@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use freemkv_firmware::cmac;
+use freemkv_flash::cmac;
 
 fn fixture_path() -> PathBuf {
     if let Ok(p) = std::env::var("FREEMKV_FIRMWARE_FIXTURE") {
