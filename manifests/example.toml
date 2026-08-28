@@ -1,4 +1,4 @@
-# Example freemkv-firmware manifest.
+# Example freemkv-flash manifest.
 #
 # Each [[image]] describes one firmware file. `path` is resolved relative to
 # this manifest unless absolute. `crc32` is verified before flashing.
@@ -13,7 +13,7 @@ model = "BU40N"
 chip = "A"
 version = "N1.02"
 kind = "oem"
-path = "../crates/freemkv-firmware/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin"
+path = "../crates/freemkv-flash/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin"
 crc32 = 0x38151381
 flash_mode = "full"
 downgrade_enable = false

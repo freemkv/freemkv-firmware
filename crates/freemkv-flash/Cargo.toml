@@ -1,19 +1,19 @@
 [package]
-name = "freemkv-firmware"
+name = "freemkv-flash"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "freemkv optical-drive firmware flasher and firmware-build pipeline (MediaTek MT19xx / Pioncer-Renesas)"
+description = "freemkv standalone optical-drive firmware flasher/dumper (MediaTek MT19xx; Pioneer/Renesas classified but unsupported)"
 
 [[bin]]
-name = "freemkv-firmware"
+name = "freemkv-flash"
 path = "src/main.rs"
 
 [lib]
-name = "freemkv_firmware"
+name = "freemkv_flash"
 path = "src/lib.rs"
 
 [dependencies]
@@ -22,6 +22,7 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 crc32fast = "1"
+tar = "0.4"
 aes = "0.8"
 cmac = "0.7"
 cipher = "0.4"

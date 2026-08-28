@@ -1,85 +1,88 @@
-# freemkv-firmware
+# freemkv-flash
 
-Optical-drive **firmware flasher** and **firmware-build pipeline** for freemkv,
+Standalone, multi-OS optical-drive **firmware flasher / dumper** for freemkv,
 written 100% in Rust (a thin `libc` FFI is used only for the Linux `SG_IO`
-ioctl; there is no hand-written C and no Python anywhere).
+ioctl; there is no hand-written C and no Python anywhere). No MakeMKV
+dependency.
 
 > ⚠️ **Flashing firmware can permanently brick a drive.** This tool issues raw
 > SCSI `WRITE_BUFFER` commands. Read the safety section before using `flash`.
 
-## What it is
+Binary name: `freemkv-flash` (the crate was renamed from `freemkv-firmware`;
+the repo directory stays `freemkv-firmware`). Firmware *authoring* (X→Y
+modification: downgrade, speed-lock, AACS host-cert) is deliberately **out of
+scope** and will land later as a separate `freemkv-forge` binary.
 
-A CLI (`freemkv-firmware`) that:
+## Commands — exactly three; `info` is the default
 
-- **detects** and classifies the connected optical drive,
-- **lists** firmware images from a manifest,
-- **flashes** a selected image over SCSI (dry-run by default, guarded by safety
-  gates),
-- **verifies** and **re-signs** the MediaTek MT1959 AES-CMAC integrity table
-  (the "T0" firmware-pipeline proof).
+| Invocation | Writes? | Input | Behavior |
+|---|---|---|---|
+| `freemkv-flash <dev>` (bare) | no | — | alias for `info` |
+| `freemkv-flash info <dev>` | no | — | INQUIRY + boot banner + classify family |
+| `freemkv-flash dump <dev> [-o out.tar]` | no | — | read per-unit regions → interoperable tar |
+| `freemkv-flash flash <dev> -i <file> [flags]` | **yes** | `.bin` or `.tar` | write, then read-back verify |
 
-GUI is future work; the CLI (Linux) is the near-term target.
+- `restore` does not exist — it is `flash` with a `.tar` input. `flash` sniffs
+  the input: `.bin` = full 2 MB image; `.tar` = per-unit dump (restore regions).
+- `verify` does not exist as a command — `flash` **always** read-back-verifies
+  after writing. `info`/`dump` never verify.
 
-## The drive model: platform A / B and OEM vs freemkv
+## MTK-gate (MediaTek-only for now)
 
-| Platform | Silicon | Discriminator |
+Every command classifies the drive first, using only proven discriminators:
+
+| Discriminator | Family | Supported? |
 |---|---|---|
-| **A** | MediaTek **MT1959** | `MT1959` boot banner @ READ_BUFFER 0x3000 |
-| **B** | MediaTek **MT1939** | `MT1939` boot banner |
-| — | **Pioneer / Renesas** | RB-0xF1 vendor probe / Pioneer INQUIRY |
-| — | **Unknown** | anything ambiguous → **never flashed** |
+| `GET_CONFIG 0x46` feature `0x010C` returns `01 0C` | **MediaTek MT19xx** | ✅ yes |
+| `READ_BUFFER 0xF1` succeeds | **Pioneer / Renesas** | classified, ❌ no |
+| neither | **Unknown** | ❌ never flashed |
 
-Detection uses `INQUIRY` (0x12), `GET CONFIGURATION` feature `0x010C`, and
-`READ BUFFER` (0x3C mode 6 @ 0x3000). Classification is **fail-safe**: if the
-silicon cannot be established it is reported as `Unknown` and refused.
+`info` prints the detected family. `dump` and `flash` **abort** on anything but
+MediaTek before issuing any dump/flash CDB — running the tool on a Pioneer drive
+is safe.
 
-> The exact MT1959-A vs MT1939-B rule is being finalised separately; the
-> banner/GET-CONFIG logic is implemented today with a marked `TODO` where the
-> final discriminator plugs in (`detect::classify`).
+## flash is a dumb verbatim writer
 
-Each firmware image is tagged **OEM-stock** or **freemkv** (patched), plus its
-platform (A/B), version, flash mode, and downgrade-enable flag — see
-`manifests/example.toml`.
+The flasher writes the given file to the drive **verbatim** and never modifies
+the image (no DE byte, no downgrade magic, no per-unit splice, no CMAC resign —
+those are firmware modification and belong to the future `freemkv-forge`). Its
+entire job:
 
-## Integrity model (MT1959 AES-CMAC)
+1. **Back up** — always attempt a pre-flash per-unit dump (saved to disk, *not*
+   spliced into the image). On dump failure `flash` aborts unless
+   `--rescue-no-dump` (the only skip, for a drive that can no longer be read).
+2. **Write** — `.bin` streams the whole 2 MB via `WRITE_BUFFER 0x3B mode 6`;
+   `.tar` restores exactly the per-unit regions.
+3. **Read-back verify** — re-read the written ranges and compare; a mismatch is
+   a hard error.
 
-Stock MT1959 images carry a 16-entry AES-CMAC integrity table at file offset
-`0x10400` (28-byte entries: `enabled`, `start`, `end`, `cmac[16]`). The key is
-**symmetric and public** — it exists to reject accidental corruption and
-unsigned third-party images, not to stop a keyholder. The `cmac` module can
-`verify` a stock image and `resign` a modified one (data ranges first, the
-table-covering range last).
+### enc — auto-detected transport envelope
 
-`enc` flashing is a separate, orthogonal layer: an AES-128-ECB **transport
-wrapping** of the whole 2 MB image under a host-embedded (non-secret) key,
-decrypted by the drive with the same key. It is **not** the vendor OTFAD/signed
-layer and does not re-sign CMAC.
+Whether the drive needs the AES-128-ECB `enc` envelope is **auto-detected on
+every flash** (`drive::mtk::enc_needed`); the user never decides. Detection is
+under active research (stock vs MakeMKV-patched firmware — see
+`ENC_DETECT_RESEARCH.md`) and currently defaults to plaintext. `--enc` /
+`--no-enc` exist only as a hidden expert override for debugging.
 
 ## Usage
 
 ```sh
-# Identify and classify a drive
-freemkv-firmware detect --device /dev/sr0
+# Identify + classify a drive (default action)
+freemkv-flash /dev/sg0
+freemkv-flash info /dev/sg0
 
-# List firmware in a manifest, grouped by model + kind
-freemkv-firmware list --manifest manifests/example.toml
+# Back up the per-unit regions to a .tar
+freemkv-flash dump /dev/sg0 -o backup.tar
 
-# Verify a stock image's CMAC table (the T0 proof)
-freemkv-firmware verify path/to/firmware.bin
-
-# Re-sign a modified image
-freemkv-firmware resign in.bin --out out.bin
-
-# Flash (DRY RUN by default — prints the plan, issues no writes)
-freemkv-firmware flash \
-    --device /dev/sr0 \
-    --manifest manifests/example.toml \
-    --model BU40N --version N1.02
+# Dry-run a flash (prints the plan, issues no writes)
+freemkv-flash flash /dev/sg0 -i firmware.bin
 
 # Actually flash (all gates must pass)
-freemkv-firmware flash --device /dev/sr0 --manifest manifests/example.toml \
-    --model BU40N --version 1.05-freemkv --mode full \
-    --i-understand-risk --execute
+freemkv-flash flash /dev/sg0 -i firmware.bin --mode full \
+    --execute --i-understand-risk
+
+# Restore per-unit regions from a dump tar
+freemkv-flash flash /dev/sg0 -i backup.tar --execute --i-understand-risk
 ```
 
 ## Safety
@@ -88,60 +91,51 @@ freemkv-firmware flash --device /dev/sr0 --manifest manifests/example.toml \
 unless:
 
 - `--i-understand-risk` is given (acknowledging possible bricking),
+- a pre-flash backup dump succeeded (or `--rescue-no-dump`),
 - the drive model matches the firmware model — a mismatch requires
   `--allow-cross-flash`,
-- the image CRC32 matches the manifest,
-- the drive silicon classified as something other than `Unknown`.
+- the drive classified as MediaTek (Unknown/Pioneer/Renesas are refused).
 
-## Flash modes
+## Two independent plug-in layers
 
-| Mode | Meaning |
-|---|---|
-| `main` | main code band only |
-| `full` | full 2 MB image |
-| `enc`  | full image, AES-128-ECB transport-encrypted before send |
+```
+crates/freemkv-flash/
+├── Cargo.toml
+└── src/
+    ├── main.rs            # clap CLI: info (default) / dump / flash
+    ├── lib.rs
+    ├── platform/          # OS transport — the ScsiDevice trait
+    │   ├── mod.rs         #   trait + open() compile-time OS selection
+    │   ├── linux.rs       #   #[cfg(linux)]   real SG_IO ioctl
+    │   ├── windows.rs     #   #[cfg(windows)] SPTI stub (unimplemented)
+    │   ├── mac.rs         #   #[cfg(macos)]   IOKit stub (unimplemented)
+    │   └── mock.rs        #   MockScsiDevice for host-independent tests
+    ├── drive/             # chip family — classify + dump/flash
+    │   ├── mod.rs         #   Family, classify(), DriveFamily trait
+    │   ├── mtk.rs         #   MediaTek MT19xx — fully implemented
+    │   ├── pioneer.rs     #   stub: classified, dump/flash Unsupported
+    │   └── renesas.rs     #   stub: classified, dump/flash Unsupported
+    ├── cmac.rs            # MT1959 AES-CMAC verify + resign
+    └── manifest.rs        # TOML firmware-image manifest / flash mode
+```
 
-All modes stream via `WRITE_BUFFER 0x3B mode 6` in chunks
-(`3B 06 <bufid> <off[3]> <len[3]> 00`).
+## Device argument by OS
 
-## Platform support
-
-The real SCSI transport is Linux `SG_IO` (`#[cfg(target_os = "linux")]`). Other
-platforms build against a **stub** backend so the whole crate compiles and the
-offline subcommands (`list`, `verify`, `resign`, dry-run `flash`) work
-everywhere; a real Windows SPTI backend and a macOS backend are `TODO`.
+- Linux: `/dev/sgN` (`SG_IO`). May also accept `/dev/srN`.
+- Windows: `\\.\CdRomN` (SPTI backend is a stub for now).
+- macOS: IOKit service / BSD name (IOKit backend is a stub for now).
 
 ## Build / CI
 
 ```sh
-cargo build
-cargo test          # includes the CMAC-verify T0 proof against a stock image
+cargo build --all-targets
+cargo test                  # includes the CMAC-verify T0 proof against a stock image
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 ```
 
 CI (GitHub Actions, `.github/workflows/ci.yml`) runs fmt, clippy (`-D
 warnings`), build, and test on a **pinned Rust 1.86** toolchain.
-
-## Crate layout
-
-```
-freemkv-firmware/
-├── Cargo.toml                     # workspace
-├── manifests/example.toml
-└── crates/freemkv-firmware/
-    ├── src/
-    │   ├── main.rs                # clap CLI (detect/list/flash/verify/resign)
-    │   ├── lib.rs
-    │   ├── cmac.rs                # MT1959 AES-CMAC verify + resign
-    │   ├── detect.rs              # probes + ChipClass classification
-    │   ├── flash.rs               # WRITE_BUFFER upload + enc + safety gate
-    │   ├── manifest.rs            # TOML manifest
-    │   └── scsi/                  # ScsiDevice trait + linux/stub backends
-    └── tests/
-        ├── cmac_verify.rs         # T0 proof
-        └── fixtures/              # stock base image
-```
 
 ## License
 

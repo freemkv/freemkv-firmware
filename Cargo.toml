@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/freemkv-firmware"]
+members = ["crates/freemkv-flash"]
 
 [workspace.package]
 version = "0.1.0"
