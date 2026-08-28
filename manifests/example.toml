@@ -1,0 +1,39 @@
+# Example freemkv-firmware manifest.
+#
+# Each [[image]] describes one firmware file. `path` is resolved relative to
+# this manifest unless absolute. `crc32` is verified before flashing.
+#
+#   chip:            "A" (MT1959) | "B" (MT1939)
+#   kind:            "oem" | "freemkv"
+#   flash_mode:      "main" | "full" | "enc"
+#   downgrade_enable: whether the image sets the downgrade gate
+
+[[image]]
+model = "BU40N"
+chip = "A"
+version = "N1.02"
+kind = "oem"
+path = "../crates/freemkv-firmware/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin"
+crc32 = 0x38151381
+flash_mode = "full"
+downgrade_enable = false
+
+[[image]]
+model = "BU40N"
+chip = "A"
+version = "1.05-freemkv"
+kind = "freemkv"
+path = "images/BU40N_1.05-freemkv.bin"
+crc32 = 0x00000000
+flash_mode = "full"
+downgrade_enable = true
+
+[[image]]
+model = "WH16NS60"
+chip = "B"
+version = "1.02-oem"
+kind = "oem"
+path = "images/WH16NS60_1.02.bin"
+crc32 = 0x00000000
+flash_mode = "enc"
+downgrade_enable = false
