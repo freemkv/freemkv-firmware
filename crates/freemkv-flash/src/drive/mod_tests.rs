@@ -54,6 +54,21 @@ fn for_family_reports_the_expected_family() {
 }
 
 #[test]
+fn read_identity_parses_boot_banner_from_32b_region() {
+    // The banner read must ask for exactly the 32-byte region — a real drive
+    // rejects a larger read (ILLEGAL REQUEST), which used to leave banner empty.
+    let mut banner = b"MT1959 Boot BU5 ".to_vec();
+    banner.push(0x00); // NUL ends the printable run
+    banner.resize(32, 0x00);
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..]),
+        banner,
+    );
+    let id = read_identity(&mut dev);
+    assert_eq!(id.banner.as_deref(), Some("MT1959 Boot BU5"));
+}
+
+#[test]
 fn sanitize_ascii_strips_control_and_escape_bytes() {
     // A malicious/garbled drive string with an ANSI escape, NUL and BEL: all
     // non-printable bytes become '.', printable ASCII is preserved.
