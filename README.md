@@ -1,12 +1,13 @@
 # freemkv-flash
 
-Standalone, multi-OS optical-drive **firmware flasher / dumper** for freemkv,
-written 100% in Rust (a thin `libc` FFI is used only for the Linux `SG_IO`
-ioctl; there is no hand-written C and no Python anywhere). No third-party
-runtime dependency.
+> # ⚠️ BETA — USE AT YOUR OWN RISK
+> **VERY UNTESTED.** Flashing firmware can **permanently BRICK your drive**.
+> Provided with **NO WARRANTY and NO LIABILITY** — if it damages your hardware,
+> that is entirely on you. Do **not** run it on a drive you cannot afford to lose.
 
-> ⚠️ **Flashing firmware can permanently brick a drive.** This tool issues raw
-> SCSI `WRITE_BUFFER` commands. Read the safety section before using `flash`.
+Standalone, multi-OS optical-drive **firmware flasher / dumper** for freemkv,
+written 100% in Rust. This tool issues raw SCSI `WRITE_BUFFER` commands — read
+the Safety section before using `flash`.
 
 Binary name: `freemkv-flash` (the crate was renamed from `freemkv-firmware`;
 the repo directory stays `freemkv-firmware`). Firmware *authoring* (X→Y
@@ -22,8 +23,8 @@ scope** and will land later as a separate `freemkv-forge` binary.
 | `freemkv-flash dump <dev> [-o out.tar]` | no | — | read per-unit regions → interoperable tar |
 | `freemkv-flash flash <dev> -i <file> [flags]` | **yes** | `.bin` or `.tar` | write, then read-back verify |
 
-- `restore` does not exist — it is `flash` with a `.tar` input. `flash` sniffs
-  the input: `.bin` = full 2 MB image; `.tar` = per-unit dump (restore regions).
+- `flash` sniffs the input: `.bin` = full 2 MB image; `.tar` = per-unit dump
+  (restore regions).
 - `verify` does not exist as a command — `flash` **always** read-back-verifies
   after writing. `info`/`dump` never verify.
 
@@ -86,8 +87,15 @@ freemkv-flash flash /dev/sg0 -i backup.tar --execute --i-understand-risk
 
 ## Safety
 
-`flash` is **dry-run unless `--execute`** and additionally refuses to write
-unless:
+**Flashing is a single, irreversible operation.** The drive erases and programs
+its flash the moment the 2 MB upload completes (the last streamed chunk) — there
+is **no safe abort mid-flight**, and read-back verify only runs *afterward*. Once
+`--execute` starts, you are committed. This has had **very little real-hardware
+testing** — treat every flash as potentially bricking.
+
+The gates below only prevent an accidental *start*; they do nothing once the
+write is underway. `flash` is **dry-run unless `--execute`**, and even then
+refuses to write unless:
 
 - `--i-understand-risk` is given (acknowledging possible bricking),
 - a pre-flash backup dump succeeded (or `--rescue-no-dump`),
