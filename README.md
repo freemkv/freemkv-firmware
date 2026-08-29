@@ -1,9 +1,13 @@
 # freemkv-flash
 
 > # ⚠️ BETA — USE AT YOUR OWN RISK
-> **VERY UNTESTED.** Flashing firmware can **permanently BRICK your drive**.
-> Provided with **NO WARRANTY and NO LIABILITY** — if it damages your hardware,
-> that is entirely on you. Do **not** run it on a drive you cannot afford to lose.
+> **Barely tested.** A full flash cycle (dump → flash → verify) has been
+> exercised on **exactly one drive model — an LG `HL-DT-ST BD-RE BU40N` (rev
+> 1.03, MediaTek MT19xx)** — and **nothing else**. Every other drive, model, and
+> firmware is **completely untested**. Flashing firmware can **permanently BRICK
+> your drive**. Provided with **NO WARRANTY and NO LIABILITY** — if it damages
+> your hardware, that is entirely on you. Do **not** run it on a drive you cannot
+> afford to lose.
 
 Standalone, multi-OS optical-drive **firmware flasher / dumper** for freemkv,
 written 100% in Rust. This tool issues raw SCSI `WRITE_BUFFER` commands — read
@@ -90,8 +94,9 @@ freemkv-flash flash /dev/sg0 -i backup.tar --execute --i-understand-risk
 **Flashing is a single, irreversible operation.** The drive erases and programs
 its flash the moment the 2 MB upload completes (the last streamed chunk) — there
 is **no safe abort mid-flight**, and read-back verify only runs *afterward*. Once
-`--execute` starts, you are committed. This has had **very little real-hardware
-testing** — treat every flash as potentially bricking.
+`--execute` starts, you are committed. A full cycle has been exercised on **one
+drive model only (an LG BU40N, rev 1.03)** — every other drive is untested;
+treat every flash as potentially bricking.
 
 The gates below only prevent an accidental *start*; they do nothing once the
 write is underway. `flash` is **dry-run unless `--execute`**, and even then

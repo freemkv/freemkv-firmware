@@ -177,6 +177,8 @@ pub struct FlashRequest {
     pub enc_override: Option<bool>,
     /// Drive model (INQUIRY product), shown in the flash plan.
     pub drive_model: String,
+    /// Show the raw SCSI CDB sequence in the plan (default: clean summary only).
+    pub verbose: bool,
     /// Where to save the pre-flash backup dump, if anywhere.
     pub predump_out: Option<std::path::PathBuf>,
 }
@@ -229,8 +231,15 @@ pub trait DriveFamily {
         enc_override: Option<bool>,
     ) -> Result<(Vec<u8>, bool)>;
 
-    /// Human-readable dry-run plan for an `image_len`-byte flash.
-    fn flash_plan(&self, image_len: usize) -> Result<String>;
+    /// Human-readable dry-run plan for an `image_len`-byte flash. `verbose` adds
+    /// the raw SCSI CDB sequence; the default is a clean plain-language summary.
+    fn flash_plan(&self, image_len: usize, verbose: bool) -> Result<String>;
+
+    /// Wait (read-only, bounded) for the drive to finish programming after the
+    /// last chunk, before read-back verify. Default: no wait.
+    fn wait_ready(&self, _dev: &mut dyn ScsiDevice) -> Result<()> {
+        Ok(())
+    }
 
     /// Read-only readiness handshake (PROBE + TEST UNIT READY) — issues NO write.
     /// The engine runs this during a dry-run so a not-ready drive is surfaced
@@ -309,7 +318,11 @@ macro_rules! unsupported_drive_family {
             ) -> ::anyhow::Result<(::std::vec::Vec<u8>, bool)> {
                 Err($crate::drive::unsupported_family_error($family))
             }
-            fn flash_plan(&self, _image_len: usize) -> ::anyhow::Result<::std::string::String> {
+            fn flash_plan(
+                &self,
+                _image_len: usize,
+                _verbose: bool,
+            ) -> ::anyhow::Result<::std::string::String> {
                 Err($crate::drive::unsupported_family_error($family))
             }
             fn flash_open(

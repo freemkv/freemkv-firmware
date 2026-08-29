@@ -103,21 +103,17 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 
     let (payload, enc) = drive.envelope(dev, &req.input, req.enc_override)?;
 
-    println!("== flash plan (verbatim) ==");
-    println!("device:         {}", dev.describe());
-    println!("drive model:    {}", ident_or_unknown(&req.drive_model));
-    println!("mode:           {:?}", req.mode);
-    println!("pre-flash dump: {backup_summary}");
+    println!("== flash plan ==");
+    println!("device:    {}", dev.describe());
+    println!("drive:     {}", ident_or_unknown(&req.drive_model));
     println!(
-        "envelope:       {}",
-        if enc {
-            "enc (AES-128-ECB)"
-        } else {
-            "plaintext"
-        }
+        "firmware:  {} ({} envelope)",
+        human_size(payload.len()),
+        if enc { "encrypted" } else { "plaintext" }
     );
+    println!("backup:    {backup_summary}");
     println!();
-    print!("{}", drive.flash_plan(payload.len())?);
+    print!("{}", drive.flash_plan(payload.len(), req.verbose)?);
 
     if !req.execute {
         // Read-only readiness handshake (PROBE + TEST UNIT READY) — issues NO
@@ -146,9 +142,14 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     }
     drive.flash_close(dev, req.mode)?;
     println!(
-        "flash sequence complete ({} bytes streamed); verifying...",
-        payload.len()
+        "upload complete ({}); waiting for the drive to finish programming...",
+        human_size(payload.len())
     );
+    // The drive keeps programming its flash after the last chunk (it reports
+    // NOT READY / LONG WRITE IN PROGRESS). Wait for it to finish before reading
+    // back, so a SUCCESSFUL flash never surfaces a scary mid-program error.
+    drive.wait_ready(dev)?;
+    println!("verifying...");
 
     // Read-back verify each streamed chunk against what was sent.
     let mut offset = 0usize;
@@ -216,6 +217,27 @@ fn ident_or_unknown(s: &str) -> &str {
         "<unknown>"
     } else {
         s
+    }
+}
+
+/// Format a byte count as a friendly size (`2 MiB`, `16 KiB`, `2.00 MiB`, …).
+pub(crate) fn human_size(bytes: usize) -> String {
+    const K: usize = 1 << 10;
+    const M: usize = 1 << 20;
+    if bytes >= M {
+        if bytes % M == 0 {
+            format!("{} MiB", bytes / M)
+        } else {
+            format!("{:.2} MiB", bytes as f64 / M as f64)
+        }
+    } else if bytes >= K {
+        if bytes % K == 0 {
+            format!("{} KiB", bytes / K)
+        } else {
+            format!("{:.1} KiB", bytes as f64 / K as f64)
+        }
+    } else {
+        format!("{bytes} B")
     }
 }
 
