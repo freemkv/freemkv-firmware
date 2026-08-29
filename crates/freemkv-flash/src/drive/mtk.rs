@@ -1,31 +1,39 @@
 //! MediaTek MT1959 / MT1939 drive family — the only fully-implemented family.
 //!
-//! This module absorbs the former `dump.rs` (per-unit region capture + tar) and
-//! `flash.rs` (WRITE_BUFFER streaming + safety gate) into one place.
+//! One file, all MTK commands: identity/dump reads, the WRITE BUFFER flash
+//! sequence, the enc transport envelope, and the per-unit tar model. The generic
+//! orchestration that drives these lives in [`crate::engine`]; this module is
+//! pure chip primitives (CDBs + framing), no file I/O and no printing.
 //!
 //! ## flash is a DUMB verbatim writer
-//! The flasher writes the given file to the drive **verbatim** and never
-//! modifies the image: no DE byte, no downgrade magic, no per-unit splice, no
-//! CMAC resign — those are *firmware modification* and belong to a separate
-//! future tool (`freemkv-forge`). flash's entire job is (1) back up via a
-//! pre-flash dump, (2) write the bytes, (3) read-back verify.
+//! The flasher writes the given image to the drive **verbatim** and never
+//! modifies it: no DE byte, no downgrade magic, no per-unit splice, no CMAC
+//! resign — those are *firmware modification* and belong to a separate future
+//! tool. flash's whole job is (1) back up, (2) write the bytes, (3) verify.
 //!
-//! ## enc is an auto-detected transport envelope
+//! ## enc transport envelope
 //! [`enc_needed`] decides on every flash whether the drive needs the AES-128-ECB
-//! `enc` envelope (research in progress — see ENC_DETECT_RESEARCH.md); it
-//! currently defaults to plaintext. `--enc`/`--no-enc` exist only as a hidden
-//! expert override. When enc is active the whole image is [`enc_transform`]ed
-//! before streaming.
+//! `enc` envelope (a known-open question); it currently defaults to plaintext.
+//! `--enc`/`--no-enc` are a hidden expert override. When enc is active the whole
+//! image is [`enc_transform`]ed before streaming.
+//!
+//! ## the flash sequence
+//! A 2 MiB image is programmed over a fixed ordered sequence of 12-byte SCSI
+//! CDBs: PROBE (READ BUFFER) → READY (TEST UNIT READY) → PREPARE (WRITE BUFFER
+//! mode 1) → 128× STREAM (WRITE BUFFER mode 6, 16 KiB) → COMMIT (WRITE BUFFER
+//! mode 7) → READY → STATUS (REQUEST SENSE). The drive erases+programs flash
+//! when the 2 MiB upload completes (the last STREAM chunk) — COMMIT is a
+//! trailing handshake, not the burn.
 
 use std::io::{Read, Write};
-use std::path::Path;
 
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockEncrypt, KeyInit};
 use aes::Aes128;
 use anyhow::{anyhow, bail, Context, Result};
 
-use super::{DriveFamily, Family, FlashRequest, InputKind};
+use super::{DriveFamily, Family, RestoreRegion};
+use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
 // ---- Region geometry --------------------------------------------------------
@@ -55,22 +63,29 @@ pub const MODE_6: u8 = 0x06;
 /// READ BUFFER buffer id used for the per-unit ROM regions.
 pub const ROM_BUFFER_ID: u8 = 0x00;
 
-/// Expected full firmware image size (2 MB).
+/// Expected full firmware image size (2 MiB).
 pub const IMAGE_SIZE: usize = 0x200000;
-/// Default WRITE_BUFFER / READ_BUFFER chunk size in bytes (32 KiB).
-pub const DEFAULT_CHUNK: usize = 0x8000;
+/// Streaming chunk size for the flash sequence, 16 KiB.
+pub const CHUNK: usize = 0x4000;
 /// WRITE_BUFFER buffer id used by the MT19xx flash path.
 pub const FLASH_BUFFER_ID: u8 = 0x00;
+/// PROBE READ BUFFER allocation length (bytes read from the model page).
+pub const PROBE_ALLOC: usize = 0x100;
+/// DRAM offset read by the PROBE for the model-signature check.
+pub const PROBE_MODEL_OFFSET: u32 = 0x1E_C000;
+/// REQUEST SENSE allocation length.
+pub const REQUEST_SENSE_ALLOC: usize = 16;
 
 /// AES-128-ECB key for the `enc` transport envelope.
 ///
-/// Applied to the whole image before streaming **only when [`enc_needed`]
-/// (or an explicit override) selects enc**; see [`enc_transform`].
+/// Applied to the whole image before streaming **only when [`enc_needed`] (or an
+/// explicit override) selects enc**; see [`enc_transform`]. This is a
+/// host-embedded, non-secret transport key — not the vendor signed-update layer.
 pub const ENC_KEY: [u8; 16] = [
     0x5e, 0x9e, 0x4f, 0x00, 0x94, 0xef, 0x20, 0xab, 0x52, 0xe3, 0x5e, 0x73, 0x6a, 0xcb, 0x23, 0x24,
 ];
 
-/// Ordered tar member names, matching a `dump_user` capture byte-for-byte.
+/// Ordered tar member names for a per-unit dump.
 pub const MEMBER_NAMES: [&str; 6] = [
     "rom_003000.bin",
     "rom_1EC000.bin",
@@ -82,7 +97,7 @@ pub const MEMBER_NAMES: [&str; 6] = [
 
 // ---- CDB builders (pure, testable) ------------------------------------------
 
-/// Build a READ BUFFER CDB (opcode 0x3C).
+/// Build a READ BUFFER CDB (opcode 0x3C, 10 bytes).
 pub fn cdb_read_buffer(mode: u8, buffer_id: u8, offset: u32, len: u32) -> [u8; 10] {
     [
         0x3C,
@@ -126,11 +141,9 @@ pub fn cdb_get_config(feature: u16, alloc_len: u16) -> [u8; 10] {
     ]
 }
 
-/// Build a WRITE BUFFER CDB (opcode 0x3B).
-///
-/// `commit` sets the low control-byte bit — the `full`-mode commit flag that
-/// tells the drive to commit the freshly-streamed 2 MB image.
-pub fn cdb_write_buffer(mode: u8, buffer_id: u8, offset: u32, len: u32, commit: bool) -> [u8; 10] {
+/// Build a targeted WRITE BUFFER CDB (opcode 0x3B, 10 bytes) — used by `.tar`
+/// restore for a whole region in one write (`len` may exceed 64 KiB - 1).
+pub fn cdb_write_buffer(mode: u8, buffer_id: u8, offset: u32, len: u32) -> [u8; 10] {
     [
         0x3B,
         mode & 0x1f,
@@ -141,15 +154,67 @@ pub fn cdb_write_buffer(mode: u8, buffer_id: u8, offset: u32, len: u32, commit: 
         (len >> 16) as u8,
         (len >> 8) as u8,
         len as u8,
-        if commit { 0x01 } else { 0x00 },
+        0x00,
+    ]
+}
+
+/// PROBE — READ BUFFER mode 6 @ 0x1EC000, 0x100 bytes (data-in). The returned
+/// buffer carries the model signature the flasher validates.
+pub fn cdb_read_probe() -> [u8; 12] {
+    [
+        0x3C, 0x06, 0x00, 0x1E, 0xC0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+    ]
+}
+
+/// READY — TEST UNIT READY, all-zero CDB (poll).
+pub fn cdb_test_unit_ready() -> [u8; 12] {
+    [0x00; 12]
+}
+
+/// PREPARE — WRITE BUFFER mode 1, "enter-download / pre-erase" (len 0). CDB[9]=0x0B.
+pub fn cdb_wb_prepare() -> [u8; 12] {
+    [
+        0x3B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0B, 0x00, 0x00,
+    ]
+}
+
+/// STREAM — WRITE BUFFER mode 6 "download microcode with offsets" (data-out).
+///
+/// `offset` is the absolute byte offset (big-endian, CDB[3..5]); `len` is
+/// big-endian in CDB[6..8] (a 0x4000 chunk lands as `00 40 00`).
+pub fn cdb_wb_data(offset: u32, len: u16) -> [u8; 12] {
+    [
+        0x3B,
+        0x06,
+        0x00,
+        (offset >> 16) as u8,
+        (offset >> 8) as u8,
+        offset as u8,
+        0x00,
+        (len >> 8) as u8,
+        len as u8,
+        0x00,
+        0x00,
+        0x00,
+    ]
+}
+
+/// COMMIT — WRITE BUFFER mode 7 "download microcode + save" (len 0). The `1B 12`
+/// magic sits in CDB[10..11].
+pub fn cdb_wb_commit() -> [u8; 12] {
+    [
+        0x3B, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1B, 0x12,
+    ]
+}
+
+/// STATUS — REQUEST SENSE, alloc 16 (data-in), the progress/status poll.
+pub fn cdb_request_sense() -> [u8; 12] {
+    [
+        0x03, 0x00, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ]
 }
 
 /// AES-128-ECB encrypt the whole image in place (the `enc` transport envelope).
-///
-/// Applied before streaming only when [`enc_needed`] (or an explicit override)
-/// selects enc. The key is host-embedded and non-secret; this is transport
-/// wrapping, not the vendor signed-update layer, and does not touch CMAC.
 pub fn enc_transform(image: &mut [u8]) -> Result<()> {
     if image.len() % 16 != 0 {
         bail!(
@@ -163,6 +228,17 @@ pub fn enc_transform(image: &mut [u8]) -> Result<()> {
         cipher.encrypt_block(block);
     }
     Ok(())
+}
+
+/// Decide whether this drive needs the `enc` transport envelope.
+///
+/// Whether a given drive *requires* the AES-128-ECB wrap (vs. accepting a
+/// plaintext image) is a KNOWN-OPEN question, not yet resolvable without a
+/// controlled hardware test against a matching base image. Until then this
+/// defaults to plaintext (`false`) and flash stays a dry-run planner: no real
+/// write ships on an unproven assumption.
+pub fn enc_needed(_dev: &mut dyn ScsiDevice) -> bool {
+    false
 }
 
 // ---- Dump plan --------------------------------------------------------------
@@ -363,6 +439,16 @@ impl UserDump {
         ]
     }
 
+    /// Decoded serial number, if the descriptor parses.
+    pub fn serial(&self) -> Option<String> {
+        parse_field_descriptor(&self.fd_sn).map(|d| d.ascii)
+    }
+
+    /// Decoded firmware date, if the descriptor parses.
+    pub fn fw_date(&self) -> Option<String> {
+        parse_field_descriptor(&self.fd_fwdate).map(|d| d.ascii)
+    }
+
     /// Write the dump as a `.tar` with compatible member names/order.
     pub fn write_tar<W: Write>(&self, w: W) -> Result<()> {
         let mut builder = tar::Builder::new(w);
@@ -446,150 +532,201 @@ pub fn parse_field_descriptor(data: &[u8]) -> Option<FieldDescriptor> {
     })
 }
 
-/// Back up a drive's per-unit regions (the pre-flash dump primitive).
-pub fn dump_user(dev: &mut dyn ScsiDevice) -> Result<UserDump> {
-    DumpPlan::new().execute(dev)
+// ---- Flash sequence plan (dry-run renderer) ---------------------------------
+
+/// Data-phase direction of a planned flash step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Dir {
+    In,
+    Out,
+    None,
 }
 
-// ---- enc auto-detection -----------------------------------------------------
-
-/// Decide whether this drive needs the `enc` transport envelope.
-///
-/// PROVEN false for MT1959: enc is NEVER needed — send plaintext always.
-/// Verified across 5 BU40N images (stock and MK) — no AES key/S-box/tables in
-/// any image, so no MT1959 firmware can consume an AES-ECB payload; and both
-/// stock and MK compare the banner at image+0x3000 as PLAINTEXT
-/// (`FUN_00003544`), so an enc'd image fails the banner match (0/16) and is
-/// rejected. An enc stream would BREAK the flash, not enable it. The forum's
-/// "use enc for original fw" has no evidence in the MT1959 hoard (likely a
-/// different drive generation). See ENC_DETECT_RESEARCH.md.
-///
-/// The hook is retained so a future non-MTK family can override per-drive; for
-/// MediaTek it is a confirmed constant, not a stub.
-pub fn enc_needed(_dev: &mut dyn ScsiDevice) -> bool {
-    false
-}
-
-// ---- Flash plan (WRITE_BUFFER streaming) ------------------------------------
-
-/// A planned flash operation, ready to be executed or dry-run.
-///
-/// The whole 2 MB image is streamed for both `main` and `full`; `full` only
-/// sets the commit flag bit on the final WRITE_BUFFER. Always plaintext.
-#[derive(Debug, Clone)]
-pub struct FlashPlan {
-    /// SCSI WRITE_BUFFER mode (always 6 for the MT19xx path).
-    pub mode: u8,
-    /// Chunk size.
-    pub chunk: usize,
-    /// Whether to set the `full`-mode commit flag on the final chunk.
-    pub commit: bool,
-    /// The exact bytes streamed to the drive (plaintext, or enc-enveloped).
-    pub payload: Vec<u8>,
-}
-
-impl FlashPlan {
-    /// Prepare a flash plan from a full image, the commit flag, and enc choice.
-    ///
-    /// When `enc` is true the whole image is AES-128-ECB enveloped before
-    /// streaming; otherwise the payload is the verbatim image.
-    pub fn prepare(image: &[u8], commit: bool, enc: bool) -> Result<Self> {
-        let mut payload = image.to_vec();
-        if enc {
-            enc_transform(&mut payload)?;
+impl Dir {
+    fn token(self) -> &'static str {
+        match self {
+            Dir::In => "in",
+            Dir::Out => "out",
+            Dir::None => "---",
         }
-        Ok(Self {
-            mode: MODE_6,
-            chunk: DEFAULT_CHUNK,
-            commit,
-            payload,
-        })
+    }
+}
+
+const LABEL_PROBE: &str = "PROBE";
+const LABEL_READY: &str = "READY";
+const LABEL_PREPARE: &str = "PREPARE";
+const LABEL_STREAM: &str = "STREAM";
+const LABEL_COMMIT: &str = "COMMIT";
+const LABEL_STATUS: &str = "STATUS";
+
+/// One planned step of the flash sequence.
+#[derive(Debug, Clone, Copy)]
+struct FlashStep {
+    label: &'static str,
+    cdb: [u8; 12],
+    dir: Dir,
+    data_len: usize,
+}
+
+impl FlashStep {
+    fn stream_offset(&self) -> u32 {
+        ((self.cdb[3] as u32) << 16) | ((self.cdb[4] as u32) << 8) | (self.cdb[5] as u32)
     }
 
-    /// Number of WRITE_BUFFER chunks this plan will issue.
-    pub fn chunk_count(&self) -> usize {
-        self.payload.len().div_ceil(self.chunk)
+    fn render(&self) -> String {
+        let hex = self
+            .cdb
+            .iter()
+            .map(|b| format!("{b:02X}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let detail = match self.dir {
+            Dir::In => format!("alloc={}", self.data_len),
+            Dir::Out if self.label == LABEL_STREAM => {
+                format!("data={} @0x{:06X}", self.data_len, self.stream_offset())
+            }
+            Dir::Out => format!("data={}", self.data_len),
+            Dir::None => String::new(),
+        };
+        format!(
+            "{:<8}{:<3}  {}   {}",
+            self.label,
+            self.dir.token(),
+            hex,
+            detail
+        )
+        .trim_end()
+        .to_string()
     }
+}
 
-    /// Execute the chunked WRITE_BUFFER upload against a live device.
-    pub fn execute(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
-        let mut offset = 0usize;
-        let last_start = self.payload.len().saturating_sub(self.chunk);
-        for chunk in self.payload.chunks(self.chunk) {
-            let is_last = offset >= last_start;
-            let cdb = cdb_write_buffer(
-                self.mode,
-                FLASH_BUFFER_ID,
-                offset as u32,
-                chunk.len() as u32,
-                self.commit && is_last,
-            );
-            dev.command_out(&cdb, chunk)?;
-            offset += chunk.len();
-        }
-        Ok(())
+/// Assemble the full ordered flash plan for an `image_len`-byte image streamed
+/// in `chunk`-byte writes.
+fn flash_sequence(image_len: usize, chunk: usize) -> Result<Vec<FlashStep>> {
+    if image_len != IMAGE_SIZE {
+        bail!(
+            "flash sequence is defined only for a {IMAGE_SIZE}-byte (2 MiB) image, got {image_len}"
+        );
     }
+    if chunk == 0 || chunk > 0xFFFF || image_len % chunk != 0 {
+        bail!("chunk {chunk} does not evenly divide the {image_len}-byte image (and must fit u16)");
+    }
+    let mut steps = Vec::with_capacity(image_len / chunk + 6);
+    steps.push(FlashStep {
+        label: LABEL_PROBE,
+        cdb: cdb_read_probe(),
+        dir: Dir::In,
+        data_len: PROBE_ALLOC,
+    });
+    steps.push(FlashStep {
+        label: LABEL_READY,
+        cdb: cdb_test_unit_ready(),
+        dir: Dir::None,
+        data_len: 0,
+    });
+    steps.push(FlashStep {
+        label: LABEL_PREPARE,
+        cdb: cdb_wb_prepare(),
+        dir: Dir::Out,
+        data_len: 0,
+    });
+    let mut offset = 0usize;
+    while offset < image_len {
+        steps.push(FlashStep {
+            label: LABEL_STREAM,
+            cdb: cdb_wb_data(offset as u32, chunk as u16),
+            dir: Dir::Out,
+            data_len: chunk,
+        });
+        offset += chunk;
+    }
+    steps.push(FlashStep {
+        label: LABEL_COMMIT,
+        cdb: cdb_wb_commit(),
+        dir: Dir::Out,
+        data_len: 0,
+    });
+    steps.push(FlashStep {
+        label: LABEL_READY,
+        cdb: cdb_test_unit_ready(),
+        dir: Dir::None,
+        data_len: 0,
+    });
+    steps.push(FlashStep {
+        label: LABEL_STATUS,
+        cdb: cdb_request_sense(),
+        dir: Dir::In,
+        data_len: REQUEST_SENSE_ALLOC,
+    });
+    Ok(steps)
+}
 
-    /// Read back the streamed range and hard-error on any mismatch.
-    pub fn verify_readback(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
-        let mut offset = 0usize;
-        for chunk in self.payload.chunks(self.chunk) {
-            let cdb = cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, offset as u32, chunk.len() as u32);
-            let got = dev.command_in(&cdb, chunk.len())?;
-            if got != chunk {
-                bail!(
-                    "read-back verify failed at 0x{offset:06X}: {} bytes differ",
-                    got.iter().zip(chunk).filter(|(a, b)| a != b).count()
+/// Render the flash sequence for human review (the dry-run output).
+fn describe_sequence(steps: &[FlashStep]) -> String {
+    use std::fmt::Write as _;
+
+    let stream_total: usize = steps
+        .iter()
+        .filter(|s| s.label == LABEL_STREAM)
+        .map(|s| s.data_len)
+        .sum();
+    let chunk = steps
+        .iter()
+        .find(|s| s.label == LABEL_STREAM)
+        .map(|s| s.data_len)
+        .unwrap_or(0);
+
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "image {stream_total} B, chunk {chunk} B, {} steps total",
+        steps.len()
+    );
+    let _ = writeln!(
+        out,
+        "(host-side GATE compares image[0x3000..] banner/model tag before PREPARE; no CDB)"
+    );
+
+    let mut i = 0usize;
+    while i < steps.len() {
+        if steps[i].label == LABEL_STREAM {
+            let start = i;
+            let mut j = i;
+            while j < steps.len() && steps[j].label == LABEL_STREAM {
+                j += 1;
+            }
+            let count = j - start;
+            let _ = writeln!(out, "#{:02} {}", start + 1, steps[start].render());
+            if count > 2 {
+                let _ = writeln!(
+                    out,
+                    "    ... {} identical-shape STREAM chunks (collapsed): off \
+                     0x000000..0x{:06X} step 0x{:04X}, {} B streamed total ...",
+                    count, stream_total, chunk, stream_total
                 );
             }
-            offset += chunk.len();
-        }
-        Ok(())
-    }
-}
-
-// ---- Safety gate ------------------------------------------------------------
-
-/// A blocked flash attempt, with the reason.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SafetyBlock(pub String);
-
-/// Inputs to the pre-flash safety gate.
-#[derive(Debug, Clone)]
-pub struct SafetyContext<'a> {
-    /// Model reported by the connected drive (INQUIRY product).
-    pub drive_model: &'a str,
-    /// Model string detected in the firmware image (may be empty).
-    pub firmware_model: &'a str,
-    /// User acknowledged the bricking risk (`--i-understand-risk`).
-    pub acknowledged_risk: bool,
-    /// User allowed a model mismatch (`--allow-cross-flash`).
-    pub allow_cross_flash: bool,
-}
-
-/// Evaluate the safety gate. `Ok(())` means the flash may proceed.
-///
-/// An empty `firmware_model` cannot be cross-checked, so cross-flash is only
-/// blocked when a model was detected and it does not match the drive.
-pub fn check_safety(ctx: &SafetyContext<'_>) -> Result<(), SafetyBlock> {
-    if !ctx.acknowledged_risk {
-        return Err(SafetyBlock(
-            "refusing to flash without --i-understand-risk (flashing can permanently brick the drive)"
-                .to_string(),
-        ));
-    }
-    if !ctx.firmware_model.is_empty() && !ctx.allow_cross_flash {
-        let matches = ctx.drive_model.eq_ignore_ascii_case(ctx.firmware_model)
-            || ctx.drive_model.contains(ctx.firmware_model)
-            || ctx.firmware_model.contains(ctx.drive_model);
-        if !matches {
-            return Err(SafetyBlock(format!(
-                "drive model '{}' does not match firmware model '{}'; refuse cross-flash without --allow-cross-flash",
-                ctx.drive_model, ctx.firmware_model
-            )));
+            if count >= 2 {
+                let _ = writeln!(out, "#{:02} {}", j, steps[j - 1].render());
+            }
+            i = j;
+        } else {
+            let _ = writeln!(out, "#{:02} {}", i + 1, steps[i].render());
+            i += 1;
         }
     }
-    Ok(())
+    let last_stream = steps
+        .iter()
+        .rposition(|s| s.label == LABEL_STREAM)
+        .map(|p| p + 1);
+    if let Some(n) = last_stream {
+        let _ = writeln!(
+            out,
+            "!! POINT OF NO RETURN = last STREAM chunk (#{n}): the drive erases+programs flash \
+             when the 2 MiB upload completes. COMMIT (mode 7) is a drive-ignored handshake, \
+             not the burn. Aborting after #{n} does NOT undo the flash."
+        );
+    }
+    out
 }
 
 // ---- The MTK family ---------------------------------------------------------
@@ -606,337 +743,81 @@ impl DriveFamily for Mtk {
         true
     }
 
-    fn dump(&self, dev: &mut dyn ScsiDevice, out: &Path) -> Result<()> {
-        let dump = dump_user(dev)?;
-        for (name, data) in dump.members() {
-            println!("  {name:<16} {} bytes", data.len());
+    fn read_dump(&self, dev: &mut dyn ScsiDevice) -> Result<UserDump> {
+        DumpPlan::new().execute(dev)
+    }
+
+    fn image_size(&self) -> usize {
+        IMAGE_SIZE
+    }
+
+    fn chunk_size(&self) -> usize {
+        CHUNK
+    }
+
+    fn envelope(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        image: &[u8],
+        enc_override: Option<bool>,
+    ) -> Result<(Vec<u8>, bool)> {
+        let enc = enc_override.unwrap_or_else(|| enc_needed(dev));
+        let mut payload = image.to_vec();
+        if enc {
+            enc_transform(&mut payload)?;
         }
-        let tar = dump.to_tar_bytes()?;
-        std::fs::write(out, &tar).with_context(|| format!("writing {}", out.display()))?;
-        if let Some(sn) = parse_field_descriptor(&dump.fd_sn) {
-            println!("serial:  {}", sn.ascii);
-        }
-        if let Some(fw) = parse_field_descriptor(&dump.fd_fwdate) {
-            println!("fw-date: {}", fw.ascii);
-        }
-        println!("wrote {} ({} bytes, 6 members).", out.display(), tar.len());
+        Ok((payload, enc))
+    }
+
+    fn flash_plan(&self, image_len: usize) -> Result<String> {
+        let seq = flash_sequence(image_len, CHUNK)?;
+        Ok(describe_sequence(&seq))
+    }
+
+    fn flash_open(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
+        // PROBE + READY are best-effort reads; PREPARE is the one data-out.
+        let _ = dev.command_in(&cdb_read_probe(), PROBE_ALLOC)?;
+        let _ = dev.command_in(&cdb_test_unit_ready(), 0)?;
+        dev.command_out(&cdb_wb_prepare(), &[])
+    }
+
+    fn flash_chunk(&self, dev: &mut dyn ScsiDevice, offset: usize, bytes: &[u8]) -> Result<()> {
+        dev.command_out(&cdb_wb_data(offset as u32, bytes.len() as u16), bytes)
+    }
+
+    fn flash_close(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
+        dev.command_out(&cdb_wb_commit(), &[])?;
+        let _ = dev.command_in(&cdb_test_unit_ready(), 0)?;
+        let _ = dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)?;
         Ok(())
     }
 
-    fn flash(&self, dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
-        run_flash(dev, req)
-    }
-}
-
-/// Orchestrate the MTK flash (or dry-run): dump-first, splice, downgrade,
-/// stream, verify. See the module docs and the design's "flash transport".
-fn run_flash(dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
-    match req.input_kind {
-        InputKind::Tar => flash_from_tar(dev, req),
-        InputKind::Bin => flash_from_bin(dev, req),
-    }
-}
-
-/// Restore per-unit regions from a `.tar` (targeted writes, not a full stream).
-fn flash_from_tar(dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
-    let dump = UserDump::from_tar_bytes(&req.input).context("parsing .tar restore input")?;
-    println!("== flash plan (restore from .tar) ==");
-    println!(
-        "restore rom_1EC000: 0x{:06X} ({} B)",
-        ROM_1EC000_OFFSET,
-        dump.rom_1ec000.len()
-    );
-    println!(
-        "restore rom_1F0000: 0x{:06X} ({} B)",
-        ROM_1F0000_OFFSET,
-        dump.rom_1f0000.len()
-    );
-
-    if !req.execute {
-        println!("\nDRY RUN: no SCSI writes issued. Re-run with --execute to restore.");
-        return Ok(());
-    }
-    if !req.acknowledged_risk {
-        bail!("refusing to write without --i-understand-risk");
+    fn readback(&self, dev: &mut dyn ScsiDevice, offset: usize, len: usize) -> Result<Vec<u8>> {
+        let cdb = cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, offset as u32, len as u32);
+        dev.command_in(&cdb, len)
     }
 
-    let regions = [
-        (ROM_1EC000_OFFSET, &dump.rom_1ec000),
-        (ROM_1F0000_OFFSET, &dump.rom_1f0000),
-    ];
-    println!("\nEXECUTING restore — do not power off or disconnect the drive...");
-    for (offset, data) in regions {
-        let cdb = cdb_write_buffer(MODE_6, FLASH_BUFFER_ID, offset, data.len() as u32, false);
-        dev.command_out(&cdb, data)?;
-        let rb = cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, offset, data.len() as u32);
-        let got = dev.command_in(&rb, data.len())?;
-        if got != *data {
-            bail!("read-back verify failed for region 0x{offset:06X}");
-        }
-    }
-    println!("restore complete and verified.");
-    Ok(())
-}
-
-/// Flash a full `.bin` image VERBATIM: dump-first (backup only), stream, verify.
-fn flash_from_bin(dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
-    if req.input.len() != IMAGE_SIZE {
-        bail!(
-            "firmware .bin must be exactly {IMAGE_SIZE} bytes, got {}",
-            req.input.len()
-        );
+    fn restore_regions<'a>(&self, dump: &'a UserDump) -> Vec<RestoreRegion<'a>> {
+        vec![
+            RestoreRegion {
+                label: "rom_1EC000.bin",
+                offset: ROM_1EC000_OFFSET,
+                bytes: &dump.rom_1ec000,
+            },
+            RestoreRegion {
+                label: "rom_1F0000.bin",
+                offset: ROM_1F0000_OFFSET,
+                bytes: &dump.rom_1f0000,
+            },
+        ]
     }
 
-    // ALWAYS attempt a pre-flash dump (backup ONLY — never spliced into the
-    // image). On failure, abort unless --rescue-no-dump.
-    let mut backup_summary = String::from("skipped (--rescue-no-dump)");
-    match dump_user(dev) {
-        Ok(dump) => {
-            if let Some(out) = &req.predump_out {
-                let tar = dump.to_tar_bytes()?;
-                std::fs::write(out, &tar)
-                    .with_context(|| format!("saving pre-flash dump to {}", out.display()))?;
-                backup_summary = format!("saved {} ({} bytes)", out.display(), tar.len());
-            } else {
-                backup_summary = "captured (not saved: no -o given)".to_string();
-            }
-        }
-        Err(e) => {
-            if !req.rescue_no_dump {
-                bail!(
-                    "pre-flash per-unit dump failed ({e}); aborting. \
-                     Use --rescue-no-dump ONLY to flash a drive that can no longer be read."
-                );
-            }
-            println!("WARNING: pre-flash dump failed ({e}); --rescue-no-dump: proceeding without a backup.");
-        }
-    }
-
-    // enc decision: always auto-detected; --enc/--no-enc is a hidden override.
-    let enc = req.enc_override.unwrap_or_else(|| enc_needed(dev));
-    let commit = req.mode == crate::manifest::FlashMode::Full;
-    let plan = FlashPlan::prepare(&req.input, commit, enc)?;
-
-    println!("== flash plan (verbatim) ==");
-    println!("device:         {}", dev.describe());
-    println!("drive model:    {}", ident_or_unknown(&req.drive_model));
-    println!("mode:           {:?}", req.mode);
-    println!("pre-flash dump: {backup_summary}");
-    println!(
-        "envelope:       {}",
-        if enc {
-            "enc (AES-128-ECB)"
-        } else {
-            "plaintext"
-        }
-    );
-    println!(
-        "stream range:   0x000000-0x1FFFFF in {} chunk(s) of {} B (commit={})",
-        plan.chunk_count(),
-        plan.chunk,
-        commit
-    );
-
-    if !req.execute {
-        println!("\nDRY RUN: no SCSI writes issued. Re-run with --execute to flash.");
-        return Ok(());
-    }
-
-    // Full safety gate only on the write path. The image is not modified, so the
-    // cross-flash model check is caller-supplied (empty => cannot cross-check).
-    let ctx = SafetyContext {
-        drive_model: &req.drive_model,
-        firmware_model: &req.firmware_model,
-        acknowledged_risk: req.acknowledged_risk,
-        allow_cross_flash: req.allow_cross_flash,
-    };
-    if let Err(block) = check_safety(&ctx) {
-        bail!("SAFETY GATE: {}", block.0);
-    }
-
-    println!("\nEXECUTING flash — do not power off or disconnect the drive...");
-    plan.execute(dev)?;
-    println!(
-        "stream complete ({} bytes); verifying...",
-        plan.payload.len()
-    );
-    plan.verify_readback(dev)?;
-    println!("flash complete and read-back verified.");
-    Ok(())
-}
-
-fn ident_or_unknown(s: &str) -> &str {
-    if s.is_empty() {
-        "<unknown>"
-    } else {
-        s
+    fn write_region(&self, dev: &mut dyn ScsiDevice, offset: u32, bytes: &[u8]) -> Result<()> {
+        let cdb = cdb_write_buffer(MODE_6, FLASH_BUFFER_ID, offset, bytes.len() as u32);
+        dev.command_out(&cdb, bytes)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::platform::MockScsiDevice;
-
-    fn full_image(fill: u8) -> Vec<u8> {
-        vec![fill; IMAGE_SIZE]
-    }
-
-    fn sample_dump(a: u8, b: u8) -> UserDump {
-        UserDump {
-            rom_003000: vec![0; ROM_003000_LEN as usize],
-            rom_1ec000: vec![a; ROM_1EC000_LEN as usize],
-            rom_1f0000: vec![b; ROM_1F0000_LEN as usize],
-            inq: vec![0; 96],
-            fd_fwdate: vec![0; 28],
-            fd_sn: vec![0; 28],
-        }
-    }
-
-    #[test]
-    fn read_buffer_cdb_layouts() {
-        assert_eq!(
-            cdb_read_buffer(MODE_6, ROM_BUFFER_ID, 0x1EC000, 0x100),
-            [0x3C, 0x06, 0x00, 0x1E, 0xC0, 0x00, 0x00, 0x01, 0x00, 0x00]
-        );
-    }
-
-    #[test]
-    fn write_buffer_commit_flag() {
-        assert_eq!(cdb_write_buffer(0x06, 0, 0x8000, 0x8000, false)[9], 0x00);
-        assert_eq!(cdb_write_buffer(0x06, 0, 0x8000, 0x8000, true)[9], 0x01);
-    }
-
-    #[test]
-    fn get_config_cdb_layouts() {
-        assert_eq!(
-            cdb_get_config(FEATURE_FWDATE, FD_LEN),
-            [0x46, 0x02, 0x01, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x1C, 0x00]
-        );
-    }
-
-    #[test]
-    fn dump_plan_issues_expected_cdbs() {
-        let mut dev = MockScsiDevice::new();
-        let dump = DumpPlan::new().execute(&mut dev).unwrap();
-        assert_eq!(dump.rom_1ec000.len(), 0x100);
-        assert_eq!(dump.rom_1f0000.len(), 0x10000);
-        assert_eq!(dev.reads.len(), 6);
-        assert_eq!(dev.reads[0][0], 0x3C);
-        assert_eq!(dev.reads[3][0], 0x12);
-        assert_eq!(&dev.reads[4][2..4], &[0x01, 0x0C]);
-        assert_eq!(&dev.reads[5][2..4], &[0x01, 0x08]);
-    }
-
-    #[test]
-    fn enc_transform_roundtrips_and_needs_block_multiple() {
-        let mut short = vec![0u8; 17];
-        assert!(enc_transform(&mut short).is_err());
-        let mut block = vec![0u8; 16];
-        enc_transform(&mut block).unwrap();
-        assert_ne!(block, vec![0u8; 16]);
-    }
-
-    #[test]
-    fn enc_needed_defaults_to_plaintext() {
-        let mut dev = MockScsiDevice::new();
-        assert!(
-            !enc_needed(&mut dev),
-            "enc must default off until research lands"
-        );
-    }
-
-    fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
-        FlashRequest {
-            input: image,
-            input_kind: InputKind::Bin,
-            mode: crate::manifest::FlashMode::Full,
-            execute,
-            rescue_no_dump: false,
-            allow_cross_flash: false,
-            acknowledged_risk: execute,
-            enc_override: None,
-            drive_model: "BU40N".into(),
-            firmware_model: String::new(),
-            predump_out: None,
-        }
-    }
-
-    #[test]
-    fn flash_dry_run_writes_nothing_but_reads_for_backup_dump() {
-        let mut dev = MockScsiDevice::new();
-        let req = bin_req(full_image(0x11), false);
-        run_flash(&mut dev, &req).unwrap();
-        // Dry run performs the pre-flash read-only backup dump but issues NO writes.
-        assert!(dev.writes.is_empty(), "dry-run must not write");
-        assert!(
-            !dev.reads.is_empty(),
-            "dry-run still reads for the backup + plan"
-        );
-    }
-
-    #[test]
-    fn flash_rejects_wrong_size_bin() {
-        let mut dev = MockScsiDevice::new();
-        let req = bin_req(vec![0u8; 1024], false);
-        assert!(run_flash(&mut dev, &req).is_err());
-    }
-
-    #[test]
-    fn flash_execute_streams_verbatim_and_verifies() {
-        // All-zero plaintext image so the mock's zero-fill read-back matches.
-        let mut dev = MockScsiDevice::new();
-        let req = bin_req(full_image(0x00), true);
-        run_flash(&mut dev, &req).unwrap();
-        // 2 MB / 32 KiB = 64 write chunks, all WRITE_BUFFER (0x3B).
-        assert_eq!(dev.writes.len(), IMAGE_SIZE / DEFAULT_CHUNK);
-        assert!(dev.writes.iter().all(|(cdb, _)| cdb[0] == 0x3B));
-        // The bytes streamed are the verbatim image (unmodified).
-        assert!(dev
-            .writes
-            .iter()
-            .all(|(_, data)| data.iter().all(|&b| b == 0)));
-    }
-
-    #[test]
-    fn safety_requires_ack_and_blocks_mismatch() {
-        let no_ack = SafetyContext {
-            drive_model: "BU40N",
-            firmware_model: "BU40N",
-            acknowledged_risk: false,
-            allow_cross_flash: false,
-        };
-        assert!(check_safety(&no_ack).is_err());
-
-        let mismatch = SafetyContext {
-            drive_model: "BU40N",
-            firmware_model: "WH16NS60",
-            acknowledged_risk: true,
-            allow_cross_flash: false,
-        };
-        assert!(check_safety(&mismatch).is_err());
-        let allowed = SafetyContext {
-            allow_cross_flash: true,
-            ..mismatch
-        };
-        assert!(check_safety(&allowed).is_ok());
-    }
-
-    #[test]
-    fn tar_round_trip() {
-        let dump = sample_dump(0x22, 0x33);
-        let bytes = dump.to_tar_bytes().unwrap();
-        assert_eq!(UserDump::from_tar_bytes(&bytes).unwrap(), dump);
-    }
-
-    #[test]
-    fn parse_field_descriptor_serial() {
-        let mut data = vec![
-            0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x01, 0x08, 0x03, 0x10,
-        ];
-        data.extend_from_slice(b"009HANK118975   ");
-        let fd = parse_field_descriptor(&data).unwrap();
-        assert_eq!(fd.feature, FEATURE_SERIAL);
-        assert_eq!(fd.ascii, "009HANK118975");
-    }
-}
+#[path = "mtk_tests.rs"]
+mod tests;

@@ -1,14 +1,19 @@
-//! Chip-family layer: classification + per-family dump/flash logic.
+//! Chip-family layer: classification + the per-family command trait.
 //!
-//! This is the second of the two independent plug-in layers (the other is
+//! This is one of the two independent plug-in layers (the other is
 //! [`crate::platform`]). [`classify`] identifies the silicon [`Family`] using
 //! only proven discriminators; [`for_family`] returns the matching
-//! [`DriveFamily`] implementation. Only [`mtk`] is fully implemented; the
-//! others classify positive but return `Unsupported` from dump/flash.
+//! [`DriveFamily`] implementation.
+//!
+//! A [`DriveFamily`] exposes **only chip primitives** — identity, per-unit dump
+//! capture, and the flash open/chunk/close/read-back steps. It does no file
+//! I/O and prints nothing. The generic orchestration (reading the input file,
+//! the pre-flash backup, the dry-run plan, the streaming loop, verification, and
+//! the safety gate) lives once in [`crate::engine`] and drives any family
+//! through this trait. Only [`mtk`] is fully implemented; the others classify
+//! positive but return `Unsupported`.
 
-use std::path::{Path, PathBuf};
-
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
@@ -16,6 +21,8 @@ use crate::platform::ScsiDevice;
 pub mod mtk;
 pub mod pioneer;
 pub mod renesas;
+
+pub use mtk::UserDump;
 
 /// The silicon family of a connected optical drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,14 +61,14 @@ pub struct Identity {
     pub banner: Option<String>,
 }
 
-fn trim_ascii(bytes: &[u8]) -> String {
+pub(crate) fn trim_ascii(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .trim_matches(|c: char| c.is_whitespace() || c == '\0')
         .to_string()
 }
 
 /// Read INQUIRY + boot banner for the `info` command (best-effort).
-pub fn identity(dev: &mut dyn ScsiDevice) -> Identity {
+pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
     let mut id = Identity::default();
     if let Ok(data) = dev.command_in(&mtk::cdb_inquiry(96), 96) {
         if data.len() >= 36 {
@@ -125,14 +132,14 @@ pub enum InputKind {
 }
 
 /// Sniff the flash input kind from a path's extension (`.tar` => tar, else bin).
-pub fn sniff_input(path: &Path) -> InputKind {
+pub fn sniff_input(path: &std::path::Path) -> InputKind {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case("tar") => InputKind::Tar,
         _ => InputKind::Bin,
     }
 }
 
-/// A fully-resolved flash request handed to a [`DriveFamily`].
+/// A fully-resolved flash request handed to [`crate::engine`].
 #[derive(Debug, Clone)]
 pub struct FlashRequest {
     /// The raw input file bytes.
@@ -156,19 +163,77 @@ pub struct FlashRequest {
     /// Firmware model detected out-of-band (empty => no cross-check).
     pub firmware_model: String,
     /// Where to save the pre-flash backup dump, if anywhere.
-    pub predump_out: Option<PathBuf>,
+    pub predump_out: Option<std::path::PathBuf>,
 }
 
-/// A chip family's dump/flash behaviour.
+/// A per-unit region to restore from a `.tar` dump (targeted write).
+#[derive(Debug, Clone, Copy)]
+pub struct RestoreRegion<'a> {
+    /// Human label (the tar member name).
+    pub label: &'static str,
+    /// Absolute ROM offset the region is written to.
+    pub offset: u32,
+    /// The region bytes.
+    pub bytes: &'a [u8],
+}
+
+/// A chip family's command primitives.
+///
+/// Every method is a pure chip operation — no file I/O, no printing. The
+/// generic [`crate::engine`] composes these into the `info` / `dump` / `flash`
+/// commands. A new family only has to supply its own CDBs; the engine loop is
+/// unchanged.
 pub trait DriveFamily {
     /// The family this implementation handles.
     fn family(&self) -> Family;
+
     /// Whether dump/flash are actually implemented (only MTK today).
     fn is_supported(&self) -> bool;
-    /// Read the per-unit regions and write an interoperable `.tar` to `out`.
-    fn dump(&self, dev: &mut dyn ScsiDevice, out: &Path) -> Result<()>;
-    /// Flash `req` to the drive (or print a dry-run plan).
-    fn flash(&self, dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()>;
+
+    /// Read INQUIRY + boot banner (the `info` primitive). Standard for all
+    /// families, so provided by default.
+    fn identity(&self, dev: &mut dyn ScsiDevice) -> Identity {
+        read_identity(dev)
+    }
+
+    /// Capture the per-unit backup regions (the `dump` primitive).
+    fn read_dump(&self, dev: &mut dyn ScsiDevice) -> Result<UserDump>;
+
+    /// Full firmware image size in bytes (e.g. 2 MiB).
+    fn image_size(&self) -> usize;
+
+    /// Streaming chunk size in bytes (e.g. 16 KiB).
+    fn chunk_size(&self) -> usize;
+
+    /// Envelope the whole image before streaming. Returns the payload bytes and
+    /// whether the enc wrap was applied.
+    fn envelope(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        image: &[u8],
+        enc_override: Option<bool>,
+    ) -> Result<(Vec<u8>, bool)>;
+
+    /// Human-readable dry-run plan for an `image_len`-byte flash.
+    fn flash_plan(&self, image_len: usize) -> Result<String>;
+
+    /// Open a flash session (probe + ready + prepare). One data-out command.
+    fn flash_open(&self, dev: &mut dyn ScsiDevice, mode: FlashMode) -> Result<()>;
+
+    /// Stream one chunk at absolute `offset`.
+    fn flash_chunk(&self, dev: &mut dyn ScsiDevice, offset: usize, bytes: &[u8]) -> Result<()>;
+
+    /// Close a flash session (commit + ready + status).
+    fn flash_close(&self, dev: &mut dyn ScsiDevice, mode: FlashMode) -> Result<()>;
+
+    /// Read back `len` bytes at `offset` (the engine uses this for verify).
+    fn readback(&self, dev: &mut dyn ScsiDevice, offset: usize, len: usize) -> Result<Vec<u8>>;
+
+    /// Map a per-unit dump onto the targeted regions a `.tar` restore writes.
+    fn restore_regions<'a>(&self, dump: &'a UserDump) -> Vec<RestoreRegion<'a>>;
+
+    /// Write one targeted region verbatim (the `.tar` restore primitive).
+    fn write_region(&self, dev: &mut dyn ScsiDevice, offset: u32, bytes: &[u8]) -> Result<()>;
 }
 
 /// Return the [`DriveFamily`] implementation for a classified [`Family`].
@@ -189,64 +254,94 @@ pub fn unsupported_family_error(family: Family) -> anyhow::Error {
     )
 }
 
+/// Implement [`DriveFamily`] for a classified-but-unsupported family: every
+/// command that would touch the drive returns the MTK-gate error, so no dump or
+/// flash CDB is ever issued. Used by the Pioneer / Renesas / Unknown stubs.
+#[macro_export]
+macro_rules! unsupported_drive_family {
+    ($ty:ty, $family:expr) => {
+        impl $crate::drive::DriveFamily for $ty {
+            fn family(&self) -> $crate::drive::Family {
+                $family
+            }
+            fn is_supported(&self) -> bool {
+                false
+            }
+            fn read_dump(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+            ) -> ::anyhow::Result<$crate::drive::UserDump> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+            fn image_size(&self) -> usize {
+                0
+            }
+            fn chunk_size(&self) -> usize {
+                0
+            }
+            fn envelope(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+                _image: &[u8],
+                _enc_override: ::core::option::Option<bool>,
+            ) -> ::anyhow::Result<(::std::vec::Vec<u8>, bool)> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+            fn flash_plan(&self, _image_len: usize) -> ::anyhow::Result<::std::string::String> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+            fn flash_open(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+                _mode: $crate::manifest::FlashMode,
+            ) -> ::anyhow::Result<()> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+            fn flash_chunk(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+                _offset: usize,
+                _bytes: &[u8],
+            ) -> ::anyhow::Result<()> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+            fn flash_close(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+                _mode: $crate::manifest::FlashMode,
+            ) -> ::anyhow::Result<()> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+            fn readback(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+                _offset: usize,
+                _len: usize,
+            ) -> ::anyhow::Result<::std::vec::Vec<u8>> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+            fn restore_regions<'a>(
+                &self,
+                _dump: &'a $crate::drive::UserDump,
+            ) -> ::std::vec::Vec<$crate::drive::RestoreRegion<'a>> {
+                ::std::vec::Vec::new()
+            }
+            fn write_region(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+                _offset: u32,
+                _bytes: &[u8],
+            ) -> ::anyhow::Result<()> {
+                Err($crate::drive::unsupported_family_error($family))
+            }
+        }
+    };
+}
+
 /// Fallback family for [`Family::Unknown`]: refuses everything.
 struct UnknownFamily;
-
-impl DriveFamily for UnknownFamily {
-    fn family(&self) -> Family {
-        Family::Unknown
-    }
-    fn is_supported(&self) -> bool {
-        false
-    }
-    fn dump(&self, _dev: &mut dyn ScsiDevice, _out: &Path) -> Result<()> {
-        bail!("{}", unsupported_family_error(Family::Unknown))
-    }
-    fn flash(&self, _dev: &mut dyn ScsiDevice, _req: &FlashRequest) -> Result<()> {
-        bail!("{}", unsupported_family_error(Family::Unknown))
-    }
-}
+unsupported_drive_family!(UnknownFamily, Family::Unknown);
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::platform::MockScsiDevice;
-
-    #[test]
-    fn classify_mtk_from_get_config_010c() {
-        let mut dev = MockScsiDevice::mtk();
-        assert_eq!(classify(&mut dev), Family::Mtk);
-    }
-
-    #[test]
-    fn classify_pioneer_from_read_buffer_f1() {
-        let mut dev = MockScsiDevice::pioneer();
-        assert_eq!(classify(&mut dev), Family::Pioneer);
-    }
-
-    #[test]
-    fn classify_unknown_when_no_discriminator() {
-        // Empty mock: GET_CONFIG zero-fills (no 01 0C), RB-0xF1 zero-fills.
-        let mut dev = MockScsiDevice::new();
-        assert_eq!(classify(&mut dev), Family::Unknown);
-    }
-
-    #[test]
-    fn sniff_picks_tar_vs_bin() {
-        assert_eq!(sniff_input(Path::new("dump.tar")), InputKind::Tar);
-        assert_eq!(sniff_input(Path::new("fw.bin")), InputKind::Bin);
-        assert_eq!(sniff_input(Path::new("image")), InputKind::Bin);
-    }
-
-    #[test]
-    fn mtk_gate_blocks_non_mtk_dump_and_flash() {
-        for fam in [Family::Pioneer, Family::Renesas, Family::Unknown] {
-            let handler = for_family(fam);
-            assert!(!handler.is_supported());
-            let mut dev = MockScsiDevice::new();
-            assert!(handler.dump(&mut dev, Path::new("/dev/null")).is_err());
-            // No dump/flash CDBs may have been issued on the gated path.
-            assert!(dev.writes.is_empty());
-        }
-    }
-}
+#[path = "mod_tests.rs"]
+mod tests;
