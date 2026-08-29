@@ -846,9 +846,20 @@ impl DriveFamily for Mtk {
     /// [`FlashMode::Main`] vs [`FlashMode::Full`] — the drive programs on
     /// completion of the streamed 2 MiB either way.
     fn flash_close(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
-        dev.command_out(&cdb_wb_commit(), &[])?;
-        dev.command_in(&cdb_test_unit_ready(), 0)?;
-        let sense = dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)?;
+        // The burn already completed on the final STREAM chunk. COMMIT + READY are
+        // status trailers, and the drive is mid-reinit — it legitimately answers
+        // these with a transient CHECK CONDITION (UNIT ATTENTION *or* NOT READY),
+        // which the strict transport refuses. That is expected here and must NOT
+        // be read as a failed flash, so both are best-effort: their transport
+        // result is deliberately discarded. REQUEST SENSE is likewise best-effort
+        // (a drive that cannot even return sense is caught by read-back verify);
+        // the ONLY hard-failure signal is a real programming fault in its parsed
+        // sense key below.
+        let _ = dev.command_out(&cdb_wb_commit(), &[]);
+        let _ = dev.command_in(&cdb_test_unit_ready(), 0);
+        let sense = dev
+            .command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)
+            .unwrap_or_default();
         match parse_sense(&sense) {
             // Bail ONLY on a genuine programming failure: MEDIUM ERROR (0x3),
             // HARDWARE ERROR (0x4), ABORTED COMMAND (0xB). A microcode program

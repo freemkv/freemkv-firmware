@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dev → qa → main` CI model (CI on pinned Rust 1.86, a QA gate, and a
   self-contained leak-guard) matching the rest of the freemkv ecosystem.
 
+### Robustness
+- Linux SG_IO transport hardened for adversarial/degraded drives: a CHECK
+  CONDITION on a data-IN read is never accepted as valid data (a failed region
+  read can no longer silently corrupt a backup); a self-clearing UNIT ATTENTION
+  is retried once on reads/polls (so a benign power-on notification does not
+  masquerade as a failure), and NOT READY now gates the flash-open handshake
+  before any WRITE BUFFER is issued. The post-burn COMMIT/READY/SENSE trailers
+  are best-effort: only a real programming fault (sense key 0x3/0x4/0xB) reports
+  the irreversible flash as failed.
+
 ### Notes
 - `flash` is a **dumb verbatim writer**: it never modifies the image. Firmware
   authoring (downgrade, speed-lock, host-cert changes) is deliberately out of
