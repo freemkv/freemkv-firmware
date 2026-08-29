@@ -233,6 +233,15 @@ fn flash_close_tolerates_benign_unit_attention() {
 }
 
 #[test]
+fn flash_close_tolerates_benign_not_ready() {
+    // NOT READY (0x2) is a benign mid-transition state after a program; it must
+    // not fail the flash either.
+    let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x02));
+    let req = bin_req(patterned_image(IMAGE_SIZE), true);
+    flash(&mut dev, &Mtk, &req).expect("benign NOT READY must not fail the flash");
+}
+
+#[test]
 fn flash_close_fails_on_hardware_error_sense() {
     // A genuine HARDWARE ERROR (0x4) after the burn IS a real failure.
     let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));
