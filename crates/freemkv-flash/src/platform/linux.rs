@@ -209,9 +209,17 @@ impl SgioDevice {
             // CHECK-CONDITIONs after its one retry is NEVER tolerated: its data is
             // not valid, and silently accepting a zero-filled/garbage region would
             // corrupt a backup. NOT READY (0x2) and every hard sense key are real
-            // failures.
+            // failures — EXCEPT the benign "no medium present" state (NOT READY /
+            // ASC 0x3A): firmware is flashed with no disc, so a healthy drive
+            // answers TEST UNIT READY (and any medium-gated command) that way. It
+            // is tolerated for every direction; a data-in read that actually
+            // needed medium returns no data and is caught by the caller's length
+            // check, so this cannot smuggle garbage upward.
+            let no_medium = sense_kaa(sense).is_some_and(|(k, a, _)| super::is_no_medium(k, a));
             let tolerable = hdr.status == CHECK_CONDITION
-                && (key == Some(0x1) || (dir != Direction::FromDevice && key == Some(0x6)));
+                && (no_medium
+                    || key == Some(0x1)
+                    || (dir != Direction::FromDevice && key == Some(0x6)));
             if !tolerable {
                 bail!(
                     "SCSI command failed on {}: {} (status 0x{:02x}, raw sense {:02x?})",

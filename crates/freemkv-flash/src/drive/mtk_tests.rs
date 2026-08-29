@@ -211,55 +211,33 @@ fn parse_sense_fixed_descriptor_and_short_buffers() {
     assert_eq!(parse_sense(&[0x00; 4]), None);
 }
 
-// ---- flash_open readiness gate (regression: hardware-found) -----------------
+// ---- preflight / flash_open safety (regression: hardware-found) -------------
+//
+// The benign "no disc" case (NOT READY / ASC 0x3A) is tolerated in the Linux
+// transport (see `platform::is_no_medium`), so at THIS layer a TEST UNIT READY
+// that surfaces as an error is a genuine fault — and must never reach a write.
+// (The transport-level no-medium tolerance itself is unit-tested in `platform`.)
 
 use crate::drive::DriveFamily;
 
-/// A fixed-format REQUEST SENSE payload carrying `key`/`asc`/`ascq`.
-fn fixed_sense3(key: u8, asc: u8, ascq: u8) -> Vec<u8> {
-    let mut s = vec![0u8; 18];
-    s[0] = 0x70;
-    s[2] = key & 0x0F;
-    s[7] = 10;
-    s[12] = asc;
-    s[13] = ascq;
-    s
+#[test]
+fn preflight_is_read_only_on_a_responsive_drive() {
+    let mut dev = MockScsiDevice::new();
+    Mtk.preflight(&mut dev)
+        .expect("a responsive drive passes the read-only handshake");
+    assert!(dev.writes.is_empty(), "preflight must issue no writes");
 }
 
 #[test]
-fn flash_open_proceeds_when_no_disc_loaded() {
-    // A real BU40N with no disc answers TEST UNIT READY with NOT READY / MEDIUM
-    // NOT PRESENT (sense key 0x02, ASC 0x3A) — the normal firmware-flash state.
-    // flash_open must NOT abort: it must go on to issue PREPARE.
-    let mut dev = MockScsiDevice::new()
-        .on_fail(|cdb| cdb == [0u8; 12].as_slice(), "TUR: not ready")
-        .on(
-            |cdb| cdb.first() == Some(&0x03),
-            fixed_sense3(0x02, 0x3A, 0x01),
-        );
-    Mtk.flash_open(&mut dev, crate::manifest::FlashMode::Full)
-        .expect("no-disc NOT READY must not block the flash");
-    assert!(
-        dev.writes.iter().any(|(cdb, _)| cdb.first() == Some(&0x3B)),
-        "PREPARE (WRITE BUFFER) should have been issued"
-    );
-}
-
-#[test]
-fn flash_open_bails_on_non_benign_not_ready() {
-    // TUR fails for a reason OTHER than no-disc (here a HARDWARE ERROR, 0x04):
-    // that is a real fault and flash_open must abort BEFORE issuing any write.
-    let mut dev = MockScsiDevice::new()
-        .on_fail(|cdb| cdb == [0u8; 12].as_slice(), "TUR: faulted")
-        .on(
-            |cdb| cdb.first() == Some(&0x03),
-            fixed_sense3(0x04, 0x00, 0x00),
-        );
+fn flash_open_aborts_without_writing_when_preflight_fails() {
+    // TEST UNIT READY fails at the transport for a non-tolerated reason (a real
+    // fault). flash_open must abort BEFORE issuing PREPARE — no writes.
+    let mut dev = MockScsiDevice::new().on_fail(|cdb| cdb == [0u8; 12].as_slice(), "TUR faulted");
     assert!(Mtk
         .flash_open(&mut dev, crate::manifest::FlashMode::Full)
         .is_err());
     assert!(
         dev.writes.is_empty(),
-        "a faulted drive must never reach PREPARE"
+        "a not-ready drive must never reach PREPARE"
     );
 }

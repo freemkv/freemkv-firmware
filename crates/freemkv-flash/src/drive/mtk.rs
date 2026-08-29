@@ -830,34 +830,21 @@ impl DriveFamily for Mtk {
     /// always streamed and the commit handshake in [`Self::flash_close`] is
     /// always sent regardless of [`FlashMode::Main`] vs [`FlashMode::Full`] —
     /// the drive programs on completion either way.
-    fn flash_open(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
-        // PROBE is a real ROM read and must succeed.
+    fn preflight(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
+        // PROBE is a real ROM read and must succeed. TEST UNIT READY is a
+        // drive-faithful handshake: firmware is flashed with NO disc loaded, so a
+        // healthy drive answers NOT READY / "medium not present" (key 0x2 ASC
+        // 0x3A) — the normal state, which the transport treats as benign (see
+        // `platform::is_no_medium`). Any OTHER not-ready reason (spinning-up,
+        // faulted, wrong medium) propagates the transport's decoded error here
+        // and aborts before the caller reaches the irreversible PREPARE.
         let _ = dev.command_in(&cdb_read_probe(), PROBE_ALLOC)?;
-        // TEST UNIT READY is a drive-faithful handshake. Firmware is flashed with
-        // NO disc loaded, so a healthy drive answers NOT READY / "medium not
-        // present" (sense key 0x2, ASC 0x3A) here — the normal state, which must
-        // NOT abort the flash. But we do NOT blanket-ignore the TUR: if it fails
-        // for ANY OTHER reason (a genuinely not-ready / spinning-up / faulted
-        // drive), that IS a real problem and must abort before the irreversible
-        // PREPARE. So on a TUR failure we read the sense and proceed only for the
-        // no-disc case.
-        if dev.command_in(&cdb_test_unit_ready(), 0).is_err() {
-            let sense = dev
-                .command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)
-                .unwrap_or_default();
-            match parse_sense(&sense) {
-                // NOT READY because no medium is loaded (ASC 0x3A, any ASCQ:
-                // tray closed / open / no medium) — expected for a flash; proceed.
-                Some((0x02, 0x3A, _)) => {}
-                Some((key, asc, ascq)) => bail!(
-                    "drive is not ready to flash — {} (only NOT READY / medium-not-present is a safe pre-flash state); refusing to PREPARE",
-                    crate::platform::describe_sense(key, asc, ascq)
-                ),
-                None => bail!(
-                    "drive reported not-ready before flash and its sense was unreadable; refusing to PREPARE"
-                ),
-            }
-        }
+        let _ = dev.command_in(&cdb_test_unit_ready(), 0)?;
+        Ok(())
+    }
+
+    fn flash_open(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
+        self.preflight(dev)?;
         // PREPARE is the one data-out that must land (strict).
         dev.command_out(&cdb_wb_prepare(), &[])
     }

@@ -90,6 +90,17 @@ pub fn asc_meaning(asc: u8, ascq: u8) -> &'static str {
     }
 }
 
+/// Is this sense a benign "no medium present" state — NOT READY (key 0x2) with
+/// ASC 0x3A (medium not present, any ASCQ: tray closed / open / no medium)?
+///
+/// Firmware operations need no disc loaded, so this is the *normal* state for a
+/// flash and the transport must not fail the command on it. A data-in read that
+/// genuinely needed medium returns no data in this state and is caught by the
+/// caller's length check, so tolerating it here cannot smuggle garbage upward.
+pub fn is_no_medium(key: u8, asc: u8) -> bool {
+    key == 0x2 && asc == 0x3A
+}
+
 /// One-line human-readable description of a `(key, ASC, ASCQ)` sense triple,
 /// e.g. `NOT READY: medium not present — tray closed (no disc) [key 0x2 ASC 3Ah/01h]`.
 pub fn describe_sense(key: u8, asc: u8, ascq: u8) -> String {
@@ -145,5 +156,33 @@ pub fn open(path: &str, writable: bool) -> Result<Box<dyn ScsiDevice>> {
     {
         let _ = writable;
         anyhow::bail!("no SCSI pass-through backend for this OS (device {path})")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_medium_is_only_not_ready_asc_3a() {
+        // The exact sense the BU40N returns to TEST UNIT READY with no disc.
+        assert!(is_no_medium(0x2, 0x3A));
+        // Other NOT-READY reasons are NOT "no medium" (must still fail the flash).
+        assert!(!is_no_medium(0x2, 0x04)); // becoming ready / spinning up
+        assert!(!is_no_medium(0x2, 0x00));
+        // Wrong key, right ASC — not a no-medium condition.
+        assert!(!is_no_medium(0x4, 0x3A)); // hardware error
+        assert!(!is_no_medium(0x0, 0x3A));
+    }
+
+    #[test]
+    fn describe_sense_is_human_readable() {
+        let s = describe_sense(0x2, 0x3A, 0x01);
+        assert!(s.contains("NOT READY"), "{s}");
+        assert!(s.contains("medium not present"), "{s}");
+        assert!(s.contains("3Ah/01h"), "{s}");
+        // A hard error decodes its key name too.
+        assert!(describe_sense(0x4, 0x0C, 0x00).contains("HARDWARE ERROR"));
+        assert!(describe_sense(0x3, 0x0C, 0x00).contains("write error"));
     }
 }

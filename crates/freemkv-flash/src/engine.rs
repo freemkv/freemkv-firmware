@@ -120,6 +120,13 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     print!("{}", drive.flash_plan(payload.len())?);
 
     if !req.execute {
+        // Read-only readiness handshake (PROBE + TEST UNIT READY) — issues NO
+        // write — so a dry-run surfaces a not-ready drive up front, before the
+        // operator commits to --execute. A benign no-disc drive passes.
+        match drive.preflight(dev) {
+            Ok(()) => println!("preflight:      OK — drive ready for flash (read-only handshake)"),
+            Err(e) => println!("preflight:      NOT READY — {e}"),
+        }
         println!("\nDRY RUN: no SCSI writes issued. Re-run with --execute to flash.");
         return Ok(());
     }
