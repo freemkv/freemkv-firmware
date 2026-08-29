@@ -10,6 +10,13 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use super::{Direction, ScsiDevice};
 
+// `libc::ioctl`'s request argument is typed differently per libc: `c_ulong` on
+// glibc, `c_int` on musl. Match each so the same source builds for a glibc CI
+// target and a static-musl release binary without a cast (which would truncate
+// or trip `clippy::unnecessary_cast` on one of the two).
+#[cfg(target_env = "musl")]
+const SG_IO: libc::c_int = 0x2285;
+#[cfg(not(target_env = "musl"))]
 const SG_IO: libc::c_ulong = 0x2285;
 const SG_DXFER_NONE: libc::c_int = -1;
 const SG_DXFER_TO_DEV: libc::c_int = -2;
