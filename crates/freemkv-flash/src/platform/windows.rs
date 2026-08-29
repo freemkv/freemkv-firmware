@@ -19,7 +19,7 @@ impl SptiDevice {
     ///
     /// Construction succeeds so callers can report identity; any real command
     /// returns an unimplemented error.
-    pub fn open(path: &str) -> Result<Self> {
+    pub fn open(path: &str, _writable: bool) -> Result<Self> {
         Ok(Self {
             path: path.to_string(),
         })

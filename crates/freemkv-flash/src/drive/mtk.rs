@@ -214,7 +214,11 @@ pub fn cdb_wb_commit() -> [u8; 12] {
     ]
 }
 
-/// STATUS — REQUEST SENSE, alloc 16 (data-in), the progress/status poll.
+/// STATUS — REQUEST SENSE (data-in), the progress/status poll. These are the
+/// exact bytes the drive's own flasher issues (byte 4 is `0x80` there, not the
+/// SPC allocation length); the actual transfer is capped by the caller's buffer
+/// ([`REQUEST_SENSE_ALLOC`] = 16). Left byte-for-byte so the drive sees what it
+/// expects rather than an SPC-strict form it was never tested against.
 pub fn cdb_request_sense() -> [u8; 12] {
     [
         0x03, 0x00, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -414,7 +418,7 @@ impl UserDump {
                 "inq.bin" => &mut inq,
                 "fd_fwdate.bin" => &mut fd_fwdate,
                 "fd_sn.bin" => &mut fd_sn,
-                other => bail!("unexpected dump member '{other}'"),
+                other => bail!("unexpected dump member '{}'", super::sanitize_ascii(other)),
             };
             if slot.is_some() {
                 bail!("duplicate dump member '{name}'");
@@ -446,14 +450,15 @@ impl UserDump {
         ]
     }
 
-    /// Decoded serial number, if the descriptor parses.
+    /// Decoded serial number, if the descriptor parses. Sanitized for display
+    /// (a malicious/garbled drive cannot inject terminal escapes).
     pub fn serial(&self) -> Option<String> {
-        parse_field_descriptor(&self.fd_sn).map(|d| d.ascii)
+        parse_field_descriptor(&self.fd_sn).map(|d| super::sanitize_ascii(&d.ascii))
     }
 
     /// Decoded firmware date, if the descriptor parses.
     pub fn fw_date(&self) -> Option<String> {
-        parse_field_descriptor(&self.fd_fwdate).map(|d| d.ascii)
+        parse_field_descriptor(&self.fd_fwdate).map(|d| super::sanitize_ascii(&d.ascii))
     }
 
     /// Write the dump as a `.tar` with compatible member names/order.
@@ -496,7 +501,9 @@ impl UserDump {
                 .iter()
                 .copied()
                 .find(|m| *m == name)
-                .with_context(|| format!("unexpected dump member '{name}'"))?;
+                .with_context(|| {
+                    format!("unexpected dump member '{}'", super::sanitize_ascii(&name))
+                })?;
             members.push((canonical, data));
         }
         Self::from_members(members)
@@ -831,13 +838,28 @@ impl DriveFamily for Mtk {
         dev.command_out(&cdb_wb_commit(), &[])?;
         dev.command_in(&cdb_test_unit_ready(), 0)?;
         let sense = dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)?;
-        if let Some((key, asc, ascq)) = parse_sense(&sense) {
-            // 0x0 = NO SENSE, 0x1 = RECOVERED ERROR: both benign.
-            if key != 0x0 && key != 0x1 {
+        match parse_sense(&sense) {
+            // Bail ONLY on a genuine programming failure: MEDIUM ERROR (0x3),
+            // HARDWARE ERROR (0x4), ABORTED COMMAND (0xB). A microcode program
+            // normally leaves a benign transient key — NOT READY (0x2) or, most
+            // often, UNIT ATTENTION (0x6, "parameters/microcode changed") — and
+            // 0x0/0x1 are benign; treating those as failure would falsely report
+            // a SUCCESSFUL irreversible flash as a brick.
+            Some((key, asc, ascq)) if matches!(key, 0x3 | 0x4 | 0xB) => {
                 bail!(
-                    "drive reported error after flash (sense key 0x{key:X} ASC {asc:02X} ASCQ {ascq:02X}); the flash may have FAILED"
+                    "drive reported a hardware/medium error after flash (sense key 0x{key:X} ASC {asc:02X} ASCQ {ascq:02X}); the flash may have FAILED"
                 );
             }
+            // Unparseable/short sense: the burn already completed and TEST UNIT
+            // READY passed, so do not conclude failure — but surface it, since
+            // read-back verify is the remaining check.
+            None => {
+                eprintln!(
+                    "warning: could not parse the post-flash REQUEST SENSE response ({} bytes); relying on read-back verify",
+                    sense.len()
+                );
+            }
+            _ => {}
         }
         Ok(())
     }

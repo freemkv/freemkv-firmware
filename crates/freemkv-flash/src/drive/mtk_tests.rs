@@ -188,3 +188,25 @@ fn mtk_envelope_plaintext_by_default() {
     assert!(enc_on);
     assert_ne!(enc_payload, image);
 }
+
+#[test]
+fn parse_sense_fixed_descriptor_and_short_buffers() {
+    // Fixed format (0x70/0x71): key=byte2&0xF, ASC=byte12, ASCQ=byte13.
+    let mut fixed = vec![0u8; 18];
+    fixed[0] = 0x70;
+    fixed[2] = 0x04;
+    fixed[7] = 10;
+    fixed[12] = 0x11;
+    fixed[13] = 0x22;
+    assert_eq!(parse_sense(&fixed), Some((0x04, 0x11, 0x22)));
+    // Descriptor format (0x72/0x73): key=byte1&0xF, ASC=byte2, ASCQ=byte3.
+    assert_eq!(
+        parse_sense(&[0x72, 0x06, 0x33, 0x44]),
+        Some((0x06, 0x33, 0x44))
+    );
+    // Short / empty / unknown response code must return None, never panic.
+    assert_eq!(parse_sense(&[0x70, 0x00, 0x04]), None);
+    assert_eq!(parse_sense(&[0x72, 0x06]), None);
+    assert_eq!(parse_sense(&[]), None);
+    assert_eq!(parse_sense(&[0x00; 4]), None);
+}

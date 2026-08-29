@@ -522,10 +522,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "freemkv-unlock"
-version = "1.6.13"
-
-[[patch.unused]]
 name = "freemkv-engine"
 version = "1.6.13"
 
@@ -539,4 +535,8 @@ version = "1.6.13"
 
 [[patch.unused]]
 name = "libfreemkv"
+version = "1.6.13"
+
+[[patch.unused]]
+name = "freemkv-unlock"
 version = "1.6.13"
