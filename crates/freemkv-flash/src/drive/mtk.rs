@@ -284,7 +284,18 @@ impl Acquire {
         match *self {
             Acquire::ReadBuffer { offset, len } => {
                 let cdb = cdb_read_buffer(MODE_6, ROM_BUFFER_ID, offset, len);
-                dev.command_in(&cdb, len as usize)
+                let data = dev.command_in(&cdb, len as usize)?;
+                // A per-unit ROM region is a fixed size; a short transfer means
+                // an incomplete read. Refuse it rather than silently writing a
+                // truncated region into a backup the operator will trust.
+                if data.len() != len as usize {
+                    bail!(
+                        "short read of ROM region at 0x{offset:06X}: got {} of {} bytes",
+                        data.len(),
+                        len
+                    );
+                }
+                Ok(data)
             }
             Acquire::Inquiry { alloc } => {
                 let cdb = cdb_inquiry(alloc);

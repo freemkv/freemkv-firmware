@@ -16,6 +16,21 @@ const SG_DXFER_TO_DEV: libc::c_int = -2;
 const SG_DXFER_FROM_DEV: libc::c_int = -3;
 const SG_INTERFACE_ID_ORIG: libc::c_int = b'S' as libc::c_int;
 const DEFAULT_TIMEOUT_MS: libc::c_uint = 30_000;
+/// SCSI status byte for CHECK CONDITION (sense data available).
+const CHECK_CONDITION: libc::c_uchar = 0x02;
+/// SG driver-status bit meaning "sense data present" (a CHECK CONDITION), not a
+/// transport-level driver error.
+const DRIVER_SENSE: libc::c_ushort = 0x08;
+
+/// Extract the SCSI sense key from a fixed- (0x70/0x71) or descriptor-format
+/// (0x72/0x73) sense buffer; `None` if it is too short or an unknown format.
+fn sense_key(sense: &[u8]) -> Option<u8> {
+    match *sense.first()? {
+        0x70 | 0x71 => sense.get(2).map(|&b| b & 0x0F),
+        0x72 | 0x73 => sense.get(1).map(|&b| b & 0x0F),
+        _ => None,
+    }
+}
 
 #[repr(C)]
 struct SgIoHdr {
@@ -113,14 +128,36 @@ impl SgioDevice {
             return Err(anyhow!(std::io::Error::last_os_error()))
                 .with_context(|| format!("SG_IO ioctl on {}", self.path));
         }
-        if hdr.status != 0 || hdr.host_status != 0 || hdr.driver_status != 0 {
+        // Transport-layer failures always fail. DRIVER_SENSE (0x08) only means
+        // "sense data is present" (i.e. a CHECK CONDITION) — mask it off so a
+        // benign CHECK CONDITION is not misread as a driver/transport error.
+        if hdr.host_status != 0 || (hdr.driver_status & !DRIVER_SENSE) != 0 {
             bail!(
-                "SCSI command failed: status=0x{:02x} host=0x{:04x} driver=0x{:04x} sense={:02x?}",
-                hdr.status,
+                "SCSI transport failure on {}: host=0x{:04x} driver=0x{:04x}",
+                self.path,
                 hdr.host_status,
-                hdr.driver_status,
-                &sense[..(hdr.sb_len_wr as usize).min(sense.len())]
+                hdr.driver_status
             );
+        }
+        if hdr.status != 0 {
+            let sense = &sense[..(hdr.sb_len_wr as usize).min(sense.len())];
+            // A CHECK CONDITION carrying a benign sense key is informational,
+            // not a failure: a firmware program raises UNIT ATTENTION (0x6), and
+            // a drive mid-transition raises NOT READY (0x2). Tolerate those (and
+            // NO SENSE 0x0 / RECOVERED 0x1, or an unparseable/empty sense) so the
+            // flash framing polls (PROBE / TEST UNIT READY / COMMIT) do not abort
+            // on the near-certain post-program UNIT ATTENTION. Any other status
+            // or sense key is a real command failure.
+            let benign = hdr.status == CHECK_CONDITION
+                && matches!(sense_key(sense), None | Some(0x0 | 0x1 | 0x2 | 0x6));
+            if !benign {
+                bail!(
+                    "SCSI command failed on {}: status=0x{:02x} sense={:02x?}",
+                    self.path,
+                    hdr.status,
+                    sense
+                );
+            }
         }
         let transferred = buf.len().saturating_sub(hdr.resid.max(0) as usize);
         Ok(transferred)
