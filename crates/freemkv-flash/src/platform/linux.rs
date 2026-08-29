@@ -121,36 +121,69 @@ impl SgioDevice {
             info: 0,
         };
 
-        // SAFETY: hdr is a correctly-initialised sg_io_hdr_t; buffers referenced
-        // by its pointers outlive the ioctl call.
-        let rc = unsafe { libc::ioctl(self.file.as_raw_fd(), SG_IO, &mut hdr as *mut SgIoHdr) };
-        if rc < 0 {
-            return Err(anyhow!(std::io::Error::last_os_error()))
-                .with_context(|| format!("SG_IO ioctl on {}", self.path));
-        }
-        // Transport-layer failures always fail. DRIVER_SENSE (0x08) only means
-        // "sense data is present" (i.e. a CHECK CONDITION) — mask it off so a
-        // benign CHECK CONDITION is not misread as a driver/transport error.
-        if hdr.host_status != 0 || (hdr.driver_status & !DRIVER_SENSE) != 0 {
-            bail!(
-                "SCSI transport failure on {}: host=0x{:04x} driver=0x{:04x}",
-                self.path,
-                hdr.host_status,
-                hdr.driver_status
-            );
-        }
-        if hdr.status != 0 {
+        // A firmware program — and any bus reset — raises UNIT ATTENTION (0x6) on
+        // the *next* command, which SCSI terminates with CHECK CONDITION *without*
+        // performing it. The UA self-clears once reported, so re-issuing returns
+        // the real result. We therefore retry a UNIT ATTENTION exactly once, but
+        // never for a data-OUT WRITE_BUFFER: re-sending the burn-triggering final
+        // chunk could re-arm the program. For reads the retry is mandatory — the
+        // first attempt's data phase is untrustworthy, so we must re-read rather
+        // than hand back a possibly-stale/garbage buffer.
+        let mut transferred = 0usize;
+        for attempt in 0..2 {
+            // Clear the fields the kernel writes back before each attempt (sbp
+            // still points at this same, non-moved `sense` array).
+            hdr.status = 0;
+            hdr.host_status = 0;
+            hdr.driver_status = 0;
+            hdr.sb_len_wr = 0;
+            hdr.resid = 0;
+            sense.fill(0);
+
+            // SAFETY: hdr is a correctly-initialised sg_io_hdr_t; buffers referenced
+            // by its pointers outlive the ioctl call.
+            let rc = unsafe { libc::ioctl(self.file.as_raw_fd(), SG_IO, &mut hdr as *mut SgIoHdr) };
+            if rc < 0 {
+                return Err(anyhow!(std::io::Error::last_os_error()))
+                    .with_context(|| format!("SG_IO ioctl on {}", self.path));
+            }
+            // Transport-layer failures always fail. DRIVER_SENSE (0x08) only means
+            // "sense data is present" (a CHECK CONDITION) — mask it off so a benign
+            // CHECK CONDITION is not misread as a driver/transport error.
+            if hdr.host_status != 0 || (hdr.driver_status & !DRIVER_SENSE) != 0 {
+                bail!(
+                    "SCSI transport failure on {}: host=0x{:04x} driver=0x{:04x}",
+                    self.path,
+                    hdr.host_status,
+                    hdr.driver_status
+                );
+            }
+            transferred = buf.len().saturating_sub(hdr.resid.max(0) as usize);
+            if hdr.status == 0 {
+                break;
+            }
             let sense = &sense[..(hdr.sb_len_wr as usize).min(sense.len())];
-            // A CHECK CONDITION carrying a benign sense key is informational,
-            // not a failure: a firmware program raises UNIT ATTENTION (0x6), and
-            // a drive mid-transition raises NOT READY (0x2). Tolerate those (and
-            // NO SENSE 0x0 / RECOVERED 0x1, or an unparseable/empty sense) so the
-            // flash framing polls (PROBE / TEST UNIT READY / COMMIT) do not abort
-            // on the near-certain post-program UNIT ATTENTION. Any other status
-            // or sense key is a real command failure.
-            let benign = hdr.status == CHECK_CONDITION
-                && matches!(sense_key(sense), None | Some(0x0 | 0x1 | 0x2 | 0x6));
-            if !benign {
+            let key = sense_key(sense);
+            // A self-clearing UNIT ATTENTION: retry once (but never a data-OUT
+            // write). On a read this is the ONLY safe path — see above.
+            if hdr.status == CHECK_CONDITION
+                && key == Some(0x6)
+                && attempt == 0
+                && dir != Direction::ToDevice
+            {
+                continue;
+            }
+            // Otherwise tolerate only RECOVERED (0x1, the command DID complete)
+            // and — for non-reads — an un-retried UNIT ATTENTION: the pure
+            // status/handshake polls (PROBE / TEST UNIT READY / COMMIT) expect the
+            // post-program UA, and a data-OUT write that did not land is still
+            // caught by the transferred-length check in `command_out`. A data-IN
+            // read that CHECK-CONDITIONs is NEVER tolerated: its data is not valid,
+            // and silently accepting a zero-filled/garbage region would corrupt a
+            // backup. NOT READY (0x2) and every hard sense key are real failures.
+            let tolerable = hdr.status == CHECK_CONDITION
+                && (key == Some(0x1) || (dir != Direction::FromDevice && key == Some(0x6)));
+            if !tolerable {
                 bail!(
                     "SCSI command failed on {}: status=0x{:02x} sense={:02x?}",
                     self.path,
@@ -158,8 +191,8 @@ impl SgioDevice {
                     sense
                 );
             }
+            break;
         }
-        let transferred = buf.len().saturating_sub(hdr.resid.max(0) as usize);
         Ok(transferred)
     }
 }
