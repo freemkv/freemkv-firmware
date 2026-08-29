@@ -52,3 +52,17 @@ fn for_family_reports_the_expected_family() {
     assert_eq!(for_family(Family::Renesas).family(), Family::Renesas);
     assert_eq!(for_family(Family::Unknown).family(), Family::Unknown);
 }
+
+#[test]
+fn sanitize_ascii_strips_control_and_escape_bytes() {
+    // A malicious/garbled drive string with an ANSI escape, NUL and BEL: all
+    // non-printable bytes become '.', printable ASCII is preserved.
+    let clean = sanitize_ascii("OK\u{1b}[31mRED\u{0}\u{7}END");
+    assert!(!clean.contains('\u{1b}'));
+    assert!(!clean.contains('\u{0}'));
+    assert!(!clean.contains('\u{7}'));
+    assert_eq!(
+        sanitize_ascii("HL-DT-ST BD-RE BU40N"),
+        "HL-DT-ST BD-RE BU40N"
+    );
+}

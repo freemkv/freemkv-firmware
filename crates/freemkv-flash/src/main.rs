@@ -62,10 +62,10 @@ struct FlashArgs {
     /// Where to save the mandatory pre-flash backup dump.
     #[arg(short, long)]
     backup: Option<PathBuf>,
-    /// Streaming mode: `main` or `full` (full sets the commit flag). NOTE: on
-    /// the currently-supported MediaTek family this is informational only —
-    /// the full 2 MiB image is always streamed and the commit handshake is
-    /// always sent regardless of which mode is selected.
+    /// Streaming mode: `main` or `full`. NOTE: on the currently-supported
+    /// MediaTek family this is informational only — the full 2 MiB image is
+    /// always streamed and the commit handshake is always sent regardless of
+    /// which mode is selected.
     #[arg(long, value_enum, default_value_t = ModeArg::Full)]
     mode: ModeArg,
     /// Actually issue SCSI writes (otherwise dry-run only).
@@ -127,7 +127,7 @@ fn main() -> ExitCode {
 }
 
 fn cmd_info(device: &str) -> Result<()> {
-    let mut dev = platform::open(device)?;
+    let mut dev = platform::open(device, false)?;
     let family = drive::classify(dev.as_mut());
     let handler = drive::for_family(family);
     engine::info(dev.as_mut(), handler.as_ref())
@@ -143,7 +143,7 @@ fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
 }
 
 fn cmd_dump(device: &str, out: &Path) -> Result<()> {
-    let mut dev = platform::open(device)?;
+    let mut dev = platform::open(device, false)?;
     let family = classify_gated(dev.as_mut())?;
     let handler = drive::for_family(family);
     engine::dump(dev.as_mut(), handler.as_ref(), out)
@@ -154,7 +154,7 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         .with_context(|| format!("reading input {}", args.input.display()))?;
     let input_kind = drive::sniff_input(&args.input);
 
-    let mut dev = platform::open(&args.device)?;
+    let mut dev = platform::open(&args.device, true)?;
     let family = classify_gated(dev.as_mut())?;
     let handler = drive::for_family(family);
 

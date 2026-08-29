@@ -153,6 +153,13 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     let mut offset = 0usize;
     for piece in payload.chunks(chunk) {
         let got = drive.readback(dev, offset, piece.len())?;
+        if got.len() != piece.len() {
+            bail!(
+                "read-back verify failed at 0x{offset:06X}: short read-back (got {} of {} bytes)",
+                got.len(),
+                piece.len()
+            );
+        }
         if got != piece {
             bail!(
                 "read-back verify failed at 0x{offset:06X}: {} bytes differ",

@@ -57,24 +57,27 @@ pub use mock::MockScsiDevice;
 
 /// Open the platform's real SCSI backend for `path`.
 ///
-/// Compile-time OS selection: Linux uses a real `SG_IO` device; Windows/macOS
-/// use their (currently stub) native transports. Any other target has no
-/// backend and returns an error.
-pub fn open(path: &str) -> Result<Box<dyn ScsiDevice>> {
+/// `writable` requests write access to the device: the read-only `info` / `dump`
+/// commands pass `false` (so they never require write permission), and only
+/// `flash` passes `true`. Compile-time OS selection: Linux uses a real `SG_IO`
+/// device; Windows/macOS use their (currently stub) native transports. Any other
+/// target has no backend and returns an error.
+pub fn open(path: &str, writable: bool) -> Result<Box<dyn ScsiDevice>> {
     #[cfg(target_os = "linux")]
     {
-        Ok(Box::new(SgioDevice::open(path)?))
+        Ok(Box::new(SgioDevice::open(path, writable)?))
     }
     #[cfg(target_os = "windows")]
     {
-        Ok(Box::new(SptiDevice::open(path)?))
+        Ok(Box::new(SptiDevice::open(path, writable)?))
     }
     #[cfg(target_os = "macos")]
     {
-        Ok(Box::new(IokitDevice::open(path)?))
+        Ok(Box::new(IokitDevice::open(path, writable)?))
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     {
+        let _ = writable;
         anyhow::bail!("no SCSI pass-through backend for this OS (device {path})")
     }
 }

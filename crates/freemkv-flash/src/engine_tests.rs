@@ -214,6 +214,36 @@ fn flash_restore_tar_writes_and_verifies_regions() {
     );
 }
 
+/// A minimal fixed-format REQUEST SENSE payload carrying `key`.
+fn fixed_sense(key: u8) -> Vec<u8> {
+    let mut s = vec![0u8; 18];
+    s[0] = 0x70; // fixed-format response code
+    s[2] = key & 0x0F; // sense key
+    s[7] = 10; // additional sense length
+    s
+}
+
+#[test]
+fn flash_close_tolerates_benign_unit_attention() {
+    // The near-certain state after a microcode program is UNIT ATTENTION (0x6);
+    // a successful, already-burned flash must NOT be reported as a failure.
+    let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x06));
+    let req = bin_req(patterned_image(IMAGE_SIZE), true);
+    flash(&mut dev, &Mtk, &req).expect("benign UNIT ATTENTION must not fail the flash");
+}
+
+#[test]
+fn flash_close_fails_on_hardware_error_sense() {
+    // A genuine HARDWARE ERROR (0x4) after the burn IS a real failure.
+    let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));
+    let req = bin_req(patterned_image(IMAGE_SIZE), true);
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(
+        err.to_string().contains("hardware/medium error"),
+        "unexpected error: {err}"
+    );
+}
+
 #[test]
 fn flash_restore_tar_detects_readback_mismatch() {
     let dump = sample_user_dump();

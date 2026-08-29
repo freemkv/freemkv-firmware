@@ -50,11 +50,14 @@ pub struct SgioDevice {
 }
 
 impl SgioDevice {
-    /// Open a SCSI generic / block device for read-write SG_IO access.
-    pub fn open(path: &str) -> Result<Self> {
+    /// Open a SCSI generic / block device for SG_IO access. `writable` requests
+    /// O_RDWR (needed for WRITE BUFFER on the `flash` path); the read-only
+    /// `info`/`dump` commands pass `false` so they never require write
+    /// permission on the device.
+    pub fn open(path: &str, writable: bool) -> Result<Self> {
         let file = OpenOptions::new()
             .read(true)
-            .write(true)
+            .write(writable)
             .open(path)
             .with_context(|| format!("opening SCSI device {path}"))?;
         Ok(Self {
