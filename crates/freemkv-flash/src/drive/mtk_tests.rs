@@ -156,10 +156,23 @@ fn mtk_geometry_and_readback() {
     let m = Mtk;
     assert_eq!(m.image_size(), IMAGE_SIZE);
     assert_eq!(m.chunk_size(), CHUNK);
-    let mut dev = MockScsiDevice::new();
+
+    // Distinct, non-zero bytes at the queried offset: a mock that just
+    // zero-fills would make a bug that swaps FLASH_BUFFER_ID / mode / offset
+    // in `readback` invisible. Pin the exact CDB *and* the returned content.
+    let want: Vec<u8> = (0..64u32).map(|i| (i * 3 + 1) as u8).collect();
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb == cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, 0x1000, 64).as_slice(),
+        want.clone(),
+    );
     let got = m.readback(&mut dev, 0x1000, 64).unwrap();
     assert_eq!(got.len(), 64);
+    assert_eq!(got, want);
     assert_eq!(dev.reads[0][0], 0x3C);
+    assert_eq!(
+        dev.reads[0],
+        cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, 0x1000, 64)
+    );
 }
 
 #[test]

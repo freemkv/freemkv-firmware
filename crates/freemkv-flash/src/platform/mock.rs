@@ -4,6 +4,8 @@
 //! and records every command_out (write) it receives, so the drive/flash logic
 //! can be exercised on any OS (including macOS CI) without real hardware.
 
+use std::collections::HashMap;
+
 use anyhow::{bail, Result};
 
 use super::ScsiDevice;
@@ -34,12 +36,29 @@ pub struct MockScsiDevice {
     pub writes: Vec<(Vec<u8>, Vec<u8>)>,
     /// Every CDB received via `command_in`, in order.
     pub reads: Vec<Vec<u8>>,
+    /// When true, WRITE BUFFER mode-6 data is captured by offset and echoed
+    /// back on a matching READ BUFFER mode-6 (opt-in; off by default).
+    echo: bool,
+    /// Offset -> last-written bytes, populated only when `echo` is set.
+    echo_store: HashMap<u32, Vec<u8>>,
 }
 
 impl MockScsiDevice {
     /// Create an empty mock (all reads zero-fill, all writes recorded).
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a mock that ECHOES WRITE BUFFER mode-6 data back on the matching
+    /// READ BUFFER mode-6 offset (real-write-then-real-readback semantics),
+    /// instead of always zero-filling unmatched reads. `.on(...)` rules still
+    /// take precedence over the echo, so a test can inject a mismatch at a
+    /// specific offset.
+    pub fn echoing() -> Self {
+        Self {
+            echo: true,
+            ..Self::default()
+        }
     }
 
     /// Add a rule: when `matcher(cdb)` is true on a data-in command, return `data`.
@@ -89,6 +108,21 @@ impl MockScsiDevice {
     }
 }
 
+/// Decode the big-endian 24-bit offset carried in `cdb[3..6]`, shared by the
+/// READ BUFFER / WRITE BUFFER (mode 6) CDBs regardless of their overall length.
+fn offset24(cdb: &[u8]) -> Option<u32> {
+    if cdb.len() < 6 {
+        return None;
+    }
+    Some(((cdb[3] as u32) << 16) | ((cdb[4] as u32) << 8) | (cdb[5] as u32))
+}
+
+/// Is this a WRITE BUFFER (0x3B) or READ BUFFER (0x3C) CDB in mode 6 (the
+/// register-offset stream/readback mode used by the flash sequence)?
+fn is_mode6(cdb: &[u8], opcode: u8) -> bool {
+    cdb.first() == Some(&opcode) && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
+}
+
 impl ScsiDevice for MockScsiDevice {
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
         self.reads.push(cdb.to_vec());
@@ -100,6 +134,15 @@ impl ScsiDevice for MockScsiDevice {
                 };
             }
         }
+        if self.echo && is_mode6(cdb, 0x3C) {
+            if let Some(off) = offset24(cdb) {
+                if let Some(stored) = self.echo_store.get(&off) {
+                    let mut out = stored.clone();
+                    out.resize(alloc_len, 0);
+                    return Ok(out);
+                }
+            }
+        }
         Ok(vec![0u8; alloc_len])
     }
 
@@ -109,6 +152,11 @@ impl ScsiDevice for MockScsiDevice {
                 if let Outcome::Fail(m) = &rule.outcome {
                     bail!("{m}");
                 }
+            }
+        }
+        if self.echo && is_mode6(cdb, 0x3B) {
+            if let Some(off) = offset24(cdb) {
+                self.echo_store.insert(off, data.to_vec());
             }
         }
         self.writes.push((cdb.to_vec(), data.to_vec()));

@@ -67,14 +67,30 @@ pub(crate) fn trim_ascii(bytes: &[u8]) -> String {
         .to_string()
 }
 
+/// Sanitize a drive-supplied ASCII string for safe display: keeps printable
+/// bytes (0x20..=0x7e) and replaces everything else (including terminal
+/// control/escape sequences a malicious or malfunctioning drive could return)
+/// with `.`.
+pub(crate) fn sanitize_ascii(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if ('\u{20}'..='\u{7e}').contains(&c) {
+                c
+            } else {
+                '.'
+            }
+        })
+        .collect()
+}
+
 /// Read INQUIRY + boot banner for the `info` command (best-effort).
 pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
     let mut id = Identity::default();
     if let Ok(data) = dev.command_in(&mtk::cdb_inquiry(96), 96) {
         if data.len() >= 36 {
-            id.vendor = trim_ascii(&data[8..16]);
-            id.product = trim_ascii(&data[16..32]);
-            id.revision = trim_ascii(&data[32..36]);
+            id.vendor = sanitize_ascii(&trim_ascii(&data[8..16]));
+            id.product = sanitize_ascii(&trim_ascii(&data[16..32]));
+            id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
         }
     }
     let cdb = mtk::cdb_read_buffer(mtk::MODE_6, mtk::ROM_BUFFER_ID, 0x3000, 64);
@@ -146,7 +162,10 @@ pub struct FlashRequest {
     pub input: Vec<u8>,
     /// Whether the input is a full `.bin` or a per-unit `.tar`.
     pub input_kind: InputKind,
-    /// Streaming mode (`main` vs `full` commit flag).
+    /// Streaming mode (`main` vs `full`). NOTE: on MTK (the only implemented
+    /// family) this is currently informational only — the full 2 MiB image is
+    /// always streamed and the commit handshake is always sent regardless of
+    /// which mode is selected.
     pub mode: FlashMode,
     /// Actually issue writes (otherwise dry-run).
     pub execute: bool,
@@ -160,7 +179,9 @@ pub struct FlashRequest {
     pub enc_override: Option<bool>,
     /// Drive model (INQUIRY product) for the safety gate.
     pub drive_model: String,
-    /// Firmware model detected out-of-band (empty => no cross-check).
+    /// RESERVED: firmware model detected out-of-band. Not currently populated
+    /// by the CLI (empty => no cross-check), so the cross-flash model check is
+    /// inactive unless a caller supplies this field itself.
     pub firmware_model: String,
     /// Where to save the pre-flash backup dump, if anywhere.
     pub predump_out: Option<std::path::PathBuf>,

@@ -11,7 +11,7 @@
 //!   that drives a [`drive::DriveFamily`] through its trait primitives.
 //!
 //! Supporting modules: [`cmac`] (MT1959 AES-CMAC verify/resign) and [`manifest`]
-//! (firmware-image manifest / flash mode).
+//! (defines the [`manifest::FlashMode`] enum).
 
 #![deny(missing_docs)]
 

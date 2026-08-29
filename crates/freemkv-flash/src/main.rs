@@ -62,7 +62,10 @@ struct FlashArgs {
     /// Where to save the mandatory pre-flash backup dump.
     #[arg(short, long)]
     backup: Option<PathBuf>,
-    /// Streaming mode: `main` or `full` (full sets the commit flag).
+    /// Streaming mode: `main` or `full` (full sets the commit flag). NOTE: on
+    /// the currently-supported MediaTek family this is informational only —
+    /// the full 2 MiB image is always streamed and the commit handshake is
+    /// always sent regardless of which mode is selected.
     #[arg(long, value_enum, default_value_t = ModeArg::Full)]
     mode: ModeArg,
     /// Actually issue SCSI writes (otherwise dry-run only).

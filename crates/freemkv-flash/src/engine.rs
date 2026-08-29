@@ -187,8 +187,14 @@ fn flash_restore(
         println!("\nDRY RUN: no SCSI writes issued. Re-run with --execute to restore.");
         return Ok(());
     }
-    if !req.acknowledged_risk {
-        bail!("refusing to write without --i-understand-risk");
+    let ctx = SafetyContext {
+        drive_model: &req.drive_model,
+        firmware_model: &req.firmware_model,
+        acknowledged_risk: req.acknowledged_risk,
+        allow_cross_flash: req.allow_cross_flash,
+    };
+    if let Err(block) = check_safety(&ctx) {
+        bail!("SAFETY GATE: {}", block.0);
     }
 
     println!("\nEXECUTING restore — do not power off or disconnect the drive...");
