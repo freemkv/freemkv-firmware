@@ -2,8 +2,8 @@
 
 Standalone, multi-OS optical-drive **firmware flasher / dumper** for freemkv,
 written 100% in Rust (a thin `libc` FFI is used only for the Linux `SG_IO`
-ioctl; there is no hand-written C and no Python anywhere). No MakeMKV
-dependency.
+ioctl; there is no hand-written C and no Python anywhere). No third-party
+runtime dependency.
 
 > ⚠️ **Flashing firmware can permanently brick a drive.** This tool issues raw
 > SCSI `WRITE_BUFFER` commands. Read the safety section before using `flash`.
@@ -60,9 +60,8 @@ entire job:
 
 Whether the drive needs the AES-128-ECB `enc` envelope is **auto-detected on
 every flash** (`drive::mtk::enc_needed`); the user never decides. Detection is
-under active research (stock vs MakeMKV-patched firmware — see
-`ENC_DETECT_RESEARCH.md`) and currently defaults to plaintext. `--enc` /
-`--no-enc` exist only as a hidden expert override for debugging.
+a known-open question and currently defaults to plaintext. `--enc` / `--no-enc`
+exist only as a hidden expert override for debugging.
 
 ## Usage
 

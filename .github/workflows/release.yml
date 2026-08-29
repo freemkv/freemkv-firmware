@@ -1,0 +1,41 @@
+name: release
+
+# Build and attach the freemkv-flash CLI to a GitHub release when a version tag
+# is pushed. Only the LINUX binary is shipped: it is the only functional target
+# today (the macOS/Windows SCSI backends are compile-only stubs, so their
+# `platform::open()` errors at runtime). macOS/Windows binaries are added here
+# once those backends are implemented. Release candidates (v*-rc*) are excluded.
+on:
+  push:
+    tags:
+      - 'v*'
+      - '!v*-rc*'
+
+permissions:
+  contents: write
+
+jobs:
+  linux-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: freemkv-firmware-release
+      - name: Build the Linux CLI (release)
+        run: cargo build --release --bin freemkv-flash
+      - name: Stage the artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          out="freemkv-flash-${tag}-x86_64-unknown-linux-gnu"
+          install -m 0755 target/release/freemkv-flash "$out"
+          sha256sum "$out" > "$out.sha256"
+      - name: Publish to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            freemkv-flash-*-x86_64-unknown-linux-gnu
+            freemkv-flash-*-x86_64-unknown-linux-gnu.sha256

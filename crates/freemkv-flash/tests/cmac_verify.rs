@@ -1,18 +1,14 @@
 //! T0 pipeline proof: recompute the MT1959 AES-CMAC integrity table over the
 //! stock base image and assert every active entry matches the stored tag.
 //!
-//! The fixture is a real LG BU40N N1.02 (2017-12-08) stock dump. By default the
-//! test uses the copy committed under `tests/fixtures/`; set
-//! `FREEMKV_FIRMWARE_FIXTURE` to point at a different image.
+//! The fixture is a real LG BU40N N1.02 (2017-12-08) stock dump, committed under
+//! `tests/fixtures/`.
 
 use std::path::PathBuf;
 
 use freemkv_flash::cmac;
 
 fn fixture_path() -> PathBuf {
-    if let Ok(p) = std::env::var("FREEMKV_FIRMWARE_FIXTURE") {
-        return PathBuf::from(p);
-    }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin")
 }

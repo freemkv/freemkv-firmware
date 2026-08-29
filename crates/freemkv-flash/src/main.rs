@@ -12,6 +12,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use freemkv_flash::drive::{self, Family, FlashRequest};
+use freemkv_flash::engine;
 use freemkv_flash::manifest::FlashMode;
 use freemkv_flash::platform;
 
@@ -124,24 +125,9 @@ fn main() -> ExitCode {
 
 fn cmd_info(device: &str) -> Result<()> {
     let mut dev = platform::open(device)?;
-    println!("device:   {}", dev.describe());
-    let id = drive::identity(dev.as_mut());
-    println!(
-        "inquiry:  vendor='{}' product='{}' rev='{}'",
-        id.vendor, id.product, id.revision
-    );
-    println!("banner:   {}", id.banner.as_deref().unwrap_or("<none>"));
     let family = drive::classify(dev.as_mut());
-    let supported = drive::for_family(family).is_supported();
-    println!(
-        "family:   {family} ({})",
-        if supported {
-            "supported"
-        } else {
-            "NOT supported (MediaTek MT19xx only)"
-        }
-    );
-    Ok(())
+    let handler = drive::for_family(family);
+    engine::info(dev.as_mut(), handler.as_ref())
 }
 
 /// Classify and enforce the MTK-gate: only MediaTek drives may dump/flash.
@@ -155,11 +141,9 @@ fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
 
 fn cmd_dump(device: &str, out: &Path) -> Result<()> {
     let mut dev = platform::open(device)?;
-    println!("device: {}", dev.describe());
     let family = classify_gated(dev.as_mut())?;
-    println!("family: {family}");
-    println!("dumping per-unit regions...");
-    drive::for_family(family).dump(dev.as_mut(), out)
+    let handler = drive::for_family(family);
+    engine::dump(dev.as_mut(), handler.as_ref(), out)
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {
@@ -169,8 +153,9 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
 
     let mut dev = platform::open(&args.device)?;
     let family = classify_gated(dev.as_mut())?;
+    let handler = drive::for_family(family);
 
-    let drive_model = drive::identity(dev.as_mut()).product;
+    let drive_model = handler.identity(dev.as_mut()).product;
     let enc_override = if args.enc {
         Some(true)
     } else if args.no_enc {
@@ -196,7 +181,7 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         firmware_model: String::new(),
         predump_out,
     };
-    drive::for_family(family).flash(dev.as_mut(), &req)
+    engine::flash(dev.as_mut(), handler.as_ref(), &req)
 }
 
 /// Default pre-flash backup path: `<input>.predump.tar` next to the input.

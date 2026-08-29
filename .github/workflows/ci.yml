@@ -1,44 +1,92 @@
 name: CI
 
 on:
+  # dev -> qa -> main. `dev` is where work lands and is pushed often: these are
+  # the FAST checks, so a mistake surfaces in minutes. `qa` is the release
+  # candidate — it runs these too, plus the expensive suite in qa.yml. `main`
+  # only moves at release time, to a commit already green on qa.
   push:
-    branches: [main, dev]
+    branches: [main, dev, qa]
   pull_request:
 
+# freemkv-firmware versions independently of the rest of the freemkv stack and
+# has no freemkv path-dependencies, so no sibling checkout is needed. Cargo.lock
+# is committed for the binary, so builds are reproducible.
 env:
   CARGO_TERM_COLOR: always
-  RUST_TOOLCHAIN: "1.86.0"
 
 jobs:
-  build-test:
-    name: build + test + lint
+  # CI owns the changelog: main may never carry a version without a CHANGELOG.md
+  # entry for it. Hard-fails on main (and PRs targeting main); warns elsewhere so
+  # an in-progress dev/qa branch whose entry isn't written yet is not blocked.
+  changelog:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Require a CHANGELOG entry for the crate version on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if grep -qE "^## \[${version}\]" CHANGELOG.md; then
+            echo "CHANGELOG.md has an entry for ${version}."
+            exit 0
+          fi
+          msg="CHANGELOG.md has no '## [${version}]' entry"
+          if [ "${GITHUB_REF_NAME:-}" = "main" ] || [ "${GITHUB_BASE_REF:-}" = "main" ]; then
+            echo "::error::${msg} — main requires a changelog entry for the released version."
+            exit 1
+          fi
+          echo "::warning::${msg} (allowed on ${GITHUB_REF_NAME:-unknown}; required before it can reach main)."
 
-      - name: Install pinned Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.86.0
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy, rustfmt
-
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          shared-key: freemkv-firmware-ci
+      - run: cargo fmt --all --check
+      # --all-targets so the test code is linted too, not just the library.
+      - run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Format check
-        run: cargo fmt --all --check
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: freemkv-firmware-ci
+      # Includes the CMAC-verify T0 proof against a committed stock image.
+      - run: cargo test --tests
 
-      - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets --all-features -- -D warnings
+  # The crate ships on macOS and Windows through its SCSI transport stubs, so it
+  # has to compile there. Build the tests (not just `cargo check`) to force
+  # codegen on the cfg-gated platform halves. These run only on the
+  # release-candidate branches — dev is the fast lane. `if` SKIPS the job (it
+  # does not queue), so a release gate is never blocked by a never-scheduled job.
+  check-macos:
+    if: github.ref_name == 'qa' || github.ref_name == 'main'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: freemkv-firmware-ci
+      - run: cargo build --all-targets --all-features
 
-      - name: Build
-        run: cargo build --all-targets --verbose
-
-      - name: Test (includes CMAC-verify T0 proof)
-        run: cargo test --verbose
+  check-windows:
+    if: github.ref_name == 'qa' || github.ref_name == 'main'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: freemkv-firmware-ci
+      - run: cargo build --all-targets --all-features
