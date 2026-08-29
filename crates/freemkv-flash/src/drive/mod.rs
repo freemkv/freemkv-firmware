@@ -232,7 +232,14 @@ pub trait DriveFamily {
     /// Human-readable dry-run plan for an `image_len`-byte flash.
     fn flash_plan(&self, image_len: usize) -> Result<String>;
 
-    /// Open a flash session (probe + ready + prepare). One data-out command.
+    /// Read-only readiness handshake (PROBE + TEST UNIT READY) — issues NO write.
+    /// The engine runs this during a dry-run so a not-ready drive is surfaced
+    /// before the operator commits to `--execute`. Default: no-op.
+    fn preflight(&self, _dev: &mut dyn ScsiDevice) -> Result<()> {
+        Ok(())
+    }
+
+    /// Open a flash session (preflight + prepare). One data-out command.
     fn flash_open(&self, dev: &mut dyn ScsiDevice, mode: FlashMode) -> Result<()>;
 
     /// Stream one chunk at absolute `offset`.
