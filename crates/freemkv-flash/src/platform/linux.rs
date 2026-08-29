@@ -174,13 +174,16 @@ impl SgioDevice {
                 continue;
             }
             // Otherwise tolerate only RECOVERED (0x1, the command DID complete)
-            // and — for non-reads — an un-retried UNIT ATTENTION: the pure
-            // status/handshake polls (PROBE / TEST UNIT READY / COMMIT) expect the
-            // post-program UA, and a data-OUT write that did not land is still
+            // and — for a NON-read command (the no-data COMMIT handshake, dir
+            // None, and data-OUT WRITE BUFFER) — an un-retried UNIT ATTENTION: the
+            // drive raises the post-program UA here and the trailer is a status
+            // no-op, while a data-OUT write that did not actually land is still
             // caught by the transferred-length check in `command_out`. A data-IN
-            // read that CHECK-CONDITIONs is NEVER tolerated: its data is not valid,
-            // and silently accepting a zero-filled/garbage region would corrupt a
-            // backup. NOT READY (0x2) and every hard sense key are real failures.
+            // read (PROBE / TEST UNIT READY / dump / read-back) that still
+            // CHECK-CONDITIONs after its one retry is NEVER tolerated: its data is
+            // not valid, and silently accepting a zero-filled/garbage region would
+            // corrupt a backup. NOT READY (0x2) and every hard sense key are real
+            // failures.
             let tolerable = hdr.status == CHECK_CONDITION
                 && (key == Some(0x1) || (dir != Direction::FromDevice && key == Some(0x6)));
             if !tolerable {
