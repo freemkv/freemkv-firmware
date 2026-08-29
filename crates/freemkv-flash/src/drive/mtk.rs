@@ -24,6 +24,12 @@
 //! mode 7) → READY → STATUS (REQUEST SENSE). The drive erases+programs flash
 //! when the 2 MiB upload completes (the last STREAM chunk) — COMMIT is a
 //! trailing handshake, not the burn.
+//!
+//! ## `--mode` is currently informational on MTK
+//! [`FlashMode`] (main vs. full) does not change MTK behavior: the full 2 MiB
+//! image is always streamed and the commit handshake is always sent
+//! regardless of the selected mode — the drive programs on completion either
+//! way.
 
 use std::io::{Read, Write};
 
@@ -42,7 +48,7 @@ use crate::platform::ScsiDevice;
 pub const ROM_003000_OFFSET: u32 = 0x003000;
 /// Boot banner / metadata region length.
 pub const ROM_003000_LEN: u32 = 0x20;
-/// Identity-page region offset (the DE byte at 0x1EC056 lives here).
+/// Identity-page region offset.
 pub const ROM_1EC000_OFFSET: u32 = 0x1EC000;
 /// Identity-page region length (256 B).
 pub const ROM_1EC000_LEN: u32 = 0x100;
@@ -159,7 +165,8 @@ pub fn cdb_write_buffer(mode: u8, buffer_id: u8, offset: u32, len: u32) -> [u8; 
 }
 
 /// PROBE — READ BUFFER mode 6 @ 0x1EC000, 0x100 bytes (data-in). The returned
-/// buffer carries the model signature the flasher validates.
+/// buffer carries a model signature that freemkv-flash does NOT validate
+/// host-side.
 pub fn cdb_read_probe() -> [u8; 12] {
     [
         0x3C, 0x06, 0x00, 0x1E, 0xC0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
@@ -514,6 +521,32 @@ pub struct FieldDescriptor {
     pub ascii: String,
 }
 
+/// Parse a REQUEST SENSE payload into `(sense_key, asc, ascq)`.
+///
+/// Supports fixed-format sense (response code 0x70/0x71: key in byte 2 low
+/// nibble, ASC in byte 12, ASCQ in byte 13) and descriptor-format sense
+/// (response code 0x72/0x73: key in byte 1 low nibble, ASC in byte 2, ASCQ in
+/// byte 3). Returns `None` if the payload is too short or has an unrecognized
+/// response code.
+pub fn parse_sense(data: &[u8]) -> Option<(u8, u8, u8)> {
+    let response_code = *data.first()?;
+    match response_code {
+        0x70 | 0x71 => {
+            if data.len() < 14 {
+                return None;
+            }
+            Some((data[2] & 0x0F, data[12], data[13]))
+        }
+        0x72 | 0x73 => {
+            if data.len() < 4 {
+                return None;
+            }
+            Some((data[1] & 0x0F, data[2], data[3]))
+        }
+        _ => None,
+    }
+}
+
 /// Parse a GET CONFIGURATION single-feature descriptor (fd_sn / fd_fwdate).
 pub fn parse_field_descriptor(data: &[u8]) -> Option<FieldDescriptor> {
     if data.len() < 12 {
@@ -684,7 +717,8 @@ fn describe_sequence(steps: &[FlashStep]) -> String {
     );
     let _ = writeln!(
         out,
-        "(host-side GATE compares image[0x3000..] banner/model tag before PREPARE; no CDB)"
+        "(NOTE: the tool streams the operator-supplied image VERBATIM; it performs \
+         NO host-side image/model cross-check)"
     );
 
     let mut i = 0usize;
@@ -774,6 +808,10 @@ impl DriveFamily for Mtk {
         Ok(describe_sequence(&seq))
     }
 
+    /// `_mode` is currently informational only: on MTK the full 2 MiB image is
+    /// always streamed and the commit handshake in [`Self::flash_close`] is
+    /// always sent regardless of [`FlashMode::Main`] vs [`FlashMode::Full`] —
+    /// the drive programs on completion either way.
     fn flash_open(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
         // PROBE + READY are best-effort reads; PREPARE is the one data-out.
         let _ = dev.command_in(&cdb_read_probe(), PROBE_ALLOC)?;
@@ -785,10 +823,22 @@ impl DriveFamily for Mtk {
         dev.command_out(&cdb_wb_data(offset as u32, bytes.len() as u16), bytes)
     }
 
+    /// `_mode` is currently informational only: on MTK the commit handshake
+    /// (COMMIT + READY + STATUS below) is always sent regardless of
+    /// [`FlashMode::Main`] vs [`FlashMode::Full`] — the drive programs on
+    /// completion of the streamed 2 MiB either way.
     fn flash_close(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
         dev.command_out(&cdb_wb_commit(), &[])?;
-        let _ = dev.command_in(&cdb_test_unit_ready(), 0)?;
-        let _ = dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)?;
+        dev.command_in(&cdb_test_unit_ready(), 0)?;
+        let sense = dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)?;
+        if let Some((key, asc, ascq)) = parse_sense(&sense) {
+            // 0x0 = NO SENSE, 0x1 = RECOVERED ERROR: both benign.
+            if key != 0x0 && key != 0x1 {
+                bail!(
+                    "drive reported error after flash (sense key 0x{key:X} ASC {asc:02X} ASCQ {ascq:02X}); the flash may have FAILED"
+                );
+            }
+        }
         Ok(())
     }
 

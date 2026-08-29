@@ -63,7 +63,7 @@ impl SgioDevice {
         })
     }
 
-    fn ioctl(&mut self, cdb: &[u8], dir: Direction, buf: &mut [u8]) -> Result<()> {
+    fn ioctl(&mut self, cdb: &[u8], dir: Direction, buf: &mut [u8]) -> Result<usize> {
         if cdb.is_empty() || cdb.len() > 255 {
             bail!("invalid CDB length {}", cdb.len());
         }
@@ -116,17 +116,19 @@ impl SgioDevice {
                 hdr.status,
                 hdr.host_status,
                 hdr.driver_status,
-                &sense[..hdr.sb_len_wr as usize]
+                &sense[..(hdr.sb_len_wr as usize).min(sense.len())]
             );
         }
-        Ok(())
+        let transferred = buf.len().saturating_sub(hdr.resid.max(0) as usize);
+        Ok(transferred)
     }
 }
 
 impl ScsiDevice for SgioDevice {
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
         let mut buf = vec![0u8; alloc_len];
-        self.ioctl(cdb, Direction::FromDevice, &mut buf)?;
+        let n = self.ioctl(cdb, Direction::FromDevice, &mut buf)?;
+        buf.truncate(n);
         Ok(buf)
     }
 
@@ -137,7 +139,15 @@ impl ScsiDevice for SgioDevice {
         } else {
             Direction::ToDevice
         };
-        self.ioctl(cdb, dir, &mut buf)
+        let n = self.ioctl(cdb, dir, &mut buf)?;
+        if n != data.len() {
+            bail!(
+                "short WRITE_BUFFER: drive accepted {} of {} bytes",
+                n,
+                data.len()
+            );
+        }
+        Ok(())
     }
 
     fn describe(&self) -> String {
