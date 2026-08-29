@@ -48,55 +48,12 @@ fn sense_kaa(sense: &[u8]) -> Option<(u8, u8, u8)> {
     }
 }
 
-/// Human-readable name for a SCSI sense key (SPC).
-fn sense_key_name(key: u8) -> &'static str {
-    match key {
-        0x0 => "NO SENSE",
-        0x1 => "RECOVERED ERROR",
-        0x2 => "NOT READY",
-        0x3 => "MEDIUM ERROR",
-        0x4 => "HARDWARE ERROR",
-        0x5 => "ILLEGAL REQUEST",
-        0x6 => "UNIT ATTENTION",
-        0x7 => "DATA PROTECT",
-        0xB => "ABORTED COMMAND",
-        _ => "UNKNOWN SENSE KEY",
-    }
-}
-
-/// Plain-language meaning for the ASC/ASCQ pairs we actually expect from an
-/// optical drive during firmware work; falls back to a generic note otherwise.
-fn asc_meaning(asc: u8, ascq: u8) -> &'static str {
-    match (asc, ascq) {
-        (0x00, 0x00) => "no additional sense information",
-        (0x04, 0x00) => "logical unit not ready, cause not reportable",
-        (0x04, 0x01) => "logical unit not ready, becoming ready",
-        (0x04, 0x02) => "logical unit not ready, initializing command required",
-        (0x28, 0x00) => "not-ready to ready change (medium may have changed)",
-        (0x29, _) => "power-on / reset / bus-device-reset occurred",
-        (0x3A, 0x00) => "medium not present (no disc)",
-        (0x3A, 0x01) => "medium not present — tray closed (no disc)",
-        (0x3A, 0x02) => "medium not present — tray open",
-        (0x20, 0x00) => "invalid command operation code",
-        (0x24, 0x00) => "invalid field in CDB",
-        (0x21, 0x00) => "logical block address out of range",
-        (0x30, _) => "incompatible medium installed",
-        _ => "(see ASC/ASCQ)",
-    }
-}
-
-/// Decode a sense buffer into a one-line human-readable description, e.g.
+/// Decode a raw sense buffer into a one-line human-readable description via the
+/// shared platform sense tables, e.g.
 /// `NOT READY: medium not present — tray closed (no disc) [key 0x2 ASC 3Ah/01h]`.
 fn describe_sense(sense: &[u8]) -> String {
     match sense_kaa(sense) {
-        Some((key, asc, ascq)) => format!(
-            "{}: {} [key 0x{:X} ASC {:02X}h/{:02X}h]",
-            sense_key_name(key),
-            asc_meaning(asc, ascq),
-            key,
-            asc,
-            ascq
-        ),
+        Some((key, asc, ascq)) => super::describe_sense(key, asc, ascq),
         None => format!("unparsable sense {sense:02x?}"),
     }
 }

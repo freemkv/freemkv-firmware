@@ -850,8 +850,8 @@ impl DriveFamily for Mtk {
                 // tray closed / open / no medium) — expected for a flash; proceed.
                 Some((0x02, 0x3A, _)) => {}
                 Some((key, asc, ascq)) => bail!(
-                    "drive is not ready to flash: sense key 0x{key:X} ASC {asc:02X} ASCQ {ascq:02X} \
-                     (only NOT READY / medium-not-present is a safe pre-flash state); refusing to PREPARE"
+                    "drive is not ready to flash — {} (only NOT READY / medium-not-present is a safe pre-flash state); refusing to PREPARE",
+                    crate::platform::describe_sense(key, asc, ascq)
                 ),
                 None => bail!(
                     "drive reported not-ready before flash and its sense was unreadable; refusing to PREPARE"
@@ -894,7 +894,8 @@ impl DriveFamily for Mtk {
             // a SUCCESSFUL irreversible flash as a brick.
             Some((key, asc, ascq)) if matches!(key, 0x3 | 0x4 | 0xB) => {
                 bail!(
-                    "drive reported a hardware/medium error after flash (sense key 0x{key:X} ASC {asc:02X} ASCQ {ascq:02X}); the flash may have FAILED"
+                    "drive reported an error after flash — {}; the flash may have FAILED",
+                    crate::platform::describe_sense(key, asc, ascq)
                 );
             }
             // Unparseable/short sense: the burn already completed and TEST UNIT

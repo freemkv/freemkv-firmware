@@ -37,6 +37,72 @@ pub trait ScsiDevice {
     fn describe(&self) -> String;
 }
 
+// ---- SCSI sense decoding (shared by the transport and the flash logic) ------
+
+/// Human-readable SCSI sense-key name (SPC-4 table 48).
+pub fn sense_key_name(key: u8) -> &'static str {
+    match key {
+        0x0 => "NO SENSE",
+        0x1 => "RECOVERED ERROR",
+        0x2 => "NOT READY",
+        0x3 => "MEDIUM ERROR",
+        0x4 => "HARDWARE ERROR",
+        0x5 => "ILLEGAL REQUEST",
+        0x6 => "UNIT ATTENTION",
+        0x7 => "DATA PROTECT",
+        0x8 => "BLANK CHECK",
+        0xA => "COPY ABORTED",
+        0xB => "ABORTED COMMAND",
+        0xD => "VOLUME OVERFLOW",
+        0xE => "MISCOMPARE",
+        _ => "UNKNOWN SENSE KEY",
+    }
+}
+
+/// Plain-language meaning for the ASC/ASCQ pairs an optical drive realistically
+/// returns during firmware work (readiness + write/program faults); falls back
+/// to a generic note otherwise.
+pub fn asc_meaning(asc: u8, ascq: u8) -> &'static str {
+    match (asc, ascq) {
+        (0x00, 0x00) => "no additional sense information",
+        (0x03, 0x00) => "peripheral device write fault",
+        (0x04, 0x00) => "logical unit not ready, cause not reportable",
+        (0x04, 0x01) => "logical unit not ready, becoming ready",
+        (0x04, 0x02) => "logical unit not ready, initializing command required",
+        (0x08, _) => "logical unit communication failure",
+        (0x0C, _) => "write error",
+        (0x11, _) => "unrecovered read error",
+        (0x20, 0x00) => "invalid command operation code",
+        (0x21, 0x00) => "logical block address out of range",
+        (0x24, 0x00) => "invalid field in CDB",
+        (0x26, _) => "invalid field in parameter list",
+        (0x28, 0x00) => "not-ready to ready change (medium may have changed)",
+        (0x29, _) => "power-on / reset / bus-device-reset occurred",
+        (0x30, _) => "incompatible medium installed",
+        (0x31, 0x00) => "medium format corrupted",
+        (0x3A, 0x00) => "medium not present (no disc)",
+        (0x3A, 0x01) => "medium not present — tray closed (no disc)",
+        (0x3A, 0x02) => "medium not present — tray open",
+        (0x40, _) => "diagnostic / hardware component failure",
+        (0x44, 0x00) => "internal target failure",
+        (0x51, 0x00) => "erase failure",
+        _ => "(see ASC/ASCQ)",
+    }
+}
+
+/// One-line human-readable description of a `(key, ASC, ASCQ)` sense triple,
+/// e.g. `NOT READY: medium not present — tray closed (no disc) [key 0x2 ASC 3Ah/01h]`.
+pub fn describe_sense(key: u8, asc: u8, ascq: u8) -> String {
+    format!(
+        "{}: {} [key 0x{:X} ASC {:02X}h/{:02X}h]",
+        sense_key_name(key),
+        asc_meaning(asc, ascq),
+        key,
+        asc,
+        ascq
+    )
+}
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]

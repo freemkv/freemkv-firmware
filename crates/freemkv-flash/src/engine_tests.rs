@@ -228,8 +228,9 @@ fn flash_close_fails_on_hardware_error_sense() {
     let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));
     let req = bin_req(patterned_image(IMAGE_SIZE), true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    let msg = err.to_string();
     assert!(
-        err.to_string().contains("hardware/medium error"),
+        msg.contains("HARDWARE ERROR") && msg.contains("flash may have FAILED"),
         "unexpected error: {err}"
     );
 }
