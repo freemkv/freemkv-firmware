@@ -124,14 +124,8 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         return Ok(());
     }
 
-    // Full safety gate only on the write path.
-    let ctx = SafetyContext {
-        drive_model: &req.drive_model,
-        firmware_model: &req.firmware_model,
-        acknowledged_risk: req.acknowledged_risk,
-        allow_cross_flash: req.allow_cross_flash,
-    };
-    if let Err(block) = check_safety(&ctx) {
+    // Safety gate only on the write path.
+    if let Err(block) = check_safety(req.acknowledged_risk) {
         bail!("SAFETY GATE: {}", block.0);
     }
 
@@ -194,13 +188,7 @@ fn flash_restore(
         println!("\nDRY RUN: no SCSI writes issued. Re-run with --execute to restore.");
         return Ok(());
     }
-    let ctx = SafetyContext {
-        drive_model: &req.drive_model,
-        firmware_model: &req.firmware_model,
-        acknowledged_risk: req.acknowledged_risk,
-        allow_cross_flash: req.allow_cross_flash,
-    };
-    if let Err(block) = check_safety(&ctx) {
+    if let Err(block) = check_safety(req.acknowledged_risk) {
         bail!("SAFETY GATE: {}", block.0);
     }
 
@@ -230,40 +218,16 @@ fn ident_or_unknown(s: &str) -> &str {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SafetyBlock(pub String);
 
-/// Inputs to the pre-flash safety gate.
-#[derive(Debug, Clone)]
-pub struct SafetyContext<'a> {
-    /// Model reported by the connected drive (INQUIRY product).
-    pub drive_model: &'a str,
-    /// Model string detected in the firmware image (may be empty).
-    pub firmware_model: &'a str,
-    /// User acknowledged the bricking risk (`--i-understand-risk`).
-    pub acknowledged_risk: bool,
-    /// User allowed a model mismatch (`--allow-cross-flash`).
-    pub allow_cross_flash: bool,
-}
-
-/// Evaluate the safety gate. `Ok(())` means the flash may proceed.
+/// Evaluate the pre-flash safety gate. `Ok(())` means the flash may proceed.
 ///
-/// An empty `firmware_model` cannot be cross-checked, so cross-flash is only
-/// blocked when a model was detected and it does not match the drive.
-pub fn check_safety(ctx: &SafetyContext<'_>) -> Result<(), SafetyBlock> {
-    if !ctx.acknowledged_risk {
+/// The write path is irreversible, so it requires the operator to have
+/// acknowledged the bricking risk (`--i-understand-risk`).
+pub fn check_safety(acknowledged_risk: bool) -> Result<(), SafetyBlock> {
+    if !acknowledged_risk {
         return Err(SafetyBlock(
             "refusing to flash without --i-understand-risk (flashing can permanently brick the drive)"
                 .to_string(),
         ));
-    }
-    if !ctx.firmware_model.is_empty() && !ctx.allow_cross_flash {
-        let matches = ctx.drive_model.eq_ignore_ascii_case(ctx.firmware_model)
-            || ctx.drive_model.contains(ctx.firmware_model)
-            || ctx.firmware_model.contains(ctx.drive_model);
-        if !matches {
-            return Err(SafetyBlock(format!(
-                "drive model '{}' does not match firmware model '{}'; refuse cross-flash without --allow-cross-flash",
-                ctx.drive_model, ctx.firmware_model
-            )));
-        }
     }
     Ok(())
 }

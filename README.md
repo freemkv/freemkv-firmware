@@ -99,8 +99,6 @@ refuses to write unless:
 
 - `--i-understand-risk` is given (acknowledging possible bricking),
 - a pre-flash backup dump succeeded (or `--rescue-no-dump`),
-- the drive model matches the firmware model — a mismatch requires
-  `--allow-cross-flash`,
 - the drive classified as MediaTek (Unknown/Pioneer/Renesas are refused).
 
 ## Two independent plug-in layers

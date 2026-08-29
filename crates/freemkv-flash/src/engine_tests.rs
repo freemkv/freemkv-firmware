@@ -50,11 +50,9 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         mode: FlashMode::Full,
         execute,
         rescue_no_dump: false,
-        allow_cross_flash: false,
         acknowledged_risk: execute,
         enc_override: None,
         drive_model: "BU40N".into(),
-        firmware_model: String::new(),
         predump_out: None,
     }
 }
@@ -103,27 +101,10 @@ fn flash_execute_requires_ack() {
 }
 
 #[test]
-fn safety_requires_ack_and_blocks_mismatch() {
-    let no_ack = SafetyContext {
-        drive_model: "BU40N",
-        firmware_model: "BU40N",
-        acknowledged_risk: false,
-        allow_cross_flash: false,
-    };
-    assert!(check_safety(&no_ack).is_err());
-
-    let mismatch = SafetyContext {
-        drive_model: "BU40N",
-        firmware_model: "WH16NS60",
-        acknowledged_risk: true,
-        allow_cross_flash: false,
-    };
-    assert!(check_safety(&mismatch).is_err());
-    let allowed = SafetyContext {
-        allow_cross_flash: true,
-        ..mismatch
-    };
-    assert!(check_safety(&allowed).is_ok());
+fn safety_requires_ack() {
+    // The irreversible write path refuses without --i-understand-risk.
+    assert!(check_safety(false).is_err());
+    assert!(check_safety(true).is_ok());
 }
 
 // ---- non-tautological read-back verify: real content, echoed by the mock --
