@@ -34,6 +34,23 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
             "NOT supported (MediaTek MT19xx only)"
         }
     );
+    // Best-effort firmware identification (read-only). `info` never aborts, so a
+    // read failure here is simply omitted.
+    if let Ok(Some(r)) = drive.firmware_report(dev) {
+        match r.matched {
+            Some(m) => {
+                println!("firmware: {}", m.desc);
+                if !m.source.is_empty() {
+                    println!("          original image: {}", m.source);
+                }
+            }
+            None => println!(
+                "firmware: {} (unrecognized — not in the built-in catalog)",
+                r.descriptor.as_deref().unwrap_or("unknown")
+            ),
+        }
+        println!("          fingerprint {}", r.fingerprint);
+    }
     Ok(())
 }
 

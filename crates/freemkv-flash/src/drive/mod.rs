@@ -18,6 +18,7 @@ use anyhow::Result;
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
+pub mod fw_ident;
 pub mod mtk;
 pub mod pioneer;
 pub mod renesas;
@@ -246,6 +247,12 @@ pub trait DriveFamily {
     /// before the operator commits to `--execute`. Default: no-op.
     fn preflight(&self, _dev: &mut dyn ScsiDevice) -> Result<()> {
         Ok(())
+    }
+
+    /// Identify the installed firmware (read-only) by reading the two readable
+    /// firmware-code windows and matching the built-in catalog. Default: none.
+    fn firmware_report(&self, _dev: &mut dyn ScsiDevice) -> Result<Option<fw_ident::FwReport>> {
+        Ok(None)
     }
 
     /// Open a flash session (preflight + prepare). One data-out command.
