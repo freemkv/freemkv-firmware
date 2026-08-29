@@ -94,8 +94,16 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
             id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
         }
     }
-    let cdb = mtk::cdb_read_buffer(mtk::MODE_6, mtk::ROM_BUFFER_ID, 0x3000, 64);
-    if let Ok(data) = dev.command_in(&cdb, 64) {
+    // The 0x3000 ROM buffer is exactly ROM_003000_LEN (32 B); asking for more
+    // makes the drive reject the read with ILLEGAL REQUEST (invalid field in
+    // CDB), which is why the banner previously always came back empty.
+    let cdb = mtk::cdb_read_buffer(
+        mtk::MODE_6,
+        mtk::ROM_BUFFER_ID,
+        mtk::ROM_003000_OFFSET,
+        mtk::ROM_003000_LEN,
+    );
+    if let Ok(data) = dev.command_in(&cdb, mtk::ROM_003000_LEN as usize) {
         let end = data
             .iter()
             .position(|&b| b == 0 || !(0x20..0x7f).contains(&b))
