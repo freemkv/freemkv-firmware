@@ -862,6 +862,26 @@ impl DriveFamily for Mtk {
         Ok(())
     }
 
+    fn firmware_report(
+        &self,
+        dev: &mut dyn ScsiDevice,
+    ) -> Result<Option<crate::drive::fw_ident::FwReport>> {
+        // The two firmware-code windows a live drive exposes (rom_1F0000 is
+        // per-unit calibration and deliberately excluded from the fingerprint).
+        let rom_003000 = dev.command_in(
+            &cdb_read_buffer(MODE_6, ROM_BUFFER_ID, ROM_003000_OFFSET, ROM_003000_LEN),
+            ROM_003000_LEN as usize,
+        )?;
+        let rom_1ec000 = dev.command_in(
+            &cdb_read_buffer(MODE_6, ROM_BUFFER_ID, ROM_1EC000_OFFSET, ROM_1EC000_LEN),
+            ROM_1EC000_LEN as usize,
+        )?;
+        Ok(Some(crate::drive::fw_ident::report(
+            &rom_003000,
+            &rom_1ec000,
+        )))
+    }
+
     fn flash_open(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
         self.preflight(dev)?;
         // PREPARE is the one data-out that must land (strict).
