@@ -74,9 +74,6 @@ struct FlashArgs {
     /// Acknowledge that flashing can permanently brick the drive.
     #[arg(long)]
     i_understand_risk: bool,
-    /// Permit flashing firmware whose model differs from the drive.
-    #[arg(long)]
-    allow_cross_flash: bool,
     /// Flash without a successful pre-flash backup (rescue a dead drive only).
     #[arg(long)]
     rescue_no_dump: bool,
@@ -177,11 +174,9 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         mode: args.mode.into(),
         execute: args.execute,
         rescue_no_dump: args.rescue_no_dump,
-        allow_cross_flash: args.allow_cross_flash,
         acknowledged_risk: args.i_understand_risk,
         enc_override,
         drive_model,
-        firmware_model: String::new(),
         predump_out,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)

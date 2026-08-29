@@ -171,18 +171,12 @@ pub struct FlashRequest {
     pub execute: bool,
     /// Allow flashing without a successful pre-flash backup dump.
     pub rescue_no_dump: bool,
-    /// Permit a drive/firmware model mismatch.
-    pub allow_cross_flash: bool,
     /// User acknowledged the bricking risk.
     pub acknowledged_risk: bool,
     /// Hidden expert override for the enc envelope (`Some(true/false)` forces).
     pub enc_override: Option<bool>,
-    /// Drive model (INQUIRY product) for the safety gate.
+    /// Drive model (INQUIRY product), shown in the flash plan.
     pub drive_model: String,
-    /// RESERVED: firmware model detected out-of-band. Not currently populated
-    /// by the CLI (empty => no cross-check), so the cross-flash model check is
-    /// inactive unless a caller supplies this field itself.
-    pub firmware_model: String,
     /// Where to save the pre-flash backup dump, if anywhere.
     pub predump_out: Option<std::path::PathBuf>,
 }
