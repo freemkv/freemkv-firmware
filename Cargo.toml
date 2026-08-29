@@ -9,7 +9,7 @@ edition = "2021"
 rust-version = "1.86"
 license = "MIT"
 authors = ["Matthew Jackson <matthew@pq.io>"]
-repository = "https://github.com/MattJackson/freemkv-firmware"
+repository = "https://github.com/freemkv/freemkv-firmware"
 
 [workspace.lints.clippy]
 all = "warn"
