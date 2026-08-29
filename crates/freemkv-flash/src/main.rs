@@ -77,6 +77,9 @@ struct FlashArgs {
     /// Flash without a successful pre-flash backup (rescue a dead drive only).
     #[arg(long)]
     rescue_no_dump: bool,
+    /// Show the raw SCSI CDB sequence in the plan (default: clean summary).
+    #[arg(short = 'v', long)]
+    verbose: bool,
     /// Hidden expert override: force the enc envelope on.
     #[arg(long, hide = true)]
     enc: bool,
@@ -177,6 +180,7 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         acknowledged_risk: args.i_understand_risk,
         enc_override,
         drive_model,
+        verbose: args.verbose,
         predump_out,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)

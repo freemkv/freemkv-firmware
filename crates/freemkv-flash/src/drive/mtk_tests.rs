@@ -136,17 +136,28 @@ fn flash_sequence_rejects_wrong_geometry() {
 }
 
 #[test]
-fn describe_collapses_stream_but_shows_framing_and_point_of_no_return() {
+fn plan_clean_is_human_readable_with_no_cdbs() {
     let seq = flash_sequence(IMAGE_SIZE, CHUNK).unwrap();
-    let text = describe_sequence(&seq);
-    assert!(text.contains("#01 PROBE"));
-    assert!(text.contains("#03 PREPARE"));
-    assert!(text.contains("@0x000000"));
-    assert!(text.contains("@0x1FC000"));
-    assert!(text.contains("128 identical-shape STREAM chunks (collapsed)"));
-    assert!(text.contains("#132 COMMIT"));
-    assert!(text.contains("POINT OF NO RETURN"));
-    assert!(text.lines().count() < 20);
+    let text = describe_sequence(&seq, false);
+    assert!(text.contains("POINT OF NO RETURN"), "{text}");
+    assert!(text.contains("2 MiB"), "{text}");
+    assert!(text.contains("128"), "{text}");
+    // No raw CDB hex or step numbers in the clean view.
+    assert!(!text.contains("#01"), "{text}");
+    assert!(!text.contains("3C 06"), "{text}");
+    assert!(text.lines().count() < 12, "{text}");
+}
+
+#[test]
+fn plan_verbose_shows_framing_and_collapses_streams() {
+    let seq = flash_sequence(IMAGE_SIZE, CHUNK).unwrap();
+    let text = describe_sequence(&seq, true);
+    assert!(text.contains("#01 PROBE"), "{text}");
+    assert!(text.contains("#03 PREPARE"), "{text}");
+    assert!(text.contains("@0x1FC000"), "{text}");
+    assert!(text.contains("identical STREAM chunks collapsed"), "{text}");
+    assert!(text.contains("#132 COMMIT"), "{text}");
+    assert!(text.contains("POINT OF NO RETURN"), "{text}");
 }
 
 // ---- the Mtk trait impl -----------------------------------------------------

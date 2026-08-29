@@ -53,6 +53,7 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         acknowledged_risk: execute,
         enc_override: None,
         drive_model: "BU40N".into(),
+        verbose: false,
         predump_out: None,
     }
 }

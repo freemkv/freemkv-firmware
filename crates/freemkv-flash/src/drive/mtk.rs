@@ -713,7 +713,8 @@ fn flash_sequence(image_len: usize, chunk: usize) -> Result<Vec<FlashStep>> {
 }
 
 /// Render the flash sequence for human review (the dry-run output).
-fn describe_sequence(steps: &[FlashStep]) -> String {
+fn describe_sequence(steps: &[FlashStep], verbose: bool) -> String {
+    use crate::engine::human_size;
     use std::fmt::Write as _;
 
     let stream_total: usize = steps
@@ -726,57 +727,57 @@ fn describe_sequence(steps: &[FlashStep]) -> String {
         .find(|s| s.label == LABEL_STREAM)
         .map(|s| s.data_len)
         .unwrap_or(0);
+    let count = steps.iter().filter(|s| s.label == LABEL_STREAM).count();
 
+    // Clean, human-readable plan by default — no CDB hex.
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "image {stream_total} B, chunk {chunk} B, {} steps total",
-        steps.len()
+        "upload:    {} streamed verbatim as {} x {} chunks, then commit + verify",
+        human_size(stream_total),
+        count,
+        human_size(chunk)
     );
+    let _ = writeln!(out);
+    let _ = writeln!(out, "  ** POINT OF NO RETURN **");
     let _ = writeln!(
         out,
-        "(NOTE: the tool streams the operator-supplied image VERBATIM; it performs \
-         NO host-side image/model cross-check)"
+        "  The drive erases and reprograms its flash the instant the full {} upload",
+        human_size(stream_total)
     );
+    let _ = writeln!(out, "  lands. This cannot be undone.");
 
-    let mut i = 0usize;
-    while i < steps.len() {
-        if steps[i].label == LABEL_STREAM {
-            let start = i;
-            let mut j = i;
-            while j < steps.len() && steps[j].label == LABEL_STREAM {
-                j += 1;
+    // Raw SCSI CDBs only when explicitly asked (-v/--verbose).
+    if verbose {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "raw SCSI sequence ({} steps):", steps.len());
+        let mut i = 0usize;
+        while i < steps.len() {
+            if steps[i].label == LABEL_STREAM {
+                let start = i;
+                let mut j = i;
+                while j < steps.len() && steps[j].label == LABEL_STREAM {
+                    j += 1;
+                }
+                let cnt = j - start;
+                let _ = writeln!(out, "  #{:02} {}", start + 1, steps[start].render());
+                if cnt > 2 {
+                    let _ = writeln!(
+                        out,
+                        "      ... {} identical STREAM chunks collapsed ({} total) ...",
+                        cnt,
+                        human_size(stream_total)
+                    );
+                }
+                if cnt >= 2 {
+                    let _ = writeln!(out, "  #{:02} {}", j, steps[j - 1].render());
+                }
+                i = j;
+            } else {
+                let _ = writeln!(out, "  #{:02} {}", i + 1, steps[i].render());
+                i += 1;
             }
-            let count = j - start;
-            let _ = writeln!(out, "#{:02} {}", start + 1, steps[start].render());
-            if count > 2 {
-                let _ = writeln!(
-                    out,
-                    "    ... {} identical-shape STREAM chunks (collapsed): off \
-                     0x000000..0x{:06X} step 0x{:04X}, {} B streamed total ...",
-                    count, stream_total, chunk, stream_total
-                );
-            }
-            if count >= 2 {
-                let _ = writeln!(out, "#{:02} {}", j, steps[j - 1].render());
-            }
-            i = j;
-        } else {
-            let _ = writeln!(out, "#{:02} {}", i + 1, steps[i].render());
-            i += 1;
         }
-    }
-    let last_stream = steps
-        .iter()
-        .rposition(|s| s.label == LABEL_STREAM)
-        .map(|p| p + 1);
-    if let Some(n) = last_stream {
-        let _ = writeln!(
-            out,
-            "!! POINT OF NO RETURN = last STREAM chunk (#{n}): the drive erases+programs flash \
-             when the 2 MiB upload completes. COMMIT (mode 7) is a drive-ignored handshake, \
-             not the burn. Aborting after #{n} does NOT undo the flash."
-        );
     }
     out
 }
@@ -821,9 +822,27 @@ impl DriveFamily for Mtk {
         Ok((payload, enc))
     }
 
-    fn flash_plan(&self, image_len: usize) -> Result<String> {
+    fn flash_plan(&self, image_len: usize, verbose: bool) -> Result<String> {
         let seq = flash_sequence(image_len, CHUNK)?;
-        Ok(describe_sequence(&seq))
+        Ok(describe_sequence(&seq, verbose))
+    }
+
+    fn wait_ready(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
+        use std::time::{Duration, Instant};
+        // After the last chunk the drive keeps programming and answers TEST UNIT
+        // READY with NOT READY / LONG WRITE IN PROGRESS (which the transport
+        // reports as an error). Poll until it becomes ready again — the transport
+        // returns Ok once the drive answers (including the benign no-disc state).
+        // Give up after a generous ceiling and let read-back verify be the judge;
+        // in practice the program completes in a few seconds.
+        let deadline = Instant::now() + Duration::from_secs(45);
+        while dev.command_in(&cdb_test_unit_ready(), 0).is_err() {
+            if Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        Ok(())
     }
 
     /// `_mode` is currently informational only: on MTK the full 2 MiB image is
