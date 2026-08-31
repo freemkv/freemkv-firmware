@@ -16,7 +16,7 @@ the Safety section before using `flash`.
 Binary name: `freemkv-flash` (the crate was renamed from `freemkv-firmware`;
 the repo directory stays `freemkv-firmware`). Firmware *authoring* (X→Y
 modification: downgrade, speed-lock, AACS host-cert) is deliberately **out of
-scope** and will land later as a separate `freemkv-forge` binary.
+scope** and will land later as a separate `freemkv-fw` binary.
 
 ## Commands — exactly three; `info` is the default
 
@@ -50,7 +50,7 @@ is safe.
 
 The flasher writes the given file to the drive **verbatim** and never modifies
 the image (no DE byte, no downgrade magic, no per-unit splice, no CMAC resign —
-those are firmware modification and belong to the future `freemkv-forge`). Its
+those are firmware modification and belong to the future `freemkv-fw`). Its
 entire job:
 
 1. **Back up** — always attempt a pre-flash per-unit dump (saved to disk, *not*

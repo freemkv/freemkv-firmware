@@ -27,9 +27,13 @@ aes = "0.8"
 cmac = "0.7"
 cipher = "0.4"
 sha2 = "0.10"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = "0.2"
+# The SCSI pass-through transport (SG_IO / IOKit / SPTI + the macOS shim) is the
+# `scsi` feature of libfreemkv — the single source of truth for that layer.
+# freemkv-flash used to carry a trimmed copy of those backends; now it adapts
+# libfreemkv's `ScsiTransport` behind its own `ScsiDevice`. `default-features =
+# false` takes ONLY the transport (libc + tracing), none of the ripping tree, so
+# there is no dependency cycle back onto the firmware/unlock side.
+libfreemkv = { path = "../../../libfreemkv", default-features = false, features = ["scsi"] }
 
 [lints]
 workspace = true

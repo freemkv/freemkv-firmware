@@ -25,6 +25,12 @@ pub mod renesas;
 
 pub use mtk::UserDump;
 
+/// A full firmware read: `(image, readable byte count, not-exposed `(start,end)`
+/// gaps)`. The image is the whole [`DriveFamily::image_size`] span; every offset
+/// a drive doesn't map to a read is filled (e.g. `0xFF`) and recorded as a gap.
+/// (Aliased so the trait signature stays under clippy's complex-type lint.)
+pub type FullImage = (Vec<u8>, usize, Vec<(usize, usize)>);
+
 /// The silicon family of a connected optical drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
@@ -224,6 +230,35 @@ pub trait DriveFamily {
 
     /// Capture the per-unit backup regions (the `dump` primitive).
     fn read_dump(&self, dev: &mut dyn ScsiDevice) -> Result<UserDump>;
+
+    /// Read the entire firmware image (the `dump --everything` primitive):
+    /// `(image, readable_bytes, gaps)`, graceful — any offset the drive doesn't
+    /// expose is filled and recorded as a gap. Read-only.
+    ///
+    /// Default: an "unsupported" error, so a family with no full-image read path
+    /// makes the engine omit `firmware.bin` from the dump rather than panic.
+    fn read_full_image(&self, _dev: &mut dyn ScsiDevice) -> Result<FullImage> {
+        Err(anyhow::anyhow!(
+            "full-image dump not supported for the {} family",
+            self.family()
+        ))
+    }
+
+    /// Build the read-surface map (`map.json` + `map.md`) for the `dump`
+    /// everything-tar, from an ALREADY-READ `image` and its `gaps` (from
+    /// [`Self::read_full_image`]) plus the `ident` header. Read-only.
+    ///
+    /// Default: `Ok(None)` — a family with no surface map simply omits it from
+    /// the dump tar.
+    fn read_surface_map(
+        &self,
+        _dev: &mut dyn ScsiDevice,
+        _ident: &Identity,
+        _image: &[u8],
+        _gaps: &[(usize, usize)],
+    ) -> Result<Option<(String, String)>> {
+        Ok(None)
+    }
 
     /// Full firmware image size in bytes (e.g. 2 MiB).
     fn image_size(&self) -> usize;

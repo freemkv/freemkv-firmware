@@ -6,6 +6,22 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0]
+
+### Added
+- `freemkv-fw`: the freemkv drive command works on real hardware. `create`
+  builds firmware that answers a vendor `READ BUFFER` knock — sub-function `01`
+  returns `freemkv <version>`; `02`–`06` are reserved placeholders that prove
+  the command dispatch before each feature's real code lands. Any non-freemkv
+  command passes straight through to the stock handler. Confirmed on an LG BU40N.
+- Code-grounded, per-chip engine: every address the build touches is derived
+  from the drive's own firmware, never hardcoded, with a known-answer test that
+  reproduces the proven image exactly.
+
+### Changed
+- `freemkv-flash` now shares libfreemkv's SCSI transport instead of a local copy.
+- Toolchain moved to Rust 1.94.
+
 ## [0.5.0]
 
 ### Added
