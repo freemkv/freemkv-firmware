@@ -190,7 +190,8 @@ fn cmd_info(device: &str) -> Result<()> {
     engine::info(dev.as_mut(), handler.as_ref())
 }
 
-/// Classify and enforce the MTK-gate: only MediaTek drives may dump/flash.
+/// Classify and enforce the flash/probe gate: only MediaTek drives may flash or
+/// run the (MTK-specific) read probes.
 fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     let family = drive::classify(dev);
     if family != Family::Mtk {
@@ -199,9 +200,21 @@ fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     Ok(family)
 }
 
+/// Classify and gate the read-only DUMP path: any family whose dump is
+/// implemented may proceed (MediaTek and Pioneer/Renesas today). Flash stays
+/// gated separately by [`classify_gated`], so a Pioneer/Renesas drive can be
+/// dumped but never flashed.
+fn classify_for_dump(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
+    let family = drive::classify(dev);
+    if !drive::for_family(family).dump_supported() {
+        return Err(drive::unsupported_family_error(family));
+    }
+    Ok(family)
+}
+
 fn cmd_dump(device: &str, out: Option<PathBuf>) -> Result<()> {
     let mut dev = platform::open(device, false)?;
-    let family = classify_gated(dev.as_mut())?;
+    let family = classify_for_dump(dev.as_mut())?;
     let handler = drive::for_family(family);
     let out = match out {
         Some(o) => o,

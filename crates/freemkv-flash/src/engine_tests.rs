@@ -232,9 +232,10 @@ fn flash_restore_tar_writes_and_verifies_regions() {
 #[test]
 fn non_mtk_family_reports_full_image_unsupported_not_panic() {
     // The dump full-image path routes through the DriveFamily trait, so a family
-    // that doesn't implement it (Pioneer today) returns the default "unsupported"
-    // error rather than panicking — letting dump degrade gracefully (omit fw.bin).
-    let drive = for_family(Family::Pioneer);
+    // that doesn't implement it (Unknown) returns the default "unsupported" error
+    // rather than panicking — letting dump degrade gracefully (omit fw.bin).
+    // (Pioneer/Renesas DO implement it now; see the pioneer module tests.)
+    let drive = for_family(Family::Unknown);
     let mut dev = MockScsiDevice::new();
     let err = drive.read_full_image(&mut dev).unwrap_err();
     assert!(

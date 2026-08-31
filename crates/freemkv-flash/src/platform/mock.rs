@@ -41,6 +41,13 @@ pub struct MockScsiDevice {
     echo: bool,
     /// Offset -> last-written bytes, populated only when `echo` is set.
     echo_store: HashMap<u32, Vec<u8>>,
+    /// When true, Pioneer raw reads (READ BUFFER mode-2 / buffer id 0xB0) return
+    /// deterministic offset-derived bytes (instead of zero-fill), except at any
+    /// offset covered by `pioneer_gaps`, which fail — to exercise the dump's
+    /// gap-fill. Opt-in via [`MockScsiDevice::pioneer`] / `..::renesas`.
+    pioneer_raw: bool,
+    /// `[start, end)` offset ranges where the Pioneer raw read FAILS (gaps).
+    pioneer_gaps: Vec<(u32, u32)>,
 }
 
 impl MockScsiDevice {
@@ -100,12 +107,43 @@ impl MockScsiDevice {
 
     /// A mock that classifies as Pioneer/Renesas: READ BUFFER buffer-id 0xF1
     /// succeeds with non-zero data; GET CONFIGURATION 0x010C does not echo `01 0C`.
+    ///
+    /// It also answers the Pioneer dump path offline: the enable knock
+    /// (WRITE BUFFER `3B 02 41 A5 AA AA`) succeeds and is recorded, and raw reads
+    /// (READ BUFFER mode-2 / buffer id 0xB0) return deterministic offset-derived
+    /// bytes so a test can assemble and check the full image.
     pub fn pioneer() -> Self {
-        Self::new().on(
-            |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-            vec![0xA5; 8],
-        )
+        Self {
+            pioneer_raw: true,
+            ..Self::new().on(
+                |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+                vec![0xA5; 8],
+            )
+        }
     }
+
+    /// Like [`Self::pioneer`] but with a `RENESAS` INQUIRY vendor, so it
+    /// classifies as [`crate::drive::Family::Renesas`].
+    pub fn renesas() -> Self {
+        let mut inq = vec![0u8; 96];
+        inq[8..15].copy_from_slice(b"RENESAS");
+        inq[15] = b' ';
+        Self::pioneer().on(|cdb| cdb.first() == Some(&0x12), inq)
+    }
+
+    /// Mark `[start, end)` as an unreadable gap for the Pioneer raw-read path,
+    /// so the dump fills it with `0xFF` and records the gap.
+    pub fn with_pioneer_gap(mut self, start: u32, end: u32) -> Self {
+        self.pioneer_gaps.push((start, end));
+        self
+    }
+}
+
+/// Is this a Pioneer raw read — READ BUFFER (0x3C) mode 0x02 / buffer id 0xB0?
+fn is_pioneer_raw_read(cdb: &[u8]) -> bool {
+    cdb.first() == Some(&0x3C)
+        && cdb.get(1).map(|m| m & 0x1f) == Some(0x02)
+        && cdb.get(2) == Some(&0xB0)
 }
 
 /// Decode the big-endian 24-bit offset carried in `cdb[3..6]`, shared by the
@@ -141,6 +179,17 @@ impl ScsiDevice for MockScsiDevice {
                     out.resize(alloc_len, 0);
                     return Ok(out);
                 }
+            }
+        }
+        if self.pioneer_raw && is_pioneer_raw_read(cdb) {
+            if let Some(off) = offset24(cdb) {
+                if self.pioneer_gaps.iter().any(|&(s, e)| off >= s && off < e) {
+                    bail!("pioneer raw read: offset 0x{off:06X} not exposed");
+                }
+                // Deterministic, offset-derived bytes of exactly the requested
+                // length, so the dump loop treats the read as fully readable.
+                let out: Vec<u8> = (0..alloc_len).map(|i| (off as usize + i) as u8).collect();
+                return Ok(out);
             }
         }
         Ok(vec![0u8; alloc_len])
