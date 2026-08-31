@@ -134,10 +134,21 @@ pub fn dump_everything(
         style::dim_line("dumping everything (full image + per-unit regions + map)...")
     );
 
-    // Per-unit regions are always captured; the full 2 MiB image and read-surface
-    // map are FAMILY-OPTIONAL (only MTK today). A family reporting "unsupported"
-    // still dumps what it can — the engine omits firmware.bin/map.* and says so.
-    let dump = drive.read_dump(dev)?;
+    // Per-unit regions, the full image, and the read-surface map are all
+    // FAMILY-OPTIONAL. MTK supplies all three; Pioneer/Renesas has no per-unit
+    // region layout and supplies only the full image. A family reporting
+    // "unsupported" for any part still dumps what it can — the engine omits that
+    // member and says so.
+    let dump = match drive.read_dump(dev) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            println!(
+                "  per-unit regions {}",
+                style::amber(&format!("unavailable ({e})"))
+            );
+            None
+        }
+    };
     let id = drive.identity(dev);
 
     let full = match drive.read_full_image(dev) {
@@ -163,8 +174,10 @@ pub fn dump_everything(
         if let Some((image, ..)) = &full {
             tar_append(&mut b, "firmware.bin", image)?;
         }
-        for (name, data) in dump.members() {
-            tar_append(&mut b, name, data)?;
+        if let Some(dump) = &dump {
+            for (name, data) in dump.members() {
+                tar_append(&mut b, name, data)?;
+            }
         }
         if let Some((map_json, map_md)) = &map {
             tar_append(&mut b, "map.json", map_json.as_bytes())?;
@@ -198,11 +211,13 @@ pub fn dump_everything(
             );
         }
     }
-    for (name, data) in dump.members() {
-        println!(
-            "{}",
-            style::dim_line(&format!("  {name:<16} {} bytes", data.len()))
-        );
+    if let Some(dump) = &dump {
+        for (name, data) in dump.members() {
+            println!(
+                "{}",
+                style::dim_line(&format!("  {name:<16} {} bytes", data.len()))
+            );
+        }
     }
     if map.is_some() {
         println!(

@@ -219,8 +219,16 @@ pub trait DriveFamily {
     /// The family this implementation handles.
     fn family(&self) -> Family;
 
-    /// Whether dump/flash are actually implemented (only MTK today).
+    /// Whether the WRITE (flash) path is actually implemented (only MTK today).
     fn is_supported(&self) -> bool;
+
+    /// Whether the read-only DUMP path is implemented. Dump is a strict subset
+    /// of full support: Pioneer/Renesas can dump (read-only) without allowing
+    /// flash. Defaults to [`Self::is_supported`], so a fully-supported family
+    /// dumps and an unsupported stub does neither.
+    fn dump_supported(&self) -> bool {
+        self.is_supported()
+    }
 
     /// Read INQUIRY + boot banner (the `info` primitive). Standard for all
     /// families, so provided by default.

@@ -1,13 +1,14 @@
-//! HL-DT-ST / Renesas drive family (stub).
+//! HL-DT-ST / Renesas drive family — read-only DUMP support.
 //!
-//! Classifies positive (READ_BUFFER 0xF1 succeeds, Renesas INQUIRY vendor) but
-//! every command that would touch the drive returns an `Unsupported` error, so
-//! the MTK-gate keeps a Renesas drive safe. A real Renesas flasher only needs to
-//! replace this with its own CDBs — the generic engine loop is unchanged.
+//! Renesas / HL-DT-ST (`RENESAS` INQUIRY vendor) is the SAME silicon and
+//! protocol as Pioneer here, so it shares the implementation in
+//! [`super::pioneer`] via [`crate::renesas_pioneer_drive_family!`]: DUMP
+//! (read-only) is supported; FLASH is not. The only write ever issued is the
+//! vendor enable knock on the dump path (see [`super::pioneer`]).
 
 use super::Family;
 
-/// The Renesas drive family (classified, unsupported).
+/// The Renesas drive family (read-only dump).
 pub struct Renesas;
 
-crate::unsupported_drive_family!(Renesas, Family::Renesas);
+crate::renesas_pioneer_drive_family!(Renesas, Family::Renesas);
