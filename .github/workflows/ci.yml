@@ -9,9 +9,12 @@ on:
     branches: [main, dev, qa]
   pull_request:
 
-# freemkv-firmware versions independently of the rest of the freemkv stack and
-# has no freemkv path-dependencies, so no sibling checkout is needed. Cargo.lock
-# is committed for the binary, so builds are reproducible.
+# freemkv-firmware's `freemkv-flash` crate path-deps ../../../libfreemkv (its
+# `scsi` feature is the single source of truth for the per-OS SCSI backends),
+# and libfreemkv in turn path-deps ../freemkv-unlock. actions/checkout refuses a
+# `path:` outside $GITHUB_WORKSPACE, so every build job checks all three repos
+# into sibling subdirectories and runs with `working-directory: freemkv-firmware`
+# — the layout under which the path deps resolve exactly as they do locally.
 env:
   CARGO_TERM_COLOR: always
 
@@ -19,10 +22,11 @@ jobs:
   # CI owns the changelog: main may never carry a version without a CHANGELOG.md
   # entry for it. Hard-fails on main (and PRs targeting main); warns elsewhere so
   # an in-progress dev/qa branch whose entry isn't written yet is not blocked.
+  # Only reads Cargo.toml/CHANGELOG.md, so it needs no sibling checkout.
   changelog:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require a CHANGELOG entry for the crate version on main
         shell: bash
         run: |
@@ -42,30 +46,57 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: freemkv-firmware-ci
+          workspaces: freemkv-firmware
       - run: cargo fmt --all --check
-      # --all-targets so the test code is linted too, not just the library.
+        working-directory: freemkv-firmware
+      # --all-targets so the test code is linted too, not just the libraries.
       - run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: freemkv-firmware
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: freemkv-firmware-ci
+          workspaces: freemkv-firmware
       # Includes the CMAC-verify T0 proof against a committed stock image.
       - run: cargo test --tests
+        working-directory: freemkv-firmware
 
-  # The crate ships on macOS and Windows through its SCSI transport stubs, so it
-  # has to compile there. Build the tests (not just `cargo check`) to force
+  # The crate ships on macOS and Windows through libfreemkv's SCSI transport, so
+  # it has to compile there. Build the tests (not just `cargo check`) to force
   # codegen on the cfg-gated platform halves. These run only on the
   # release-candidate branches — dev is the fast lane. `if` SKIPS the job (it
   # does not queue), so a release gate is never blocked by a never-scheduled job.
@@ -73,20 +104,87 @@ jobs:
     if: github.ref_name == 'qa' || github.ref_name == 'main'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: freemkv-firmware-ci
+          workspaces: freemkv-firmware
       - run: cargo build --all-targets --all-features
+        working-directory: freemkv-firmware
 
   check-windows:
     if: github.ref_name == 'qa' || github.ref_name == 'main'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.86.0
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: freemkv-firmware-ci
+          workspaces: freemkv-firmware
       - run: cargo build --all-targets --all-features
+        working-directory: freemkv-firmware
+
+  # ── Coverage (non-required, additive) ───────────────────────────────────────
+  #
+  # Reports line coverage to Codecov. Deliberately NOT wired into any release
+  # gate: it is informational only and no other job `needs:` it. Mirrors the
+  # `test` job's layout — same pinned 1.94 toolchain, same sibling checkout so
+  # the path deps resolve. cargo-llvm-cov comes as a prebuilt binary from
+  # taiki-e/install-action, so it is toolchain-independent.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      # Cover the library crates only. The egui/wgpu GUI bins carry no meaningful
+      # unit coverage and building them under instrumentation is slow and brittle.
+      - run: cargo llvm-cov --workspace --exclude freemkv-flash-gui --exclude freemkv-fw-gui --ignore-run-fail --lcov --output-path lcov.info
+        working-directory: freemkv-firmware
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: freemkv-firmware/lcov.info
+          slug: freemkv/freemkv-firmware
+          fail_ci_if_error: false

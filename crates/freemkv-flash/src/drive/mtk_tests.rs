@@ -222,12 +222,9 @@ fn parse_sense_fixed_descriptor_and_short_buffers() {
     assert_eq!(parse_sense(&[0x00; 4]), None);
 }
 
-// ---- preflight / flash_open safety (regression: hardware-found) -------------
-//
-// The benign "no disc" case (NOT READY / ASC 0x3A) is tolerated in the Linux
-// transport (see `platform::is_no_medium`), so at THIS layer a TEST UNIT READY
-// that surfaces as an error is a genuine fault — and must never reach a write.
-// (The transport-level no-medium tolerance itself is unit-tested in `platform`.)
+// preflight / flash_open safety (regression: hardware-found). The benign "no
+// disc" case is tolerated in the transport, so at THIS layer a TEST UNIT READY
+// surfacing as an error is a genuine fault that must never reach a write.
 
 use crate::drive::DriveFamily;
 

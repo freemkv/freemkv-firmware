@@ -1,8 +1,9 @@
 //! freemkv-flash command-line interface.
 //!
-//! Exactly three commands; `info` is the default:
-//! * `freemkv-flash <dev>` / `info <dev>` — identify + classify (read-only).
-//! * `freemkv-flash dump <dev> [-o out.tar]` — per-unit backup (read-only).
+//! Reading commands (read-only) + `flash` (write); `info` is the default:
+//! * `freemkv-flash <dev>` / `info <dev>` — identify + classify.
+//! * `freemkv-flash dump <dev> [-o fw.bin]` — full 2 MiB image (`--tar` = per-unit backup).
+//! * `freemkv-flash map  <dev>` — read-surface map → `<base>.map.{json,md}`.
 //! * `freemkv-flash flash <dev> -i <file> [flags]` — write, then read-back verify.
 
 use std::path::{Path, PathBuf};
@@ -15,6 +16,7 @@ use freemkv_flash::drive::{self, Family, FlashRequest};
 use freemkv_flash::engine;
 use freemkv_flash::manifest::FlashMode;
 use freemkv_flash::platform;
+use freemkv_flash::style;
 
 /// freemkv standalone optical-drive firmware flasher / dumper.
 #[derive(Parser, Debug)]
@@ -40,16 +42,58 @@ enum Command {
         /// SCSI device path (e.g. /dev/sg0).
         device: String,
     },
-    /// Back up the per-unit regions to an interoperable .tar (read-only).
+    /// Dump EVERYTHING readable to one .tar: full image + per-unit regions + map (read-only).
     Dump {
         /// SCSI device path (e.g. /dev/sg0).
         device: String,
-        /// Output .tar path.
-        #[arg(short, long, default_value = "dump.tar")]
-        out: PathBuf,
+        /// Output .tar path (default: `<product>_<rev>.dump.tar`).
+        #[arg(short, long)]
+        out: Option<PathBuf>,
     },
     /// Flash a firmware image or restore a per-unit .tar (WRITE).
     Flash(FlashArgs),
+    /// EXPERIMENTAL read-only probe: find which READ BUFFER channel dumps the
+    /// full 2 MiB flash (issues only 0x3C — never a write).
+    #[command(hide = true)]
+    ReadProbe {
+        /// SCSI device path (e.g. /dev/sg0).
+        device: String,
+        /// Save the full image here if the sweep succeeds.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+    /// EXPERIMENTAL read-only map: sweep the full READ BUFFER (mode x buf x
+    /// offset) surface and report what each reads (0x3C only — never a write).
+    #[command(hide = true)]
+    ReadMap {
+        /// SCSI device path (e.g. /dev/sg0).
+        device: String,
+        /// Save the map text here.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+    /// EXPERIMENTAL read-only raw READ BUFFER via explicit mode/buf/offset/len,
+    /// or --dump to sweep the whole 2 MiB via that channel (0x3C only).
+    #[command(hide = true)]
+    ReadRaw {
+        /// SCSI device path (e.g. /dev/sg0).
+        device: String,
+        /// READ BUFFER mode (e.g. 2, 6). Accepts 0x-prefixed hex.
+        #[arg(short = 'm', long)]
+        mode: String,
+        /// Buffer-ID (e.g. 0, 0x80). Accepts 0x-prefixed hex.
+        #[arg(short = 'b', long)]
+        buf: String,
+        /// Byte offset. Accepts 0x-prefixed hex.
+        #[arg(short = 'O', long, default_value = "0")]
+        offset: String,
+        /// Read length. Accepts 0x-prefixed hex.
+        #[arg(short = 'L', long, default_value = "0x40")]
+        len: String,
+        /// Sweep the whole 2 MiB via this channel and save here (uses --len as chunk).
+        #[arg(long)]
+        dump: Option<PathBuf>,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -107,12 +151,25 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
         Some(Command::Info { device }) => cmd_info(&device),
-        Some(Command::Dump { device, out }) => cmd_dump(&device, &out),
+        Some(Command::Dump { device, out }) => cmd_dump(&device, out),
         Some(Command::Flash(args)) => cmd_flash(args),
+        Some(Command::ReadProbe { device, out }) => cmd_read_probe(&device, out.as_deref()),
+        Some(Command::ReadMap { device, out }) => cmd_read_map(&device, out.as_deref()),
+        Some(Command::ReadRaw {
+            device,
+            mode,
+            buf,
+            offset,
+            len,
+            dump,
+        }) => cmd_read_raw(&device, &mode, &buf, &offset, &len, dump.as_deref()),
         None => match cli.device {
             Some(device) => cmd_info(&device),
             None => {
-                eprintln!("error: a device is required (try `freemkv-flash info <dev>` or --help)");
+                eprintln!(
+                    "{} a device is required (try `freemkv-flash info <dev>` or --help)",
+                    style::red("error:")
+                );
                 return ExitCode::FAILURE;
             }
         },
@@ -120,7 +177,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("error: {e:#}");
+            eprintln!("{} {e:#}", style::red("error:"));
             ExitCode::FAILURE
         }
     }
@@ -142,11 +199,69 @@ fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     Ok(family)
 }
 
-fn cmd_dump(device: &str, out: &Path) -> Result<()> {
+fn cmd_dump(device: &str, out: Option<PathBuf>) -> Result<()> {
     let mut dev = platform::open(device, false)?;
     let family = classify_gated(dev.as_mut())?;
     let handler = drive::for_family(family);
-    engine::dump(dev.as_mut(), handler.as_ref(), out)
+    let out = match out {
+        Some(o) => o,
+        None => {
+            let id = handler.identity(dev.as_mut());
+            let s: String = format!("{}_{}", id.product, id.revision)
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            PathBuf::from(format!("{s}.dump.tar"))
+        }
+    };
+    engine::dump_everything(dev.as_mut(), handler.as_ref(), &out)
+}
+
+fn cmd_read_probe(device: &str, out: Option<&Path>) -> Result<()> {
+    let mut dev = platform::open(device, false)?;
+    let _family = classify_gated(dev.as_mut())?;
+    freemkv_flash::probe::read_probe(dev.as_mut(), out)
+}
+
+fn cmd_read_map(device: &str, out: Option<&Path>) -> Result<()> {
+    let mut dev = platform::open(device, false)?;
+    let _family = classify_gated(dev.as_mut())?;
+    freemkv_flash::probe::read_map(dev.as_mut(), out)
+}
+
+/// Parse a `u32` that may be decimal or `0x`-prefixed hex.
+fn parse_num(s: &str) -> Result<u32> {
+    let s = s.trim();
+    let v = if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u32::from_str_radix(hex, 16)
+    } else {
+        s.parse::<u32>()
+    };
+    v.with_context(|| format!("invalid number '{s}'"))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_read_raw(
+    device: &str,
+    mode: &str,
+    buf: &str,
+    offset: &str,
+    len: &str,
+    dump: Option<&Path>,
+) -> Result<()> {
+    let mode = parse_num(mode)? as u8;
+    let buf = parse_num(buf)? as u8;
+    let offset = parse_num(offset)?;
+    let len = parse_num(len)?;
+    let mut dev = platform::open(device, false)?;
+    let _family = classify_gated(dev.as_mut())?;
+    freemkv_flash::probe::read_raw(dev.as_mut(), mode, buf, offset, len, dump)
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {

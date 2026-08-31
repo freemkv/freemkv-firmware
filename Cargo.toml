@@ -1,12 +1,17 @@
 [workspace]
 resolver = "2"
-members = ["crates/freemkv-flash"]
+members = [
+    "crates/freemkv-flash",
+    "crates/freemkv-flash-gui",
+    "crates/freemkv-fw",
+    "crates/freemkv-fw-gui",
+]
 
 [workspace.package]
 # freemkv-firmware versions INDEPENDENTLY of the rest of the freemkv stack.
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
-rust-version = "1.86"
+rust-version = "1.94"
 license = "MIT"
 authors = ["Matthew Jackson <matthew@pq.io>"]
 repository = "https://github.com/freemkv/freemkv-firmware"

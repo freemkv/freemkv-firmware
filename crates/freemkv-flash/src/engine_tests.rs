@@ -5,7 +5,7 @@ use crate::drive::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
     ROM_1F0000_OFFSET,
 };
-use crate::drive::InputKind;
+use crate::drive::{for_family, Family, InputKind};
 use crate::manifest::FlashMode;
 use crate::platform::MockScsiDevice;
 
@@ -129,14 +129,25 @@ fn flash_execute_streams_patterned_image_verbatim() {
     assert_eq!(streamed, image);
 }
 
+/// Stamp one ACTIVE CMAC entry at the integrity table so `[start, end]` is a
+/// protected range (enabled=1, start, end). Mirrors the on-file layout the drive
+/// authenticates: `[enabled(4) | start(4) | end(4) | tag(16)]` at 0x10400.
+fn with_active_cmac_range(mut image: Vec<u8>, start: u32, end: u32) -> Vec<u8> {
+    let off = 0x10400usize; // cmac::TABLE_OFFSET
+    image[off..off + 4].copy_from_slice(&1u32.to_le_bytes()); // enabled
+    image[off + 4..off + 8].copy_from_slice(&start.to_le_bytes());
+    image[off + 8..off + 12].copy_from_slice(&end.to_le_bytes());
+    image
+}
+
 #[test]
-fn flash_execute_detects_readback_mismatch() {
-    // Same patterned image, but the mock answers the READ BUFFER for one
-    // specific chunk offset with the wrong bytes. If verify were a no-op (or
-    // compared against the mock's own zero-fill instead of the real write),
-    // this would still return Ok — proving the test actually exercises verify.
-    let image = patterned_image(IMAGE_SIZE);
-    let bad_offset = (CHUNK * 5) as u32;
+fn flash_execute_fails_on_mismatch_inside_a_cmac_protected_range() {
+    // A read-back mismatch INSIDE a CMAC-protected range is genuine corruption
+    // (those bytes the drive authenticates), so verify must FAIL. The mock answers
+    // one chunk's READ BUFFER with wrong bytes inside the active protected range.
+    let bad_offset = (CHUNK * 5) as u32; // 0x14000
+    let image = with_active_cmac_range(patterned_image(IMAGE_SIZE), 0x11000, 0x1FFFF);
+    assert!((0x11000..=0x1FFFF).contains(&bad_offset));
     let want = offset_bytes(bad_offset);
     let mut dev = MockScsiDevice::echoing().on(
         move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
@@ -145,9 +156,31 @@ fn flash_execute_detects_readback_mismatch() {
     let req = bin_req(image, true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        err.to_string().contains("read-back verify failed"),
+        err.to_string().contains("read-back verify FAILED"),
         "unexpected error: {err}"
     );
+}
+
+#[test]
+fn flash_execute_tolerates_readback_mismatch_outside_protected_ranges() {
+    // A mismatch OUTSIDE every CMAC-protected range — here the per-unit NVRAM/
+    // calibration region, owned and rewritten by the drive — legitimately differs
+    // on a perfect flash, so verify must PASS. Protected range placed away from it.
+    let bad_offset = ROM_1F0000_OFFSET + CHUNK as u32; // inside per-unit NVRAM
+    assert!((bad_offset as usize) < ROM_1F0000_OFFSET as usize + ROM_1F0000_LEN as usize);
+    let image = with_active_cmac_range(patterned_image(IMAGE_SIZE), 0x11000, 0x1FFFF);
+    assert!(
+        bad_offset > 0x1FFFF,
+        "mismatch must be outside the protected range"
+    );
+    let want = offset_bytes(bad_offset);
+    let mut dev = MockScsiDevice::echoing().on(
+        move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+        vec![0xFFu8; CHUNK],
+    );
+    let req = bin_req(image, true);
+    flash(&mut dev, &Mtk, &req)
+        .expect("mismatch outside every CMAC-protected range must pass verify");
 }
 
 #[test]
@@ -194,6 +227,26 @@ fn flash_restore_tar_writes_and_verifies_regions() {
         wrote_region(ROM_1F0000_OFFSET, &dump.rom_1f0000),
         "rom_1F0000 region not written verbatim"
     );
+}
+
+#[test]
+fn non_mtk_family_reports_full_image_unsupported_not_panic() {
+    // The dump full-image path routes through the DriveFamily trait, so a family
+    // that doesn't implement it (Pioneer today) returns the default "unsupported"
+    // error rather than panicking — letting dump degrade gracefully (omit fw.bin).
+    let drive = for_family(Family::Pioneer);
+    let mut dev = MockScsiDevice::new();
+    let err = drive.read_full_image(&mut dev).unwrap_err();
+    assert!(
+        err.to_string().contains("not supported"),
+        "expected an unsupported-family error, got: {err}"
+    );
+    // The read-surface map default is simply "no map" (None), also non-panicking.
+    let id = drive.identity(&mut dev);
+    let map = drive
+        .read_surface_map(&mut dev, &id, &[], &[])
+        .expect("default surface map must not error");
+    assert!(map.is_none(), "a family with no map returns None");
 }
 
 /// A minimal fixed-format REQUEST SENSE payload carrying `key`.

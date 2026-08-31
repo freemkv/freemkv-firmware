@@ -178,7 +178,7 @@ pub fn cdb_test_unit_ready() -> [u8; 12] {
     [0x00; 12]
 }
 
-/// PREPARE — WRITE BUFFER mode 1, "enter-download / pre-erase" (len 0). CDB[9]=0x0B.
+/// PREPARE — WRITE BUFFER mode 1, "enter-download / pre-erase" (len 0). `CDB[9]`=0x0B.
 pub fn cdb_wb_prepare() -> [u8; 12] {
     [
         0x3B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0B, 0x00, 0x00,
@@ -227,7 +227,7 @@ pub fn cdb_request_sense() -> [u8; 12] {
 
 /// AES-128-ECB encrypt the whole image in place (the `enc` transport envelope).
 pub fn enc_transform(image: &mut [u8]) -> Result<()> {
-    if image.len() % 16 != 0 {
+    if !image.len().is_multiple_of(16) {
         bail!(
             "enc: image length {} is not a multiple of the AES block size",
             image.len()
@@ -659,7 +659,7 @@ fn flash_sequence(image_len: usize, chunk: usize) -> Result<Vec<FlashStep>> {
             "flash sequence is defined only for a {IMAGE_SIZE}-byte (2 MiB) image, got {image_len}"
         );
     }
-    if chunk == 0 || chunk > 0xFFFF || image_len % chunk != 0 {
+    if chunk == 0 || chunk > 0xFFFF || !image_len.is_multiple_of(chunk) {
         bail!("chunk {chunk} does not evenly divide the {image_len}-byte image (and must fit u16)");
     }
     let mut steps = Vec::with_capacity(image_len / chunk + 6);
@@ -800,6 +800,29 @@ impl DriveFamily for Mtk {
         DumpPlan::new().execute(dev)
     }
 
+    fn read_full_image(&self, dev: &mut dyn ScsiDevice) -> Result<super::FullImage> {
+        // The MTK full-image read (mode6/buf0 sweep) lives in `probe`; this trait
+        // method is the entry point the engine calls.
+        crate::probe::read_full_image(dev)
+    }
+
+    fn read_surface_map(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        ident: &super::Identity,
+        image: &[u8],
+        gaps: &[(usize, usize)],
+    ) -> Result<Option<(String, String)>> {
+        let map_ident = crate::probe::MapIdent {
+            vendor: ident.vendor.as_str(),
+            product: ident.product.as_str(),
+            revision: ident.revision.as_str(),
+            banner: ident.banner.as_deref(),
+        };
+        let (json, md) = crate::probe::build_map(dev, &map_ident, image, gaps)?;
+        Ok(Some((json, md)))
+    }
+
     fn image_size(&self) -> usize {
         IMAGE_SIZE
     }
@@ -829,12 +852,9 @@ impl DriveFamily for Mtk {
 
     fn wait_ready(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
         use std::time::{Duration, Instant};
-        // After the last chunk the drive keeps programming and answers TEST UNIT
-        // READY with NOT READY / LONG WRITE IN PROGRESS (which the transport
-        // reports as an error). Poll until it becomes ready again — the transport
-        // returns Ok once the drive answers (including the benign no-disc state).
-        // Give up after a generous ceiling and let read-back verify be the judge;
-        // in practice the program completes in a few seconds.
+        // After the last chunk the drive keeps programming and reports TEST UNIT
+        // READY as an error until done. Poll until the transport returns Ok, then
+        // let read-back verify judge; give up after a generous ceiling.
         let deadline = Instant::now() + Duration::from_secs(45);
         while dev.command_in(&cdb_test_unit_ready(), 0).is_err() {
             if Instant::now() >= deadline {
@@ -850,13 +870,9 @@ impl DriveFamily for Mtk {
     /// always sent regardless of [`FlashMode::Main`] vs [`FlashMode::Full`] —
     /// the drive programs on completion either way.
     fn preflight(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
-        // PROBE is a real ROM read and must succeed. TEST UNIT READY is a
-        // drive-faithful handshake: firmware is flashed with NO disc loaded, so a
-        // healthy drive answers NOT READY / "medium not present" (key 0x2 ASC
-        // 0x3A) — the normal state, which the transport treats as benign (see
-        // `platform::is_no_medium`). Any OTHER not-ready reason (spinning-up,
-        // faulted, wrong medium) propagates the transport's decoded error here
-        // and aborts before the caller reaches the irreversible PREPARE.
+        // PROBE is a real ROM read and must succeed. TEST UNIT READY is a faithful
+        // handshake: flashed with no disc, a healthy drive answers benign no-medium
+        // (key 0x2 ASC 0x3A); any OTHER not-ready reason aborts before PREPARE.
         let _ = dev.command_in(&cdb_read_probe(), PROBE_ALLOC)?;
         let _ = dev.command_in(&cdb_test_unit_ready(), 0)?;
         Ok(())
@@ -897,27 +913,18 @@ impl DriveFamily for Mtk {
     /// [`FlashMode::Main`] vs [`FlashMode::Full`] — the drive programs on
     /// completion of the streamed 2 MiB either way.
     fn flash_close(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
-        // The burn already completed on the final STREAM chunk. COMMIT + READY are
-        // status trailers, and the drive is mid-reinit — it legitimately answers
-        // these with a transient CHECK CONDITION (UNIT ATTENTION *or* NOT READY),
-        // which the strict transport refuses. That is expected here and must NOT
-        // be read as a failed flash, so both are best-effort: their transport
-        // result is deliberately discarded. REQUEST SENSE is likewise best-effort
-        // (a drive that cannot even return sense is caught by read-back verify);
-        // the ONLY hard-failure signal is a real programming fault in its parsed
-        // sense key below.
+        // The burn completed on the final chunk; COMMIT + READY + REQUEST SENSE are
+        // trailers the reinit-ing drive may answer with a transient CHECK CONDITION,
+        // so all are best-effort. Only a real fault in the parsed sense below fails.
         let _ = dev.command_out(&cdb_wb_commit(), &[]);
         let _ = dev.command_in(&cdb_test_unit_ready(), 0);
         let sense = dev
             .command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)
             .unwrap_or_default();
         match parse_sense(&sense) {
-            // Bail ONLY on a genuine programming failure: MEDIUM ERROR (0x3),
-            // HARDWARE ERROR (0x4), ABORTED COMMAND (0xB). A microcode program
-            // normally leaves a benign transient key — NOT READY (0x2) or, most
-            // often, UNIT ATTENTION (0x6, "parameters/microcode changed") — and
-            // 0x0/0x1 are benign; treating those as failure would falsely report
-            // a SUCCESSFUL irreversible flash as a brick.
+            // Bail ONLY on a genuine programming failure: MEDIUM (0x3), HARDWARE
+            // (0x4), ABORTED (0xB). A normal program leaves a benign transient
+            // (NOT READY 0x2 / UNIT ATTENTION 0x6) or 0x0/0x1 — not a failure.
             Some((key, asc, ascq)) if matches!(key, 0x3 | 0x4 | 0xB) => {
                 bail!(
                     "drive reported an error after flash — {}; the flash may have FAILED",

@@ -1,0 +1,31 @@
+{
+  "chip": "mt1959",
+  "model": "BU40N",
+  "version": "1.00",
+  "base_sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+  "cdb_base": "0x02000d38",
+  "response_writer": "0x000a2074",
+  "response_commit": "0x00098180",
+  "length_field": "0x02000c72",
+  "buffer_offset": "0x0000af90",
+  "record_off": "0x14fd74",
+  "oem_handler": "0x0009ad5b",
+  "flags_preserved": "0x01",
+  "flags_note": "0x01 is a drive-ready gate, NOT media-gated (command answers with no disc, proven on hardware)",
+  "knock": { "opcode": "0x3C", "mode_cdb1": "0x0E", "sig_cdb2_3": "C0 DE", "subfn_cdb4": "01,02,03,04,05,09" },
+  "handler_va": "0x153968",
+  "dispatch": "cdb[4] (subfn) selects the reply. 03 (VID) builds the format-0x80 READ DISC STRUCTURE request, gates the AGID state, and calls the OEM dispatcher; 09 (DumpAll) reads a 64-byte RAM window at the address packed in cdb[5..9]. Every other subfn writes its 16-byte payload slot: buffer cleared, written via 0xa2074, committed via 0x98180. A non-matching mode/knock tail-calls the untouched OEM handler.",
+  "subfns": {
+    "01": "Identity — 'freemkv <version>' (magic-led; the only framed reply)",
+    "02": "Speed — state = ramp-ceiling cap (00 = OEM, FF = max)",
+    "03": "VID — 16 raw bytes, lean/raw (no prefix)",
+    "04": "BusEncryption — no-op (read path has no cipher; proven)",
+    "05": "Region — RPC-1 region-free",
+    "09": "DumpAll — 64-byte RAM peek at cdb[5..9]"
+  },
+  "flag_table_base": "0x02000e40",
+  "de_byte_off": "0x001ec056",
+  "de_note": "downgrade-enable: write 0xDE unconditionally so every freemkv image flashes over any prior version; not covered by the CMAC integrity regions",
+  "hardware_proven": "LG BU40N 1.00, /dev/sg0: 3C 0E C0 DE 01 -> 'freemkv <version>'; 09 DumpAll reads live SRAM; DE gates downgrade (controlled test). 03 VID variant sweep awaits a disc-in test.",
+  "note": "cleanroom manifest — freemkv-authored bytes + integrity hashes only, no OEM code. The Rust KAT (mt1959_kat_tests.rs) is the enforced, byte-exact source of truth; this file is descriptive and intentionally omits drift-prone goldens (output hash / CMAC deltas) so it cannot go stale against the enforced test."
+}
