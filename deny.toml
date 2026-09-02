@@ -1,0 +1,52 @@
+# cargo-deny — gates the RESOLVED dependency graph (issue #15).
+# Runs in CI against the committed Cargo.lock: RUSTSEC advisories, a permissive
+# licence allow-list, and source/ban hygiene. Update the lock (cargo update)
+# to clear an advisory rather than adding an `ignore` entry without cause.
+
+[advisories]
+yanked = "deny"
+ignore = [
+    # ttf-parser is UNMAINTAINED (not a vulnerability) — a transitive font dep
+    # pulled by egui/epaint. Upstream's migration path is skrifa; until egui
+    # switches, there is nothing to update to. Re-review when egui bumps.
+    "RUSTSEC-2026-0192",
+]
+
+[licenses]
+# The whole tree is permissive. r-efi's LGPL arm is satisfied by Apache-2.0
+# (its expression is "Apache-2.0 OR LGPL-2.1-or-later"), so no copyleft is
+# allowed here. Add a licence only when a real dependency introduces it.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "0BSD",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "CDLA-Permissive-2.0",
+    # egui/wgpu GUI stack + bundled fonts (firmware is a desktop app):
+    "BSL-1.0",
+    "CC0-1.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"   # transitive dupes (digest 0.10/0.11 etc.) are noise, not a gate
+wildcards = "deny"
+# The freemkv siblings resolve as path deps under CI's path-patch layout, which
+# reads as a wildcard version req. That is internal, not a supply-chain wildcard.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# The freemkv siblings are first-party git-tag deps; allow git sources from
+# our own org only (CI resolves them as git, not the local path override).
+[sources.allow-org]
+github = ["freemkv"]

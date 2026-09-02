@@ -1,0 +1,218 @@
+//! A programmable in-memory [`ScsiDevice`] for host-independent tests.
+//!
+//! `MockScsiDevice` lets tests answer specific CDBs with canned data or errors
+//! and records every command_out (write) it receives, so the drive/flash logic
+//! can be exercised on any OS (including macOS CI) without real hardware.
+
+use std::collections::HashMap;
+
+use anyhow::{bail, Result};
+
+use super::ScsiDevice;
+
+type Matcher = Box<dyn Fn(&[u8]) -> bool + Send + Sync>;
+
+enum Outcome {
+    /// Return these exact bytes (as-is, ignoring alloc_len).
+    Data(Vec<u8>),
+    /// Fail the command with this message.
+    Fail(String),
+}
+
+struct Rule {
+    matcher: Matcher,
+    outcome: Outcome,
+}
+
+/// A mock SCSI device driven by a list of CDB-matching rules.
+///
+/// Unmatched `command_in` calls return an all-zero buffer of the requested
+/// length; unmatched `command_out` calls succeed and are recorded in
+/// [`MockScsiDevice::writes`].
+#[derive(Default)]
+pub struct MockScsiDevice {
+    rules: Vec<Rule>,
+    /// Every `(cdb, data)` pair received via `command_out`, in order.
+    pub writes: Vec<(Vec<u8>, Vec<u8>)>,
+    /// Every CDB received via `command_in`, in order.
+    pub reads: Vec<Vec<u8>>,
+    /// When true, WRITE BUFFER mode-6 data is captured by offset and echoed
+    /// back on a matching READ BUFFER mode-6 (opt-in; off by default).
+    echo: bool,
+    /// Offset -> last-written bytes, populated only when `echo` is set.
+    echo_store: HashMap<u32, Vec<u8>>,
+    /// When true, Pioneer raw reads (READ BUFFER mode-2 / buffer id 0xB0) return
+    /// deterministic offset-derived bytes (instead of zero-fill), except at any
+    /// offset covered by `pioneer_gaps`, which fail — to exercise the dump's
+    /// gap-fill. Opt-in via [`MockScsiDevice::pioneer`] / `..::renesas`.
+    pioneer_raw: bool,
+    /// `[start, end)` offset ranges where the Pioneer raw read FAILS (gaps).
+    pioneer_gaps: Vec<(u32, u32)>,
+}
+
+impl MockScsiDevice {
+    /// Create an empty mock (all reads zero-fill, all writes recorded).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a mock that ECHOES WRITE BUFFER mode-6 data back on the matching
+    /// READ BUFFER mode-6 offset (real-write-then-real-readback semantics),
+    /// instead of always zero-filling unmatched reads. `.on(...)` rules still
+    /// take precedence over the echo, so a test can inject a mismatch at a
+    /// specific offset.
+    pub fn echoing() -> Self {
+        Self {
+            echo: true,
+            ..Self::default()
+        }
+    }
+
+    /// Add a rule: when `matcher(cdb)` is true on a data-in command, return `data`.
+    pub fn on<F>(mut self, matcher: F, data: Vec<u8>) -> Self
+    where
+        F: Fn(&[u8]) -> bool + Send + Sync + 'static,
+    {
+        self.rules.push(Rule {
+            matcher: Box::new(matcher),
+            outcome: Outcome::Data(data),
+        });
+        self
+    }
+
+    /// Add a rule: when `matcher(cdb)` is true, fail the command with `msg`.
+    pub fn on_fail<F>(mut self, matcher: F, msg: &str) -> Self
+    where
+        F: Fn(&[u8]) -> bool + Send + Sync + 'static,
+    {
+        self.rules.push(Rule {
+            matcher: Box::new(matcher),
+            outcome: Outcome::Fail(msg.to_string()),
+        });
+        self
+    }
+
+    /// A mock that classifies as MediaTek: GET CONFIGURATION 0x010C echoes the
+    /// `01 0C` feature descriptor. All other reads zero-fill.
+    pub fn mtk() -> Self {
+        let mut fd = vec![0u8; 28];
+        // GET CONFIG header (8) + feature descriptor: feature code at bytes 8..10.
+        fd[8] = 0x01;
+        fd[9] = 0x0C;
+        Self::new().on(
+            |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
+            fd,
+        )
+    }
+
+    /// A mock that classifies as Pioneer/Renesas: READ BUFFER buffer-id 0xF1
+    /// succeeds with non-zero data; GET CONFIGURATION 0x010C does not echo `01 0C`.
+    ///
+    /// It also answers the Pioneer dump path offline: the enable knock
+    /// (WRITE BUFFER `3B 02 41 A5 AA AA`) succeeds and is recorded, and raw reads
+    /// (READ BUFFER mode-2 / buffer id 0xB0) return deterministic offset-derived
+    /// bytes so a test can assemble and check the full image.
+    pub fn pioneer() -> Self {
+        Self {
+            pioneer_raw: true,
+            ..Self::new().on(
+                |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+                vec![0xA5; 8],
+            )
+        }
+    }
+
+    /// Like [`Self::pioneer`] but with a `RENESAS` INQUIRY vendor, so it
+    /// classifies as [`crate::drive::Family::Renesas`].
+    pub fn renesas() -> Self {
+        let mut inq = vec![0u8; 96];
+        inq[8..15].copy_from_slice(b"RENESAS");
+        inq[15] = b' ';
+        Self::pioneer().on(|cdb| cdb.first() == Some(&0x12), inq)
+    }
+
+    /// Mark `[start, end)` as an unreadable gap for the Pioneer raw-read path,
+    /// so the dump fills it with `0xFF` and records the gap.
+    pub fn with_pioneer_gap(mut self, start: u32, end: u32) -> Self {
+        self.pioneer_gaps.push((start, end));
+        self
+    }
+}
+
+/// Is this a Pioneer raw read — READ BUFFER (0x3C) mode 0x02 / buffer id 0xB0?
+fn is_pioneer_raw_read(cdb: &[u8]) -> bool {
+    cdb.first() == Some(&0x3C)
+        && cdb.get(1).map(|m| m & 0x1f) == Some(0x02)
+        && cdb.get(2) == Some(&0xB0)
+}
+
+/// Decode the big-endian 24-bit offset carried in `cdb[3..6]`, shared by the
+/// READ BUFFER / WRITE BUFFER (mode 6) CDBs regardless of their overall length.
+fn offset24(cdb: &[u8]) -> Option<u32> {
+    if cdb.len() < 6 {
+        return None;
+    }
+    Some(((cdb[3] as u32) << 16) | ((cdb[4] as u32) << 8) | (cdb[5] as u32))
+}
+
+/// Is this a WRITE BUFFER (0x3B) or READ BUFFER (0x3C) CDB in mode 6 (the
+/// register-offset stream/readback mode used by the flash sequence)?
+fn is_mode6(cdb: &[u8], opcode: u8) -> bool {
+    cdb.first() == Some(&opcode) && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
+}
+
+impl ScsiDevice for MockScsiDevice {
+    fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
+        self.reads.push(cdb.to_vec());
+        for rule in &self.rules {
+            if (rule.matcher)(cdb) {
+                return match &rule.outcome {
+                    Outcome::Data(d) => Ok(d.clone()),
+                    Outcome::Fail(m) => bail!("{m}"),
+                };
+            }
+        }
+        if self.echo && is_mode6(cdb, 0x3C) {
+            if let Some(off) = offset24(cdb) {
+                if let Some(stored) = self.echo_store.get(&off) {
+                    let mut out = stored.clone();
+                    out.resize(alloc_len, 0);
+                    return Ok(out);
+                }
+            }
+        }
+        if self.pioneer_raw && is_pioneer_raw_read(cdb) {
+            if let Some(off) = offset24(cdb) {
+                if self.pioneer_gaps.iter().any(|&(s, e)| off >= s && off < e) {
+                    bail!("pioneer raw read: offset 0x{off:06X} not exposed");
+                }
+                // Deterministic, offset-derived bytes of exactly the requested
+                // length, so the dump loop treats the read as fully readable.
+                let out: Vec<u8> = (0..alloc_len).map(|i| (off as usize + i) as u8).collect();
+                return Ok(out);
+            }
+        }
+        Ok(vec![0u8; alloc_len])
+    }
+
+    fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        for rule in &self.rules {
+            if (rule.matcher)(cdb) {
+                if let Outcome::Fail(m) = &rule.outcome {
+                    bail!("{m}");
+                }
+            }
+        }
+        if self.echo && is_mode6(cdb, 0x3B) {
+            if let Some(off) = offset24(cdb) {
+                self.echo_store.insert(off, data.to_vec());
+            }
+        }
+        self.writes.push((cdb.to_vec(), data.to_vec()));
+        Ok(())
+    }
+
+    fn describe(&self) -> String {
+        "mock://in-memory".to_string()
+    }
+}

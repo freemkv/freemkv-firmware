@@ -1,0 +1,225 @@
+name: release
+
+# Build the freemkv-flash / freemkv-fw CLIs and their desktop GUIs for every
+# shipping platform and attach the binaries to a GitHub Release when a version
+# tag is pushed.
+#
+# ── Where the website's download buttons should point ───────────────────────
+# Every leg publishes a STABLE, unversioned archive name, so the download page
+# can link the "latest" URL without knowing the version:
+#
+#   Releases page (all versions):
+#     https://github.com/freemkv/freemkv-firmware/releases/latest
+#   Direct per-asset "always the newest" download URLs:
+#     https://github.com/freemkv/freemkv-firmware/releases/latest/download/freemkv-flash-linux-x86_64.tar.gz
+#     https://github.com/freemkv/freemkv-firmware/releases/latest/download/freemkv-flash-macos-aarch64.tar.gz
+#     https://github.com/freemkv/freemkv-firmware/releases/latest/download/freemkv-flash-windows-x86_64.zip
+#     (and the same for freemkv-fw, freemkv-flash-gui, freemkv-fw-gui)
+#   Each archive has a sibling `<name>.sha256` for verification.
+#
+# ── Which targets are green today ───────────────────────────────────────────
+# The CLIs compile and package on all four targets: the macOS (IOKit) and
+# Windows (SPTI) SCSI backends come from libfreemkv and build cleanly. The GUIs
+# (eframe/egui) ship on the desktop targets — macOS (both arches) and Windows —
+# and are skipped on the static-musl Linux leg, where the windowing/GPU stack
+# does not link; the portable Linux CLI is built there instead.
+#
+# Build jobs check out libfreemkv + freemkv-unlock as sibling subdirectories
+# (freemkv-flash path-deps ../../../libfreemkv, which path-deps ../freemkv-unlock)
+# and run under `working-directory: freemkv-firmware`, exactly as ci.yml does.
+
+on:
+  push:
+    tags:
+      # Release only on real version tags. Release candidates (v<ver>-rc<N>,
+      # stamped on every push to `qa`) match `v*` too, so they are excluded —
+      # otherwise every candidate, including the red ones, would publish a
+      # GitHub Release.
+      - 'v*'
+      - '!v*-rc*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Guard: a tag must agree with the crate version it claims to release. Only
+  # meaningful for tag pushes (a workflow_dispatch from a branch has no version
+  # tag), so it is skipped otherwise. Does not block `build` — see below.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify Cargo.toml version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo_ver="v$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [ "$cargo_ver" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Cargo.toml says $cargo_ver but tag is ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "Version match: $cargo_ver"
+
+  build:
+    # Deliberately does NOT `needs: verify`: verify is a fast tripwire that fails
+    # the run on a version mismatch, but packaging can start in parallel.
+    strategy:
+      # One red leg (e.g. a backend that stops compiling on its host) must not
+      # cancel the others — the platforms that do build should still ship.
+      fail-fast: false
+      matrix:
+        include:
+          # Linux: static musl so the CLI is portable across distros (no glibc
+          # version coupling). GUIs are skipped here (no windowing/GPU on musl).
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            osname: linux
+            arch: x86_64
+            archive: tar.gz
+            binext: ''
+            gui: false
+          # macOS: ship both architectures as separate binaries, GUIs included.
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            osname: macos
+            arch: x86_64
+            archive: tar.gz
+            binext: ''
+            gui: true
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            osname: macos
+            arch: aarch64
+            archive: tar.gz
+            binext: ''
+            gui: true
+          # Windows: MSVC toolchain, GUIs included.
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            osname: windows
+            arch: x86_64
+            archive: zip
+            binext: '.exe'
+            gui: true
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+
+      # Pin to the toolchain the project targets (rust-version = "1.94"), so the
+      # shipped binary is built with the same compiler CI gates on.
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+          shared-key: freemkv-firmware-release
+          key: ${{ matrix.target }}
+
+      # musl needs its C toolchain for the linker; the CLI's deps are otherwise
+      # pure Rust, so no cross-container is required for x86_64.
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        working-directory: .
+
+      - name: Build the CLIs (release)
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
+
+      - name: Build the GUIs (release)
+        if: matrix.gui
+        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui
+
+      # Package each binary that got built into its own archive: a stable
+      # unversioned name (the "latest" download URL the site links) plus a
+      # version-stamped copy, each with a SHA-256 sidecar.
+      - name: Package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='${{ matrix.target }}'
+          osname='${{ matrix.osname }}'
+          arch='${{ matrix.arch }}'
+          fmt='${{ matrix.archive }}'
+          ext='${{ matrix.binext }}'
+          # workflow_dispatch from a branch has no version tag; label those runs
+          # so a manual test build still produces sensibly-named archives.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then ver="${GITHUB_REF_NAME}"; else ver="dev-${GITHUB_SHA::7}"; fi
+
+          sha() { # portable sha256 -> <file>.sha256
+            if [ "${RUNNER_OS}" = "macOS" ]; then shasum -a 256 "$1" > "$1.sha256";
+            else sha256sum "$1" > "$1.sha256"; fi
+          }
+
+          bins="freemkv-flash freemkv-fw"
+          if [ "${{ matrix.gui }}" = "true" ]; then bins="$bins freemkv-flash-gui freemkv-fw-gui"; fi
+
+          for bin in $bins; do
+            src="target/$target/release/$bin$ext"
+            if [ ! -f "$src" ]; then
+              echo "::warning::$src not found — skipping"
+              continue
+            fi
+            stable="$bin-$osname-$arch"          # e.g. freemkv-flash-linux-x86_64
+            versioned="$bin-$ver-$osname-$arch"
+            staged="$bin$ext"
+            cp "$src" "$staged"
+            if [ "$fmt" = "zip" ]; then
+              # Git-bash on the Windows runner ships these; PATH may not, so be explicit.
+              7z a -tzip "$stable.$fmt" "$staged" >/dev/null
+              cp "$stable.$fmt" "$versioned.$fmt"
+            else
+              tar czf "$stable.$fmt" "$staged"
+              cp "$stable.$fmt" "$versioned.$fmt"
+            fi
+            sha "$stable.$fmt"
+            sha "$versioned.$fmt"
+            rm -f "$staged"
+          done
+
+      # Manual runs (and branch dispatch, which cannot publish a Release) still
+      # get retrievable artifacts. Paths are relative to $GITHUB_WORKSPACE, and
+      # the archives are created under the freemkv-firmware/ checkout.
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: freemkv-${{ matrix.osname }}-${{ matrix.arch }}
+          path: |
+            freemkv-firmware/*.tar.gz
+            freemkv-firmware/*.zip
+            freemkv-firmware/*.sha256
+          if-no-files-found: error
+
+      # Publish to the GitHub Release only for real version tags. softprops
+      # creates/updates the release for the tag and attaches these files; each
+      # matrix leg contributes its own, so the release accumulates all platforms.
+      - name: Publish to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            freemkv-firmware/*.tar.gz
+            freemkv-firmware/*.zip
+            freemkv-firmware/*.sha256

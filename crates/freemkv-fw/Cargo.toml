@@ -1,0 +1,28 @@
+[package]
+name = "freemkv-fw"
+publish = false  # internal firmware crate; git-tag/path-deps siblings, never on crates.io
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "freemkv firmware authoring tool: verify and re-sign MediaTek MT19xx integrity (AES-CMAC) tables, and probe live drives for freemkv firmware"
+
+[lib]
+name = "freemkv_fw"
+path = "src/lib.rs"
+
+[[bin]]
+name = "freemkv-fw"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+# The integrity engine (table parse + AES-CMAC + re-sign) lives in freemkv-flash;
+# freemkv-fw is a thin authoring CLI over it — no duplicated crypto.
+freemkv-flash = { path = "../freemkv-flash" }
+
+[lints]
+workspace = true

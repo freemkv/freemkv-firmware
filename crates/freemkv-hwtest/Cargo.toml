@@ -1,0 +1,28 @@
+[package]
+name = "freemkv-hwtest"
+publish = false  # internal firmware crate; git-tag/path-deps siblings, never on crates.io
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "freemkv firmware hardware-test harness — a data-driven, single-framing SCSI knock runner that replaces scripts/fw_hwtest.sh"
+
+[[bin]]
+name = "freemkv-hwtest"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+# Reuse libfreemkv's REAL SCSI pass-through transport (same as freemkv-flash) so
+# the harness's data-phase framing is byte-identical to production. `scsi`-only:
+# `default-features = false` takes just the transport (libc + tracing), none of
+# the ripping tree, so there is no dependency cycle onto the firmware side.
+libfreemkv = { path = "../../../libfreemkv", default-features = false, features = ["scsi"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,40 @@
+[package]
+name = "freemkv-flash-gui"
+publish = false  # internal firmware crate; git-tag/path-deps siblings, never on crates.io
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Minimal cross-platform desktop UI for freemkv-flash (drive info / dump / flash)"
+build = "build.rs"
+
+[[bin]]
+name = "freemkv-flash-gui"
+path = "src/main.rs"
+
+[dependencies]
+freemkv-flash = { path = "../freemkv-flash" }
+anyhow = "1"
+
+# eframe/egui: pure-Rust, immediate-mode GUI. Trivially cross-platform
+# (macOS + Windows + Linux) with no system webview. egui is re-exported as
+# `eframe::egui`. The window icon is decoded from a PNG at startup.
+eframe = "0.35"
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Native "open file" / "save file" dialogs on every platform.
+rfd = "0.17"
+
+# libc drives the stdout->pipe redirect that streams the engine's println!
+# progress into the log pane (Unix backends only; see src/ops.rs).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# On a Windows host build, embed the freemkv .ico as the executable icon.
+# No-op when building on macOS/Linux (guarded by cfg(windows) in build.rs).
+[build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true

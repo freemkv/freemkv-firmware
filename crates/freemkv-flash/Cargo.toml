@@ -1,0 +1,40 @@
+[package]
+name = "freemkv-flash"
+publish = false  # internal firmware crate; git-tag/path-deps siblings, never on crates.io
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "freemkv standalone optical-drive firmware flasher/dumper (MediaTek MT19xx; Pioneer/Renesas classified but unsupported)"
+
+[[bin]]
+name = "freemkv-flash"
+path = "src/main.rs"
+
+[lib]
+name = "freemkv_flash"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+crc32fast = "1"
+tar = "0.4"
+aes = "0.8"
+cmac = "0.7"
+cipher = "0.4"
+sha2 = "0.10"
+# The SCSI pass-through transport (SG_IO / IOKit / SPTI + the macOS shim) is the
+# `scsi` feature of libfreemkv — the single source of truth for that layer.
+# freemkv-flash used to carry a trimmed copy of those backends; now it adapts
+# libfreemkv's `ScsiTransport` behind its own `ScsiDevice`. `default-features =
+# false` takes ONLY the transport (libc + tracing), none of the ripping tree, so
+# there is no dependency cycle back onto the firmware/unlock side.
+libfreemkv = { path = "../../../libfreemkv", default-features = false, features = ["scsi"] }
+
+[lints]
+workspace = true
