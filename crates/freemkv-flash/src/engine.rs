@@ -360,6 +360,22 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         return Ok(());
     }
 
+    // Integrity gate (write path): the image's AES-CMAC must verify before any
+    // destructive write. A mis-signed image is rejected by the drive's boot
+    // authenticator and can brick it — refuse unconditionally, no override.
+    if !cmac::verify(&req.input) {
+        bail!(
+            "firmware image fails its AES-CMAC integrity check — refusing to flash. \
+             A mis-signed or corrupted image is rejected by the drive's boot \
+             authenticator and can brick the drive."
+        );
+    }
+
+    // Model gate (write path): every MT19xx image CMAC-verifies for its OWN
+    // model, so CMAC alone can't stop a wrong-model write. Require the image's
+    // drive-descriptor model to name this drive's INQUIRY product.
+    ensure_image_matches_drive(&req.input, &req.drive_model)?;
+
     // Safety gate only on the write path.
     if let Err(block) = check_safety(req.acknowledged_risk) {
         bail!("SAFETY GATE: {}", block.0);
@@ -489,6 +505,48 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 }
 
 /// Restore per-unit regions from a `.tar` (targeted writes, not a full stream).
+/// Refuse to flash an image whose drive-descriptor model does not name this
+/// drive. Fails closed — too-small image, missing MT19xx family tag, unknown
+/// drive product, or model mismatch all abort, with no override. The descriptor
+/// is at file offset 0x1EC000 (model `0x08..0x18`, family tag `0x34..0x3E`),
+/// mirrored from freemkv-fw's `family`; that crate depends on this one (its KAT
+/// calls `cmac::verify`) so the parse can't be shared without a cycle.
+fn ensure_image_matches_drive(image: &[u8], drive_product: &str) -> Result<()> {
+    const DESCRIPTOR_OFFSET: usize = 0x1E_C000;
+    const DESCRIPTOR_LEN: usize = 0x40;
+    let desc = image
+        .get(DESCRIPTOR_OFFSET..DESCRIPTOR_OFFSET + DESCRIPTOR_LEN)
+        .context("image too small to contain the drive descriptor at 0x1EC000")?;
+
+    let family_tag = crate::drive::trim_ascii(&desc[0x34..0x3E]);
+    if !family_tag.starts_with("MTEKMT19") {
+        bail!(
+            "input is not a recognizable MT19xx firmware image (drive-descriptor \
+             family tag {family_tag:?} at 0x1EC034) — refusing to flash"
+        );
+    }
+
+    let product = drive_product.trim();
+    if product.is_empty() {
+        bail!(
+            "drive model is unknown (empty INQUIRY product) — refusing to flash \
+             without confirming the image matches this drive"
+        );
+    }
+
+    let image_model = crate::drive::trim_ascii(&desc[0x08..0x18]);
+    if !image_model
+        .to_ascii_uppercase()
+        .contains(&product.to_ascii_uppercase())
+    {
+        bail!(
+            "image is built for model {image_model:?} but this drive reports \
+             {product:?} — refusing to flash a wrong-model image"
+        );
+    }
+    Ok(())
+}
+
 fn flash_restore(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,

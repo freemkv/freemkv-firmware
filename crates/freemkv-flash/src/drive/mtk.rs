@@ -922,9 +922,9 @@ impl DriveFamily for Mtk {
             .command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)
             .unwrap_or_default();
         match parse_sense(&sense) {
-            // Bail ONLY on a genuine programming failure: MEDIUM (0x3), HARDWARE
-            // (0x4), ABORTED (0xB). A normal program leaves a benign transient
-            // (NOT READY 0x2 / UNIT ATTENTION 0x6) or 0x0/0x1 — not a failure.
+            // Hard-fail ONLY on an unambiguous programming failure: MEDIUM (0x3),
+            // HARDWARE (0x4), ABORTED (0xB). Every other key is non-fatal here
+            // (see the catch-all) — the drive re-enumeration is the authority.
             Some((key, asc, ascq)) if matches!(key, 0x3 | 0x4 | 0xB) => {
                 bail!(
                     "drive reported an error after flash — {}; the flash may have FAILED",
@@ -940,6 +940,9 @@ impl DriveFamily for Mtk {
                     sense.len()
                 );
             }
+            // Any other key (0x0/0x1 clean, 0x2/0x6 benign transient, or an
+            // unexpected 0x5/0x7/…): not hard-failed here — post-flash identity
+            // re-enumeration + read-back verify are the authorities (see fn doc).
             _ => {}
         }
         Ok(())

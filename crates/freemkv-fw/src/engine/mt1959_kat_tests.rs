@@ -447,6 +447,14 @@ fn find_free_sram_cell_marks_base_register_reach() {
     assert_eq!(cell, 0x0200_0030);
 }
 
+/// A valid `ldr r0,[pc,#0]` whose literal pool (offset 4) lies past this 2-byte
+/// image must decode to None, never panic — the SRAM scan reaches the image
+/// tail and OEM images may be malformed.
+#[test]
+fn pc_literal_past_the_image_tail_is_none_not_panic() {
+    assert_eq!(super::pc_literal(&0x4800u16.to_le_bytes(), 0), None);
+}
+
 /// STATIC behavioral guard for the Raw Read (0x04) flag semantics — the mapping
 /// this test protects does NOT change on a version bump or an unrelated subfn
 /// edit, unlike the byte snapshot above. It fails loudly if the two modes are
