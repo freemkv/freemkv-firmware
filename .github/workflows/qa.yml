@@ -1,0 +1,184 @@
+name: qa
+
+# ── The qa gate: "is this production worth?" ────────────────────────────────
+#
+# dev -> qa -> main.
+#
+# `dev` is for committing often. ci.yml answers "is it green" in minutes with
+# fmt, clippy and the unit suite. `qa` is the release-candidate branch, and THIS
+# workflow is the claim that a commit is production worth: everything expensive
+# that can run without physical media. `main` only ever receives a qa that went
+# green here.
+#
+# What this gate CANNOT cover: real flashing needs a sacrificial MT19xx drive,
+# and no hosted runner has one. That leg stays on hardware, by hand.
+#
+# Build jobs check out libfreemkv + freemkv-unlock as sibling subdirectories
+# (freemkv-flash path-deps ../../../libfreemkv, which path-deps ../freemkv-unlock)
+# and run under `working-directory: freemkv-firmware`, exactly as ci.yml does.
+on:
+  push:
+    branches: [qa]
+  workflow_dispatch:
+
+jobs:
+  # ── Name the candidate ────────────────────────────────────────────────
+  # Every push to `qa` is a release candidate, so every push gets a tag:
+  # v<version>-rc<N>, N incrementing. Runs FIRST and does not depend on the
+  # gates — a red candidate needs a name more than a green one does. Only reads
+  # Cargo.toml + tags, so it needs no sibling checkout.
+  rc-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Stamp the next rc
+        shell: bash
+        run: |
+          set -euo pipefail
+          v=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          [ -n "$v" ] || { echo "no version in Cargo.toml" >&2; exit 1; }
+          # Numeric sort on the rc ordinal: -rc10 must beat -rc9.
+          n=$(git tag -l "v$v-rc*" | sed "s|^v$v-rc||" | sort -n | tail -1)
+          tag="v$v-rc$(( ${n:-0} + 1 ))"
+          git tag "$tag"
+          git push origin "$tag"
+          echo "### Candidate \`$tag\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # Release is a DIFFERENT build: overflow checks off, debug_assert! compiled
+  # out, inlining changes what the optimiser proves. A test that only passes in
+  # debug never guarded the binary anyone ships.
+  release-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['ubuntu-latest', 'macos-latest']
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+      - run: cargo test --release --tests
+
+  # clippy's output is target-dependent: cfg-gated code only gets linted on the
+  # target it compiles for. Linting solely on the dev host is how a lint that CI
+  # rejects reaches a push.
+  cross-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # Windows compiles the tests but does not run them. The value is codegen: the
+  # #[cfg(windows)] half of the SCSI transport compiles on no other runner, so
+  # without this it is first built at release time.
+  windows-build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+      - run: cargo build --release --all-targets --all-features
+
+  # freemkv-fw claims it can modify (create + re-verify) 100% of the FORGEABLE
+  # firmware images we hold — "forgeable" meaning a plaintext MediaTek MT1959
+  # image with a valid AES-CMAC table, per crates/freemkv-fw/tests/
+  # corpus_create_verify.rs's own independent classifier (NOT freemkv-fw's own
+  # detection — see that file's header for why that independence matters).
+  #
+  # This gates on the committed OEM fixture under crates/freemkv-fw/tests/fixtures/
+  # (stock manufacturer dumps ONLY — no MakeMKV-modified images are committed to
+  # this PUBLIC repo). The full corpus, including MK-signed images, lives in the
+  # private firmware-hoard and is never pulled into a public run (it would leak
+  # firmware via logs/artifacts).
+  #
+  # The FULL corpus is still run the same way, just manually / locally, by
+  # pointing FREEMKV_FW_CORPUS at the private checkout:
+  #   FREEMKV_FW_CORPUS=/path/to/hoard/organized,/path/to/hoard/incoming \
+  #     cargo +1.94 test -p freemkv-fw --test corpus_create_verify -- --nocapture
+  forge-corpus:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/libfreemkv
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: libfreemkv
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/freemkv-unlock
+          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
+          path: freemkv-unlock
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+      - name: Prove freemkv-fw modifies 100% of the fixture corpus
+        run: |
+          set -euo pipefail
+          export FREEMKV_FW_CORPUS="$PWD/crates/freemkv-fw/tests/fixtures"
+          cargo test -p freemkv-fw --test corpus_create_verify -- --nocapture

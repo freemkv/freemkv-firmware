@@ -1,0 +1,626 @@
+# freemkv firmware hardware-test script.
+#
+# A data-driven bring-up suite. EVERY step is issued through the one call
+# primitive (call_cdb), which fixes the SCSI data-phase framing so it can never
+# drift between steps — the bug that motivated this rewrite was a knock issued
+# with NO data-in phase, which desyncs the transfer and wedges the drive.
+#
+# ── Schema ──────────────────────────────────────────────────────────────────
+# Top level:
+#   expect_version:  string   expected identity, e.g. "freemkv 0.6.6"
+#                             (CLI --expect-version overrides this)
+#   flag_base:       int/hex  SRAM flag-table base (default 0x02000e40)
+#   timeout_ms:      int      per-command watchdog in ms (default 30000)
+#   steps:           list     ordered test steps (below)
+#
+# Each step:
+#   name:   string            human label
+#   phase:  discless | disc   disc steps run only with --disc (a disc loaded)
+#   ONE of:
+#     knock: { subfn: <int>, state: <int?>, addr: <int?> }
+#           assembles 3C 0E C0 DE <subfn> <state> 00 00 40 00 (a 64-byte knock).
+#           For DumpAll (subfn 0x09) give `addr` instead of `state`; it packs the
+#           32-bit address into cdb[5..9].
+#     raw: "3c 00 00 …"       a literal hex-byte CDB (e.g. OEM passthrough, READ(10))
+#     sequence: [ sub, sub ]  an ORDERED list of sub-commands run as one unit.
+#           Each sub is { name, knock|raw, dir?, alloc?, repeat?, expect } — like
+#           a step but with no phase (it inherits the parent's) and no nesting.
+#           Combine with `iterations` to repeat the whole ordered sequence; this
+#           is how the deny→approve→read hang is reproduced (see D8 below).
+#   dir:    from_device | none | to_device   data phase (default from_device;
+#           a knock MUST be from_device with alloc 64, or it desyncs)
+#   alloc:  int               data-in bytes to read (default 64 for a knock, else 0)
+#   repeat: int               issue the command this many times (default 1); use
+#                             with data.stable to prove an idempotent flag
+#   iterations: int           run the command form (single command OR `sequence`)
+#                             this many times (default 1), evaluating EACH run
+#                             INDEPENDENTLY and reporting "X/N passed" instead of
+#                             aborting on first failure — so intermittency shows
+#                             up as e.g. 17/20. The step passes only when X==N. A
+#                             per-command timeout/hang is a WEDGE (exit 2), never
+#                             a silent skip. Between iterations the identity
+#                             wedge-guard is re-asserted; a dead drive aborts.
+#                             (`repeat` collects reads for stable/status ANDing;
+#                             `iterations` scores each run separately for X/N.)
+#   exec: { cert: valid|revoked, program?, args? }
+#                             run a host-side helper — the AACS cert AKE via
+#                             libfreemkv's `cert_vid`. With `cert` the runner
+#                             supplies AKE_HELPER + `--dev <dev> --cert <hex>
+#                             --key <hex>` from config; with `program` it runs an
+#                             explicit binary. Asserted with `expect_exec`. If the
+#                             AKE_HELPER / cert material isn't configured the step
+#                             is SKIPPED (never hangs / hard-fails). Usable as a
+#                             sub-step so a cert scenario is `sequence: [ knock,
+#                             exec ]` (set the raw-read mode, then run the AKE).
+#   report: true              informational: print the returned bytes and always
+#                             pass (for disc-type probes we record but don't assert)
+#   expect_exec:              (for an `exec` command)
+#     result:  vid | rejected | no_vid | transport   # helper exit+stdout contract
+#     any_of:  [vid, rejected]  # accept any (AACS-1.0 cert on a 2.0 disc may REJECT)
+#     exit_code: int            # raw exit-code assertion
+#     stdout_contains: "..."    # substring assertion
+#     vid: { nonzero: true, ... }   # field checks on the parsed "VID <hex>" bytes
+#   expect:
+#     status:    good | check_condition | any     (default good)
+#     sense_key: <int>         expected sense key on a CHECK CONDITION (e.g. 0x05)
+#     data:                    (optional) any of:
+#       # whole-response checks:
+#       starts_with_ascii: "freemkv"
+#       starts_with_hex:   "de ad"
+#       contains_ascii:    "..."
+#       contains_version:  true      # must contain the resolved expected version
+#       # field checks (operate on `slice` if given, else the whole response):
+#       slice:          { offset: 4, len: 16 }   # a window, e.g. the VID at [4..20]
+#       nonzero:        true         # at least one non-zero byte in the field
+#       min_len:        16           # field length floor
+#       stable:         true         # field identical across every `repeat` read
+#       capture:        vid          # store the field under a name
+#       equals_capture: vid          # field must equal a previously-captured value
+#     flag: { subfn: <int>, equals: <int> }   # DumpAll@flag_base, byte[subfn]==equals
+#
+# Numbers accept decimal, 0x-hex, or a quoted "0x.." string.
+#
+# Top-level pacing / AKE config (all overridable by CLI/env; see README):
+#   delay_ms / settle_ms / tur_retries / tur_backoff_ms — command pacing (a
+#     back-to-back rapid-fire is a known wedge trigger; a spun-down disc is a
+#     false-timeout source, so disc reads poll TEST UNIT READY first).
+#   ake: { helper, valid_cert, valid_key, revoked_cert, revoked_key } — the cert
+#     AKE helper + cert material; env (AKE_HELPER, VALID_CERT, …) overrides.
+#
+# This is the ONE comprehensive "does the firmware work" script: it covers the
+# Raw Read 00/01/02 bare-read contract AND the 00/01/02 cert-AKE matrix, per-mode
+# reliability (N-trial X/N), and the deny→approve→read hang repro — disc-less and
+# disc. The cert matrix (D9) needs an AKE_HELPER + certs; without them it SKIPs.
+
+expect_version: "freemkv 0.6.8"
+flag_base: 0x02000e40
+timeout_ms: 30000
+# Pacing (ms). Set to 0 to disable. CLI --delay-ms/--settle-ms/... override.
+delay_ms: 200
+settle_ms: 400
+tur_retries: 10
+tur_backoff_ms: 150
+# AKE helper + cert material for the D11 cert-AKE matrix are NEVER committed:
+# AACS host certificates and their private keys are licensed material. Supply
+# them at run time via environment variables — AKE_HELPER (path to the cert_vid
+# helper) and VALID_CERT / VALID_KEY / REVOKED_CERT / REVOKED_KEY (hex). If any
+# are unset the D11 cert steps SKIP (they never hang or hard-fail).
+
+steps:
+  # ── P0  identity / new firmware booted ──────────────────────────────────
+  - name: "P0 identity knock"
+    phase: discless
+    knock: { subfn: 0x01, state: 0x00 }
+    dir: from_device
+    alloc: 64
+    expect:
+      status: good
+      data: { starts_with_ascii: "freemkv", contains_version: true }
+
+  # ── P1  Speed flag persistence (0x02) ───────────────────────────────────
+  - name: "P1 Speed toggle max (02 FF) persists"
+    phase: discless
+    knock: { subfn: 0x02, state: 0xFF }
+    expect:
+      status: good
+      flag: { subfn: 0x02, equals: 0xFF }
+  - name: "P1 Speed toggle off (02 00) persists"
+    phase: discless
+    knock: { subfn: 0x02, state: 0x00 }
+    expect:
+      status: good
+      flag: { subfn: 0x02, equals: 0x00 }
+  - name: "P1 Speed toggle cap (02 42) persists"
+    phase: discless
+    knock: { subfn: 0x02, state: 0x42 }
+    expect:
+      status: good
+      flag: { subfn: 0x02, equals: 0x42 }
+
+  # ── P1r  Speed (0x02) per-value RELIABILITY (N-trial, no disc) ───────────
+  # The 0x02 counterpart of P3r: a representative cap value latched 20x, scored
+  # X/20, so a flaky Speed toggle that only sometimes writes its flag is caught.
+  - name: "P1r Speed cap (02 42) x20 — flag latches every trial"
+    phase: discless
+    iterations: 20
+    knock: { subfn: 0x02, state: 0x42 }
+    expect:
+      status: good
+      flag: { subfn: 0x02, equals: 0x42 }
+
+  # ── P2  Region flag persistence (0x03) ──────────────────────────────────
+  - name: "P2 Region free (03 01) persists"
+    phase: discless
+    knock: { subfn: 0x03, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x03, equals: 0x01 }
+  - name: "P2 Region off (03 00) persists"
+    phase: discless
+    knock: { subfn: 0x03, state: 0x00 }
+    expect:
+      status: good
+      flag: { subfn: 0x03, equals: 0x00 }
+
+  # ── P2r  Region (0x03) RELIABILITY (N-trial, no disc) ────────────────────
+  - name: "P2r Region free (03 01) x20 — flag latches every trial"
+    phase: discless
+    iterations: 20
+    knock: { subfn: 0x03, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x03, equals: 0x01 }
+
+  # ── P3  Raw Read state plumbing, no disc (0x04 00/01/02) ─────────────────
+  # Each toggle must return cleanly (no wedge) and persist its state. This is
+  # the exact path that wedged 0.6.0 when framed without a data-in phase.
+  - name: "P3 Raw Read OEM (04 00) — clean, flag persists"
+    phase: discless
+    knock: { subfn: 0x04, state: 0x00 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x00 }
+  - name: "P3 Raw Read cert-valid (04 01) — clean, flag persists"
+    phase: discless
+    knock: { subfn: 0x04, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x01 }
+  - name: "P3 Raw Read accept-any-cert (04 02) — clean, flag persists"
+    phase: discless
+    knock: { subfn: 0x04, state: 0x02 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x02 }
+
+  # ── P3r  Raw Read per-mode RELIABILITY (N-trial, no disc) ────────────────
+  # Each toggle is issued 20x and scored INDEPENDENTLY: the report reads e.g.
+  # "20/20" (or "17/20" if intermittent) instead of a single lucky/unlucky shot.
+  # A flaky toggle that only sometimes latches its flag is caught here. Bump
+  # `iterations` for a longer soak. The identity wedge-guard runs between trials.
+  - name: "P3r Raw Read OEM (04 00) x20 — flag latches every trial"
+    phase: discless
+    iterations: 20
+    knock: { subfn: 0x04, state: 0x00 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x00 }
+  - name: "P3r Raw Read cert-valid (04 01) x20 — flag latches every trial"
+    phase: discless
+    iterations: 20
+    knock: { subfn: 0x04, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x01 }
+  - name: "P3r Raw Read accept-any-cert (04 02) x20 — flag latches every trial"
+    phase: discless
+    iterations: 20
+    knock: { subfn: 0x04, state: 0x02 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x02 }
+
+  # ── P3c  DumpAll returns a RAM window (flag base AND a second address) ────
+  - name: "P3c DumpAll flag window returns data"
+    phase: discless
+    knock: { subfn: 0x09, addr: 0x02000e40 }
+    dir: from_device
+    alloc: 64
+    expect:
+      status: good
+      data: { min_len: 64 }
+  - name: "P3c DumpAll a second RAM address returns a 64-byte window"
+    phase: discless
+    knock: { subfn: 0x09, addr: 0x02000000 }
+    dir: from_device
+    alloc: 64
+    expect:
+      status: good
+      data: { min_len: 64 }
+
+  # ── P4  OEM READ BUFFER passthrough intact (mode 00, not our knock) ──────
+  - name: "P4 OEM READ BUFFER passthrough (mode 00)"
+    phase: discless
+    raw: "3c 00 00 00 00 00 00 00 00 00"
+    dir: none
+    alloc: 0
+    expect:
+      status: any
+
+  # ── P4b  OEM INQUIRY still identifies the drive (passthrough intact) ─────
+  # A stock SCSI INQUIRY must still return the real vendor/product — proof the
+  # firmware patch didn't disturb normal (non-knock) command handling.
+  - name: "P4b OEM INQUIRY returns product id (BU40N)"
+    phase: discless
+    raw: "12 00 00 00 24 00"
+    dir: from_device
+    alloc: 36
+    expect:
+      status: good
+      data: { contains_ascii: "BU40N" }
+
+  # ── P6  Flag coexistence: 02/03/04 are independent (no aliasing) ─────────
+  # Set all three flags, then confirm each survived — proves the flag bytes are
+  # distinct storage and one toggle never clobbers another.
+  - name: "P6 set Speed (02 FF)"
+    phase: discless
+    knock: { subfn: 0x02, state: 0xFF }
+    expect: { status: good }
+  - name: "P6 set Region (03 01)"
+    phase: discless
+    knock: { subfn: 0x03, state: 0x01 }
+    expect: { status: good }
+  - name: "P6 set Raw Read (04 01)"
+    phase: discless
+    knock: { subfn: 0x04, state: 0x01 }
+    expect: { status: good }
+  - name: "P6 coexist — Speed still 0xFF after 03+04 sets"
+    phase: discless
+    knock: { subfn: 0x01, state: 0x00 }
+    expect: { status: good, flag: { subfn: 0x02, equals: 0xFF } }
+  - name: "P6 coexist — Region still 0x01"
+    phase: discless
+    knock: { subfn: 0x01, state: 0x00 }
+    expect: { status: good, flag: { subfn: 0x03, equals: 0x01 } }
+  - name: "P6 coexist — Raw Read still 0x01"
+    phase: discless
+    knock: { subfn: 0x01, state: 0x00 }
+    expect: { status: good, flag: { subfn: 0x04, equals: 0x01 } }
+  - name: "P6 restore Raw Read OFF (04 00) — clean baseline for disc phase"
+    phase: discless
+    knock: { subfn: 0x04, state: 0x00 }
+    expect: { status: good, flag: { subfn: 0x04, equals: 0x00 } }
+
+  # ── P5  safety invariant: still answers identity ────────────────────────
+  - name: "P5 alive — identity still answers"
+    phase: discless
+    knock: { subfn: 0x01, state: 0x00 }
+    dir: from_device
+    alloc: 64
+    expect:
+      status: good
+      data: { starts_with_ascii: "freemkv" }
+
+  # ═══════════════════════ DISC PHASES (need --disc) ══════════════════════
+  # Hardware-validated on a real drive (freemkv 0.6.6, UHD/AACS-2.x disc).
+  # The bare VID read is the STANDARD READ DISC STRUCTURE (Blu-ray, format 0x80):
+  #   CDB = AD 01 00 00 00 00 00 80 00 24 00 00, FromDevice, alloc 36.
+  # The reply is `00 22 00 00 <16-byte VID> <16-byte MAC>`, so the VID is the
+  # 16-byte window at [4..20]. The VID is DISC-SPECIFIC — never assert a fixed
+  # value; assert only 16 bytes, nonzero, and stability. The MAC is unverifiable
+  # on the bare path (no bus key) and is ignored.
+
+  # ── D1  DENY baseline: Raw Read OFF → bare 0xAD is refused ───────────────
+  - name: "D1 Raw Read OFF (04 00)"
+    phase: disc
+    knock: { subfn: 0x04, state: 0x00 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x00 }
+  - name: "D1 bare 0xAD denied under OEM enforce (CHECK CONDITION / ILLEGAL REQUEST)"
+    phase: disc
+    raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+    dir: from_device
+    alloc: 36
+    expect:
+      status: check_condition
+      sense_key: 0x05
+
+  # ── D2  UNLOCK: Raw Read cert-valid ON → bare 0xAD returns the VID ────────
+  - name: "D2 Raw Read cert-valid ON (04 01)"
+    phase: disc
+    knock: { subfn: 0x04, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x01 }
+  - name: "D2 bare 0xAD returns a 16-byte nonzero VID (captured)"
+    phase: disc
+    raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+    dir: from_device
+    alloc: 36
+    expect:
+      status: good
+      data:
+        slice: { offset: 4, len: 16 }
+        min_len: 16
+        nonzero: true
+        capture: vid
+
+  # ── D3  IDEMPOTENT: the approve flag is sticky, not single-use ────────────
+  - name: "D3 Raw Read cert-valid ON once (04 01)"
+    phase: disc
+    knock: { subfn: 0x04, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x01 }
+  - name: "D3 bare 0xAD x5 with NO knock between — every read GOOD, VID identical"
+    phase: disc
+    raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+    dir: from_device
+    alloc: 36
+    repeat: 5
+    expect:
+      status: good
+      data:
+        slice: { offset: 4, len: 16 }
+        stable: true
+        equals_capture: vid
+
+  # ── D4  REVERT: Raw Read OFF again → bare 0xAD refused again ──────────────
+  - name: "D4 Raw Read OFF (04 00) reverts to OEM"
+    phase: disc
+    knock: { subfn: 0x04, state: 0x00 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x00 }
+  - name: "D4 bare 0xAD denied again (clean revert)"
+    phase: disc
+    raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+    dir: from_device
+    alloc: 36
+    expect:
+      status: check_condition
+      sense_key: 0x05
+
+  # ── D5  RE-ENABLE: fully togglable, same VID returns ──────────────────────
+  - name: "D5 Raw Read cert-valid ON (04 01) again"
+    phase: disc
+    knock: { subfn: 0x04, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x01 }
+  - name: "D5 bare 0xAD returns the SAME VID as before"
+    phase: disc
+    raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+    dir: from_device
+    alloc: 36
+    expect:
+      status: good
+      data:
+        slice: { offset: 4, len: 16 }
+        nonzero: true
+        equals_capture: vid
+
+  # ── D6  READ(10) raw sector — GOOD + 2048 bytes (still AACS-encrypted) ────
+  - name: "D6 READ(10) LBA0 returns a 2048-byte sector"
+    phase: disc
+    raw: "28 00 00 00 00 00 00 00 01 00"
+    dir: from_device
+    alloc: 2048
+    expect:
+      status: good
+      data: { min_len: 2048 }
+
+  # ── D7  Informational disc-type probes (report only, never asserted) ──────
+  # READ CAPACITY(10): last-LBA at bytes [0..4] big-endian (~66GB/100GB ⇒ UHD,
+  # 25/50GB ⇒ BD). GET CONFIGURATION current profile at bytes [6..8] (0x0040 =
+  # BD-ROM). Printed so a run records which disc was tested.
+  - name: "D7 READ CAPACITY(10) — report last LBA"
+    phase: disc
+    raw: "25 00 00 00 00 00 00 00 00 00"
+    dir: from_device
+    alloc: 8
+    report: true
+  - name: "D7 GET CONFIGURATION current profile — report"
+    phase: disc
+    raw: "46 00 00 00 00 00 00 00 20 00"
+    dir: from_device
+    alloc: 32
+    report: true
+
+  # ── D8  BUG REPRO: deny → approve → read hang (the 04 01 intermittency) ───
+  # The regression: from a clean state `04 01` + bare 0xAD returns the VID
+  # reliably, BUT after a `04 00` (OEM) DENY the *next* `04 01` + 0xAD HANGS /
+  # times out. This sequence reproduces that exact ordering and repeats it 20x;
+  # the FINAL unlock read (the hang point) is asserted GOOD + nonzero VID every
+  # iteration, and a timeout there is a WEDGE (exit 2), never a silent skip —
+  # this is the test that would have caught the bug. The VID is captured ONCE
+  # (D2 above) and every read here `equals_capture: vid`, so a value that drifts
+  # across the deny→approve cycle also fails. Between iterations the identity
+  # wedge-guard is re-asserted; a wedged drive aborts rather than being hammered.
+  - name: "D8 deny→approve→read hang repro (x20, VID stable, no wedge)"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "unlock 04 01"
+        knock: { subfn: 0x04, state: 0x01 }
+        expect: { status: good }
+      - name: "bare 0xAD → VID"
+        raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+        alloc: 36
+        expect:
+          status: good
+          data: { slice: { offset: 4, len: 16 }, nonzero: true, equals_capture: vid }
+      - name: "deny 04 00 (OEM enforce)"
+        knock: { subfn: 0x04, state: 0x00 }
+        expect: { status: good }
+      - name: "bare 0xAD denied (CHECK CONDITION / ILLEGAL REQUEST)"
+        raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+        alloc: 36
+        expect: { status: check_condition, sense_key: 0x05 }
+      - name: "re-approve 04 01"
+        knock: { subfn: 0x04, state: 0x01 }
+        expect: { status: good }
+      # THE HANG POINT: pre-fix this bare 0xAD after a deny times out / wedges.
+      - name: "bare 0xAD → VID again (the hang point)"
+        raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+        alloc: 36
+        expect:
+          status: good
+          data: { slice: { offset: 4, len: 16 }, nonzero: true, equals_capture: vid }
+
+  # ── D9  01/02 SPLIT: 04 02 forces only the AKE path, NOT the bare producer ─
+  # `04 02` (accept-any-cert) affects the *cert AKE* path only; it does NOT open
+  # the bare-read producer gate. So a bare 0xAD under 04 02 must still be DENIED
+  # (CHECK CONDITION / ILLEGAL REQUEST) — exactly as under 04 00. This is the
+  # proof that 01 (bare producer) and 02 (AKE) are independent. 20x for reliability.
+  - name: "D9 04 02 + bare 0xAD still DENIED (01/02 split), x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "accept-any-cert 04 02"
+        knock: { subfn: 0x04, state: 0x02 }
+        expect: { status: good, flag: { subfn: 0x04, equals: 0x02 } }
+      - name: "bare 0xAD denied under 04 02 (producer gate still OEM)"
+        raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+        alloc: 36
+        expect: { status: check_condition, sense_key: 0x05 }
+
+  # ── D10  DISC unlock RELIABILITY: 04 01 → bare 0xAD → VID, x20 (from clean) ─
+  # The disc-side counterpart of P3r: from a clean state, unlock (04 01) and read
+  # the VID, 20 independent trials, reported X/20. Standalone (no deny in the
+  # loop) — a pure "does the bare unlock read work every time" soak.
+  - name: "D10 04 01 → bare 0xAD → VID reliability, x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "unlock 04 01"
+        knock: { subfn: 0x04, state: 0x01 }
+        expect: { status: good, flag: { subfn: 0x04, equals: 0x01 } }
+      - name: "bare 0xAD → 16-byte nonzero VID, same as D2"
+        raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+        alloc: 36
+        expect:
+          status: good
+          data: { slice: { offset: 4, len: 16 }, nonzero: true, equals_capture: vid }
+
+  # ── D12  END-TO-END unlock ORDER (the real rip auth path), x20 ────────────
+  # freemkv-unlock's FreemkvUnlocker.full_unlock issues, IN ORDER: identity (01),
+  # region-free (03 01), speed cap (02 FF), Raw Read cert-valid (04 01), then the
+  # bare 0xAD VID read (mirrors src/freemkv/mod.rs full_unlock). This proves the
+  # firmware honours that exact sequence the ripper uses — not just the pieces in
+  # isolation. Each iteration must end in a GOOD 16-byte nonzero VID == D2's
+  # capture. 20x for reliability; a hang is a WEDGE (exit 2), never a skip.
+  - name: "D12 full unlock order (01→03 01→02 FF→04 01→0xAD) → VID, x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "identity 01"
+        knock: { subfn: 0x01, state: 0x00 }
+        expect: { status: good, data: { starts_with_ascii: "freemkv" } }
+      - name: "region-free 03 01"
+        knock: { subfn: 0x03, state: 0x01 }
+        expect: { status: good }
+      - name: "speed cap 02 FF"
+        knock: { subfn: 0x02, state: 0xFF }
+        expect: { status: good }
+      - name: "raw-read cert-valid 04 01"
+        knock: { subfn: 0x04, state: 0x01 }
+        expect: { status: good, flag: { subfn: 0x04, equals: 0x01 } }
+      - name: "bare 0xAD → VID (== D2 capture)"
+        raw: "ad 01 00 00 00 00 00 80 00 24 00 00"
+        alloc: 36
+        expect:
+          status: good
+          data: { slice: { offset: 4, len: 16 }, nonzero: true, equals_capture: vid }
+
+  # ═══════════════ D11  CERT-AKE MATRIX (needs AKE_HELPER + certs) ═══════════
+  # Drives libfreemkv's host-side AACS AKE (`cert_vid`) against each Raw Read mode
+  # with a VALID and a REVOKED host cert. Set the mode via a knock, then run the
+  # AKE via `exec`. The helper prints `VID <hex32>` (exit 0) or REJECTED/NO_VID/
+  # TRANSPORT (exit 2/3/5). The VID is disc-specific — asserted only 16-byte /
+  # nonzero. Each entry runs x20 for reliability. If AKE_HELPER / certs aren't
+  # configured, every D11 step SKIPs (never hangs, never hard-fails).
+  #
+  # DISC-TYPE CAVEAT: our certs are AACS 1.0. On a UHD / AACS-2.0 disc a 1.0 cert
+  # may legitimately REJECT even when it "should" succeed — hence the AKE-success
+  # entries use `any_of: [vid, rejected]`. On a BD / AACS-1.0 disc, tighten these
+  # to `result: vid` (or set per-disc in your own copy).
+
+  # 04 00 (OEM enforce) — the cert AKE runs the drive's OWN policy (HRL applies).
+  - name: "D11 04 00 + VALID cert → AKE succeeds (OEM cert path), x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "OEM enforce 04 00"
+        knock: { subfn: 0x04, state: 0x00 }
+        expect: { status: good, flag: { subfn: 0x04, equals: 0x00 } }
+      - name: "cert AKE (valid) — VID (or REJECT on a 2.0 disc)"
+        exec: { cert: valid }
+        expect_exec:
+          any_of: [vid, rejected]
+          vid: { nonzero: true, min_len: 16 }
+  - name: "D11 04 00 + REVOKED cert → REJECTED (drive HRL denies), x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "OEM enforce 04 00"
+        knock: { subfn: 0x04, state: 0x00 }
+        expect: { status: good }
+      - name: "cert AKE (revoked) — drive rejects the revoked host cert"
+        exec: { cert: revoked }
+        expect_exec: { result: rejected }
+
+  # 04 01 (bare producer unlock) — does NOT touch the AKE path, so the cert AKE
+  # behaves EXACTLY like 04 00/OEM: valid → VID, revoked → REJECTED.
+  - name: "D11 04 01 + VALID cert → AKE behaves like OEM (VID), x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "bare unlock 04 01 (AKE path untouched)"
+        knock: { subfn: 0x04, state: 0x01 }
+        expect: { status: good, flag: { subfn: 0x04, equals: 0x01 } }
+      - name: "cert AKE (valid) — same as OEM"
+        exec: { cert: valid }
+        expect_exec:
+          any_of: [vid, rejected]
+          vid: { nonzero: true, min_len: 16 }
+  - name: "D11 04 01 + REVOKED cert → AKE behaves like OEM (REJECTED), x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "bare unlock 04 01 (AKE path untouched)"
+        knock: { subfn: 0x04, state: 0x01 }
+        expect: { status: good }
+      - name: "cert AKE (revoked) — drive still rejects (04 01 ≠ AKE)"
+        exec: { cert: revoked }
+        expect_exec: { result: rejected }
+
+  # 04 02 (accept-any-cert) — the AKE HEADLINE: the firmware forces the AKE to
+  # accept, so EVEN a REVOKED cert yields a VID (the reason 04 02 exists).
+  - name: "D11 04 02 + VALID cert → AKE succeeds (VID), x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "accept-any-cert 04 02"
+        knock: { subfn: 0x04, state: 0x02 }
+        expect: { status: good, flag: { subfn: 0x04, equals: 0x02 } }
+      - name: "cert AKE (valid) — VID"
+        exec: { cert: valid }
+        expect_exec:
+          any_of: [vid, rejected]
+          vid: { nonzero: true, min_len: 16 }
+  - name: "D11 04 02 + REVOKED cert → FORCED ACCEPT still yields VID, x20"
+    phase: disc
+    iterations: 20
+    sequence:
+      - name: "accept-any-cert 04 02"
+        knock: { subfn: 0x04, state: 0x02 }
+        expect: { status: good, flag: { subfn: 0x04, equals: 0x02 } }
+      # THE 04 02 HEADLINE: revoked cert accepted anyway → VID. On a 1.0 disc
+      # tighten to `result: vid`; on a 2.0 disc a 1.0 cert may still REJECT.
+      - name: "cert AKE (revoked) — forced accept → VID"
+        exec: { cert: revoked }
+        expect_exec:
+          any_of: [vid, rejected]
+          vid: { nonzero: true, min_len: 16 }

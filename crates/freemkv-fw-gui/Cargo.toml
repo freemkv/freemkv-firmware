@@ -1,0 +1,34 @@
+[package]
+name = "freemkv-fw-gui"
+publish = false  # internal firmware crate; git-tag/path-deps siblings, never on crates.io
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Minimal cross-platform desktop UI for freemkv-fw (create / verify / sign / probe)"
+build = "build.rs"
+
+[[bin]]
+name = "freemkv-fw-gui"
+path = "src/main.rs"
+
+[dependencies]
+freemkv-fw = { path = "../freemkv-fw" }
+anyhow = "1"
+
+# eframe/egui: pure-Rust, immediate-mode GUI. Cross-platform (macOS + Windows +
+# Linux), no system webview. egui is re-exported as `eframe::egui`.
+eframe = "0.35"
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Native "open file" / "save file" dialogs on every platform.
+rfd = "0.17"
+
+# On a Windows host build, embed the freemkv .ico as the executable icon.
+# No-op on macOS/Linux (guarded by cfg(windows) in build.rs).
+[build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true

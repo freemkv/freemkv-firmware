@@ -1,0 +1,17 @@
+name: comment-guard
+
+# Caps explanatory prose attached to code by AUDIENCE, not sigil. Internal
+# comments (bare //, /* */, and /// or //! on a NON-pub item) cap at 3 lines;
+# rustdoc prose on a pub item caps at 8 (fenced ``` examples excluded). A doc
+# sigil on a private item is held to the inline cap, so long rationale cannot
+# hide in ///. Overflow belongs in docs/<topic>.md with a one-line // pointer.
+
+on: [push, pull_request]
+
+jobs:
+  comment-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run comment-guard
+        run: python3 ci/comment-guard.py

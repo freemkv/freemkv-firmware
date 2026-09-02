@@ -1,0 +1,27 @@
+NOTICE — Third-Party Firmware Ownership
+=======================================
+
+The freemkv-firmware tooling (freemkv-fw, freemkv-flash, freemkv-hwtest, and the
+build/authoring engine) is licensed under the MIT License — see LICENSE.
+
+The MIT License covers ONLY freemkv's own source code. It does NOT cover any
+optical-drive firmware image. Firmware images — including the OEM base images
+used as test fixtures or read as build input, and any patched image produced by
+these tools — are derived from and remain the property of their original
+manufacturers (for the currently supported drives, LG Electronics / Hitachi-LG
+Data Storage Inc. and MediaTek Inc.).
+
+Firmware images bundled in this repository for testing/interoperability:
+
+  crates/freemkv-fw/tests/fixtures/BU40N_OEM_1.00.bin
+  crates/freemkv-flash/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin
+
+and any firmware offered for download or produced by these tools, are included
+solely for interoperability, testing, and research on firmware the end user
+already owns. They are NOT licensed under MIT, and no ownership of them is
+claimed or transferred.
+
+freemkv is an independent project and is not affiliated with, endorsed by, or
+sponsored by LG Electronics, Hitachi-LG Data Storage, or MediaTek Inc. All
+product names, logos, and trademarks are the property of their respective owners.
+Do not redistribute these firmware images except as permitted by their owners.
