@@ -6,7 +6,24 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.8]
+## [0.7.0]
+
+### Security
+- `freemkv-flash`: the flash write path now refuses — unconditionally, with no
+  override — to write an image whose AES-CMAC does not verify, or whose
+  drive-descriptor model (file offset 0x1EC000) does not name the target drive's
+  INQUIRY product. Either gap could brick a good drive: a mis-signed/corrupted
+  image the drive's boot authenticator rejects, or a right-family/wrong-model
+  image (every MT19xx image CMAC-verifies for its OWN model, so CMAC alone can't
+  catch that). Both gates run before any SCSI write; a dry-run stays a pure
+  read-only inspection.
+
+### Fixed
+- `freemkv-fw`: two out-of-bounds panics on a malformed or short OEM image — the
+  `ldr [pc,#imm]` literal-pool read past the image tail, and the Gate-A
+  deny-reset site index — now fail closed (`None` / a clear error) instead of
+  panicking. Added coverage for the flasher's failed-backup abort gate and for
+  `freemkv-hwtest`'s hung-helper timeout/kill.
 
 ### Added
 - `freemkv-hwtest`: a data-driven, single-framing hardware-test harness (YAML

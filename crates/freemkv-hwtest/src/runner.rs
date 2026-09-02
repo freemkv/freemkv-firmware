@@ -1919,6 +1919,30 @@ steps:
     }
 
     #[test]
+    fn run_with_timeout_kills_a_hung_helper() {
+        // The concurrency safety net: a helper that never exits is killed at the
+        // deadline and reported as a timeout, not left to stall the suite.
+        let helper = write_helper("#!/bin/sh\nsleep 30\n");
+        let mut t = MockTransport::new();
+        let r = Runner::new(&mut t, 0, 1000).with_exec_timeout(200);
+        let err = r
+            .run_with_timeout(helper.to_str().unwrap(), &[])
+            .unwrap_err();
+        assert!(err.contains("timed out"), "got: {err}");
+    }
+
+    #[test]
+    fn run_with_timeout_captures_a_fast_helper() {
+        // The happy path still returns the child's exit code and stdout.
+        let helper = write_helper("#!/bin/sh\necho hello\nexit 0\n");
+        let mut t = MockTransport::new();
+        let r = Runner::new(&mut t, 0, 1000).with_exec_timeout(5000);
+        let (code, out) = r.run_with_timeout(helper.to_str().unwrap(), &[]).unwrap();
+        assert_eq!(code, 0);
+        assert!(out.contains("hello"), "got: {out:?}");
+    }
+
+    #[test]
     fn exec_program_vid_result_passes_and_parses_vid() {
         let s = Script::from_yaml(
             r#"

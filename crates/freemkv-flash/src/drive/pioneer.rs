@@ -3,7 +3,7 @@
 //! Pioneer (INQUIRY vendor `PIONEER`) and Renesas / HL-DT-ST (`RENESAS`) are the
 //! same silicon and speak the same protocol here, so a single implementation
 //! backs both ([`Pioneer`] and [`super::renesas::Renesas`] via the
-//! [`renesas_pioneer_drive_family!`] macro).
+//! [`renesas_pioneer_drive_family!`](crate::renesas_pioneer_drive_family) macro).
 //!
 //! ## DUMP is supported; FLASH is NOT
 //! The full drive-memory image can be read out (read-only). Every WRITE (flash)

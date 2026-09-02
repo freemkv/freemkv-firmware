@@ -15,6 +15,23 @@ fn patterned_image(len: usize) -> Vec<u8> {
     (0..len).map(|i| (i % 251) as u8).collect()
 }
 
+/// Stamp a valid MT19xx drive descriptor at 0x1EC000: `model` at +0x08 and the
+/// `MTEKMT1959` family tag at +0x34, so the write-path model gate recognizes it.
+fn stamp_descriptor(img: &mut [u8], model: &str) {
+    let d = ROM_1EC000_OFFSET as usize;
+    img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
+    img[d + 0x34..d + 0x34 + 10].copy_from_slice(b"MTEKMT1959");
+}
+
+/// Turn a full-size image into one the write-path gates accept: stamp a matching
+/// descriptor + one active CMAC range, then sign it so `cmac::verify` passes.
+fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
+    assert_eq!(img.len(), IMAGE_SIZE);
+    stamp_descriptor(&mut img, model);
+    let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
+    crate::cmac::resign(&img).expect("resign a well-formed image")
+}
+
 /// Big-endian 24-bit offset bytes, as they appear at `cdb[3..6]`.
 fn offset_bytes(offset: u32) -> [u8; 3] {
     [(offset >> 16) as u8, (offset >> 8) as u8, offset as u8]
@@ -79,26 +96,34 @@ fn flash_rejects_wrong_size_bin() {
 
 #[test]
 fn flash_execute_streams_verbatim_and_verifies() {
-    // All-zero plaintext image so the mock's zero-fill read-back matches.
+    // A signed, model-matching image (mostly zero); the mock's zero-fill
+    // read-back matches inside the CMAC-protected range (also zero).
     let mut dev = MockScsiDevice::new();
-    let req = bin_req(vec![0u8; IMAGE_SIZE], true);
+    let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let req = bin_req(image.clone(), true);
     flash(&mut dev, &Mtk, &req).unwrap();
     // 1 PREPARE + 128 STREAM + 1 COMMIT, all WRITE_BUFFER (0x3B).
     assert_eq!(dev.writes.len(), 1 + IMAGE_SIZE / CHUNK + 1);
     assert!(dev.writes.iter().all(|(cdb, _)| cdb[0] == 0x3B));
-    // Bytes streamed are the verbatim (all-zero) image.
-    assert!(dev
+    // Bytes streamed are the verbatim image.
+    let streamed: Vec<u8> = dev
         .writes
         .iter()
-        .all(|(_, data)| data.iter().all(|&b| b == 0)));
+        .filter(|(cdb, _)| is_stream_write(cdb))
+        .flat_map(|(_, data)| data.clone())
+        .collect();
+    assert_eq!(streamed, image);
 }
 
 #[test]
 fn flash_execute_requires_ack() {
+    // A valid, model-matching image so the flow reaches the ACK gate (not the
+    // CMAC/model gates) — the refusal here must be the missing acknowledgement.
     let mut dev = MockScsiDevice::new();
-    let mut req = bin_req(vec![0u8; IMAGE_SIZE], true);
+    let mut req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
     req.acknowledged_risk = false;
-    assert!(flash(&mut dev, &Mtk, &req).is_err());
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(err.to_string().contains("SAFETY GATE"), "got: {err}");
 }
 
 #[test]
@@ -116,7 +141,7 @@ fn flash_execute_streams_patterned_image_verbatim() {
     // streamed bytes must equal the original image, not merely "whatever the
     // mock happens to read back."
     let mut dev = MockScsiDevice::echoing();
-    let image = patterned_image(IMAGE_SIZE);
+    let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     let req = bin_req(image.clone(), true);
     flash(&mut dev, &Mtk, &req).unwrap();
 
@@ -146,7 +171,7 @@ fn flash_execute_fails_on_mismatch_inside_a_cmac_protected_range() {
     // (those bytes the drive authenticates), so verify must FAIL. The mock answers
     // one chunk's READ BUFFER with wrong bytes inside the active protected range.
     let bad_offset = (CHUNK * 5) as u32; // 0x14000
-    let image = with_active_cmac_range(patterned_image(IMAGE_SIZE), 0x11000, 0x1FFFF);
+    let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     assert!((0x11000..=0x1FFFF).contains(&bad_offset));
     let want = offset_bytes(bad_offset);
     let mut dev = MockScsiDevice::echoing().on(
@@ -168,7 +193,7 @@ fn flash_execute_tolerates_readback_mismatch_outside_protected_ranges() {
     // on a perfect flash, so verify must PASS. Protected range placed away from it.
     let bad_offset = ROM_1F0000_OFFSET + CHUNK as u32; // inside per-unit NVRAM
     assert!((bad_offset as usize) < ROM_1F0000_OFFSET as usize + ROM_1F0000_LEN as usize);
-    let image = with_active_cmac_range(patterned_image(IMAGE_SIZE), 0x11000, 0x1FFFF);
+    let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     assert!(
         bad_offset > 0x1FFFF,
         "mismatch must be outside the protected range"
@@ -189,7 +214,7 @@ fn flash_execute_streams_enc_payload_not_plaintext() {
     // AES-transformed payload, not a slice of the plaintext image (proves the
     // enc transform actually ran end-to-end through the streaming loop).
     let mut dev = MockScsiDevice::echoing();
-    let image = patterned_image(IMAGE_SIZE);
+    let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     let mut req = bin_req(image.clone(), true);
     req.enc_override = Some(true);
     flash(&mut dev, &Mtk, &req).unwrap();
@@ -263,7 +288,10 @@ fn flash_close_tolerates_benign_unit_attention() {
     // The near-certain state after a microcode program is UNIT ATTENTION (0x6);
     // a successful, already-burned flash must NOT be reported as a failure.
     let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x06));
-    let req = bin_req(patterned_image(IMAGE_SIZE), true);
+    let req = bin_req(
+        make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
+        true,
+    );
     flash(&mut dev, &Mtk, &req).expect("benign UNIT ATTENTION must not fail the flash");
 }
 
@@ -272,7 +300,10 @@ fn flash_close_tolerates_benign_not_ready() {
     // NOT READY (0x2) is a benign mid-transition state after a program; it must
     // not fail the flash either.
     let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x02));
-    let req = bin_req(patterned_image(IMAGE_SIZE), true);
+    let req = bin_req(
+        make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
+        true,
+    );
     flash(&mut dev, &Mtk, &req).expect("benign NOT READY must not fail the flash");
 }
 
@@ -280,7 +311,10 @@ fn flash_close_tolerates_benign_not_ready() {
 fn flash_close_fails_on_hardware_error_sense() {
     // A genuine HARDWARE ERROR (0x4) after the burn IS a real failure.
     let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));
-    let req = bin_req(patterned_image(IMAGE_SIZE), true);
+    let req = bin_req(
+        make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
+        true,
+    );
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     let msg = err.to_string();
     assert!(
@@ -305,5 +339,84 @@ fn flash_restore_tar_detects_readback_mismatch() {
     assert!(
         err.to_string().contains("read-back verify failed"),
         "unexpected error: {err}"
+    );
+}
+
+// ---- write-path integrity + model gates (never write a bad image) ----------
+
+#[test]
+fn model_gate_accepts_a_matching_image() {
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    assert!(ensure_image_matches_drive(&img, "BU40N").is_ok());
+}
+
+#[test]
+fn model_gate_refuses_a_wrong_model_image() {
+    // A valid MT19xx image built for a DIFFERENT model than the drive reports.
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
+    let err = ensure_image_matches_drive(&img, "BU40N").unwrap_err();
+    assert!(err.to_string().contains("wrong-model"), "got: {err}");
+}
+
+#[test]
+fn model_gate_refuses_a_non_mt19xx_image() {
+    // No MTEKMT19 family tag at the descriptor → not a recognizable image.
+    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N").is_err());
+}
+
+#[test]
+fn model_gate_refuses_an_unknown_drive_product() {
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    assert!(ensure_image_matches_drive(&img, "   ").is_err());
+}
+
+#[test]
+fn model_gate_refuses_a_truncated_image() {
+    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N").is_err());
+}
+
+#[test]
+fn flash_execute_refuses_an_unsigned_image_with_no_write() {
+    // The brick guard: a model-matching image whose CMAC does NOT verify (empty
+    // integrity table) must be refused before any firmware byte is streamed.
+    let mut dev = MockScsiDevice::new();
+    let mut img = vec![0u8; IMAGE_SIZE];
+    stamp_descriptor(&mut img, "BD-RE BU40N");
+    let err = flash(&mut dev, &Mtk, &bin_req(img, true)).unwrap_err();
+    assert!(err.to_string().contains("AES-CMAC"), "got: {err}");
+    assert!(
+        !dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)),
+        "no firmware bytes may be streamed for an unsigned image"
+    );
+}
+
+#[test]
+fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
+    // A failed pre-flash per-unit backup must abort the flash unless the
+    // operator opts into --rescue-no-dump — never write firmware over a drive
+    // whose recovery image we could not capture.
+    let mut dev = MockScsiDevice::new().on_fail(is_mode6_read, "dump read refused");
+    let req = bin_req(vec![0u8; IMAGE_SIZE], true); // rescue_no_dump = false
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(
+        err.to_string().contains("pre-flash per-unit dump failed"),
+        "got: {err}"
+    );
+    assert!(
+        !dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)),
+        "no firmware bytes may be streamed after a failed backup"
+    );
+}
+
+#[test]
+fn flash_execute_refuses_a_wrong_model_image_with_no_write() {
+    // A correctly-signed image for a DIFFERENT model must never reach the write.
+    let mut dev = MockScsiDevice::new();
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
+    let err = flash(&mut dev, &Mtk, &bin_req(img, true)).unwrap_err();
+    assert!(err.to_string().contains("wrong-model"), "got: {err}");
+    assert!(
+        !dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)),
+        "no firmware bytes may be streamed for a wrong-model image"
     );
 }

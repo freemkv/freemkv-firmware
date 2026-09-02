@@ -235,6 +235,9 @@ fn pc_literal(image: &[u8], at: usize) -> Option<u32> {
         return None;
     }
     let pool = ((at + 4) & !3) + (hw & 0xFF) as usize * 4;
+    if pool + 4 > image.len() {
+        return None; // literal pool past the image tail — not decodable
+    }
     Some(thumb::read_u32(image, pool))
 }
 
@@ -1463,6 +1466,9 @@ impl Mt1959Engine {
         // stub that idles the engine via aacs_session_reset, replays sense, returns.
         let aacs_reset = self.find_aacs_session_reset(image)?;
         let deny_site = gatea_deny as usize + 0x10;
+        if deny_site + 4 > image.len() {
+            bail!("deny sense-setup site 0x{deny_site:x} is past the end of the image");
+        }
         let d0 = u16::from_le_bytes([image[deny_site], image[deny_site + 1]]);
         let d1 = u16::from_le_bytes([image[deny_site + 2], image[deny_site + 3]]);
         if d0 != 0x2202 || d1 != 0x216f {
