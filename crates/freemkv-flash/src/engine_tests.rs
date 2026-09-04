@@ -433,3 +433,47 @@ fn flash_execute_refuses_a_wrong_model_image_with_no_write() {
         "no firmware bytes may be streamed for a wrong-model image"
     );
 }
+
+// ---- info on a FILE (classify_file) ----
+
+#[test]
+fn classify_file_reports_a_valid_mt1959_image() {
+    // A correctly-signed BU40N image classifies as MT1959 / BD-UHD / executable
+    // / CMAC-valid — the `info <file>` happy path, no drive involved.
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let fc = classify_file(&img);
+    let chip = fc.chip.expect("recognized MT1959");
+    assert_eq!(chip.family, freemkv_chipset::ChipFamily::Mt1959);
+    assert!(chip.model.to_ascii_uppercase().contains("BU40N"));
+    let cap = fc.capability.expect("capability");
+    assert!(cap.bd_aacs);
+    assert!(cap.media_class >= freemkv_chipset::MediaClass::Bd);
+    let (_, status) = fc.flash.expect("MediaTek flash recipe");
+    assert!(status.is_executable());
+    assert!(
+        matches!(fc.cmac, CmacSummary::Valid { .. }),
+        "a signed image must report valid integrity"
+    );
+}
+
+#[test]
+fn classify_file_flags_a_corrupt_signed_image() {
+    // Flip a byte inside a signed range → integrity must report Invalid.
+    let mut img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    img[0x12000] ^= 0xFF;
+    assert!(matches!(
+        classify_file(&img).cmac,
+        CmacSummary::Invalid { .. }
+    ));
+}
+
+#[test]
+fn classify_file_rejects_unrecognizable_bytes() {
+    // Too small / no MTEKMT19xx tag → not a recognizable image (never panics),
+    // and no capability/flash is inferred for an unrecognized image.
+    assert!(classify_file(&[0u8; 100]).chip.is_none());
+    assert!(classify_file(&vec![0xAAu8; IMAGE_SIZE]).chip.is_none());
+    let fc = classify_file(&[0u8; 100]);
+    assert!(fc.capability.is_none() && fc.flash.is_none());
+    assert!(matches!(fc.cmac, CmacSummary::Unsigned));
+}

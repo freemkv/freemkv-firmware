@@ -1,7 +1,8 @@
 //! freemkv-flash command-line interface.
 //!
 //! Reading commands (read-only) + `flash` (write); `info` is the default:
-//! * `freemkv-flash <dev>` / `info <dev>` — identify + classify.
+//! * `freemkv-flash <dev|file>` / `info <dev|file>` — identify + classify a
+//!   live drive or a firmware image `.bin` (same family key the flash gate uses).
 //! * `freemkv-flash dump <dev> [-o fw.bin]` — full 2 MiB image (`--tar` = per-unit backup).
 //! * `freemkv-flash map  <dev>` — read-surface map → `<base>.map.{json,md}`.
 //! * `freemkv-flash flash <dev> -i <file> [flags]` — write, then read-back verify.
@@ -31,15 +32,15 @@ use freemkv_flash::style;
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
-    /// Device for the default `info` action (e.g. /dev/sg0).
+    /// Device (e.g. /dev/sg0) or firmware image file for the default `info` action.
     device: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Identify + classify the drive (read-only; never aborts).
+    /// Identify + classify a drive OR a firmware image file (read-only; never aborts).
     Info {
-        /// SCSI device path (e.g. /dev/sg0).
+        /// SCSI device path (e.g. /dev/sg0) or a firmware image file (.bin).
         device: String,
     },
     /// Dump EVERYTHING readable to one .tar: full image + per-unit regions + map (read-only).
@@ -183,11 +184,26 @@ fn main() -> ExitCode {
     }
 }
 
-fn cmd_info(device: &str) -> Result<()> {
-    let mut dev = platform::open(device, false)?;
+fn cmd_info(target: &str) -> Result<()> {
+    // A regular file is a firmware image → classify the FILE (no drive needed);
+    // anything else (a /dev/sg* node, or a nonexistent path) → probe the DRIVE.
+    if is_firmware_file(target) {
+        return engine::info_file(Path::new(target));
+    }
+    let mut dev = platform::open(target, false)?;
     let family = drive::classify(dev.as_mut());
     let handler = drive::for_family(family);
     engine::info(dev.as_mut(), handler.as_ref())
+}
+
+/// Route the `info` argument: a path that exists as a **regular file** is a
+/// firmware image (file info); a SCSI **device node** (`/dev/sg*`, a char/block
+/// device) or a nonexistent path is a live drive to probe. Firmware images are
+/// regular files and device nodes are not, so the two split cleanly with no flag.
+fn is_firmware_file(target: &str) -> bool {
+    std::fs::metadata(target)
+        .map(|m| m.is_file())
+        .unwrap_or(false)
 }
 
 /// Classify and enforce the flash/probe gate: only MediaTek drives may flash or
@@ -318,4 +334,28 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
 fn default_backup_path(input: &Path) -> Option<PathBuf> {
     let name = input.file_name()?.to_string_lossy();
     Some(input.with_file_name(format!("{name}.predump.tar")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_firmware_file;
+
+    #[test]
+    fn regular_file_routes_to_file_info() {
+        let p = std::env::temp_dir().join(format!("fmkv_info_dispatch_{}.bin", std::process::id()));
+        std::fs::write(&p, b"a regular file, contents irrelevant to dispatch").unwrap();
+        assert!(is_firmware_file(p.to_str().unwrap()));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn device_node_routes_to_drive() {
+        // /dev/null exists but is a char device, not a regular file → drive path.
+        assert!(!is_firmware_file("/dev/null"));
+    }
+
+    #[test]
+    fn nonexistent_path_routes_to_drive() {
+        assert!(!is_firmware_file("/dev/sg-does-not-exist-42"));
+    }
 }
