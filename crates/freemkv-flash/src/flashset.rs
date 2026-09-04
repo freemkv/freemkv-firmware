@@ -1,9 +1,9 @@
 //! Declarative flash instruction sets — the per-family/brand flash recipe as data.
 //!
 //! This is the flash analogue of the modify tool's per-chipset lever set: a
-//! single generic engine drives whichever [`FlashInstructionSet`] the detected
+//! single generic engine drives whichever [`crate::flashset::FlashInstructionSet`] the detected
 //! chipset selects. It never replaces the proven [`crate::drive::mtk`] execution
-//! path — instead [`FlashInstructionSet::mt1959`] describes that path
+//! path — instead [`crate::flashset::FlashInstructionSet::mt1959`] describes that path
 //! *declaratively*, and the golden CDB KAT in `flashset_tests` proves the
 //! declarative form renders **byte-identical** CDBs to the live `mtk` builders,
 //! so the catalog can never silently drift from what actually executes.
@@ -241,7 +241,7 @@ impl FlashInstructionSet {
 
     /// The instruction set for a classified drive [`Family`]. MTK returns the
     /// executable MT1959 recipe; other silicon families have no executable set
-    /// yet (their brand recipes live in [`catalog`], catalog-only).
+    /// yet (their brand recipes live in [`crate::flashset::CATALOG`], catalog-only).
     pub fn for_family(family: Family) -> Option<Self> {
         match family {
             Family::Mtk => Some(Self::mt1959()),
