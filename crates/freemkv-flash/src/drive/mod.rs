@@ -196,6 +196,9 @@ pub struct FlashRequest {
     pub verbose: bool,
     /// Where to save the pre-flash backup dump, if anywhere.
     pub predump_out: Option<std::path::PathBuf>,
+    /// EXPERIMENTAL crossflash: allow flashing a DIFFERENT same-chipset model's
+    /// firmware (waives the model match; never the chipset-family gate).
+    pub allow_crossflash: bool,
 }
 
 /// A per-unit region to restore from a `.tar` dump (targeted write).

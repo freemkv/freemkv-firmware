@@ -72,6 +72,7 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         drive_model: "BU40N".into(),
         verbose: false,
         predump_out: None,
+        allow_crossflash: false,
     }
 }
 
@@ -347,32 +348,35 @@ fn flash_restore_tar_detects_readback_mismatch() {
 #[test]
 fn model_gate_accepts_a_matching_image() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Mtk).is_ok());
+    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Mtk, false, None).is_ok());
 }
 
 #[test]
 fn model_gate_refuses_a_wrong_model_image() {
     // A valid MT19xx image built for a DIFFERENT model than the drive reports.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
-    let err = ensure_image_matches_drive(&img, "BU40N", Family::Mtk).unwrap_err();
+    let err = ensure_image_matches_drive(&img, "BU40N", Family::Mtk, false, None).unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
 }
 
 #[test]
 fn model_gate_refuses_a_non_mt19xx_image() {
     // No MTEKMT19 family tag at the descriptor → not a recognizable image.
-    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", Family::Mtk).is_err());
+    assert!(
+        ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", Family::Mtk, false, None)
+            .is_err()
+    );
 }
 
 #[test]
 fn model_gate_refuses_an_unknown_drive_product() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "   ", Family::Mtk).is_err());
+    assert!(ensure_image_matches_drive(&img, "   ", Family::Mtk, false, None).is_err());
 }
 
 #[test]
 fn model_gate_refuses_a_truncated_image() {
-    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", Family::Mtk).is_err());
+    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", Family::Mtk, false, None).is_err());
 }
 
 #[test]
@@ -380,12 +384,125 @@ fn family_cross_gate_refuses_an_mt19xx_image_on_a_non_mtk_drive() {
     // A perfectly valid MT1959 image, but the connected drive classified as a
     // different silicon family — refuse across families, before any write.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    let err = ensure_image_matches_drive(&img, "BU40N", Family::Pioneer).unwrap_err();
+    let err = ensure_image_matches_drive(&img, "BU40N", Family::Pioneer, false, None).unwrap_err();
     assert!(
         err.to_string().contains("across silicon families"),
         "got: {err}"
     );
-    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Renesas).is_err());
+    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Renesas, false, None).is_err());
+}
+
+// ---- crossflash gate (--allow-crossflash): waive model, never the family ------
+
+use freemkv_chipset::ChipFamily;
+
+#[test]
+fn crossflash_refuses_cross_chip_family_even_with_the_flag() {
+    // MT1959 image, but the drive's CURRENT firmware reads as MT1939 silicon:
+    // an instant brick. --allow-crossflash must NOT override this.
+    let err = decide_crossflash(
+        ChipFamily::Mt1959,
+        "BD-RE BU40N",
+        "WH16NS60",
+        Some(ChipFamily::Mt1939),
+        true,
+        true, // allow_crossflash
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("across chip families"),
+        "got: {err}"
+    );
+}
+
+#[test]
+fn crossflash_waives_the_model_match_with_the_flag_same_family() {
+    // Different model, same chipset (or unknown drive silicon) + the flag → allowed.
+    let info = decide_crossflash(
+        ChipFamily::Mt1959,
+        "BD-RE BU40N",
+        "WH16NS60",
+        Some(ChipFamily::Mt1959),
+        true, // de enabled
+        true, // allow_crossflash
+    )
+    .unwrap()
+    .expect("authorized crossflash");
+    assert_eq!(info.image_family, ChipFamily::Mt1959);
+    assert!(!info.warnings.iter().any(|w| w.contains("downgrade")));
+}
+
+#[test]
+fn model_mismatch_is_refused_without_the_flag() {
+    let err = decide_crossflash(
+        ChipFamily::Mt1959,
+        "BD-RE BU40N",
+        "WH16NS60",
+        None,
+        true,
+        false, // no crossflash
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("wrong-model"), "got: {err}");
+    assert!(err.to_string().contains("--allow-crossflash"), "got: {err}");
+}
+
+#[test]
+fn crossflash_warns_when_image_is_not_downgrade_enabled() {
+    let info = decide_crossflash(
+        ChipFamily::Mt1959,
+        "BD-RE BU40N",
+        "WH16NS60",
+        Some(ChipFamily::Mt1959),
+        false, // DE NOT set → the drive will likely reject it
+        true,
+    )
+    .unwrap()
+    .expect("authorized crossflash");
+    assert!(
+        info.warnings
+            .iter()
+            .any(|w| w.contains("downgrade-enabled")),
+        "warnings: {:?}",
+        info.warnings
+    );
+}
+
+#[test]
+fn crossflash_warns_when_the_drive_silicon_is_unconfirmed() {
+    // drive_fine_family = None → the sub-family gate could not be checked here.
+    let info = decide_crossflash(
+        ChipFamily::Mt1959,
+        "BD-RE BU40N",
+        "WH16NS60",
+        None,
+        true,
+        true,
+    )
+    .unwrap()
+    .expect("authorized crossflash");
+    assert!(
+        info.warnings.iter().any(|w| w.contains("MT1959 vs MT1939")),
+        "warnings: {:?}",
+        info.warnings
+    );
+}
+
+#[test]
+fn crossflash_flag_lets_a_wrong_model_image_flash_end_to_end() {
+    // A signed MT1959 image built for WH16NS60, flashed onto a drive reporting
+    // BU40N. Without the flag the model gate refuses; with it, the flash proceeds.
+    let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
+
+    let mut refused = bin_req(image.clone(), true);
+    assert!(
+        flash(&mut MockScsiDevice::new(), &Mtk, &refused).is_err(),
+        "wrong-model flash must refuse without --allow-crossflash"
+    );
+
+    refused.allow_crossflash = true;
+    flash(&mut MockScsiDevice::new(), &Mtk, &refused)
+        .expect("crossflash proceeds with --allow-crossflash on same-chipset silicon");
 }
 
 #[test]
