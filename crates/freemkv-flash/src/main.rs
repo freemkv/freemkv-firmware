@@ -122,6 +122,11 @@ struct FlashArgs {
     /// Flash without a successful pre-flash backup (rescue a dead drive only).
     #[arg(long)]
     rescue_no_dump: bool,
+    /// EXPERIMENTAL: crossflash a DIFFERENT same-chipset model's firmware (e.g. a
+    /// UHD-friendly crossflash). Waives the model match but NEVER the chipset-family
+    /// gate (MT1959->MT1959 only). Hardware-unvalidated — high brick risk.
+    #[arg(long)]
+    allow_crossflash: bool,
     /// Show the raw SCSI CDB sequence in the plan (default: clean summary).
     #[arg(short = 'v', long)]
     verbose: bool,
@@ -326,6 +331,7 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         drive_model,
         verbose: args.verbose,
         predump_out,
+        allow_crossflash: args.allow_crossflash,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)
 }
