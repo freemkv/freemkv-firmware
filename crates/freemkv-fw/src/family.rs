@@ -282,6 +282,62 @@ fn parse_descriptor(image: &[u8]) -> (String, String, String, Option<u8>, bool) 
     }
 }
 
+/// Media capability class, ordered `Cd < Dvd < Bd < UhdBd`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MediaClass {
+    /// CD-only.
+    Cd,
+    /// DVD (may carry an RPC region lever).
+    Dvd,
+    /// Blu-ray (AACS content in scope).
+    Bd,
+    /// 4K UHD Blu-ray.
+    UhdBd,
+}
+
+impl MediaClass {
+    /// Short display label.
+    pub fn label(self) -> &'static str {
+        match self {
+            MediaClass::Cd => "CD",
+            MediaClass::Dvd => "DVD",
+            MediaClass::Bd => "BD",
+            MediaClass::UhdBd => "BD/UHD",
+        }
+    }
+}
+
+/// What a given drive/firmware can receive — the step-2 gate the levers consult.
+/// (Chipset property + media class; the OEM-vs-MK distinction is a per-image
+/// property handled by the levers, not here.)
+#[derive(Debug, Clone)]
+pub struct Capability {
+    /// Chip family.
+    pub family: ChipFamily,
+    /// Media capability class.
+    pub media_class: MediaClass,
+    /// AACS content lever (VID / raw-read) in scope.
+    pub bd_aacs: bool,
+    /// RPC region lever in scope.
+    pub region_lockable: bool,
+}
+
+/// Resolve the capability for a model/family.
+///
+/// Minimal built-in table: every MT19xx target freemkv-fw handles today is a
+/// BD/UHD writer with the AACS + region levers in scope. The full model-keyed
+/// capability map (`capability-map.json`, incl. DVD-region-only parts) lands with
+/// the `freemkv-chipset` extraction; the downgrade-enable lever is family-agnostic
+/// and does not depend on this table.
+pub fn capability_for(_model: &str, family: ChipFamily) -> Capability {
+    Capability {
+        family,
+        media_class: MediaClass::UhdBd,
+        bd_aacs: true,
+        region_lockable: true,
+    }
+}
+
 #[cfg(test)]
 #[path = "family_tests.rs"]
 mod tests;
