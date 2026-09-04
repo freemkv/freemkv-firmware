@@ -507,11 +507,15 @@ impl Mt1959Engine {
     /// of the first `ldr r3, [pc, #imm]` at the scanner entry.
     pub fn find_cdb_base(&self, image: &[u8]) -> Result<u32> {
         let entry = self.find_scanner_entry(image)? as usize;
-        // entry+2 is `ldr r3, [pc, #imm]` (0x4Bxx).
+        // entry+2 is the scanner's CDB-base load: `ldr r3,[pc,#imm]` (0x4Bxx) on
+        // MT1959 / JB8, or `ldr r5,[pc,#imm]` (0x4Dxx) on the MT1939 classic
+        // scanner (proven, engine-scope §1). Accept either destination register;
+        // the pool literal + SRAM-window check below is what actually validates it.
         let ins_off = entry + 2;
         let hw = u16::from_le_bytes([image[ins_off], image[ins_off + 1]]);
-        if (hw & 0xF800) != 0x4800 || ((hw >> 8) & 0x7) != 3 {
-            bail!("scanner entry+2 is not `ldr r3,[pc,#imm]` (got 0x{hw:04x})");
+        let rt = (hw >> 8) & 0x7;
+        if (hw & 0xF800) != 0x4800 || !(rt == 3 || rt == 5) {
+            bail!("scanner entry+2 is not `ldr r3/r5,[pc,#imm]` (got 0x{hw:04x})");
         }
         let imm8 = (hw & 0xFF) as usize;
         let pool = ((ins_off + 4) & !3) + imm8 * 4;
@@ -549,7 +553,22 @@ impl Mt1959Engine {
     /// with the live media-gated flag and an in-image handler, and requiring
     /// exactly one whose handler lands on a real `push {…,lr}` prologue.
     pub fn find_live_record(&self, image: &[u8], opcode: u8) -> Result<CommandRecord> {
-        let end = TABLE_HI.min(image.len());
+        self.find_live_record_in(image, opcode, TABLE_LO, TABLE_HI)
+    }
+
+    /// [`Self::find_live_record`] over an explicit table window. The MT1959/JB8
+    /// dispatch table lives at [`TABLE_LO`]..[`TABLE_HI`]; the MT1939 **classic**
+    /// generation keeps the same `opcode@0/flags@1/handler@4` record format but in
+    /// a different window (`~0x1a4000`, engine-scope §1), so the classic engine
+    /// calls this with that window.
+    pub fn find_live_record_in(
+        &self,
+        image: &[u8],
+        opcode: u8,
+        table_lo: usize,
+        table_hi: usize,
+    ) -> Result<CommandRecord> {
+        let end = table_hi.min(image.len());
         let valid = |p: usize| -> bool {
             if p + STRIDE > image.len() {
                 return false;
@@ -560,7 +579,7 @@ impl Mt1959Engine {
             resv == 0 && matches!(fl, 0..=9 | 0x80 | 0x87) && (h == 0 || h < 0x0200_0000)
         };
         let mut hits: Vec<CommandRecord> = Vec::new();
-        let mut off = TABLE_LO;
+        let mut off = table_lo;
         while off + STRIDE <= end {
             if !valid(off) {
                 off += 4;
@@ -957,6 +976,16 @@ impl Mt1959Engine {
     pub fn find_region_emitter(&self, image: &[u8]) -> Result<u32> {
         let lo = 0x0011_0000usize.min(image.len());
         let hi = 0x0012_0000usize.min(image.len());
+        Ok(find_unique(image, REGION_EMIT_SIG, lo, hi, "RPC-state emitter")? as u32)
+    }
+
+    /// [`Self::find_region_emitter`] over an explicit window. `REGION_EMIT_SIG` is
+    /// unique on all 42 MT1939 images too, but the MT1939 **classic** RPC emitter
+    /// sits at `~0x154000..0x157000` (engine-scope §2), outside the MT1959 window,
+    /// so the classic engine searches there.
+    pub fn find_region_emitter_in(&self, image: &[u8], lo: usize, hi: usize) -> Result<u32> {
+        let lo = lo.min(image.len());
+        let hi = hi.min(image.len());
         Ok(find_unique(image, REGION_EMIT_SIG, lo, hi, "RPC-state emitter")? as u32)
     }
 
@@ -1902,6 +1931,158 @@ impl Mt1959Engine {
             levers,
             image: signed,
         })
+    }
+
+    /// **BETA** — MT1939 classic-generation MODIFY.
+    ///
+    /// The classic generation keeps MT1959's `opcode@0/flags@1/handler@4` dispatch
+    /// record format and the same chip-agnostic response writer/commit routines
+    /// (all resolve on classic images), but in a different SRAM map + table window.
+    /// This wires the two levers whose emit is **structurally provable + self-
+    /// verifying** on classic — the Identity vendor handler (which also enables
+    /// DumpAll) and Region-free — plus the always-safe DE byte. RawRead and Speed
+    /// stay reported-only: the classic clear-VID scratch/deny path is INFERRED and
+    /// the classic ramp ceiling is unreversed, so they are NOT emitted.
+    ///
+    /// Every byte written is well-formed, lands in a provably-free SRAM cell /
+    /// CMAC-covered free space, and the image re-signs + self-verifies. What is
+    /// **unproven is runtime behavior on a real classic drive** — hence BETA: this
+    /// path only runs under the caller's explicit `--beta` opt-in, and the Identity
+    /// and Region levers are flagged `beta` in the report.
+    pub fn build_modify_classic(
+        &self,
+        image: &[u8],
+        chip: &ChipInfo,
+        cap: &Capability,
+    ) -> Result<ModifyReport> {
+        // Base prerequisites (classic): scanner + CDB base (r5) + the chip-agnostic
+        // response writer/commit that build_handler needs. If any is missing the
+        // vendor handler can't be built → this classic build can't run (the caller
+        // degrades to the DE-only path).
+        self.find_scanner_entry(image)
+            .context("classic base: dispatch scanner not found")?;
+        self.find_cdb_base(image)
+            .context("classic base: CDB base")?;
+        self.find_response_writer(image)
+            .context("classic base: response writer")?;
+        self.find_response_commit(image)
+            .context("classic base: response commit")?;
+
+        // Classic dispatch table window (~0x1a4000, engine-scope §1).
+        const CLASSIC_TABLE_LO: usize = 0x001a_0000;
+        const CLASSIC_TABLE_HI: usize = 0x001a_8000;
+        let record = self
+            .find_live_record_in(
+                image,
+                abi::READ_BUFFER_OPCODE,
+                CLASSIC_TABLE_LO,
+                CLASSIC_TABLE_HI,
+            )
+            .context("classic base: live 0x3C dispatch record")?;
+
+        // Provably-free SRAM cell for the freemkv flag table (classic SRAM map
+        // differs from MT1959, so we do not reuse the MT1959 FLAG_TABLE_BASE
+        // placeholder — we derive an unreferenced cell from THIS image).
+        let flag_base = self
+            .find_free_sram_cell(image)
+            .context("classic base: free SRAM cell for the flag table")?;
+
+        let handler_bytes = self
+            .build_handler(image, record.handler, flag_base)
+            .context("classic base: assembling the 3C-0E handler")?;
+
+        let mut out = image.to_vec();
+        let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
+        thumb::write(&mut out, handler_va as usize, &handler_bytes);
+
+        let mut levers: Vec<LeverReport> = Vec::new();
+
+        // Identity / vendor handler + DumpAll — BETA (unvalidated on hardware).
+        levers.push(LeverReport::applied_beta(
+            LeverId::Identity,
+            vec![
+                ("handler_va", handler_va),
+                ("record_off", record.off as u32),
+                ("flag_base", flag_base),
+            ],
+        ));
+
+        // Speed — the classic ramp ceiling is not reversed (engine-scope §4).
+        levers.push(LeverReport::missed(
+            LeverId::Speed,
+            "MT1939 classic read-ramp ceiling not yet reversed (NEEDS-RE)",
+        ));
+
+        // Region-free — REGION_EMIT_SIG transfers to classic in a higher window.
+        // BETA (the detour is sound + self-verifies; runtime unvalidated).
+        levers.push(if cap.region_lockable {
+            match self.emit_region_classic(&mut out, flag_base) {
+                Ok((emitter, va)) => LeverReport::applied_beta(
+                    LeverId::RegionFree,
+                    vec![("region_emitter", emitter), ("region_stub_va", va)],
+                ),
+                Err(e) => LeverReport::missed(LeverId::RegionFree, format!("{e:#}")),
+            }
+        } else {
+            LeverReport::not_applicable(LeverId::RegionFree, "no region lever on this model")
+        });
+
+        // Raw read — the classic VID/AKE gates are located + proven-unique, but the
+        // clear-output scratch buffer + deny path are INFERRED (engine-scope §3), so
+        // the detour is NOT emitted even under beta: a wrong reply-path desyncs the
+        // SCSI FIFO. Report the located gates for audit; leave the emit for hardware.
+        levers.push(LeverReport::missed(
+            LeverId::RawRead,
+            "MT1939 classic VID/AKE gates located (proven-unique) but the clear-output/deny \
+             path is INFERRED — not emitted even under beta; needs hardware validation",
+        ));
+
+        // Downgrade-enable — proven/stable (NOT beta), any identity page.
+        levers.push(self.lever_de(image, &mut out, chip));
+
+        // Repoint the classic 0x3C record's handler; flags stay live.
+        let table = CommandTable {
+            base: 0,
+            stride: STRIDE,
+            opcode_off: 0,
+            flags_off: 1,
+            handler_off: 4,
+            term_flag: TERM_FLAG,
+            max_records: 1,
+        };
+        table.replace(&mut out, &record, handler_va | 1, None);
+        debug_assert_eq!(out[record.off + 1], LIVE_FLAGS, "flags must remain live");
+
+        if !levers.iter().any(|l| l.outcome.is_effective()) {
+            bail!("nothing modifiable on this classic MT1939 image");
+        }
+
+        let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
+
+        Ok(ModifyReport {
+            engine: "MT1939",
+            family: chip.family.label().to_string(),
+            vendor: chip.vendor.clone(),
+            model: chip.model.clone(),
+            rev: chip.rev.clone(),
+            media: cap.media_class.label().to_string(),
+            levers,
+            image: signed,
+        })
+    }
+
+    /// Region-free emission for the MT1939 classic window (mirrors [`Self::emit_region`]
+    /// with the classic `REGION_EMIT_SIG` window, `~0x154000..0x157000`).
+    fn emit_region_classic(&self, out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
+        let region_emitter = self.find_region_emitter_in(out, 0x0015_0000, 0x0016_0000)?;
+        let region_site = region_emitter as usize + 14;
+        let region_bytes = self.build_region_stub(flag_base)?;
+        let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
+        let bl = thumb::encode_bl(region_site, region_stub_va)
+            .ok_or_else(|| anyhow!("classic Region detour `bl` out of range"))?;
+        thumb::write(out, region_stub_va as usize, &region_bytes);
+        thumb::write(out, region_site, &bl);
+        Ok((region_emitter, region_stub_va))
     }
 
     /// Speed lever emission (atomic: writes only on full success). Mirrors the

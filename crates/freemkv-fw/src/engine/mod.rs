@@ -90,6 +90,16 @@ pub struct CreateReport {
     pub free_sram_cell: u32,
 }
 
+/// Caller options for a MODIFY run.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ModifyOpts {
+    /// Opt in to BETA / experimental emit paths that are structurally sound and
+    /// self-verifying but **not hardware-validated** (today: the MT1939
+    /// classic-generation handler + Region-free). Off by default — beta bytes are
+    /// never emitted without this explicit opt-in.
+    pub beta: bool,
+}
+
 /// The platform-specific knowledge the toolkit verbs are pointed at. One
 /// implementation per controller family.
 pub trait Engine {
@@ -109,6 +119,15 @@ pub trait Engine {
     /// user-facing path (`freemkv-fw create`): it "modifies what it can and
     /// reports what it did" rather than refusing on the first missing signature.
     fn modify(&self, image: &[u8]) -> Result<ModifyReport>;
+
+    /// MODIFY with caller [`ModifyOpts`]. Default = ignore options and call
+    /// [`Engine::modify`]; engines with BETA emit paths (MT1939 classic) override
+    /// this to honour `opts.beta`. Kept separate so the stable `modify` path is
+    /// unaffected and beta bytes are only ever produced through an explicit opt-in.
+    fn modify_with(&self, image: &[u8], opts: &ModifyOpts) -> Result<ModifyReport> {
+        let _ = opts;
+        self.modify(image)
+    }
 }
 
 /// Select the engine for `image`'s detected chip family, or fail cleanly if the
