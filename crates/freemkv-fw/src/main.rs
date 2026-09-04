@@ -62,6 +62,12 @@ enum Command {
         /// hardware-validated — beta levers are labelled `(BETA)` in the report.
         #[arg(long)]
         beta: bool,
+        /// After building, run the structural detour audit (prove each Applied
+        /// lever's `bl` and stub actually landed, the record was repointed, the
+        /// DE byte is set, and CMAC verifies) and print PASS/FAIL per check.
+        /// Exits non-zero if any check fails.
+        #[arg(long)]
+        audit: bool,
     },
     /// Verify a firmware image (file) or probe a live drive (device) for
     /// freemkv firmware.
@@ -127,7 +133,8 @@ fn main() -> ExitCode {
             in_place,
             json,
             beta,
-        } => cmd_create(&input, output, in_place, json, beta),
+            audit,
+        } => cmd_create(&input, output, in_place, json, beta, audit),
         Command::Verify { path, family } => cmd_verify(&path, family),
         Command::Info {
             device,
@@ -595,6 +602,7 @@ fn cmd_create(
     in_place: bool,
     json: bool,
     beta: bool,
+    audit: bool,
 ) -> Result<ExitCode> {
     let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
 
@@ -627,6 +635,24 @@ fn cmd_create(
     let verdicts = MtkCmac.verify(&report.image)?;
     if verdicts.is_empty() || verdicts.iter().any(|v| !v.ok) {
         bail!("internal error: modified image does not re-verify");
+    }
+
+    // Structural detour audit: prove every Applied lever actually landed.
+    if audit {
+        let result = engine::audit::audit_image(&image, &report);
+        if !json {
+            println!("structural audit:");
+            for c in &result.checks {
+                let mark = if c.ok { "PASS" } else { "FAIL" };
+                println!("  [{mark}] {:<14} {} — {}", c.lever, c.what, c.detail);
+            }
+        }
+        if !result.ok() {
+            bail!(
+                "structural audit FAILED: {} check(s) did not pass — refusing to write",
+                result.failures().count()
+            );
+        }
     }
 
     std::fs::write(&out_path, &report.image)

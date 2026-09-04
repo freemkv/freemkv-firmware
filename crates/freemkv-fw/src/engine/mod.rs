@@ -17,6 +17,7 @@ use anyhow::Result;
 use crate::family::{self, ChipFamily};
 use crate::thumb::CommandRecord;
 
+pub mod audit;
 pub mod lever;
 pub mod mt1939;
 pub mod mt1959;

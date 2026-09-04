@@ -36,6 +36,9 @@ use crate::thumb::{self, Asm, CommandRecord, CommandTable};
 /// Grounded facts produced by the Raw-read lever (VID + AKE + Gate-A + deny).
 struct RawReadFacts {
     ake_gate: u32,
+    /// The AKE detour `bl` site (where the redirect was written) — needed by the
+    /// structural audit to recompute the expected hook via `encode_bl`.
+    ake_site: u32,
     ake_stub_va: u32,
     gatea_cmp: u32,
     gatea_stub_va: u32,
@@ -1820,6 +1823,15 @@ impl Mt1959Engine {
         chip: &ChipInfo,
         cap: &Capability,
     ) -> Result<ModifyReport> {
+        // Idempotency: re-feeding a freemkv-modified image must not re-patch or
+        // error out (the repointed 0x3C record now targets our injected handler,
+        // which has no stock push-lr prologue). Instead, report every lever
+        // AlreadyPresent and return the image byte-identical. Detected by the
+        // RESP_MAGIC the Identity handler always injects (absent from stock OEM).
+        if is_freemkv_patched(image) {
+            return Ok(self.already_present_report(image, chip, cap, "MT1959"));
+        }
+
         // ---- Base prerequisites: if these fail the vendor command cannot exist
         //      at all → whole-run abort ("nothing modifiable"). ----
         self.find_scanner_entry(image)
@@ -1883,6 +1895,7 @@ impl Mt1959Engine {
                     LeverId::RawRead,
                     vec![
                         ("ake_gate", f.ake_gate),
+                        ("ake_site", f.ake_site),
                         ("ake_stub_va", f.ake_stub_va),
                         ("gatea_gate", f.gatea_cmp),
                         ("gatea_stub_va", f.gatea_stub_va),
@@ -1955,6 +1968,12 @@ impl Mt1959Engine {
         chip: &ChipInfo,
         cap: &Capability,
     ) -> Result<ModifyReport> {
+        // Idempotency: a re-fed freemkv-modified classic image reports every lever
+        // AlreadyPresent and returns byte-identical (see `build_modify`).
+        if is_freemkv_patched(image) {
+            return Ok(self.already_present_report(image, chip, cap, "MT1959"));
+        }
+
         // Base prerequisites (classic): scanner + CDB base (r5) + the chip-agnostic
         // response writer/commit that build_handler needs. If any is missing the
         // vendor handler can't be built → this classic build can't run (the caller
@@ -2208,6 +2227,7 @@ impl Mt1959Engine {
         *out = w;
         Ok(RawReadFacts {
             ake_gate,
+            ake_site: reset_site as u32,
             ake_stub_va,
             gatea_cmp: gatea_cmp as u32,
             gatea_stub_va,
@@ -2239,6 +2259,72 @@ impl Mt1959Engine {
             Err(e) => LeverReport::missed(LeverId::DowngradeEnable, format!("{e:#}")),
         }
     }
+
+    /// Build an all-`AlreadyPresent` report for an image that is already
+    /// freemkv-modified (idempotent re-entry). The image is returned
+    /// **byte-identical** (it is already a valid, signed freemkv image), so
+    /// `modify(modify(x)) == modify(x)`. Levers are marked `AlreadyPresent`
+    /// (capability-gated ones `NotApplicable`) to mirror what a fresh modify
+    /// produced.
+    fn already_present_report(
+        &self,
+        image: &[u8],
+        chip: &ChipInfo,
+        cap: &Capability,
+        engine: &'static str,
+    ) -> ModifyReport {
+        let mut levers = Vec::new();
+        levers.push(LeverReport::already(LeverId::Identity, vec![]));
+        levers.push(if cap.media_class >= MediaClass::Bd || cap.bd_aacs {
+            LeverReport::already(LeverId::Speed, vec![])
+        } else {
+            LeverReport::not_applicable(LeverId::Speed, "no BD read-ramp on this model")
+        });
+        levers.push(if cap.region_lockable {
+            LeverReport::already(LeverId::RegionFree, vec![])
+        } else {
+            LeverReport::not_applicable(LeverId::RegionFree, "no region lever on this model")
+        });
+        levers.push(if cap.bd_aacs {
+            LeverReport::already(LeverId::RawRead, vec![])
+        } else {
+            LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
+        });
+        levers.push(if !chip.descriptor_present {
+            LeverReport::not_applicable(
+                LeverId::DowngradeEnable,
+                "no MTEK identity page in this image",
+            )
+        } else {
+            match self.find_de_byte(image) {
+                Ok(de_off) => {
+                    LeverReport::already(LeverId::DowngradeEnable, vec![("de_off", de_off)])
+                }
+                Err(e) => LeverReport::missed(LeverId::DowngradeEnable, format!("{e:#}")),
+            }
+        });
+        ModifyReport {
+            engine,
+            family: chip.family.label().to_string(),
+            vendor: chip.vendor.clone(),
+            model: chip.model.clone(),
+            rev: chip.rev.clone(),
+            media: cap.media_class.label().to_string(),
+            levers,
+            image: image.to_vec(),
+        }
+    }
+}
+
+/// True if `image` is already freemkv-modified. The Identity handler that every
+/// successful modify injects carries the [`abi::RESP_MAGIC`] (`b"freemkv"`)
+/// identity string, which never appears in a stock OEM image — so its presence
+/// is a reliable, byte-stable "already patched by us" marker (used for
+/// idempotent re-entry; see [`Mt1959Engine::build_modify`]).
+pub fn is_freemkv_patched(image: &[u8]) -> bool {
+    image
+        .windows(abi::RESP_MAGIC.len())
+        .any(|w| w == abi::RESP_MAGIC)
 }
 
 #[cfg(test)]
