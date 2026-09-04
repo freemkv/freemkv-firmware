@@ -103,6 +103,9 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
                 enc_override: None,
                 drive_model,
                 verbose: false,
+                // Crossflash is an experimental CLI-only opt-in; the GUI never
+                // waives the model gate.
+                allow_crossflash: false,
                 // Always keep a backup next to the input image.
                 predump_out: default_backup_path(input),
             };
