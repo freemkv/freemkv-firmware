@@ -22,11 +22,17 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// The dispatching handler: persists flag[subfn]=cdb[5]; 01 Identity, 02 Speed,
 /// 03 Region, 04 Raw Read, 09 DumpAll. Speed/Region/Raw Read act via flag-gated
 /// OEM-code trampolines (Raw Read = the AKE accept-gate stub), not this handler.
+///
+/// NOTE: the handler embeds the crate version string (`freemkv <CARGO_PKG_VERSION>`),
+/// so a version bump changes these injected bytes AND the two CMAC digests below
+/// (the version bytes fall inside CMAC entries 1 and 15). When the version bumps,
+/// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
+/// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "224b58780e2806d19878c02803d1d878de2800d101e01e4b1847f0b51d4f1c791d480019597901700025402d04d2281c0021b8470135f8e7092c11d15e793602987936183602d87936183602187a36180025402d12d2281c715db8470135f8e7013c062c0ad210a6200136180025102d04d2281c715db8470135f8e74020074908800748074a9047f0bd0000380d00025bad090075200a00400e0002720c000290af000081810900667265656d6b7620302e362e380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    "224b58780e2806d19878c02803d1d878de2800d101e01e4b1847f0b51d4f1c791d480019597901700025402d04d2281c0021b8470135f8e7092c11d15e793602987936183602d87936183602187a36180025402d12d2281c715db8470135f8e7013c062c0ad210a6200136180025102d04d2281c715db8470135f8e74020074908800748074a9047f0bd0000380d00025bad090075200a00400e0002720c000290af000081810900667265656d6b7620302e372e300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
-const EXPECT_CMAC_1: &str = "d31d8ddedef5c7ca473e24f4086c9689";
-const EXPECT_CMAC_15: &str = "0e785528a5dea558d80cad68c5bde33e";
+const EXPECT_CMAC_1: &str = "ca941ac20cc9096b71a7122bd8d571ad";
+const EXPECT_CMAC_15: &str = "aa08dd64af2c2d15cf1c488e7c979bab";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -571,4 +577,50 @@ fn vid_gate_finds_nb_variant_when_original_absent() {
     nb6[1] = 0x6831;
     put_hw(&mut img6, 0x13_0000, &nb6);
     assert_eq!(Mt1959Engine.find_vid_gate(&img6).unwrap(), 0x13_0000);
+}
+
+/// The never-abort MODIFY driver must emit byte-for-byte the same image as the
+/// strict `build_report` on the all-levers-succeed base, and report every lever
+/// Applied. This is what lets the framework refactor ride on the frozen KAT.
+#[test]
+fn create_and_modify_agree_on_base() {
+    let Some(base) = load_base() else {
+        eprintln!("SKIP: KAT base image not present (set FREEMKV_KAT_BASE)");
+        return;
+    };
+    let created = Mt1959Engine
+        .create(&base)
+        .expect("create must succeed on the OEM base");
+    let chip = crate::family::detect_chip(&base).expect("detect base");
+    let cap = crate::family::capability_for(&chip.model, chip.family);
+    let modified = Mt1959Engine
+        .build_modify(&base, &chip, &cap)
+        .expect("modify must succeed on the OEM base");
+
+    assert_eq!(
+        modified.image, created.image,
+        "build_modify must be byte-identical to build_report on the base"
+    );
+
+    // Every lever is effective on the base. DowngradeEnable is AlreadyPresent
+    // here because the KAT base (`DE_LG_BU40N_1.00`) already carries 0xDE at the
+    // identity-page slot; the other four are freshly Applied.
+    use crate::engine::lever::{LeverId, LeverOutcome};
+    for l in &modified.levers {
+        assert!(
+            l.outcome.is_effective(),
+            "lever {:?} not effective on the base: {:?}",
+            l.id,
+            l.outcome
+        );
+        if l.id != LeverId::DowngradeEnable {
+            assert!(
+                matches!(l.outcome, LeverOutcome::Applied),
+                "lever {:?} should be Applied on the base: {:?}",
+                l.id,
+                l.outcome
+            );
+        }
+    }
+    assert_eq!(modified.levers.len(), 5, "Identity+Speed+Region+RawRead+DE");
 }

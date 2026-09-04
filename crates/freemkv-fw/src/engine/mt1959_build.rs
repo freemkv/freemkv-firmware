@@ -26,10 +26,23 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use freemkv_flash::cmac;
 
+use super::lever::{LeverId, LeverReport, ModifyReport};
 use super::mt1959::Mt1959Engine;
 use super::CreateReport;
 use crate::abi;
+use crate::family::{Capability, ChipInfo, MediaClass};
 use crate::thumb::{self, Asm, CommandRecord, CommandTable};
+
+/// Grounded facts produced by the Raw-read lever (VID + AKE + Gate-A + deny).
+struct RawReadFacts {
+    ake_gate: u32,
+    ake_stub_va: u32,
+    gatea_cmp: u32,
+    gatea_stub_va: u32,
+    deny_site: u32,
+    deny_stub_va: u32,
+    vid_producer: u32,
+}
 
 // The wire frame (opcode / mode / knock / identity sense) is defined once in
 // `crate::abi` and imported here — the engine emits exactly what the host ABI
@@ -1650,6 +1663,304 @@ impl Mt1959Engine {
             flag_base,
             free_sram_cell,
         })
+    }
+
+    /// Never-abort MODIFY: run every applicable lever, collect per-lever
+    /// outcomes, re-sign once. Aborts the whole run **only** when the base
+    /// vendor-command prerequisites cannot be built (nothing modifiable) — a
+    /// single lever missing its signature does not stop the others.
+    ///
+    /// On an image where every lever applies (e.g. the BU40N 1.00 base) this
+    /// emits byte-for-byte the same image as [`Self::build_report`]: the same
+    /// finds, the same `free_space` allocation order (handler → speed → region →
+    /// ake → gate-a → deny), the same detours, one `cmac::resign`. That equality
+    /// is asserted by `create_and_modify_agree_on_base` in the KAT tests.
+    pub fn build_modify(
+        &self,
+        image: &[u8],
+        chip: &ChipInfo,
+        cap: &Capability,
+    ) -> Result<ModifyReport> {
+        // ---- Base prerequisites: if these fail the vendor command cannot exist
+        //      at all → whole-run abort ("nothing modifiable"). ----
+        self.find_scanner_entry(image)
+            .context("nothing modifiable: dispatch scanner signature not found")?;
+        self.find_cdb_base(image)?;
+        self.sense_setter(image)?;
+        let record = self.find_live_record(image, abi::READ_BUFFER_OPCODE)?;
+        let flag_base = FLAG_TABLE_BASE;
+        let flag_table_len = abi::SubFn::DumpAll as u32 + 1;
+        self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
+        let handler_bytes = self
+            .build_handler(image, record.handler, flag_base)
+            .context("assembling the 3C-0E handler")?;
+
+        let mut out = image.to_vec();
+        let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
+        thumb::write(&mut out, handler_va as usize, &handler_bytes);
+
+        let mut levers: Vec<LeverReport> = Vec::new();
+
+        // Identity / base (the vendor handler + DumpAll). Always applicable — its
+        // success is what makes every toggle addressable.
+        levers.push(LeverReport::applied(
+            LeverId::Identity,
+            vec![
+                ("handler_va", handler_va),
+                ("record_off", record.off as u32),
+            ],
+        ));
+
+        // Speed (read-ramp ceiling) — BD capability.
+        levers.push(if cap.media_class >= MediaClass::Bd || cap.bd_aacs {
+            match self.emit_speed(image, &mut out, flag_base) {
+                Ok((gate, va)) => LeverReport::applied(
+                    LeverId::Speed,
+                    vec![("speed_gate", gate), ("speed_stub_va", va)],
+                ),
+                Err(e) => LeverReport::missed(LeverId::Speed, format!("{e:#}")),
+            }
+        } else {
+            LeverReport::not_applicable(LeverId::Speed, "no BD read-ramp on this model")
+        });
+
+        // Region-free (RPC-1) — DVD or BD.
+        levers.push(if cap.region_lockable {
+            match self.emit_region(image, &mut out, flag_base) {
+                Ok((emitter, va)) => LeverReport::applied(
+                    LeverId::RegionFree,
+                    vec![("region_emitter", emitter), ("region_stub_va", va)],
+                ),
+                Err(e) => LeverReport::missed(LeverId::RegionFree, format!("{e:#}")),
+            }
+        } else {
+            LeverReport::not_applicable(LeverId::RegionFree, "no region lever on this model")
+        });
+
+        // Raw read / clear VID (VID gate + AKE accept + deny reset) — AACS/BD.
+        levers.push(if cap.bd_aacs {
+            match self.emit_rawread(image, &mut out, flag_base) {
+                Ok(f) => LeverReport::applied(
+                    LeverId::RawRead,
+                    vec![
+                        ("ake_gate", f.ake_gate),
+                        ("ake_stub_va", f.ake_stub_va),
+                        ("gatea_gate", f.gatea_cmp),
+                        ("gatea_stub_va", f.gatea_stub_va),
+                        ("deny_site", f.deny_site),
+                        ("deny_stub_va", f.deny_stub_va),
+                        ("vid_producer", f.vid_producer),
+                    ],
+                ),
+                Err(e) => LeverReport::missed(LeverId::RawRead, format!("{e:#}")),
+            }
+        } else {
+            LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
+        });
+
+        // Downgrade-enable (DE) — family-agnostic: any image with a well-formed
+        // MTEK identity page. Idempotent (already-0xDE → AlreadyPresent).
+        levers.push(self.lever_de(image, &mut out, chip));
+
+        // Repoint the hijacked record's handler pointer; flags stay OEM.
+        let table = CommandTable {
+            base: 0,
+            stride: STRIDE,
+            opcode_off: 0,
+            flags_off: 1,
+            handler_off: 4,
+            term_flag: TERM_FLAG,
+            max_records: 1,
+        };
+        table.replace(&mut out, &record, handler_va | 1, None);
+        debug_assert_eq!(out[record.off + 1], LIVE_FLAGS, "flags must remain live");
+
+        // If literally nothing took effect, this image is not modifiable.
+        if !levers.iter().any(|l| l.outcome.is_effective()) {
+            bail!("nothing modifiable on this image (no lever applied)");
+        }
+
+        let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
+
+        Ok(ModifyReport {
+            engine: "MT1959",
+            family: chip.family.label().to_string(),
+            vendor: chip.vendor.clone(),
+            model: chip.model.clone(),
+            rev: chip.rev.clone(),
+            media: cap.media_class.label().to_string(),
+            levers,
+            image: signed,
+        })
+    }
+
+    /// Speed lever emission (atomic: writes only on full success). Mirrors the
+    /// Speed block of [`Self::build_report`]; the `bl` range is checked before any
+    /// write so a miss leaves `out` untouched.
+    fn emit_speed(&self, image: &[u8], out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
+        let (speed_gate, speed_idx_reg) = self.find_speed_gate(image)?;
+        let cmp_at = speed_gate as usize + 4;
+        let bhi_at = speed_gate as usize + 6;
+        let bhi_hw = u16::from_le_bytes([image[bhi_at], image[bhi_at + 1]]);
+        if (bhi_hw & 0xFF00) != 0xD800 {
+            bail!("speed gate `bhi` not at 0x{bhi_at:x} (got 0x{bhi_hw:04x})");
+        }
+        let mut disp = (bhi_hw & 0xFF) as i32;
+        if disp >= 0x80 {
+            disp -= 0x100;
+        }
+        let ramp_exit = (bhi_at as i32 + 4 + disp * 2) as u32;
+        let fallthrough = speed_gate + 8;
+        let speed_bytes =
+            self.build_speed_stub(flag_base, fallthrough, ramp_exit, speed_idx_reg)?;
+        let speed_stub_va = self.free_space(out, speed_bytes.len() + 16)?;
+        let bl = thumb::encode_bl(cmp_at, speed_stub_va)
+            .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
+        thumb::write(out, speed_stub_va as usize, &speed_bytes);
+        thumb::write(out, cmp_at, &bl);
+        Ok((speed_gate, speed_stub_va))
+    }
+
+    /// Region-free lever emission (atomic). Mirrors the Region block of
+    /// [`Self::build_report`].
+    fn emit_region(&self, image: &[u8], out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
+        let region_emitter = self.find_region_emitter(image)?;
+        let region_site = region_emitter as usize + 14;
+        let region_bytes = self.build_region_stub(flag_base)?;
+        let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
+        let bl = thumb::encode_bl(region_site, region_stub_va)
+            .ok_or_else(|| anyhow!("Region detour `bl` out of range"))?;
+        thumb::write(out, region_stub_va as usize, &region_bytes);
+        thumb::write(out, region_site, &bl);
+        Ok((region_emitter, region_stub_va))
+    }
+
+    /// Raw-read lever emission (VID gate + AKE accept + deny reset). Validates all
+    /// three sub-finds read-only first, then commits the three detours on a
+    /// working copy so a mid-commit invariant break leaves `out` clean. Mirrors
+    /// the AKE/Gate-A/deny blocks of [`Self::build_report`], same allocation
+    /// order (ake → gate-a → deny).
+    fn emit_rawread(
+        &self,
+        image: &[u8],
+        out: &mut Vec<u8>,
+        flag_base: u32,
+    ) -> Result<RawReadFacts> {
+        // ---- validate (read-only) ----
+        // AKE accept gate.
+        let ake_gate = self.find_ake_gate(image)?;
+        let reset_site = ake_gate as usize + 12;
+        let movs_hw = u16::from_le_bytes([image[reset_site], image[reset_site + 1]]);
+        if movs_hw != 0x2101 {
+            bail!("AKE reset writer `movs r1,#1` not at 0x{reset_site:x} (got 0x{movs_hw:04x})");
+        }
+        let b_at = reset_site + 2;
+        let b_hw = u16::from_le_bytes([image[b_at], image[b_at + 1]]);
+        if (b_hw & 0xF800) != 0xE000 {
+            bail!("AKE reset writer `b` not at 0x{b_at:x} (got 0x{b_hw:04x})");
+        }
+        let mut disp = (b_hw & 0x7FF) as i32;
+        if disp >= 0x400 {
+            disp -= 0x800;
+        }
+        let ake_back = (b_at as i32 + 4 + disp * 2) as u32;
+        let ake_bytes = self.build_ake_stub(flag_base, ake_back)?;
+
+        // Producer Gate-A.
+        let gatea_anchor = self.find_vid_gate(image)?;
+        let gatea_cmp = gatea_anchor + 18;
+        let cmp_hw = u16::from_le_bytes([image[gatea_cmp], image[gatea_cmp + 1]]);
+        if cmp_hw != 0x2806 {
+            bail!("VID gate `cmp r0,#6` not at 0x{gatea_cmp:x} (got 0x{cmp_hw:04x})");
+        }
+        let gatea_bne = gatea_cmp + 2;
+        let bne_hw = u16::from_le_bytes([image[gatea_bne], image[gatea_bne + 1]]);
+        if (bne_hw & 0xFF00) != 0xD100 {
+            bail!("VID gate `bne` not at 0x{gatea_bne:x} (got 0x{bne_hw:04x})");
+        }
+        let mut d = (bne_hw & 0xFF) as i32;
+        if d >= 0x80 {
+            d -= 0x100;
+        }
+        let gatea_deny = (gatea_bne as i32 + 4 + d * 2) as u32;
+        let gatea_authed = (gatea_cmp + 4) as u32;
+        let vid_agid_struct = self.find_vid_agid_struct(image)?;
+        let gatea_bytes =
+            self.build_gatea_stub(flag_base, vid_agid_struct, gatea_authed, gatea_deny)?;
+
+        // Deny-path AACS reset.
+        let aacs_reset = self.find_aacs_session_reset(image)?;
+        let deny_site = gatea_deny as usize + 0x10;
+        if deny_site + 4 > image.len() {
+            bail!("deny sense-setup site 0x{deny_site:x} is past the end of the image");
+        }
+        let d0 = u16::from_le_bytes([image[deny_site], image[deny_site + 1]]);
+        let d1 = u16::from_le_bytes([image[deny_site + 2], image[deny_site + 3]]);
+        if d0 != 0x2202 || d1 != 0x216f {
+            bail!(
+                "deny sense-setup (movs r2,#2; movs r1,#0x6f) not at 0x{deny_site:x} \
+                 (got 0x{d0:04x} 0x{d1:04x})"
+            );
+        }
+        let deny_bytes = self.build_deny_reset_stub(aacs_reset)?;
+
+        // VID producer facts (required for the feature; reported).
+        let (vid_producer, _vid_out_buf) = self.find_vid_producer(image)?;
+        self.find_vid_gate_setter(image)?;
+
+        // ---- commit on a working copy (atomic) ----
+        let mut w = out.clone();
+        let ake_stub_va = self.free_space(&w, ake_bytes.len() + 16)?;
+        let ake_bl = thumb::encode_bl(reset_site, ake_stub_va)
+            .ok_or_else(|| anyhow!("AKE detour `bl` out of range"))?;
+        thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);
+        thumb::write(&mut w, reset_site, &ake_bl);
+
+        let gatea_stub_va = self.free_space(&w, gatea_bytes.len() + 16)?;
+        let gatea_bl = thumb::encode_bl(gatea_cmp, gatea_stub_va)
+            .ok_or_else(|| anyhow!("Gate-A detour `bl` out of range"))?;
+        thumb::write(&mut w, gatea_stub_va as usize, &gatea_bytes);
+        thumb::write(&mut w, gatea_cmp, &gatea_bl);
+
+        let deny_stub_va = self.free_space(&w, deny_bytes.len() + 16)?;
+        let deny_bl = thumb::encode_bl(deny_site, deny_stub_va)
+            .ok_or_else(|| anyhow!("deny-reset detour `bl` out of range"))?;
+        thumb::write(&mut w, deny_stub_va as usize, &deny_bytes);
+        thumb::write(&mut w, deny_site, &deny_bl);
+
+        *out = w;
+        Ok(RawReadFacts {
+            ake_gate,
+            ake_stub_va,
+            gatea_cmp: gatea_cmp as u32,
+            gatea_stub_va,
+            deny_site: deny_site as u32,
+            deny_stub_va,
+            vid_producer,
+        })
+    }
+
+    /// Downgrade-enable lever. Family-agnostic: writes `0xDE` at the identity-page
+    /// slot when a well-formed MTEK descriptor is present; idempotent.
+    fn lever_de(&self, image: &[u8], out: &mut [u8], chip: &ChipInfo) -> LeverReport {
+        if !chip.descriptor_present {
+            return LeverReport::not_applicable(
+                LeverId::DowngradeEnable,
+                "no MTEK identity page in this image",
+            );
+        }
+        match self.find_de_byte(image) {
+            Ok(de_off) => {
+                let off = de_off as usize;
+                if out[off] == 0xDE {
+                    LeverReport::already(LeverId::DowngradeEnable, vec![("de_off", de_off)])
+                } else {
+                    out[off] = 0xDE;
+                    LeverReport::applied(LeverId::DowngradeEnable, vec![("de_off", de_off)])
+                }
+            }
+            Err(e) => LeverReport::missed(LeverId::DowngradeEnable, format!("{e:#}")),
+        }
     }
 }
 

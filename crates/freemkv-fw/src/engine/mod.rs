@@ -12,14 +12,18 @@
 //! error rather than a wrong guess. This mirrors the flash-side `DriveFamily`
 //! split: one engine per chip, all sharing the dumb toolkit.
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 use crate::family::{self, ChipFamily};
 use crate::thumb::CommandRecord;
 
+pub mod lever;
+pub mod mt1939;
 pub mod mt1959;
 pub mod mt1959_build;
 pub mod pioneer;
+
+pub use lever::ModifyReport;
 
 /// The result of building freemkv firmware from an OEM image: the re-signed
 /// image plus the grounded facts used to build it, so a caller (and the KAT) can
@@ -95,8 +99,16 @@ pub trait Engine {
     /// Build freemkv firmware from an OEM `image`: prove the find against the
     /// drive's own code, inject the handler, repoint the hijacked record, and
     /// re-sign. Fails loudly (never guesses) if the image isn't a recognised,
-    /// unambiguous target for this engine.
+    /// unambiguous target for this engine. Strict / all-or-nothing — used by the
+    /// KAT and by callers that want the full grounded [`CreateReport`].
     fn create(&self, image: &[u8]) -> Result<CreateReport>;
+
+    /// Never-abort MODIFY: apply every lever this engine + the image's capability
+    /// support, and report each one's outcome. Aborts the whole run only when the
+    /// image is undetectable or nothing at all can be built. This is the
+    /// user-facing path (`freemkv-fw create`): it "modifies what it can and
+    /// reports what it did" rather than refusing on the first missing signature.
+    fn modify(&self, image: &[u8]) -> Result<ModifyReport>;
 }
 
 /// Select the engine for `image`'s detected chip family, or fail cleanly if the
@@ -110,15 +122,11 @@ pub fn detect(image: &[u8]) -> Result<Box<dyn Engine>> {
 pub fn for_family(fam: ChipFamily) -> Result<Box<dyn Engine>> {
     match fam {
         ChipFamily::Mt1959 => Ok(Box::new(mt1959::Mt1959Engine)),
-        // MT1939 shares the toolkit but not the MT1959 SRAM map; its engine is
-        // not implemented yet, so refuse rather than apply MT1959 addresses.
-        ChipFamily::Mt1939 => bail!(
-            "no modification engine for {} yet — freemkv-fw currently modifies {} only; the \
-             toolkit is platform-neutral, but this controller needs its own engine (SRAM map / \
-             hook points)",
-            fam,
-            ChipFamily::Mt1959.label(),
-        ),
+        // MT1939 shares the toolkit + the (byte-identical) CMAC scheme but not the
+        // MT1959 SRAM map / hook points. Its full engine is pending; today it can
+        // still apply the family-agnostic downgrade-enable byte via `modify`, and
+        // reports the rest as pending — so it is no longer opaquely refused.
+        ChipFamily::Mt1939 => Ok(Box::new(mt1939::Mt1939Engine)),
     }
 }
 

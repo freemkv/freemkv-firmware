@@ -8,7 +8,8 @@
 
 use anyhow::Result;
 
-use super::{CreateReport, Engine};
+use super::{CreateReport, Engine, ModifyReport};
+use crate::family;
 
 /// The MT1959 platform engine.
 pub struct Mt1959Engine;
@@ -20,5 +21,11 @@ impl Engine for Mt1959Engine {
 
     fn create(&self, image: &[u8]) -> Result<CreateReport> {
         self.build_report(image)
+    }
+
+    fn modify(&self, image: &[u8]) -> Result<ModifyReport> {
+        let chip = family::detect_chip(image)?;
+        let cap = family::capability_for(&chip.model, chip.family);
+        self.build_modify(image, &chip, &cap)
     }
 }

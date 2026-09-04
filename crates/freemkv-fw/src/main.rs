@@ -31,7 +31,7 @@ use freemkv_flash::{platform, style};
 use freemkv_fw::scheme::{
     select_scheme, Family, IntegrityScheme, MtkCmac, RegionChange, RegionVerdict,
 };
-use freemkv_fw::{abi, engine, family};
+use freemkv_fw::{abi, engine};
 
 /// freemkv firmware authoring tool (create / verify / re-sign).
 #[derive(Parser, Debug)]
@@ -53,6 +53,9 @@ enum Command {
         /// Rewrite the input image in place.
         #[arg(long)]
         in_place: bool,
+        /// Emit a machine-readable JSON report instead of the human table.
+        #[arg(long)]
+        json: bool,
     },
     /// Verify a firmware image (file) or probe a live drive (device) for
     /// freemkv firmware.
@@ -116,7 +119,8 @@ fn main() -> ExitCode {
             input,
             output,
             in_place,
-        } => cmd_create(&input, output, in_place),
+            json,
+        } => cmd_create(&input, output, in_place, json),
         Command::Verify { path, family } => cmd_verify(&path, family),
         Command::Info {
             device,
@@ -578,7 +582,7 @@ fn default_created_path(input: &Path) -> PathBuf {
     input.with_file_name(format!("{stem}.freemkv.bin"))
 }
 
-fn cmd_create(path: &Path, out: Option<PathBuf>, in_place: bool) -> Result<ExitCode> {
+fn cmd_create(path: &Path, out: Option<PathBuf>, in_place: bool, json: bool) -> Result<ExitCode> {
     let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
 
     // Resolve the output path up front so we fail fast on conflicts.
@@ -598,12 +602,11 @@ fn cmd_create(path: &Path, out: Option<PathBuf>, in_place: bool) -> Result<ExitC
         dest
     };
 
-    // Pick the platform engine (a clean refusal on an unsupported/unidentified
-    // controller), then build. Every address the engine uses is derived from the
-    // drive's own code — the grounded find fails loudly rather than guessing.
+    // Pick the platform engine (a clean refusal only on an unidentified/garbage
+    // image), then MODIFY: apply every lever this image supports and report each
+    // one. A missing signature skips that lever, it does not abort the build.
     let engine = engine::detect(&image).context("selecting a platform engine for this image")?;
-    let chip = family::detect_chip(&image).ok();
-    let report = engine.create(&image).context("building freemkv firmware")?;
+    let report = engine.modify(&image).context("building freemkv firmware")?;
 
     // Never write an image that does not re-verify.
     let verdicts = MtkCmac.verify(&report.image)?;
@@ -611,207 +614,79 @@ fn cmd_create(path: &Path, out: Option<PathBuf>, in_place: bool) -> Result<ExitC
         bail!("internal error: modified image does not re-verify");
     }
 
-    match &chip {
-        Some(c) => println!(
-            "\n{} — {} · {} {} · rev {}",
-            style::header(&format!("freemkv-fw {}", env!("CARGO_PKG_VERSION"))),
-            engine.name(),
-            c.vendor,
-            c.model,
-            c.rev,
-        ),
-        None => println!(
-            "\n{} — {}",
-            style::header(&format!("freemkv-fw {}", env!("CARGO_PKG_VERSION"))),
-            engine.name(),
-        ),
-    }
-    println!();
-    print_command_table(&report);
-    println!();
-
-    for v in &verdicts {
-        println!(
-            "Re-signing {} integrity table {} ... {}",
-            MtkCmac.name(),
-            style::dim(&format!("@ 0x{:x}", v.start)),
-            style::green("ok"),
-        );
-    }
-
     std::fs::write(&out_path, &report.image)
         .with_context(|| format!("writing {}", out_path.display()))?;
+
+    if json {
+        println!("{}", report.to_json());
+    } else {
+        print_modify_report(&report, &out_path, verdicts.len());
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Print the per-lever MODIFY report: a summary line + one row per lever with its
+/// outcome (applied / already set / n/a / skipped) and grounded facts, all
+/// derived from the real [`engine::ModifyReport`] so the output can never drift
+/// from what was emitted.
+fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regions: usize) {
+    use engine::lever::LeverOutcome;
+
+    println!();
+    println!(
+        "{} — {} · {} {} · rev {}  [{}]",
+        style::header(&format!("freemkv-fw {}", env!("CARGO_PKG_VERSION"))),
+        report.engine,
+        report.vendor,
+        report.model,
+        report.rev,
+        report.media,
+    );
+    println!("  {}", style::bold(&report.summary()));
+    println!();
+
+    for l in &report.levers {
+        let sty = match &l.outcome {
+            LeverOutcome::Applied | LeverOutcome::AlreadyPresent => style::Status::Ok,
+            LeverOutcome::NotApplicable { .. } | LeverOutcome::SignatureNotFound { .. } => {
+                style::Status::Warn
+            }
+        };
+        println!(
+            "{}",
+            style::status_line(l.id.label(), l.outcome.word(), sty)
+        );
+        match &l.outcome {
+            LeverOutcome::NotApplicable { reason } => {
+                println!("{}", style::dim_line(&format!("      {reason}")))
+            }
+            LeverOutcome::SignatureNotFound { detail } => {
+                println!("{}", style::dim_line(&format!("      {detail}")))
+            }
+            LeverOutcome::Applied | LeverOutcome::AlreadyPresent if !l.facts.is_empty() => {
+                let facts: Vec<String> = l
+                    .facts
+                    .iter()
+                    .map(|(k, v)| format!("{k} 0x{v:x}"))
+                    .collect();
+                println!(
+                    "{}",
+                    style::dim_line(&format!("      {}", facts.join(" · ")))
+                );
+            }
+            _ => {}
+        }
+    }
+
+    println!();
     println!(
         "Wrote {} {}",
         out_path.display(),
         style::dim(&format!(
-            "({} bytes, {} CMAC region(s) OK)",
+            "({} bytes, {cmac_regions} CMAC region(s) OK)",
             report.image.len(),
-            verdicts.len()
         )),
-    );
-
-    print_create_details(engine.name(), &report);
-    Ok(ExitCode::SUCCESS)
-}
-
-/// Whether a capability is actually present in THIS build. Derived from the
-/// real [`engine::CreateReport`], never a hardcoded claim — so the summary can
-/// never drift from what the handler truly emits.
-enum FeatureStatus {
-    /// Emitted into this build's handler and active.
-    Wired,
-    /// Not emitted in this build.
-    NotWired,
-}
-
-/// Print the capability table with each row's status DERIVED from `report`
-/// (the actual build), so a build always describes itself truthfully.
-///
-/// Each row's status is derived from `report` so the build describes itself
-/// truthfully. Bus encryption has no row — it is off for free on the Raw Read path.
-fn print_command_table(report: &engine::CreateReport) {
-    let raw_read = if report.ake_stub_va != 0 {
-        FeatureStatus::Wired
-    } else {
-        FeatureStatus::NotWired
-    };
-    let speed = if report.speed_stub_va != 0 {
-        FeatureStatus::Wired
-    } else {
-        FeatureStatus::NotWired
-    };
-    let region = if report.region_stub_va != 0 {
-        FeatureStatus::Wired
-    } else {
-        FeatureStatus::NotWired
-    };
-    // One capability row: label, status, and two (state, description) detail pairs.
-    type FeatureRow = (
-        &'static str,
-        FeatureStatus,
-        [(&'static str, &'static str); 2],
-    );
-    let rows: [FeatureRow; 5] = [
-        (
-            "Identity",
-            FeatureStatus::Wired,
-            [("On", "answers freemkv"), ("Off", "stock")],
-        ),
-        (
-            "Speed",
-            speed,
-            [("On", "full speed"), ("Off", "OEM throttle")],
-        ),
-        (
-            "Raw Read",
-            raw_read,
-            [("On", "approve; VID+sectors clear"), ("Off", "OEM")],
-        ),
-        (
-            "Region-free",
-            region,
-            [("On", "any region"), ("Off", "OEM region lock")],
-        ),
-        (
-            "Diagnostic Dump",
-            FeatureStatus::Wired,
-            [("addr", "64-byte RAM read"), ("", "diagnostic")],
-        ),
-    ];
-    for (label, status, detail) in rows {
-        let (word, sty) = match status {
-            FeatureStatus::Wired => ("added", style::Status::Ok),
-            FeatureStatus::NotWired => ("skipped", style::Status::Warn),
-        };
-        println!("{}", style::status_line(label, word, sty));
-        let [(s1, d1), (s2, d2)] = detail;
-        println!(
-            "{}",
-            style::dim_line(&format!("    {s1:<3} → {d1:<28}{s2:<3} → {d2}"))
-        );
-        match status {
-            FeatureStatus::NotWired => println!(
-                "{}",
-                style::dim_line("      (not yet implemented in this build)")
-            ),
-            FeatureStatus::Wired => {}
-        }
-    }
-}
-
-/// The grounded facts the build used — every address derived from the image, so
-/// this block is the audit trail for how the firmware was made.
-fn print_create_details(engine_name: &str, report: &engine::CreateReport) {
-    println!();
-    println!("{}", style::dim("details:"));
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  command: 3C {:02X} {:02X} {:02X}  (READ BUFFER hijack, OEM-unused mode + knock)",
-            abi::KNOCK_MODE,
-            abi::KNOCK[0],
-            abi::KNOCK[1],
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  engine ({engine_name}): scanner @ 0x{:x} · CDB base @ 0x{:x} · sense-setter @ 0x{:x}",
-            report.scanner_entry, report.cdb_base, report.sense_setter,
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  hijack: 0x{:02X} record @ 0x{:x}  handler 0x{:x} -> 0x{:x}  (flags 0x{:02X} preserved)",
-            report.record.opcode, report.record.off, report.record.handler,
-            report.handler_va | 1, report.record.flags,
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  handler: {} bytes injected at 0x{:x}",
-            report.handler_bytes.len(),
-            report.handler_va,
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  raw read (0x04): AKE accept gate @ 0x{:x} -> stub 0x{:x}  (flag-gated: \
-             forces AKE state 6 on cert-fail; host drives the AKE + 0xAD read)",
-            report.ake_gate, report.ake_stub_va,
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  speed (0x02): gate @ 0x{:x} -> stub 0x{:x}  (flag-gated, ramp untouched)",
-            report.speed_gate, report.speed_stub_va,
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  region-free (0x03): emitter @ 0x{:x} -> stub 0x{:x}  (flag-gated RPC-1)",
-            report.region_emitter, report.region_stub_va,
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  bus enc: no command — off for free on the approve path (SetDiscMode @ 0x{:x})",
-            report.setdiscmode,
-        ))
-    );
-    println!(
-        "{}",
-        style::dim(&format!(
-            "  flags: table @ 0x{:x} (validated free SRAM, unreferenced this image) · DE byte @ 0x{:x}",
-            report.flag_base, report.de_off,
-        ))
     );
 }
 
