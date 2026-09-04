@@ -516,3 +516,59 @@ fn handler_carries_no_placeholder_payloads() {
         "handler must not contain the ASCII 'Command NN WIP' placeholder payload"
     );
 }
+
+// --- RE-derived variant signatures (research/hoard-campaign-2026-09-03) ---------
+//
+// These lock the wiring of the NB-class VID gate and the r0 speed gate discovered
+// this pass. They are pure synthetic buffers (no owned image needed) that assert
+// (a) the variant is found where the original is absent, and (b) the original is
+// still preferred when present — the invariant that keeps the KAT byte-identical.
+
+/// Write little-endian halfwords into `img` starting at `off`.
+fn put_hw(img: &mut [u8], off: usize, hws: &[u16]) {
+    for (k, &h) in hws.iter().enumerate() {
+        img[off + 2 * k..off + 2 * k + 2].copy_from_slice(&h.to_le_bytes());
+    }
+}
+
+#[test]
+fn speed_gate_finds_r0_variant_and_prefers_original() {
+    // r0 variant: `ldr r1,[pc]; ldrb r0,[r1]; cmp r0,#0x32; bhi` → reg 0.
+    let mut img = vec![0u8; 0x2_0010];
+    put_hw(&mut img, 0x1_1000, &[0x4900, 0x7808, 0x2832, 0xD800]);
+    let (off, reg) = Mt1959Engine.find_speed_gate(&img).unwrap();
+    assert_eq!(off, 0x1_1000);
+    assert_eq!(reg, 0, "variant register");
+
+    // original (r2) present alongside → original wins (reg 2), variant ignored.
+    put_hw(&mut img, 0x1_2000, &[0x4900, 0x780A, 0x2A32, 0xD800]);
+    let (off, reg) = Mt1959Engine.find_speed_gate(&img).unwrap();
+    assert_eq!(off, 0x1_2000);
+    assert_eq!(reg, 2, "original preferred when present");
+}
+
+#[test]
+fn vid_gate_finds_nb_variant_when_original_absent() {
+    // NB variant: the two leading halfwords differ (`adds r0,r0,r1; ldr r1,[r5]`),
+    // the gate `ldrb r0,[r0]; cmp r0,#6; bne` sits at match+16.
+    let nb: [u16; 11] = [
+        0x1840, 0x6829, 0x1808, 0x4900, 0x0200, 0x6809, 0x0A00, 0x1840, 0x7800, 0x2806, 0xD100,
+    ];
+    let mut img = vec![0u8; 0x18_1000];
+    put_hw(&mut img, 0x13_0000, &nb);
+    let off = Mt1959Engine.find_vid_gate(&img).unwrap();
+    assert_eq!(off, 0x13_0000);
+    // the `ldrb r0,[r0]` gate is at match+16 for both variants.
+    assert_eq!(
+        u16::from_le_bytes([img[off + 16], img[off + 17]]),
+        0x7800,
+        "gate ldrb at match+16"
+    );
+
+    // the r6 base-register form (`ldr r1,[r6]` = 0x6831) also matches (masked field).
+    let mut img6 = vec![0u8; 0x18_1000];
+    let mut nb6 = nb;
+    nb6[1] = 0x6831;
+    put_hw(&mut img6, 0x13_0000, &nb6);
+    assert_eq!(Mt1959Engine.find_vid_gate(&img6).unwrap(), 0x13_0000);
+}

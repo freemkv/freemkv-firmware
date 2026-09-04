@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -1329,7 +1329,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1342,7 +1342,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1351,7 +1351,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-hwtest"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1969,7 +1969,7 @@ checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
 name = "libfreemkv"
-version = "1.6.14"
+version = "1.7.0"
 dependencies = [
  "libc",
  "tracing",
@@ -4857,16 +4857,16 @@ dependencies = [
 
 [[patch.unused]]
 name = "freemkv-unlock"
-version = "1.6.14"
+version = "1.7.0"
 
 [[patch.unused]]
 name = "freemkv-engine"
-version = "1.6.14"
+version = "1.7.0"
 
 [[patch.unused]]
 name = "freemkv-i18n"
-version = "1.6.14"
+version = "1.7.0"
 
 [[patch.unused]]
 name = "freemkv-keysources"
-version = "1.6.14"
+version = "1.7.0"
