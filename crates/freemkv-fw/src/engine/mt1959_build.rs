@@ -122,6 +122,25 @@ const SPEED_GATE_SIG: &[(u16, u16)] = &[
     (0xD800, 0xFF00), // bhi <ramp-exit>    stop ramping once past the ceiling
 ];
 
+/// `r0`-register variant of [`SPEED_GATE_SIG`]. Some builds (LG BU40N 1.04/1.05
+/// "Original Flasher"/-INTM, and the whole NB-class BP50NB40/BP55EB40/WP50NB40
+/// line) load the ramp `speed_index` into `r0` instead of `r2`; the gate is
+/// otherwise byte-identical (same `ldr r1,[pc]` cell, same `#0x32` band, same
+/// `bhi`), so the gate `cmp` is still at `match+4` and `bhi` at `match+6`.
+///
+/// PROVEN (research/hoard-campaign-2026-09-03): unique per image on all 15
+/// affected MT1959 images, never ambiguous, never overlapping [`SPEED_GATE_SIG`],
+/// and **zero matches** in the BU40N 1.00 KAT base (which matches the original) —
+/// original-first keeps the KAT byte-identical. `r0` is redefined immediately
+/// after the gate (`ldrb r0,[r5,#5]`), i.e. DEAD at both the fall-through and
+/// ramp-exit targets, which is what lets the variant stub use it as scratch.
+const SPEED_GATE_SIG_R0: &[(u16, u16)] = &[
+    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]  (speed_index SRAM cell literal)
+    (0x7808, 0xFFFF), // ldrb r0,[r1]       r0 = speed_index (variant register)
+    (0x2832, 0xFFFF), // cmp  r0,#0x32      ramp self-ceiling band
+    (0xD800, 0xFF00), // bhi  <ramp-exit>
+];
+
 /// Signature of the AACS AKE per-AGID state writers at the tail of the
 /// key-exchange step handler (`0x136594` on 1.00, `0x13697c` on 1.03 MK —
 /// byte-identical). The two writers sit back-to-back: the SUCCESS writer sets the
@@ -166,8 +185,9 @@ const REGION_EMIT_SIG: &[(u16, u16)] = &[
 
 /// Byte offset of the downgrade-enable (DE) byte within the ASCII drive-descriptor
 /// record ([`crate::family::DESCRIPTOR_OFFSET`]). The record's family tag
-/// `"MTEKMT19.."` sits at `+0x34`; a `0x78 00 00 00 <crc16>` marker at `+0x50`
-/// precedes the DE slot at `+0x56`. Verified on 1.00 and 1.03.
+/// `"MTEKMT19.."` sits at `+0x34`; a within-family variant marker (`0x78/0x58/
+/// 0x18/0x38`, NOT an invariant) sits at `+0x50`; the DE slot is at `+0x56`.
+/// Verified across the owned MT1959 image set.
 const DE_BYTE_OFF: usize = 0x56;
 
 /// Signature of the VID gate's address-compute tail inside the OEM Volume-ID
@@ -188,6 +208,37 @@ const VID_GATE_SIG: &[(u16, u16)] = &[
     (0x7800, 0xFFFF), // ldrb r0,[r0]      (auth-state byte) — the gate
     (0x2806, 0xFFFF), // cmp r0,#6
     (0xD100, 0xFF00), // bne <skip>
+];
+
+/// NB-class (LG BP/WP slim/portable: BP50NB40/BP55EB40/BP60NB10/WP50NB40) variant
+/// of [`VID_GATE_SIG`]. The producer's address-compute tail differs only in its
+/// FIRST TWO halfwords (`adds r0,r0,r1; ldr r1,[r5]` instead of the `lsls #16;
+/// lsrs #16` pair) — the gate `ldrb r0,[r0]; cmp r0,#6; bne` and everything from
+/// the `adds r0,r1,r0` onward are byte-identical, so the gate is still at
+/// `match + 16` and its `cmp` at `match + 18` (no downstream offset change).
+///
+/// PROVEN (research/hoard-campaign-2026-09-03): RE'd from
+/// `LG_BP60NB10_1.00_Official_Flasher.bin` (gate `ldrb` at `0x1369c8`) and
+/// cross-checked on BP50NB40 / BP55EB40 / WP50NB40 (gate at `0x1341c8`). The NB
+/// line has one address-compute shape with a single build-varying register: the
+/// base of the `ldr r1,[rN]` deref is `r5` on BP60NB10 and `r6` on the others, so
+/// that one field is masked (`0x6801, 0xFFC7` = `ldr r1,[rN,#0]`), everything
+/// else exact. Verified **unique per image on 18 MT1959 images**, never ambiguous,
+/// never overlapping [`VID_GATE_SIG`], and **zero matches** in the BU40N 1.00 KAT
+/// base (which matches the original) — so trying the original first keeps the KAT
+/// byte-identical while this recovers the VID/Raw-Read lever on the whole NB line.
+const VID_GATE_SIG_NB: &[(u16, u16)] = &[
+    (0x1840, 0xFFFF), // adds r0,r0,r1
+    (0x6801, 0xFFC7), // ldr  r1,[rN]      (SRAM base-ptr deref; rN = r5/r6 per build)
+    (0x1808, 0xFFFF), // adds r0,r1,r0
+    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]  (SRAM base-ptr cell)
+    (0x0200, 0xFFFF), // lsls r0,r0,#8
+    (0x6809, 0xFFFF), // ldr  r1,[r1]
+    (0x0A00, 0xFFFF), // lsrs r0,r0,#8
+    (0x1840, 0xFFFF), // adds r0,r0,r1
+    (0x7800, 0xFFFF), // ldrb r0,[r0]      (auth-state byte) — the gate
+    (0x2806, 0xFFFF), // cmp  r0,#6
+    (0xD100, 0xFF00), // bne  <skip>
 ];
 
 /// Signature of `SetDiscMode`'s prologue — the read-datapath disc-mode dispatcher
@@ -696,12 +747,25 @@ impl Mt1959Engine {
         Ok((dispatcher, AUTH_BASE + 2))
     }
 
-    /// The unique offset of the [`VID_GATE_SIG`] match (the VID gate's
-    /// address-compute tail). The gate `ldrb r0,[r0]` is at `result + 16`.
+    /// The unique offset of the VID gate's address-compute tail. The gate
+    /// `ldrb r0,[r0]` is at `result + 16` for BOTH variants.
+    ///
+    /// Tries the original [`VID_GATE_SIG`] first (so the BU40N KAT base always
+    /// matches the same signature → byte-identical output), then the NB-class
+    /// [`VID_GATE_SIG_NB`] variant. Each is required unique in its own right; an
+    /// ambiguous original still refuses rather than silently trying the variant.
     fn find_vid_gate(&self, image: &[u8]) -> Result<usize> {
         let lo = 0x0012_0000usize.min(image.len());
         let hi = 0x0018_0000usize.min(image.len());
-        find_unique(image, VID_GATE_SIG, lo, hi, "VID gate")
+        match find_masked_all(image, VID_GATE_SIG, lo, hi).as_slice() {
+            [one] => Ok(*one),
+            [] => find_unique(image, VID_GATE_SIG_NB, lo, hi, "VID gate (NB-class)"),
+            hits => bail!(
+                "VID gate signature matched {} time(s) in [0x{lo:x},0x{hi:x}) (want exactly 1) — \
+                 refusing to patch",
+                hits.len()
+            ),
+        }
     }
 
     /// The OEM Volume-ID producer and its clear-VID scratch buffer. Returns
@@ -823,13 +887,32 @@ impl Mt1959Engine {
         Ok(find_unique(image, SETDISCMODE_SIG, lo, hi, "SetDiscMode")? as u32)
     }
 
-    /// The Speed (0x02) ramp-ceiling gate anchor — the unique [`SPEED_GATE_SIG`]
-    /// match (`0x1bb22` on 1.00 and 1.03). Returns the anchor offset; the gate
-    /// `cmp/bhi` the detour replaces begins at `anchor+4`.
-    pub fn find_speed_gate(&self, image: &[u8]) -> Result<u32> {
+    /// The Speed (0x02) ramp-ceiling gate anchor. Returns `(anchor, idx_reg)`
+    /// where `idx_reg` is the register the ramp holds `speed_index` in (`2` for the
+    /// original [`SPEED_GATE_SIG`], `0` for the [`SPEED_GATE_SIG_R0`] variant); the
+    /// gate `cmp/bhi` the detour replaces begins at `anchor+4` for both. Original
+    /// first so the BU40N KAT base always resolves to the `r2` shape.
+    pub fn find_speed_gate(&self, image: &[u8]) -> Result<(u32, u8)> {
         let lo = 0x0001_0000usize.min(image.len());
         let hi = 0x0002_0000usize.min(image.len());
-        Ok(find_unique(image, SPEED_GATE_SIG, lo, hi, "Speed ramp-ceiling gate")? as u32)
+        match find_masked_all(image, SPEED_GATE_SIG, lo, hi).as_slice() {
+            [one] => Ok((*one as u32, 2)),
+            [] => Ok((
+                find_unique(
+                    image,
+                    SPEED_GATE_SIG_R0,
+                    lo,
+                    hi,
+                    "Speed ramp-ceiling gate (r0)",
+                )? as u32,
+                0,
+            )),
+            hits => bail!(
+                "Speed ramp-ceiling gate signature matched {} time(s) in [0x{lo:x},0x{hi:x}) \
+                 (want exactly 1) — refusing to patch",
+                hits.len()
+            ),
+        }
     }
 
     /// The Region-free (0x05) RPC-state emitter anchor — the unique
@@ -913,9 +996,17 @@ impl Mt1959Engine {
 
     /// The downgrade-enable (DE) byte offset. Anchored on the ASCII identity page
     /// (the same drive-descriptor record [`crate::family::detect_chip`] parses):
-    /// the `"MTEKMT19"` family tag at `descriptor+0x34` and the `0x78` marker at
-    /// `descriptor+0x50` must both be present, then the DE slot is `descriptor+0x56`.
-    /// Refuses rather than guessing a byte to poke if the page isn't the descriptor.
+    /// the `"MTEKMT19"` family tag at `descriptor+0x34` must be present, then the
+    /// DE slot is `descriptor+0x56`. Refuses rather than guessing a byte to poke
+    /// if the page isn't the descriptor.
+    ///
+    /// The tag is the *only* anchor: the byte at `descriptor+0x50` is a
+    /// within-family variant/region marker (`0x78/0x58/0x18/0x38` all occur on
+    /// genuine MT1959 parts — proven by the 149-image scan in
+    /// `research/hoard-campaign-2026-09-03`), NOT an invariant. It was previously
+    /// (wrongly) required to equal `0x78`, which refused 8 otherwise-patchable
+    /// images whose DE slot is already correct; that guard is removed. The DE slot
+    /// at `+0x56` is stable fleet-wide.
     pub fn find_de_byte(&self, image: &[u8]) -> Result<u32> {
         use crate::family::DESCRIPTOR_OFFSET;
         let de = DESCRIPTOR_OFFSET + DE_BYTE_OFF;
@@ -927,12 +1018,6 @@ impl Mt1959Engine {
             bail!(
                 "drive-descriptor family tag not at 0x{:x} — refusing to place the DE byte",
                 DESCRIPTOR_OFFSET + 0x34
-            );
-        }
-        if image[DESCRIPTOR_OFFSET + 0x50] != 0x78 {
-            bail!(
-                "DE marker (0x78 @ 0x{:x}) absent — refusing to guess the DE offset",
-                DESCRIPTOR_OFFSET + 0x50
             );
         }
         Ok(de as u32)
@@ -1172,28 +1257,62 @@ impl Mt1959Engine {
     /// unlimited sentinel) when set or `0x32` (OEM band) when clear, then
     /// replicates the OEM `bhi` and returns to the exact ramp instruction the OEM
     /// gate would have. `fallthrough`/`exit` are the two OEM continuation VAs.
-    fn build_speed_stub(&self, flag_base: u32, fallthrough: u32, exit: u32) -> Result<Vec<u8>> {
+    fn build_speed_stub(
+        &self,
+        flag_base: u32,
+        fallthrough: u32,
+        exit: u32,
+        idx_reg: u8,
+    ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let patched = a.label();
         let decide = a.label();
         let go_exit = a.label();
-        a.push(0x0001); // push {r0}          save r0 (live at ramp fall-through)
-        a.ldr_lit(0, flag_base + abi::SubFn::Speed as u32); // r0 = &flag[0x02]
-        a.ldrb_imm(0, 0, 0); // r0 = Speed flag byte
-        a.cmp_imm(0, abi::STATE_ON); // patched (0x01)?
-        a.beq(patched); // yes -> unlimited ceiling
-        a.cmp_imm(2, 0x32); // OEM: compare speed_index against the 0x32 band
-        a.b(decide);
-        a.bind(patched);
-        a.cmp_imm(2, 0xFF); // patched: compare against the drive's own 0xFF sentinel
-        a.bind(decide);
-        a.pop(0x0001); // pop {r0}           restore r0 (POP preserves flags)
-        a.bhi(go_exit); // replicate the OEM `bhi <ramp-exit>`
-        a.ldr_lit(2, fallthrough | 1); // fall-through: r2 dead at the OEM target
-        a.bx(2); // continue the OEM ramp
-        a.bind(go_exit);
-        a.ldr_lit(2, exit | 1); // taken: r2 dead at the OEM ramp-exit target
-        a.bx(2); // jump to the OEM ramp exit
+        if idx_reg == 2 {
+            // Original shape: speed_index in r2; r0 is live at the ramp
+            // fall-through so it is saved/restored and doubles as the flag scratch.
+            // (Byte-identical to the shipped emit — the KAT pins these bytes.)
+            a.push(0x0001); // push {r0}          save r0 (live at ramp fall-through)
+            a.ldr_lit(0, flag_base + abi::SubFn::Speed as u32); // r0 = &flag[0x02]
+            a.ldrb_imm(0, 0, 0); // r0 = Speed flag byte
+            a.cmp_imm(0, abi::STATE_ON); // patched (0x01)?
+            a.beq(patched); // yes -> unlimited ceiling
+            a.cmp_imm(2, 0x32); // OEM: compare speed_index against the 0x32 band
+            a.b(decide);
+            a.bind(patched);
+            a.cmp_imm(2, 0xFF); // patched: compare against the drive's own 0xFF sentinel
+            a.bind(decide);
+            a.pop(0x0001); // pop {r0}           restore r0 (POP preserves flags)
+            a.bhi(go_exit); // replicate the OEM `bhi <ramp-exit>`
+            a.ldr_lit(2, fallthrough | 1); // fall-through: r2 dead at the OEM target
+            a.bx(2); // continue the OEM ramp
+            a.bind(go_exit);
+            a.ldr_lit(2, exit | 1); // taken: r2 dead at the OEM ramp-exit target
+            a.bx(2); // jump to the OEM ramp exit
+        } else {
+            // r0 variant: speed_index in r0, which is DEAD after the gate (the OEM
+            // ramp redefines it via `ldrb r0,[r5,#5]`), so r0 needs no saving and
+            // doubles as the jump scratch. The flag byte is read into r1, saved/
+            // restored around that use (r1 = the cell pointer, may be live), so the
+            // only registers this stub disturbs are r0 (dead) and r1 (restored).
+            a.push(0x0002); // push {r1}          save r1 (cell ptr; may be live)
+            a.ldr_lit(1, flag_base + abi::SubFn::Speed as u32); // r1 = &flag[0x02]
+            a.ldrb_imm(1, 1, 0); // r1 = Speed flag byte
+            a.cmp_imm(1, abi::STATE_ON); // patched (0x01)?
+            a.pop(0x0002); // pop {r1}           restore r1 (POP preserves flags)
+            a.beq(patched); // yes -> unlimited ceiling
+            a.cmp_imm(0, 0x32); // OEM: compare speed_index (r0) against the 0x32 band
+            a.b(decide);
+            a.bind(patched);
+            a.cmp_imm(0, 0xFF); // patched: compare against the drive's own 0xFF sentinel
+            a.bind(decide);
+            a.bhi(go_exit); // replicate the OEM `bhi <ramp-exit>`
+            a.ldr_lit(0, fallthrough | 1); // fall-through: r0 dead at the OEM target
+            a.bx(0); // continue the OEM ramp
+            a.bind(go_exit);
+            a.ldr_lit(0, exit | 1); // taken: r0 dead at the OEM ramp-exit target
+            a.bx(0); // jump to the OEM ramp exit
+        }
         a.finish()
     }
 
@@ -1342,7 +1461,7 @@ impl Mt1959Engine {
         // Bus Encryption (0x04) hook point — proven locatable and unique (see report).
         let setdiscmode = self.find_setdiscmode(image)?;
         // Toggle hook anchors, all signature-found and proven unique on 1.00 + 1.03.
-        let speed_gate = self.find_speed_gate(image)?;
+        let (speed_gate, speed_idx_reg) = self.find_speed_gate(image)?;
         let region_emitter = self.find_region_emitter(image)?;
         // Raw Read (0x04): the AACS AKE accept gate (signature-found, unique).
         let ake_gate = self.find_ake_gate(image)?;
@@ -1386,7 +1505,8 @@ impl Mt1959Engine {
         }
         let ramp_exit = (bhi_at as i32 + 4 + disp * 2) as u32; // OEM `bhi` target
         let fallthrough = speed_gate + 8; // OEM ramp continuation
-        let speed_bytes = self.build_speed_stub(flag_base, fallthrough, ramp_exit)?;
+        let speed_bytes =
+            self.build_speed_stub(flag_base, fallthrough, ramp_exit, speed_idx_reg)?;
         let speed_stub_va = self.free_space(&out, speed_bytes.len() + 16)?;
         thumb::write(&mut out, speed_stub_va as usize, &speed_bytes);
         let bl = thumb::encode_bl(cmp_at, speed_stub_va)
