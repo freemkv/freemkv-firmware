@@ -26,7 +26,7 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use freemkv_flash::cmac;
 
-use super::lever::{LeverId, LeverReport, ModifyReport};
+use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use super::CreateReport;
 use crate::abi;
@@ -275,6 +275,26 @@ const VID_GATE_SIG_NB: &[(u16, u16)] = &[
     (0x0A00, 0xFFFF), // lsrs r0,r0,#8
     (0x1840, 0xFFFF), // adds r0,r0,r1
     (0x7800, 0xFFFF), // ldrb r0,[r0]      (auth-state byte) — the gate
+    (0x2806, 0xFFFF), // cmp  r0,#6
+    (0xD100, 0xFF00), // bne  <skip>
+];
+
+/// JB8 MT1939-generation VID-producer gate. The JB8 address-compute tail does the
+/// SRAM byte-assembly in **two masking rounds** (a `#0x10` round then a `#8` round),
+/// unlike the single round of [`VID_GATE_SIG`]/[`VID_GATE_SIG_NB`]. Cut so the gate
+/// `ldrb r0,[r0]` still sits at `match + 16` (index 8), same as the other variants.
+/// Reversed from `DE_LG_BH14NS50_1.01 @ 0x139774` (gate at `0x139784`). Proven
+/// UNIQUE on every JB8-generation image and **zero matches** on BU40N + classic.
+const VID_GATE_SIG_JB8: &[(u16, u16)] = &[
+    (0x6809, 0xFFFF), // ldr  r1,[r1]      (round-1 SRAM base-ptr deref)
+    (0x0C00, 0xFFFF), // lsrs r0,r0,#0x10
+    (0x1808, 0xFFFF), // adds r0,r1,r0
+    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]  (round-2 SRAM base-ptr cell)
+    (0x0200, 0xFFFF), // lsls r0,r0,#8
+    (0x6809, 0xFFFF), // ldr  r1,[r1]
+    (0x0A00, 0xFFFF), // lsrs r0,r0,#8
+    (0x1840, 0xFFFF), // adds r0,r0,r1
+    (0x7800, 0xFFFF), // ldrb r0,[r0]      (auth-state byte) — the gate (match+16)
     (0x2806, 0xFFFF), // cmp  r0,#6
     (0xD100, 0xFF00), // bne  <skip>
 ];
@@ -816,7 +836,17 @@ impl Mt1959Engine {
         let hi = 0x0018_0000usize.min(image.len());
         match find_masked_all(image, VID_GATE_SIG, lo, hi).as_slice() {
             [one] => Ok(*one),
-            [] => find_unique(image, VID_GATE_SIG_NB, lo, hi, "VID gate (NB-class)"),
+            // No BU40N-shape match → try the NB-class variant, then the JB8 variant.
+            // Each is original-first and required unique in its own right.
+            [] => match find_masked_all(image, VID_GATE_SIG_NB, lo, hi).as_slice() {
+                [one] => Ok(*one),
+                [] => find_unique(image, VID_GATE_SIG_JB8, lo, hi, "VID gate (JB8)"),
+                hits => bail!(
+                    "VID gate (NB-class) signature matched {} time(s) in [0x{lo:x},0x{hi:x}) \
+                     (want exactly 1) — refusing to patch",
+                    hits.len()
+                ),
+            },
             hits => bail!(
                 "VID gate signature matched {} time(s) in [0x{lo:x},0x{hi:x}) (want exactly 1) — \
                  refusing to patch",
@@ -1943,10 +1973,11 @@ impl Mt1959Engine {
             media: cap.media_class.label().to_string(),
             levers,
             image: signed,
+            validation: Validation::StaticOnly,
         })
     }
 
-    /// **BETA** — MT1939 classic-generation MODIFY.
+    /// MT1939 classic-generation MODIFY (Identity + Region-free + DE).
     ///
     /// The classic generation keeps MT1959's `opcode@0/flags@1/handler@4` dispatch
     /// record format and the same chip-agnostic response writer/commit routines
@@ -1958,10 +1989,13 @@ impl Mt1959Engine {
     /// the classic ramp ceiling is unreversed, so they are NOT emitted.
     ///
     /// Every byte written is well-formed, lands in a provably-free SRAM cell /
-    /// CMAC-covered free space, and the image re-signs + self-verifies. What is
-    /// **unproven is runtime behavior on a real classic drive** — hence BETA: this
-    /// path only runs under the caller's explicit `--beta` opt-in, and the Identity
-    /// and Region levers are flagged `beta` in the report.
+    /// CMAC-covered free space, the image re-signs + self-verifies, and it passes
+    /// the structural detour audit — so, being structurally valid, Identity +
+    /// Region-free + DE are produced unconditionally (no flag). What is not yet
+    /// proven is runtime behavior on a real classic drive; the whole report carries
+    /// the uniform `static-only` validation label for that. Classic Raw-read is the
+    /// one thing withheld here — not as "beta" but because it is structurally unsafe
+    /// (its clear-output/deny path is INFERRED; a wrong reply desyncs the SCSI FIFO).
     pub fn build_modify_classic(
         &self,
         image: &[u8],
@@ -2016,8 +2050,9 @@ impl Mt1959Engine {
 
         let mut levers: Vec<LeverReport> = Vec::new();
 
-        // Identity / vendor handler + DumpAll — BETA (unvalidated on hardware).
-        levers.push(LeverReport::applied_beta(
+        // Identity / vendor handler + DumpAll — structurally valid, self-verifies,
+        // passes the structural audit → produced unconditionally (static-only label).
+        levers.push(LeverReport::applied(
             LeverId::Identity,
             vec![
                 ("handler_va", handler_va),
@@ -2033,10 +2068,10 @@ impl Mt1959Engine {
         ));
 
         // Region-free — REGION_EMIT_SIG transfers to classic in a higher window.
-        // BETA (the detour is sound + self-verifies; runtime unvalidated).
+        // Structurally valid + self-verifies → produced unconditionally.
         levers.push(if cap.region_lockable {
             match self.emit_region_classic(&mut out, flag_base) {
-                Ok((emitter, va)) => LeverReport::applied_beta(
+                Ok((emitter, va)) => LeverReport::applied(
                     LeverId::RegionFree,
                     vec![("region_emitter", emitter), ("region_stub_va", va)],
                 ),
@@ -2048,15 +2083,16 @@ impl Mt1959Engine {
 
         // Raw read — the classic VID/AKE gates are located + proven-unique, but the
         // clear-output scratch buffer + deny path are INFERRED (engine-scope §3), so
-        // the detour is NOT emitted even under beta: a wrong reply-path desyncs the
-        // SCSI FIFO. Report the located gates for audit; leave the emit for hardware.
+        // the detour is NOT emitted: a wrong reply-path desyncs the SCSI FIFO —
+        // structurally unsafe, withheld. Report the located gates for audit; the emit
+        // is left for hardware validation.
         levers.push(LeverReport::missed(
             LeverId::RawRead,
-            "MT1939 classic VID/AKE gates located (proven-unique) but the clear-output/deny \
-             path is INFERRED — not emitted even under beta; needs hardware validation",
+            "classic Raw-read withheld: clear-output/deny path unverified (SCSI-FIFO desync \
+             risk) — VID/AKE gates located + proven-unique, emit pending hardware validation",
         ));
 
-        // Downgrade-enable — proven/stable (NOT beta), any identity page.
+        // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));
 
         // Repoint the classic 0x3C record's handler; flags stay live.
@@ -2087,6 +2123,7 @@ impl Mt1959Engine {
             media: cap.media_class.label().to_string(),
             levers,
             image: signed,
+            validation: Validation::StaticOnly,
         })
     }
 
@@ -2312,6 +2349,7 @@ impl Mt1959Engine {
             media: cap.media_class.label().to_string(),
             levers,
             image: image.to_vec(),
+            validation: Validation::StaticOnly,
         }
     }
 }
