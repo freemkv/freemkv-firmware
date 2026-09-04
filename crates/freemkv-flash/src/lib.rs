@@ -18,6 +18,8 @@
 pub mod cmac;
 pub mod drive;
 pub mod engine;
+/// Declarative per-family/brand flash instruction sets + the 18-brand catalog.
+pub mod flashset;
 pub mod manifest;
 pub mod platform;
 pub mod probe;

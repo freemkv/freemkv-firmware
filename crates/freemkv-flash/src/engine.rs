@@ -54,6 +54,15 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
             )
         )
     );
+    // Flash recipe / execution tier for this family (from the declarative catalog).
+    let recipe = match crate::flashset::FlashInstructionSet::for_family(drive.family()) {
+        Some(set) => format!("{} — {}", set.name, set.status.label()),
+        None => format!(
+            "no executable recipe ({} brand recipes catalogued)",
+            crate::flashset::CATALOG.len()
+        ),
+    };
+    println!("{}", style::kv("flash", &recipe));
     // Best-effort firmware identification (read-only). `info` never aborts, so a
     // read failure here is simply omitted.
     if let Ok(Some(r)) = drive.firmware_report(dev) {
@@ -374,7 +383,26 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // Model gate (write path): every MT19xx image CMAC-verifies for its OWN
     // model, so CMAC alone can't stop a wrong-model write. Require the image's
     // drive-descriptor model to name this drive's INQUIRY product.
-    ensure_image_matches_drive(&req.input, &req.drive_model)?;
+    ensure_image_matches_drive(&req.input, &req.drive_model, drive.family())?;
+
+    // Execution-tier gate: a real (destructive) write is allowed ONLY for a
+    // hardware-proven, issuable instruction set. Today that is MT1959 (the MTK
+    // family); catalog-only / transport-gated families are dry-run/plan only and
+    // must never issue a write, even with --execute.
+    match crate::flashset::FlashInstructionSet::for_family(drive.family()) {
+        Some(set) if set.status.is_executable() => {}
+        other => {
+            let tier = other
+                .map(|s| s.status.label())
+                .unwrap_or("no executable flash recipe (catalog-only)");
+            bail!(
+                "refusing to flash: the {} family is {} — freemkv-flash executes real \
+                 writes only on the hardware-proven MT1959 path (dry-run/plan only here)",
+                drive.family(),
+                tier
+            );
+        }
+    }
 
     // Safety gate only on the write path.
     if let Err(block) = check_safety(req.acknowledged_risk) {
@@ -514,9 +542,25 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 /// never disagree on a firmware image's family, and byte-shifted extractions
 /// (where the old fixed-offset `0x1EC034` read missed) are still recognized. The
 /// model-vs-drive cross-check is retained as a secondary guard.
-fn ensure_image_matches_drive(image: &[u8], drive_product: &str) -> Result<()> {
+fn ensure_image_matches_drive(
+    image: &[u8],
+    drive_product: &str,
+    drive_family: crate::drive::Family,
+) -> Result<()> {
     let chip = freemkv_chipset::detect_chip(image)
         .context("input is not a recognizable MT19xx firmware image — refusing to flash")?;
+
+    // Family cross-gate: an MT19xx image (ChipFamily::Mt1959/Mt1939 are both
+    // MediaTek silicon) must be flashed onto a drive that classified as MediaTek.
+    // Refuse flashing across silicon families outright.
+    if drive_family != crate::drive::Family::Mtk {
+        bail!(
+            "image is {} (MediaTek) firmware but this drive classified as {} — \
+             refusing to flash across silicon families",
+            chip.family.label(),
+            drive_family
+        );
+    }
 
     let product = drive_product.trim();
     if product.is_empty() {

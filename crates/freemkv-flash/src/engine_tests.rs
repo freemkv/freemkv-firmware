@@ -347,32 +347,45 @@ fn flash_restore_tar_detects_readback_mismatch() {
 #[test]
 fn model_gate_accepts_a_matching_image() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "BU40N").is_ok());
+    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Mtk).is_ok());
 }
 
 #[test]
 fn model_gate_refuses_a_wrong_model_image() {
     // A valid MT19xx image built for a DIFFERENT model than the drive reports.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
-    let err = ensure_image_matches_drive(&img, "BU40N").unwrap_err();
+    let err = ensure_image_matches_drive(&img, "BU40N", Family::Mtk).unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
 }
 
 #[test]
 fn model_gate_refuses_a_non_mt19xx_image() {
     // No MTEKMT19 family tag at the descriptor → not a recognizable image.
-    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N").is_err());
+    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", Family::Mtk).is_err());
 }
 
 #[test]
 fn model_gate_refuses_an_unknown_drive_product() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "   ").is_err());
+    assert!(ensure_image_matches_drive(&img, "   ", Family::Mtk).is_err());
 }
 
 #[test]
 fn model_gate_refuses_a_truncated_image() {
-    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N").is_err());
+    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", Family::Mtk).is_err());
+}
+
+#[test]
+fn family_cross_gate_refuses_an_mt19xx_image_on_a_non_mtk_drive() {
+    // A perfectly valid MT1959 image, but the connected drive classified as a
+    // different silicon family — refuse across families, before any write.
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let err = ensure_image_matches_drive(&img, "BU40N", Family::Pioneer).unwrap_err();
+    assert!(
+        err.to_string().contains("across silicon families"),
+        "got: {err}"
+    );
+    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Renesas).is_err());
 }
 
 #[test]
