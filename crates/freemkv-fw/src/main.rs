@@ -56,6 +56,12 @@ enum Command {
         /// Emit a machine-readable JSON report instead of the human table.
         #[arg(long)]
         json: bool,
+        /// Opt in to BETA / experimental emit paths (today: the MT1939
+        /// classic-generation Identity + Region-free levers). These are
+        /// structurally sound and the image self-verifies, but they are NOT
+        /// hardware-validated — beta levers are labelled `(BETA)` in the report.
+        #[arg(long)]
+        beta: bool,
     },
     /// Verify a firmware image (file) or probe a live drive (device) for
     /// freemkv firmware.
@@ -120,7 +126,8 @@ fn main() -> ExitCode {
             output,
             in_place,
             json,
-        } => cmd_create(&input, output, in_place, json),
+            beta,
+        } => cmd_create(&input, output, in_place, json, beta),
         Command::Verify { path, family } => cmd_verify(&path, family),
         Command::Info {
             device,
@@ -582,7 +589,13 @@ fn default_created_path(input: &Path) -> PathBuf {
     input.with_file_name(format!("{stem}.freemkv.bin"))
 }
 
-fn cmd_create(path: &Path, out: Option<PathBuf>, in_place: bool, json: bool) -> Result<ExitCode> {
+fn cmd_create(
+    path: &Path,
+    out: Option<PathBuf>,
+    in_place: bool,
+    json: bool,
+    beta: bool,
+) -> Result<ExitCode> {
     let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
 
     // Resolve the output path up front so we fail fast on conflicts.
@@ -606,7 +619,9 @@ fn cmd_create(path: &Path, out: Option<PathBuf>, in_place: bool, json: bool) -> 
     // image), then MODIFY: apply every lever this image supports and report each
     // one. A missing signature skips that lever, it does not abort the build.
     let engine = engine::detect(&image).context("selecting a platform engine for this image")?;
-    let report = engine.modify(&image).context("building freemkv firmware")?;
+    let report = engine
+        .modify_with(&image, &engine::ModifyOpts { beta })
+        .context("building freemkv firmware")?;
 
     // Never write an image that does not re-verify.
     let verdicts = MtkCmac.verify(&report.image)?;
@@ -653,10 +668,12 @@ fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regi
                 style::Status::Warn
             }
         };
-        println!(
-            "{}",
-            style::status_line(l.id.label(), l.outcome.word(), sty)
-        );
+        let (word, sty) = if l.beta {
+            ("applied (BETA)", style::Status::Warn)
+        } else {
+            (l.outcome.word(), sty)
+        };
+        println!("{}", style::status_line(l.id.label(), word, sty));
         match &l.outcome {
             LeverOutcome::NotApplicable { reason } => {
                 println!("{}", style::dim_line(&format!("      {reason}")))
@@ -677,6 +694,19 @@ fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regi
             }
             _ => {}
         }
+    }
+
+    if report.levers.iter().any(|l| l.beta) {
+        println!();
+        println!(
+            "{}",
+            style::status_line(
+                "BETA",
+                "levers above marked (BETA) are experimental and NOT hardware-validated — \
+                 the image self-verifies but runtime behavior on a real drive is unproven",
+                style::Status::Warn,
+            )
+        );
     }
 
     println!();

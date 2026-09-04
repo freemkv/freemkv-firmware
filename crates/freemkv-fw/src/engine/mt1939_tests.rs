@@ -147,6 +147,128 @@ fn every_mt1939_image_modifies_with_the_expected_generation_outcome() {
     );
 }
 
+/// BETA classic emit: with `--beta`, a classic image gets Identity + Region-free
+/// **applied and flagged beta** + an effective DE, RawRead/Speed reported pending,
+/// and the re-signed image **self-verifies** (round-trip). Without `--beta`, the
+/// classic path stays DE-only and emits no beta levers.
+#[test]
+fn classic_beta_emit_applies_identity_and_region_and_round_trips() {
+    let Ok(path) = std::env::var("FREEMKV_MT1939_CLASSIC") else {
+        eprintln!("skip: set FREEMKV_MT1939_CLASSIC to a classic MT1939 image");
+        return;
+    };
+    let img = std::fs::read(&path).expect("read classic image");
+    assert!(is_classic(&img), "{path} is not a classic-generation image");
+    use crate::engine::ModifyOpts;
+    use crate::scheme::{IntegrityScheme, MtkCmac};
+
+    // No --beta → no beta levers (stable DE-only path).
+    let stable = Mt1939Engine
+        .modify_with(&img, &ModifyOpts { beta: false })
+        .expect("stable modify");
+    assert!(
+        !stable.levers.iter().any(|l| l.beta),
+        "no beta levers may be emitted without --beta"
+    );
+
+    // --beta → Identity + Region applied (beta), DE effective, RawRead/Speed pending.
+    let beta = Mt1939Engine
+        .modify_with(&img, &ModifyOpts { beta: true })
+        .expect("beta classic modify");
+    let get = |id| beta.levers.iter().find(|l| l.id == id).unwrap();
+    let ident = get(LeverId::Identity);
+    assert!(
+        ident.outcome == LeverOutcome::Applied && ident.beta,
+        "Identity must be applied+beta, got {:?} beta={}",
+        ident.outcome,
+        ident.beta
+    );
+    let region = get(LeverId::RegionFree);
+    assert!(
+        region.outcome == LeverOutcome::Applied && region.beta,
+        "Region must be applied+beta, got {:?} beta={}",
+        region.outcome,
+        region.beta
+    );
+    assert!(
+        get(LeverId::DowngradeEnable).outcome.is_effective(),
+        "DE must be effective and is NOT beta"
+    );
+    assert!(
+        !get(LeverId::DowngradeEnable).beta,
+        "DE is proven, not beta"
+    );
+    assert!(
+        matches!(
+            get(LeverId::RawRead).outcome,
+            LeverOutcome::SignatureNotFound { .. }
+        ),
+        "RawRead stays pending on classic (INFERRED deny path), even under beta"
+    );
+
+    // Round-trip: the re-signed beta image verifies clean and keeps its size.
+    let v = MtkCmac.verify(&beta.image).expect("verify beta image");
+    assert!(
+        !v.is_empty() && v.iter().all(|r| r.ok),
+        "beta classic image must self-verify (round-trip)"
+    );
+    assert_eq!(beta.image.len(), img.len());
+}
+
+/// BETA classic coverage sweep over the corpus: for every classic image, the beta
+/// path must EITHER fully resolve (Identity + Region applied-beta, self-verifying)
+/// OR cleanly degrade to the stable DE path — never emit a non-verifying image.
+#[test]
+fn classic_beta_sweep_over_corpus() {
+    let Ok(dir) = std::env::var("FREEMKV_MT1939_HOARD") else {
+        eprintln!("skip: set FREEMKV_MT1939_HOARD");
+        return;
+    };
+    use crate::engine::ModifyOpts;
+    use crate::scheme::{IntegrityScheme, MtkCmac};
+    let (mut classic, mut beta_full, mut degraded) = (0usize, 0usize, 0usize);
+    for entry in walk(std::path::Path::new(&dir)) {
+        let Ok(img) = std::fs::read(&entry) else {
+            continue;
+        };
+        if img.len() != 0x20_0000 || !is_classic(&img) {
+            continue;
+        }
+        let Ok(chip) = crate::family::detect_chip(&img) else {
+            continue;
+        };
+        if !chip.descriptor_present {
+            continue;
+        }
+        classic += 1;
+        let r = Mt1939Engine
+            .modify_with(&img, &ModifyOpts { beta: true })
+            .unwrap_or_else(|e| panic!("beta classic hard-failed on {}: {e:#}", entry.display()));
+        // Whatever path ran, the image must self-verify.
+        let v = MtkCmac.verify(&r.image).expect("verify");
+        assert!(
+            !v.is_empty() && v.iter().all(|x| x.ok),
+            "non-verifying image from {}",
+            entry.display()
+        );
+        let ident_beta = r
+            .levers
+            .iter()
+            .any(|l| l.id == LeverId::Identity && l.beta && l.outcome == LeverOutcome::Applied);
+        if ident_beta {
+            beta_full += 1;
+        } else {
+            degraded += 1;
+        }
+    }
+    eprintln!("MT1939 classic BETA sweep: {classic} classic → {beta_full} full beta (Identity+Region), {degraded} degraded-to-DE (all self-verify)");
+    assert!(classic > 0, "no classic images under {dir}");
+    assert!(
+        beta_full > 0,
+        "expected the beta classic path to resolve on at least one image"
+    );
+}
+
 /// Minimal recursive `.bin` walk (std-only).
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();

@@ -102,6 +102,12 @@ pub struct LeverReport {
     pub outcome: LeverOutcome,
     /// Grounded addresses (name → value) for the `details:` block and audit.
     pub facts: Vec<(&'static str, u32)>,
+    /// True when this lever's emit is a **BETA / experimental** path that is NOT
+    /// hardware-validated (e.g. the MT1939 classic-generation handler). The bytes
+    /// are well-formed and the image self-verifies, but runtime behavior on a real
+    /// drive is unproven. Only ever set on an `Applied` outcome reached under the
+    /// user's explicit `--beta` opt-in; the report labels it loudly.
+    pub beta: bool,
 }
 
 impl LeverReport {
@@ -111,6 +117,16 @@ impl LeverReport {
             id,
             outcome: LeverOutcome::Applied,
             facts,
+            beta: false,
+        }
+    }
+    /// Applied via a BETA / experimental (not hardware-validated) path.
+    pub fn applied_beta(id: LeverId, facts: Vec<(&'static str, u32)>) -> Self {
+        Self {
+            id,
+            outcome: LeverOutcome::Applied,
+            facts,
+            beta: true,
         }
     }
     /// Already present (idempotent).
@@ -119,6 +135,7 @@ impl LeverReport {
             id,
             outcome: LeverOutcome::AlreadyPresent,
             facts,
+            beta: false,
         }
     }
     /// Out of scope for this capability.
@@ -129,6 +146,7 @@ impl LeverReport {
                 reason: reason.into(),
             },
             facts: vec![],
+            beta: false,
         }
     }
     /// In scope but the signature missed on this image.
@@ -139,6 +157,7 @@ impl LeverReport {
                 detail: detail.into(),
             },
             facts: vec![],
+            beta: false,
         }
     }
 }
@@ -167,11 +186,17 @@ pub struct ModifyReport {
 impl ModifyReport {
     /// A one-line summary: engine · media · what applied.
     pub fn summary(&self) -> String {
-        let applied: Vec<&str> = self
+        let applied: Vec<String> = self
             .levers
             .iter()
             .filter(|l| l.outcome == LeverOutcome::Applied)
-            .map(|l| l.id.label())
+            .map(|l| {
+                if l.beta {
+                    format!("{} (BETA)", l.id.label())
+                } else {
+                    l.id.label().to_string()
+                }
+            })
             .collect();
         let already: Vec<&str> = self
             .levers
@@ -237,6 +262,7 @@ impl ModifyReport {
                     jstr(detail)
                 )),
             }
+            s.push_str(&format!(",\"beta\":{}", l.beta));
             s.push_str(",\"facts\":{");
             for (j, (k, v)) in l.facts.iter().enumerate() {
                 if j > 0 {
