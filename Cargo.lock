@@ -1311,6 +1311,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "freemkv-chipset"
+version = "0.7.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "freemkv-flash"
 version = "0.7.0"
 dependencies = [
@@ -1320,6 +1327,7 @@ dependencies = [
  "clap",
  "cmac",
  "crc32fast",
+ "freemkv-chipset",
  "libfreemkv",
  "serde",
  "sha2",
@@ -1346,6 +1354,7 @@ version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
+ "freemkv-chipset",
  "freemkv-flash",
 ]
 
@@ -4856,10 +4865,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "freemkv-unlock"
-version = "1.7.0"
-
-[[patch.unused]]
 name = "freemkv-engine"
 version = "1.7.0"
 
@@ -4869,4 +4874,8 @@ version = "1.7.0"
 
 [[patch.unused]]
 name = "freemkv-keysources"
+version = "1.7.0"
+
+[[patch.unused]]
+name = "freemkv-unlock"
 version = "1.7.0"

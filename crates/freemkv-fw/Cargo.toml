@@ -23,6 +23,9 @@ clap = { version = "4", features = ["derive"] }
 # The integrity engine (table parse + AES-CMAC + re-sign) lives in freemkv-flash;
 # freemkv-fw is a thin authoring CLI over it — no duplicated crypto.
 freemkv-flash = { path = "../freemkv-flash" }
+# Shared step-1 chipset detection + capability taxonomy (also used by
+# freemkv-flash), so both tools identify a family the same way.
+freemkv-chipset = { path = "../freemkv-chipset" }
 
 [lints]
 workspace = true

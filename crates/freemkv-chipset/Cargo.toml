@@ -1,0 +1,20 @@
+[package]
+name = "freemkv-chipset"
+publish = false  # internal shared kernel; path-dep of freemkv-fw and freemkv-flash
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Shared optical-drive chipset detection + media-capability taxonomy (step-1 identity used by both the modify and flash tools)"
+
+[lib]
+name = "freemkv_chipset"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+
+[lints]
+workspace = true
