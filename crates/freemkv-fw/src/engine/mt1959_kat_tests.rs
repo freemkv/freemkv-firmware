@@ -579,6 +579,33 @@ fn vid_gate_finds_nb_variant_when_original_absent() {
     assert_eq!(Mt1959Engine.find_vid_gate(&img6).unwrap(), 0x13_0000);
 }
 
+#[test]
+fn ake_gate_finds_nb_variant_and_original_absent() {
+    // NB-class AKE gate: AGID via r4 (`ldrb r0,[r4,#0xa]` = 0x7AA0), accept
+    // (`movs r1,#6`) and reject (`movs r1,#1`) arms converge on a shared
+    // `bl set_agid_state` at anchor+12 (the reject writer is a bare `movs r1,#1`
+    // at anchor+10).
+    let nb: [u16; 6] = [0x7AA0, 0x0980, 0x2106, 0xE000, 0x0980, 0x2101];
+    let mut img = vec![0u8; 0x14_1000];
+    put_hw(&mut img, 0x13_4000, &nb);
+    put_hw(&mut img, 0x13_4000 + 12, &[0xF000, 0xF800]); // shared bl (any target)
+    assert_eq!(Mt1959Engine.find_ake_gate_nb(&img).unwrap(), 0x13_4000);
+    // the reject writer sits at anchor+10 — the NB detour precondition.
+    assert_eq!(
+        u16::from_le_bytes([img[0x13_4000 + 10], img[0x13_4000 + 11]]),
+        0x2101
+    );
+    // the original (r5, twin-`ldrb`) signature must NOT match the NB idiom, and
+    // absence is a clean error (→ RawRead SignatureNotFound), never a panic.
+    assert!(
+        Mt1959Engine.find_ake_gate(&img).is_err(),
+        "original AKE sig must miss on the NB idiom"
+    );
+    assert!(Mt1959Engine
+        .find_ake_gate_nb(&vec![0u8; 0x14_1000])
+        .is_err());
+}
+
 /// The never-abort MODIFY driver must emit byte-for-byte the same image as the
 /// strict `build_report` on the all-levers-succeed base, and report every lever
 /// Applied. This is what lets the framework refactor ride on the frozen KAT.

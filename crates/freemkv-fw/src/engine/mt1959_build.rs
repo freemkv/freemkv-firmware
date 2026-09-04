@@ -176,6 +176,28 @@ const AKE_GATE_SIG: &[(u16, u16)] = &[
     (0xE000, 0xF800), // b <set_agid_state>
 ];
 
+/// NB-class (LG BP50NB40 / BP55EB40 / WP50NB40 portable) variant of the AKE
+/// accept gate. RE'd from `HL-DT-ST_BP50NB40_N1.01` (anchor `0x13405a`),
+/// proven-unique across the NB corpus and 0-match on every BU40N image. Two
+/// differences from [`AKE_GATE_SIG`] that make the original miss and require a
+/// distinct detour: the AGID byte is read via `r4` (not `r5`), and — critically —
+/// the accept (`movs r1,#6`) and reject (`movs r1,#1`) arms **converge on a
+/// single shared `bl set_agid_state`** at `anchor+12` (the accept arm's `b` lands
+/// there) instead of each ending in its own `b`. So the reject writer is a bare
+/// 2-byte `movs r1,#1` at `anchor+10` and `anchor+12` is the shared `bl`. Raw
+/// Read detours that shared `bl` (see [`Mt1959Engine::build_ake_stub_nb`]) — the
+/// stub must PRESERVE `r1` when the flag is off (the accept arm passes through it
+/// too), forcing `6` only when `flag[RawRead]==2`.
+const AKE_GATE_SIG_NB: &[(u16, u16)] = &[
+    (0x7AA0, 0xFFFF), // ldrb r0,[r4,#0xa]   AGID byte (r4, not r5)
+    (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID   (accept arm)
+    (0x2106, 0xFFFF), // movs r1,#6          accept: state 6
+    (0xE000, 0xF800), // b <shared bl @ +12>
+    (0x0980, 0xFFFF), // lsrs r0,r0,#6       reject arm (no second ldrb)
+    (0x2101, 0xFFFF), // movs r1,#1          reject: state 1   (bare, 2 bytes)
+                      // anchor+12 = `bl set_agid_state`, the shared join both arms reach ← detour site
+];
+
 /// Signature of the OEM REPORT KEY key-format-8 (RPC state) emitter tail
 /// (`0x119890` on 1.00, `0x119a84` on 1.03) — the byte-for-byte identical run
 /// that marshals the 8-byte RPC-state frame into the response FIFO. RPCScheme is
@@ -947,6 +969,15 @@ impl Mt1959Engine {
         Ok(find_unique(image, AKE_GATE_SIG, lo, hi, "AACS AKE accept gate")? as u32)
     }
 
+    /// The NB-class AKE accept-gate anchor — the unique [`AKE_GATE_SIG_NB`] match.
+    /// Returns the anchor; the shared `bl set_agid_state` the Raw Read NB detour
+    /// replaces is at `anchor+12` (see [`AKE_GATE_SIG_NB`]).
+    pub fn find_ake_gate_nb(&self, image: &[u8]) -> Result<u32> {
+        let lo = 0x0013_0000usize.min(image.len());
+        let hi = 0x0014_0000usize.min(image.len());
+        Ok(find_unique(image, AKE_GATE_SIG_NB, lo, hi, "AACS AKE accept gate (NB)")? as u32)
+    }
+
     /// The OEM AACS engine session-reset routine (`aacs_session_reset`) — the
     /// primitive that idles the AACS hardware engine (a direct engine gate-bit
     /// clear followed by a mailbox reset), used by the Raw Read deny-path detour
@@ -993,13 +1024,21 @@ impl Mt1959Engine {
                 hits.len()
             ),
         };
-        // Entry: nearest preceding `push {r4,r5,r6,lr}` (0xB570).
+        // Entry: nearest preceding `push {..r4,r5,r6..,lr}`. Desktop/BU40N is
+        // `push {r4,r5,r6,lr}` (0xB570); the NB-class portable line uses
+        // `push {r3,r4,r5,r6,r7,lr}` (0xB5F8). Accept any push-with-lr whose
+        // register mask includes the loop's working regs r4/r5/r6 (mask bit
+        // 0x70) — proven to select the routine prologue on both, and BU40N still
+        // resolves to the identical 0xB570 entry (KAT unaffected).
         let mut p = m;
         let entry = loop {
             if p < 2 || m - p > 0x40 {
-                bail!("aacs_session_reset prologue (push {{r4-r6,lr}}) not found before the loop");
+                bail!(
+                    "aacs_session_reset prologue (push {{..r4-r6..,lr}}) not found before the loop"
+                );
             }
-            if u16::from_le_bytes([image[p], image[p + 1]]) == 0xB570 {
+            let hw = u16::from_le_bytes([image[p], image[p + 1]]);
+            if (hw & 0xFF00) == 0xB500 && (hw & 0x0070) == 0x0070 {
                 break p;
             }
             p -= 2;
@@ -1386,6 +1425,77 @@ impl Mt1959Engine {
         a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
         a.bx(2);
         a.finish()
+    }
+
+    /// NB-class Raw Read (0x04) AKE accept-gate trampoline. Entered by a `bl` that
+    /// replaces the **shared** `bl set_agid_state` at [`AKE_GATE_SIG_NB`]'s
+    /// `anchor+12` — the join BOTH arms reach (`r0 = AGID`, `r1 = 6` on the accept
+    /// arm or `1` on the reject arm). Because the accept arm passes through here
+    /// too, the stub must **preserve `r1`** when the flag is off (unlike
+    /// [`Self::build_ake_stub`], which sits only on the reject writer): it forces
+    /// `r1 = 6` only when `flag[RawRead]==2`, then tail-jumps to the OEM
+    /// `set_agid_state` (`back`) so the store happens through the OEM primitive.
+    /// `r2` is scratch (dead at `back`); `lr` is preserved by the outer `bl` and
+    /// carries the OEM return, matching the `bl set_agid_state` this replaces.
+    fn build_ake_stub_nb(&self, flag_base: u32, back: u32) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        let force = a.label();
+        let keep = a.label();
+        a.ldr_lit(2, flag_base + abi::SubFn::RawRead as u32); // r2 = &flag[0x04]
+        a.ldrb_imm(2, 2, 0); // r2 = RawRead flag byte
+        a.cmp_imm(2, 2); // 02 = accept ANY host cert (revoked ok)
+        a.beq(force);
+        a.b(keep); // flag off: preserve r1 (accept arm = 6, reject arm = 1)
+        a.bind(force);
+        a.movs_imm(1, 6); // forced: state 6 (AKE authenticated)
+        a.bind(keep);
+        a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
+        a.bx(2);
+        a.finish()
+    }
+
+    /// Resolve the AKE detour site + stub for whichever gate variant this image
+    /// carries. Tries the BU40N/desktop [`AKE_GATE_SIG`] first (so BU40N stays
+    /// byte-identical), then the NB-class [`AKE_GATE_SIG_NB`]. Returns
+    /// `(detour_site, stub_bytes, anchor)` where a `bl` to the stub is written at
+    /// `detour_site`. Errors (→ RawRead `SignatureNotFound`) only if neither
+    /// variant matches.
+    fn ake_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>, u32)> {
+        // Original (BU40N / BP60NB10 / desktop): detour the reject writer
+        // `movs r1,#1; b <back>` (4 bytes at anchor+12).
+        if let Ok(ake_gate) = self.find_ake_gate(image) {
+            let reset_site = ake_gate as usize + 12;
+            let movs_hw = u16::from_le_bytes([image[reset_site], image[reset_site + 1]]);
+            if movs_hw != 0x2101 {
+                bail!(
+                    "AKE reset writer `movs r1,#1` not at 0x{reset_site:x} (got 0x{movs_hw:04x})"
+                );
+            }
+            let b_at = reset_site + 2;
+            let b_hw = u16::from_le_bytes([image[b_at], image[b_at + 1]]);
+            if (b_hw & 0xF800) != 0xE000 {
+                bail!("AKE reset writer `b` not at 0x{b_at:x} (got 0x{b_hw:04x})");
+            }
+            let mut disp = (b_hw & 0x7FF) as i32;
+            if disp >= 0x400 {
+                disp -= 0x800;
+            }
+            let ake_back = (b_at as i32 + 4 + disp * 2) as u32;
+            let bytes = self.build_ake_stub(flag_base, ake_back)?;
+            return Ok((reset_site, bytes, ake_gate));
+        }
+        // NB-class: detour the shared `bl set_agid_state` at anchor+12.
+        let nb_gate = self.find_ake_gate_nb(image)?;
+        let reject = nb_gate as usize + 10;
+        let movs_hw = u16::from_le_bytes([image[reject], image[reject + 1]]);
+        if movs_hw != 0x2101 {
+            bail!("NB AKE reject writer `movs r1,#1` not at 0x{reject:x} (got 0x{movs_hw:04x})");
+        }
+        let bl_site = nb_gate as usize + 12;
+        let back = thumb::decode_bl(image, bl_site)
+            .ok_or_else(|| anyhow!("NB AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
+        let bytes = self.build_ake_stub_nb(flag_base, back)?;
+        Ok((bl_site, bytes, nb_gate))
     }
 
     /// The Raw Read (0x04) flag-gated producer Gate-A trampoline. Entered by a `bl`
@@ -1847,24 +1957,10 @@ impl Mt1959Engine {
         flag_base: u32,
     ) -> Result<RawReadFacts> {
         // ---- validate (read-only) ----
-        // AKE accept gate.
-        let ake_gate = self.find_ake_gate(image)?;
-        let reset_site = ake_gate as usize + 12;
-        let movs_hw = u16::from_le_bytes([image[reset_site], image[reset_site + 1]]);
-        if movs_hw != 0x2101 {
-            bail!("AKE reset writer `movs r1,#1` not at 0x{reset_site:x} (got 0x{movs_hw:04x})");
-        }
-        let b_at = reset_site + 2;
-        let b_hw = u16::from_le_bytes([image[b_at], image[b_at + 1]]);
-        if (b_hw & 0xF800) != 0xE000 {
-            bail!("AKE reset writer `b` not at 0x{b_at:x} (got 0x{b_hw:04x})");
-        }
-        let mut disp = (b_hw & 0x7FF) as i32;
-        if disp >= 0x400 {
-            disp -= 0x800;
-        }
-        let ake_back = (b_at as i32 + 4 + disp * 2) as u32;
-        let ake_bytes = self.build_ake_stub(flag_base, ake_back)?;
+        // AKE accept gate — BU40N/desktop (reject-writer detour) or NB-class
+        // (shared-`bl` detour). Resolved by `ake_detour`; BU40N matches the
+        // original signature first, so its `reset_site`/`ake_bytes` are unchanged.
+        let (reset_site, ake_bytes, ake_gate) = self.ake_detour(image, flag_base)?;
 
         // Producer Gate-A.
         let gatea_anchor = self.find_vid_gate(image)?;
