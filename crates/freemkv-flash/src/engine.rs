@@ -506,25 +506,17 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 
 /// Restore per-unit regions from a `.tar` (targeted writes, not a full stream).
 /// Refuse to flash an image whose drive-descriptor model does not name this
-/// drive. Fails closed — too-small image, missing MT19xx family tag, unknown
-/// drive product, or model mismatch all abort, with no override. The descriptor
-/// is at file offset 0x1EC000 (model `0x08..0x18`, family tag `0x34..0x3E`),
-/// mirrored from freemkv-fw's `family`; that crate depends on this one (its KAT
-/// calls `cmac::verify`) so the parse can't be shared without a cycle.
+/// drive. Fails closed — unidentifiable image, unknown drive product, or model
+/// mismatch all abort, with no override.
+///
+/// Family identification is delegated to the shared [`freemkv_chipset::detect_chip`]
+/// — the SAME `MTEKMT19xx` pattern-search the modify tool uses — so the two tools
+/// never disagree on a firmware image's family, and byte-shifted extractions
+/// (where the old fixed-offset `0x1EC034` read missed) are still recognized. The
+/// model-vs-drive cross-check is retained as a secondary guard.
 fn ensure_image_matches_drive(image: &[u8], drive_product: &str) -> Result<()> {
-    const DESCRIPTOR_OFFSET: usize = 0x1E_C000;
-    const DESCRIPTOR_LEN: usize = 0x40;
-    let desc = image
-        .get(DESCRIPTOR_OFFSET..DESCRIPTOR_OFFSET + DESCRIPTOR_LEN)
-        .context("image too small to contain the drive descriptor at 0x1EC000")?;
-
-    let family_tag = crate::drive::trim_ascii(&desc[0x34..0x3E]);
-    if !family_tag.starts_with("MTEKMT19") {
-        bail!(
-            "input is not a recognizable MT19xx firmware image (drive-descriptor \
-             family tag {family_tag:?} at 0x1EC034) — refusing to flash"
-        );
-    }
+    let chip = freemkv_chipset::detect_chip(image)
+        .context("input is not a recognizable MT19xx firmware image — refusing to flash")?;
 
     let product = drive_product.trim();
     if product.is_empty() {
@@ -534,7 +526,7 @@ fn ensure_image_matches_drive(image: &[u8], drive_product: &str) -> Result<()> {
         );
     }
 
-    let image_model = crate::drive::trim_ascii(&desc[0x08..0x18]);
+    let image_model = chip.model;
     if !image_model
         .to_ascii_uppercase()
         .contains(&product.to_ascii_uppercase())
