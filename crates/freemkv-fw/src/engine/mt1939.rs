@@ -26,7 +26,7 @@ use freemkv_flash::cmac;
 
 use super::lever::{LeverId, LeverReport};
 use super::mt1959::Mt1959Engine;
-use super::{CreateReport, Engine, ModifyOpts, ModifyReport};
+use super::{CreateReport, Engine, ModifyReport};
 use crate::family;
 
 /// Downgrade-enable byte offset within the MTEK identity page (`0x1EC056`).
@@ -148,19 +148,6 @@ impl Engine for Mt1939Engine {
         })
     }
 
-    fn modify_with(&self, image: &[u8], opts: &ModifyOpts) -> Result<ModifyReport> {
-        // BETA: classic-generation full(er) emit (Identity + Region + DE) only under
-        // the explicit opt-in. On any classic-base miss, degrade to the stable path.
-        if opts.beta && is_classic(image) {
-            let chip = family::detect_chip(image)?;
-            let cap = family::capability_for(&chip.model, chip.family);
-            if let Ok(report) = Mt1959Engine.build_modify_classic(image, &chip, &cap) {
-                return Ok(report);
-            }
-        }
-        self.modify(image)
-    }
-
     fn modify(&self, image: &[u8]) -> Result<ModifyReport> {
         let chip = family::detect_chip(image)?;
         let cap = family::capability_for(&chip.model, chip.family);
@@ -180,10 +167,20 @@ impl Engine for Mt1939Engine {
             // fails on a non-classic image (degrade, never refuse).
         }
 
-        // Classic generation: only the family-agnostic DE lever is wired. The
-        // classic VID/AKE gate signatures are reversed + proven unique (see the
-        // consts above), but activating them needs the classic Identity base
-        // (its own sense-setter + injected handler + flag table) — the next block.
+        // Classic generation: produce the full classic emit (Identity + Region-free
+        // + DE) — structurally valid, self-verifies, passes the structural audit, so
+        // it ships unconditionally (Raw-read stays withheld inside as unsafe). If the
+        // classic base can't be located on this specific image, degrade to the
+        // DE-only fallback below (never refuse).
+        if is_classic(image) {
+            if let Ok(report) = Mt1959Engine.build_modify_classic(image, &chip, &cap) {
+                return Ok(report);
+            }
+        }
+
+        // DE-only fallback: family-agnostic downgrade-enable when the classic base
+        // isn't locatable. The classic VID/AKE gate signatures are reversed + proven
+        // unique (consts above) but need the classic Identity base to emit.
         let mut out = image.to_vec();
         let mut levers = Vec::new();
 
@@ -224,7 +221,6 @@ impl Engine for Mt1939Engine {
                     ("vid_gate_classic", vid_gate),
                     ("ake_gate_classic", ake_gate),
                 ],
-                beta: false,
             },
             None => LeverReport::missed(
                 LeverId::RawRead,
@@ -252,6 +248,7 @@ impl Engine for Mt1939Engine {
             media: cap.media_class.label().to_string(),
             levers,
             image: signed,
+            validation: super::lever::Validation::StaticOnly,
         })
     }
 }

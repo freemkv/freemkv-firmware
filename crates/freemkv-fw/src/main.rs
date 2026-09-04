@@ -56,12 +56,6 @@ enum Command {
         /// Emit a machine-readable JSON report instead of the human table.
         #[arg(long)]
         json: bool,
-        /// Opt in to BETA / experimental emit paths (today: the MT1939
-        /// classic-generation Identity + Region-free levers). These are
-        /// structurally sound and the image self-verifies, but they are NOT
-        /// hardware-validated — beta levers are labelled `(BETA)` in the report.
-        #[arg(long)]
-        beta: bool,
         /// After building, run the structural detour audit (prove each Applied
         /// lever's `bl` and stub actually landed, the record was repointed, the
         /// DE byte is set, and CMAC verifies) and print PASS/FAIL per check.
@@ -132,9 +126,8 @@ fn main() -> ExitCode {
             output,
             in_place,
             json,
-            beta,
             audit,
-        } => cmd_create(&input, output, in_place, json, beta, audit),
+        } => cmd_create(&input, output, in_place, json, audit),
         Command::Verify { path, family } => cmd_verify(&path, family),
         Command::Info {
             device,
@@ -601,7 +594,6 @@ fn cmd_create(
     out: Option<PathBuf>,
     in_place: bool,
     json: bool,
-    beta: bool,
     audit: bool,
 ) -> Result<ExitCode> {
     let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
@@ -627,9 +619,7 @@ fn cmd_create(
     // image), then MODIFY: apply every lever this image supports and report each
     // one. A missing signature skips that lever, it does not abort the build.
     let engine = engine::detect(&image).context("selecting a platform engine for this image")?;
-    let report = engine
-        .modify_with(&image, &engine::ModifyOpts { beta })
-        .context("building freemkv firmware")?;
+    let report = engine.modify(&image).context("building freemkv firmware")?;
 
     // Never write an image that does not re-verify.
     let verdicts = MtkCmac.verify(&report.image)?;
@@ -694,12 +684,10 @@ fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regi
                 style::Status::Warn
             }
         };
-        let (word, sty) = if l.beta {
-            ("applied (BETA)", style::Status::Warn)
-        } else {
-            (l.outcome.word(), sty)
-        };
-        println!("{}", style::status_line(l.id.label(), word, sty));
+        println!(
+            "{}",
+            style::status_line(l.id.label(), l.outcome.word(), sty)
+        );
         match &l.outcome {
             LeverOutcome::NotApplicable { reason } => {
                 println!("{}", style::dim_line(&format!("      {reason}")))
@@ -722,18 +710,18 @@ fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regi
         }
     }
 
-    if report.levers.iter().any(|l| l.beta) {
-        println!();
-        println!(
-            "{}",
-            style::status_line(
-                "BETA",
-                "levers above marked (BETA) are experimental and NOT hardware-validated — \
-                 the image self-verifies but runtime behavior on a real drive is unproven",
-                style::Status::Warn,
-            )
-        );
-    }
+    println!();
+    println!(
+        "{}",
+        style::status_line(
+            "validation",
+            report.validation.note(),
+            match report.validation {
+                engine::lever::Validation::HardwareConfirmed => style::Status::Ok,
+                engine::lever::Validation::StaticOnly => style::Status::Warn,
+            },
+        )
+    );
 
     println!();
     println!(

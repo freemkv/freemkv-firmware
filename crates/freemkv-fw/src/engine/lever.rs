@@ -102,12 +102,6 @@ pub struct LeverReport {
     pub outcome: LeverOutcome,
     /// Grounded addresses (name → value) for the `details:` block and audit.
     pub facts: Vec<(&'static str, u32)>,
-    /// True when this lever's emit is a **BETA / experimental** path that is NOT
-    /// hardware-validated (e.g. the MT1939 classic-generation handler). The bytes
-    /// are well-formed and the image self-verifies, but runtime behavior on a real
-    /// drive is unproven. Only ever set on an `Applied` outcome reached under the
-    /// user's explicit `--beta` opt-in; the report labels it loudly.
-    pub beta: bool,
 }
 
 impl LeverReport {
@@ -117,16 +111,6 @@ impl LeverReport {
             id,
             outcome: LeverOutcome::Applied,
             facts,
-            beta: false,
-        }
-    }
-    /// Applied via a BETA / experimental (not hardware-validated) path.
-    pub fn applied_beta(id: LeverId, facts: Vec<(&'static str, u32)>) -> Self {
-        Self {
-            id,
-            outcome: LeverOutcome::Applied,
-            facts,
-            beta: true,
         }
     }
     /// Already present (idempotent).
@@ -135,7 +119,6 @@ impl LeverReport {
             id,
             outcome: LeverOutcome::AlreadyPresent,
             facts,
-            beta: false,
         }
     }
     /// Out of scope for this capability.
@@ -146,7 +129,6 @@ impl LeverReport {
                 reason: reason.into(),
             },
             facts: vec![],
-            beta: false,
         }
     }
     /// In scope but the signature missed on this image.
@@ -157,7 +139,37 @@ impl LeverReport {
                 detail: detail.into(),
             },
             facts: vec![],
-            beta: false,
+        }
+    }
+}
+
+/// Hardware-validation confidence of a modification. Today every family/lever is
+/// `StaticOnly` — the emitted bytes are structurally valid and self-verify, but no
+/// modification has been confirmed on a real drive yet. A label, never a gate: it
+/// never blocks producing a structurally-valid modification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Validation {
+    /// Confirmed working on real hardware.
+    HardwareConfirmed,
+    /// Structurally valid + self-verifying, but not yet hardware-validated.
+    StaticOnly,
+}
+
+impl Validation {
+    /// Short machine key.
+    pub fn key(self) -> &'static str {
+        match self {
+            Validation::HardwareConfirmed => "hardware-confirmed",
+            Validation::StaticOnly => "static-only",
+        }
+    }
+    /// Human note.
+    pub fn note(self) -> &'static str {
+        match self {
+            Validation::HardwareConfirmed => "hardware-confirmed",
+            Validation::StaticOnly => {
+                "static-only (structurally valid + self-verifying; pending hardware validation)"
+            }
         }
     }
 }
@@ -181,6 +193,8 @@ pub struct ModifyReport {
     pub levers: Vec<LeverReport>,
     /// The re-signed, self-verified image.
     pub image: Vec<u8>,
+    /// Hardware-validation confidence (uniform label, never a gate).
+    pub validation: Validation,
 }
 
 impl ModifyReport {
@@ -190,13 +204,7 @@ impl ModifyReport {
             .levers
             .iter()
             .filter(|l| l.outcome == LeverOutcome::Applied)
-            .map(|l| {
-                if l.beta {
-                    format!("{} (BETA)", l.id.label())
-                } else {
-                    l.id.label().to_string()
-                }
-            })
+            .map(|l| l.id.label().to_string())
             .collect();
         let already: Vec<&str> = self
             .levers
@@ -241,6 +249,7 @@ impl ModifyReport {
         s.push_str(&format!("\"model\":{},", jstr(&self.model)));
         s.push_str(&format!("\"rev\":{},", jstr(&self.rev)));
         s.push_str(&format!("\"media\":{},", jstr(&self.media)));
+        s.push_str(&format!("\"validation\":{},", jstr(self.validation.key())));
         s.push_str(&format!("\"summary\":{},", jstr(&self.summary())));
         s.push_str("\"levers\":[");
         for (i, l) in self.levers.iter().enumerate() {
@@ -262,7 +271,6 @@ impl ModifyReport {
                     jstr(detail)
                 )),
             }
-            s.push_str(&format!(",\"beta\":{}", l.beta));
             s.push_str(",\"facts\":{");
             for (j, (k, v)) in l.facts.iter().enumerate() {
                 if j > 0 {

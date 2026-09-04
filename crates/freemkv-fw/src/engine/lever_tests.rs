@@ -10,6 +10,7 @@ fn report(levers: Vec<LeverReport>) -> ModifyReport {
         media: "BD/UHD".into(),
         levers,
         image: vec![],
+        validation: Validation::StaticOnly,
     }
 }
 
