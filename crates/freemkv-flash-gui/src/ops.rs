@@ -166,12 +166,19 @@ pub fn capture_lines<R>(f: impl FnOnce() -> R, on_line: impl FnMut(String) + Sen
         // SAFETY: read_fd is a valid, owned read end of the pipe.
         let file = unsafe { std::fs::File::from_raw_fd(read_fd) };
         let mut on_line = on_line;
-        for line in BufReader::new(file).lines().map_while(Result::ok) {
-            on_line(line);
+        // Skip a transient read error rather than ending forwarding on it, so
+        // mid-flash output isn't silently truncated (EOF still ends the loop).
+        for line in BufReader::new(file).lines() {
+            match line {
+                Ok(line) => on_line(line),
+                Err(_) => continue,
+            }
         }
     });
 
-    let out = f();
+    // Run the job under a guard: if it panics, fd 1 must still be restored (else
+    // stdout stays wired to the dead pipe) before we resume unwinding.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
 
     let _ = std::io::stdout().flush();
     // Restore stdout; dup2 closes the pipe write end (old fd 1), so the reader
@@ -182,7 +189,10 @@ pub fn capture_lines<R>(f: impl FnOnce() -> R, on_line: impl FnMut(String) + Sen
         libc::close(saved);
     }
     let _ = reader.join();
-    out
+    match result {
+        Ok(out) => out,
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
 
 /// Non-Unix fallback: the process-global stdout redirect used above relies on
