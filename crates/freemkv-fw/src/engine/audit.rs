@@ -61,6 +61,17 @@ fn stub_present(img: &[u8], va: u32) -> bool {
     a + 16 <= img.len() && img[a..a + 16].iter().any(|&b| b != 0xFF)
 }
 
+/// A failing check for an Applied lever whose facts are absent: we can't prove
+/// the detour landed, so it must be caught, not accepted vacuously.
+fn missing_facts(lever: &'static str, detail: &str) -> AuditCheck {
+    AuditCheck {
+        lever,
+        what: "detour facts present".into(),
+        ok: false,
+        detail: detail.to_string(),
+    }
+}
+
 /// Assert the 4 bytes at `site` are exactly the `bl` the emitter would write to
 /// reach `stub` (recomputed via [`thumb::encode_bl`]).
 fn check_bl(
@@ -158,6 +169,8 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 if let (Some(gate), Some(stub)) = (fact(l, "speed_gate"), fact(l, "speed_stub_va"))
                 {
                     check_bl(&mut checks, name, "speed detour bl", img, gate + 4, stub);
+                } else {
+                    checks.push(missing_facts(name, "missing speed_gate/speed_stub_va"));
                 }
             }
             LeverId::RegionFree => {
@@ -172,9 +185,12 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                         emitter + 14,
                         stub,
                     );
+                } else {
+                    checks.push(missing_facts(name, "missing region_emitter/region_stub_va"));
                 }
             }
             LeverId::RawRead => {
+                let before = checks.len();
                 if let (Some(site), Some(stub)) = (fact(l, "ake_site"), fact(l, "ake_stub_va")) {
                     check_bl(&mut checks, name, "AKE detour bl", img, site, stub);
                 }
@@ -185,21 +201,26 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 if let (Some(site), Some(stub)) = (fact(l, "deny_site"), fact(l, "deny_stub_va")) {
                     check_bl(&mut checks, name, "deny-reset detour bl", img, site, stub);
                 }
+                if checks.len() == before {
+                    checks.push(missing_facts(name, "missing AKE/Gate-A/deny detour facts"));
+                }
             }
             LeverId::DowngradeEnable => {
-                if let Some(de) = fact(l, "de_off") {
-                    let a = de as usize;
-                    let ok = a < img.len() && img[a] == 0xDE;
-                    checks.push(AuditCheck {
-                        lever: name,
-                        what: "DE byte set".into(),
-                        ok,
-                        detail: format!(
-                            "0x{de:08x} = 0x{:02x} (want 0xDE)",
-                            img.get(a).copied().unwrap_or(0)
-                        ),
-                    });
-                }
+                let Some(de) = fact(l, "de_off") else {
+                    checks.push(missing_facts(name, "missing de_off"));
+                    continue;
+                };
+                let a = de as usize;
+                let ok = a < img.len() && img[a] == 0xDE;
+                checks.push(AuditCheck {
+                    lever: name,
+                    what: "DE byte set".into(),
+                    ok,
+                    detail: format!(
+                        "0x{de:08x} = 0x{:02x} (want 0xDE)",
+                        img.get(a).copied().unwrap_or(0)
+                    ),
+                });
             }
         }
     }
