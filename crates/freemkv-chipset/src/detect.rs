@@ -270,7 +270,14 @@ fn read_banner(image: &[u8]) -> Option<String> {
 /// `MTEKMT19xx` tag @0x34.
 fn parse_descriptor(image: &[u8]) -> (String, String, String, String, Option<u8>, bool) {
     if image.len() < DESCRIPTOR_OFFSET + DESCRIPTOR_LEN {
-        return (String::new(), String::new(), String::new(), String::new(), None, false);
+        return (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            None,
+            false,
+        );
     }
     let desc = &image[DESCRIPTOR_OFFSET..DESCRIPTOR_OFFSET + DESCRIPTOR_LEN];
     let tag_present = desc[DESCRIPTOR_TAG_OFF..].starts_with(b"MTEKMT19");
@@ -288,7 +295,14 @@ fn parse_descriptor(image: &[u8]) -> (String, String, String, String, Option<u8>
     } else {
         // No identity page: still expose the marker byte for audit, but report
         // no descriptor and empty display fields (they'd be garbage).
-        (String::new(), String::new(), String::new(), String::new(), marker, false)
+        (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            marker,
+            false,
+        )
     }
 }
 
@@ -371,6 +385,16 @@ mod tests {
         let img = synthetic("XX9999 Boot", "MTEKXX9999", "X", "1.00");
         let err = detect_chip(&img).unwrap_err().to_string();
         assert!(err.contains("undetectable"), "got: {err}");
+    }
+
+    /// An `MTEKMT19xx` tag whose variant freemkv doesn't handle (and no MT19xx
+    /// banner) hits the "unsupported MT19xx variant" bail, not "undetectable".
+    #[test]
+    fn unsupported_mt19xx_variant_is_refused() {
+        let img = synthetic("MT1900 Boot", "MTEKMT1900", "X", "1.00");
+        let err = detect_chip(&img).unwrap_err().to_string();
+        assert!(err.contains("unsupported MT19xx variant"), "got: {err}");
+        assert!(err.contains("MTEKMT1900"), "got: {err}");
     }
 
     /// Two conflicting identity strings (spliced/corrupt) → clean refusal.

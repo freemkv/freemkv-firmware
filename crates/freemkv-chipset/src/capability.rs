@@ -204,9 +204,14 @@ mod tests {
 
     #[test]
     fn longest_token_wins() {
-        // "BW-16D1HT" is UHD; make sure a shorter accidental token can't shadow it.
-        let cap = capability_for("ASUS BW-16D1HT", ChipFamily::Mt1939);
-        assert_eq!(cap.media_class, MediaClass::UhdBd);
+        // Two table tokens match this string and map to DIFFERENT media classes:
+        // "BU40N" (UhdBd, len 5) and the longer "WH16NS40" (Bd, len 8). The
+        // max_by_key tie-break must pick the longer one, so the class flips to Bd
+        // — proving selection is by token length, not by class ordering.
+        let short = capability_for("BU40N", ChipFamily::Mt1959);
+        assert_eq!(short.media_class, MediaClass::UhdBd);
+        let cap = capability_for("BU40N WH16NS40", ChipFamily::Mt1959);
+        assert_eq!(cap.media_class, MediaClass::Bd);
     }
 
     #[test]
