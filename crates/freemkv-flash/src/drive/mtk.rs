@@ -44,12 +44,12 @@ use crate::platform::ScsiDevice;
 
 // ---- Region geometry --------------------------------------------------------
 
-/// Boot banner / metadata region offset.
-pub const ROM_003000_OFFSET: u32 = 0x003000;
+/// Boot banner / metadata region offset (shared with `freemkv_chipset`).
+pub const ROM_003000_OFFSET: u32 = freemkv_chipset::BANNER_OFFSET as u32;
 /// Boot banner / metadata region length.
 pub const ROM_003000_LEN: u32 = 0x20;
-/// Identity-page region offset.
-pub const ROM_1EC000_OFFSET: u32 = 0x1EC000;
+/// Identity-page region offset (shared with `freemkv_chipset`).
+pub const ROM_1EC000_OFFSET: u32 = freemkv_chipset::DESCRIPTOR_OFFSET as u32;
 /// Identity-page region length (256 B).
 pub const ROM_1EC000_LEN: u32 = 0x100;
 /// Per-unit calibration NVRAM region offset.

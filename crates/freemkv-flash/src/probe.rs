@@ -54,10 +54,10 @@ const CHANNELS: &[Channel] = &[
 /// The flash boot banner at `0x3000` starts with these bytes ("MT19"). A channel
 /// whose `0x3000` read starts with this is reading the real SPI flash.
 const FLASH_SIG: &[u8] = b"MT19";
-/// Offset of the boot banner (known-good flash read).
-const BANNER_OFF: u32 = 0x003000;
-/// Offset of the ASCII descriptor (known-good flash read).
-const DESCR_OFF: u32 = 0x1EC000;
+/// Offset of the boot banner (known-good flash read; shared with `freemkv_chipset`).
+const BANNER_OFF: u32 = freemkv_chipset::BANNER_OFFSET as u32;
+/// Offset of the ASCII descriptor (known-good flash read; shared with `freemkv_chipset`).
+const DESCR_OFF: u32 = freemkv_chipset::DESCRIPTOR_OFFSET as u32;
 /// Candidate chunk sizes to probe, largest-first (bytes).
 const CHUNK_LADDER: &[usize] = &[0x10000, 0x8000, 0x4000, 0x1000, 0x400, 0x40];
 

@@ -78,9 +78,9 @@ pub struct Mt1939Engine;
 /// True when this MT1939 image is the classic generation (banner `"MT1939 Boot
 /// Code"` at `0x3000`). JB8/JBP6/JBC6 parts carry an `"MT1959 Boot …"` banner.
 fn is_classic(image: &[u8]) -> bool {
-    const BANNER: usize = 0x3000;
+    let banner = freemkv_chipset::BANNER_OFFSET;
     image
-        .get(BANNER..BANNER + 16)
+        .get(banner..banner + 16)
         .map(|b| b.starts_with(b"MT1939 Boot"))
         .unwrap_or(false)
 }
