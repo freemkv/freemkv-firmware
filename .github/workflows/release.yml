@@ -151,6 +151,28 @@ jobs:
         if: matrix.gui
         run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui
 
+      # macOS desktop apps: wrap each GUI binary in a <bin>.app and ship it in a
+      # plain .zip — the artifact a Homebrew cask installs into /Applications.
+      # NO .dmg: a manually-downloaded dmg would trip Gatekeeper (ad-hoc signed,
+      # not notarized), but a cask curl-fetches the zip and strips
+      # com.apple.quarantine on install, so there is no security prompt. bundle.sh
+      # re-runs the GUI build, reusing the artifacts the step above compiled. The
+      # zip names mirror the tarballs' <bin>-macos-<arch> convention: the two
+      # macOS legs produce e.g. freemkv-flash-gui-macos-aarch64.zip.
+      - name: Bundle the macOS apps (.app in a .zip)
+        if: matrix.gui && runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='${{ matrix.target }}'
+          arch='${{ matrix.arch }}'
+          for bin in freemkv-flash-gui freemkv-fw-gui; do
+            bash macos/bundle.sh "$bin" release "$target"
+            zip="$bin-macos-$arch.zip"
+            ditto -c -k --keepParent "target/$bin.app" "$zip"
+            shasum -a 256 "$zip" > "$zip.sha256"
+          done
+
       # Package each binary that got built into its own archive: a stable
       # unversioned name (the "latest" download URL the site links) plus a
       # version-stamped copy, each with a SHA-256 sidecar.
