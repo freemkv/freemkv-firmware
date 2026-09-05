@@ -245,6 +245,7 @@ impl Engine for Mt1939Engine {
             vendor: chip.vendor.clone(),
             model: chip.model.clone(),
             rev: chip.rev.clone(),
+            vendor_specific: chip.vendor_specific.clone(),
             media: cap.media_class.label().to_string(),
             levers,
             image: signed,

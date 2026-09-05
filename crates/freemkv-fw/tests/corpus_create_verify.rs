@@ -14,8 +14,8 @@
 //! Classification signals (independent of `crate::family`/`crate::modify`):
 //! * a `MTEKMT1959` or `MTEKMT1939` ASCII tag in the drive descriptor at file
 //!   offset `0x1EC000` (mirrors what the boot banner + descriptor encode, see
-//!   `src/family.rs`'s doc comment) — MT1939 is a real, recognized family
-//!   `freemkv-fw` does not yet modify, so it is a SKIP, not a FAIL;
+//!   `src/family.rs`'s doc comment) — BOTH families are modifiable, so either
+//!   tag makes an image a forgeability candidate;
 //! * Shannon entropy of the `0x1000..0x20000` window under ~6.7 bits/byte —
 //!   above that, the image is almost certainly encrypted/wrapped (post-2020
 //!   firmware) and no plaintext CMAC table can be forged;
@@ -43,10 +43,6 @@ const DESCRIPTOR_OFFSET: usize = 0x1EC000;
 /// Offset within the descriptor of the family tag (mirrors `family.rs`).
 const FAMILY_TAG_OFFSET: usize = 0x34;
 const FAMILY_TAG_LEN: usize = 0x0A;
-
-/// File offset of the boot-banner ASCII string (mirrors `family::BANNER_OFFSET`).
-const BANNER_OFFSET: usize = 0x3000;
-const BANNER_LEN: usize = 32;
 
 /// Entropy probe window (mirrors the task brief's independent signal, not
 /// `modify::ENTROPY_PROBES` — deliberately a different probe so this harness
@@ -99,24 +95,12 @@ fn classify(image: &[u8]) -> Classification {
         ..DESCRIPTOR_OFFSET + FAMILY_TAG_OFFSET + FAMILY_TAG_LEN];
     let tag = String::from_utf8_lossy(tag_bytes);
 
-    // The boot banner near 0x3000 also names a family; a real image can have it
-    // disagree with the descriptor tag (observed in the corpus). freemkv-fw fails
-    // closed on that, so it SKIPs — report the disagreement when that is the cause.
-    let banner_has_1959 = image.len() >= BANNER_OFFSET + BANNER_LEN
-        && String::from_utf8_lossy(&image[BANNER_OFFSET..BANNER_OFFSET + BANNER_LEN])
-            .contains("MT1959");
-
-    if tag.contains(MT1939_TAG) {
-        if banner_has_1959 {
-            return Classification::Skip(
-                "MT1939 — boot banner (MT1959) and descriptor (MT1939) disagree on chip \
-                 family; freemkv-fw refuses to guess"
-                    .into(),
-            );
-        }
-        return Classification::Skip("MT1939 — freemkv-fw does not modify this family yet".into());
-    }
-    if !tag.contains(MT1959_TAG) {
+    // Both MT1959 and MT1939 are now modifiable families (MT1939 support landed
+    // after this harness was first written). A recognized MTEKMT19xx tag is a
+    // forgeability *candidate*; the entropy + CMAC gates below, and ultimately
+    // `create`+`verify` itself, are the arbiters of whether modify actually works.
+    // Anything else has no recognized family and is skipped.
+    if !tag.contains(MT1959_TAG) && !tag.contains(MT1939_TAG) {
         return Classification::Skip(format!(
             "no recognized MTEKMT19xx family tag at 0x{:x} (got {:?})",
             DESCRIPTOR_OFFSET + FAMILY_TAG_OFFSET,
@@ -212,7 +196,6 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
 
     let fw_bin = PathBuf::from(env!("CARGO_BIN_EXE_freemkv-fw"));
 
-    let mut skipped_mt1939 = Vec::new();
     let mut skipped_other: Vec<(PathBuf, String)> = Vec::new();
     let mut passed: Vec<Outcome> = Vec::new();
     let mut failed: Vec<Outcome> = Vec::new();
@@ -238,11 +221,7 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
 
         match classify(&image) {
             Classification::Skip(reason) => {
-                if reason.starts_with("MT1939") {
-                    skipped_mt1939.push(path.clone());
-                } else {
-                    skipped_other.push((path.clone(), reason));
-                }
+                skipped_other.push((path.clone(), reason));
                 continue;
             }
             Classification::Forgeable => {}
@@ -300,6 +279,26 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
 
     let _ = std::fs::remove_dir_all(&tmp_root);
 
+    // Publish gate: when `FREEMKV_FW_PUBLISH_OUT` names a file, emit the list of
+    // images that modify PROVABLY handles (create+verify OK) — one absolute path
+    // per line. This is the authoritative publish set: the
+    // "hoard -> modify works? -> R2 -> website" pipeline consumes exactly these,
+    // so a base is published if and only if `freemkv-fw` can forge it here.
+    if let Ok(out) = std::env::var("FREEMKV_FW_PUBLISH_OUT") {
+        let mut paths: Vec<String> = passed
+            .iter()
+            .map(|o| o.path.to_string_lossy().into_owned())
+            .collect();
+        paths.sort();
+        let body = if paths.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n", paths.join("\n"))
+        };
+        std::fs::write(&out, body).expect("write publish set");
+        println!("publish set: {} image(s) -> {out}", passed.len());
+    }
+
     let total = bins.len();
     let forgeable = passed.len() + failed.len();
 
@@ -308,8 +307,7 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
     println!("forgeable (create+verify): {forgeable}");
     println!("  passed:                  {}", passed.len());
     println!("  FAILED:                  {}", failed.len());
-    println!("skipped (MT1939):          {}", skipped_mt1939.len());
-    println!("skipped (other):           {}", skipped_other.len());
+    println!("skipped (unmodifiable):    {}", skipped_other.len());
 
     if !failed.is_empty() {
         println!("\n--- FAILURES ---");
@@ -319,11 +317,7 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
     }
 
     if std::env::var("FREEMKV_FW_CORPUS_VERBOSE").is_ok() {
-        println!("\n--- skipped (MT1939) ---");
-        for p in &skipped_mt1939 {
-            println!("  {}", p.display());
-        }
-        println!("\n--- skipped (other) ---");
+        println!("\n--- skipped (unmodifiable) ---");
         for (p, reason) in &skipped_other {
             println!("  {}: {reason}", p.display());
         }
