@@ -662,11 +662,15 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 
     let mut checked = 0usize; // protected + readable bytes we compared
     let mut differing = 0usize; // of those, how many differed
+    let mut unverified = 0usize; // protected chunks we could not read back
     let mut first_bad: Option<(usize, u8, u8)> = None;
     let mut offset = 0usize;
     for piece in payload.chunks(chunk) {
-        if let Ok(got) = drive.readback(dev, offset, piece.len()) {
-            if got.len() == piece.len() {
+        // Does this chunk cover any comparable (protected, past-boot) byte?
+        let has_protected =
+            (offset..offset + piece.len()).any(|pos| pos >= BOOT_SKIP && is_protected(pos));
+        match drive.readback(dev, offset, piece.len()) {
+            Ok(got) if got.len() == piece.len() => {
                 for (i, (a, b)) in got.iter().zip(piece).enumerate() {
                     let pos = offset + i;
                     if pos < BOOT_SKIP || !is_protected(pos) {
@@ -679,6 +683,10 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
                     }
                 }
             }
+            // Errored or short read-back of a protected chunk: it stays
+            // unverified, so the success message below must not claim it.
+            _ if has_protected => unverified += 1,
+            _ => {}
         }
         offset += piece.len();
     }
@@ -698,6 +706,21 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
             style::dim_line(
                 "  read-back cross-check: image carries no integrity table; \
                  relying on the drive's firmware identity below."
+            )
+        );
+    } else if unverified > 0 {
+        // Some protected chunks could not be read back, so verification is
+        // incomplete — don't imply the whole protected image was confirmed.
+        println!(
+            "{}",
+            style::status_line(
+                "flash complete — read-back INCOMPLETE",
+                &format!(
+                    "{} verified; could not read back {} protected chunk(s)",
+                    human_size(checked),
+                    unverified
+                ),
+                style::Status::Warn
             )
         );
     } else {
@@ -721,8 +744,8 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         )
     );
     // Positive proof the new firmware is resident and booted.
-    if let Ok(Some(r)) = drive.firmware_report(dev) {
-        match r.matched {
+    match drive.firmware_report(dev) {
+        Ok(Some(r)) => match r.matched {
             Some(m) => println!(
                 "{}",
                 style::kv("firmware now", &format!("{}  [{}]", m.desc, r.fingerprint))
@@ -738,7 +761,16 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
                     )
                 )
             ),
-        }
+        },
+        // The drive is still re-enumerating (or reports nothing): we can't
+        // confirm the resident firmware here — say so rather than end silently.
+        _ => println!(
+            "{}",
+            style::dim_line(
+                "  could not read back firmware identity yet (drive still re-enumerating); \
+                 re-run `info` in a moment to confirm."
+            )
+        ),
     }
     Ok(())
 }
