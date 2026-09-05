@@ -535,6 +535,9 @@ impl Mt1959Engine {
         // scanner (proven, engine-scope §1). Accept either destination register;
         // the pool literal + SRAM-window check below is what actually validates it.
         let ins_off = entry + 2;
+        if ins_off + 2 > image.len() {
+            bail!("scanner entry+2 (0x{ins_off:x}) runs past the image tail");
+        }
         let hw = u16::from_le_bytes([image[ins_off], image[ins_off + 1]]);
         let rt = (hw >> 8) & 0x7;
         if (hw & 0xF800) != 0x4800 || !(rt == 3 || rt == 5) {
@@ -542,6 +545,9 @@ impl Mt1959Engine {
         }
         let imm8 = (hw & 0xFF) as usize;
         let pool = ((ins_off + 4) & !3) + imm8 * 4;
+        if pool + 4 > image.len() {
+            bail!("scanner cdb-base literal pool (0x{pool:x}) runs past the image tail");
+        }
         let val = thumb::read_u32(image, pool);
         if !(0x0200_0000..0x0200_2000).contains(&val) {
             bail!("scanner cdb-base literal 0x{val:08x} is not in the expected SRAM window");
