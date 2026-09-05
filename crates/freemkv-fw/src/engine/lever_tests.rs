@@ -7,6 +7,7 @@ fn report(levers: Vec<LeverReport>) -> ModifyReport {
         vendor: "HL-DT-ST".into(),
         model: "BD-RE BU40N".into(),
         rev: "1.00".into(),
+        vendor_specific: "N000000".into(),
         media: "BD/UHD".into(),
         levers,
         image: vec![],

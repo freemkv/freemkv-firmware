@@ -187,6 +187,8 @@ pub struct ModifyReport {
     pub model: String,
     /// Drive revision.
     pub rev: String,
+    /// Vendor-specific region/SKU code from the descriptor (e.g. `"N003600"`).
+    pub vendor_specific: String,
     /// Media class label (e.g. `"BD/UHD"`, `"DVD"`).
     pub media: String,
     /// Per-lever outcomes, in a fixed order.
@@ -248,6 +250,7 @@ impl ModifyReport {
         s.push_str(&format!("\"vendor\":{},", jstr(&self.vendor)));
         s.push_str(&format!("\"model\":{},", jstr(&self.model)));
         s.push_str(&format!("\"rev\":{},", jstr(&self.rev)));
+        s.push_str(&format!("\"vendor_specific\":{},", jstr(&self.vendor_specific)));
         s.push_str(&format!("\"media\":{},", jstr(&self.media)));
         s.push_str(&format!("\"validation\":{},", jstr(self.validation.key())));
         s.push_str(&format!("\"summary\":{},", jstr(&self.summary())));

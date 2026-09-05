@@ -118,6 +118,9 @@ pub struct ChipInfo {
     pub model: String,
     /// Trimmed revision field from the descriptor (e.g. `"1.00"`).
     pub rev: String,
+    /// Trimmed vendor-specific field from the descriptor (e.g. `"N003600"`) — the
+    /// region/SKU code MakeMKV/LibreDrive key on. Empty if no identity page.
+    pub vendor_specific: String,
     /// The matched `MTEKMT19xx` identity string, if any (display/audit).
     pub tag_string: Option<String>,
     /// The display-only marker byte at descriptor `+0x50`, if present. NEVER
@@ -220,7 +223,8 @@ pub fn detect_chip(image: &[u8]) -> Result<ChipInfo> {
     };
 
     // --- Descriptor parse (display-only + DE anchor). ---
-    let (vendor, model, rev, marker_0x50, descriptor_present) = parse_descriptor(image);
+    let (vendor, model, rev, vendor_specific, marker_0x50, descriptor_present) =
+        parse_descriptor(image);
 
     Ok(ChipInfo {
         family,
@@ -229,6 +233,7 @@ pub fn detect_chip(image: &[u8]) -> Result<ChipInfo> {
         vendor,
         model,
         rev,
+        vendor_specific,
         tag_string,
         marker_0x50,
         descriptor_present,
@@ -255,28 +260,35 @@ fn read_banner(image: &[u8]) -> Option<String> {
 }
 
 /// Parse the display-only descriptor fields and detect a well-formed identity
-/// page. Returns `(vendor, model, rev, marker_0x50, descriptor_present)`; all
-/// strings empty and `descriptor_present == false` when no identity page exists.
-fn parse_descriptor(image: &[u8]) -> (String, String, String, Option<u8>, bool) {
+/// page. Returns `(vendor, model, rev, vendor_specific, marker_0x50,
+/// descriptor_present)`; all strings empty and `descriptor_present == false` when
+/// no identity page exists.
+///
+/// Descriptor record layout (mirrors the drive's SCSI INQUIRY): vendor@0x00 (8),
+/// model@0x08 (16), rev@0x18 (4), `vendor_specific`@0x1C (8) — the region/SKU code
+/// MakeMKV/LibreDrive key on (e.g. `N003600`) — then a `UNIQUE<ts>` stamp and the
+/// `MTEKMT19xx` tag @0x34.
+fn parse_descriptor(image: &[u8]) -> (String, String, String, String, Option<u8>, bool) {
     if image.len() < DESCRIPTOR_OFFSET + DESCRIPTOR_LEN {
-        return (String::new(), String::new(), String::new(), None, false);
+        return (String::new(), String::new(), String::new(), String::new(), None, false);
     }
     let desc = &image[DESCRIPTOR_OFFSET..DESCRIPTOR_OFFSET + DESCRIPTOR_LEN];
     let tag_present = desc[DESCRIPTOR_TAG_OFF..].starts_with(b"MTEKMT19");
     let vendor = ascii_trim(&desc[0x00..0x08]);
     let model = ascii_trim(&desc[0x08..0x18]);
     let rev = ascii_trim(&desc[0x18..0x1C]);
+    let vendor_specific = ascii_trim(&desc[0x1C..0x24]);
     // The marker byte lives at descriptor `+0x50`, PAST the 0x40-byte record, so
     // it is read from the image directly (with a bounds check), not the slice.
     let marker = image
         .get(DESCRIPTOR_OFFSET + DESCRIPTOR_MARKER_OFF)
         .copied();
     if tag_present {
-        (vendor, model, rev, marker, true)
+        (vendor, model, rev, vendor_specific, marker, true)
     } else {
         // No identity page: still expose the marker byte for audit, but report
         // no descriptor and empty display fields (they'd be garbage).
-        (String::new(), String::new(), String::new(), marker, false)
+        (String::new(), String::new(), String::new(), String::new(), marker, false)
     }
 }
 
