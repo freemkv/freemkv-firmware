@@ -44,6 +44,13 @@ struct RawReadFacts {
     gatea_stub_va: u32,
     deny_site: u32,
     deny_stub_va: u32,
+    /// AKE **success**-writer detour site for the `04 03` "data clear" (bus-off)
+    /// mode, at `ake_gate+4`. `0` when not wired (e.g. NB-class images whose AKE
+    /// arms converge on a shared `bl`, so there is no standalone success writer).
+    busoff_site: u32,
+    /// Injection address of the `04 03` bus-off (AKE success-writer) trampoline.
+    /// `0` when not wired.
+    busoff_stub_va: u32,
     vid_producer: u32,
 }
 
@@ -1529,6 +1536,85 @@ impl Mt1959Engine {
         a.finish()
     }
 
+    /// The Raw Read `04 03` "data clear" trampoline — removes in-transit bus
+    /// encryption. Entered by a `bl` that replaces the OEM AKE **SUCCESS** writer's
+    /// `movs r1,#6; b <back>` (4 bytes at [`AKE_GATE_SIG`]'s `match+4`) — the peer
+    /// site to the `04 01/02` RESET-writer detour at `match+12` (see
+    /// [`Self::build_ake_stub`]). On entry `r0 = AGID` (from the preceding
+    /// `ldrb/lsrs`), preserved; `r2` is scratch; `lr` is dead (the OEM `b` saved
+    /// nothing). The stub tail-jumps to `back` (the OEM `set_agid_state(r0,r1)` call
+    /// the success writer branched to) so the store happens through the OEM
+    /// primitive.
+    ///
+    /// # Mechanism
+    /// The in-transit bus wrap is a side-effect of a SUCCESSFUL AKE reaching the
+    /// bus-keyed authenticated state (state `6`): a bus key is derived and content
+    /// `READ(10)` is AES-wrapped with it. The read datapath itself is untouched (the
+    /// read handler is stock), so this gates the AKE success state — the RESET-writer
+    /// detour cannot affect a successful AKE.
+    ///
+    /// `flag[RawRead]` (`flag[0x04]`) semantics at this site:
+    ///   * `!= 3` (OEM / `01` / `02`): write state `6` — the AKE completes normally,
+    ///     the bus key is derived, **bus encryption ON**. Byte-behaviour-identical to
+    ///     OEM, so this mode is inert until `03` is set.
+    ///   * `== 3` (data clear): write the un-authenticated state `1` on the success
+    ///     path → the AKE never reaches the bus-keyed state, so no bus key is
+    ///     negotiated and content `READ(10)` returns the on-disc AACS-at-rest bytes
+    ///     unwrapped.
+    ///
+    /// **HARDWARE-KAT-GATED HYPOTHESIS.** That forcing the success writer to the
+    /// no-bus-key state suppresses the bus wrap *without* aborting the SCSI session
+    /// before the host issues `READ(10)` is NOT yet proven on silicon; the hardware
+    /// KAT is the final arbiter. The `!= 3` (bus-ON) path IS structurally proven — it
+    /// replays the exact OEM state-6 store.
+    fn build_ake_busoff_stub(&self, flag_base: u32, back: u32) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        let dataclear = a.label();
+        let done = a.label();
+        a.ldr_lit(2, flag_base + abi::SubFn::RawRead as u32); // r2 = &flag[0x04]
+        a.ldrb_imm(2, 2, 0); // r2 = RawRead flag byte
+        a.cmp_imm(2, 3); // 03 = data clear (remove in-transit bus encryption)
+        a.beq(dataclear);
+        a.movs_imm(1, 6); // OEM/01/02: authenticated state 6 (bus key derived → bus ON)
+        a.b(done);
+        a.bind(dataclear);
+        a.movs_imm(1, 1); // 03: no bus key negotiated → content READ(10) at-rest
+        a.bind(done);
+        a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
+        a.bx(2);
+        a.finish()
+    }
+
+    /// Resolve the `04 03` bus-off detour: the AKE **success** writer
+    /// `movs r1,#6; b <set_agid_state>` at [`AKE_GATE_SIG`]'s `match+4`. Returns
+    /// `(success_site, stub_bytes)` where a `bl` to the stub is written at
+    /// `success_site`. Uses the desktop/BU40N [`AKE_GATE_SIG`] anchor via
+    /// [`Self::find_ake_gate`]; NB-class images (whose accept/reject arms converge on
+    /// a shared `bl`, so there is no standalone success writer to detour) return an
+    /// error, and the caller simply leaves the `04 03` mode unwired for them.
+    fn busoff_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
+        let ake_gate = self.find_ake_gate(image)?;
+        let success_site = ake_gate as usize + 4;
+        let movs_hw = u16::from_le_bytes([image[success_site], image[success_site + 1]]);
+        if movs_hw != 0x2106 {
+            bail!(
+                "AKE success writer `movs r1,#6` not at 0x{success_site:x} (got 0x{movs_hw:04x})"
+            );
+        }
+        let b_at = success_site + 2;
+        let b_hw = u16::from_le_bytes([image[b_at], image[b_at + 1]]);
+        if (b_hw & 0xF800) != 0xE000 {
+            bail!("AKE success writer `b <set_agid_state>` not at 0x{b_at:x} (got 0x{b_hw:04x})");
+        }
+        let mut disp = (b_hw & 0x7FF) as i32;
+        if disp >= 0x400 {
+            disp -= 0x800; // sign-extend the imm11 branch displacement
+        }
+        let back = (b_at as i32 + 4 + disp * 2) as u32; // OEM set_agid_state call
+        let bytes = self.build_ake_busoff_stub(flag_base, back)?;
+        Ok((success_site, bytes))
+    }
+
     /// Resolve the AKE detour site + stub for whichever gate variant this image
     /// carries. Tries the BU40N/desktop [`AKE_GATE_SIG`] first (so BU40N stays
     /// byte-identical), then the NB-class [`AKE_GATE_SIG_NB`]. Returns
@@ -1802,6 +1888,20 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("deny-reset detour `bl` out of range"))?;
         thumb::write(&mut out, deny_site, &bl);
 
+        // Raw Read `04 03` "data clear" (remove in-transit bus encryption). The AKE
+        // SUCCESS writer's `movs r1,#6; b <back>` (4 bytes at ake_gate+4) is detoured
+        // to a stub that writes the OEM state 6 (bus key derived → bus ON) unless
+        // flag[RawRead]==3, in which case it writes the no-bus-key state 1 so content
+        // READ(10) returns at-rest. Wired AFTER the deny block so the free_space
+        // allocation order matches build_modify (…→ deny → busoff). See
+        // `build_ake_busoff_stub` for the mechanism + the hardware-KAT hypothesis.
+        let (busoff_site, busoff_bytes) = self.busoff_detour(image, flag_base)?;
+        let busoff_stub_va = self.free_space(&out, busoff_bytes.len() + 16)?;
+        thumb::write(&mut out, busoff_stub_va as usize, &busoff_bytes);
+        let bl = thumb::encode_bl(busoff_site, busoff_stub_va)
+            .ok_or_else(|| anyhow!("bus-off detour `bl` out of range"))?;
+        thumb::write(&mut out, busoff_site, &bl);
+
         // Downgrade-enable (DE) byte: a build step (not a toggle) — write 0xDE
         // unconditionally at the identity-page slot. Idempotent on already-DE images.
         out[de_off as usize] = 0xDE;
@@ -1844,6 +1944,8 @@ impl Mt1959Engine {
             gatea_stub_va,
             deny_reset_gate: deny_site as u32,
             deny_stub_va,
+            ake_busoff_gate: busoff_site as u32,
+            ake_busoff_stub_va: busoff_stub_va,
             de_off,
             flag_base,
             free_sram_cell,
@@ -1934,9 +2036,8 @@ impl Mt1959Engine {
         // Raw read / clear VID (VID gate + AKE accept + deny reset) — AACS/BD.
         levers.push(if cap.bd_aacs {
             match self.emit_rawread(image, &mut out, flag_base) {
-                Ok(f) => LeverReport::applied(
-                    LeverId::RawRead,
-                    vec![
+                Ok(f) => {
+                    let mut facts = vec![
                         ("ake_gate", f.ake_gate),
                         ("ake_site", f.ake_site),
                         ("ake_stub_va", f.ake_stub_va),
@@ -1945,8 +2046,15 @@ impl Mt1959Engine {
                         ("deny_site", f.deny_site),
                         ("deny_stub_va", f.deny_stub_va),
                         ("vid_producer", f.vid_producer),
-                    ],
-                ),
+                    ];
+                    // `04 03` "data clear" bus-off detour, when wired (desktop AKE
+                    // shape). Recorded so the structural audit re-checks its `bl`.
+                    if f.busoff_stub_va != 0 {
+                        facts.push(("busoff_site", f.busoff_site));
+                        facts.push(("busoff_stub_va", f.busoff_stub_va));
+                    }
+                    LeverReport::applied(LeverId::RawRead, facts)
+                }
                 Err(e) => LeverReport::missed(LeverId::RawRead, format!("{e:#}")),
             }
         } else {
@@ -2276,6 +2384,23 @@ impl Mt1959Engine {
         thumb::write(&mut w, deny_stub_va as usize, &deny_bytes);
         thumb::write(&mut w, deny_site, &deny_bl);
 
+        // `04 03` "data clear" (remove in-transit bus encryption): detour the AKE
+        // SUCCESS writer at ake_gate+4. Only on the desktop AKE_GATE_SIG shape (via
+        // busoff_detour → find_ake_gate); NB-class images have no standalone success
+        // writer, so the mode is simply left unwired (0). Committed last so the
+        // free_space order matches build_report (…→ deny → busoff).
+        let (busoff_site, busoff_stub_va) = match self.busoff_detour(image, flag_base) {
+            Ok((site, bytes)) => {
+                let stub_va = self.free_space(&w, bytes.len() + 16)?;
+                let bl = thumb::encode_bl(site, stub_va)
+                    .ok_or_else(|| anyhow!("bus-off detour `bl` out of range"))?;
+                thumb::write(&mut w, stub_va as usize, &bytes);
+                thumb::write(&mut w, site, &bl);
+                (site as u32, stub_va)
+            }
+            Err(_) => (0, 0),
+        };
+
         *out = w;
         Ok(RawReadFacts {
             ake_gate,
@@ -2285,6 +2410,8 @@ impl Mt1959Engine {
             gatea_stub_va,
             deny_site: deny_site as u32,
             deny_stub_va,
+            busoff_site,
+            busoff_stub_va,
             vid_producer,
         })
     }

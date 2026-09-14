@@ -201,6 +201,14 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 if let (Some(site), Some(stub)) = (fact(l, "deny_site"), fact(l, "deny_stub_va")) {
                     check_bl(&mut checks, name, "deny-reset detour bl", img, site, stub);
                 }
+                // `04 03` "data clear" bus-off detour (AKE success writer). Present
+                // only when wired (desktop AKE shape); optional, so no facts here is
+                // not a miss on its own — the AKE/Gate-A/deny facts above cover that.
+                if let (Some(site), Some(stub)) =
+                    (fact(l, "busoff_site"), fact(l, "busoff_stub_va"))
+                {
+                    check_bl(&mut checks, name, "bus-off detour bl", img, site, stub);
+                }
                 if checks.len() == before {
                     checks.push(missing_facts(name, "missing AKE/Gate-A/deny detour facts"));
                 }
