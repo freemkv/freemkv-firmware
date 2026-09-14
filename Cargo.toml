@@ -4,7 +4,6 @@ members = [
     "crates/freemkv-chipset",
     "crates/freemkv-flash",
     "crates/freemkv-flash-gui",
-    "crates/freemkv-hwtest",
     "crates/freemkv-fw",
     "crates/freemkv-fw-gui",
 ]
