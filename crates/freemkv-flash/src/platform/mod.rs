@@ -35,6 +35,22 @@ pub trait ScsiDevice {
 
     /// Human-readable identity of the underlying transport/device path.
     fn describe(&self) -> String;
+
+    /// Whether a medium (disc) is currently loaded, probed via TEST UNIT READY.
+    ///
+    /// `Ok(true)` = a disc is present (GOOD, or any not-ready reason OTHER than a
+    /// positive "no medium" — we only report empty when it is positively
+    /// confirmed); `Ok(false)` = empty tray (NOT READY / medium not present, key
+    /// 0x2 ASC 0x3A); `Err` = a senseless transport failure.
+    ///
+    /// Firmware must be flashed with NO disc loaded — reprogramming the flash
+    /// while the drive is servicing a medium can wedge it mid-program. The flash
+    /// engine calls this to refuse a disc-loaded flash. The default is
+    /// `Ok(false)` (no disc) for backends/mocks that do not model medium state,
+    /// so it never blocks host-independent tests; the real transport overrides it.
+    fn medium_present(&mut self) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 // ---- SCSI sense decoding (shared by the transport and the flash logic) ------
