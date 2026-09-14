@@ -6,9 +6,10 @@ use crate::call::{
     call_cdb, CallResult, DataDirection, ScsiTransport, STATUS_CHECK_CONDITION, STATUS_GOOD,
 };
 use crate::cdb::{self, subfn, KNOCK_ALLOC};
+use crate::kat::{self, KatGeom};
 use crate::script::{
-    AkeConfig, Dir, ExecExpect, ExecSpec, Expect, Knock, Num, Pacing, Phase, Script, StatusExp,
-    Step,
+    AkeConfig, Dir, ExecExpect, ExecSpec, Expect, KatExpect, KatSpec, Knock, Num, Pacing, Phase,
+    Script, StatusExp, Step,
 };
 
 /// The overall result of a run.
@@ -30,6 +31,15 @@ impl RunOutcome {
             RunOutcome::Failure => 1,
             RunOutcome::Wedged => 2,
         }
+    }
+}
+
+/// Render a bool as `ok`/`FAIL` for the KAT per-unit detail lines.
+fn yn(b: bool) -> &'static str {
+    if b {
+        "ok"
+    } else {
+        "FAIL"
     }
 }
 
@@ -175,6 +185,10 @@ pub struct Runner<'a> {
     /// AKE that hangs (e.g. a 1.0 cert against a 2.0 disc) would otherwise stall
     /// the whole suite. 0 = no timeout (the unit tests use fast local helpers).
     exec_timeout_ms: u32,
+    /// Directory holding the private AACS-KAT golden reference (`mkref_unit*.bin`).
+    /// Set from `--kat-dir` / `FREEMKV_KAT_DIR`; a per-step `kat.dir` overrides it.
+    /// `None` → KAT steps SKIP (never vendor the golden bins into this repo).
+    kat_dir: Option<String>,
 }
 
 impl<'a> Runner<'a> {
@@ -192,7 +206,15 @@ impl<'a> Runner<'a> {
             max_iters: None,
             disc_precheck: false,
             exec_timeout_ms: 0,
+            kat_dir: None,
         }
+    }
+
+    /// Set the AACS-KAT golden-reference directory (from `--kat-dir` /
+    /// `FREEMKV_KAT_DIR`). `None` (the default) means KAT steps SKIP.
+    pub fn with_kat_dir(mut self, dir: Option<String>) -> Self {
+        self.kat_dir = dir;
+        self
     }
 
     /// Kill an `exec` helper after `ms` (0 disables). Real hardware sets this so a
@@ -507,6 +529,18 @@ impl<'a> Runner<'a> {
     /// with no `iterations` is a single command (original behaviour); a
     /// `sequence` and/or `iterations` step runs the iterated path.
     fn run_step(&mut self, step: &Step, version: Option<&str>) -> StepReport {
+        if let Some(spec) = &step.kat {
+            let out = self.exec_kat(&step.name, spec, &step.expect_kat);
+            if out.wedged {
+                return StepReport::wedged(
+                    step.name.clone(),
+                    step.phase,
+                    out.checks,
+                    out.wedge_at.unwrap_or_else(|| step.name.clone()),
+                );
+            }
+            return StepReport::issued(step.name.clone(), step.phase, out.checks);
+        }
         if step.sequence.is_some() || step.iterations.is_some() {
             return self.run_iterated(step, version);
         }
@@ -564,6 +598,9 @@ impl<'a> Runner<'a> {
     fn step_skip_reason(&self, step: &Step) -> Option<String> {
         if let Some(ex) = &step.exec {
             return self.exec_skip_reason(&step.name, ex);
+        }
+        if let Some(spec) = &step.kat {
+            return self.kat_skip_reason(&step.name, spec);
         }
         if let Some(seq) = &step.sequence {
             for sub in seq {
@@ -808,6 +845,186 @@ impl<'a> Runner<'a> {
                 }
             }
         }
+
+        ExecOutcome {
+            checks,
+            wedged: false,
+            wedge_at: None,
+        }
+    }
+
+    /// The golden-reference directory for a KAT step: the per-step `kat.dir` else
+    /// the runner's `--kat-dir` / `FREEMKV_KAT_DIR`.
+    fn kat_dir_for(&self, spec: &KatSpec) -> Option<String> {
+        spec.dir.clone().or_else(|| self.kat_dir.clone())
+    }
+
+    /// Why a KAT step must be skipped (no reference dir configured, or it does not
+    /// exist), or `None` to run it. The golden bins are never in this repo, so an
+    /// absent reference is a SKIP (like the cert-AKE steps), never a hard fail.
+    fn kat_skip_reason(&self, name: &str, spec: &KatSpec) -> Option<String> {
+        match self.kat_dir_for(spec) {
+            None => Some(format!(
+                "KAT {name:?}: no --kat-dir / FREEMKV_KAT_DIR (golden reference not provided; KAT skipped)"
+            )),
+            Some(d) if !std::path::Path::new(&d).is_dir() => Some(format!(
+                "KAT {name:?}: reference dir {d:?} not found (KAT skipped)"
+            )),
+            Some(_) => None,
+        }
+    }
+
+    /// Resolve the KAT geometry from the step spec, falling back to the
+    /// reference-disc defaults for any field left unset.
+    fn kat_geom(spec: &KatSpec) -> KatGeom {
+        let d = KatGeom::default();
+        KatGeom {
+            start_lba: spec.start_lba.map(Num::as_u32).unwrap_or(d.start_lba),
+            n_units: spec.n_units.map(Num::as_u32).unwrap_or(d.n_units),
+            stride_sectors: spec
+                .stride_sectors
+                .map(|n| n.as_u32() as u16)
+                .unwrap_or(d.stride_sectors),
+            unit_len: spec.unit_len.map(Num::as_usize).unwrap_or(d.unit_len),
+        }
+    }
+
+    /// Build a `READ(10)` CDB (`28 00 <lba:be32> 00 <blocks:be16> 00`).
+    fn read10_cdb(lba: u32, blocks: u16) -> [u8; 10] {
+        [
+            0x28,
+            0x00,
+            (lba >> 24) as u8,
+            (lba >> 16) as u8,
+            (lba >> 8) as u8,
+            lba as u8,
+            0x00,
+            (blocks >> 8) as u8,
+            blocks as u8,
+            0x00,
+        ]
+    }
+
+    /// Run the AACS bus-encryption KAT (the content-read differential): read
+    /// `n_units` aligned units via `READ(10)` and byte-compare each to its golden
+    /// `mkref_unit{i}.bin`. Every unit's four checks (TS-sync / CPI / AACS-at-rest
+    /// / byte-identical) are surfaced as informational detail lines; a single
+    /// authoritative summary check asserts `expect.all_units_pass` (true after the
+    /// flag-gated bus-off knock, false for the pre-unlock baseline). A transport
+    /// wedge on any `READ(10)` aborts the run (exit 2).
+    fn exec_kat(&mut self, name: &str, spec: &KatSpec, expect: &KatExpect) -> ExecOutcome {
+        let Some(dir) = self.kat_dir_for(spec) else {
+            return ExecOutcome {
+                checks: vec![Check {
+                    pass: false,
+                    detail: format!("KAT {name:?}: no reference directory resolved"),
+                }],
+                wedged: false,
+                wedge_at: None,
+            };
+        };
+        let dir = std::path::PathBuf::from(dir);
+        let geom = Self::kat_geom(spec);
+        let mut checks = Vec::new();
+
+        // Spin-up grace: poll TEST UNIT READY once before the content reads.
+        if let ReadyState::Wedged = self.wait_ready() {
+            return ExecOutcome {
+                checks: vec![Check {
+                    pass: false,
+                    detail: format!("KAT {name:?}: WEDGED polling TEST UNIT READY"),
+                }],
+                wedged: true,
+                wedge_at: Some(format!("{name} (TEST UNIT READY)")),
+            };
+        }
+
+        let mut verdicts: Vec<kat::UnitVerdict> = Vec::new();
+        for i in 0..geom.n_units {
+            let lba = geom.lba_of(i);
+            let golden = match std::fs::read(KatGeom::ref_path(&dir, i)) {
+                Ok(b) => b,
+                Err(e) => {
+                    // The dir exists (skip-guard passed) but a bin is missing: a
+                    // real misconfiguration → recorded as an error unit.
+                    verdicts.push(kat::error_unit(
+                        i,
+                        lba,
+                        format!("missing golden reference: {e}"),
+                    ));
+                    continue;
+                }
+            };
+            let cdb = Self::read10_cdb(lba, geom.stride_sectors);
+            let r = call_cdb(
+                self.scsi,
+                &cdb,
+                DataDirection::FromDevice,
+                geom.unit_len,
+                self.timeout_ms,
+            );
+            if r.wedged {
+                checks.push(Check {
+                    pass: false,
+                    detail: format!("unit {i} (lba {lba}): READ(10) WEDGED"),
+                });
+                return ExecOutcome {
+                    checks,
+                    wedged: true,
+                    wedge_at: Some(format!("{name} (unit {i})")),
+                };
+            }
+            if r.status != STATUS_GOOD {
+                verdicts.push(kat::error_unit(
+                    i,
+                    lba,
+                    format!("READ(10) status 0x{:02x}", r.status),
+                ));
+                continue;
+            }
+            verdicts.push(kat::check_unit(i, lba, &r.data, &golden));
+            // Pace content reads like any other command.
+            Self::sleep(self.pacing.delay_ms);
+        }
+
+        // Per-unit detail (informational — the summary check is authoritative).
+        for v in &verdicts {
+            let detail = match &v.error {
+                Some(e) => format!("unit {} lba {}: {e}", v.index, v.lba),
+                None => format!(
+                    "unit {} lba {}: ts47={} cpi={} aacs_enc={} sha_match={} => {} ({})",
+                    v.index,
+                    v.lba,
+                    yn(v.ts47),
+                    yn(v.cpi),
+                    v.aacs_enc,
+                    yn(v.sha_match),
+                    if v.pass() { "PASS" } else { "FAIL" },
+                    &v.sha_hex[..v.sha_hex.len().min(16)],
+                ),
+            };
+            checks.push(Check { pass: true, detail });
+        }
+
+        // The authoritative verdict: does the observed all-pass match what the
+        // step expects? `all_units_pass: true` (post-unlock) wants every unit to
+        // match golden; `false` (pre-unlock baseline) wants them NOT to. A setup
+        // error (missing bin / non-GOOD read) disqualifies either way.
+        let setup_error = verdicts.iter().any(|v| v.error.is_some());
+        let passed = verdicts.iter().filter(|v| v.pass()).count();
+        let all_pass = !verdicts.is_empty() && verdicts.iter().all(|v| v.pass());
+        let summary_pass = !setup_error && (all_pass == expect.all_units_pass);
+        checks.insert(
+            0,
+            Check {
+                pass: summary_pass,
+                detail: format!(
+                    "KAT: {passed}/{} unit(s) byte-identical to golden reference \
+                     (expected all_units_pass={})",
+                    geom.n_units, expect.all_units_pass,
+                ),
+            },
+        );
 
         ExecOutcome {
             checks,
@@ -2264,5 +2481,234 @@ steps:
         });
         let res = r.run(&s, false, Some("freemkv 0.6.6"));
         assert_eq!(res.outcome, RunOutcome::AllPass, "{:#?}", res.steps);
+    }
+
+    // ── KAT (AACS bus-encryption content differential) step tests ────────────
+
+    /// A tiny KAT geometry for the mock tests: 3 units, 16 bytes each, stride 1,
+    /// starting at LBA 100 — so the golden bins are trivially small.
+    const KAT_START: u32 = 100;
+    const KAT_N: u32 = 3;
+    const KAT_STRIDE: u16 = 1;
+    const KAT_LEN: usize = 16;
+
+    /// Write `KAT_N` golden `mkref_unit{i}.bin` files (each a "clear" unit: CPI
+    /// bits set at byte0, MPEG-TS sync at byte4) into a fresh temp dir; return it.
+    fn write_kat_refs() -> std::path::PathBuf {
+        static NONCE: AtomicUsize = AtomicUsize::new(0);
+        let n = NONCE.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("hwtest_kat_{}_{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..KAT_N {
+            let mut unit = vec![0u8; KAT_LEN];
+            unit[0] = 0xC7; // CPI bits + aacs-at-rest
+            unit[4] = 0x47; // MPEG-TS sync
+            unit[8] = i as u8; // per-unit distinguisher
+            std::fs::write(dir.join(format!("mkref_unit{i}.bin")), &unit).unwrap();
+        }
+        dir
+    }
+
+    /// A drive whose READ(10) returns the CLEAR golden bytes only when the bus-off
+    /// flag is ON (set via a `04 01` knock); otherwise it returns bus-encrypted
+    /// (scrambled) bytes. Models the flag-gated bus-off lever the KAT proves.
+    struct KatDrive {
+        bus_on: bool,
+    }
+    impl ScsiTransport for KatDrive {
+        fn execute(
+            &mut self,
+            cdb: &[u8],
+            _dir: DataDirection,
+            data: &mut [u8],
+            _t: u32,
+        ) -> libfreemkv::error::Result<libfreemkv::scsi::ScsiResult> {
+            use libfreemkv::scsi::ScsiResult;
+            // Bus-off knock 04 <state>: latch the lever.
+            if cdb.first() == Some(&0x3C) && cdb.get(4) == Some(&0x04) {
+                self.bus_on = cdb.get(5) == Some(&0x01);
+                return Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: 0,
+                    sense: [0; 32],
+                });
+            }
+            // Identity knock (wedge guard).
+            if cdb.first() == Some(&0x3C) && cdb.get(4) == Some(&0x01) {
+                let m = b"freemkv 0.6.8";
+                let n = m.len().min(data.len());
+                data[..n].copy_from_slice(&m[..n]);
+                return Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: n,
+                    sense: [0; 32],
+                });
+            }
+            // READ(10): LBA at cdb[2..6] big-endian → unit index.
+            if cdb.first() == Some(&0x28) {
+                let lba = u32::from_be_bytes([cdb[2], cdb[3], cdb[4], cdb[5]]);
+                let idx = (lba - KAT_START) / KAT_STRIDE as u32;
+                let reply = if self.bus_on {
+                    let mut u = vec![0u8; KAT_LEN];
+                    u[0] = 0xC7;
+                    u[4] = 0x47;
+                    u[8] = idx as u8;
+                    u
+                } else {
+                    // Bus encryption ON: scrambled seed, no TS sync.
+                    vec![0x5Au8; KAT_LEN]
+                };
+                let n = reply.len().min(data.len());
+                data[..n].copy_from_slice(&reply[..n]);
+                return Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: n,
+                    sense: [0; 32],
+                });
+            }
+            let n = data.len();
+            Ok(ScsiResult {
+                status: 0,
+                bytes_transferred: n,
+                sense: [0; 32],
+            })
+        }
+    }
+
+    fn kat_script(dir: &std::path::Path) -> Script {
+        Script::from_yaml(&format!(
+            r#"
+steps:
+  - name: "K0 baseline — bus encryption ON (04 00), KAT must NOT all-pass"
+    phase: disc
+    knock: {{ subfn: 0x04, state: 0x00 }}
+    expect: {{ status: good }}
+  - name: "K0 KAT baseline differential (bus on ⇒ not byte-identical)"
+    phase: disc
+    kat:
+      dir: "{dir}"
+      start_lba: {KAT_START}
+      n_units: {KAT_N}
+      stride_sectors: {KAT_STRIDE}
+      unit_len: {KAT_LEN}
+    expect_kat: {{ all_units_pass: false }}
+  - name: "K1 enable bus-off lever (04 01)"
+    phase: disc
+    knock: {{ subfn: 0x04, state: 0x01 }}
+    expect: {{ status: good }}
+  - name: "K1 KAT — bus encryption stripped ⇒ all units byte-identical"
+    phase: disc
+    kat:
+      dir: "{dir}"
+      start_lba: {KAT_START}
+      n_units: {KAT_N}
+      stride_sectors: {KAT_STRIDE}
+      unit_len: {KAT_LEN}
+    expect_kat: {{ all_units_pass: true }}
+"#,
+            dir = dir.display(),
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn kat_differential_passes_against_stateful_bus_off_mock() {
+        let dir = write_kat_refs();
+        let s = kat_script(&dir);
+        let mut t = KatDrive { bus_on: false };
+        let mut r = Runner::new(&mut t, s.flag_base(), s.timeout_ms());
+        let res = r.run(&s, true, None);
+        assert_eq!(res.outcome, RunOutcome::AllPass, "{:#?}", res.steps);
+        // The post-unlock KAT step reports all units matched.
+        let kat_step = res.steps.last().unwrap();
+        assert!(kat_step.passed());
+        assert!(kat_step.checks[0]
+            .detail
+            .contains(&format!("{KAT_N}/{KAT_N} unit(s)")));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn kat_fails_when_bus_still_on_but_expected_pass() {
+        let dir = write_kat_refs();
+        // A single KAT step that expects all-pass, but the drive never unlocks.
+        let s = Script::from_yaml(&format!(
+            r#"
+steps:
+  - name: "KAT expects pass but bus is ON"
+    phase: disc
+    kat:
+      dir: "{dir}"
+      start_lba: {KAT_START}
+      n_units: {KAT_N}
+      stride_sectors: {KAT_STRIDE}
+      unit_len: {KAT_LEN}
+    expect_kat: {{ all_units_pass: true }}
+"#,
+            dir = dir.display(),
+        ))
+        .unwrap();
+        let mut t = KatDrive { bus_on: false };
+        let mut r = Runner::new(&mut t, s.flag_base(), s.timeout_ms());
+        let res = r.run(&s, true, None);
+        assert_eq!(res.outcome, RunOutcome::Failure, "{:#?}", res.steps);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn kat_step_skipped_when_no_dir_configured() {
+        let s = Script::from_yaml(
+            r#"
+steps:
+  - name: "KAT needs a reference dir"
+    phase: disc
+    kat: {}
+    expect_kat: { all_units_pass: true }
+"#,
+        )
+        .unwrap();
+        // No --kat-dir / FREEMKV_KAT_DIR and no per-step dir → SKIP, not fail.
+        let mut t = MockTransport::new().on_data(|c| is_knock(c, 0x01), b"freemkv".to_vec());
+        let mut r = Runner::new(&mut t, s.flag_base(), s.timeout_ms());
+        let res = r.run(&s, true, None);
+        assert_eq!(res.outcome, RunOutcome::AllPass);
+        assert!(res.steps[0].skipped);
+        assert!(!res.steps[0].passed());
+        assert!(res.steps[0]
+            .skip_reason
+            .as_ref()
+            .unwrap()
+            .contains("FREEMKV_KAT_DIR"));
+    }
+
+    #[test]
+    fn kat_read_wedge_aborts_exit_2() {
+        let dir = write_kat_refs();
+        let s = Script::from_yaml(&format!(
+            r#"
+steps:
+  - name: "KAT read wedges"
+    phase: disc
+    kat:
+      dir: "{dir}"
+      start_lba: {KAT_START}
+      n_units: {KAT_N}
+      stride_sectors: {KAT_STRIDE}
+      unit_len: {KAT_LEN}
+    expect_kat: {{ all_units_pass: true }}
+"#,
+            dir = dir.display(),
+        ))
+        .unwrap();
+        // READ(10) wedges the bus → the KAT aborts with exit 2 (never a false pass).
+        let mut t = MockTransport::new()
+            .on_wedge(|c| c.first() == Some(&0x28))
+            .on_data(|c| is_knock(c, 0x01), b"freemkv 0.6.8".to_vec());
+        let mut r = Runner::new(&mut t, s.flag_base(), s.timeout_ms());
+        let res = r.run(&s, true, None);
+        assert_eq!(res.outcome, RunOutcome::Wedged);
+        assert_eq!(res.outcome.exit_code(), 2);
+        assert!(res.steps.last().unwrap().wedged);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -11,6 +11,7 @@
 
 mod call;
 mod cdb;
+mod kat;
 #[cfg(test)]
 mod mock;
 mod runner;
@@ -131,6 +132,13 @@ struct Cli {
     /// 1.0 cert against a 2.0 disc) can't stall the run. 0 disables.
     #[arg(long, default_value_t = 25000)]
     exec_timeout_ms: u32,
+
+    /// Directory holding the private AACS-KAT golden reference (the
+    /// `mkref_unit*.bin` capture — licensed ripped-disc material, NEVER vendored
+    /// into this repo). Point at `freemkv-private/tests/kat`. Overrides
+    /// `FREEMKV_KAT_DIR`; a per-step `dir:` overrides both. Unset → KAT steps SKIP.
+    #[arg(long)]
+    kat_dir: Option<PathBuf>,
 }
 
 /// A `u32` env var, if set and parseable.
@@ -220,6 +228,15 @@ fn run() -> Result<ExitCode> {
     ake.revoked_key = env_str("REVOKED_KEY").or(ake.revoked_key);
     ake.dev = Some(dev.clone());
 
+    // Resolve the KAT golden-reference dir: CLI --kat-dir > FREEMKV_KAT_DIR env.
+    // The golden bins are never vendored into this repo; the dir points at the
+    // private KAT checkout. Unset → KAT steps SKIP (never hang / hard-fail).
+    let kat_dir = cli
+        .kat_dir
+        .clone()
+        .map(|p| p.to_string_lossy().into_owned())
+        .or_else(|| env_str("FREEMKV_KAT_DIR"));
+
     // Fast by default (cap iterations); `--soak` runs each step's full count.
     let max_iters = if cli.soak {
         None
@@ -250,6 +267,10 @@ fn run() -> Result<ExitCode> {
         ake.helper.as_deref().unwrap_or("(unset — cert steps skip)")
     );
     println!(
+        "  KAT_DIR={}",
+        kat_dir.as_deref().unwrap_or("(unset — KAT steps skip)")
+    );
+    println!(
         "  iterations: {}\n",
         match &max_iters {
             None => "full (soak)".to_string(),
@@ -262,7 +283,8 @@ fn run() -> Result<ExitCode> {
         .with_ake(ake)
         .with_max_iters(max_iters)
         .with_disc_precheck(true)
-        .with_exec_timeout(cli.exec_timeout_ms);
+        .with_exec_timeout(cli.exec_timeout_ms)
+        .with_kat_dir(kat_dir);
     // Stream each step's result LIVE (flushed) as it runs, and pause between the
     // disc-less and disc phases so the operator can insert a disc.
     let no_pause = cli.no_pause;
