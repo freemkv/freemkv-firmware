@@ -51,7 +51,11 @@ pub struct CreateReport {
     pub vid_out_buf: u32,
     /// OEM per-AGID AKE gate-setter primitive (0x03 opens the gate through it).
     pub vid_gate_setter: u32,
-    /// `SetDiscMode` dispatcher — the Bus Encryption (0x04) hook point (see report).
+    /// `SetDiscMode` dispatcher — the read-datapath disc-mode anchor. Located and
+    /// proven unique, but DELIBERATELY NOT wired: the read path is stock and bus-off
+    /// comes from the AKE negotiating no bus key, so the Raw Read `04 03` "data clear"
+    /// mode gates the AKE success writer instead (see `ake_busoff_gate`). Reported for
+    /// audit / future use.
     pub setdiscmode: u32,
     /// Speed (0x02) ramp-ceiling gate anchor (the `ldr r1,[pc]` of the ramp
     /// self-ceiling test); the detour replaces the `cmp/bhi` at `gate+4`.
@@ -80,6 +84,14 @@ pub struct CreateReport {
     pub deny_reset_gate: u32,
     /// Injection address of the Raw Read (0x04) deny-path AACS-reset trampoline.
     pub deny_stub_va: u32,
+    /// AACS AKE **success**-writer detour site for Raw Read `04 03` "data clear"
+    /// (bus-encryption removal); the detour replaces the SUCCESS state writer
+    /// (`movs r1,#6; b <set_agid_state>`) at `ake_gate+4`. (The `04 01/02` modes
+    /// detour the RESET writer at `ake_gate+12`; the two sites do not overlap.)
+    pub ake_busoff_gate: u32,
+    /// Injection address of the Raw Read `04 03` bus-off (AKE success-writer)
+    /// trampoline.
+    pub ake_busoff_stub_va: u32,
     /// File offset of the downgrade-enable (DE) byte written unconditionally.
     pub de_off: u32,
     /// SRAM flag-table base actually used by this build (currently the provisional

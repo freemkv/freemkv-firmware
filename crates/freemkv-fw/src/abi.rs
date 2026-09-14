@@ -100,20 +100,27 @@ pub enum SubFn {
     /// DVD region (RPC) free. Toggle: `cdb[5]==0x01` on, `0x00` OEM.
     Region = 0x03,
     /// Raw Read — the transport-unlock command. `cdb[5]` is persisted to
-    /// `flag[0x04]` and read by two build-time OEM-code trampolines. Two distinct
-    /// unlock modes plus OEM off:
-    ///   `0x00` — OEM enforcement (both trampolines replicate stock behaviour).
-    ///   `0x01` — "cert is valid": the Gate-A trampoline at the VID producer's own
-    ///            `cmp auth,#6` gate forces the authed path, so an unlocker issues a
-    ///            BARE `READ DISC STRUCTURE` (`0xAD` fmt `0x80`) and gets the VID with
-    ///            NO host cert and NO AKE. The one-command unlock path.
-    ///   `0x02` — "accept any host cert, revoked or not": the AKE trampoline forces a
-    ///            FAILED host-cert verify to AKE state `6` (accept). The host still
-    ///            drives the real AKE (`0xA3`/`0xA4`) and may present a revoked (or
-    ///            any) cert; the drive accepts it, the bus key is established, and a
-    ///            normal `0xAD` read returns the VID. Only defeats revocation/verify.
+    /// `flag[0x04]` and read by build-time OEM-code trampolines. Enabling Raw Read
+    /// gets you either the VID in the clear or the disc data in the clear; distinct
+    /// modes plus OEM off:
+    ///   `0x00` — OEM enforcement (every trampoline replicates stock behaviour).
+    ///   `0x01` — "cert is valid" (VID clear): the Gate-A trampoline at the VID
+    ///            producer's own `cmp auth,#6` gate forces the authed path, so an
+    ///            unlocker issues a BARE `READ DISC STRUCTURE` (`0xAD` fmt `0x80`) and
+    ///            gets the VID with NO host cert and NO AKE. The one-command path.
+    ///   `0x02` — "accept any host cert, revoked or not" (VID clear): the AKE
+    ///            trampoline forces a FAILED host-cert verify to AKE state `6`
+    ///            (accept). The host still drives the real AKE (`0xA3`/`0xA4`) and may
+    ///            present a revoked (or any) cert; the drive accepts it, the bus key
+    ///            is established, and a normal `0xAD` read returns the VID. Only
+    ///            defeats revocation/verify.
+    ///   `0x03` — "remove in-transit bus encryption" (data clear): the AKE
+    ///            success-writer trampoline forces the AGID to the un-authenticated
+    ///            state on a SUCCESSFUL AKE, so no bus key is negotiated and content
+    ///            `READ(10)` returns the on-disc (AACS-at-rest) bytes unwrapped.
+    ///            Defaults OFF (OEM = bus encryption ON) until this state is set.
     RawRead = 0x04,
-    // 0x05 unassigned.
+    // 0x05-0x08 unassigned.
     /// Diagnostic RAM peek: 64 bytes at the 32-bit address packed big-endian in
     /// `cdb[5..9]`. Read-only. Parked at `0x09` after the `0x05`–`0x08` gap.
     DumpAll = 0x09,
