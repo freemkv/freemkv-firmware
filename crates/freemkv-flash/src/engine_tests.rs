@@ -342,6 +342,42 @@ fn flash_dryrun_warns_but_proceeds_when_disc_loaded() {
 }
 
 #[test]
+fn flash_execute_refuses_when_tray_open() {
+    // An OPEN tray is not a settled flash state — refuse a --execute flash with a
+    // distinct "close the tray" message, before any write.
+    let mut dev = MockScsiDevice::echoing().with_tray_open();
+    let req = bin_req(
+        make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
+        true,
+    );
+    let err = flash(&mut dev, &Mtk, &req).expect_err("tray-open flash must be refused");
+    assert!(
+        err.to_string().contains("tray is OPEN"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        dev.writes.is_empty(),
+        "no WRITE BUFFER may be issued with the tray open"
+    );
+}
+
+#[test]
+fn flash_execute_proceeds_when_closed_empty() {
+    // The default mock is a closed, empty tray (the only flash-safe state): the
+    // medium guard must NOT block it, and the flash streams to completion.
+    let mut dev = MockScsiDevice::echoing();
+    let req = bin_req(
+        make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
+        true,
+    );
+    flash(&mut dev, &Mtk, &req).expect("closed-empty tray must flash");
+    assert!(
+        !dev.writes.is_empty(),
+        "a closed-empty flash must issue WRITE BUFFERs"
+    );
+}
+
+#[test]
 fn flash_close_fails_on_hardware_error_sense() {
     // A genuine HARDWARE ERROR (0x4) after the burn IS a real failure.
     let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));

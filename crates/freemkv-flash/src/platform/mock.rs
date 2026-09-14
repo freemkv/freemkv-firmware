@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use anyhow::{bail, Result};
 
-use super::ScsiDevice;
+use super::{MediumStatus, ScsiDevice};
 
 type Matcher = Box<dyn Fn(&[u8]) -> bool + Send + Sync>;
 
@@ -36,10 +36,10 @@ pub struct MockScsiDevice {
     pub writes: Vec<(Vec<u8>, Vec<u8>)>,
     /// Every CDB received via `command_in`, in order.
     pub reads: Vec<Vec<u8>>,
-    /// When true, [`ScsiDevice::medium_present`] reports a loaded disc — lets a
-    /// test exercise the flash engine's disc-loaded refusal. Off by default, so
-    /// every existing mock flashes as an empty tray.
-    medium_loaded: bool,
+    /// Tray/medium state [`ScsiDevice::medium_status`] reports — lets a test
+    /// exercise the flash engine's refusals. Defaults to `ClosedEmpty` (flash-safe),
+    /// so every existing mock flashes as a closed, empty tray.
+    medium: MediumStatus,
     /// When true, WRITE BUFFER mode-6 data is captured by offset and echoed
     /// back on a matching READ BUFFER mode-6 (opt-in; off by default).
     echo: bool,
@@ -109,10 +109,17 @@ impl MockScsiDevice {
         )
     }
 
-    /// Mark this mock as having a disc loaded, so [`ScsiDevice::medium_present`]
-    /// reports `true` (the flash engine then refuses a `--execute` flash).
+    /// Mark this mock as having a disc loaded, so [`ScsiDevice::medium_status`]
+    /// reports `DiscPresent` (the flash engine then refuses a `--execute` flash).
     pub fn with_medium_loaded(mut self) -> Self {
-        self.medium_loaded = true;
+        self.medium = MediumStatus::DiscPresent;
+        self
+    }
+
+    /// Mark this mock's tray as open, so [`ScsiDevice::medium_status`] reports
+    /// `TrayOpen` (the flash engine then refuses until the tray is closed).
+    pub fn with_tray_open(mut self) -> Self {
+        self.medium = MediumStatus::TrayOpen;
         self
     }
 
@@ -223,8 +230,8 @@ impl ScsiDevice for MockScsiDevice {
         Ok(())
     }
 
-    fn medium_present(&mut self) -> Result<bool> {
-        Ok(self.medium_loaded)
+    fn medium_status(&mut self) -> Result<MediumStatus> {
+        Ok(self.medium)
     }
 
     fn describe(&self) -> String {
