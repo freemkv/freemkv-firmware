@@ -38,8 +38,8 @@ const EXPECT_HANDLER_HEX: &str =
 // base (run this test with FREEMKV_KAT_BASE set and copy the `left:` values); the
 // handler bytes themselves are UNCHANGED (bus-off touches no handler code). This is
 // expected drift, not a regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "ca941ac20cc9096b71a7122bd8d571ad";
-const EXPECT_CMAC_15: &str = "aa08dd64af2c2d15cf1c488e7c979bab";
+const EXPECT_CMAC_1: &str = "4e046c539271fdf579e224e3c882dcf9";
+const EXPECT_CMAC_15: &str = "ae6d19c7da38f8214a9a76df1f3d5691";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
