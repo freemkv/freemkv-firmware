@@ -124,7 +124,6 @@ fn check_bl(
 pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
     let img = &report.image;
     let mut checks = Vec::new();
-    let _ = original;
 
     for l in &report.levers {
         if l.outcome != LeverOutcome::Applied {
@@ -200,6 +199,33 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
                 if let (Some(site), Some(stub)) = (fact(l, "deny_site"), fact(l, "deny_stub_va")) {
                     check_bl(&mut checks, name, "deny-reset detour bl", img, site, stub);
+                }
+                // Classic (`04 01`/`04 02`) emits NO deny-reset detour: the `deny`
+                // block must be byte-identical to OEM (a wrong reply desyncs the
+                // SCSI FIFO). When a `deny` address fact is present, assert the
+                // 0x40 bytes at it are untouched vs the original image.
+                if let Some(deny) = fact(l, "deny") {
+                    let a = deny as usize;
+                    let ok = a + 0x40 <= img.len()
+                        && a + 0x40 <= original.len()
+                        && img[a..a + 0x40] == original[a..a + 0x40];
+                    checks.push(AuditCheck {
+                        lever: name,
+                        what: "deny block byte-identical to OEM".into(),
+                        ok,
+                        detail: format!("deny 0x{deny:08x}..+0x40 untouched"),
+                    });
+                }
+                // The clear-VID scratch buffer is audit-only (no stub consumes it);
+                // assert it is the unique runtime RAM cell it must be.
+                if let Some(scratch) = fact(l, "scratch") {
+                    let ok = (0x0020_1000..0x0030_0000).contains(&scratch);
+                    checks.push(AuditCheck {
+                        lever: name,
+                        what: "scratch buffer in runtime RAM window".into(),
+                        ok,
+                        detail: format!("scratch 0x{scratch:08x} in [0x201000,0x300000)"),
+                    });
                 }
                 if checks.len() == before {
                     checks.push(missing_facts(name, "missing AKE/Gate-A/deny detour facts"));
