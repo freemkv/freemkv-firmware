@@ -104,20 +104,35 @@ fn every_mt1939_image_modifies_with_the_expected_generation_outcome() {
 
         if is_classic(&img) {
             classic += 1;
-            // Classic now emits unconditionally when its base is locatable: Identity +
-            // Region-free Applied. Raw-read is always withheld-as-unsafe, and Speed is
-            // unreversed → both always pending. Region-free is Applied on the full
-            // classic emit, or pending on the DE-only degrade — both valid.
-            for id in [LeverId::RawRead, LeverId::Speed] {
-                let l = report.levers.iter().find(|l| l.id == id).unwrap();
-                assert!(
-                    matches!(l.outcome, LeverOutcome::SignatureNotFound { .. }),
-                    "classic {} expected pending {:?}, got {:?}",
-                    entry.display(),
-                    id,
-                    l.outcome
-                );
-            }
+            // Classic now emits unconditionally when its base is locatable: Identity
+            // + Region-free + Raw-read (04 01/04 02) Applied. Speed stays unreversed
+            // → always pending. On the DE-only degrade path Raw-read/Region report
+            // pending instead — both outcomes are valid, so accept either.
+            let speed = report
+                .levers
+                .iter()
+                .find(|l| l.id == LeverId::Speed)
+                .unwrap();
+            assert!(
+                matches!(speed.outcome, LeverOutcome::SignatureNotFound { .. }),
+                "classic {} Speed expected pending, got {:?}",
+                entry.display(),
+                speed.outcome
+            );
+            let rawread = report
+                .levers
+                .iter()
+                .find(|l| l.id == LeverId::RawRead)
+                .unwrap();
+            assert!(
+                matches!(
+                    rawread.outcome,
+                    LeverOutcome::Applied | LeverOutcome::SignatureNotFound { .. }
+                ),
+                "classic {} RawRead must be Applied (full emit) or pending (degrade), got {:?}",
+                entry.display(),
+                rawread.outcome
+            );
             let region = report
                 .levers
                 .iter()
@@ -163,8 +178,8 @@ fn every_mt1939_image_modifies_with_the_expected_generation_outcome() {
     );
 }
 
-/// Classic emit (no flag): a classic image gets Identity and Region-free
-/// **applied**, an effective DE, Raw-read withheld-as-unsafe, and the re-signed
+/// Classic emit (no flag): a classic image gets Identity, Region-free and
+/// Raw-read (04 01 + 04 02) **applied**, an effective DE, and the re-signed
 /// image **self-verifies** (round-trip). Classic modify is unconditional now —
 /// being structurally valid, it just produces, carrying the static-only label.
 #[test]
@@ -199,12 +214,10 @@ fn classic_emit_applies_identity_and_region_and_round_trips() {
         get(LeverId::DowngradeEnable).outcome.is_effective(),
         "DE must be effective"
     );
-    assert!(
-        matches!(
-            get(LeverId::RawRead).outcome,
-            LeverOutcome::SignatureNotFound { .. }
-        ),
-        "classic Raw-read stays withheld (unsafe/unverified deny path)"
+    assert_eq!(
+        get(LeverId::RawRead).outcome,
+        LeverOutcome::Applied,
+        "classic Raw-read (04 01 Gate-A + 04 02 AKE) must be applied"
     );
 
     // Round-trip: the re-signed image verifies clean and keeps its size.
@@ -214,6 +227,83 @@ fn classic_emit_applies_identity_and_region_and_round_trips() {
         "classic image must self-verify (round-trip)"
     );
     assert_eq!(r.image.len(), img.len());
+}
+
+/// Classic Raw-read (04 01 + 04 02) on a real classic image: the finder fix
+/// (agid_struct via the CDB base, NOT the r7 heuristic) holds, the detours land,
+/// the clear-VID scratch is the unique 0x210c00, and the full structural audit
+/// passes — including that the deny block is byte-identical to OEM (no deny
+/// detour). Env-gated on `FREEMKV_MT1939_CLASSIC`.
+#[test]
+fn classic_rawread_finder_fix_emit_and_audit() {
+    let Ok(path) = std::env::var("FREEMKV_MT1939_CLASSIC") else {
+        eprintln!("skip: set FREEMKV_MT1939_CLASSIC to a classic MT1939 image");
+        return;
+    };
+    let img = std::fs::read(&path).expect("read classic image");
+    assert!(is_classic(&img), "{path} is not a classic-generation image");
+    let eng = Mt1959Engine;
+
+    // Finder fix: classic AGID struct = CDB base (r5), distinct from the MT1959
+    // `ldr r7,[pc]` heuristic cell (which is wrong on classic).
+    let cdb = eng.find_cdb_base(&img).expect("cdb base");
+    let classic_struct = eng
+        .find_vid_agid_struct_classic(&img)
+        .expect("classic agid struct");
+    let r7 = eng.find_vid_agid_struct(&img).expect("r7 heuristic");
+    assert_eq!(
+        classic_struct, cdb,
+        "classic agid struct must be the CDB base"
+    );
+    assert_ne!(
+        classic_struct, r7,
+        "classic must NOT reuse the r7 heuristic cell (the finder bug)"
+    );
+
+    let r = Mt1939Engine.modify(&img).expect("classic modify");
+    let rr = r
+        .levers
+        .iter()
+        .find(|l| l.id == LeverId::RawRead)
+        .expect("RawRead lever");
+    assert_eq!(rr.outcome, LeverOutcome::Applied, "RawRead must be applied");
+    let f = |k: &str| rr.facts.iter().find(|(n, _)| *n == k).map(|(_, v)| *v);
+    assert!(f("gatea_gate").is_some(), "gatea_gate fact present");
+    assert!(f("ake_site").is_some(), "ake_site fact present");
+    assert_eq!(f("scratch"), Some(0x0021_0c00), "unique clear-VID scratch");
+
+    // The Gate-A `cmp r0,#6` site must be replaced by the detour `bl`.
+    let gate = f("gatea_gate").unwrap() as usize;
+    assert_eq!(
+        u16::from_le_bytes([img[gate], img[gate + 1]]),
+        0x2806,
+        "OEM had cmp r0,#6 at the gate"
+    );
+    assert_ne!(
+        u16::from_le_bytes([r.image[gate], r.image[gate + 1]]),
+        0x2806,
+        "gate site must be patched to a bl"
+    );
+
+    // Deny block byte-identical to OEM (we emit no deny detour).
+    let deny = f("deny").unwrap() as usize;
+    assert_eq!(
+        img[deny..deny + 0x40],
+        r.image[deny..deny + 0x40],
+        "deny block must be untouched"
+    );
+
+    // Full structural audit passes.
+    let audit = crate::engine::audit::audit_image(&img, &r);
+    assert!(
+        audit.ok(),
+        "structural audit failed:\n{}",
+        audit
+            .failures()
+            .map(|c| format!("  [{}] {}: {}", c.lever, c.what, c.detail))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 }
 
 /// Classic coverage sweep over the corpus: every classic image resolves to the full

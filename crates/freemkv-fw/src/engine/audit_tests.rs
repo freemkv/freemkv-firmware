@@ -164,6 +164,96 @@ fn audit_fails_when_busoff_stub_blank() {
     );
 }
 
+/// Synthetic structural-audit checks for a classic Raw-read report: the Gate-A
+/// `bl` check PASSES when the detour landed on a written stub, FAILS when the
+/// stub is blank flash, and the "detour facts present" check FAILS when an
+/// Applied lever carries none. Also exercises the classic-only `deny`
+/// (byte-identical) and `scratch` (RAM-window) checks. No owned image needed.
+#[test]
+fn raw_read_audit_flags_blank_stub_and_missing_facts() {
+    use crate::engine::lever::{LeverId, LeverReport, ModifyReport, Validation};
+    use crate::thumb;
+
+    fn report_with(image: Vec<u8>, lever: LeverReport) -> ModifyReport {
+        ModifyReport {
+            engine: "MT1939",
+            family: "f".into(),
+            vendor: "v".into(),
+            model: "m".into(),
+            rev: "r".into(),
+            vendor_specific: String::new(),
+            media: "BD".into(),
+            levers: vec![lever],
+            image,
+            validation: Validation::StaticOnly,
+        }
+    }
+    fn rr_check<'a>(a: &'a AuditResult, what: &str) -> &'a crate::engine::audit::AuditCheck {
+        a.checks
+            .iter()
+            .find(|c| c.lever == "Raw read" && c.what == what)
+            .unwrap_or_else(|| panic!("no Raw-read check {what:?}"))
+    }
+
+    let site = 0x1000u32;
+    let stub = 0x2000u32;
+    let deny = 0x0800u32;
+
+    // --- landed: real bl at site, non-blank stub, deny untouched, scratch in RAM.
+    let mut img = vec![0xFFu8; 0x4000];
+    let bl = thumb::encode_bl(site as usize, stub).unwrap();
+    thumb::write(&mut img, site as usize, &bl);
+    thumb::write(&mut img, stub as usize, &[0x01u8; 16]); // non-blank stub
+    let orig = img.clone(); // deny region identical
+    let landed = report_with(
+        img,
+        LeverReport::applied(
+            LeverId::RawRead,
+            vec![
+                ("gatea_gate", site),
+                ("gatea_stub_va", stub),
+                ("deny", deny),
+                ("scratch", 0x0021_0c00),
+            ],
+        ),
+    );
+    let a = audit_image(&orig, &landed);
+    assert!(rr_check(&a, "Gate-A detour bl").ok, "landed bl must pass");
+    assert!(
+        rr_check(&a, "deny block byte-identical to OEM").ok,
+        "untouched deny must pass"
+    );
+    assert!(
+        rr_check(&a, "scratch buffer in runtime RAM window").ok,
+        "0x210c00 is in the RAM window"
+    );
+
+    // --- blank stub: bl present but the stub is still 0xFF → fail.
+    let mut img = vec![0xFFu8; 0x4000];
+    thumb::write(&mut img, site as usize, &bl); // stub left blank
+    let orig = img.clone();
+    let blank = report_with(
+        img,
+        LeverReport::applied(
+            LeverId::RawRead,
+            vec![("gatea_gate", site), ("gatea_stub_va", stub)],
+        ),
+    );
+    assert!(
+        !rr_check(&audit_image(&orig, &blank), "Gate-A detour bl").ok,
+        "blank stub must fail"
+    );
+
+    // --- missing facts: Applied but no detour facts → the guard check fails.
+    let img = vec![0xFFu8; 0x4000];
+    let orig = img.clone();
+    let empty = report_with(img, LeverReport::applied(LeverId::RawRead, vec![]));
+    assert!(
+        !rr_check(&audit_image(&orig, &empty), "detour facts present").ok,
+        "missing facts must fail"
+    );
+}
+
 fn corpus_files() -> Option<Vec<std::path::PathBuf>> {
     let dir = std::env::var("FREEMKV_OEM_CORPUS").ok()?;
     let mut out = Vec::new();
