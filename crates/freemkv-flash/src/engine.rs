@@ -442,10 +442,30 @@ fn tar_append<W: Write>(b: &mut tar::Builder<W>, name: &str, data: &[u8]) -> Res
 
 /// Run the `flash` command: `.bin` = full verbatim stream, `.tar` = per-unit restore.
 pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
+    guard_no_medium(dev, req.execute)?;
     match req.input_kind {
         InputKind::Tar => flash_restore(dev, drive, req),
         InputKind::Bin => flash_bin(dev, drive, req),
     }
+}
+
+/// Refuse to flash while a disc is loaded. Reprogramming the flash while the
+/// drive is busy servicing a medium can wedge the controller mid-program (a
+/// verify-mismatch / `DID_BAD_TARGET` brick that only a power-cycle clears), so
+/// a firmware flash MUST run against an empty, closed tray. On `--execute` this
+/// is a hard abort before any backup or write; on a dry run it is a prominent
+/// warning so the operator ejects before committing.
+fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
+    if dev.medium_present()? {
+        let msg = "a disc is loaded in the drive — refusing to flash. \
+                   Eject the disc and retry with an EMPTY, closed tray. \
+                   Flashing while a medium is loaded can wedge the drive mid-program.";
+        if execute {
+            bail!("{msg}");
+        }
+        println!("{}", style::amber(&format!("WARNING: {msg}")));
+    }
+    Ok(())
 }
 
 /// Flash a full `.bin` image VERBATIM: backup-first, stream, read-back verify.

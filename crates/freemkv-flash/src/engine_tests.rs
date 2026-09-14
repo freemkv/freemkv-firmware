@@ -309,6 +309,39 @@ fn flash_close_tolerates_benign_not_ready() {
 }
 
 #[test]
+fn flash_execute_refuses_when_disc_loaded() {
+    // A disc in the tray must hard-abort a --execute flash BEFORE any write —
+    // reprogramming while the drive services a medium can wedge the controller.
+    let mut dev = MockScsiDevice::echoing().with_medium_loaded();
+    let req = bin_req(
+        make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
+        true,
+    );
+    let err = flash(&mut dev, &Mtk, &req).expect_err("disc-loaded flash must be refused");
+    assert!(
+        err.to_string().contains("refusing to flash"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        dev.writes.is_empty(),
+        "no WRITE BUFFER may be issued when a disc is loaded"
+    );
+}
+
+#[test]
+fn flash_dryrun_warns_but_proceeds_when_disc_loaded() {
+    // A dry run only WARNS on a loaded disc (no writes happen anyway), so the
+    // operator still sees the full plan before committing.
+    let mut dev = MockScsiDevice::echoing().with_medium_loaded();
+    let req = bin_req(
+        make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
+        false,
+    );
+    flash(&mut dev, &Mtk, &req).expect("dry run must not fail on a loaded disc");
+    assert!(dev.writes.is_empty(), "dry run issues no writes");
+}
+
+#[test]
 fn flash_close_fails_on_hardware_error_sense() {
     // A genuine HARDWARE ERROR (0x4) after the burn IS a real failure.
     let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));

@@ -27,7 +27,24 @@ use freemkv_flash::style;
     about,
     long_about = None,
     args_conflicts_with_subcommands = true,
-    subcommand_negates_reqs = true
+    subcommand_negates_reqs = true,
+    after_help = "\
+EXAMPLES:
+  # Identify the drive (read-only, safe):
+  freemkv-flash info /dev/sg0
+
+  # Back up the per-unit regions before flashing (read-only):
+  freemkv-flash dump /dev/sg0 -o backup.tar
+
+  # Dry-run a flash — prints the plan, issues NO writes:
+  freemkv-flash flash /dev/sg0 -i firmware.bin
+
+  # Flash for real (IRREVERSIBLE). EJECT ANY DISC FIRST — an empty, closed
+  # tray is required; flashing with a disc loaded can wedge the drive:
+  freemkv-flash flash /dev/sg0 -i firmware.bin \\
+      --backup backup-preflash.tar --execute --i-understand-risk
+
+Run `freemkv-flash flash --help` for the full flash workflow and all flags."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -97,7 +114,25 @@ enum Command {
     },
 }
 
+/// Flash a firmware image (.bin) or restore a per-unit .tar. WRITES to the drive.
+///
+/// Without `--execute` this is a DRY RUN: it prints the full plan and a read-only
+/// readiness handshake but issues no writes. Add `--execute --i-understand-risk`
+/// to actually program the flash — this is IRREVERSIBLE.
+///
+/// EJECT ANY DISC FIRST: the flash requires an empty, closed tray. Reprogramming
+/// while the drive is servicing a medium can wedge the controller mid-program.
 #[derive(Parser, Debug)]
+#[command(after_help = "\
+FLASH WORKFLOW:
+  1. freemkv-flash info  /dev/sg0                      # confirm the drive + family
+  2. freemkv-flash dump  /dev/sg0 -o backup.tar        # keep a per-unit backup
+  3. EJECT any disc so the tray is empty and closed
+  4. freemkv-flash flash /dev/sg0 -i firmware.bin      # DRY RUN — review the plan
+  5. freemkv-flash flash /dev/sg0 -i firmware.bin \\
+         --backup backup-preflash.tar --execute --i-understand-risk   # for real
+
+Do not power off or disconnect the drive during step 5.")]
 struct FlashArgs {
     /// SCSI device path (e.g. /dev/sg0).
     device: String,

@@ -36,6 +36,10 @@ pub struct MockScsiDevice {
     pub writes: Vec<(Vec<u8>, Vec<u8>)>,
     /// Every CDB received via `command_in`, in order.
     pub reads: Vec<Vec<u8>>,
+    /// When true, [`ScsiDevice::medium_present`] reports a loaded disc — lets a
+    /// test exercise the flash engine's disc-loaded refusal. Off by default, so
+    /// every existing mock flashes as an empty tray.
+    medium_loaded: bool,
     /// When true, WRITE BUFFER mode-6 data is captured by offset and echoed
     /// back on a matching READ BUFFER mode-6 (opt-in; off by default).
     echo: bool,
@@ -103,6 +107,13 @@ impl MockScsiDevice {
             |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
             fd,
         )
+    }
+
+    /// Mark this mock as having a disc loaded, so [`ScsiDevice::medium_present`]
+    /// reports `true` (the flash engine then refuses a `--execute` flash).
+    pub fn with_medium_loaded(mut self) -> Self {
+        self.medium_loaded = true;
+        self
     }
 
     /// A mock that classifies as Pioneer/Renesas: READ BUFFER buffer-id 0xF1
@@ -210,6 +221,10 @@ impl ScsiDevice for MockScsiDevice {
         }
         self.writes.push((cdb.to_vec(), data.to_vec()));
         Ok(())
+    }
+
+    fn medium_present(&mut self) -> Result<bool> {
+        Ok(self.medium_loaded)
     }
 
     fn describe(&self) -> String {

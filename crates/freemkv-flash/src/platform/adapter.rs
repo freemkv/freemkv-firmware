@@ -139,6 +139,52 @@ impl ScsiDevice for TransportDevice {
     fn describe(&self) -> String {
         format!("{} (libfreemkv SCSI transport)", self.path)
     }
+
+    fn medium_present(&mut self) -> Result<bool> {
+        // Standard TEST UNIT READY (opcode 0x00, 6-byte CDB), no data phase.
+        //   GOOD (status 0)                     => unit ready WITH a medium loaded.
+        //   NOT READY / medium not present       => empty tray (the ONLY positive
+        //     (key 0x2 ASC 0x3A)                    "no disc" answer; safe to flash).
+        //   self-clearing UNIT ATTENTION (0x6)   => stale power-on/reset notice;
+        //                                           retried once, then re-judged.
+        //   any other decoded sense              => treated as "medium present"
+        //                                           (spinning up, incompatible
+        //                                           medium, …) so we NEVER flash
+        //                                           unless the empty tray is proven.
+        // A senseless transport failure (dead bus) propagates as Err.
+        let cdb = [0u8; 6];
+        for attempt in 0..2 {
+            let mut none: [u8; 0] = [];
+            match self.inner.execute(&cdb, DataDirection::None, &mut none, TIMEOUT_MS) {
+                Ok(r) => {
+                    if r.status == 0 {
+                        return Ok(true);
+                    }
+                    match sense_kaa(&r.sense) {
+                        Some((k, a, _)) if super::is_no_medium(k, a) => return Ok(false),
+                        Some((0x6, _, _)) if attempt == 0 => continue,
+                        _ => return Ok(true),
+                    }
+                }
+                Err(e) => {
+                    if let Some(s) = e.scsi_sense() {
+                        if super::is_no_medium(s.sense_key, s.asc) {
+                            return Ok(false);
+                        }
+                        if s.sense_key == 0x6 && attempt == 0 {
+                            continue;
+                        }
+                        return Ok(true);
+                    }
+                    return Err(anyhow!(
+                        "TEST UNIT READY transport failure on {}: {e}",
+                        self.path
+                    ));
+                }
+            }
+        }
+        Ok(true)
+    }
 }
 
 /// Extract the SCSI sense key from a fixed- (0x70/0x71) or descriptor-format
@@ -236,5 +282,69 @@ mod tests {
                 .is_err(),
             "a real error must not be tolerated"
         );
+    }
+
+    /// A transport that answers with a chosen SCSI status + raw sense as an
+    /// `Ok(ScsiResult)` (how a status-only, no-data command like TEST UNIT READY
+    /// comes back), for exercising [`TransportDevice::medium_present`].
+    struct StatusTransport {
+        status: u8,
+        sense: [u8; 32],
+    }
+    impl ScsiTransport for StatusTransport {
+        fn execute(
+            &mut self,
+            _cdb: &[u8],
+            _dir: DataDirection,
+            _buf: &mut [u8],
+            _timeout_ms: u32,
+        ) -> libfreemkv::error::Result<ScsiResult> {
+            Ok(ScsiResult {
+                status: self.status,
+                bytes_transferred: 0,
+                sense: self.sense,
+            })
+        }
+    }
+    fn dev_status(status: u8, kaa: (u8, u8, u8)) -> TransportDevice {
+        // Fixed-format sense buffer (0x70): key at [2], ASC at [12], ASCQ at [13].
+        let mut sense = [0u8; 32];
+        sense[0] = 0x70;
+        sense[2] = kaa.0;
+        sense[12] = kaa.1;
+        sense[13] = kaa.2;
+        TransportDevice {
+            inner: Box::new(StatusTransport { status, sense }),
+            path: "test".to_string(),
+        }
+    }
+
+    /// GOOD status to TEST UNIT READY => a medium is loaded => flash must be refused.
+    #[test]
+    fn medium_present_true_on_good_status() {
+        let mut dev = dev_status(0x00, (0, 0, 0));
+        assert_eq!(dev.medium_present().unwrap(), true);
+    }
+
+    /// Positive "no medium" (key 0x2 ASC 0x3A), whether surfaced as `Err` (real
+    /// SG_IO/SPTI) or as `Ok { status: CC }`, is the ONLY empty-tray answer.
+    #[test]
+    fn medium_present_false_on_no_medium() {
+        let mut e = dev_with(ScsiSense {
+            sense_key: 0x2,
+            asc: 0x3A,
+            ascq: 0x01,
+        });
+        assert_eq!(e.medium_present().unwrap(), false, "no-medium via Err");
+        let mut o = dev_status(CHECK_CONDITION, (0x2, 0x3A, 0x00));
+        assert_eq!(o.medium_present().unwrap(), false, "no-medium via Ok(CC)");
+    }
+
+    /// "Becoming ready" (key 0x2 ASC 0x04 — a disc spinning up) is NOT a positive
+    /// empty tray, so it is conservatively treated as medium-present (block flash).
+    #[test]
+    fn medium_present_true_when_spinning_up() {
+        let mut dev = dev_status(CHECK_CONDITION, (0x2, 0x04, 0x01));
+        assert_eq!(dev.medium_present().unwrap(), true);
     }
 }
