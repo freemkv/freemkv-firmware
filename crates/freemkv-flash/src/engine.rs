@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 
 use crate::cmac;
 use crate::drive::{DriveFamily, FlashRequest, InputKind, UserDump};
-use crate::platform::ScsiDevice;
+use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 /// Run the `info` command: identify + classify (read-only).
@@ -456,15 +456,24 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 /// is a hard abort before any backup or write; on a dry run it is a prominent
 /// warning so the operator ejects before committing.
 fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
-    if dev.medium_present()? {
-        let msg = "a disc is loaded in the drive — refusing to flash. \
-                   Eject the disc and retry with an EMPTY, closed tray. \
-                   Flashing while a medium is loaded can wedge the drive mid-program.";
-        if execute {
-            bail!("{msg}");
+    // Flashing is safe ONLY with a closed, empty tray. A loaded disc can wedge
+    // the controller mid-program; an open tray is not a settled flash state.
+    let msg = match dev.medium_status()? {
+        MediumStatus::ClosedEmpty => return Ok(()),
+        MediumStatus::DiscPresent => {
+            "a disc is loaded — refusing to flash. Eject the disc and retry with a \
+             closed, EMPTY tray. Flashing while a medium is loaded can wedge the \
+             drive mid-program."
         }
-        println!("{}", style::amber(&format!("WARNING: {msg}")));
+        MediumStatus::TrayOpen => {
+            "the tray is OPEN — refusing to flash. Close the empty tray and retry \
+             (flashing requires a closed, empty tray)."
+        }
+    };
+    if execute {
+        bail!("{msg}");
     }
+    println!("{}", style::amber(&format!("WARNING: {msg}")));
     Ok(())
 }
 
