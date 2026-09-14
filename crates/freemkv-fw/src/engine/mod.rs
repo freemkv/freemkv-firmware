@@ -58,10 +58,10 @@ pub struct CreateReport {
     pub speed_gate: u32,
     /// Injection address of the Speed (0x02) flag-gated ceiling trampoline.
     pub speed_stub_va: u32,
-    /// OEM RPC-state emitter anchor for Region-free (0x05); the detour replaces
-    /// the RPCScheme store at `region_emitter+14`.
+    /// OEM RPC-state emitter anchor for Region-free (0x03); the detour replaces
+    /// the frame[4] store at `region_emitter+6`.
     pub region_emitter: u32,
-    /// Injection address of the Region-free (0x05) flag-gated emitter trampoline.
+    /// Injection address of the Region-free (0x03) flag-gated emitter trampoline.
     pub region_stub_va: u32,
     /// AACS AKE accept-gate anchor for Raw Read (0x04); the detour replaces the
     /// RESET state writer (`movs r1,#1; b <back>`) at `ake_gate+12`.
