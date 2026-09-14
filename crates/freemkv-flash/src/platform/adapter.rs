@@ -155,7 +155,10 @@ impl ScsiDevice for TransportDevice {
         let cdb = [0u8; 6];
         for attempt in 0..2 {
             let mut none: [u8; 0] = [];
-            match self.inner.execute(&cdb, DataDirection::None, &mut none, TIMEOUT_MS) {
+            match self
+                .inner
+                .execute(&cdb, DataDirection::None, &mut none, TIMEOUT_MS)
+            {
                 Ok(r) => {
                     if r.status == 0 {
                         return Ok(true);
