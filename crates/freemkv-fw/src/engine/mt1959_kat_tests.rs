@@ -204,7 +204,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // two OEM-code detours, or the DE byte. 0x400 bounds the injected band.
     let injected = EXPECT_HANDLER_VA as usize..EXPECT_HANDLER_VA as usize + 0x400;
     let speed_detour = report.speed_gate as usize + 4..report.speed_gate as usize + 8;
-    let region_detour = report.region_emitter as usize + 14..report.region_emitter as usize + 18;
+    let region_detour = report.region_emitter as usize + 6..report.region_emitter as usize + 10;
     let ake_detour = report.ake_gate as usize + 12..report.ake_gate as usize + 16;
     let gatea_detour = report.gatea_gate as usize..report.gatea_gate as usize + 4;
     let deny_detour = report.deny_reset_gate as usize..report.deny_reset_gate as usize + 4;
@@ -344,12 +344,12 @@ fn finders_hold_across_owned_images() {
         assert!(report.vid_producer != 0, "VID producer for {path}");
         assert!(report.vid_gate_setter != 0, "VID gate-setter for {path}");
         assert!(report.setdiscmode != 0, "SetDiscMode for {path}");
-        // Speed (0x02) + Region-free (0x05) must be wired, and the DE byte + the
+        // Speed (0x02) + Region-free (0x03) must be wired, and the DE byte + the
         // scanner-derived free cell must agree across both required BU40N images.
         assert!(report.speed_stub_va != 0, "Speed (0x02) wired for {path}");
         assert!(
             report.region_stub_va != 0,
-            "Region-free (0x05) wired for {path}"
+            "Region-free (0x03) wired for {path}"
         );
         assert_eq!(report.de_off, EXPECT_DE_OFF, "DE byte for {path}");
         assert_eq!(

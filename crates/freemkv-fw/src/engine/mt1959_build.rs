@@ -204,19 +204,20 @@ const AKE_GATE_SIG_NB: &[(u16, u16)] = &[
 /// Signature of the OEM REPORT KEY key-format-8 (RPC state) emitter tail
 /// (`0x119890` on 1.00, `0x119a84` on 1.03) — the byte-for-byte identical run
 /// that marshals the 8-byte RPC-state frame into the response FIFO. RPCScheme is
-/// hardcoded to `1` (RPC-2) via `r4`; the store `strb r4,[r0,#8]` is at
-/// `match+14`. Region-free (0x05) detours that store (4 bytes at `match+14`,
-/// consuming the following `strb r1` too) to a flag-gated stub that emits RPC-1
-/// (scheme 0) when set. Proven unique per image. (`r1` is provably `0`, `r4==1`.)
+/// hardcoded to `1` (RPC-2) via `r4`; the `frame[4]` store `strb r2,[r0,#8]` is
+/// at `match+6`. Region-free (0x03) detours from there (4 bytes at `match+6`,
+/// consuming the following `mov r3,sp` too) to a flag-gated stub that re-emits
+/// `frame[4..7]` — zeroing TypeCode/RegionMask/RPCScheme for a golden-MK RPC-1
+/// frame when set, OEM otherwise. Proven unique per image. (`r1==0`, `r4==1`.)
 const REGION_EMIT_SIG: &[(u16, u16)] = &[
     (0x466B, 0xFFFF), // mov  r3,sp
     (0x789B, 0xFFFF), // ldrb r3,[r3,#2]   s2
     (0x18D2, 0xFFFF), // adds r2,r2,r3
-    (0x7202, 0xFFFF), // strb r2,[r0,#8]   frame[4]
-    (0x466B, 0xFFFF), // mov  r3,sp
-    (0x78DA, 0xFFFF), // ldrb r2,[r3,#3]   s3
+    (0x7202, 0xFFFF), // strb r2,[r0,#8]   frame[4] = TypeCode/resets/changes ← detour
+    (0x466B, 0xFFFF), // mov  r3,sp        (consumed by the 4-byte bl)
+    (0x78DA, 0xFFFF), // ldrb r2,[r3,#3]   s3 (RegionMask source, re-read by the stub)
     (0x7202, 0xFFFF), // strb r2,[r0,#8]   frame[5] = RegionMask
-    (0x7204, 0xFFFF), // strb r4,[r0,#8]   frame[6] = RPCScheme (r4==1) ← detour
+    (0x7204, 0xFFFF), // strb r4,[r0,#8]   frame[6] = RPCScheme (r4==1)
     (0x7201, 0xFFFF), // strb r1,[r0,#8]   frame[7] = 0 (reserved)
     (0xBD18, 0xFFFF), // pop  {r3,r4,pc}   emitter epilogue (replicated by the stub)
 ];
@@ -1008,10 +1009,10 @@ impl Mt1959Engine {
         }
     }
 
-    /// The Region-free (0x05) RPC-state emitter anchor — the unique
+    /// The Region-free (0x03) RPC-state emitter anchor — the unique
     /// [`REGION_EMIT_SIG`] match (`0x119890` on 1.00, `0x119a84` on 1.03).
-    /// Returns the anchor offset; the RPCScheme store the detour replaces is at
-    /// `anchor+14`.
+    /// Returns the anchor offset; the frame[4] store the detour replaces is at
+    /// `anchor+6`.
     pub fn find_region_emitter(&self, image: &[u8]) -> Result<u32> {
         let lo = 0x0011_0000usize.min(image.len());
         let hi = 0x0012_0000usize.min(image.len());
@@ -1436,26 +1437,32 @@ impl Mt1959Engine {
         a.finish()
     }
 
-    /// The Region-free (0x05) flag-gated RPC-emitter trampoline. Entered by a `bl`
-    /// that replaces the OEM emitter's `strb r4,[r0,#8]` (RPCScheme=1) and the
-    /// following `strb r1,[r0,#8]` (`frame[7]`=0). On entry `r0 = FIFO data-port
-    /// base`, `r1 == 0`, `r4 == 1` (all per the OEM emitter); `r2` is dead. The
-    /// stub reads the Region flag byte and emits RPCScheme `0` (RPC-1 → all
-    /// regions) when set or `r4` (OEM RPC-2) when clear, always writes the
-    /// reserved `frame[7]`=0, then replicates the emitter epilogue `pop {r3,r4,pc}`
-    /// (the OEM epilogue at the detour tail becomes dead code).
+    /// The Region-free (0x03) flag-gated RPC-emitter trampoline. Entered by a `bl`
+    /// that replaces the OEM emitter's `frame[4]` store `strb r2,[r0,#8]` and the
+    /// following `mov r3,sp` at `region_emitter+6`. On entry `r0 = FIFO data-port
+    /// base`, `r1 == 0`, `r2 == frame[4]` (OEM TypeCode/reset/change counters),
+    /// `r4 == 1`, and `sp[3]` is the RegionMask source (all per the OEM emitter).
+    /// When the flag is set the stub zeroes `frame[4..6]` (TypeCode 0, RegionMask
+    /// 0x00, RPCScheme 0 → RPC-1 — golden-MK parity) else it replicates the OEM
+    /// `frame[4..6]`; both then emit reserved `frame[7]=0` and `pop {r3,r4,pc}`.
     fn build_region_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
-        let patched = a.label();
+        let region_free = a.label();
         let tail = a.label();
-        a.ldr_lit(2, flag_base + abi::SubFn::Region as u32); // r2 = &flag[0x05] (r2 dead)
-        a.ldrb_imm(2, 2, 0); // r2 = Region flag byte
-        a.cmp_imm(2, abi::STATE_ON); // patched (0x01)?
-        a.beq(patched); // yes -> force RPC-1
-        a.strb_imm(4, 0, 8); // OEM: frame[6] = r4 (RPCScheme = 1, RPC-2)
+        a.ldr_lit(3, flag_base + abi::SubFn::Region as u32); // r3 = &flag[0x03] (r3 popped)
+        a.ldrb_imm(3, 3, 0); // r3 = Region flag byte
+        a.cmp_imm(3, abi::STATE_ON); // patched (0x01)?
+        a.beq(region_free); // yes -> emit a region-free RPC-1 frame
+        a.strb_imm(2, 0, 8); // Stays-Stock frame[4] = r2 (OEM TypeCode/#resets/#changes)
+        a.raw16(0x466B); // mov r3,sp — re-read the RegionMask source from sp[3]
+        a.ldrb_imm(2, 3, 3); // r2 = s3 (frame[4] already emitted, r2 free)
+        a.strb_imm(2, 0, 8); // frame[5] = s3 (OEM RegionMask)
+        a.strb_imm(4, 0, 8); // frame[6] = r4 (RPCScheme = 1, RPC-2)
         a.b(tail);
-        a.bind(patched);
-        a.strb_imm(1, 0, 8); // patched: frame[6] = 0 (RPC-1 → region-free)
+        a.bind(region_free);
+        a.strb_imm(1, 0, 8); // frame[4] = 0 (TypeCode/resets/changes cleared)
+        a.strb_imm(1, 0, 8); // frame[5] = 0 (RegionMask → all regions playable)
+        a.strb_imm(1, 0, 8); // frame[6] = 0 (RPCScheme → RPC-1, region-free)
         a.bind(tail);
         a.strb_imm(1, 0, 8); // frame[7] = 0 (reserved, always)
         a.pop(0x0118); // pop {r3,r4,pc} — replicate the emitter epilogue
@@ -1704,10 +1711,10 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
         thumb::write(&mut out, cmp_at, &bl);
 
-        // Region-free (0x05): flag-gated RPC-emitter trampoline. The RPCScheme
-        // store + the following reserved store (4 bytes at region_emitter+14) are
-        // detoured to the stub, which replicates the emitter epilogue.
-        let region_site = region_emitter as usize + 14;
+        // Region-free (0x03): flag-gated RPC-emitter trampoline. The frame[4]
+        // store + the following `mov r3,sp` (4 bytes at region_emitter+6) are
+        // detoured to the stub, which re-emits frame[4..7] + the epilogue.
+        let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
         let region_stub_va = self.free_space(&out, region_bytes.len() + 16)?;
         thumb::write(&mut out, region_stub_va as usize, &region_bytes);
@@ -2139,7 +2146,7 @@ impl Mt1959Engine {
     /// with the classic `REGION_EMIT_SIG` window, `~0x154000..0x157000`).
     fn emit_region_classic(&self, out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
         let region_emitter = self.find_region_emitter_in(out, 0x0015_0000, 0x0016_0000)?;
-        let region_site = region_emitter as usize + 14;
+        let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
         let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
         let bl = thumb::encode_bl(region_site, region_stub_va)
@@ -2180,7 +2187,7 @@ impl Mt1959Engine {
     /// [`Self::build_report`].
     fn emit_region(&self, image: &[u8], out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
         let region_emitter = self.find_region_emitter(image)?;
-        let region_site = region_emitter as usize + 14;
+        let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
         let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
         let bl = thumb::encode_bl(region_site, region_stub_va)

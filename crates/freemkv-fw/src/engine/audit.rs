@@ -5,7 +5,7 @@
 //! that gap: for every `Applied` lever it recomputes the **exact** expected hook
 //! bytes with the emitter's own [`crate::thumb::encode_bl`] and asserts they are
 //! present in the produced image at the emitter's real hook site (`speed_gate+4`,
-//! `region_emitter+14`, the AKE/Gate-A/deny `bl` sites), that the injected stub is
+//! `region_emitter+6`, the AKE/Gate-A/deny `bl` sites), that the injected stub is
 //! not blank flash, that the hijacked record was repointed to the injected handler,
 //! that the DE byte is `0xDE`, and that the CMAC tables verify.
 //!
@@ -182,7 +182,7 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                         name,
                         "region detour bl",
                         img,
-                        emitter + 14,
+                        emitter + 6,
                         stub,
                     );
                 } else {
