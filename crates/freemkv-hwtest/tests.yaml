@@ -42,6 +42,23 @@
 #                             wedge-guard is re-asserted; a dead drive aborts.
 #                             (`repeat` collects reads for stable/status ANDing;
 #                             `iterations` scores each run separately for X/N.)
+#   kat: { dir?, start_lba?, n_units?, stride_sectors?, unit_len? }
+#                             the AACS bus-encryption Known-Answer-Test (the
+#                             content-read differential): read `n_units` aligned
+#                             units via READ(10) starting at `start_lba` (stride
+#                             `stride_sectors`) and BYTE-COMPARE each to the golden
+#                             `mkref_unit{i}.bin` in the reference dir. `dir`
+#                             overrides `--kat-dir` / `FREEMKV_KAT_DIR`; if none
+#                             resolves the step SKIPs (golden bins are licensed and
+#                             are NEVER committed here). All fields optional —
+#                             default to the reference-disc geometry. Assert with
+#                             `expect_kat`.
+#   expect_kat: { all_units_pass: <bool> }
+#                             `true` (default): every unit must be byte-identical
+#                             to golden (bus encryption stripped). `false`: the
+#                             pre-unlock baseline — the units must NOT all match
+#                             (bus encryption still ON). A missing bin / non-GOOD
+#                             read disqualifies either way; a READ(10) wedge → exit 2.
 #   exec: { cert: valid|revoked, program?, args? }
 #                             run a host-side helper — the AACS cert AKE via
 #                             libfreemkv's `cert_vid`. With `cert` the runner
@@ -624,3 +641,47 @@ steps:
         expect_exec:
           any_of: [vid, rejected]
           vid: { nonzero: true, min_len: 16 }
+
+  # ═══════════ K  AACS BUS-ENCRYPTION KAT (content-read differential) ═════════
+  # The Known-Answer-Test that proves the flashed build STRIPS AACS bus
+  # encryption on READ(10): a fixed set of aligned units read off the reference
+  # disc must be BYTE-IDENTICAL to a golden capture taken on known-good
+  # MK/LibreDrive firmware. Four checks per aligned unit — seed TS-sync byte
+  # (0x47), CPI bits, AACS-at-rest still present, and sha256/byte match to golden.
+  #
+  # The golden `mkref_unit*.bin` reference is LICENSED ripped-disc material and is
+  # NEVER committed to this public repo. It is read at run time from the directory
+  # named by `--kat-dir` / `FREEMKV_KAT_DIR` (point it at private-repo/tests/
+  # kat). If neither is set, every K step SKIPs (never hangs / hard-fails), so CI
+  # stays hardware-free. Geometry defaults to the reference disc (start_lba 11712,
+  # 8 units, stride 3, 6144-byte units) and is overridable per step.
+  #
+  # This is a DIFFERENTIAL: with the bus-off lever OFF the content is still
+  # bus-encrypted (K0 asserts the KAT does NOT match golden); the flag-gated
+  # bus-off knock (04 01 — the transport/Bus-Encryption hook) then makes READ(10)
+  # match the golden reference (K1 asserts all units byte-identical). Keep the
+  # SAME physical reference disc in the drive across every fw-test iteration.
+
+  # ── K0  BASELINE: bus-off OFF → content still bus-encrypted (must NOT match) ─
+  - name: "K0 bus-off OFF (04 00) — OEM enforce baseline"
+    phase: disc
+    knock: { subfn: 0x04, state: 0x00 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x00 }
+  - name: "K0 KAT baseline — bus encryption ON ⇒ content NOT byte-identical"
+    phase: disc
+    kat: {}                       # dir from --kat-dir / FREEMKV_KAT_DIR
+    expect_kat: { all_units_pass: false }
+
+  # ── K1  UNLOCK: enable the bus-off lever → content matches golden reference ──
+  - name: "K1 enable bus-off lever (04 01)"
+    phase: disc
+    knock: { subfn: 0x04, state: 0x01 }
+    expect:
+      status: good
+      flag: { subfn: 0x04, equals: 0x01 }
+  - name: "K1 KAT — bus encryption STRIPPED ⇒ all units byte-identical to golden"
+    phase: disc
+    kat: {}                       # dir from --kat-dir / FREEMKV_KAT_DIR
+    expect_kat: { all_units_pass: true }

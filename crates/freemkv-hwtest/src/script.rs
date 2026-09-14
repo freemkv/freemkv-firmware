@@ -265,6 +265,58 @@ pub struct ExecExpect {
     pub vid: Option<DataExp>,
 }
 
+/// The AACS bus-encryption KAT command form (the content-read differential).
+/// Reads `n_units` aligned units off the drive via `READ(10)` starting at
+/// `start_lba` (stride `stride_sectors`) and byte-compares each to the golden
+/// `mkref_unit{i}.bin` reference. The golden bins are licensed ripped-disc
+/// material and are NEVER vendored into this repo; they are read at run time from
+/// `dir` (else the `--kat-dir` / `FREEMKV_KAT_DIR` path). If no directory
+/// resolves, the KAT step SKIPs (never hangs / hard-fails). Every field is
+/// optional and defaults to the reference-disc geometry (see [`crate::kat`]).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct KatSpec {
+    /// Golden-reference directory for THIS step (overrides `--kat-dir` /
+    /// `FREEMKV_KAT_DIR`).
+    #[serde(default)]
+    pub dir: Option<String>,
+    /// First content LBA (default 11712 / 0x2dc0).
+    #[serde(default)]
+    pub start_lba: Option<Num>,
+    /// Number of aligned units to read + compare (default 8).
+    #[serde(default)]
+    pub n_units: Option<Num>,
+    /// Aligned-unit sector stride (default 3).
+    #[serde(default)]
+    pub stride_sectors: Option<Num>,
+    /// Aligned-unit length in bytes (default 6144).
+    #[serde(default)]
+    pub unit_len: Option<Num>,
+}
+
+/// Expectations for a [`KatSpec`] step. Default asserts every unit passes (bus
+/// encryption stripped). Set `all_units_pass: false` for the negative baseline
+/// (bus encryption still ON before the flag-gated bus-off knock is issued).
+#[derive(Debug, Clone, Deserialize)]
+pub struct KatExpect {
+    /// Whether all units must pass (`true`, the default) or must NOT all pass
+    /// (`false`, the pre-unlock differential baseline).
+    #[serde(default = "default_true")]
+    pub all_units_pass: bool,
+}
+
+impl Default for KatExpect {
+    fn default() -> Self {
+        Self {
+            all_units_pass: true,
+        }
+    }
+}
+
+/// serde default for [`KatExpect::all_units_pass`].
+fn default_true() -> bool {
+    true
+}
+
 /// Host-side AKE helper + cert material. Populated from the script's optional
 /// `ake:` block and overlaid by env (`AKE_HELPER`, `VALID_CERT`, `VALID_KEY`,
 /// `REVOKED_CERT`, `REVOKED_KEY`); `dev` is filled from the CLI `--dev`.
@@ -381,6 +433,10 @@ pub struct Step {
     /// the cert AKE. Assert on it with `expect_exec`.
     #[serde(default)]
     pub exec: Option<ExecSpec>,
+    /// The AACS bus-encryption KAT (mutually exclusive with the other forms) —
+    /// the content-read differential. Assert on it with `expect_kat`.
+    #[serde(default)]
+    pub kat: Option<KatSpec>,
     /// Data phase (default `from_device`).
     #[serde(default)]
     pub dir: Dir,
@@ -410,6 +466,9 @@ pub struct Step {
     /// Expectations for an `exec` command.
     #[serde(default)]
     pub expect_exec: ExecExpect,
+    /// Expectations for a `kat` command.
+    #[serde(default)]
+    pub expect_kat: KatExpect,
 }
 
 /// A whole test script.
@@ -451,15 +510,16 @@ impl Script {
             let forms = step.knock.is_some() as u8
                 + step.raw.is_some() as u8
                 + step.sequence.is_some() as u8
-                + step.exec.is_some() as u8;
+                + step.exec.is_some() as u8
+                + step.kat.is_some() as u8;
             match forms {
                 0 => anyhow::bail!(
-                    "step {:?}: needs one of `knock`, `raw`, `sequence`, or `exec`",
+                    "step {:?}: needs one of `knock`, `raw`, `sequence`, `exec`, or `kat`",
                     step.name
                 ),
                 1 => {}
                 _ => anyhow::bail!(
-                    "step {:?}: has more than one of `knock`/`raw`/`sequence`/`exec` (pick one)",
+                    "step {:?}: has more than one of `knock`/`raw`/`sequence`/`exec`/`kat` (pick one)",
                     step.name
                 ),
             }
@@ -754,6 +814,52 @@ steps:
     phase: disc
     exec: { cert: bogus }
     expect_exec: { result: vid }
+"#;
+        assert!(Script::from_yaml(bad).is_err());
+    }
+
+    #[test]
+    fn parses_kat_step_and_defaults() {
+        let s = Script::from_yaml(
+            r#"
+steps:
+  - name: "KAT positive"
+    phase: disc
+    kat:
+      dir: /tmp/kat
+      start_lba: 11712
+      n_units: 8
+      stride_sectors: 3
+      unit_len: 6144
+    expect_kat: { all_units_pass: true }
+  - name: "KAT baseline (defaults)"
+    phase: disc
+    kat: {}
+    expect_kat: { all_units_pass: false }
+"#,
+        )
+        .unwrap();
+        let k = s.steps[0].kat.as_ref().unwrap();
+        assert_eq!(k.dir.as_deref(), Some("/tmp/kat"));
+        assert_eq!(k.start_lba.unwrap().as_u32(), 11712);
+        assert_eq!(k.n_units.unwrap().as_usize(), 8);
+        assert!(s.steps[0].expect_kat.all_units_pass);
+        // defaults: no dir, and all_units_pass parsed as false for the baseline.
+        assert!(s.steps[1].kat.as_ref().unwrap().dir.is_none());
+        assert!(!s.steps[1].expect_kat.all_units_pass);
+        // expect_kat omitted entirely defaults to all_units_pass = true.
+        let d = Script::from_yaml("steps:\n  - name: x\n    phase: disc\n    kat: {}\n").unwrap();
+        assert!(d.steps[0].expect_kat.all_units_pass);
+    }
+
+    #[test]
+    fn rejects_kat_with_another_form() {
+        let bad = r#"
+steps:
+  - name: bad
+    phase: disc
+    kat: {}
+    knock: { subfn: 0x04 }
 "#;
         assert!(Script::from_yaml(bad).is_err());
     }

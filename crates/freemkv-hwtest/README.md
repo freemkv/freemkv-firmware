@@ -26,6 +26,35 @@ freemkv-hwtest --dev /dev/sg0 --disc --delay-ms 300 --settle-ms 600  # slower pa
 freemkv-hwtest --script tests.yaml                  # validate-only (no --dev; touches nothing)
 ```
 
+### One full-confirmation iteration (all vendor functions + the KAT)
+
+This is the single command we run each iteration once freemkv firmware is
+flashed — it confirms the **entire** vendor feature set (Identity, Speed, Region,
+Raw Read, DumpAll, flag round-trips, the cert-AKE matrix) **and** the AACS
+bus-encryption content differential (the KAT), with a clear PASS/FAIL per
+function:
+
+```
+FREEMKV_KAT_DIR=/path/to/private-repo/tests/kat \
+AKE_HELPER=/path/to/cert_vid \
+VALID_CERT=<hex> VALID_KEY=<hex> REVOKED_CERT=<hex> REVOKED_KEY=<hex> \
+freemkv-hwtest --dev /dev/sg0 --disc --soak --expect-version "freemkv 0.7.0"
+```
+
+On the test box (`matthew@10.1.7.13`, `/dev/sg0`, in the `cdrom` group), with the
+**reference KAT disc** loaded (`source ~/.cargo/env` first for `cargo` on PATH):
+
+```
+FREEMKV_KAT_DIR=$HOME/private-repo/tests/kat \
+  freemkv-hwtest --dev /dev/sg0 --disc --no-pause
+```
+
+`--kat-dir <path>` is the CLI equivalent of `FREEMKV_KAT_DIR` (CLI wins). Without
+either, the KAT (`K*`) steps **SKIP** — the golden reference bins are licensed
+ripped-disc material and are **never** committed to this repo. Without
+`AKE_HELPER` + certs the cert-AKE (`D11`) steps SKIP the same way. Use `--soak`
+for the full 20× reliability counts (default is a fast 3× cap).
+
 Exit codes: `0` all steps passed (skips don't fail the run), `1` a step failed,
 `2` the drive wedged (DID_BAD_TARGET / timeout — power-cycle to recover). After
 every step the runner re-issues the identity knock as a wedge guard; a dead bus
@@ -139,9 +168,44 @@ informational disc-type probes (READ CAPACITY(10), GET CONFIGURATION — printed
 never asserted), **D8** the deny→approve→read hang repro (see below), **D9** the
 01/02 split (`04 02` + bare `0xAD` still DENIED — `02` forces only the AKE path,
 not the bare producer gate), **D10** the disc unlock reliability soak
-(`04 01` → bare `0xAD` → VID, x20, reported X/20), and **D11** the cert-AKE matrix
-(see below). The VID is disc-specific and is **never** asserted against a fixed
-value; the tests assert only presence, nonzero, and stability.
+(`04 01` → bare `0xAD` → VID, x20, reported X/20), **D11** the cert-AKE matrix
+(see below), **D12** the end-to-end full-unlock order, and the **K** phase — the
+AACS bus-encryption KAT content differential (**K0** baseline bus-on ⇒ content
+NOT byte-identical, **K1** bus-off lever on ⇒ every unit byte-identical to the
+golden reference; see the KAT section). The VID is disc-specific and is **never**
+asserted against a fixed value; the tests assert only presence, nonzero, and
+stability.
+
+## AACS bus-encryption KAT (`kat` step + `--kat-dir`)
+
+The **K** phase is the content-read differential: it proves the flashed build
+**strips AACS bus encryption** on `READ(10)`. A `kat` step reads a fixed set of
+aligned units off the reference disc via `READ(10)` and **byte-compares** each to
+a golden `mkref_unit{i}.bin` captured on known-good MK/LibreDrive firmware, with
+four per-unit checks (mirrors the out-of-tree `private-repo/tests/kat/`):
+
+1. seed `byte[4] == 0x47` — MPEG-TS sync visible ⇒ seed clear in transit,
+2. `(unit[0] & 0xC0) == 0xC0` — CPI bits set,
+3. `aacs_unit_encrypted` (`(unit[0] & 0xC0) != 0`) — AACS-at-rest still present,
+4. `sha256(unit)` == the golden bin — byte-identical.
+
+It is a **differential**: `tests.yaml` runs the KAT twice — **K0** with the
+bus-off lever OFF (`04 00`) asserts the content is still bus-encrypted
+(`expect_kat: { all_units_pass: false }` — units must NOT match golden), then
+**K1** enables the flag-gated bus-off lever (`04 01`, the transport /
+Bus-Encryption hook) and asserts every unit is now byte-identical
+(`all_units_pass: true`). A `READ(10)` timeout during the KAT is a **WEDGE**
+(exit 2), never a false pass.
+
+The golden bins are **licensed ripped-disc material and are NEVER vendored into
+this repo**. They are read at run time from the directory named by `--kat-dir` or
+`FREEMKV_KAT_DIR` (point it at `private-repo/tests/kat`); a per-step `kat.dir`
+overrides both. If none resolves, every K step **SKIPs** — so `cargo test` and CI
+never need the reference (the KAT path is covered by mock unit tests with a
+stateful bus-off drive + throwaway golden bins in a temp dir). Geometry defaults
+to the reference disc (`start_lba 11712`, 8 units, stride 3, 6144-byte units) and
+is overridable per step. Keep the **same physical reference disc** in the drive
+across every fw-test iteration — the hashes are byte-exact to it.
 
 ## Command pacing (don't DDoS the drive)
 
