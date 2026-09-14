@@ -6,6 +6,25 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1]
+
+### Added
+- `freemkv-flash info` now identifies **every** drive family in a firmware image,
+  not just MediaTek MT19xx: Pioneer (raw + zlib-packaged), legacy Hitachi-LG
+  (HL-DT-ST) full-flash dumps, Renesas and MediaTek-bridge dumps, the encrypted
+  MediaTek envelope, and ASCII Intel-HEX images — each reported with honest
+  flashability (only MT19xx is flashable) and integrity where applicable.
+
+### Changed
+- `freemkv-flash flash` now writes only with a **closed, empty tray** — it refuses
+  a loaded disc or an open tray (each with a distinct message) before any write.
+
+### Validated
+- **Hardware-proven on the LG BU40N (MT1959).** `freemkv-fw create` output flashed
+  cleanly (read-back + on-device CMAC verified), `freemkv-hwtest` passed all lever
+  checks, the AACS bus-decrypt KAT read byte-identical to the golden MK/LibreDrive
+  reference, and a full UHD autorip produced an ISO **byte-identical to MakeMKV**.
+
 ## [0.7.0]
 
 ### Security

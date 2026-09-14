@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 # freemkv-firmware versions INDEPENDENTLY of the rest of the freemkv stack.
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 rust-version = "1.94"
 license = "MIT"
