@@ -551,6 +551,44 @@ fn raw_read_flag_mapping_01_bare_02_ake() {
     );
 }
 
+/// STATIC encoding guard for the **classic** AKE accept stub (`build_ake_stub_classic`,
+/// the `04 02` path). It must (a) replay the overwritten `lsrs r0,r0,#6` as its
+/// FIRST instruction (the classic reject writer folds the AGID compute into the 4
+/// replaced bytes), (b) gate on `cmp r2,#2` (accept-any-cert), and (c) carry both
+/// the OEM reject `movs r1,#1` and the forced-accept `movs r1,#6`. Pure synthetic;
+/// no owned image needed. Thumb: `lsrs r0,r0,#6` = 0x0980, `cmp r2,#2` = 0x2A02.
+#[test]
+fn classic_ake_stub_replays_lsrs_and_gates_on_cmp2() {
+    fn has_u16le(hay: &[u8], needle: u16) -> bool {
+        hay.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == needle)
+    }
+    let stub = Mt1959Engine
+        .build_ake_stub_classic(super::FLAG_TABLE_BASE, 0x0010_0000)
+        .expect("classic ake stub");
+    assert_eq!(
+        u16::from_le_bytes([stub[0], stub[1]]),
+        0x0980,
+        "first instruction must replay `lsrs r0,r0,#6`"
+    );
+    assert!(
+        has_u16le(&stub, 0x2A02),
+        "must gate on cmp r2,#2 (accept-any)"
+    );
+    assert!(
+        has_u16le(&stub, 0x2101),
+        "must carry the OEM reject `movs r1,#1`"
+    );
+    assert!(
+        has_u16le(&stub, 0x2106),
+        "must carry the forced-accept `movs r1,#6`"
+    );
+    assert!(
+        !has_u16le(&stub, 0x2A01),
+        "classic AKE stub must NOT gate on #1 (that is the bare-read 04 01 path)"
+    );
+}
+
 /// STATIC guard against the class of bug that wedged the drive: the control
 /// toggles (Speed/Region/Raw Read) return a ZERO-length GOOD, so the handler must
 /// carry NO data payload for them. The old build shipped "Command NN WIP"

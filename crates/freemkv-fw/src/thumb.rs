@@ -389,6 +389,11 @@ impl Asm {
         self.raw16((imm5 << 6) | (rm << 3) | rd);
     }
 
+    /// `lsrs rd, rm, #imm5` (logical shift right; `imm5` 1..31).
+    pub fn lsrs_imm(&mut self, rd: u16, rm: u16, imm5: u16) {
+        self.raw16(0x0800 | (imm5 << 6) | (rm << 3) | rd);
+    }
+
     /// `adds rd, rn, rm` (register).
     pub fn adds_reg(&mut self, rd: u16, rn: u16, rm: u16) {
         self.raw16(0x1800 | (rm << 6) | (rn << 3) | rd);
