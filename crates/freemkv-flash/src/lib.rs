@@ -20,6 +20,8 @@ pub mod drive;
 pub mod engine;
 /// Declarative per-family/brand flash instruction sets + the 18-brand catalog.
 pub mod flashset;
+/// Signature-driven drive-family identification for a firmware IMAGE.
+pub mod imageid;
 pub mod manifest;
 pub mod platform;
 pub mod probe;

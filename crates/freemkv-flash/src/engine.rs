@@ -121,10 +121,14 @@ pub(crate) struct FileClass {
     pub flash: Option<(&'static str, crate::flashset::FlashStatus)>,
     /// CMAC integrity of the image bytes.
     pub cmac: CmacSummary,
+    /// The full drive-family identity: MT19xx OR any other family found in the
+    /// hoard (Pioneer, Renesas, legacy HL-DT-ST, …), by in-image signature.
+    pub identity: crate::imageid::ImageIdentity,
 }
 
 /// Classify a firmware image the way `info` reports it (read-only, no drive).
 pub(crate) fn classify_file(image: &[u8]) -> FileClass {
+    let identity = crate::imageid::identify(image);
     let chip = freemkv_chipset::detect_chip(image).ok();
     let capability = chip
         .as_ref()
@@ -155,6 +159,7 @@ pub(crate) fn classify_file(image: &[u8]) -> FileClass {
         capability,
         flash,
         cmac,
+        identity,
     }
 }
 
@@ -179,16 +184,9 @@ pub fn info_file(path: &Path) -> Result<()> {
 
     let fc = classify_file(&image);
     let Some(chip) = fc.chip.as_ref() else {
-        println!(
-            "{}",
-            style::kv(
-                "image",
-                &style::amber(
-                    "not a recognizable MT19xx firmware image (truncated, packed, or non-MediaTek)"
-                )
-            )
-        );
-        return Ok(());
+        // Not MT19xx: report whichever other family the signature layer found
+        // (Pioneer, Renesas, legacy HL-DT-ST, …) — or an honest "unknown".
+        return info_file_other(&fc.identity);
     };
 
     let conf = match chip.confidence {
@@ -243,7 +241,15 @@ pub fn info_file(path: &Path) -> Result<()> {
     }
 
     let flash = match fc.flash {
-        Some((name, status)) => format!("{name} — {}", status.label()),
+        // MT1959 is the hardware-proven executable path; an MT1939 image shares the
+        // MediaTek recipe but is not itself proven, so say so rather than overclaim.
+        Some((name, status)) => {
+            let mut s = format!("{name} — {}", status.label());
+            if chip.family == freemkv_chipset::ChipFamily::Mt1939 {
+                s.push_str(" (image is MT1939 — recognized; only the MT1959 path is proven)");
+            }
+            s
+        }
         None => format!(
             "not flashable by this tool ({} brand recipes catalogued)",
             crate::flashset::CATALOG.len()
@@ -274,6 +280,48 @@ pub fn info_file(path: &Path) -> Result<()> {
                 ident_or_unknown(&chip.model),
                 chip.family.label()
             )
+        )
+    );
+    Ok(())
+}
+
+/// Report a firmware FILE that is NOT MediaTek MT19xx: a non-MTK family found by
+/// the signature layer ([`crate::imageid`]), or an honest "unknown". Prints the
+/// family, any model/rev extracted from the image (never the filename), the
+/// honest flashability (identify-only for every non-MT19xx family), and states
+/// that these families carry no MT19xx-style signed CMAC table — so `info` never
+/// prints INVALID for an image that simply has no integrity table.
+fn info_file_other(id: &crate::imageid::ImageIdentity) -> Result<()> {
+    use crate::imageid::ImageFamily;
+    if id.family == ImageFamily::Unknown {
+        println!(
+            "{}",
+            style::kv(
+                "image",
+                &style::amber(
+                    "unrecognized — no known drive-family signature (truncated, packed, or an \
+                     unsupported family)"
+                )
+            )
+        );
+        return Ok(());
+    }
+    println!("{}", style::kv("family", id.family.label()));
+    let model = id.model.as_deref().unwrap_or("unknown (not in image)");
+    let rev = id.rev.as_deref().unwrap_or("unknown");
+    println!(
+        "{}",
+        style::kv("descriptor", &format!("model='{model}' rev='{rev}'"))
+    );
+    if let Some(note) = &id.note {
+        println!("{}", style::dim_line(&format!("          {note}")));
+    }
+    println!("{}", style::kv("flash", &id.family.flash_summary()));
+    println!(
+        "{}",
+        style::kv(
+            "integrity",
+            &style::amber("not applicable (this family has no MT19xx-style signed CMAC table)")
         )
     );
     Ok(())
