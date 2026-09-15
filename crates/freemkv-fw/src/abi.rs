@@ -141,11 +141,15 @@ pub enum Feature {
     /// 1..8; [`REGION_BD_A`]/`_B`/`_C` = force BD region A/B/C.
     Region = 0x02,
     /// UHD (AACS 2.0) capability gate (the disc-classifier mode gate). `passthrough`
-    /// = as shipped; [`STATE_OFF`] = force disabled; [`STATE_ON`] = force enabled
-    /// (mode gate neutralized so the drive engages UHD discs).
+    /// = as shipped; [`STATE_ON`] = force enabled (mode gate neutralized so the drive
+    /// engages UHD discs). [`STATE_OFF`] is a reserved/OEM no-op here: only the enable
+    /// direction is emitted (the classifier stub arms solely on [`STATE_ON`]).
     Uhd = 0x03,
-    /// Blu-ray (AACS 1.0) capability gate. `passthrough` = as shipped;
-    /// [`STATE_OFF`] = force disabled; [`STATE_ON`] = force enabled.
+    /// Blu-ray (AACS 1.0) capability gate. `passthrough`/[`STATE_OFF`] (boot)/
+    /// [`STATE_ON`] = OEM (BD engaged as shipped — the enable direction is a
+    /// reserved/no-op, since OEM already engages BD); [`STATE_BD_DISABLE`] (`0x02`) =
+    /// force-refuse BD discs. The disable value is a distinct sentinel (NOT `0x00`,
+    /// the SRAM boot value) so an unarmed image is OEM-behaviour-identical.
     Bd = 0x04,
     /// Host Revocation List handling on the cert path. `passthrough`/[`STATE_OFF`]
     /// = OEM enforce; [`STATE_ON`] (`0x01`) = skip the HRL lookup (revoked certs
@@ -164,6 +168,13 @@ pub enum Feature {
 
 /// [`Feature::Hrl`] state: one-time PERMANENT wipe of the flash HRL to valid-empty.
 pub const HRL_WIPE_ONCE: u8 = 0x02;
+
+/// [`Feature::Bd`] state: **force-refuse** BD (AACS 1.0) discs (`0x02`). A distinct
+/// sentinel — deliberately NOT [`STATE_OFF`] (`0x00`, which is the SRAM boot value
+/// of every flag cell) — so an unarmed/boot image leaves BD engaged (OEM). Mirrors
+/// [`HRL_WIPE_ONCE`]'s use of `0x02` as a feature-specific state that is neither the
+/// boot `0x00` nor the passthrough `0xFF` default. See [`Feature::Bd`].
+pub const STATE_BD_DISABLE: u8 = 0x02;
 
 /// [`Feature::Region`] state: force BD region A. (`0x2A`/`0x2B`/`0x2C` = A/B/C; the
 /// `0x2X` block is the BD region scheme, `0x1X` the DVD 1..8 scheme.)

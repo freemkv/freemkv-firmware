@@ -531,11 +531,12 @@ const UHD_CLASSIFIER_SIG_VER: &[(u16, u16)] = &[
 ///   ...deny: movs r2,#1; movs r1,#0x6f; movs r0,#5; bl <set_sense>  (OEM 6F refusal)
 ///   ```
 /// The `Feature::Bd` stub replays `ldrb r0,[r2,#7]` and then, only when
-/// `flag[Bd]==STATE_OFF`, forces a non-equal compare so the caller's `beq` falls
-/// through to the OEM deny block (which raises the drive's own `6F` refusal sense)
-/// — i.e. the drive REFUSES a BD disc it would otherwise engage. At `passthrough`
-/// (default) / `on` it replays the OEM `cmp r0,#2` verbatim, so an unarmed image is
-/// byte-behaviour-identical to OEM (stealth). This is the real enforcement point
+/// `flag[Bd]==STATE_BD_DISABLE` (`0x02`, a distinct sentinel — NOT the boot `0x00`),
+/// forces a non-equal compare so the caller's `beq` falls through to the OEM deny
+/// block (which raises the drive's own `6F` refusal sense) — i.e. the drive REFUSES
+/// a BD disc it would otherwise engage. At any non-`STATE_BD_DISABLE` value (`0x00`
+/// boot / `0xFF` passthrough / `on`) it replays the OEM `cmp r0,#2` verbatim, so an
+/// unarmed/boot image is byte-behaviour-identical to OEM (stealth). This is the real enforcement point
 /// (not the classifier, which only *sets* the class), it reuses OEM's own deny
 /// path (no fabricated sense), and it is **unique** in the REPORT KEY window on
 /// every MT1959 image that carries this shape; images with a different REPORT KEY
@@ -2169,21 +2170,25 @@ impl Mt1959Engine {
     /// them is invisible. `lr` is caller-saved (the enclosing function returns via its
     /// own `pop {…,pc}`), so the `bl`'s `lr` clobber is harmless.
     ///
-    /// `flag[Bd]` semantics at this site:
-    ///   * `!= STATE_OFF` (`passthrough` default / `on`): replay `ldrb r0,[r2,#7]; cmp
-    ///     r0,#2` verbatim, so the caller's `beq` sees the exact OEM flags — BD
-    ///     acceptance is byte-behaviour-identical to OEM. Inert (stealth) until armed.
-    ///   * `== STATE_OFF`: after the class replay, force a non-equal compare (`cmp
-    ///     r0,#0xff`; class is never `0xff`) so the caller's `beq <accept>` is NOT
-    ///     taken and control falls into the OEM deny block, which raises the drive's
-    ///     own `6F` refusal sense — the drive REFUSES the BD disc.
+    /// `flag[Bd]` semantics at this site (the disable value is a distinct sentinel,
+    /// [`abi::STATE_BD_DISABLE`] = `0x02`, NOT the boot `0x00` — every other stub
+    /// treats `0x00` boot and `0xFF` passthrough alike as OEM, and BD must too so an
+    /// unarmed/boot image is byte-behaviour-identical to OEM):
+    ///   * `!= STATE_BD_DISABLE` (`0x00` boot / `0xFF` passthrough / `0x01` on):
+    ///     replay `ldrb r0,[r2,#7]; cmp r0,#2` verbatim, so the caller's `beq` sees
+    ///     the exact OEM flags — BD acceptance is byte-behaviour-identical to OEM.
+    ///     Inert (stealth) until armed; an unarmed/boot image engages BD like OEM.
+    ///   * `== STATE_BD_DISABLE` (`0x02`): after the class replay, force a non-equal
+    ///     compare (`cmp r0,#0xff`; class is never `0xff`) so the caller's `beq
+    ///     <accept>` is NOT taken and control falls into the OEM deny block, which
+    ///     raises the drive's own `6F` refusal sense — the drive REFUSES the BD disc.
     fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let refuse = a.label();
         a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
         a.ldr_lit(3, flag_base + abi::Feature::Bd as u32); // r3 = &flag[Bd]
         a.ldrb_imm(3, 3, 0); // r3 = Bd flag byte
-        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force BD refuse
+        a.cmp_imm(3, abi::STATE_BD_DISABLE); // 0x02 = force BD refuse (distinct sentinel; 0x00 boot / 0xFF passthrough / 0x01 on all stay OEM)
         a.beq(refuse);
         a.cmp_imm(0, 2); // stealth: replay `cmp r0,#2` LAST so the caller's `beq` sees OEM flags
         a.bx(14); // bx lr -> caller's `beq <accept>` at anchor+20 (OEM acceptance)
@@ -2233,7 +2238,7 @@ impl Mt1959Engine {
         a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
         a.cmp_imm(2, abi::STATE_ON); // 0x01 = null AKE (accept any/revoked host cert)
         a.beq(accept);
-        a.movs_imm(1, 1); // 00/01: OEM reset to state 1 on a failed cert verify
+        a.movs_imm(1, 1); // OEM (00/0xFF): reset to state 1 on a failed cert verify
         a.b(done);
         a.bind(accept);
         a.movs_imm(1, 6); // forced: state 6 (AKE authenticated)
