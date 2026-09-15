@@ -220,6 +220,38 @@ const AKE_GATE_SIG_NB: &[(u16, u16)] = &[
                       // anchor+12 = `bl set_agid_state`, the shared join both arms reach ← detour site
 ];
 
+/// NB-class **`1.V5`** variant of the AKE accept gate. RE'd from the two
+/// `WH16NS58 1.V5` images (`unMK_WH16NS58_1.V5_N004900` + its MK sibling,
+/// anchor `0x13a254`), where BOTH [`AKE_GATE_SIG`] and [`AKE_GATE_SIG_NB`] match
+/// 0×. It is a hybrid of the two shapes:
+///
+/// * like [`AKE_GATE_SIG_NB`], the AGID byte is read via `r4` (not `r5`) and the
+///   accept (`movs r1,#6`) and reject (`movs r1,#1`) arms **converge on one
+///   shared `bl set_agid_state`** (the accept arm's `b` lands on it) rather than
+///   each ending in its own `b`;
+/// * unlike `AKE_GATE_SIG_NB` — and like the desktop [`AKE_GATE_SIG`] — the
+///   reject arm **re-reads** the AGID byte (`ldrb r0,[r4,#0xa]; lsrs r0,r0,#6`)
+///   instead of falling straight into a bare `lsrs`. That extra `ldrb` (2 bytes)
+///   pushes the reject writer to `anchor+12` and the shared `bl` to `anchor+14`.
+///
+/// PROVEN (fleet scan, `[0x130000,0x140000)`): unique per image (n=1) on exactly
+/// the 2 `1.V5` images, **zero matches** on every other hoard image, and neither
+/// `AKE_GATE_SIG` nor `AKE_GATE_SIG_NB` matches the `1.V5` images — so the three
+/// variants never overlap and existing coverage is untouched. The Raw Read detour
+/// replaces the shared `bl` at `anchor+14` and reuses the NB stub verbatim
+/// ([`Mt1959Engine::build_ake_stub_nb`]): both arms reach the join with `r1`
+/// already set, so the stub must PRESERVE `r1` when the flag is off.
+const AKE_GATE_SIG_NB_V5: &[(u16, u16)] = &[
+    (0x7AA0, 0xFFFF), // ldrb r0,[r4,#0xa]   AGID byte (r4)   (accept arm)
+    (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID
+    (0x2106, 0xFFFF), // movs r1,#6          accept: state 6
+    (0xE000, 0xF800), // b <shared bl @ +14>
+    (0x7AA0, 0xFFFF), // ldrb r0,[r4,#0xa]   reject arm RE-READS (unlike NB)
+    (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID
+    (0x2101, 0xFFFF), // movs r1,#1          reject: state 1  ← reject writer @ anchor+12
+                      // anchor+14 = `bl set_agid_state`, the shared join both arms reach ← detour site
+];
+
 /// Signature of the OEM REPORT KEY key-format-8 (RPC state) emitter tail
 /// (`0x119890` on 1.00, `0x119a84` on 1.03) — the byte-for-byte identical run
 /// that marshals the 8-byte RPC-state frame into the response FIFO. RPCScheme is
@@ -1188,6 +1220,22 @@ impl Mt1959Engine {
         let lo = 0x0013_0000usize.min(image.len());
         let hi = 0x0014_0000usize.min(image.len());
         Ok(find_unique(image, AKE_GATE_SIG_NB, lo, hi, "AACS AKE accept gate (NB)")? as u32)
+    }
+
+    /// The NB-class `1.V5` AKE accept-gate anchor — the unique
+    /// [`AKE_GATE_SIG_NB_V5`] match. Returns the anchor; the reject writer
+    /// (`movs r1,#1`) is at `anchor+12` and the shared `bl set_agid_state` the
+    /// Raw Read detour replaces is at `anchor+14` (see [`AKE_GATE_SIG_NB_V5`]).
+    pub fn find_ake_gate_nb_v5(&self, image: &[u8]) -> Result<u32> {
+        let lo = 0x0013_0000usize.min(image.len());
+        let hi = 0x0014_0000usize.min(image.len());
+        Ok(find_unique(
+            image,
+            AKE_GATE_SIG_NB_V5,
+            lo,
+            hi,
+            "AACS AKE accept gate (NB 1.V5)",
+        )? as u32)
     }
 
     /// The OEM AACS engine session-reset routine (`aacs_session_reset`) — the
@@ -2187,17 +2235,37 @@ impl Mt1959Engine {
             return Ok((reset_site, bytes, ake_gate));
         }
         // NB-class: detour the shared `bl set_agid_state` at anchor+12.
-        let nb_gate = self.find_ake_gate_nb(image)?;
-        let reject = nb_gate as usize + 10;
+        if let Ok(nb_gate) = self.find_ake_gate_nb(image) {
+            let reject = nb_gate as usize + 10;
+            let movs_hw = u16::from_le_bytes([image[reject], image[reject + 1]]);
+            if movs_hw != 0x2101 {
+                bail!(
+                    "NB AKE reject writer `movs r1,#1` not at 0x{reject:x} (got 0x{movs_hw:04x})"
+                );
+            }
+            let bl_site = nb_gate as usize + 12;
+            let back = thumb::decode_bl(image, bl_site)
+                .ok_or_else(|| anyhow!("NB AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
+            let bytes = self.build_ake_stub_nb(flag_base, back)?;
+            return Ok((bl_site, bytes, nb_gate));
+        }
+        // NB-class `1.V5`: reject arm re-reads the AGID byte, so the reject writer
+        // is at anchor+12 and the shared `bl set_agid_state` at anchor+14. Both
+        // arms converge on that shared `bl`, so the NB stub (which PRESERVES r1
+        // when the flag is off) applies verbatim.
+        let v5_gate = self.find_ake_gate_nb_v5(image)?;
+        let reject = v5_gate as usize + 12;
         let movs_hw = u16::from_le_bytes([image[reject], image[reject + 1]]);
         if movs_hw != 0x2101 {
-            bail!("NB AKE reject writer `movs r1,#1` not at 0x{reject:x} (got 0x{movs_hw:04x})");
+            bail!(
+                "NB 1.V5 AKE reject writer `movs r1,#1` not at 0x{reject:x} (got 0x{movs_hw:04x})"
+            );
         }
-        let bl_site = nb_gate as usize + 12;
+        let bl_site = v5_gate as usize + 14;
         let back = thumb::decode_bl(image, bl_site)
-            .ok_or_else(|| anyhow!("NB AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
+            .ok_or_else(|| anyhow!("NB 1.V5 AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
         let bytes = self.build_ake_stub_nb(flag_base, back)?;
-        Ok((bl_site, bytes, nb_gate))
+        Ok((bl_site, bytes, v5_gate))
     }
 
     /// The Raw Read (0x04) flag-gated producer Gate-A trampoline. Entered by a `bl`
@@ -2787,10 +2855,20 @@ impl Mt1959Engine {
             ],
         ));
 
-        // Speed — the classic ramp ceiling is not reversed (engine-scope §4).
+        // Speed — the MT1959 ramp-ceiling gate (a byte `speed_index` in an SRAM
+        // cell, `cmp #0x32; bhi <ramp-exit>`, incremented by a rate-limit counter)
+        // does NOT exist on classic MT1939: RE of all 11 classic speed-miss images
+        // finds no incrementing byte-index ramp and no `#0x32` ceiling anywhere in
+        // the image. Classic read speed is a disc-type halfword clamp routed through
+        // a shared limiter primitive (`~0x1b854` on BH16NS40 1.00, disc-type gated
+        // max values 0x64/0xc8/0x190/0x1f4), with no single detourable ramp gate
+        // matching the MT1959 stub contract. A residual miss by real architecture
+        // difference, not a missing signature — see the fleet survey notes.
         levers.push(LeverReport::missed(
             LeverId::Speed,
-            "MT1939 classic read-ramp ceiling not yet reversed (NEEDS-RE)",
+            "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter \
+             primitive, no byte speed_index ramp / no 0x32 ceiling) — no MT1959-style \
+             ramp-ceiling gate exists to detour (residual RE miss)",
         ));
 
         // Region-free — REGION_EMIT_SIG transfers to classic in a higher window.
