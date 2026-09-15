@@ -41,8 +41,8 @@ const EXPECT_HANDLER_HEX: &str =
 // REPORT KEY mode-0 class check (0x1365ce). Regenerate against the OEM base (run this
 // test with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "82947a68884d8350abf76efeeeaa6e94";
-const EXPECT_CMAC_15: &str = "28fc3eb63b938f03167497076193c85b";
+const EXPECT_CMAC_1: &str = "9f4431e67ebbaf7689ecc7ebe2b9f36a";
+const EXPECT_CMAC_15: &str = "bc257318767a1660b4c0a3f31945e31c";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -651,12 +651,13 @@ fn feature_flag_gating_is_reslotted() {
         "Region stub reads flag[Region]"
     );
 
-    // BD-refuse gates on `cmp r3,#STATE_OFF` (0x2B00) and reads flag[Bd] (0x04).
-    const CMP_R3_OFF: u16 = 0x2B00; // cmp r3,#STATE_OFF
+    // BD-refuse gates on `cmp r3,#STATE_BD_DISABLE` (0x2B02) — a distinct sentinel,
+    // NOT the boot `0x00`, so unarmed/boot BD stays OEM — and reads flag[Bd] (0x04).
+    const CMP_R3_DISABLE: u16 = 0x2B02; // cmp r3,#STATE_BD_DISABLE
     let bd = Mt1959Engine.build_bd_stub(base).expect("bd stub");
     assert!(
-        has(&bd, CMP_R3_OFF),
-        "BD-refuse stub gates on cmp r3,#STATE_OFF"
+        has(&bd, CMP_R3_DISABLE),
+        "BD-refuse stub gates on cmp r3,#STATE_BD_DISABLE"
     );
     assert!(
         reads(&bd, base + Feature::Bd as u32),
