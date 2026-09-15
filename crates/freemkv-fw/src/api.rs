@@ -114,7 +114,7 @@ pub fn probe_device(device: &str) -> Result<ProbeOutcome> {
     let mut dev = platform::open(device, false).with_context(|| format!("opening {device}"))?;
 
     const ALLOC_LEN: usize = 96;
-    let cdb = abi::build_cdb(abi::SubFn::Identity, None, ALLOC_LEN as u16);
+    let cdb = abi::build_identity_cdb(ALLOC_LEN as u16);
 
     match dev.command_in(&cdb, ALLOC_LEN) {
         Ok(resp) if abi::verify_response(&resp) => {

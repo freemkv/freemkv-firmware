@@ -300,6 +300,11 @@ impl Asm {
         self.raw16(0x2800 | (rn << 8) | imm8 as u16);
     }
 
+    /// `cmp rn, rm` (low registers, data-processing form).
+    pub fn cmp_reg(&mut self, rn: u16, rm: u16) {
+        self.raw16(0x4280 | (rm << 3) | rn);
+    }
+
     /// `movs rt, #imm8`.
     pub fn movs_imm(&mut self, rt: u16, imm8: u8) {
         self.raw16(0x2000 | (rt << 8) | imm8 as u16);

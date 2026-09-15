@@ -72,10 +72,10 @@ fn kat_base_audits_and_is_idempotent() {
 
 /// Build a one-lever `ModifyReport` (RawRead Applied) over `image`, carrying the
 /// given bus-off facts, so the structural audit can be exercised synthetically.
-fn rawread_busoff_report(
+fn rawread_busenc_report(
     image: Vec<u8>,
-    busoff_site: u32,
-    busoff_stub_va: u32,
+    busenc_site: u32,
+    busenc_stub_va: u32,
 ) -> crate::engine::lever::ModifyReport {
     use crate::engine::lever::{LeverId, LeverReport, ModifyReport, Validation};
     ModifyReport {
@@ -89,8 +89,8 @@ fn rawread_busoff_report(
         levers: vec![LeverReport::applied(
             LeverId::RawRead,
             vec![
-                ("busoff_site", busoff_site),
-                ("busoff_stub_va", busoff_stub_va),
+                ("busenc_site", busenc_site),
+                ("busenc_stub_va", busenc_stub_va),
             ],
         )],
         image,
@@ -99,27 +99,27 @@ fn rawread_busoff_report(
 }
 
 /// Locate the "bus-off detour bl" audit check verdict, if produced.
-fn busoff_check_ok(a: &AuditResult) -> Option<bool> {
+fn busenc_check_ok(a: &AuditResult) -> Option<bool> {
     a.checks
         .iter()
-        .find(|c| c.what == "bus-off detour bl")
+        .find(|c| c.what == "bus-enc detour bl")
         .map(|c| c.ok)
 }
 
 /// The structural audit must PASS the bus-off detour check when the `04 03` `bl`
 /// landed correctly at the recorded site and the stub is non-blank.
 #[test]
-fn audit_passes_when_busoff_bl_landed() {
+fn audit_passes_when_busenc_bl_landed() {
     let site = 0x100u32;
     let stub = 0x200u32;
     let mut img = vec![0u8; 0x400];
     let bl = crate::thumb::encode_bl(site as usize, stub).expect("bl in range");
     img[site as usize..site as usize + 4].copy_from_slice(&bl);
     // stub must not be blank flash (0xFF) — leave it as non-0xFF zeros.
-    let report = rawread_busoff_report(img.clone(), site, stub);
+    let report = rawread_busenc_report(img.clone(), site, stub);
     let audit = audit_image(&img, &report);
     assert_eq!(
-        busoff_check_ok(&audit),
+        busenc_check_ok(&audit),
         Some(true),
         "bus-off detour check must pass:\n{}",
         fmt_failures(&audit)
@@ -129,14 +129,14 @@ fn audit_passes_when_busoff_bl_landed() {
 /// The audit must FAIL the bus-off check when the recorded `bl` is not present at
 /// the site (guards against a lever reporting Applied without the detour landing).
 #[test]
-fn audit_fails_when_busoff_bl_missing() {
+fn audit_fails_when_busenc_bl_missing() {
     let site = 0x100u32;
     let stub = 0x200u32;
     let img = vec![0u8; 0x400]; // no `bl` written at `site`
-    let report = rawread_busoff_report(img.clone(), site, stub);
+    let report = rawread_busenc_report(img.clone(), site, stub);
     let audit = audit_image(&img, &report);
     assert_eq!(
-        busoff_check_ok(&audit),
+        busenc_check_ok(&audit),
         Some(false),
         "bus-off detour check must fail when the bl is absent"
     );
@@ -145,7 +145,7 @@ fn audit_fails_when_busoff_bl_missing() {
 /// The audit must FAIL the bus-off check when the `bl` landed but the stub slot is
 /// blank flash (0xFF) — a detour to an un-injected stub is not effective.
 #[test]
-fn audit_fails_when_busoff_stub_blank() {
+fn audit_fails_when_busenc_stub_blank() {
     let site = 0x100u32;
     let stub = 0x200u32;
     let mut img = vec![0u8; 0x400];
@@ -155,10 +155,10 @@ fn audit_fails_when_busoff_stub_blank() {
     for b in &mut img[stub as usize..stub as usize + 16] {
         *b = 0xFF;
     }
-    let report = rawread_busoff_report(img.clone(), site, stub);
+    let report = rawread_busenc_report(img.clone(), site, stub);
     let audit = audit_image(&img, &report);
     assert_eq!(
-        busoff_check_ok(&audit),
+        busenc_check_ok(&audit),
         Some(false),
         "bus-off detour check must fail when the stub is blank flash"
     );

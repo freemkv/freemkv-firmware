@@ -4821,3 +4821,19 @@ dependencies = [
  "syn 3.0.5",
  "winnow 1.0.4",
 ]
+
+[[patch.unused]]
+name = "freemkv-unlock"
+version = "1.7.1"
+
+[[patch.unused]]
+name = "freemkv-engine"
+version = "1.7.1"
+
+[[patch.unused]]
+name = "freemkv-i18n"
+version = "1.7.1"
+
+[[patch.unused]]
+name = "freemkv-keysources"
+version = "1.7.1"

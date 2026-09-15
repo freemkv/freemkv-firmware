@@ -52,10 +52,10 @@ pub struct CreateReport {
     /// OEM per-AGID AKE gate-setter primitive (0x03 opens the gate through it).
     pub vid_gate_setter: u32,
     /// `SetDiscMode` dispatcher — the read-datapath disc-mode anchor. Located and
-    /// proven unique, but DELIBERATELY NOT wired: the read path is stock and bus-off
-    /// comes from the AKE negotiating no bus key, so the Raw Read `04 03` "data clear"
-    /// mode gates the AKE success writer instead (see `ake_busoff_gate`). Reported for
-    /// audit / future use.
+    /// proven unique, but DELIBERATELY NOT wired: bus-off is done the MK way instead,
+    /// by clearing the bus-encryption enable bit of the read-datapath MMIO register on
+    /// the AACS opcode-0x45 path (see `busenc_detour_site`). Reported for audit /
+    /// future use.
     pub setdiscmode: u32,
     /// Speed (0x02) ramp-ceiling gate anchor (the `ldr r1,[pc]` of the ramp
     /// self-ceiling test); the detour replaces the `cmp/bhi` at `gate+4`.
@@ -84,14 +84,29 @@ pub struct CreateReport {
     pub deny_reset_gate: u32,
     /// Injection address of the Raw Read (0x04) deny-path AACS-reset trampoline.
     pub deny_stub_va: u32,
-    /// AACS AKE **success**-writer detour site for Raw Read `04 03` "data clear"
-    /// (bus-encryption removal); the detour replaces the SUCCESS state writer
-    /// (`movs r1,#6; b <set_agid_state>`) at `ake_gate+4`. (The `04 01/02` modes
-    /// detour the RESET writer at `ake_gate+12`; the two sites do not overlap.)
-    pub ake_busoff_gate: u32,
-    /// Injection address of the Raw Read `04 03` bus-off (AKE success-writer)
+    /// AACS opcode-0x45 (Read Data Key) arm detour site for Raw Read `04 03` "data
+    /// clear" (drive-side bus-encryption removal, MK-style); the detour replaces the
+    /// arm's leading `bl <key-prog>`, and the stub clears the bus-enc enable bit of
+    /// the read-datapath MMIO register when `flag[RawRead]==3`.
+    pub busenc_detour_site: u32,
+    /// Injection address of the Raw Read `04 03` bus-off (MK-style bit-clear)
     /// trampoline.
-    pub ake_busoff_stub_va: u32,
+    pub busenc_stub_va: u32,
+    /// Raw Read `04 03` UHD mode-gate neutralizer detour site — the disc-version
+    /// classifier prologue's reload (`ldr r0,[sp,#0x38]`, `UHD_CLASSIFIER_SIG`
+    /// match+6). The stub replays the reload and, when `flag[RawRead]==3`, zeros the
+    /// disc-version so a UHD (AACS 2.0) disc dodges the mode-1 refusal — the MK-style
+    /// classifier hook. `0` when not wired (classifier prologue not the known shape).
+    pub uhd_classifier_site: u32,
+    /// Injection address of the Raw Read `04 03` UHD mode-gate neutralizer trampoline.
+    /// `0` when not wired.
+    pub uhd_stub_va: u32,
+    /// The three HRL-skip cert-path detour sites (`flag[Feature::Hrl]==STATE_ON`):
+    /// each a `cmp r0,#0; bne <6F/00>` replaced by a `bl` to the shared HRL-skip
+    /// stub. Empty when the HRL cert path is not the known shape (lever MISS).
+    pub hrl_sites: Vec<u32>,
+    /// Injection address of the shared HRL-skip trampoline. `0` when not wired.
+    pub hrl_stub_va: u32,
     /// File offset of the downgrade-enable (DE) byte written unconditionally.
     pub de_off: u32,
     /// SRAM flag-table base actually used by this build (currently the provisional
