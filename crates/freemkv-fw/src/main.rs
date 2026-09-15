@@ -79,7 +79,7 @@ enum Command {
         family: Option<Family>,
     },
     /// Probe a live freemkv drive over the vendor command (`3C 0E C0 DE`):
-    /// identity, or a memory read via [`abi::SubFn::DumpAll`] (subfn 07).
+    /// identity, or a memory read via [`abi::Verb::DumpAll`].
     ///
     /// With no dump flags: prints the drive's freemkv identity.
     /// `--dump <hex-addr> --len <hex-len> --out <file>`: read an explicit range.
@@ -279,7 +279,7 @@ fn cmd_verify_device(path: &Path) -> Result<ExitCode> {
         platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
 
     const ALLOC_LEN: usize = 96;
-    let cdb = abi::build_cdb(abi::SubFn::Identity, None, ALLOC_LEN as u16);
+    let cdb = abi::build_identity_cdb(ALLOC_LEN as u16);
 
     match dev.command_in(&cdb, ALLOC_LEN) {
         Ok(resp) if abi::verify_response(&resp) => {
@@ -332,7 +332,7 @@ fn parse_u32(s: &str) -> Result<u32> {
     Ok(v)
 }
 
-/// Read `len` bytes starting at `start` via [`abi::SubFn::DumpAll`], in
+/// Read `len` bytes starting at `start` via [`abi::Verb::DumpAll`], in
 /// [`abi::MEMREAD_LEN`]-byte windows. When `auto_stop`, a run of consecutive
 /// unreadable windows (transport/sense error) ends the read early — the natural
 /// "end of mapped memory" signal. Unreadable windows before the run are

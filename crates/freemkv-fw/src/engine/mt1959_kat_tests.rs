@@ -19,9 +19,11 @@ const EXPECT_SENSE: u32 = 0x000a_2d6a;
 const EXPECT_RECORD_OFF: usize = 0x0014_fd74;
 const EXPECT_OEM_HANDLER: u32 = 0x0009_ad5b;
 const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
-/// The dispatching handler: persists flag[subfn]=cdb[5]; 01 Identity, 02 Speed,
-/// 03 Region, 04 Raw Read, 09 DumpAll. Speed/Region/Raw Read act via flag-gated
-/// OEM-code trampolines (Raw Read = the AKE accept-gate stub), not this handler.
+/// The dispatching handler for the `verb [feature] [state]` grammar: SET writes
+/// `flag[cdb[5]]=cdb[6]`; RESET writes 0xFF to every feature flag; GET returns
+/// `flag[cdb[5]]`; IDENTITY returns RESP_MAGIC+version+the live feature-state
+/// table; DUMPALL peeks RAM. Speed/Region/UHD/BD/HRL/AKE/Bus act via flag-gated
+/// OEM-code trampolines keyed by Feature id, not this handler.
 ///
 /// NOTE: the handler embeds the crate version string (`freemkv <CARGO_PKG_VERSION>`),
 /// so a version bump changes these injected bytes AND the two CMAC digests below
@@ -29,17 +31,19 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "224b58780e2806d19878c02803d1d878de2800d101e01e4b1847f0b51d4f1c791d480019597901700025402d04d2281c0021b8470135f8e7092c11d15e793602987936183602d87936183602187a36180025402d12d2281c715db8470135f8e7013c062c0ad210a6200136180025102d04d2281c715db8470135f8e74020074908800748074a9047f0bd0000380d00025bad090075200a00400e0002720c000290af000081810900667265656d6b7620302e372e300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    "324b58780e2806d19878c02803d1d878de2800d101e02e4b1847f0b52d4f1c79022c05d12c4859794018997901700ae0042c08d12848ff2141708170c170017141718171c1710025402d04d2281c0021b8470135f8e7032c06d11f485979401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d114a600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e74020074908800748074a9047f0bd0000380d00025bad090075200a00400e0002720c000290af000081810900667265656d6b7620302e372e31";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
-// NOTE: adding the Raw Read `04 03` "data clear" (bus-off) AKE success-writer stub
-// injects ~24 more bytes into the CMAC-covered injected band, so these two digests
-// change from their pre-bus-off values. They must be regenerated against the OEM
-// base (run this test with FREEMKV_KAT_BASE set and copy the `left:` values); the
-// handler bytes themselves are UNCHANGED (bus-off touches no handler code). This is
-// expected drift, not a regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "4e046c539271fdf579e224e3c882dcf9";
-const EXPECT_CMAC_15: &str = "ae6d19c7da38f8214a9a76df1f3d5691";
+// NOTE: the Raw Read `04 03` "data clear" (bus-off) is done the MK way — a `bl` to a
+// stub written over the OEM `bl <key-prog>` at the AACS opcode-0x45 arm (0x95eec), the
+// `04 03` UHD mode-gate detour over the disc-version classifier reload (0xcb3c6), plus
+// the injected stubs themselves. All fall in CMAC-covered regions, so these two digests
+// differ from a build without the bus-off / UHD detours and must be regenerated against
+// the OEM base (run this test with FREEMKV_KAT_BASE set and copy the `left:` values).
+// The handler bytes are UNCHANGED (the detours touch no handler code). Expected drift,
+// not a regression — the test skips when the base is absent.
+const EXPECT_CMAC_1: &str = "c617660d3fd1359bc1f8567e99082d12";
+const EXPECT_CMAC_15: &str = "23320969d0d7e16817d904bdad371561";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -215,9 +219,21 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     let ake_detour = report.ake_gate as usize + 12..report.ake_gate as usize + 16;
     let gatea_detour = report.gatea_gate as usize..report.gatea_gate as usize + 4;
     let deny_detour = report.deny_reset_gate as usize..report.deny_reset_gate as usize + 4;
-    // Raw Read `04 03` "data clear" (bus-off): the AKE SUCCESS-writer detour at
-    // ake_gate+4 (report.ake_busoff_gate).
-    let busoff_detour = report.ake_busoff_gate as usize..report.ake_busoff_gate as usize + 4;
+    // Raw Read `04 03` "data clear" (bus-off): the AACS opcode-0x45 arm detour
+    // (report.busenc_detour_site), 4 bytes of the arm's leading `bl`.
+    let busenc_detour = report.busenc_detour_site as usize..report.busenc_detour_site as usize + 4;
+    // Raw Read `04 03` UHD mode-gate neutralizer: the disc-version classifier
+    // prologue detour (report.uhd_classifier_site), 4 bytes replacing the reload
+    // `ldr r0,[sp,#0x38]; movs r5,#6`.
+    let uhd_detour = report.uhd_classifier_site as usize..report.uhd_classifier_site as usize + 4;
+    // HRL skip (`flag[Feature::Hrl]==STATE_ON`): three cert-path detour sites, 4
+    // bytes each (a `bl` to the shared HRL-skip stub, replacing `cmp r0,#0; bne`).
+    let in_hrl = |i: usize| {
+        report
+            .hrl_sites
+            .iter()
+            .any(|&s| (s as usize..s as usize + 4).contains(&i))
+    };
     for (i, (a, b)) in base.iter().zip(img.iter()).enumerate() {
         if a != b {
             let in_record = (EXPECT_RECORD_OFF + 4..EXPECT_RECORD_OFF + 8).contains(&i);
@@ -234,7 +250,9 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
                     || ake_detour.contains(&i)
                     || gatea_detour.contains(&i)
                     || deny_detour.contains(&i)
-                    || busoff_detour.contains(&i)
+                    || busenc_detour.contains(&i)
+                    || uhd_detour.contains(&i)
+                    || in_hrl(i)
                     || i == report.de_off as usize,
                 "unexpected byte change at 0x{i:x}"
             );
@@ -275,20 +293,38 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.deny_stub_va != 0,
         "Raw Read (0x04) deny-path AACS-reset stub wired"
     );
-    // Raw Read `04 03` "data clear" (bus-off): AKE SUCCESS-writer detour at
-    // ake_gate+4 = 0x136594+4 = 0x136598.
+    // Raw Read `04 03` "data clear" (bus-off): the MK-style detour of the OEM
+    // `bl <key-prog>` at the start of the AACS opcode-0x45 arm (0x95eec on 1.00).
     assert_eq!(
-        report.ake_busoff_gate,
-        report.ake_gate + 4,
-        "bus-off (04 03) detours the AKE success writer at ake_gate+4"
-    );
-    assert_eq!(
-        report.ake_busoff_gate, 0x0013_6598,
-        "bus-off detour site (1.00)"
+        report.busenc_detour_site, 0x0009_5eec,
+        "bus-off (04 03) detours the AACS opcode-0x45 arm's leading bl (1.00)"
     );
     assert!(
-        report.ake_busoff_stub_va != 0,
+        report.busenc_stub_va != 0,
         "Raw Read `04 03` bus-off (data clear) stub wired"
+    );
+    // Raw Read `04 03` UHD mode-gate neutralizer (MK-style classifier hook): the
+    // detour of the disc-version classifier prologue's reload at classifier+6
+    // (0xcb3c0 anchor → 0xcb3c6 site on 1.00).
+    assert_eq!(
+        report.uhd_classifier_site, 0x000c_b3c6,
+        "UHD mode-gate (04 03) detours the disc-version classifier reload (1.00)"
+    );
+    assert!(
+        report.uhd_stub_va != 0,
+        "Raw Read `04 03` UHD mode-gate neutralizer stub wired"
+    );
+    // HRL skip (`flag[Feature::Hrl]==STATE_ON`): the three cert-path check sites
+    // (`cmp r0,#0; bne <6F/00>`) after each `bl <hrl_lookup>` (0x13550e on 1.00),
+    // all detoured to one shared HRL-skip stub.
+    assert_eq!(
+        report.hrl_sites,
+        vec![0x0013_6334, 0x0013_6378, 0x0013_63aa],
+        "HRL-skip cert-path detour sites (1.00)"
+    );
+    assert!(
+        report.hrl_stub_va != 0,
+        "Feature::Hrl STATE_ON (HRL skip) stub wired"
     );
     assert_eq!(report.de_off, 0x001e_c056, "DE byte offset (1.00)");
 }
@@ -435,6 +471,24 @@ fn finders_hold_across_owned_images() {
             .unwrap_or_else(|e| panic!("VID gate-setter @ {disp}: {e}"));
         eng.find_setdiscmode(&bytes)
             .unwrap_or_else(|e| panic!("SetDiscMode @ {disp}: {e}"));
+        // MK-style bus-off (`04 03`): the AACS opcode-0x45 arm must resolve UNIQUELY
+        // on every image whose desktop OR notebook AKE gate is present (the MT1959
+        // lineage this mechanism applies to). JB8/MT1939-classic images have no such
+        // AKE gate, so `ake_detour` (hence bus-off) is intentionally not asserted.
+        if eng.ake_detour(&bytes, super::FLAG_TABLE_BASE).is_ok() {
+            let (site, _keyprog) = eng
+                .find_aacs45_arm(&bytes)
+                .unwrap_or_else(|e| panic!("AACS opcode-0x45 arm @ {disp}: {e}"));
+            assert!(site != 0, "bus-off detour site @ {disp}");
+        }
+        // MK-style UHD mode-gate neutralizer (`04 03`): the disc-version classifier
+        // prologue resolves UNIQUELY (via `find_unique`) on OEM-line MT1959 images.
+        // MK-flashed images have this exact prologue overwritten by MK's own hook, so
+        // it is asserted only where it resolves — never hard-fails on an image whose
+        // classifier is already hooked (that is the expected MK state).
+        if let Ok(uhd) = eng.find_uhd_classifier(&bytes) {
+            assert!(uhd != 0, "UHD classifier anchor @ {disp}");
+        }
         // The SRAM scanner is model-agnostic — it must resolve a free gap on every
         // VID-capable owned image. The Speed/Region/DE finders are BU40N-shaped, so
         // other hoard models are not asserted fleet-wide here.
@@ -487,78 +541,157 @@ fn pc_literal_past_the_image_tail_is_none_not_panic() {
     assert_eq!(super::pc_literal(&0x4800u16.to_le_bytes(), 0), None);
 }
 
-/// STATIC behavioral guard for the Raw Read (0x04) flag semantics — the mapping
-/// this test protects does NOT change on a version bump or an unrelated subfn
-/// edit, unlike the byte snapshot above. It fails loudly if the two modes are
-/// swapped or a compare is broken:
-///   `04 01` = "cert is valid" → Gate-A stub gates on `cmp r2,#1` (bare 0xAD read)
-///   `04 02` = "accept any cert" → AKE stub gates on `cmp r2,#2` (host runs the AKE)
-/// Thumb `cmp r2,#imm8` encodes as `0x2A00 | imm` (LE bytes `[imm, 0x2A]`).
+/// STATIC behavioral guard for the re-slotted feature-flag gating — the mapping
+/// this test protects does NOT change on a version bump, unlike the byte snapshot
+/// above. It fails loudly if a stub reads the wrong feature cell or gates on the
+/// wrong value. Each stub reads its own `flag[Feature::X]` (`flag_base + id`) and
+/// arms on `STATE_ON` (0x01):
+///   AKE null / Gate-A → flag[Ake] (0x06), gate `cmp r2,#STATE_ON`  (0x2A01)
+///   Bus off           → flag[Bus] (0x07), gate `cmp r3,#STATE_ON`  (0x2B01)
+///   UHD force         → flag[Uhd] (0x03), gate `cmp r3,#STATE_ON`  (0x2B01)
+///   Speed / Region    → flag[Speed] (0x01) / flag[Region] (0x02)
+/// Thumb `cmp rN,#imm8` = `0x2800 | (N<<8) | imm`.
 #[test]
-fn raw_read_flag_mapping_01_bare_02_ake() {
-    fn has_u16le(hay: &[u8], needle: u16) -> bool {
+fn feature_flag_gating_is_reslotted() {
+    use crate::abi::Feature;
+    fn has(hay: &[u8], n: u16) -> bool {
         hay.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == needle)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == n)
     }
-    const CMP_R2_1: u16 = 0x2A01; // cmp r2,#1
-    const CMP_R2_2: u16 = 0x2A02; // cmp r2,#2
-                                  // Dummy branch targets — only the gating compare is asserted.
+    fn reads(hay: &[u8], cell: u32) -> bool {
+        hay.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == cell)
+    }
+    const CMP_R2_ON: u16 = 0x2A01; // cmp r2,#STATE_ON
+    const CMP_R3_ON: u16 = 0x2B01; // cmp r3,#STATE_ON
+    let base = super::FLAG_TABLE_BASE;
+
     let ake = Mt1959Engine
-        .build_ake_stub(super::FLAG_TABLE_BASE, 0x0010_0000)
+        .build_ake_stub(base, 0x0010_0000)
         .expect("ake stub");
+    assert!(
+        has(&ake, CMP_R2_ON),
+        "AKE-null stub gates on cmp r2,#STATE_ON"
+    );
+    assert!(
+        reads(&ake, base + Feature::Ake as u32),
+        "AKE-null stub reads flag[Ake]"
+    );
+
     let gatea = Mt1959Engine
-        .build_gatea_stub(
-            super::FLAG_TABLE_BASE,
-            0x0010_0000,
-            0x0010_0100,
-            0x0010_0200,
-        )
+        .build_gatea_stub(base, 0x0010_0000, 0x0010_0100, 0x0010_0200)
         .expect("gatea stub");
-
     assert!(
-        has_u16le(&ake, CMP_R2_2),
-        "04 02 (accept-any-cert AKE path) must gate on cmp r2,#2"
+        has(&gatea, CMP_R2_ON),
+        "Gate-A stub gates on cmp r2,#STATE_ON"
     );
     assert!(
-        !has_u16le(&ake, CMP_R2_1),
-        "AKE stub must NOT gate on #1 — that value is the bare-read 01 path"
-    );
-    assert!(
-        has_u16le(&gatea, CMP_R2_1),
-        "04 01 (cert-valid bare-read path) must gate on cmp r2,#1"
+        reads(&gatea, base + Feature::Ake as u32),
+        "Gate-A stub reads flag[Ake] (pre-authenticated path)"
     );
 
-    // `04 03` "data clear" (bus-off) gates on cmp r2,#3 at the AKE SUCCESS writer.
-    const CMP_R2_3: u16 = 0x2A03; // cmp r2,#3
-    let busoff = Mt1959Engine
-        .build_ake_busoff_stub(super::FLAG_TABLE_BASE, 0x0010_0000)
-        .expect("busoff stub");
+    let busenc = Mt1959Engine
+        .build_busenc_stub(base, 0x0009_4790)
+        .expect("busenc stub");
     assert!(
-        has_u16le(&busoff, CMP_R2_3),
-        "04 03 (bus-off / data clear) must gate on cmp r2,#3"
-    );
-    // Emits both the OEM authenticated state 6 (bus ON) and the no-bus-key state 1
-    // (bus OFF); `movs r1,#imm8` encodes as 0x2100|imm (LE bytes [imm, 0x21]).
-    const MOVS_R1_6: u16 = 0x2106;
-    const MOVS_R1_1: u16 = 0x2101;
-    assert!(
-        has_u16le(&busoff, MOVS_R1_6),
-        "bus-off stub must write state 6 (OEM, bus key derived) when flag != 3"
+        has(&busenc, CMP_R3_ON),
+        "bus-off stub gates on cmp r3,#STATE_ON"
     );
     assert!(
-        has_u16le(&busoff, MOVS_R1_1),
-        "bus-off stub must write state 1 (no bus key) when flag == 3"
+        reads(&busenc, base + Feature::Bus as u32),
+        "bus-off stub reads flag[Bus]"
+    );
+    // Materializes BUSENC_REG (movs r1,#1; lsls r1,r1,#26), clears the enable bit
+    // (movs r3,#0x10; bics r2,r3), and replays the OEM key-prog call (blx r2).
+    for (needle, what) in [
+        (0x2101u16, "movs r1,#1 (BUSENC_REG base)"),
+        (0x0689u16, "lsls r1,r1,#26 (BUSENC_REG = 1<<26)"),
+        (0x2310u16, "movs r3,#0x10 (BUSENC_ENABLE_BIT)"),
+        (0x439au16, "bics r2,r3 (clear the bus-enc enable bit)"),
+        (0x4790u16, "blx r2 (replay OEM key-prog)"),
+    ] {
+        assert!(has(&busenc, needle), "busenc stub must emit {what}");
+    }
+
+    let uhd = Mt1959Engine.build_uhd_stub(base).expect("uhd stub");
+    assert!(has(&uhd, CMP_R3_ON), "UHD stub gates on cmp r3,#STATE_ON");
+    assert!(
+        reads(&uhd, base + Feature::Uhd as u32),
+        "UHD stub reads flag[Uhd]"
+    );
+
+    let speed = Mt1959Engine
+        .build_speed_stub(base, 0x0001_0000, 0x0001_0100, 2)
+        .expect("speed stub");
+    assert!(
+        reads(&speed, base + Feature::Speed as u32),
+        "Speed stub reads flag[Speed]"
+    );
+
+    let region = Mt1959Engine.build_region_stub(base).expect("region stub");
+    assert!(
+        reads(&region, base + Feature::Region as u32),
+        "Region stub reads flag[Region]"
     );
 }
 
-/// STATIC encoding guard for the **classic** AKE accept stub (`build_ake_stub_classic`,
-/// the `04 02` path). It must (a) replay the overwritten `lsrs r0,r0,#6` as its
-/// FIRST instruction (the classic reject writer folds the AGID compute into the 4
-/// replaced bytes), (b) gate on `cmp r2,#2` (accept-any-cert), and (c) carry both
-/// the OEM reject `movs r1,#1` and the forced-accept `movs r1,#6`. Pure synthetic;
-/// no owned image needed. Thumb: `lsrs r0,r0,#6` = 0x0980, `cmp r2,#2` = 0x2A02.
+/// The HRL-skip stub (`flag[Feature::Hrl]==STATE_ON`) must read `flag[Hrl]`, gate
+/// on `cmp r3,#STATE_ON` (0x2B01), and carry the 6F/00 revoke target as a literal.
 #[test]
-fn classic_ake_stub_replays_lsrs_and_gates_on_cmp2() {
+fn hrl_skip_stub_gates_on_hrl_cell() {
+    let base = super::FLAG_TABLE_BASE;
+    let stub = Mt1959Engine
+        .build_hrl_skip_stub(base, 0x0013_63ba)
+        .expect("hrl skip stub");
+    assert!(
+        stub.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]])
+                == base + crate::abi::Feature::Hrl as u32),
+        "HRL-skip stub reads flag[Hrl]"
+    );
+    assert!(
+        stub.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x2B01),
+        "HRL-skip stub gates on cmp r3,#STATE_ON"
+    );
+    assert!(
+        stub.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == (0x0013_63ba | 1)),
+        "HRL-skip stub carries the 6F/00 revoke target"
+    );
+}
+
+/// The gated HRL wipe-once record codegen: a well-formed valid-empty AACS HRL
+/// (record type 0x21, total-entries 0x0000 — NOT the 0xFFFF blank sentinel). The
+/// destructive on-drive flash program stays gated off by default.
+#[test]
+fn hrl_valid_empty_record_is_count_zero_type_0x21() {
+    let r = Mt1959Engine.hrl_valid_empty_record();
+    assert_eq!(r[0], 0x21, "record type = Host Revocation List (0x21)");
+    assert_eq!(
+        &r[4..6],
+        &[0x00, 0x00],
+        "total entries = 0 (NOT the 0xFFFF blank sentinel)"
+    );
+    assert_ne!(
+        &r[4..6],
+        &[0xFF, 0xFF],
+        "must never emit the blank sentinel"
+    );
+    // The destructive on-drive HRL wipe stays gated off by default.
+    if super::HRL_WIPE_ARMED {
+        panic!("destructive HRL wipe must stay gated off by default");
+    }
+}
+
+/// STATIC encoding guard for the **classic** AKE accept stub (`build_ake_stub_classic`).
+/// It must (a) replay the overwritten `lsrs r0,r0,#6` as its FIRST instruction (the
+/// classic reject writer folds the AGID compute into the 4 replaced bytes), (b) gate
+/// on `cmp r2,#STATE_ON` (null AKE), and (c) carry both the OEM reject `movs r1,#1`
+/// and the forced-accept `movs r1,#6`. Thumb: `lsrs r0,r0,#6` = 0x0980,
+/// `cmp r2,#STATE_ON` = 0x2A01.
+#[test]
+fn classic_ake_stub_replays_lsrs_and_gates_on_state_on() {
     fn has_u16le(hay: &[u8], needle: u16) -> bool {
         hay.windows(2)
             .any(|w| u16::from_le_bytes([w[0], w[1]]) == needle)
@@ -572,8 +705,8 @@ fn classic_ake_stub_replays_lsrs_and_gates_on_cmp2() {
         "first instruction must replay `lsrs r0,r0,#6`"
     );
     assert!(
-        has_u16le(&stub, 0x2A02),
-        "must gate on cmp r2,#2 (accept-any)"
+        has_u16le(&stub, 0x2A01),
+        "must gate on cmp r2,#STATE_ON (null AKE)"
     );
     assert!(
         has_u16le(&stub, 0x2101),
@@ -584,8 +717,8 @@ fn classic_ake_stub_replays_lsrs_and_gates_on_cmp2() {
         "must carry the forced-accept `movs r1,#6`"
     );
     assert!(
-        !has_u16le(&stub, 0x2A01),
-        "classic AKE stub must NOT gate on #1 (that is the bare-read 04 01 path)"
+        !has_u16le(&stub, 0x2A02),
+        "classic AKE stub must NOT gate on the old `cmp r2,#2` (04 02) value"
     );
 }
 
@@ -695,80 +828,86 @@ fn ake_gate_finds_nb_variant_and_original_absent() {
 /// The desktop AKE gate (the `04 01/02/03` anchor). Success writer `movs r1,#6` at
 /// index 2 (anchor+4), its `b <set_agid_state>` at index 3 (anchor+6); reset writer
 /// `movs r1,#1` at index 6 (anchor+12).
-const AKE_SIG_HWS: [u16; 8] = [
-    0x7AA8, 0x0980, 0x2106, 0xE000, 0x7AA8, 0x0980, 0x2101, 0xE000,
-];
+/// The invariant tail of the AACS opcode-0x45 arm body (after its leading 4-byte
+/// `bl <key-prog>`), variant A (BU40N/notebook order) and variant B (BH/WH desktop
+/// order). Prefixed at build time with a real `bl` to the synthetic key-prog target.
+const ARM_A_TAIL: [u16; 6] = [0x2006, 0x4900, 0x4360, 0x310C, 0x5A08, 0x9009];
+const ARM_B_TAIL: [u16; 5] = [0x2006, 0x4360, 0x4900, 0x5A08, 0x9009];
 
-/// `busoff_detour` must resolve the AKE SUCCESS writer at `ake_gate+4`, decode the
-/// `b <set_agid_state>` target, and emit a non-empty stub — on a synthetic desktop
-/// gate, no owned image needed.
-#[test]
-fn busoff_detour_resolves_success_writer_at_ake_gate_plus_4() {
+/// Lay down a synthetic opcode-0x45 arm (leading `bl <keyprog>` + body tail) at
+/// `anchor` and return the image.
+fn arm_image(anchor: usize, keyprog: u32, tail: &[u16]) -> Vec<u8> {
     let mut img = vec![0u8; 0x14_1000];
-    let anchor = 0x13_4000usize;
-    put_hw(&mut img, anchor, &AKE_SIG_HWS);
+    let bl = crate::thumb::encode_bl(anchor, keyprog).expect("bl encodes");
+    crate::thumb::write(&mut img, anchor, &bl);
+    put_hw(&mut img, anchor + 4, tail);
+    img
+}
+
+/// `busenc_detour` must resolve variant A's opcode-0x45 arm, return the arm's
+/// leading `bl` as the detour site, and emit a stub that REPLAYS the decoded
+/// key-prog target — on a synthetic arm, no owned image needed.
+#[test]
+fn busenc_detour_resolves_arm_variant_a() {
+    let anchor = 0x9_5000usize;
+    let keyprog = 0x9_4790u32;
+    let img = arm_image(anchor, keyprog, &ARM_A_TAIL);
     let (site, bytes) = Mt1959Engine
-        .busoff_detour(&img, super::FLAG_TABLE_BASE)
-        .expect("busoff detour must resolve on the desktop AKE gate");
-    assert_eq!(
-        site,
-        anchor + 4,
-        "bus-off detours the success writer at anchor+4"
-    );
-    assert!(!bytes.is_empty(), "stub bytes emitted");
-    // The success writer's `b` (0xE000, disp 0) targets anchor+6+4 = anchor+10; the
-    // stub must carry that `set_agid_state` return address as a literal (| thumb bit).
-    let back = (anchor as u32 + 10) | 1;
-    let carries_back = bytes
+        .busenc_detour(&img, super::FLAG_TABLE_BASE)
+        .expect("busenc detour must resolve on the variant-A arm");
+    assert_eq!(site, anchor, "detour replaces the arm's leading bl");
+    // The stub must carry the decoded key-prog target as a literal (| thumb bit) so
+    // it can replay the OEM key-programming call.
+    let carries = bytes
         .windows(4)
-        .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == back);
+        .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == (keyprog | 1));
     assert!(
-        carries_back,
-        "stub must tail-jump to the decoded set_agid_state (back|1)"
+        carries,
+        "stub must replay the decoded key-prog call (keyprog|1)"
     );
 }
 
-/// `busoff_detour` must return a clean error (never panic, never mis-patch) when the
-/// AKE signature does not match — here the success-writer `movs r1,#6` is corrupted,
-/// so `find_ake_gate` misses and the mode is left unwired.
+/// `busenc_detour` must also resolve the BH/WH desktop variant-B arm shape (tried
+/// after A), same detour-site + key-prog-replay contract.
 #[test]
-fn busoff_detour_errors_on_malformed_gate() {
-    let mut img = vec![0u8; 0x14_1000];
-    let anchor = 0x13_4000usize;
-    let mut hws = AKE_SIG_HWS;
-    hws[2] = 0x2107; // not `movs r1,#6` → AKE signature no longer matches
-    put_hw(&mut img, anchor, &hws);
+fn busenc_detour_resolves_arm_variant_b() {
+    let anchor = 0x9_6000usize;
+    let keyprog = 0x9_4568u32;
+    let img = arm_image(anchor, keyprog, &ARM_B_TAIL);
+    let (site, bytes) = Mt1959Engine
+        .busenc_detour(&img, super::FLAG_TABLE_BASE)
+        .expect("busenc detour must resolve on the variant-B arm");
+    assert_eq!(site, anchor, "detour replaces the arm's leading bl");
+    assert!(
+        bytes
+            .windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == (keyprog | 1)),
+        "stub must replay the decoded key-prog call"
+    );
+}
+
+/// `busenc_detour` must return a clean error (never panic, never mis-patch) when the
+/// arm body matches neither variant — the `04 03` mode is then left unwired.
+#[test]
+fn busenc_detour_errors_on_unknown_arm() {
+    let mut img = arm_image(0x9_5000, 0x9_4790, &ARM_A_TAIL);
+    // Corrupt the `str r0,[sp,#0x24]` tail halfword so neither SIG_A nor SIG_B matches.
+    put_hw(&mut img, 0x9_5000 + 4 + 2 * 5, &[0x9008]);
     assert!(
         Mt1959Engine
-            .busoff_detour(&img, super::FLAG_TABLE_BASE)
+            .busenc_detour(&img, super::FLAG_TABLE_BASE)
             .is_err(),
-        "a non-matching AKE gate must yield a clean error, never a wrong patch"
+        "an unknown opcode-0x45 arm must yield a clean error, never a wrong patch"
     );
 }
 
-/// `busoff_detour` must return a clean error (→ leaves `04 03` unwired) when only
-/// the NB-class AKE idiom is present — there is no standalone success writer there.
+/// The bus-off stub must assemble, be halfword-aligned, gate on `cmp r3,#STATE_ON`,
+/// materialize `BUSENC_REG` (`1<<26`) and clear `BUSENC_ENABLE_BIT`, and read the
+/// Bus feature cell (`flag_base + Feature::Bus`).
 #[test]
-fn busoff_detour_errors_on_nb_only_image() {
-    // NB idiom: AGID via r4, accept/reject arms converge on a shared `bl` at +12.
-    let nb: [u16; 6] = [0x7AA0, 0x0980, 0x2106, 0xE000, 0x0980, 0x2101];
-    let mut img = vec![0u8; 0x14_1000];
-    put_hw(&mut img, 0x13_4000, &nb);
-    put_hw(&mut img, 0x13_4000 + 12, &[0xF000, 0xF800]);
-    assert!(
-        Mt1959Engine
-            .busoff_detour(&img, super::FLAG_TABLE_BASE)
-            .is_err(),
-        "NB-only images have no desktop success writer → 04 03 unwired, clean error"
-    );
-}
-
-/// The bus-off stub must assemble (Thumb `finish` succeeds), be a whole number of
-/// halfwords, and encode the exact decision (`cmp r2,#3`, states 6 and 1).
-#[test]
-fn busoff_stub_is_wellformed_and_encodes_the_decision() {
+fn busenc_stub_is_wellformed_and_encodes_the_decision() {
     let bytes = Mt1959Engine
-        .build_ake_busoff_stub(super::FLAG_TABLE_BASE, 0x0013_400a)
+        .build_busenc_stub(super::FLAG_TABLE_BASE, 0x0009_4790)
         .expect("stub assembles");
     assert!(!bytes.is_empty());
     assert_eq!(bytes.len() % 2, 0, "Thumb code is halfword-aligned");
@@ -777,15 +916,21 @@ fn busoff_stub_is_wellformed_and_encodes_the_decision() {
             .windows(2)
             .any(|w| u16::from_le_bytes([w[0], w[1]]) == n)
     };
-    assert!(has(0x2A03), "gates on cmp r2,#3");
-    assert!(has(0x2106), "OEM path writes state 6");
-    assert!(has(0x2101), "data-clear path writes state 1");
-    // Reads the RawRead flag byte (flag_base + 0x04), same cell the 01/02 stubs use.
-    let flag_cell = super::FLAG_TABLE_BASE + 0x04;
+    assert!(has(0x2B01), "gates on cmp r3,#STATE_ON");
+    assert!(
+        has(0x2101) && has(0x0689),
+        "materializes BUSENC_REG (1<<26)"
+    );
+    assert!(
+        has(0x2310) && has(0x439A),
+        "clears BUSENC_ENABLE_BIT (movs r3,#0x10; bics r2,r3)"
+    );
+    // Reads the Bus feature flag byte (flag_base + Feature::Bus).
+    let flag_cell = super::FLAG_TABLE_BASE + crate::abi::Feature::Bus as u32;
     let reads_flag = bytes
         .windows(4)
         .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == flag_cell);
-    assert!(reads_flag, "stub loads &flag[0x04] as a literal");
+    assert!(reads_flag, "stub loads &flag[Bus] as a literal");
 }
 
 /// The never-abort MODIFY driver must emit byte-for-byte the same image as the

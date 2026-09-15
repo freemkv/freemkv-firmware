@@ -200,13 +200,39 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 if let (Some(site), Some(stub)) = (fact(l, "deny_site"), fact(l, "deny_stub_va")) {
                     check_bl(&mut checks, name, "deny-reset detour bl", img, site, stub);
                 }
-                // `04 03` "data clear" bus-off detour (AKE success writer). Present
-                // only when wired (desktop AKE shape); optional, so no facts here is
-                // not a miss on its own — the AKE/Gate-A/deny facts above cover that.
+                // `04 03` "data clear" bus-off detour (AACS opcode-0x45 arm). Present
+                // only when wired (opcode-0x45 arm is a known MT1959 shape); optional,
+                // so no facts here is not a miss on its own — the AKE/Gate-A/deny facts
+                // above cover that. Proves the MK-style detour's `bl` + stub landed.
                 if let (Some(site), Some(stub)) =
-                    (fact(l, "busoff_site"), fact(l, "busoff_stub_va"))
+                    (fact(l, "busenc_site"), fact(l, "busenc_stub_va"))
                 {
-                    check_bl(&mut checks, name, "bus-off detour bl", img, site, stub);
+                    check_bl(&mut checks, name, "bus-enc detour bl", img, site, stub);
+                }
+                // `04 03` UHD mode-gate neutralizer detour (disc-version classifier
+                // prologue). Present only when wired (classifier prologue is a known
+                // MT1959 shape); optional, like the bus-enc detour above. Proves the
+                // MK-style classifier hook's `bl` + stub landed.
+                if let (Some(site), Some(stub)) = (fact(l, "uhd_site"), fact(l, "uhd_stub_va")) {
+                    check_bl(
+                        &mut checks,
+                        name,
+                        "UHD mode-gate detour bl",
+                        img,
+                        site,
+                        stub,
+                    );
+                }
+                // HRL skip (`flag[Feature::Hrl]==STATE_ON`): one shared stub reached
+                // by a `bl` at each of the three cert-path check sites. Present only
+                // when wired (HRL cert path is the known shape); optional, like the
+                // bus-enc/UHD detours above. Each `bl` is recomputed and re-checked.
+                if let Some(stub) = fact(l, "hrl_stub_va") {
+                    for key in ["hrl_site", "hrl_site2", "hrl_site3"] {
+                        if let Some(site) = fact(l, key) {
+                            check_bl(&mut checks, name, "HRL-skip detour bl", img, site, stub);
+                        }
+                    }
                 }
                 // Classic (`04 01`/`04 02`) emits NO deny-reset detour: the `deny`
                 // block must be byte-identical to OEM (a wrong reply desyncs the
