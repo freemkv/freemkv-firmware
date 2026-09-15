@@ -65,6 +65,13 @@ struct RawReadFacts {
     hrl_sites: Vec<u32>,
     /// Injection address of the shared HRL-skip trampoline. `0` when not wired.
     hrl_stub_va: u32,
+    /// `Feature::Bd` REPORT KEY refuse detour site — the mode-0 class check
+    /// (`ldrb r0,[r2,#7]; cmp r0,#2`, [`BD_GATE_SIG`] `anchor+16`), replaced by a `bl`
+    /// to the BD-refuse stub. `0` when not wired (image whose REPORT KEY gate is not
+    /// the known MT1959 shape).
+    bd_site: u32,
+    /// Injection address of the `Feature::Bd` BD-refuse trampoline. `0` when not wired.
+    bd_stub_va: u32,
     vid_producer: u32,
 }
 
@@ -184,7 +191,7 @@ const SPEED_GATE_SIG_R0: &[(u16, u16)] = &[
 /// cert accept/reject decision: on a failed host-cert verify the OEM lands here and
 /// resets to `1`. Raw Read (0x04) detours the RESET writer's `movs r1,#1; b <back>`
 /// (4 bytes at `match+12`) to a flag-gated stub that sets `6` (accept) when
-/// `flag[RawRead]` is on, replicating the OEM `1` when off. Proven unique; the two
+/// `flag[Ake]==STATE_ON` (null AKE), replicating the OEM `1` when off. Proven unique; the two
 /// `b <back>` displacements are masked (`0xE000/0xF800`). `movs r1,#6` is unique in
 /// the AACS window, which anchors the match.
 const AKE_GATE_SIG: &[(u16, u16)] = &[
@@ -209,7 +216,7 @@ const AKE_GATE_SIG: &[(u16, u16)] = &[
 /// 2-byte `movs r1,#1` at `anchor+10` and `anchor+12` is the shared `bl`. Raw
 /// Read detours that shared `bl` (see [`Mt1959Engine::build_ake_stub_nb`]) — the
 /// stub must PRESERVE `r1` when the flag is off (the accept arm passes through it
-/// too), forcing `6` only when `flag[RawRead]==2`.
+/// too), forcing `6` only when `flag[Ake]==STATE_ON`.
 const AKE_GATE_SIG_NB: &[(u16, u16)] = &[
     (0x7AA0, 0xFFFF), // ldrb r0,[r4,#0xa]   AGID byte (r4, not r5)
     (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID   (accept arm)
@@ -448,7 +455,7 @@ const BUSENC_ENABLE_BIT: u8 = 0x10;
 /// byte-identically on the owned 1.03 images. freemkv detours the version reload
 /// `ldr r0,[sp,#0x38]` (+`movs r5,#6`, the 4 bytes at `match+6`) to a flag-gated
 /// stub ([`Mt1959Engine::build_uhd_stub`]) that replays both and — only when
-/// `flag[RawRead]==3` — zeros the disc-version (MK-parity). `lr` is already saved on
+/// `flag[Uhd]==STATE_ON` — zeros the disc-version (MK-parity). `lr` is already saved on
 /// the stack by the preceding `push {r4-r7,lr}`, so the detour `bl` may clobber it
 /// freely and the stub returns with `bx lr` to `match+10` (the classifier body).
 const UHD_CLASSIFIER_SIG: &[(u16, u16)] = &[
@@ -457,6 +464,94 @@ const UHD_CLASSIFIER_SIG: &[(u16, u16)] = &[
     (0xB089, 0xFFFF), // sub  sp,#0x24
     (0x980E, 0xFFFF), // ldr  r0,[sp,#0x38]   disc-version reload ← detour site (match+6)
     (0x2506, 0xFFFF), // movs r5,#6           (match+8; consumed by the 4-byte detour bl)
+];
+
+/// Signature of the **version-compare** disc-version classifier — the NB/NS/newer-MK
+/// codegen that classifies by disc-version *thresholds* instead of the byte-extraction
+/// prologue [`UHD_CLASSIFIER_SIG`] matches. This is the SAME UHD mode-gate, only a
+/// different compiler shape, and covers the MT1959 images the primary signature misses
+/// (~1/3 of the fleet: BU40N `1.01`/`1.04`, BP50NB40, WH14NS40 `1.05`, BE16NU50, …).
+///
+/// The classifier loads the disc-version halfword (`ldrh r0,[r1]`) and buckets it by
+/// two band edges, writing the class code into `r2`:
+///   ```text
+///   ldrh r0,[r1]              (match-2)   ← detour site (with the following `cmp`)
+///   cmp  r0,#0x63             (match+0)   ← ANCHOR (the unique head)
+///   bls  <lo-band>            (match+2)   return target of the stub's stealth path
+///   movs r2,#2               (match+4)   class = UHD/BD (mode-1 — the refused bucket)
+///   b    <join1>
+///   ldrh r0,[r1]                          reload for the second compare
+///   cmp  r0,#0x5e
+///   bls  <arm-C>
+///   movs r2,#1                            mid band
+///   movs r1,#0x73; movs r0,#1; b <join2>
+///   movs r2,#3               (match+0x16) ← arm C (lowest band == what version-0 hits)
+///   ...join1: movs r1,#0x73; movs r0,#3
+///   join2: bl <compose_disc_mode>        packs (r0<<16)|(r1<<8)|r2 into the mode word
+///   ```
+/// `movs r2,#2` (`r2==2`) is the UHD "mode 1" the downstream REPORT KEY gate refuses
+/// with `6F/01`; arm C (`r2==3`, `r0==3`) is exactly the class a disc-version of `0`
+/// falls into. So "force the seen disc-version to 0" here = **route to arm C**: the
+/// stub (only when `flag[Feature::Uhd]==STATE_ON`) branches straight to `match+0x16`,
+/// which is byte-for-byte the version-0 outcome (MK-parity), and otherwise replays
+/// `ldrh r0,[r1]; cmp r0,#0x63` verbatim (stealth). The two `bls` displacements are
+/// masked. Consulted **only when [`UHD_CLASSIFIER_SIG`] matches zero** (original-first),
+/// so the BU40N KAT base and every image the byte-extraction shape covers are untouched.
+const UHD_CLASSIFIER_SIG_VER: &[(u16, u16)] = &[
+    (0x2863, 0xFFFF), // cmp  r0,#0x63     ← anchor (the `ldrh r0,[r1]` is at match-2)
+    (0xD900, 0xFF00), // bls  <lo-band>
+    (0x2202, 0xFFFF), // movs r2,#2        class = UHD/BD (mode-1, the refused bucket)
+    (0xE000, 0xF800), // b    <join1>
+    (0x8808, 0xFFFF), // ldrh r0,[r1]      reload for the second compare
+    (0x285E, 0xFFFF), // cmp  r0,#0x5e
+    (0xD900, 0xFF00), // bls  <arm-C>
+    (0x2201, 0xFFFF), // movs r2,#1
+    (0x2173, 0xFFFF), // movs r1,#0x73
+    (0x2001, 0xFFFF), // movs r0,#1
+];
+
+/// Signature of the AACS **REPORT KEY disc-mode/class accept gate** — the code
+/// that decides whether the drive engages a disc for AACS key exchange, keyed on
+/// the disc *mode* (`0`=BD/AACS-1.0, `1`=UHD/AACS-2.0 mode-1) and the classifier's
+/// *class* byte (`class_struct[7]`). Anchor is the `cmp r0,#1` (mode==1 test); the
+/// `Feature::Bd` detour replaces the **mode-0 class check** `ldrb r0,[r2,#7]; cmp
+/// r0,#2` at `anchor+16` (`0x1365ce` on BU40N 1.00):
+///   ```text
+///   cmp  r0,#1              (anchor)     mode == 1 (UHD)?
+///   bne  <mode-not-1>       (anchor+2)
+///   ldrb r0,[r2,#7]                      class
+///   cmp  r0,#3                           UHD accepts iff class==3
+///   bne  <deny>
+///   ldrb r0,[r1,#0]                      reload mode
+///   cmp  r0,#0                           mode == 0 (BD)?
+///   bne  <accept>
+///   ldrb r0,[r2,#7]        (anchor+16)   ← DETOUR SITE: BD class
+///   cmp  r0,#2             (anchor+18)   BD accepts iff class==2
+///   beq  <accept>          (anchor+20)   ← stub returns here (uses its Z flag)
+///   ...deny: movs r2,#1; movs r1,#0x6f; movs r0,#5; bl <set_sense>  (OEM 6F refusal)
+///   ```
+/// The `Feature::Bd` stub replays `ldrb r0,[r2,#7]` and then, only when
+/// `flag[Bd]==STATE_OFF`, forces a non-equal compare so the caller's `beq` falls
+/// through to the OEM deny block (which raises the drive's own `6F` refusal sense)
+/// — i.e. the drive REFUSES a BD disc it would otherwise engage. At `passthrough`
+/// (default) / `on` it replays the OEM `cmp r0,#2` verbatim, so an unarmed image is
+/// byte-behaviour-identical to OEM (stealth). This is the real enforcement point
+/// (not the classifier, which only *sets* the class), it reuses OEM's own deny
+/// path (no fabricated sense), and it is **unique** in the REPORT KEY window on
+/// every MT1959 image that carries this shape; images with a different REPORT KEY
+/// codegen leave `Feature::Bd` gracefully unwired (like busenc/uhd/hrl).
+const BD_GATE_SIG: &[(u16, u16)] = &[
+    (0x2801, 0xFFFF), // cmp  r0,#1          ← anchor (mode==1 test)
+    (0xD100, 0xFF00), // bne  <mode-not-1>
+    (0x79D0, 0xFFFF), // ldrb r0,[r2,#7]
+    (0x2803, 0xFFFF), // cmp  r0,#3
+    (0xD100, 0xFF00), // bne  <deny>
+    (0x7808, 0xFFFF), // ldrb r0,[r1,#0]
+    (0x2800, 0xFFFF), // cmp  r0,#0          mode==0 (BD)?
+    (0xD100, 0xFF00), // bne  <accept>
+    (0x79D0, 0xFFFF), // ldrb r0,[r2,#7]     ← detour site (anchor+16)
+    (0x2802, 0xFFFF), // cmp  r0,#2          BD accepts iff class==2
+    (0xD000, 0xFF00), // beq  <accept>       ← stub returns here (anchor+20)
 ];
 
 /// Signature of the flash-resident **Host Revocation List (HRL) lookup** routine
@@ -1501,6 +1596,11 @@ impl Mt1959Engine {
         a.bne(not_set);
         a.ldr_lit(0, flag_base); // r0 = flag-table base (SRAM)
         a.ldrb_imm(1, 3, abi::CDB_FEATURE as u16); // r1 = feature id (cdb[5])
+                                                   // Bounds-clamp the feature id: valid ids are 1..=NUM_FEATURES, so anything
+                                                   // >= NUM_FEATURES+1 is rejected (return a zeroed buffer, no write). Without
+                                                   // this an id such as 0xC8 would `strb` into live SRAM past the flag hole.
+        a.cmp_imm(1, NUM_FEATURES + 1);
+        a.bhs(clr);
         a.adds_reg(0, 0, 1); // r0 = &flag[feature]
         a.ldrb_imm(1, 3, abi::CDB_STATE as u16); // r1 = state (cdb[6])
         a.strb_imm(1, 0, 0); // flag[feature] = state
@@ -1536,6 +1636,12 @@ impl Mt1959Engine {
         a.bne(not_get);
         a.ldr_lit(0, flag_base);
         a.ldrb_imm(1, 3, abi::CDB_FEATURE as u16); // r1 = feature id
+                                                   // Bounds-clamp the feature id (same window as SET): an id >= NUM_FEATURES+1
+                                                   // would `ldrb` from live SRAM past the flag hole. Out of range → fall through
+                                                   // to `not_get` (verb isn't DumpAll/Identity either, so it reaches `docommit`
+                                                   // and returns the already-zeroed buffer).
+        a.cmp_imm(1, NUM_FEATURES + 1);
+        a.bhs(not_get);
         a.adds_reg(0, 0, 1); // r0 = &flag[feature]
         a.ldrb_imm(1, 0, 0); // r1 = flag byte
         a.movs_imm(0, 0); // response offset 0
@@ -1783,7 +1889,7 @@ impl Mt1959Engine {
     /// that replaces the OEM RESET writer's `movs r1,#1; b <back>` at
     /// [`AKE_GATE_SIG`]'s `match+12`. On entry `r0 = AGID` (set by the preceding
     /// `ldrb/lsrs`), which is preserved. The stub picks the per-AGID state to write:
-    /// `6` (AKE authenticated → VID gate open) when `flag[RawRead]==2`, else the
+    /// `6` (AKE authenticated → VID gate open) when `flag[Ake]==STATE_ON`, else the
     /// OEM `1` (auth failed → reset). It then jumps to `back` — the OEM
     /// `set_agid_state(r0, r1)` call the reset writer branched to — so the store
     /// happens through the OEM primitive unchanged. `r2` is scratch (dead at `back`);
@@ -1818,7 +1924,7 @@ impl Mt1959Engine {
     /// arm or `1` on the reject arm). Because the accept arm passes through here
     /// too, the stub must **preserve `r1`** when the flag is off (unlike
     /// [`Self::build_ake_stub`], which sits only on the reject writer): it forces
-    /// `r1 = 6` only when `flag[RawRead]==2`, then tail-jumps to the OEM
+    /// `r1 = 6` only when `flag[Ake]==STATE_ON`, then tail-jumps to the OEM
     /// `set_agid_state` (`back`) so the store happens through the OEM primitive.
     /// `r2` is scratch (dead at `back`); `lr` is preserved by the outer `bl` and
     /// carries the OEM return, matching the `bl set_agid_state` this replaces.
@@ -1850,11 +1956,16 @@ impl Mt1959Engine {
     /// On entry `r0..r3` still hold the OEM `bl <key-prog>` arguments (a `bl` does not
     /// disturb them) and `lr = arm+4` (the OEM continuation, where the arm ignores the
     /// call's return value — it does `movs r0,#6` immediately). The stub saves `lr`,
-    /// replays the call, and — only when `flag[RawRead]==3` — clears
+    /// replays the call **through `r4`** (NOT a low arg register: loading the call
+    /// target into `r0..r3` would clobber a key-prog argument, and a >=3-arg AAPCS
+    /// key-prog would then program a corrupt read-data-key — the `Bus=off` path would
+    /// return wrong content), and — only when `flag[Bus]==STATE_ON` — clears
     /// [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`] before returning to `arm+4` via the
     /// saved `lr`. `r1..r3` are dead across the OEM continuation (it re-establishes
-    /// them), so the stub uses them as scratch; `r4` is pushed only to keep the stack
-    /// 8-byte aligned and is restored unchanged.
+    /// them), so the stub uses them as scratch; `r4` is pushed and reused as the
+    /// call-target scratch — the key-prog callee preserves it (AAPCS callee-saved), and
+    /// the `pop` restores it to its entry value, so the OEM continuation sees it
+    /// unchanged.
     ///
     /// # Mechanism
     /// AACS bus encryption is a drive-side hardware stage on the read datapath, gated
@@ -1869,11 +1980,12 @@ impl Mt1959Engine {
     /// matching bus-less key, which is unnecessary here because we let the OEM key
     /// programming run unchanged and only drop the transport wrap).
     ///
-    /// `flag[RawRead]` (`flag[0x04]`) semantics at this site:
-    ///   * `!= 3` (OEM / `01` / `02`): replay the OEM key-prog `bl` and return —
-    ///     the register is untouched, **bus encryption ON**. Byte-behaviour-identical
-    ///     to OEM, so this mode is inert (stealth) until `03` is set.
-    ///   * `== 3` (data clear): replay the OEM key-prog `bl`, then
+    /// `flag[Bus]` (`flag[Feature::Bus]`) semantics at this site:
+    ///   * `!= STATE_ON` (`passthrough` default / `off`): replay the OEM key-prog `bl`
+    ///     and return — the register is untouched, **bus encryption ON**.
+    ///     Byte-behaviour-identical to OEM, so this mode is inert (stealth) until
+    ///     `Bus=on`.
+    ///   * `== STATE_ON` (bus off / data clear): replay the OEM key-prog `bl`, then
     ///     `*BUSENC_REG &= ~BUSENC_ENABLE_BIT` → the transport wrap is off for the
     ///     following `READ(10)`, content comes back AACS-at-rest only.
     ///
@@ -1881,14 +1993,14 @@ impl Mt1959Engine {
     /// specifically the bus-encryption enable (and that clearing it here suppresses
     /// the wrap without disturbing the at-rest read path) comes from the MK-vs-OEM
     /// 1.03 diff and is NOT yet re-proven on this silicon; the golden-UK hardware KAT
-    /// is the final arbiter. The `!= 3` (bus-ON) path IS structurally proven — it
-    /// replays the exact OEM key-prog call and touches nothing else.
+    /// is the final arbiter. The `!= STATE_ON` (bus-ON) path IS structurally proven —
+    /// it replays the exact OEM key-prog call and touches nothing else.
     fn build_busenc_stub(&self, flag_base: u32, keyprog: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let skip = a.label();
-        a.push(0x0110); // push {r4, lr}   (r4 only to keep SP 8-byte aligned)
-        a.ldr_lit(2, keyprog | 1); // r2 = &oem_key_prog (thumb)
-        a.blx(2); // replay OEM key programming (its return value is dead at arm+4)
+        a.push(0x0110); // push {r4, lr}   (r4 saved, then reused as the call-target scratch)
+        a.ldr_lit(4, keyprog | 1); // r4 = &oem_key_prog (thumb); r0-r3 (key-prog args) untouched
+        a.blx(4); // replay OEM key programming with r0-r3 = original args (return value dead at arm+4)
         a.ldr_lit(3, flag_base + abi::Feature::Bus as u32); // r3 = &flag[Bus]
         a.ldrb_imm(3, 3, 0); // r3 = Bus flag byte
         a.cmp_imm(3, abi::STATE_ON); // 0x01 = bus off (remove the bus-encryption stage)
@@ -1908,7 +2020,7 @@ impl Mt1959Engine {
     /// classifier hook). Entered by a `bl` that replaces the disc-version classifier
     /// prologue's reload `ldr r0,[sp,#0x38]; movs r5,#6` (4 bytes at
     /// [`UHD_CLASSIFIER_SIG`]'s `match+6`). It replays both overwritten instructions
-    /// and, only when `flag[RawRead]==3`, zeros the disc-version so a UHD (AACS 2.0)
+    /// and, only when `flag[Uhd]==STATE_ON`, zeros the disc-version so a UHD (AACS 2.0)
     /// disc is never categorized into the "mode 1" bucket the downstream REPORT KEY
     /// gate refuses with sense `6F/01`.
     ///
@@ -1923,12 +2035,12 @@ impl Mt1959Engine {
     /// live outputs the continuation consumes; `r3` is scratch, dead at `match+10`
     /// (the continuation recomputes `r2`/`r3` before use).
     ///
-    /// `flag[RawRead]` (`flag[0x04]`) semantics at this site:
-    ///   * `!= 3` (OEM / `01` / `02`): replay `ldr r0,[sp,#0x38]; movs r5,#6` verbatim
-    ///     and return — the disc-version is untouched, so classification is
-    ///     byte-behaviour-identical to OEM. Inert (stealth) until `03` is set.
-    ///   * `== 3` (full UHD bypass): after the replay, `r0 = 0` → the classifier sees
-    ///     disc-version `0`, dodging the UHD mode-1 categorization (MK-parity: MK's
+    /// `flag[Uhd]` (`flag[Feature::Uhd]`) semantics at this site:
+    ///   * `!= STATE_ON` (`passthrough` / `off`): replay `ldr r0,[sp,#0x38]; movs r5,#6`
+    ///     verbatim and return — the disc-version is untouched, so classification is
+    ///     byte-behaviour-identical to OEM. Inert (stealth) until `Uhd=on`.
+    ///   * `== STATE_ON` (full UHD bypass): after the replay, `r0 = 0` → the classifier
+    ///     sees disc-version `0`, dodging the UHD mode-1 categorization (MK-parity: MK's
     ///     injected stub returns the same forced-`0`).
     ///
     /// **HARDWARE-KAT-GATED HYPOTHESIS.** That neutralizing this categorization (the
@@ -1961,16 +2073,144 @@ impl Mt1959Engine {
     /// reload before returning, so a mis-anchored match refuses rather than patches.
     fn uhd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
         let anchor = self.find_uhd_classifier(image)? as usize;
-        let site = anchor + 6;
-        let ldr = u16::from_le_bytes([image[site], image[site + 1]]);
-        let movs = u16::from_le_bytes([image[site + 2], image[site + 3]]);
-        if ldr != 0x980E || movs != 0x2506 {
+        let head = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
+        // The finder returns the head of whichever variant resolved. `push {r0-r3}`
+        // (0xB40F) => the byte-extraction prologue (primary); `cmp r0,#0x63` (0x2863)
+        // => the version-compare variant. Each has its own detour site + stub, verified
+        // against the OEM bytes before patching so a mis-anchored match refuses.
+        if head == 0xB40F {
+            // Primary: replace the disc-version reload `ldr r0,[sp,#0x38]; movs r5,#6`
+            // (4 bytes at anchor+6); the stub returns to the classifier body at anchor+10.
+            let site = anchor + 6;
+            let ldr = u16::from_le_bytes([image[site], image[site + 1]]);
+            let movs = u16::from_le_bytes([image[site + 2], image[site + 3]]);
+            if ldr != 0x980E || movs != 0x2506 {
+                bail!(
+                    "UHD classifier reload (ldr r0,[sp,#0x38]; movs r5,#6) not at 0x{site:x} \
+                     (got 0x{ldr:04x} 0x{movs:04x})"
+                );
+            }
+            Ok((site, self.build_uhd_stub(flag_base)?))
+        } else {
+            // Version-compare variant: the anchor is `cmp r0,#0x63`, preceded by the
+            // disc-version load `ldrh r0,[r1]` at anchor-2. Replace those 4 bytes
+            // (ldrh + cmp) with the `bl`; the stub replays both (stealth) or, when armed,
+            // branches straight to arm C at anchor+0x16 (`movs r2,#3` == the class a
+            // disc-version of 0 hits). Verify all three OEM landmarks before patching.
+            let site = anchor - 2;
+            let ldrh = u16::from_le_bytes([image[site], image[site + 1]]);
+            let cmp = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
+            let arm_c_va = (anchor + 0x16) as u32;
+            let arm_c = u16::from_le_bytes([image[anchor + 0x16], image[anchor + 0x17]]);
+            if ldrh != 0x8808 || cmp != 0x2863 || arm_c != 0x2203 {
+                bail!(
+                    "UHD version-compare classifier landmarks off at anchor 0x{anchor:x} \
+                     (ldrh@-2=0x{ldrh:04x} cmp=0x{cmp:04x} armC@+0x16=0x{arm_c:04x})"
+                );
+            }
+            Ok((site, self.build_uhd_stub_ver(flag_base, arm_c_va)?))
+        }
+    }
+
+    /// Version-compare sibling of [`Self::build_uhd_stub`] — the `04 03` UHD mode-gate
+    /// neutralizer for images whose classifier buckets by disc-version *thresholds*
+    /// ([`UHD_CLASSIFIER_SIG_VER`]). Entered by a `bl` that replaces `ldrh r0,[r1];
+    /// cmp r0,#0x63` (the 4 bytes at the anchor's `match-2`).
+    ///
+    /// # Register / frame contract
+    /// A bare `bl` (no push), so `sp`/`r1` are unchanged — the replayed `ldrh r0,[r1]`
+    /// resolves to the same disc-version halfword the OEM load would. `r3` is scratch:
+    /// the classifier never feeds `r3` to the class-compose call (`compose_disc_mode`
+    /// sets `r3=0` on entry), and no arm reads it, so clobbering it is invisible on both
+    /// paths. `lr` is caller-saved (the function returns via its own `pop {…,pc}`, and
+    /// re-arms `lr` at the class-compose `bl`), so the `bl`'s `lr` clobber is harmless.
+    ///
+    /// `flag[Feature::Uhd]` semantics at this site:
+    ///   * `!= STATE_ON` (OEM / off): replay `ldrh r0,[r1]; cmp r0,#0x63` verbatim and
+    ///     `bx lr` to the caller's `bls` (anchor+2) — classification is
+    ///     byte-behaviour-identical to OEM. Inert (stealth) until armed.
+    ///   * `== STATE_ON`: branch straight to arm C (`arm_c_va` = anchor+0x16, `movs
+    ///     r2,#3`), the exact class a disc-version of `0` produces — so a UHD disc
+    ///     dodges the `r2==2` mode-1 bucket the REPORT KEY gate refuses (MK-parity).
+    ///
+    /// **HARDWARE-KAT-GATED HYPOTHESIS** — same status as [`Self::build_uhd_stub`]: the
+    /// stealth (`!= STATE_ON`) path is structurally proven (a verbatim replay); the
+    /// armed path's effect on the UHD refusal is the MK-vs-OEM hypothesis, not re-proven
+    /// on this silicon.
+    fn build_uhd_stub_ver(&self, flag_base: u32, arm_c_va: u32) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        let armed = a.label();
+        a.raw16(0x8808); // replay: ldrh r0,[r1]   (r0 = disc-version; r1 unchanged by the bl)
+        a.ldr_lit(3, flag_base + abi::Feature::Uhd as u32); // r3 = &flag[Uhd]
+        a.ldrb_imm(3, 3, 0); // r3 = UHD flag byte
+        a.cmp_imm(3, abi::STATE_ON); // 0x01 = force UHD (neutralize the mode gate)
+        a.beq(armed);
+        a.cmp_imm(0, 0x63); // stealth: replay `cmp r0,#0x63` LAST so the caller's `bls` sees OEM flags
+        a.bx(14); // bx lr -> caller's `bls` at anchor+2 (OEM classification)
+        a.bind(armed);
+        a.ldr_lit(3, arm_c_va | 1); // armed: arm C (movs r2,#3) == disc-version-0 class (MK-parity)
+        a.bx(3);
+        a.finish()
+    }
+
+    /// The `Feature::Bd` **BD (AACS 1.0) capability-refuse** trampoline. Entered by a
+    /// `bl` that replaces the REPORT KEY gate's mode-0 class check `ldrb r0,[r2,#7];
+    /// cmp r0,#2` (4 bytes at [`BD_GATE_SIG`]'s `anchor+16`). On entry `r2 = the
+    /// per-disc class struct` (loaded by the gate's own `ldr r2,[pc]`, undisturbed by
+    /// a `bl`) and `lr = anchor+20` (the OEM `beq <accept>`, which the gate reaches
+    /// only for a mode-0 = BD disc). The stub replays the class load and returns to
+    /// that `beq` with the compare flags it needs.
+    ///
+    /// # Register / frame contract
+    /// A bare `bl` (no push), so `sp`/`r2` are unchanged — the replayed `ldrb
+    /// r0,[r2,#7]` reads the same class byte the OEM load would. `r0` and `r3` are
+    /// scratch: both continuation targets (`<accept>` at `anchor+20`'s branch and the
+    /// `<deny>` block) recompute `r0` before use and never read `r3`, so clobbering
+    /// them is invisible. `lr` is caller-saved (the enclosing function returns via its
+    /// own `pop {…,pc}`), so the `bl`'s `lr` clobber is harmless.
+    ///
+    /// `flag[Bd]` semantics at this site:
+    ///   * `!= STATE_OFF` (`passthrough` default / `on`): replay `ldrb r0,[r2,#7]; cmp
+    ///     r0,#2` verbatim, so the caller's `beq` sees the exact OEM flags — BD
+    ///     acceptance is byte-behaviour-identical to OEM. Inert (stealth) until armed.
+    ///   * `== STATE_OFF`: after the class replay, force a non-equal compare (`cmp
+    ///     r0,#0xff`; class is never `0xff`) so the caller's `beq <accept>` is NOT
+    ///     taken and control falls into the OEM deny block, which raises the drive's
+    ///     own `6F` refusal sense — the drive REFUSES the BD disc.
+    fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        let refuse = a.label();
+        a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
+        a.ldr_lit(3, flag_base + abi::Feature::Bd as u32); // r3 = &flag[Bd]
+        a.ldrb_imm(3, 3, 0); // r3 = Bd flag byte
+        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force BD refuse
+        a.beq(refuse);
+        a.cmp_imm(0, 2); // stealth: replay `cmp r0,#2` LAST so the caller's `beq` sees OEM flags
+        a.bx(14); // bx lr -> caller's `beq <accept>` at anchor+20 (OEM acceptance)
+        a.bind(refuse);
+        a.cmp_imm(0, 0xff); // armed: class never 0xff -> Z=0 -> caller's `beq` falls through to OEM deny (6F)
+        a.bx(14);
+        a.finish()
+    }
+
+    /// Resolve the `Feature::Bd` REPORT KEY refuse detour: the mode-0 class check
+    /// located by [`Self::find_bd_gate`]. Returns `(detour_site, stub_bytes)` where a
+    /// `bl` to the stub is written at `detour_site` (= gate `anchor+16`, replacing
+    /// `ldrb r0,[r2,#7]; cmp r0,#2`). Verifies the two replaced halfwords are exactly
+    /// the OEM class check before returning, so a mis-anchored match refuses rather
+    /// than patches.
+    fn bd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
+        let anchor = self.find_bd_gate(image)? as usize;
+        let site = anchor + 16;
+        let ldrb = u16::from_le_bytes([image[site], image[site + 1]]);
+        let cmp = u16::from_le_bytes([image[site + 2], image[site + 3]]);
+        if ldrb != 0x79D0 || cmp != 0x2802 {
             bail!(
-                "UHD classifier reload (ldr r0,[sp,#0x38]; movs r5,#6) not at 0x{site:x} \
-                 (got 0x{ldr:04x} 0x{movs:04x})"
+                "BD gate mode-0 class check (ldrb r0,[r2,#7]; cmp r0,#2) not at 0x{site:x} \
+                 (got 0x{ldrb:04x} 0x{cmp:04x})"
             );
         }
-        let bytes = self.build_uhd_stub(flag_base)?;
+        let bytes = self.build_bd_stub(flag_base)?;
         Ok((site, bytes))
     }
 
@@ -1979,7 +2219,7 @@ impl Mt1959Engine {
     /// movs r1,#1` (4 bytes at `AKE_GATE_SIG_CLASSIC`'s `match+6`) — unlike the
     /// MT1959 reject writer, the classic one folds the `lsrs` (AGID compute) into
     /// the replaced bytes, so the stub REPLAYS it. It then forces `r1 = 6` when
-    /// `flag[RawRead]==2` (accept any host cert) else the OEM `1` (reject), and
+    /// `flag[Ake]==STATE_ON` (accept any host cert) else the OEM `1` (reject), and
     /// falls through to the shared OEM `bl set_agid_state` call at `back`
     /// (`match+0xa`) that BOTH arms converge on — a single clean call, so the
     /// store happens through the OEM primitive unchanged. `r2` scratch; `r0`=AGID
@@ -2026,22 +2266,53 @@ impl Mt1959Engine {
         Ok((arm, keyprog))
     }
 
-    /// The OEM disc-version classifier prologue anchor — the unique
-    /// [`UHD_CLASSIFIER_SIG`] match (`0xcb3c0` on BU40N 1.00). Returns the anchor;
-    /// the disc-version reload `ldr r0,[sp,#0x38]` the `04 03` UHD-bypass detour
-    /// replaces (4 bytes, together with the following `movs r5,#6`) is at
-    /// `anchor+6`, and the classifier continuation the stub returns to is at
-    /// `anchor+10`.
+    /// The OEM disc-version classifier anchor. Two codegen shapes carry the same UHD
+    /// mode gate, tried original-first:
+    ///
+    /// * primary — the byte-extraction prologue ([`UHD_CLASSIFIER_SIG`], `0xcb3c0` on
+    ///   BU40N 1.00). The reload `ldr r0,[sp,#0x38]` the `04 03` detour replaces (4
+    ///   bytes, with the following `movs r5,#6`) is at `anchor+6`; the stub returns to
+    ///   the classifier body at `anchor+10`.
+    /// * variant — the version-compare shape ([`UHD_CLASSIFIER_SIG_VER`], consulted
+    ///   only when the prologue matches zero). The anchor is `cmp r0,#0x63`; the detour
+    ///   replaces `ldrh r0,[r1]; cmp r0,#0x63` (4 bytes at `anchor-2`) and, when armed,
+    ///   routes to arm C (`movs r2,#3`) at `anchor+0x16`.
+    ///
+    /// [`Self::uhd_detour`] disambiguates by the anchor's head halfword and applies the
+    /// matching site + stub. Either shape must resolve UNIQUELY.
     pub fn find_uhd_classifier(&self, image: &[u8]) -> Result<u32> {
         let lo = 0x000c_0000usize.min(image.len());
         let hi = 0x000d_0000usize.min(image.len());
-        Ok(find_unique(
-            image,
-            UHD_CLASSIFIER_SIG,
-            lo,
-            hi,
-            "UHD disc-version classifier",
-        )? as u32)
+        // Original-first (same pattern as `find_aacs45_arm`): the byte-extraction
+        // prologue shape wins wherever it resolves, so the BU40N KAT base and every
+        // image that shape covers stay on the primary detour byte-for-byte. Only when
+        // the prologue matches ZERO do we fall back to the version-compare variant.
+        match find_masked_all(image, UHD_CLASSIFIER_SIG, lo, hi).as_slice() {
+            [one] => Ok(*one as u32),
+            [] => Ok(find_unique(
+                image,
+                UHD_CLASSIFIER_SIG_VER,
+                lo,
+                hi,
+                "UHD disc-version classifier (version-compare)",
+            )? as u32),
+            hits => bail!(
+                "UHD disc-version classifier signature matched {} time(s) in \
+                 [0x{lo:x},0x{hi:x}) (want exactly 1) — refusing to patch",
+                hits.len()
+            ),
+        }
+    }
+
+    /// The AACS REPORT KEY disc-mode/class accept-gate anchor — the unique
+    /// [`BD_GATE_SIG`] match (`0x1365be` on BU40N 1.00). Returns the anchor; the
+    /// mode-0 class check `ldrb r0,[r2,#7]; cmp r0,#2` the `Feature::Bd` refuse
+    /// detour replaces (4 bytes) is at `anchor+16`, and the OEM `beq <accept>` the
+    /// stub returns to is at `anchor+20`.
+    pub fn find_bd_gate(&self, image: &[u8]) -> Result<u32> {
+        let lo = 0x0013_0000usize.min(image.len());
+        let hi = 0x0014_0000usize.min(image.len());
+        Ok(find_unique(image, BD_GATE_SIG, lo, hi, "AACS REPORT KEY BD accept gate")? as u32)
     }
 
     /// The flash-resident HRL lookup routine, located by [`HRL_LOOKUP_SIG`] and
@@ -2195,8 +2466,8 @@ impl Mt1959Engine {
     /// start of the AACS opcode-`0x45` arm (located by [`Self::find_aacs45_arm`]).
     /// Returns `(detour_site, stub_bytes)` where a `bl` to the stub is written at
     /// `detour_site` (replacing the OEM `bl`); the stub replays the OEM key-prog call
-    /// and, when `flag[RawRead]==3`, clears [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`].
-    /// Errors (→ `04 03` unwired) on images whose opcode-`0x45` arm is not one of the
+    /// and, when `flag[Bus]==STATE_ON`, clears [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`].
+    /// Errors (→ Bus feature unwired) on images whose opcode-`0x45` arm is not one of the
     /// two known MT1959 shapes.
     fn busenc_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
         let (detour_site, keyprog) = self.find_aacs45_arm(image)?;
@@ -2274,12 +2545,13 @@ impl Mt1959Engine {
     /// preceding `ldrb r0,[r0]`), preserved. This gate is reached by a bare
     /// `READ DISC STRUCTURE` (`0xAD` fmt `0x80`) — NO AKE.
     ///
-    /// This is the `04 01` mode: "the cert is valid" — the drive is told the host
-    /// auth already succeeded, so an unlocker can just issue a bare `0xAD` fmt `0x80`
-    /// and get the VID with NO cert and NO AKE. When `flag[RawRead]==1` the stub
-    /// jumps to `authed` (the fall-through that stages+emits VID) regardless of the
-    /// auth byte; otherwise (00/02) it replicates the OEM `cmp #6` (authed on `==6`,
-    /// which is what the `04 02` AKE path leaves in place). `r2` scratch; `lr` dead
+    /// This is the null-AKE bare-read mode (`flag[Ake]==STATE_ON`): "the cert is
+    /// valid" — the drive is told the host auth already succeeded, so an unlocker can
+    /// just issue a bare `0xAD` fmt `0x80` and get the VID with NO cert and NO AKE.
+    /// When `flag[Ake]==STATE_ON` the stub jumps to `authed` (the fall-through that
+    /// stages+emits VID) regardless of the auth byte; otherwise (`passthrough`/`off`)
+    /// it replicates the OEM `cmp #6` (authed on `==6`, which is what the real-AKE
+    /// accept path leaves in place). `r2` scratch; `lr` dead
     /// (producer saved it). The drive runs its own producer in its own `0xAD`
     /// context — no inline call, so a missing-buffer failure is a recoverable CHECK
     /// CONDITION, never a wedge.
@@ -2353,11 +2625,6 @@ impl Mt1959Engine {
         let vid_gate_setter = self.find_vid_gate_setter(image)?;
         // Bus Encryption (0x04) hook point — proven locatable and unique (see report).
         let setdiscmode = self.find_setdiscmode(image)?;
-        // Toggle hook anchors, all signature-found and proven unique on 1.00 + 1.03.
-        let (speed_gate, speed_idx_reg) = self.find_speed_gate(image)?;
-        let region_emitter = self.find_region_emitter(image)?;
-        // Raw Read (0x04): the AACS AKE accept gate (signature-found, unique).
-        let ake_gate = self.find_ake_gate(image)?;
         let de_off = self.find_de_byte(image)?;
         // The build-time SRAM scanner independently derives a candidate free cell;
         // retained for AUDIT only — it is unsound (picks a live-in-use cell), so it
@@ -2367,8 +2634,9 @@ impl Mt1959Engine {
         // free hole (chip constant, hardware-proven writable+free across 24 images).
         let flag_base = FLAG_TABLE_BASE;
         // Hybrid safety belt: cells are chip constants, but assert per-image they
-        // sit in mapped RAM and are unreferenced before we commit. Handler writes
-        // flag[subfn] for 0..=DumpAll(0x09), so the table spans 0x0a bytes.
+        // sit in mapped RAM and are unreferenced before we commit. The table holds
+        // `flag[Feature::X]` for feature ids `1..=NUM_FEATURES` (slot 0 is unused
+        // padding), so it spans `NUM_FEATURES + 1` = 8 bytes.
         let flag_table_len = NUM_FEATURES as u32 + 1;
         self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
 
@@ -2384,172 +2652,19 @@ impl Mt1959Engine {
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
 
-        // Speed (0x02): flag-gated ramp-ceiling trampoline. The gate `cmp/bhi`
-        // (4 bytes at speed_gate+4) is detoured to the stub; the ramp is untouched.
-        let cmp_at = speed_gate as usize + 4;
-        let bhi_at = speed_gate as usize + 6;
-        let bhi_hw = u16::from_le_bytes([image[bhi_at], image[bhi_at + 1]]);
-        if (bhi_hw & 0xFF00) != 0xD800 {
-            bail!("speed gate `bhi` not at 0x{bhi_at:x} (got 0x{bhi_hw:04x})");
-        }
-        let mut disp = (bhi_hw & 0xFF) as i32;
-        if disp >= 0x80 {
-            disp -= 0x100; // sign-extend the imm8 branch displacement
-        }
-        let ramp_exit = (bhi_at as i32 + 4 + disp * 2) as u32; // OEM `bhi` target
-        let fallthrough = speed_gate + 8; // OEM ramp continuation
-        let speed_bytes =
-            self.build_speed_stub(flag_base, fallthrough, ramp_exit, speed_idx_reg)?;
-        let speed_stub_va = self.free_space(&out, speed_bytes.len() + 16)?;
-        thumb::write(&mut out, speed_stub_va as usize, &speed_bytes);
-        let bl = thumb::encode_bl(cmp_at, speed_stub_va)
-            .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
-        thumb::write(&mut out, cmp_at, &bl);
-
-        // Region-free (0x03): flag-gated RPC-emitter trampoline. The frame[4]
-        // store + the following `mov r3,sp` (4 bytes at region_emitter+6) are
-        // detoured to the stub, which re-emits frame[4..7] + the epilogue.
-        let region_site = region_emitter as usize + 6;
-        let region_bytes = self.build_region_stub(flag_base)?;
-        let region_stub_va = self.free_space(&out, region_bytes.len() + 16)?;
-        thumb::write(&mut out, region_stub_va as usize, &region_bytes);
-        let bl = thumb::encode_bl(region_site, region_stub_va)
-            .ok_or_else(|| anyhow!("Region detour `bl` out of range"))?;
-        thumb::write(&mut out, region_site, &bl);
-
-        // Raw Read (0x04): flag-gated AKE accept-gate trampoline. The RESET writer's
-        // `movs r1,#1; b <back>` (4 bytes at ake_gate+12) is detoured to a stub forcing
-        // state 6 (accept) when flag[RawRead] is on, else the OEM 1, then jumps to back.
-        let reset_site = ake_gate as usize + 12;
-        let movs_hw = u16::from_le_bytes([image[reset_site], image[reset_site + 1]]);
-        if movs_hw != 0x2101 {
-            bail!("AKE reset writer `movs r1,#1` not at 0x{reset_site:x} (got 0x{movs_hw:04x})");
-        }
-        let b_at = reset_site + 2;
-        let b_hw = u16::from_le_bytes([image[b_at], image[b_at + 1]]);
-        if (b_hw & 0xF800) != 0xE000 {
-            bail!("AKE reset writer `b` not at 0x{b_at:x} (got 0x{b_hw:04x})");
-        }
-        let mut disp = (b_hw & 0x7FF) as i32;
-        if disp >= 0x400 {
-            disp -= 0x800; // sign-extend the imm11 branch displacement
-        }
-        let ake_back = (b_at as i32 + 4 + disp * 2) as u32; // OEM set_agid_state call
-        let ake_bytes = self.build_ake_stub(flag_base, ake_back)?;
-        let ake_stub_va = self.free_space(&out, ake_bytes.len() + 16)?;
-        thumb::write(&mut out, ake_stub_va as usize, &ake_bytes);
-        let bl = thumb::encode_bl(reset_site, ake_stub_va)
-            .ok_or_else(|| anyhow!("AKE detour `bl` out of range"))?;
-        thumb::write(&mut out, reset_site, &bl);
-
-        // Raw Read (0x04): flag-gated producer Gate-A trampoline. The producer's own
-        // gate `cmp r0,#6; bne <deny>` (4 bytes at VID_GATE_SIG match+18) is detoured
-        // to a stub forcing the authed path when flag[RawRead]==1 (bare 0xAD, no AKE).
-        let gatea_anchor = self.find_vid_gate(image)?;
-        let gatea_cmp = gatea_anchor + 18;
-        let cmp_hw = u16::from_le_bytes([image[gatea_cmp], image[gatea_cmp + 1]]);
-        if cmp_hw != 0x2806 {
-            bail!("VID gate `cmp r0,#6` not at 0x{gatea_cmp:x} (got 0x{cmp_hw:04x})");
-        }
-        let gatea_bne = gatea_cmp + 2;
-        let bne_hw = u16::from_le_bytes([image[gatea_bne], image[gatea_bne + 1]]);
-        if (bne_hw & 0xFF00) != 0xD100 {
-            bail!("VID gate `bne` not at 0x{gatea_bne:x} (got 0x{bne_hw:04x})");
-        }
-        let mut d = (bne_hw & 0xFF) as i32;
-        if d >= 0x80 {
-            d -= 0x100;
-        }
-        let gatea_deny = (gatea_bne as i32 + 4 + d * 2) as u32; // OEM deny target
-        let gatea_authed = (gatea_cmp + 4) as u32; // fall-through: stage + emit VID
-                                                   // The per-AGID session struct the producer gates on: the 04 01 bare-read
-                                                   // path resets its AGID selector so a prior read/deny can't leave it >= 2
-                                                   // (which makes the producer bail with ABORTED COMMAND until power-cycle).
-        let vid_agid_struct = self.find_vid_agid_struct(image)?;
-        let gatea_bytes =
-            self.build_gatea_stub(flag_base, vid_agid_struct, gatea_authed, gatea_deny)?;
-        let gatea_stub_va = self.free_space(&out, gatea_bytes.len() + 16)?;
-        thumb::write(&mut out, gatea_stub_va as usize, &gatea_bytes);
-        let bl = thumb::encode_bl(gatea_cmp, gatea_stub_va)
-            .ok_or_else(|| anyhow!("Gate-A detour `bl` out of range"))?;
-        thumb::write(&mut out, gatea_cmp, &bl);
-
-        // Raw Read (0x04) deny-path AACS reset. The deny block's sense-setup
-        // `movs r2,#2; movs r1,#0x6f` at the OEM deny target + 0x10 is detoured to a
-        // stub that idles the engine via aacs_session_reset, replays sense, returns.
-        let aacs_reset = self.find_aacs_session_reset(image)?;
-        let deny_site = gatea_deny as usize + 0x10;
-        if deny_site + 4 > image.len() {
-            bail!("deny sense-setup site 0x{deny_site:x} is past the end of the image");
-        }
-        let d0 = u16::from_le_bytes([image[deny_site], image[deny_site + 1]]);
-        let d1 = u16::from_le_bytes([image[deny_site + 2], image[deny_site + 3]]);
-        if d0 != 0x2202 || d1 != 0x216f {
-            bail!(
-                "deny sense-setup (movs r2,#2; movs r1,#0x6f) not at 0x{deny_site:x} \
-                 (got 0x{d0:04x} 0x{d1:04x})"
-            );
-        }
-        let deny_bytes = self.build_deny_reset_stub(aacs_reset)?;
-        let deny_stub_va = self.free_space(&out, deny_bytes.len() + 16)?;
-        thumb::write(&mut out, deny_stub_va as usize, &deny_bytes);
-        let bl = thumb::encode_bl(deny_site, deny_stub_va)
-            .ok_or_else(|| anyhow!("deny-reset detour `bl` out of range"))?;
-        thumb::write(&mut out, deny_site, &bl);
-
-        // Raw Read `04 03` "data clear" (remove the drive-side bus-encryption stage,
-        // MK-style). The OEM `bl <key-prog>` at the start of the AACS opcode-0x45 arm
-        // is detoured to a stub that replays the OEM key programming and, only when
-        // flag[RawRead]==3, clears BUSENC_ENABLE_BIT of BUSENC_REG so the following
-        // content READ(10) comes back AACS-at-rest only. Wired AFTER the deny block so
-        // the free_space allocation order matches build_modify (…→ deny → busenc). See
-        // `build_busenc_stub` for the mechanism + the hardware-KAT hypothesis.
-        let (busenc_site, busenc_bytes) = self.busenc_detour(image, flag_base)?;
-        let busenc_stub_va = self.free_space(&out, busenc_bytes.len() + 16)?;
-        thumb::write(&mut out, busenc_stub_va as usize, &busenc_bytes);
-        let bl = thumb::encode_bl(busenc_site, busenc_stub_va)
-            .ok_or_else(|| anyhow!("bus-enc detour `bl` out of range"))?;
-        thumb::write(&mut out, busenc_site, &bl);
-
-        // Raw Read `04 03` UHD mode-gate neutralizer (MK-style classifier hook). The
-        // classifier prologue's disc-version reload `ldr r0,[sp,#0x38]; movs r5,#6` is
-        // detoured to a stub that replays both and, only when flag[RawRead]==3, zeros
-        // the disc-version so a UHD disc dodges the mode-1 refusal. Wired AFTER busenc
-        // so the free_space allocation order matches build_modify (…→ busenc → uhd).
-        // Optional (graceful): images whose classifier prologue is not the known shape
-        // leave the mode unwired (0), exactly like the busenc arm on unknown 0x45 shapes.
-        let (uhd_site, uhd_stub_va) = match self.uhd_detour(image, flag_base) {
-            Ok((site, bytes)) => {
-                let stub_va = self.free_space(&out, bytes.len() + 16)?;
-                let bl = thumb::encode_bl(site, stub_va)
-                    .ok_or_else(|| anyhow!("UHD mode-gate detour `bl` out of range"))?;
-                thumb::write(&mut out, stub_va as usize, &bytes);
-                thumb::write(&mut out, site, &bl);
-                (site as u32, stub_va)
-            }
-            Err(_) => (0, 0),
-        };
-
-        // HRL skip (`flag[Feature::Hrl]==STATE_ON`): one shared stub, a `bl` at each
-        // of the three cert-path check sites. Wired AFTER uhd so the free_space
-        // allocation order matches build_modify (…→ uhd → hrl). Graceful: an image
-        // whose HRL cert path is not the known shape leaves it unwired.
-        let (hrl_sites, hrl_stub_va) = match self.hrl_skip_detour(image, flag_base) {
-            Ok((sites, _revoke, bytes)) => {
-                let stub_va = self.free_space(&out, bytes.len() + 16)?;
-                thumb::write(&mut out, stub_va as usize, &bytes);
-                for &site in &sites {
-                    let bl = thumb::encode_bl(site, stub_va)
-                        .ok_or_else(|| anyhow!("HRL-skip detour `bl` out of range"))?;
-                    thumb::write(&mut out, site, &bl);
-                }
-                (
-                    sites.iter().map(|&s| s as u32).collect::<Vec<u32>>(),
-                    stub_va,
-                )
-            }
-            Err(_) => (Vec::new(), 0),
-        };
+        // Speed / Region / Raw-read levers are emitted through the exact same
+        // `emit_*` helpers `build_modify` uses (single source of truth), so a fresh
+        // `create` and a `modify` on the same base produce byte-for-byte identical
+        // images — asserted by `create_and_modify_agree_on_base`. Each helper
+        // re-finds its own anchors and preserves the `free_space` allocation order
+        // (handler → speed → region → raw-read[ake → gatea → deny → busenc → uhd →
+        // hrl → bd]). The AKE gate is resolved via `ake_detour` (desktop → NB → V5),
+        // and busenc/uhd/hrl/bd are graceful (unwired = 0/empty on unknown shapes),
+        // exactly as `modify` treats them — so `create` no longer diverges on the
+        // NB/V5 images the old inline `find_ake_gate` + hard-`?` busenc path failed.
+        let (speed_gate, speed_stub_va) = self.emit_speed(image, &mut out, flag_base)?;
+        let (region_emitter, region_stub_va) = self.emit_region(image, &mut out, flag_base)?;
+        let f = self.emit_rawread(image, &mut out, flag_base)?;
 
         // HRL wipe-once is destructive and gated behind HRL_WIPE_ARMED (default
         // off) — its record codegen is `hrl_valid_empty_record`; no image ships the
@@ -2592,18 +2707,20 @@ impl Mt1959Engine {
             speed_stub_va,
             region_emitter,
             region_stub_va,
-            ake_gate,
-            ake_stub_va,
-            gatea_gate: gatea_cmp as u32,
-            gatea_stub_va,
-            deny_reset_gate: deny_site as u32,
-            deny_stub_va,
-            busenc_detour_site: busenc_site as u32,
-            busenc_stub_va,
-            uhd_classifier_site: uhd_site,
-            uhd_stub_va,
-            hrl_sites,
-            hrl_stub_va,
+            ake_gate: f.ake_gate,
+            ake_stub_va: f.ake_stub_va,
+            gatea_gate: f.gatea_cmp,
+            gatea_stub_va: f.gatea_stub_va,
+            deny_reset_gate: f.deny_site,
+            deny_stub_va: f.deny_stub_va,
+            busenc_detour_site: f.busenc_site,
+            busenc_stub_va: f.busenc_stub_va,
+            uhd_classifier_site: f.uhd_site,
+            uhd_stub_va: f.uhd_stub_va,
+            bd_gate_site: f.bd_site,
+            bd_stub_va: f.bd_stub_va,
+            hrl_sites: f.hrl_sites,
+            hrl_stub_va: f.hrl_stub_va,
             de_off,
             flag_base,
             free_sram_cell,
@@ -2724,6 +2841,13 @@ impl Mt1959Engine {
                         for (k, &site) in f.hrl_sites.iter().enumerate() {
                             facts.push((["hrl_site", "hrl_site2", "hrl_site3"][k], site));
                         }
+                    }
+                    // `Feature::Bd` BD-refuse detour (REPORT KEY mode-0 class gate),
+                    // when wired (gate is a known MT1959 shape). Recorded so the audit
+                    // re-checks its `bl`.
+                    if f.bd_stub_va != 0 {
+                        facts.push(("bd_site", f.bd_site));
+                        facts.push(("bd_stub_va", f.bd_stub_va));
                     }
                     LeverReport::applied(LeverId::RawRead, facts)
                 }
@@ -3226,6 +3350,24 @@ impl Mt1959Engine {
             Err(_) => (Vec::new(), 0),
         };
 
+        // `Feature::Bd` BD (AACS 1.0) capability-refuse: detour the REPORT KEY gate's
+        // mode-0 class check (via bd_detour → find_bd_gate). When `flag[Bd]==STATE_OFF`
+        // the stub forces the OEM deny path so the drive refuses a BD disc; unarmed it
+        // replays OEM (stealth). Graceful: images whose REPORT KEY gate is not the
+        // known MT1959 shape leave it unwired (0). Committed last so the free_space
+        // order matches build_report (…→ hrl → bd).
+        let (bd_site, bd_stub_va) = match self.bd_detour(image, flag_base) {
+            Ok((site, bytes)) => {
+                let stub_va = self.free_space(&w, bytes.len() + 16)?;
+                let bl = thumb::encode_bl(site, stub_va)
+                    .ok_or_else(|| anyhow!("BD-refuse detour `bl` out of range"))?;
+                thumb::write(&mut w, stub_va as usize, &bytes);
+                thumb::write(&mut w, site, &bl);
+                (site as u32, stub_va)
+            }
+            Err(_) => (0, 0),
+        };
+
         *out = w;
         Ok(RawReadFacts {
             ake_gate,
@@ -3241,6 +3383,8 @@ impl Mt1959Engine {
             uhd_stub_va,
             hrl_sites,
             hrl_stub_va,
+            bd_site,
+            bd_stub_va,
             vid_producer,
         })
     }

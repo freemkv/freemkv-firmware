@@ -223,6 +223,13 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                         stub,
                     );
                 }
+                // `Feature::Bd` BD-refuse detour (REPORT KEY mode-0 class gate).
+                // Present only when wired (gate is a known MT1959 shape); optional,
+                // like the bus-enc/UHD detours above. Proves the BD-refuse `bl` + stub
+                // landed at the mode-0 class check.
+                if let (Some(site), Some(stub)) = (fact(l, "bd_site"), fact(l, "bd_stub_va")) {
+                    check_bl(&mut checks, name, "BD-refuse detour bl", img, site, stub);
+                }
                 // HRL skip (`flag[Feature::Hrl]==STATE_ON`): one shared stub reached
                 // by a `bl` at each of the three cert-path check sites. Present only
                 // when wired (HRL cert path is the known shape); optional, like the

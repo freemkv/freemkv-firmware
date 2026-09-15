@@ -31,19 +31,18 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "324b58780e2806d19878c02803d1d878de2800d101e02e4b1847f0b52d4f1c79022c05d12c4859794018997901700ae0042c08d12848ff2141708170c170017141718171c1710025402d04d2281c0021b8470135f8e7032c06d11f485979401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d114a600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e74020074908800748074a9047f0bd0000380d00025bad090075200a00400e0002720c000290af000081810900667265656d6b7620302e372e31";
+    "344b58780e2806d19878c02803d1d878de2800d101e0304b1847f0b52f4f1c79022c07d12e48597908290ed24018997901700ae0042c08d12948ff2141708170c170017141718171c1710025402d04d2281c0021b8470135f8e7032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d114a600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e74020074908800748074a9047f0bd0000380d00025bad090075200a00400e0002720c000290af000081810900667265656d6b7620302e372e31";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
-// NOTE: the Raw Read `04 03` "data clear" (bus-off) is done the MK way — a `bl` to a
-// stub written over the OEM `bl <key-prog>` at the AACS opcode-0x45 arm (0x95eec), the
-// `04 03` UHD mode-gate detour over the disc-version classifier reload (0xcb3c6), plus
-// the injected stubs themselves. All fall in CMAC-covered regions, so these two digests
-// differ from a build without the bus-off / UHD detours and must be regenerated against
-// the OEM base (run this test with FREEMKV_KAT_BASE set and copy the `left:` values).
-// The handler bytes are UNCHANGED (the detours touch no handler code). Expected drift,
-// not a regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "c617660d3fd1359bc1f8567e99082d12";
-const EXPECT_CMAC_15: &str = "23320969d0d7e16817d904bdad371561";
+// NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
+// in CMAC-covered regions, so these two digests must be regenerated whenever any of
+// them change — including the SET/GET feature-id bounds clamp added to the handler, the
+// bus-off stub's `blx r4` register fix, and the `Feature::Bd` BD-refuse detour over the
+// REPORT KEY mode-0 class check (0x1365ce). Regenerate against the OEM base (run this
+// test with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
+// regression — the test skips when the base is absent.
+const EXPECT_CMAC_1: &str = "82947a68884d8350abf76efeeeaa6e94";
+const EXPECT_CMAC_15: &str = "28fc3eb63b938f03167497076193c85b";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -211,8 +210,9 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     );
 
     // Every changed byte must fall in an accounted-for region: the injected band
-    // (3C handler + Speed/Region stubs), the repointed record, the CMAC table, the
-    // two OEM-code detours, or the DE byte. 0x400 bounds the injected band.
+    // (3C handler + every stub), the repointed record, the CMAC table, the OEM-code
+    // detours (speed/region/ake/gatea/deny/busenc/uhd/bd/hrl), or the DE byte. 0x400
+    // bounds the injected band.
     let injected = EXPECT_HANDLER_VA as usize..EXPECT_HANDLER_VA as usize + 0x400;
     let speed_detour = report.speed_gate as usize + 4..report.speed_gate as usize + 8;
     let region_detour = report.region_emitter as usize + 6..report.region_emitter as usize + 10;
@@ -226,6 +226,9 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // prologue detour (report.uhd_classifier_site), 4 bytes replacing the reload
     // `ldr r0,[sp,#0x38]; movs r5,#6`.
     let uhd_detour = report.uhd_classifier_site as usize..report.uhd_classifier_site as usize + 4;
+    // `Feature::Bd` BD-refuse: the REPORT KEY mode-0 class check detour
+    // (report.bd_gate_site), 4 bytes replacing `ldrb r0,[r2,#7]; cmp r0,#2`.
+    let bd_detour = report.bd_gate_site as usize..report.bd_gate_site as usize + 4;
     // HRL skip (`flag[Feature::Hrl]==STATE_ON`): three cert-path detour sites, 4
     // bytes each (a `bl` to the shared HRL-skip stub, replacing `cmp r0,#0; bne`).
     let in_hrl = |i: usize| {
@@ -252,6 +255,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
                     || deny_detour.contains(&i)
                     || busenc_detour.contains(&i)
                     || uhd_detour.contains(&i)
+                    || bd_detour.contains(&i)
                     || in_hrl(i)
                     || i == report.de_off as usize,
                 "unexpected byte change at 0x{i:x}"
@@ -314,6 +318,15 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.uhd_stub_va != 0,
         "Raw Read `04 03` UHD mode-gate neutralizer stub wired"
     );
+    // `Feature::Bd` BD-refuse (REPORT KEY mode-0 class gate): the mode-0 class check
+    // `ldrb r0,[r2,#7]; cmp r0,#2` at the gate anchor+16 (0x1365be anchor → 0x1365ce
+    // site on 1.00), detoured to a stub that forces the OEM deny (6F) when
+    // `flag[Bd]==STATE_OFF` and replays OEM otherwise (stealth).
+    assert_eq!(
+        report.bd_gate_site, 0x0013_65ce,
+        "BD-refuse (Feature::Bd) detours the REPORT KEY mode-0 class check (1.00)"
+    );
+    assert!(report.bd_stub_va != 0, "Feature::Bd BD-refuse stub wired");
     // HRL skip (`flag[Feature::Hrl]==STATE_ON`): the three cert-path check sites
     // (`cmp r0,#0; bne <6F/00>`) after each `bl <hrl_lookup>` (0x13550e on 1.00),
     // all detoured to one shared HRL-skip stub.
@@ -602,13 +615,17 @@ fn feature_flag_gating_is_reslotted() {
         "bus-off stub reads flag[Bus]"
     );
     // Materializes BUSENC_REG (movs r1,#1; lsls r1,r1,#26), clears the enable bit
-    // (movs r3,#0x10; bics r2,r3), and replays the OEM key-prog call (blx r2).
+    // (movs r3,#0x10; bics r2,r3), and replays the OEM key-prog call through r4
+    // (blx r4 — NOT a low arg register, so the key-prog args in r0-r3 survive).
     for (needle, what) in [
         (0x2101u16, "movs r1,#1 (BUSENC_REG base)"),
         (0x0689u16, "lsls r1,r1,#26 (BUSENC_REG = 1<<26)"),
         (0x2310u16, "movs r3,#0x10 (BUSENC_ENABLE_BIT)"),
         (0x439au16, "bics r2,r3 (clear the bus-enc enable bit)"),
-        (0x4790u16, "blx r2 (replay OEM key-prog)"),
+        (
+            0x47a0u16,
+            "blx r4 (replay OEM key-prog; r0-r3 args preserved)",
+        ),
     ] {
         assert!(has(&busenc, needle), "busenc stub must emit {what}");
     }
@@ -632,6 +649,18 @@ fn feature_flag_gating_is_reslotted() {
     assert!(
         reads(&region, base + Feature::Region as u32),
         "Region stub reads flag[Region]"
+    );
+
+    // BD-refuse gates on `cmp r3,#STATE_OFF` (0x2B00) and reads flag[Bd] (0x04).
+    const CMP_R3_OFF: u16 = 0x2B00; // cmp r3,#STATE_OFF
+    let bd = Mt1959Engine.build_bd_stub(base).expect("bd stub");
+    assert!(
+        has(&bd, CMP_R3_OFF),
+        "BD-refuse stub gates on cmp r3,#STATE_OFF"
+    );
+    assert!(
+        reads(&bd, base + Feature::Bd as u32),
+        "BD-refuse stub reads flag[Bd]"
     );
 }
 
