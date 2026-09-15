@@ -101,6 +101,14 @@ pub struct CreateReport {
     /// Injection address of the Raw Read `04 03` UHD mode-gate neutralizer trampoline.
     /// `0` when not wired.
     pub uhd_stub_va: u32,
+    /// `Feature::Bd` REPORT KEY refuse detour site — the mode-0 class check
+    /// (`ldrb r0,[r2,#7]; cmp r0,#2`, `BD_GATE_SIG` `anchor+16`). The stub replays the
+    /// class load and, when `flag[Bd]==STATE_OFF`, forces the OEM deny path so the
+    /// drive refuses a BD disc; unarmed it replays OEM (stealth). `0` when not wired
+    /// (REPORT KEY gate not the known shape).
+    pub bd_gate_site: u32,
+    /// Injection address of the `Feature::Bd` BD-refuse trampoline. `0` when not wired.
+    pub bd_stub_va: u32,
     /// The three HRL-skip cert-path detour sites (`flag[Feature::Hrl]==STATE_ON`):
     /// each a `cmp r0,#0; bne <6F/00>` replaced by a `bl` to the shared HRL-skip
     /// stub. Empty when the HRL cert path is not the known shape (lever MISS).
