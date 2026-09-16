@@ -243,17 +243,26 @@ const BOOT_INIT_SIG_CLASSIC: &[(u16, u16)] = &[
 
 /// SAFETY BOUND for the flash-write probe: the destination offset MUST satisfy
 /// `FLASHWRITE_ALLOW_LO <= off < FLASHWRITE_ALLOW_HI`, else the handler refuses
-/// (error status word, PROGRAM routine NOT called). The window is the erased
-/// (all-`0xFF`) 4-KiB-sector-aligned scratch gap that sits OUTSIDE the CMAC
-/// coverage (which ends at 0x1B001F) and far from the HRL regions
-/// (0x1D8000/0x1E0000) and mfg data — so the probe can physically only write the
-/// safe non-CMAC gap. Widening this to the HRL regions is a FUTURE change.
-const FLASHWRITE_ALLOW_LO: u32 = 0x001C_4000;
+/// (error status word, PROGRAM routine NOT called).
+///
+/// The window is `0x1D0000..0x1D7000` — the SAVE/config region proven safe across
+/// the WHOLE 118-image OEM corpus (not just BU40N), by a full-corpus scan:
+///   * blank (all-`0xFF`, i.e. erased/unused) in every one of the 118 images;
+///   * OUTSIDE CMAC coverage in every image — the highest CMAC-covered byte across
+///     the entire corpus is `0x1CFFFF`, so `0x1D0000` clears it by one byte;
+///   * below the HRL regions (`0x1D8000`/`0x1E0000`) and per-unit calibration
+///     (`0x1F0000`).
+/// (The earlier `0x1C4000` lower bound was BU40N-only — non-blank in 85/118 images
+/// — and is retired.) The OEM PROGRAM routine reached here is the drive's GENERAL
+/// flash programmer (28 callers across the image; the HRL wrapper is only one), and
+/// `op=1` is a neighbour-preserving erase-block read-modify-write, so a write here
+/// cannot disturb any other image contents.
+const FLASHWRITE_ALLOW_LO: u32 = 0x001D_0000;
 const FLASHWRITE_ALLOW_HI: u32 = 0x001D_7000;
 const _: () = assert!(FLASHWRITE_ALLOW_LO < FLASHWRITE_ALLOW_HI);
-// The allowlist must stay clear of the CMAC-covered region (ends 0x1B001F) and
-// below the HRL regions (0x1D8000/0x1E0000) — compile-time proven here.
-const _: () = assert!(FLASHWRITE_ALLOW_LO >= 0x001B_0020);
+// Must clear the corpus-wide max CMAC-covered end (0x1CFFFF) and stay below the
+// HRL regions (0x1D8000/0x1E0000) — compile-time proven here.
+const _: () = assert!(FLASHWRITE_ALLOW_LO >= 0x001D_0000);
 const _: () = assert!(FLASHWRITE_ALLOW_HI <= 0x001D_8000);
 
 /// Byte offset from [`FLAG_TABLE_BASE`] of the 1-byte SRAM scratch cell the
