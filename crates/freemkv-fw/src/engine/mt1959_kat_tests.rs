@@ -31,18 +31,19 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "344b58780e2806d19878c02803d1d878de2800d101e0304b1847f0b52f4f1c79022c07d12e48597908290ed24018997901700ae0042c08d12948ff2141708170c170017141718171c1710025402d04d2281c0021b8470135f8e7032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d114a600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e74020074908800748074a9047f0bd0000380d00025bad090075200a00400e0002720c000290af000081810900667265656d6b7620302e372e31";
+    "564b58780e2806d19878c02803d1d878de2800d101e0524b1847f0b5514f1c79022c07d15048597908290ed24018997901700ae0042c08d14b48ff2141708170c170017141718171c1710025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a3d4908703d4886420ad33d48864207d23948311c012201233a4da847041c00e0394c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb84734e0032c08d11f485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d119a600250d2d04d2281c715db8470135f8e70b4e0d250122082a05d2b15c281cb84701350132f7e740200b4908800b480c4a9047f0bd380d00025bad090075200a00400e0002500e000200401c0000701d002bda130055464552720c000290af000081810900667265656d6b7620302e372e31";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
 // in CMAC-covered regions, so these two digests must be regenerated whenever any of
-// them change — including the SET/GET feature-id bounds clamp added to the handler, the
-// bus-off stub's `blx r4` register fix, and the `Feature::Bd` BD-refuse detour over the
-// REPORT KEY mode-0 class check (0x1365ce). Regenerate against the OEM base (run this
-// test with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
+// them change — including the tri-state redesign: the new always-on boot-init detour
+// (0x13d41a) + its stub, the Speed stub losing its `0x00->OEM` branch, the Region stub
+// gaining a `0x00` region-lock arm, and the BD-refuse gate moving from the `0x02`
+// sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
+// with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "9f4431e67ebbaf7689ecc7ebe2b9f36a";
-const EXPECT_CMAC_15: &str = "bc257318767a1660b4c0a3f31945e31c";
+const EXPECT_CMAC_1: &str = "4bb3613a588d3db298b1a50de2946f24";
+const EXPECT_CMAC_15: &str = "d1e11114facafbe520c6607fe7596e6b";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -213,7 +214,10 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // (3C handler + every stub), the repointed record, the CMAC table, the OEM-code
     // detours (speed/region/ake/gatea/deny/busenc/uhd/bd/hrl), or the DE byte. 0x400
     // bounds the injected band.
-    let injected = EXPECT_HANDLER_VA as usize..EXPECT_HANDLER_VA as usize + 0x400;
+    let injected = EXPECT_HANDLER_VA as usize..EXPECT_HANDLER_VA as usize + 0x480;
+    // Always-on boot-init hook: the main-task prologue's boot-status reload
+    // (`ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`) replaced by a `bl` to the boot stub.
+    let boot_detour = report.boot_init_site as usize..report.boot_init_site as usize + 4;
     let speed_detour = report.speed_gate as usize + 4..report.speed_gate as usize + 8;
     let region_detour = report.region_emitter as usize + 6..report.region_emitter as usize + 10;
     let ake_detour = report.ake_gate as usize + 12..report.ake_gate as usize + 16;
@@ -248,6 +252,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
                 injected.contains(&i)
                     || in_record
                     || in_cmac
+                    || boot_detour.contains(&i)
                     || speed_detour.contains(&i)
                     || region_detour.contains(&i)
                     || ake_detour.contains(&i)
@@ -274,6 +279,14 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.flag_base, 0x0200_0e40,
         "flag-table base (validated free hole)"
     );
+    // Always-on boot-init hook: the main-task prologue's boot-status reload at
+    // BOOT_INIT_SIG anchor+4 (0x13d416 + 4 = 0x13d41a on 1.00), detoured to a stub
+    // that writes 0xFF into every flag at power-on (tri-state safety).
+    assert_eq!(
+        report.boot_init_site, 0x0013_d41a,
+        "always-on boot-init hook site (1.00)"
+    );
+    assert!(report.boot_stub_va != 0, "boot-init stub wired");
     assert_eq!(
         report.speed_gate, 0x0001_bb22,
         "Speed ramp-ceiling gate (1.00)"
@@ -651,17 +664,55 @@ fn feature_flag_gating_is_reslotted() {
         "Region stub reads flag[Region]"
     );
 
-    // BD-refuse gates on `cmp r3,#STATE_BD_DISABLE` (0x2B02) — a distinct sentinel,
-    // NOT the boot `0x00`, so unarmed/boot BD stays OEM — and reads flag[Bd] (0x04).
-    const CMP_R3_DISABLE: u16 = 0x2B02; // cmp r3,#STATE_BD_DISABLE
+    // BD-refuse gates on `cmp r3,#STATE_OFF` (0x2B00) — the uniform `0x00` OFF (the
+    // old distinct `0x02` sentinel is retired; the boot hook keeps `0x00` unreachable
+    // at power-on) — and reads flag[Bd] (0x04).
+    const CMP_R3_OFF: u16 = 0x2B00; // cmp r3,#STATE_OFF
     let bd = Mt1959Engine.build_bd_stub(base).expect("bd stub");
     assert!(
-        has(&bd, CMP_R3_DISABLE),
-        "BD-refuse stub gates on cmp r3,#STATE_BD_DISABLE"
+        has(&bd, CMP_R3_OFF),
+        "BD-refuse stub gates on cmp r3,#STATE_OFF"
+    );
+    assert!(
+        !has(&bd, 0x2B02),
+        "BD-refuse stub must NOT gate on the retired `cmp r3,#0x02` sentinel"
     );
     assert!(
         reads(&bd, base + Feature::Bd as u32),
         "BD-refuse stub reads flag[Bd]"
+    );
+
+    // Region tri-state encodes all three canonical states: reads flag[Region], gates
+    // on `cmp r3,#STATE_ON` (0x2B01, region-free) and `cmp r3,#STATE_OFF` (0x2B00,
+    // region-locked). The locked arm materializes RegionMask 0xFF (`movs r2,#0xFF`).
+    assert!(
+        has(&region, CMP_R3_ON),
+        "Region stub encodes ON (region-free)"
+    );
+    assert!(
+        has(&region, CMP_R3_OFF),
+        "Region stub encodes OFF (region-locked)"
+    );
+    assert!(
+        has(&region, 0x22FF),
+        "Region OFF materializes RegionMask 0xFF (movs r2,#0xFF)"
+    );
+
+    // Speed (idx_reg=2) encodes ON (unlimited) as `cmp r0,#STATE_ON` (0x2801) and
+    // OEM as `cmp r2,#0x32` (0x2A32). OFF (0x00) is NOT a special case: it reaches the
+    // floor via the explicit-cap path (`cmp r2,r0`), so the retired `cmp r0,#STATE_OFF`
+    // (0x2800) branch back to OEM must be gone.
+    assert!(
+        has(&speed, 0x2801),
+        "Speed stub gates ON on cmp r0,#STATE_ON"
+    );
+    assert!(
+        has(&speed, 0x2A32),
+        "Speed stub keeps the OEM 0x32 band compare"
+    );
+    assert!(
+        !has(&speed, 0x2800),
+        "Speed stub must not route STATE_OFF (0x00) back to OEM — 0x00 is the floor cap"
     );
 }
 
@@ -963,6 +1014,80 @@ fn busenc_stub_is_wellformed_and_encodes_the_decision() {
     assert!(reads_flag, "stub loads &flag[Bus] as a literal");
 }
 
+/// TEMPORARY flash-write probe ([`abi::Verb::FlashWrite`]): the destination
+/// allowlist is a compile-time constant that provably brackets ONLY the safe
+/// erased non-CMAC gap, and the emitted handler must actually range-check
+/// against both bounds, stage through the SRAM scratch cell, and call the OEM
+/// PROGRAM routine. This is the safety proof that the probe verb can physically
+/// only write `[0x1C4000, 0x1D7000)`.
+#[test]
+fn flashwrite_probe_is_range_bounded_to_the_safe_cell() {
+    use super::{
+        FLAG_TABLE_BASE, FLASHWRITE_ALLOW_HI, FLASHWRITE_ALLOW_LO, FLASHWRITE_REFUSE_STATUS,
+        FLASHWRITE_SCRATCH_OFF,
+    };
+
+    // Compile-time bound proof: the window sits inside the non-CMAC gap (CMAC
+    // ends 0x1B001F), below the HRL regions (0x1D8000/0x1E0000), and is 4-KiB
+    // erase-sector aligned. These are const asserts so a bad widening fails to
+    // compile, not merely at test time.
+    const _: () = {
+        assert!(FLASHWRITE_ALLOW_LO == 0x001C_4000);
+        assert!(FLASHWRITE_ALLOW_HI == 0x001D_7000);
+        assert!(FLASHWRITE_ALLOW_LO < FLASHWRITE_ALLOW_HI);
+        // must clear the CMAC-covered region (ends 0x1B001F)
+        assert!(FLASHWRITE_ALLOW_LO >= 0x001B_0020);
+        // must stay below the HRL region (0x1D8000)
+        assert!(FLASHWRITE_ALLOW_HI <= 0x001D_8000);
+        // must be 4-KiB erase-sector aligned
+        assert!(FLASHWRITE_ALLOW_LO.is_multiple_of(0x1000));
+    };
+
+    let Some(base) = load_base() else {
+        eprintln!("SKIP: KAT base image not present (set FREEMKV_KAT_BASE)");
+        return;
+    };
+    let report = Mt1959Engine
+        .create(&base)
+        .expect("create must succeed on the OEM base");
+    let hb = &report.handler_bytes;
+    let has_u32 = |v: u32| {
+        hb.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
+    };
+
+    // Both allowlist bounds are materialized as literals — the runtime range
+    // check that gates the PROGRAM call.
+    assert!(
+        has_u32(FLASHWRITE_ALLOW_LO),
+        "handler must load the allowlist LO bound for the range check"
+    );
+    assert!(
+        has_u32(FLASHWRITE_ALLOW_HI),
+        "handler must load the allowlist HI bound for the range check"
+    );
+    // The OEM flash PROGRAM routine (thumb bit set) is the call target — its VA is
+    // now recovered by the signature finder (0x13da2a on BU40N), not a hardcoded const.
+    let flash_program = Mt1959Engine
+        .find_flash_program(&base)
+        .expect("flash PROGRAM routine must resolve on the base");
+    assert_eq!(flash_program, 0x0013_da2a, "BU40N flash PROGRAM VA");
+    assert!(
+        has_u32(flash_program | 1),
+        "handler must call the OEM flash PROGRAM routine (0x13da2a)"
+    );
+    // The 1-byte SRAM source-staging scratch cell literal.
+    assert!(
+        has_u32(FLAG_TABLE_BASE + FLASHWRITE_SCRATCH_OFF),
+        "handler must stage the source byte via the SRAM scratch cell"
+    );
+    // The distinct refuse status word for the out-of-range path.
+    assert!(
+        has_u32(FLASHWRITE_REFUSE_STATUS),
+        "handler must carry the refuse status sentinel"
+    );
+}
+
 /// The never-abort MODIFY driver must emit byte-for-byte the same image as the
 /// strict `build_report` on the all-levers-succeed base, and report every lever
 /// Applied. This is what lets the framework refactor ride on the frozen KAT.
@@ -1007,4 +1132,380 @@ fn create_and_modify_agree_on_base() {
         }
     }
     assert_eq!(modified.levers.len(), 5, "Identity+Speed+Region+RawRead+DE");
+}
+
+/// The committed BU40N 1.00 fixture (third-party OEM firmware, present in-tree for
+/// interoperability testing — see `tests/fixtures/README.md`). Loaded directly so
+/// the signature-based finders are exercised without any environment setup.
+fn bu40n_fixture() -> Vec<u8> {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/BU40N_OEM_1.00.bin"
+    );
+    std::fs::read(path).unwrap_or_else(|e| panic!("BU40N fixture must be present at {path}: {e}"))
+}
+
+/// PHASE 1 invariant: the signature-based flash-PROGRAM finder must resolve to the
+/// SAME address the old absolute `FLASH_PROGRAM_VA` held on BU40N (`0x13da2a`), so
+/// the FlashWrite probe emits byte-identical code and the golden KAT stays frozen.
+#[test]
+fn find_flash_program_resolves_bu40n() {
+    let img = bu40n_fixture();
+    let va = Mt1959Engine
+        .find_flash_program(&img)
+        .expect("flash PROGRAM routine must resolve uniquely on BU40N");
+    assert_eq!(
+        va, 0x0013_da2a,
+        "flash PROGRAM finder must resolve to the frozen BU40N VA"
+    );
+}
+
+/// PHASE 1: the boot-init finder must resolve to the boot-init hook site
+/// (`anchor+4 == 0x13d41a`) on BU40N, and (verified in the fleet sweep) return
+/// `None` on the MT1939-classic lineage rather than failing.
+#[test]
+fn find_boot_init_resolves_bu40n() {
+    let img = bu40n_fixture();
+    let site = Mt1959Engine
+        .find_boot_init(&img)
+        .expect("boot-init finder must not error on BU40N");
+    assert_eq!(
+        site,
+        Some(super::BootInitSite::Modern(0x0013_d41a)),
+        "boot-init finder must resolve BU40N via the MODERN signature to the frozen hook site"
+    );
+}
+
+/// PHASE 2: the always-on boot-init trampoline. `build_boot_init` must write `0xFF`
+/// (STATE_PASSTHROUGH) into the whole flag table (slot 0 + features 1..=7) and then
+/// replay the two overwritten prologue halfwords before returning — the mechanism
+/// that makes tri-state `0x00 == OFF` safe (a freshly powered drive is OEM-identical).
+#[test]
+fn build_boot_init_writes_ff_table_and_replays() {
+    let base = super::FLAG_TABLE_BASE;
+    let stub = Mt1959Engine.build_boot_init(base).expect("boot-init stub");
+    // Loads the flag-table base as a literal.
+    assert!(
+        stub.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == base),
+        "boot stub loads the flag-table base"
+    );
+    // Materializes 0xFF (movs r1,#0xFF = 0x21FF).
+    assert!(
+        stub.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x21FF),
+        "boot stub materializes 0xFF"
+    );
+    // Eight `strb r1,[r0,#off]` (0x7001 | off<<6) — off 0..=7 (slot 0 pad + all 7 flags).
+    for off in 0u16..=7 {
+        let strb = 0x7001 | (off << 6);
+        assert!(
+            stub.windows(2)
+                .any(|w| u16::from_le_bytes([w[0], w[1]]) == strb),
+            "boot stub writes 0xFF to flag[{off}]"
+        );
+    }
+    // Replays `ldr r0,[r0,#0x18]` (0x6980) then `lsls r0,r0,#0x18` (0x0600).
+    assert!(
+        stub.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x6980),
+        "boot stub replays ldr r0,[r0,#0x18]"
+    );
+    assert!(
+        stub.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x0600),
+        "boot stub replays lsls r0,r0,#0x18"
+    );
+}
+
+/// PHASE 2: `emit_boot_init` on the BU40N fixture must install the detour `bl` at the
+/// boot-init site (over the correct original bytes) and land a stub that replays them.
+#[test]
+fn emit_boot_init_installs_detour_on_bu40n() {
+    let img = bu40n_fixture();
+    let site = 0x0013_d41a_usize;
+    // Precondition: the site holds the boot-status reload we replace.
+    assert_eq!(u16::from_le_bytes([img[site], img[site + 1]]), 0x6980);
+    assert_eq!(u16::from_le_bytes([img[site + 2], img[site + 3]]), 0x0600);
+
+    let mut out = img.clone();
+    let (s, stub_va) = Mt1959Engine
+        .emit_boot_init(&img, &mut out, super::FLAG_TABLE_BASE)
+        .expect("boot hook installs on BU40N");
+    assert_eq!(s, site as u32, "detour site");
+    assert!(stub_va != 0, "boot stub landed");
+
+    // The site now holds a `bl` to the stub (recomputed via encode_bl).
+    let expected = crate::thumb::encode_bl(site, stub_va).expect("bl encodes");
+    assert_eq!(&out[site..site + 4], &expected, "boot detour bl installed");
+    // The stub replays the two original halfwords it overwrote.
+    let stub = &out[stub_va as usize..stub_va as usize + 0x40];
+    assert!(
+        stub.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x6980)
+            && stub
+                .windows(2)
+                .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x0600),
+        "boot stub replays the overwritten prologue reload"
+    );
+}
+
+/// PHASE 2 fail-closed: an image with no boot-init site (no `BOOT_INIT_SIG`) must make
+/// the build BAIL — never ship an image that would boot every feature to OFF (`0x00`).
+#[test]
+fn emit_boot_init_fails_closed_without_a_site() {
+    let img = vec![0u8; 0x20_0000];
+    let mut out = img.clone();
+    let err = Mt1959Engine
+        .emit_boot_init(&img, &mut out, super::FLAG_TABLE_BASE)
+        .expect_err("must fail closed when no boot-init site exists");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("boot-init") && msg.contains("unsafe"),
+        "fail-closed error must explain the missing boot-init site: {msg}"
+    );
+}
+
+/// Fleet sweep (hoard-gated): both new finders must resolve n==1 across every owned
+/// MT19xx image the engine recognises. `find_flash_program` must be unique on ALL of
+/// them; `find_boot_init` is unique on the MT1959 lineage and legitimately `None` on
+/// MT1939-classic — so it is asserted "either a real site or a clean None", never a
+/// hard error. Skips (does not fail) when `FREEMKV_KAT_HOARD` is unset.
+#[test]
+fn flash_and_boot_finders_hold_across_owned_images() {
+    let eng = Mt1959Engine;
+    let roots = hoard_roots();
+    if roots.is_empty() {
+        eprintln!("SKIP: FREEMKV_KAT_HOARD unset — flash/boot finder fleet sweep skipped");
+        return;
+    }
+    let mut files = Vec::new();
+    for root in &roots {
+        collect_bins(std::path::Path::new(root), &mut files);
+    }
+    files.sort();
+    files.dedup();
+
+    let mut checked = 0;
+    for path in &files {
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        // Only images this engine recognises as a 3C target are candidates.
+        if eng.find_scanner_entry(&bytes).is_err() {
+            continue;
+        }
+        let disp = path.display();
+        let va = eng
+            .find_flash_program(&bytes)
+            .unwrap_or_else(|e| panic!("flash PROGRAM finder @ {disp}: {e}"));
+        assert!(va != 0, "flash PROGRAM VA @ {disp}");
+        // boot-init: Ok(Some(site)) on MT1959, Ok(None) on MT1939-classic — both fine;
+        // an Err means the signature matched more than once, which must never happen.
+        eng.find_boot_init(&bytes)
+            .unwrap_or_else(|e| panic!("boot-init finder @ {disp}: {e}"));
+        checked += 1;
+    }
+    assert!(checked > 0, "expected at least one recognised owned image");
+    eprintln!("flash/boot finder fleet sweep: {checked} owned images verified");
+}
+
+/// Per-family PASS matrix row for the MT19xx corpus validation below.
+#[derive(Default)]
+struct CorpusRow {
+    total: usize,
+    flash_n1: usize,
+    boot_modern: usize,
+    boot_classic: usize,
+    boot_none: usize,
+    boot_ambiguous: usize,
+}
+
+/// PHASE 3a corpus regression guard (hoard-gated): over EVERY ~2 MiB image the
+/// chipset detector classifies as MT19xx (`MTEKMT1959`/`MTEKMT1939`) under
+/// `FREEMKV_KAT_HOARD`, prove the two family-agnostic finders that the whole
+/// portability claim rests on:
+///
+/// * `find_flash_program` resolves n==1 (a real, non-zero VA) on ALL of them;
+/// * `find_boot_init` resolves to exactly ONE site — `Modern` on the MT1959-shape
+///   prologue, `ClassicUnconfirmed` on the MT1939-classic prologue — and is NEVER
+///   ambiguous (`Err`) and NEVER `None` (unknown shape).
+///
+/// A per-family PASS matrix is printed, and on ANY per-image violation the test
+/// panics with that matrix so a regression names the family that broke. Skips
+/// (does not fail) when `FREEMKV_KAT_HOARD` is unset, so plain `cargo test` still
+/// passes without the private corpus.
+#[test]
+fn mt19xx_corpus_finders_validate() {
+    let eng = Mt1959Engine;
+    let roots = hoard_roots();
+    if roots.is_empty() {
+        eprintln!("SKIP: FREEMKV_KAT_HOARD unset — MT19xx corpus finder validation skipped");
+        return;
+    }
+    let mut files = Vec::new();
+    for root in &roots {
+        collect_bins(std::path::Path::new(root), &mut files);
+    }
+    files.sort();
+    files.dedup();
+
+    use crate::family::{detect_chip, ChipFamily};
+    let mut rows: std::collections::BTreeMap<String, CorpusRow> = std::collections::BTreeMap::new();
+    let mut failures: Vec<String> = Vec::new();
+
+    for path in &files {
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        let Ok(chip) = detect_chip(&bytes) else {
+            continue; // not an identifiable MTK part (Pioneer/Renesas etc.)
+        };
+        if !matches!(chip.family, ChipFamily::Mt1959 | ChipFamily::Mt1939) {
+            continue;
+        }
+        // Scope to images the engine RECOGNISES as a 3C target (same gate the fleet
+        // sweeps and the `create` path use). Older DVD-lineage / ASUS BC-12* parts
+        // that merely carry an MTEKMT19xx tag are refused cleanly by the scanner and
+        // are out of scope for the tri-state build's portability claim.
+        if eng.find_scanner_entry(&bytes).is_err() {
+            continue;
+        }
+        let key = if chip.model.is_empty() {
+            chip.family.label().to_string()
+        } else {
+            format!("{} {}", chip.family.label(), chip.model)
+        };
+        let row = rows.entry(key).or_default();
+        row.total += 1;
+        let disp = path.display();
+
+        match eng.find_flash_program(&bytes) {
+            Ok(va) if va != 0 => row.flash_n1 += 1,
+            Ok(_) => failures.push(format!("flash PROGRAM VA==0 @ {disp}")),
+            Err(e) => failures.push(format!("flash PROGRAM finder @ {disp}: {e}")),
+        }
+
+        match eng.find_boot_init(&bytes) {
+            Ok(Some(super::BootInitSite::Modern(_))) => row.boot_modern += 1,
+            Ok(Some(super::BootInitSite::ClassicUnconfirmed(_))) => row.boot_classic += 1,
+            Ok(None) => {
+                row.boot_none += 1;
+                failures.push(format!(
+                    "boot-init resolved None (unknown prologue) @ {disp}"
+                ));
+            }
+            Err(e) => {
+                row.boot_ambiguous += 1;
+                failures.push(format!("boot-init AMBIGUOUS @ {disp}: {e}"));
+            }
+        }
+    }
+
+    // Render the per-family matrix (always, for evidence).
+    let mut matrix = String::from(
+        "\nMT19xx corpus finder matrix (family: total flash_n1 modern classic none ambiguous):\n",
+    );
+    let (mut t_total, mut t_flash, mut t_mod, mut t_cls) = (0, 0, 0, 0);
+    for (k, r) in &rows {
+        matrix.push_str(&format!(
+            "  {k:<32} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4}\n",
+            r.total, r.flash_n1, r.boot_modern, r.boot_classic, r.boot_none, r.boot_ambiguous
+        ));
+        t_total += r.total;
+        t_flash += r.flash_n1;
+        t_mod += r.boot_modern;
+        t_cls += r.boot_classic;
+    }
+    matrix.push_str(&format!(
+        "  {:<32} {t_total:>4} {t_flash:>4} {t_mod:>4} {t_cls:>4}\n",
+        "TOTAL"
+    ));
+    eprintln!("{matrix}");
+
+    assert!(
+        t_total > 0,
+        "expected at least one MT19xx image under FREEMKV_KAT_HOARD"
+    );
+    assert!(
+        failures.is_empty(),
+        "MT19xx corpus finder validation FAILED ({} violation(s)):\n{}\n{matrix}",
+        failures.len(),
+        failures.join("\n")
+    );
+    // Every MT19xx image must resolve BOTH finders cleanly.
+    assert_eq!(
+        t_flash, t_total,
+        "find_flash_program must be n==1 on every MT19xx image"
+    );
+    assert_eq!(
+        t_mod + t_cls,
+        t_total,
+        "find_boot_init must resolve exactly one site (Modern or ClassicUnconfirmed) on every image"
+    );
+    // Both populations must be represented (the whole point of the classic fallback).
+    assert!(t_mod > 0, "expected Modern boot-init sites in the corpus");
+    assert!(
+        t_cls > 0,
+        "expected ClassicUnconfirmed boot-init sites in the corpus"
+    );
+    eprintln!(
+        "MT19xx corpus finders: {t_total} images — flash n==1 on all; boot-init modern {t_mod} / classic {t_cls}"
+    );
+}
+
+/// PHASE 3a (hoard-gated): the classic boot-init fallback resolves, and
+/// `emit_boot_init` still fails CLOSED on it. Finds the first MT1939-classic image
+/// in the corpus whose `find_boot_init` returns `ClassicUnconfirmed`, asserts the
+/// site's four bytes are the `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` reload
+/// (`80 69 00 06`), and asserts the production emit path bails rather than shipping
+/// the unblessed hook. Skips when the corpus (or any classic image) is absent.
+#[test]
+fn classic_boot_init_resolves_but_emit_fails_closed() {
+    let eng = Mt1959Engine;
+    let roots = hoard_roots();
+    if roots.is_empty() {
+        eprintln!("SKIP: FREEMKV_KAT_HOARD unset — classic boot-init fallback test skipped");
+        return;
+    }
+    let mut files = Vec::new();
+    for root in &roots {
+        collect_bins(std::path::Path::new(root), &mut files);
+    }
+    files.sort();
+    files.dedup();
+
+    let mut checked = 0usize;
+    for path in &files {
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        let Ok(Some(super::BootInitSite::ClassicUnconfirmed(site))) = eng.find_boot_init(&bytes)
+        else {
+            continue;
+        };
+        checked += 1;
+        let s = site as usize;
+        // site+? : the four bytes AT the returned hook site are the reload we replay.
+        assert_eq!(
+            &bytes[s..s + 4],
+            &[0x80, 0x69, 0x00, 0x06],
+            "classic boot-init site @ {} must land on `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`",
+            path.display()
+        );
+        // Production emit MUST fail closed on the unconfirmed classic site.
+        let mut out = bytes.clone();
+        let err = eng
+            .emit_boot_init(&bytes, &mut out, super::FLAG_TABLE_BASE)
+            .expect_err("emit_boot_init must fail closed on a ClassicUnconfirmed site");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("hardware-unconfirmed") || msg.contains("classic"),
+            "fail-closed error must name the unconfirmed classic site: {msg}"
+        );
+        break;
+    }
+    if checked == 0 {
+        eprintln!("SKIP: no MT1939-classic image found in the corpus for the fallback test");
+    }
 }

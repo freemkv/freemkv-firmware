@@ -150,6 +150,125 @@ const SRAM_END: u32 = 0x0200_1a00;
 /// pointers) and is retained only for audit reporting.
 const FLAG_TABLE_BASE: u32 = 0x0200_0e40;
 
+/// TEMPORARY flash-write probe ([`abi::Verb::FlashWrite`]) constants.
+///
+/// The OEM flash PROGRAM routine (thumb): `program(r0=src, r1=dest, r2=len,
+/// r3=op)`. `op=1` = erase-aligned read-modify-write. `dest` (r1) is a DIRECT
+/// flash byte offset; `src` (r0) is a DIRECT memory pointer (`ldrb [r0+i]`). The
+/// OEM HRL wrapper (0x1354a0) calls it `r0=0x30000`, `r1=0x1e0000/0x1d8000`,
+/// `r2=0x8000`, `r3=1` — proven. Its address is NOT hardcoded: it is recovered
+/// per image by [`Mt1959Engine::find_flash_program`] (`0x13da2a` on BU40N 1.00),
+/// so the probe generalizes across the MediaTek corpus instead of pinning one VA.
+///
+/// Two family-invariant constants disambiguate the PROGRAM routine from a decoy
+/// erase routine that shares its prologue: the mailbox doorbell cell and the
+/// controller register base, both materialized in the PROGRAM routine's literal
+/// pool on every owned MT19xx image. Only the true PROGRAM routine's pool ALSO
+/// carries a `0x01ff_xxxx` descriptor pointer (the decoy lacks it), which is the
+/// third leg of the match — see [`Mt1959Engine::find_flash_program`].
+const FLASH_MAILBOX: u32 = 0x0200_1200;
+const FLASH_CONTROLLER: u32 = 0x0400_2240;
+
+/// Prologue signature of the OEM flash PROGRAM routine: `push {r0-r7,lr}; movs
+/// r6,r1; movs r5,r2; movs r4,r3; cmp r3,#4; sub sp,#4; bcc <…>`. Matches TWICE
+/// on a BU40N image (the true PROGRAM routine at `0x13da2a` plus a decoy erase
+/// routine at `0x8faa` that shares the prologue); [`Mt1959Engine::find_flash_program`]
+/// disambiguates by the literal-pool contents (mailbox + controller + descriptor).
+const FLASH_PROGRAM_SIG: &[(u16, u16)] = &[
+    (0xB5FF, 0xFFFF), // push {r0,r1,r2,r3,r4,r5,r6,r7,lr}
+    (0x000E, 0xFFFF), // movs r6,r1        (dest)
+    (0x0015, 0xFFFF), // movs r5,r2        (len)
+    (0x001C, 0xFFFF), // movs r4,r3        (op)
+    (0x2B04, 0xFFFF), // cmp  r3,#4
+    (0xB081, 0xFFFF), // sub  sp,#4
+    (0xD302, 0xFFFF), // bcc  <…>
+];
+
+/// Number of pool bytes past the PROGRAM routine's entry scanned for the mailbox /
+/// controller / descriptor literals that identify it. The constant table of a
+/// routine this size sits within its first ~1 KiB; 0x400 covers it on every owned
+/// image.
+const FLASH_POOL_SPAN: usize = 0x400;
+
+/// Signature of the MT1959 boot-init hook site — the main-task prologue that reads
+/// the boot-mode word and branches on it: `ldr r0,[pc,#imm]; push {r4,r5,r6,lr};
+/// ldr r0,[r0,#0x18]; lsls r0,r0,#0x18; bmi <…>; movs r1,#0; movs r0,#0`. The
+/// leading `ldr r0,[pc,#imm]` immediate varies per build, so its low byte is masked
+/// (`?? 48`). The boot-init detour replaces the `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`
+/// (the 4 bytes at `anchor+4`), so the hook site is `anchor+4`
+/// ([`Mt1959Engine::find_boot_init`]). Unique (n==1) on all 68 owned MT1959 images;
+/// present on the 17 MT1939-classic images only via [`BOOT_INIT_SIG_CLASSIC`]
+/// (an older prologue whose second halfword differs), so the modern shape returns
+/// zero there and [`Mt1959Engine::find_boot_init`] falls back.
+const BOOT_INIT_SIG: &[(u16, u16)] = &[
+    (0x4800, 0xFF00), // ldr  r0,[pc,#imm]   (boot-status base; imm varies → masked)
+    (0xB570, 0xFFFF), // push {r4,r5,r6,lr}
+    (0x6980, 0xFFFF), // ldr  r0,[r0,#0x18]  ← hook site (anchor+4)
+    (0x0600, 0xFFFF), // lsls r0,r0,#0x18
+    (0xD403, 0xFFFF), // bmi  <…>
+    (0x2100, 0xFFFF), // movs r1,#0
+    (0x2000, 0xFFFF), // movs r0,#0
+];
+
+/// MT1939-classic variant of the boot-init hook site. RE-derived from the classic
+/// lineage (research/hoard-campaign), where the main-task prologue reads the
+/// boot-mode word through the SAME `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` reload as
+/// modern, but the surrounding shape differs: the `push {r4,r5,r6,lr}` of
+/// [`BOOT_INIT_SIG`] is replaced by a `subs r0,#0xc0` discriminator, and the
+/// trailing `movs r1,#0; movs r0,#0` pair is absent, so the modern signature
+/// misses entirely on classic images. The four replayed/replaced bytes at the
+/// hook site are `80 69 00 06` (`ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`), byte-for-
+/// byte identical to modern — so the boot-init stub itself is unchanged; only the
+/// finder needs a second shape to resolve the site.
+///
+/// The hook site is `anchor+4` (index 2, the `ldr r0,[r0,#0x18]`), exactly as for
+/// [`BOOT_INIT_SIG`]. Capability base `0x0400_2040`, boot-mode word `@0x0400_2058`.
+///
+/// SAFETY: this classic site is a CALLED LEAF helper, not `main()`'s prologue, so
+/// its runtime power-on call-order is HARDWARE-UNCONFIRMED. The finder therefore
+/// tags a classic resolution [`BootInitSite::ClassicUnconfirmed`] and
+/// [`Mt1959Engine::emit_boot_init`] FAILS CLOSED on it (see the gate there): the
+/// signature resolves and is unit-tested, but production emit for classic images
+/// stays a deliberate one-line flip pending on-silicon verification. This helper
+/// ALSO matches inside 157 modern images, so [`Mt1959Engine::find_boot_init`] must
+/// try [`BOOT_INIT_SIG`] FIRST and only consult this when the modern shape returns
+/// zero — a merged scan would make modern images ambiguous.
+const BOOT_INIT_SIG_CLASSIC: &[(u16, u16)] = &[
+    (0x4800, 0xFF00), // ldr  r0,[pc,#imm]   (boot-status base; imm varies → masked)
+    (0x38C0, 0xFFFF), // subs r0,#0xc0       (classic discriminator)
+    (0x6980, 0xFFFF), // ldr  r0,[r0,#0x18]  ← hook site (anchor+4)
+    (0x0600, 0xFFFF), // lsls r0,r0,#0x18
+    (0xD400, 0xFF00), // bmi  <…>            (displacement varies → masked)
+];
+
+/// SAFETY BOUND for the flash-write probe: the destination offset MUST satisfy
+/// `FLASHWRITE_ALLOW_LO <= off < FLASHWRITE_ALLOW_HI`, else the handler refuses
+/// (error status word, PROGRAM routine NOT called). The window is the erased
+/// (all-`0xFF`) 4-KiB-sector-aligned scratch gap that sits OUTSIDE the CMAC
+/// coverage (which ends at 0x1B001F) and far from the HRL regions
+/// (0x1D8000/0x1E0000) and mfg data — so the probe can physically only write the
+/// safe non-CMAC gap. Widening this to the HRL regions is a FUTURE change.
+const FLASHWRITE_ALLOW_LO: u32 = 0x001C_4000;
+const FLASHWRITE_ALLOW_HI: u32 = 0x001D_7000;
+const _: () = assert!(FLASHWRITE_ALLOW_LO < FLASHWRITE_ALLOW_HI);
+// The allowlist must stay clear of the CMAC-covered region (ends 0x1B001F) and
+// below the HRL regions (0x1D8000/0x1E0000) — compile-time proven here.
+const _: () = assert!(FLASHWRITE_ALLOW_LO >= 0x001B_0020);
+const _: () = assert!(FLASHWRITE_ALLOW_HI <= 0x001D_8000);
+
+/// Byte offset from [`FLAG_TABLE_BASE`] of the 1-byte SRAM scratch cell the
+/// flash-write probe stages its source byte in before calling the PROGRAM
+/// routine (`r0 = &scratch`). Sits in the same validated 204-byte free hole as
+/// the flag table, past the 8-byte flag table (slots `0x00..=0x07`), guard-
+/// checked per image by [`Mt1959Engine::assert_sram_cell_free`].
+const FLASHWRITE_SCRATCH_OFF: u32 = 0x10;
+
+/// Distinct status word the flash-write probe writes to the reply when it
+/// REFUSES an out-of-allowlist offset (PROGRAM routine not called). ASCII
+/// `"REFU"` — clearly not a PROGRAM return code, so the host can tell a refusal
+/// from a real program status.
+const FLASHWRITE_REFUSE_STATUS: u32 = 0x5245_4655;
+
 /// Signature of the read-ramp CEILING gate inside the per-READ ramp writer
 /// (`0x1bb22` on both OEM 1.00 and MK 1.03). The bare `cmp #0x32` is ambiguous
 /// (the `0x32` "high-speed band" threshold has many consumers), so the full
@@ -531,12 +650,14 @@ const UHD_CLASSIFIER_SIG_VER: &[(u16, u16)] = &[
 ///   ...deny: movs r2,#1; movs r1,#0x6f; movs r0,#5; bl <set_sense>  (OEM 6F refusal)
 ///   ```
 /// The `Feature::Bd` stub replays `ldrb r0,[r2,#7]` and then, only when
-/// `flag[Bd]==STATE_BD_DISABLE` (`0x02`, a distinct sentinel — NOT the boot `0x00`),
-/// forces a non-equal compare so the caller's `beq` falls through to the OEM deny
-/// block (which raises the drive's own `6F` refusal sense) — i.e. the drive REFUSES
-/// a BD disc it would otherwise engage. At any non-`STATE_BD_DISABLE` value (`0x00`
-/// boot / `0xFF` passthrough / `on`) it replays the OEM `cmp r0,#2` verbatim, so an
-/// unarmed/boot image is byte-behaviour-identical to OEM (stealth). This is the real enforcement point
+/// `flag[Bd]==STATE_OFF` (`0x00`), forces a non-equal compare so the caller's `beq`
+/// falls through to the OEM deny block (which raises the drive's own `6F` refusal
+/// sense) — i.e. the drive REFUSES a BD disc it would otherwise engage. At any
+/// non-`STATE_OFF` value (`0xFF` passthrough / `0x01` on) it replays the OEM
+/// `cmp r0,#2` verbatim. The boot hook writes `0xFF` into every flag at power-on, so
+/// an unarmed/boot image never sees `0x00` here and is byte-behaviour-identical to
+/// OEM (stealth) — which is what lets BD use the uniform `0x00` OFF instead of the
+/// old distinct `0x02` sentinel. This is the real enforcement point
 /// (not the classifier, which only *sets* the class), it reuses OEM's own deny
 /// path (no fabricated sense), and it is **unique** in the REPORT KEY window on
 /// every MT1959 image that carries this shape; images with a different REPORT KEY
@@ -744,6 +865,55 @@ fn decode_bl_target(image: &[u8], at: usize) -> Option<u32> {
         off |= !0u32 << 25; // sign-extend from bit 24
     }
     Some((at as u32 + 4).wrapping_add(off) & !1)
+}
+
+/// Emit code writing the 32-bit register `src` big-endian into the reply buffer
+/// at byte offsets `base_off..base_off+4`, through the drive byte-writer held in
+/// **r7** (`writer(r0=offset, r1=byte)`). Uses r5 as scratch and preserves
+/// `src`. Used by the [`abi::Verb::FlashWrite`] probe to marshal the echoed
+/// offset and the PROGRAM status word into the data-in reply. The byte-writer
+/// preserves r4-r7 (proven by the handler's clear/dump loops using r5/r6 across
+/// it), so `src` (r4/r6) survives the four calls.
+fn emit_be_word_to_response(a: &mut Asm, src: u16, base_off: u8) {
+    for idx in 0u16..4 {
+        // r5 = (src >> (8*(3-idx))) & 0xFF — isolate one byte via left-then-right.
+        if idx == 0 {
+            a.lsrs_imm(5, src, 24);
+        } else {
+            a.lsls_imm(5, src, 8 * idx);
+            a.lsrs_imm(5, 5, 24);
+        }
+        a.movs_imm(0, base_off + idx as u8);
+        a.mov_reg(1, 5);
+        a.blx(7);
+    }
+}
+
+/// The resolved boot-init hook site, tagged by which prologue shape matched.
+///
+/// The distinction is load-bearing for safety: a [`Self::Modern`] site is the
+/// MT1959 main-task prologue whose power-on boot hook is HARDWARE-CONFIRMED, so
+/// [`Mt1959Engine::emit_boot_init`] ships it. A [`Self::ClassicUnconfirmed`] site
+/// is the MT1939-classic leaf helper (matched by [`BOOT_INIT_SIG_CLASSIC`]) whose
+/// runtime power-on call-order has NOT been verified on silicon, so `emit_boot_init`
+/// FAILS CLOSED on it — the classic images degrade to DE-only exactly as before,
+/// while the site now resolves and is unit-tested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BootInitSite {
+    /// MT1959 modern prologue site (blessed; shipped by `emit_boot_init`).
+    Modern(u32),
+    /// MT1939-classic leaf-helper site (hardware-unconfirmed; `emit_boot_init`
+    /// fails closed pending on-silicon call-order verification).
+    ClassicUnconfirmed(u32),
+}
+
+impl BootInitSite {
+    /// The hook-site file offset, regardless of which prologue shape matched.
+    pub fn site(self) -> u32 {
+        match self {
+            BootInitSite::Modern(s) | BootInitSite::ClassicUnconfirmed(s) => s,
+        }
+    }
 }
 
 impl Mt1959Engine {
@@ -1042,6 +1212,83 @@ impl Mt1959Engine {
             off += 2;
         }
         bail!("response-commit anchors (str [rN,#0x28] + length load) not found")
+    }
+
+    /// Locate the OEM flash **PROGRAM** routine (`program(r0=src, r1=dest, r2=len,
+    /// r3=op)`) — the entry a [`abi::Verb::FlashWrite`] `bl`s. Returns the routine's
+    /// address (`0x13da2a` on BU40N 1.00; VA == file offset in this flat image).
+    ///
+    /// The raw prologue [`FLASH_PROGRAM_SIG`] is NOT unique: it also matches a decoy
+    /// erase routine that shares the prologue (`0x8faa` on BU40N). Disambiguate by the
+    /// candidate's constant table (`+0..+FLASH_POOL_SPAN`), requiring ALL THREE of the
+    /// mailbox constant [`FLASH_MAILBOX`], the controller constant [`FLASH_CONTROLLER`],
+    /// and a descriptor pointer word in `[0x01ff_0000, 0x0200_0000)`. Only the true
+    /// PROGRAM routine carries all three (the decoy lacks the descriptor), which yields
+    /// exactly one qualifying candidate across the owned MT19xx corpus. Refuses (rather
+    /// than guessing) if zero or more than one candidate qualifies.
+    pub fn find_flash_program(&self, image: &[u8]) -> Result<u32> {
+        // A descriptor pointer lives in the trailing pool of the true PROGRAM routine.
+        let pool_has_word_in = |from: usize, range: std::ops::Range<u32>| -> bool {
+            let end = (from + FLASH_POOL_SPAN).min(image.len().saturating_sub(4));
+            (from..end)
+                .step_by(2)
+                .any(|p| range.contains(&thumb::read_u32(image, p)))
+        };
+        let qualifies = |cand: usize| -> bool {
+            pool_has_word_in(cand, FLASH_MAILBOX..FLASH_MAILBOX + 1)
+                && pool_has_word_in(cand, FLASH_CONTROLLER..FLASH_CONTROLLER + 1)
+                && pool_has_word_in(cand, 0x01ff_0000..0x0200_0000)
+        };
+        let hits: Vec<usize> = find_masked_all(image, FLASH_PROGRAM_SIG, 0, image.len())
+            .into_iter()
+            .filter(|&c| qualifies(c))
+            .collect();
+        match hits.as_slice() {
+            [one] => Ok(*one as u32),
+            other => bail!(
+                "flash PROGRAM routine (prologue + mailbox 0x{FLASH_MAILBOX:08x} + \
+                 controller 0x{FLASH_CONTROLLER:08x} + 0x01ff descriptor) matched {} \
+                 candidate(s) (want exactly 1) — refusing to patch",
+                other.len()
+            ),
+        }
+    }
+
+    /// Locate the MT1959 **boot-init** hook site — the point a future boot-init
+    /// detour is written (`anchor+4`, over `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`).
+    /// Returns `0x13d41a` on BU40N 1.00.
+    ///
+    /// [`BOOT_INIT_SIG`] is unique (n==1) on every owned MT1959 image. On the
+    /// MT1939-classic lineage the modern shape returns zero and an ORDERED FALLBACK
+    /// to [`BOOT_INIT_SIG_CLASSIC`] recovers the same reload site (tagged
+    /// [`BootInitSite::ClassicUnconfirmed`]). Ordering is MANDATORY and the reason
+    /// this is not a merged scan: the classic helper ALSO matches inside 157 modern
+    /// images, so a simultaneous scan would make modern images ambiguous. The modern
+    /// shape is therefore tried FIRST and resolves modern images without ever
+    /// consulting the classic signature.
+    ///
+    /// Each signature is required unique in its own right (`n==1`); `>1` on either
+    /// refuses. Zero matches on BOTH returns `Ok(None)` (unknown prologue shape).
+    pub fn find_boot_init(&self, image: &[u8]) -> Result<Option<BootInitSite>> {
+        match find_masked_all(image, BOOT_INIT_SIG, 0, image.len()).as_slice() {
+            [one] => Ok(Some(BootInitSite::Modern(*one as u32 + 4))),
+            // No modern-shape match → try the MT1939-classic variant. Original-first
+            // keeps modern images resolving via BOOT_INIT_SIG (byte-identical output).
+            [] => match find_masked_all(image, BOOT_INIT_SIG_CLASSIC, 0, image.len()).as_slice() {
+                [] => Ok(None),
+                [one] => Ok(Some(BootInitSite::ClassicUnconfirmed(*one as u32 + 4))),
+                many => bail!(
+                    "classic boot-init signature matched {} time(s) (want exactly 1) — \
+                     refusing to patch",
+                    many.len()
+                ),
+            },
+            many => bail!(
+                "boot-init signature matched {} time(s) (want 0 on MT1939-classic or \
+                 exactly 1 on MT1959) — refusing to patch",
+                many.len()
+            ),
+        }
     }
 
     /// The OEM READ DISC STRUCTURE **format dispatcher** and the AACS
@@ -1536,9 +1783,11 @@ impl Mt1959Engine {
     ///
     /// Each OEM-code trampoline reads its own `flag[feature]` byte (Speed
     /// `flag[0x01]`, Region `flag[0x02]`, UHD `flag[0x03]`, BD `flag[0x04]`, HRL
-    /// `flag[0x05]`, AKE `flag[0x06]`, Bus `flag[0x07]`) and defaults to OEM
-    /// behaviour on the passthrough sentinel (`0xFF`) **and** the SRAM boot value
-    /// (`0x00`), so an unarmed or RESET image is byte-behaviour-identical to OEM.
+    /// `flag[0x05]`, AKE `flag[0x06]`, Bus `flag[0x07]`) as a uniform tri-state:
+    /// `0xFF` = OEM passthrough, `0x01` = on/armed, `0x00` = off (actively disabled).
+    /// The always-on boot-init hook writes `0xFF` into every flag at power-on, so an
+    /// unarmed or RESET image is byte-behaviour-identical to OEM and a gate only ever
+    /// sees `0x00` (off) when the host has explicitly set it — never at boot.
     ///
     /// The host ALWAYS reads `CLEAR_LEN` bytes — a `0x3C` READ BUFFER is a data-in
     /// opcode, so a command with no/short data phase desyncs the transfer (ABORTED
@@ -1548,6 +1797,9 @@ impl Mt1959Engine {
         let cdb = self.find_cdb_base(image)?;
         let (writer, commit_off) = self.find_response_writer(image)?;
         let (commit, length_field) = self.find_response_commit(image)?;
+        // OEM flash PROGRAM routine, recovered per image (no hardcoded VA) — the
+        // [`abi::Verb::FlashWrite`] probe `bl`s this.
+        let flash_program = self.find_flash_program(image)?;
         let identity = identity_blob();
         let id_len = identity.len() as u8;
 
@@ -1559,6 +1811,9 @@ impl Mt1959Engine {
         let clr_loop = a.label();
         let clrd = a.label();
         let not_get = a.label();
+        let not_flash = a.label();
+        let flash_refuse = a.label();
+        let flash_reply = a.label();
         let not_dump = a.label();
         let dump_loop = a.label();
         let id_loop = a.label();
@@ -1631,6 +1886,60 @@ impl Mt1959Engine {
         a.adds_imm(5, 1);
         a.b(clr_loop);
         a.bind(clrd);
+
+        // FLASHWRITE (TEMPORARY diagnostic): program the byte cdb[9] to the 32-bit
+        // flash offset packed big-endian in cdb[5..9], via the OEM PROGRAM routine
+        // — but only after a HARD range-check against the compile-time safe-cell
+        // allowlist. An out-of-allowlist offset refuses (PROGRAM NOT called) with a
+        // distinct status word, so this verb can physically only write the erased
+        // non-CMAC gap. Reply = offset echo (BE, [0..4]) + status word (BE, [4..8]).
+        let scratch_cell = flag_base + FLASHWRITE_SCRATCH_OFF;
+        a.cmp_imm(4, abi::Verb::FlashWrite as u8);
+        a.bne(not_flash);
+        // r6 = flash offset from cdb[5..9] (big-endian). r6 is callee-saved, so it
+        // survives the OEM PROGRAM call and the byte-writer reply loop.
+        a.ldrb_imm(6, 3, 5); // off[31:24]
+        a.lsls_imm(6, 6, 8);
+        a.ldrb_imm(0, 3, 6);
+        a.adds_reg(6, 6, 0); // |= off[23:16]
+        a.lsls_imm(6, 6, 8);
+        a.ldrb_imm(0, 3, 7);
+        a.adds_reg(6, 6, 0); // |= off[15:8]
+        a.lsls_imm(6, 6, 8);
+        a.ldrb_imm(0, 3, 8);
+        a.adds_reg(6, 6, 0); // |= off[7:0]  → r6 = full 32-bit offset
+                             // stage the source byte cdb[9] into the SRAM scratch cell (harmless if
+                             // the range check then refuses — the PROGRAM routine is never reached).
+        a.ldrb_imm(0, 3, 9); // r0 = value byte (cdb[9])
+        a.ldr_lit(1, scratch_cell);
+        a.strb_imm(0, 1, 0); // *scratch = value
+                             // SAFETY range check: refuse unless LO <= off < HI. On refuse the OEM
+                             // PROGRAM routine is NOT called — the probe can only ever touch the gap.
+        a.ldr_lit(0, FLASHWRITE_ALLOW_LO);
+        a.cmp_reg(6, 0);
+        a.blo(flash_refuse); // off < LO → refuse
+        a.ldr_lit(0, FLASHWRITE_ALLOW_HI);
+        a.cmp_reg(6, 0);
+        a.bhs(flash_refuse); // off >= HI → refuse
+                             // armed: program(r0=&scratch, r1=off, r2=1, r3=1) — op=1 is the OEM
+                             // erase-aligned read-modify-write. r3 (cdb base) is dead here (all cdb
+                             // fields already read), so reusing it as the op arg is safe.
+        a.ldr_lit(0, scratch_cell);
+        a.mov_reg(1, 6);
+        a.movs_imm(2, 1);
+        a.movs_imm(3, 1);
+        a.ldr_lit(5, flash_program | 1);
+        a.blx(5); // r0 = PROGRAM status word (r4-r11 preserved → r6 offset survives)
+        a.mov_reg(4, 0); // r4 = status word (callee-saved; survives the reply writes)
+        a.b(flash_reply);
+        a.bind(flash_refuse);
+        a.ldr_lit(4, FLASHWRITE_REFUSE_STATUS); // r4 = "REFU" sentinel (PROGRAM not called)
+        a.bind(flash_reply);
+        // reply: offset echo at [0..4], status word at [4..8], both big-endian.
+        emit_be_word_to_response(&mut a, 6, 0);
+        emit_be_word_to_response(&mut a, 4, 4);
+        a.b(docommit);
+        a.bind(not_flash);
 
         // GET: response byte 0 = flag[cdb[5]=feature].
         a.cmp_imm(4, abi::Verb::Get as u8);
@@ -1732,10 +2041,13 @@ impl Mt1959Engine {
         exit: u32,
         idx_reg: u8,
     ) -> Result<Vec<u8>> {
-        // flag[Feature::Speed] semantics (`0x00` boot / `0xFF` passthrough BOTH mean
-        // OEM, preserving the stealth invariant): `STATE_ON` (0x01) = unlimited
-        // (compare against the drive's own `0xFF` sentinel); any other value is an
-        // explicit speed-cap byte (compare `speed_index` against it directly).
+        // flag[Feature::Speed] tri-state: `STATE_PASSTHROUGH` (0xFF) = OEM (compare
+        // against the OEM 0x32 band); `STATE_ON` (0x01) = unlimited (compare against
+        // the drive's own `0xFF` sentinel); any OTHER value is an explicit speed-cap
+        // byte (compare `speed_index` against it directly), so `STATE_OFF` (0x00) =
+        // cap 0 = the floor (slowest / riplock fully engaged) — the genuine OFF,
+        // reached through the same cap path. The boot hook guarantees `0xFF` at
+        // power-on, so a gate never sees the `0x00` cap unless the host set it.
         let mut a = Asm::new();
         let patched = a.label();
         let oem = a.label();
@@ -1750,11 +2062,9 @@ impl Mt1959Engine {
             a.ldrb_imm(0, 0, 0); // r0 = Speed flag byte
             a.cmp_imm(0, abi::STATE_ON); // 0x01 -> unlimited
             a.beq(patched);
-            a.cmp_imm(0, abi::STATE_OFF); // 0x00 (boot) -> OEM
-            a.beq(oem);
             a.cmp_imm(0, abi::STATE_PASSTHROUGH); // 0xFF -> OEM
             a.beq(oem);
-            a.cmp_reg(2, 0); // explicit cap: speed_index vs cap byte
+            a.cmp_reg(2, 0); // explicit cap (incl 0x00 OFF = floor): speed_index vs cap byte
             a.b(decide);
             a.bind(patched);
             a.cmp_imm(2, 0xFF); // unlimited: the drive's own 0xFF sentinel
@@ -1778,11 +2088,9 @@ impl Mt1959Engine {
             a.ldrb_imm(1, 1, 0); // r1 = Speed flag byte
             a.cmp_imm(1, abi::STATE_ON); // 0x01 -> unlimited
             a.beq(patched);
-            a.cmp_imm(1, abi::STATE_OFF); // 0x00 (boot) -> OEM
-            a.beq(oem);
             a.cmp_imm(1, abi::STATE_PASSTHROUGH); // 0xFF -> OEM
             a.beq(oem);
-            a.cmp_reg(0, 1); // explicit cap: speed_index vs cap byte
+            a.cmp_reg(0, 1); // explicit cap (incl 0x00 OFF = floor): speed_index vs cap byte
             a.b(decide);
             a.bind(patched);
             a.cmp_imm(0, 0xFF); // unlimited: the drive's own 0xFF sentinel
@@ -1810,10 +2118,12 @@ impl Mt1959Engine {
     /// 0x00, RPCScheme 0 → RPC-1 — golden-MK parity) else it replicates the OEM
     /// `frame[4..6]`; both then emit reserved `frame[7]=0` and `pop {r3,r4,pc}`.
     fn build_region_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
-        // flag[Feature::Region] semantics (`0x00` boot / `0xFF` passthrough BOTH =
-        // OEM, stealth): `STATE_ON` (0x01) = RPC-1 region-free (zero frame[4..6]);
-        // `0x11..=0x18` = force DVD region 1..8; `REGION_BD_A/B/C` (0x2A/2B/2C) =
-        // force BD region A/B/C; anything else = OEM.
+        // flag[Feature::Region] tri-state: `STATE_PASSTHROUGH` (0xFF) = OEM (stealth;
+        // the boot hook guarantees this at power-on); `STATE_ON` (0x01) = RPC-1
+        // region-free (zero frame[4..6]); `STATE_OFF` (0x00) = region-LOCKED (RPC-2,
+        // RegionMask 0xFF → no region playable — the genuine OFF); `0x11..=0x18` =
+        // force DVD region 1..8; `REGION_BD_A/B/C` (0x2A/2B/2C) = force BD region
+        // A/B/C; anything else = OEM.
         //
         // Force-region writes a specific RegionMask into `frame[5]`:
         //   * DVD (RPC-2 state): the standard inverted bitmask `~(1<<(region-1))`
@@ -1828,6 +2138,7 @@ impl Mt1959Engine {
 
         let mut a = Asm::new();
         let region_free = a.label();
+        let region_lock = a.label();
         let dvd_force = a.label();
         let bd_force = a.label();
         let oem = a.label();
@@ -1836,8 +2147,10 @@ impl Mt1959Engine {
         a.ldrb_imm(3, 3, 0); // r3 = Region flag byte
         a.cmp_imm(3, abi::STATE_ON); // 0x01 -> RPC-1 free
         a.beq(region_free);
+        a.cmp_imm(3, abi::STATE_OFF); // 0x00 -> region-locked (genuine OFF)
+        a.beq(region_lock);
         a.cmp_imm(3, 0x11);
-        a.blo(oem); // < 0x11 (incl 0x00/0xFF handled below) -> OEM
+        a.blo(oem); // 0x02..0x10 -> OEM (0x00/0x01/0xFF already handled)
         a.cmp_imm(3, 0x19);
         a.blo(dvd_force); // 0x11..=0x18 -> DVD force
         a.cmp_imm(3, abi::REGION_BD_A);
@@ -1858,6 +2171,16 @@ impl Mt1959Engine {
         a.strb_imm(1, 0, 8); // frame[4] = 0 (TypeCode/resets/changes cleared)
         a.strb_imm(1, 0, 8); // frame[5] = 0 (RegionMask → all regions playable)
         a.strb_imm(1, 0, 8); // frame[6] = 0 (RPCScheme → RPC-1, region-free)
+        a.b(tail);
+
+        a.bind(region_lock);
+        // Genuine OFF: force RPC-2 with RegionMask 0xFF (every region prohibited →
+        // the disc plays in no region). HARDWARE-KAT-GATED: the all-set mask == fully
+        // locked is the standard RPC-2 encoding but is not re-proven on this silicon.
+        a.strb_imm(2, 0, 8); // frame[4] = r2 (OEM TypeCode/#resets/#changes)
+        a.movs_imm(2, 0xFF); // r2 = 0xFF (all 8 regions prohibited)
+        a.strb_imm(2, 0, 8); // frame[5] = 0xFF (no region playable)
+        a.strb_imm(4, 0, 8); // frame[6] = r4 (RPCScheme = 1, RPC-2)
         a.b(tail);
 
         a.bind(dvd_force);
@@ -2044,6 +2367,15 @@ impl Mt1959Engine {
     ///     sees disc-version `0`, dodging the UHD mode-1 categorization (MK-parity: MK's
     ///     injected stub returns the same forced-`0`).
     ///
+    /// **`STATE_OFF` (`0x00`) is RESERVED (== OEM) on this byte-extraction classifier
+    /// shape.** The class this classifier assigns is derived from *several* disc-version
+    /// bytes through a per-byte category loop (not a single hookable value the reload
+    /// controls), so a genuine force-refuse cannot be grounded here from the single
+    /// `r0` reload without deeper RE. OFF therefore falls through the `!= STATE_ON`
+    /// (verbatim replay) path — safe (boot-behaviour-identical) but a no-op. The
+    /// genuine UHD OFF IS emitted on the version-compare classifier shape (see
+    /// [`Self::build_uhd_stub_ver`]), which exposes a distinct `movs r2,#2` mode-1 arm.
+    ///
     /// **HARDWARE-KAT-GATED HYPOTHESIS.** That neutralizing this categorization (the
     /// exact site MK hooks) is what lifts the UHD mode-1 refusal — and that it, together
     /// with the already-shipped bus-encryption bit-clear, yields readable at-rest UHD
@@ -2103,13 +2435,21 @@ impl Mt1959Engine {
             let cmp = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
             let arm_c_va = (anchor + 0x16) as u32;
             let arm_c = u16::from_le_bytes([image[anchor + 0x16], image[anchor + 0x17]]);
-            if ldrh != 0x8808 || cmp != 0x2863 || arm_c != 0x2203 {
+            // The mode-1 (UHD-refused) class arm `movs r2,#2` is at anchor+4 (index 2
+            // of UHD_CLASSIFIER_SIG_VER); the OFF path routes here to force-refuse UHD.
+            let mode1_va = (anchor + 4) as u32;
+            let mode1 = u16::from_le_bytes([image[anchor + 4], image[anchor + 5]]);
+            if ldrh != 0x8808 || cmp != 0x2863 || arm_c != 0x2203 || mode1 != 0x2202 {
                 bail!(
                     "UHD version-compare classifier landmarks off at anchor 0x{anchor:x} \
-                     (ldrh@-2=0x{ldrh:04x} cmp=0x{cmp:04x} armC@+0x16=0x{arm_c:04x})"
+                     (ldrh@-2=0x{ldrh:04x} cmp=0x{cmp:04x} mode1@+4=0x{mode1:04x} \
+                     armC@+0x16=0x{arm_c:04x})"
                 );
             }
-            Ok((site, self.build_uhd_stub_ver(flag_base, arm_c_va)?))
+            Ok((
+                site,
+                self.build_uhd_stub_ver(flag_base, arm_c_va, mode1_va)?,
+            ))
         }
     }
 
@@ -2126,30 +2466,42 @@ impl Mt1959Engine {
     /// paths. `lr` is caller-saved (the function returns via its own `pop {…,pc}`, and
     /// re-arms `lr` at the class-compose `bl`), so the `bl`'s `lr` clobber is harmless.
     ///
-    /// `flag[Feature::Uhd]` semantics at this site:
-    ///   * `!= STATE_ON` (OEM / off): replay `ldrh r0,[r1]; cmp r0,#0x63` verbatim and
-    ///     `bx lr` to the caller's `bls` (anchor+2) — classification is
-    ///     byte-behaviour-identical to OEM. Inert (stealth) until armed.
-    ///   * `== STATE_ON`: branch straight to arm C (`arm_c_va` = anchor+0x16, `movs
-    ///     r2,#3`), the exact class a disc-version of `0` produces — so a UHD disc
-    ///     dodges the `r2==2` mode-1 bucket the REPORT KEY gate refuses (MK-parity).
+    /// `flag[Feature::Uhd]` tri-state at this site:
+    ///   * `STATE_PASSTHROUGH` (0xFF) / anything else: replay `ldrh r0,[r1]; cmp
+    ///     r0,#0x63` verbatim and `bx lr` to the caller's `bls` (anchor+2) —
+    ///     classification is byte-behaviour-identical to OEM. Inert (stealth); the
+    ///     boot hook guarantees `0xFF` at power-on.
+    ///   * `STATE_ON` (0x01): branch straight to arm C (`arm_c_va` = anchor+0x16,
+    ///     `movs r2,#3`), the exact class a disc-version of `0` produces — so a UHD
+    ///     disc dodges the `r2==2` mode-1 bucket the REPORT KEY gate refuses
+    ///     (MK-parity, force-ENABLE UHD).
+    ///   * `STATE_OFF` (0x00): branch straight to the `movs r2,#2` mode-1 arm
+    ///     (`mode1_va` = anchor+4) — the UHD/AACS-2.0 bucket the REPORT KEY gate
+    ///     refuses with `6F/01`, so the drive genuinely reports/behaves as no-UHD
+    ///     (force-DISABLE UHD). The genuine OFF this classifier shape can express.
     ///
     /// **HARDWARE-KAT-GATED HYPOTHESIS** — same status as [`Self::build_uhd_stub`]: the
-    /// stealth (`!= STATE_ON`) path is structurally proven (a verbatim replay); the
-    /// armed path's effect on the UHD refusal is the MK-vs-OEM hypothesis, not re-proven
-    /// on this silicon.
-    fn build_uhd_stub_ver(&self, flag_base: u32, arm_c_va: u32) -> Result<Vec<u8>> {
+    /// stealth path is structurally proven (a verbatim replay); the armed ON/OFF
+    /// branch targets are the OEM classifier's own class arms, but their end effect on
+    /// the UHD refusal is the MK-vs-OEM hypothesis, not re-proven on this silicon.
+    fn build_uhd_stub_ver(&self, flag_base: u32, arm_c_va: u32, mode1_va: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
-        let armed = a.label();
+        let force_on = a.label();
+        let force_off = a.label();
         a.raw16(0x8808); // replay: ldrh r0,[r1]   (r0 = disc-version; r1 unchanged by the bl)
         a.ldr_lit(3, flag_base + abi::Feature::Uhd as u32); // r3 = &flag[Uhd]
         a.ldrb_imm(3, 3, 0); // r3 = UHD flag byte
-        a.cmp_imm(3, abi::STATE_ON); // 0x01 = force UHD (neutralize the mode gate)
-        a.beq(armed);
+        a.cmp_imm(3, abi::STATE_ON); // 0x01 = force UHD ON (neutralize the mode gate)
+        a.beq(force_on);
+        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force UHD OFF (route to the refused mode-1 bucket)
+        a.beq(force_off);
         a.cmp_imm(0, 0x63); // stealth: replay `cmp r0,#0x63` LAST so the caller's `bls` sees OEM flags
         a.bx(14); // bx lr -> caller's `bls` at anchor+2 (OEM classification)
-        a.bind(armed);
-        a.ldr_lit(3, arm_c_va | 1); // armed: arm C (movs r2,#3) == disc-version-0 class (MK-parity)
+        a.bind(force_on);
+        a.ldr_lit(3, arm_c_va | 1); // ON: arm C (movs r2,#3) == disc-version-0 class (engage UHD)
+        a.bx(3);
+        a.bind(force_off);
+        a.ldr_lit(3, mode1_va | 1); // OFF: mode-1 arm (movs r2,#2) == UHD bucket REPORT KEY refuses
         a.bx(3);
         a.finish()
     }
@@ -2170,25 +2522,24 @@ impl Mt1959Engine {
     /// them is invisible. `lr` is caller-saved (the enclosing function returns via its
     /// own `pop {…,pc}`), so the `bl`'s `lr` clobber is harmless.
     ///
-    /// `flag[Bd]` semantics at this site (the disable value is a distinct sentinel,
-    /// [`abi::STATE_BD_DISABLE`] = `0x02`, NOT the boot `0x00` — every other stub
-    /// treats `0x00` boot and `0xFF` passthrough alike as OEM, and BD must too so an
-    /// unarmed/boot image is byte-behaviour-identical to OEM):
-    ///   * `!= STATE_BD_DISABLE` (`0x00` boot / `0xFF` passthrough / `0x01` on):
-    ///     replay `ldrb r0,[r2,#7]; cmp r0,#2` verbatim, so the caller's `beq` sees
-    ///     the exact OEM flags — BD acceptance is byte-behaviour-identical to OEM.
-    ///     Inert (stealth) until armed; an unarmed/boot image engages BD like OEM.
-    ///   * `== STATE_BD_DISABLE` (`0x02`): after the class replay, force a non-equal
-    ///     compare (`cmp r0,#0xff`; class is never `0xff`) so the caller's `beq
-    ///     <accept>` is NOT taken and control falls into the OEM deny block, which
-    ///     raises the drive's own `6F` refusal sense — the drive REFUSES the BD disc.
+    /// `flag[Bd]` tri-state at this site (uniform `0xFF`/`0x01`/`0x00`; the old
+    /// distinct `0x02` sentinel is retired — the always-on boot hook writes `0xFF`
+    /// into every flag at power-on, so `0x00` OFF is never seen at boot and BD can
+    /// use the uniform value like every other feature):
+    ///   * `!= STATE_OFF` (`0xFF` passthrough / `0x01` on): replay `ldrb r0,[r2,#7];
+    ///     cmp r0,#2` verbatim, so the caller's `beq` sees the exact OEM flags — BD
+    ///     acceptance is byte-behaviour-identical to OEM. Inert (stealth) until armed.
+    ///   * `== STATE_OFF` (`0x00`): after the class replay, force a non-equal compare
+    ///     (`cmp r0,#0xff`; class is never `0xff`) so the caller's `beq <accept>` is
+    ///     NOT taken and control falls into the OEM deny block, which raises the
+    ///     drive's own `6F` refusal sense — the drive REFUSES the BD disc.
     fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let refuse = a.label();
         a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
         a.ldr_lit(3, flag_base + abi::Feature::Bd as u32); // r3 = &flag[Bd]
         a.ldrb_imm(3, 3, 0); // r3 = Bd flag byte
-        a.cmp_imm(3, abi::STATE_BD_DISABLE); // 0x02 = force BD refuse (distinct sentinel; 0x00 boot / 0xFF passthrough / 0x01 on all stay OEM)
+        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force BD refuse (0xFF passthrough / 0x01 on stay OEM; boot hook makes 0x00 unreachable at power-on)
         a.beq(refuse);
         a.cmp_imm(0, 2); // stealth: replay `cmp r0,#2` LAST so the caller's `beq` sees OEM flags
         a.bx(14); // bx lr -> caller's `beq <accept>` at anchor+20 (OEM acceptance)
@@ -2613,6 +2964,98 @@ impl Mt1959Engine {
         a.finish()
     }
 
+    /// The **always-on boot-init** trampoline — the mechanism that makes the
+    /// tri-state safe. Entered by a `bl` that replaces the MT1959 main-task
+    /// prologue's boot-status reload `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` (the 4
+    /// bytes at [`Self::find_boot_init`]'s site = [`BOOT_INIT_SIG`] `anchor+4`).
+    ///
+    /// Under the tri-state, a flag value of `0x00` means **OFF** (actively disabled),
+    /// but the drive's SRAM flag table reads all-`0x00` at power-on — which would
+    /// wrongly disable every feature at boot. This stub therefore writes
+    /// [`abi::STATE_PASSTHROUGH`] (`0xFF`) into the whole flag table (`flag_base+0 ..=
+    /// flag_base+NUM_FEATURES`, i.e. the unused slot 0 plus every feature flag
+    /// `1..=7`) at boot, so a freshly powered drive is byte-behaviour-identical to
+    /// OEM and no gate ever sees `0x00` unless the host set it. It is NOT
+    /// feature-gated — it runs unconditionally on every boot.
+    ///
+    /// # Register / frame contract
+    /// The detour is a bare `bl`, and `lr` is already saved on the stack by the
+    /// prologue's own preceding `push {r4,r5,r6,lr}` ([`BOOT_INIT_SIG`] index 1), so
+    /// the `bl`'s clobber of `lr` is harmless and the stub returns to `site+4` via
+    /// `bx lr`. On entry `r0` holds the boot-status base pointer (from the prologue's
+    /// `ldr r0,[pc,#imm]`), which the replayed `ldr r0,[r0,#0x18]` needs; the stub
+    /// saves/restores both `r0` and its `r1` scratch (`push/pop {r0,r1}`) so the
+    /// continuation's `bmi` sees the exact post-`ldr`/`lsls` `r0` value it consumes.
+    /// No other register is touched.
+    fn build_boot_init(&self, flag_base: u32) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        a.push(0x0003); // push {r0,r1}  save the boot-status base ptr (r0) + scratch (r1)
+        a.ldr_lit(0, flag_base); // r0 = &flag table (SRAM)
+        a.movs_imm(1, abi::STATE_PASSTHROUGH); // r1 = 0xFF (OEM passthrough)
+        for off in 0..=NUM_FEATURES {
+            a.strb_imm(1, 0, off as u16); // flag[off] = 0xFF (slot 0 pad + features 1..=7)
+        }
+        a.pop(0x0003); // pop {r0,r1}   restore r0 (boot-status base) + r1
+        a.raw16(0x6980); // replay: ldr  r0,[r0,#0x18]  (boot-status word)
+        a.raw16(0x0600); // replay: lsls r0,r0,#0x18    (r0 consumed by the continuation's bmi)
+        a.bx(14); // bx lr -> boot-init site+4 (main-task continuation)
+        a.finish()
+    }
+
+    /// Install the always-on boot-init hook: find the site, verify the replaced
+    /// bytes, inject [`Self::build_boot_init`] into covered free space, and write the
+    /// detour `bl`. Returns `(site, stub_va)`.
+    ///
+    /// **Fail-closed** on both no-site and unconfirmed-site:
+    /// * `None` from [`Self::find_boot_init`] (prologue is neither known shape) BAILS
+    ///   rather than shipping an image that would boot every feature to OFF (`0x00`).
+    /// * a [`BootInitSite::ClassicUnconfirmed`] site (MT1939-classic, matched via
+    ///   [`BOOT_INIT_SIG_CLASSIC`]) ALSO bails: the classic reload site resolves and
+    ///   is unit-tested, but it is a called leaf helper whose power-on call-order is
+    ///   HARDWARE-UNCONFIRMED, so auto-shipping a boot hook there could brick a
+    ///   classic drive. Classic images therefore degrade to DE-only exactly as
+    ///   before — unchanged production behaviour — until the site is blessed.
+    ///
+    /// Only a [`BootInitSite::Modern`] site is shipped. Tri-state OFF is safe once a
+    /// boot-init site writes `0xFF` at power-on; blessing classic production emit is
+    /// a deliberate one-line flip after on-silicon verification, not a code change to
+    /// the finder (which is already complete).
+    fn emit_boot_init(&self, image: &[u8], out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
+        let site = match self.find_boot_init(image)? {
+            Some(BootInitSite::Modern(s)) => s as usize,
+            // TODO(hw-confirm): bless classic boot-init after on-silicon call-order
+            // verification — swap this bail for `s as usize` to ship the classic hook.
+            Some(BootInitSite::ClassicUnconfirmed(s)) => bail!(
+                "boot-init site 0x{s:x} resolved via the MT1939-classic signature is a called \
+                 leaf helper whose power-on call-order is hardware-unconfirmed. Refusing to ship \
+                 an unblessed classic boot hook (could brick the drive) — classic images degrade \
+                 to DE-only until the site is verified on silicon."
+            ),
+            None => bail!(
+                "tri-state OFF is unsafe without a boot-init site: no known boot-init prologue \
+                 found on this image (unknown shape). Refusing to ship — a flag table that boots \
+                 all-0x00 would disable every feature at power-on."
+            ),
+        };
+        // Verify the two bytes we replace are exactly `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`
+        // so a mis-anchored site refuses rather than corrupting the prologue.
+        let i0 = u16::from_le_bytes([image[site], image[site + 1]]);
+        let i1 = u16::from_le_bytes([image[site + 2], image[site + 3]]);
+        if i0 != 0x6980 || i1 != 0x0600 {
+            bail!(
+                "boot-init reload (ldr r0,[r0,#0x18]; lsls r0,r0,#0x18) not at 0x{site:x} \
+                 (got 0x{i0:04x} 0x{i1:04x})"
+            );
+        }
+        let bytes = self.build_boot_init(flag_base)?;
+        let stub_va = self.free_space(out, bytes.len() + 16)?;
+        let bl = thumb::encode_bl(site, stub_va)
+            .ok_or_else(|| anyhow!("boot-init detour `bl` out of range"))?;
+        thumb::write(out, stub_va as usize, &bytes);
+        thumb::write(out, site, &bl);
+        Ok((site as u32, stub_va))
+    }
+
     /// Full freemkv build: prove the find, inject the handler into covered free
     /// space, repoint only the `0x3C` handler pointer (flags untouched), and
     /// re-sign. Returns the new image and the grounded facts used. The [`Engine`]
@@ -2644,6 +3087,15 @@ impl Mt1959Engine {
         // padding), so it spans `NUM_FEATURES + 1` = 8 bytes.
         let flag_table_len = NUM_FEATURES as u32 + 1;
         self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
+        // TEMPORARY flash-write probe: its 1-byte SRAM source-staging cell lives in
+        // the same validated free hole, past the flag table — guard-check it per
+        // image so we never stage the source byte over live SRAM.
+        self.assert_sram_cell_free(
+            image,
+            flag_base + FLASHWRITE_SCRATCH_OFF,
+            1,
+            "flash-write scratch",
+        )?;
 
         let handler_bytes = self
             .build_handler(image, record.handler, flag_base)
@@ -2656,6 +3108,13 @@ impl Mt1959Engine {
         // large erased run shrinks past each blob and the next lands after it.
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
+
+        // Always-on boot-init hook — installed FIRST (right after the handler, before
+        // any feature stub) so the free_space allocation order is identical on the
+        // create and modify paths (handler → boot → speed → region → raw-read). It
+        // writes 0xFF into every flag at power-on, which is what makes the tri-state
+        // `0x00 == OFF` safe. Fail-closed if the site is absent (see emit_boot_init).
+        let (boot_init_site, boot_stub_va) = self.emit_boot_init(image, &mut out, flag_base)?;
 
         // Speed / Region / Raw-read levers are emitted through the exact same
         // `emit_*` helpers `build_modify` uses (single source of truth), so a fresh
@@ -2704,6 +3163,8 @@ impl Mt1959Engine {
             record,
             handler_va,
             handler_bytes,
+            boot_init_site,
+            boot_stub_va,
             vid_producer,
             vid_out_buf,
             vid_gate_setter,
@@ -2767,6 +3228,13 @@ impl Mt1959Engine {
         let flag_base = FLAG_TABLE_BASE;
         let flag_table_len = NUM_FEATURES as u32 + 1;
         self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
+        // TEMPORARY flash-write probe scratch cell (see build_report).
+        self.assert_sram_cell_free(
+            image,
+            flag_base + FLASHWRITE_SCRATCH_OFF,
+            1,
+            "flash-write scratch",
+        )?;
         let handler_bytes = self
             .build_handler(image, record.handler, flag_base)
             .context("assembling the 3C-0E handler")?;
@@ -2775,15 +3243,23 @@ impl Mt1959Engine {
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
 
+        // Always-on boot-init hook (see build_report): same allocation slot on both
+        // paths (handler → boot → …), so create and modify stay byte-identical.
+        // Fail-closed if the boot-init site is absent — a base prerequisite now, since
+        // tri-state OFF is unsafe without it.
+        let (boot_init_site, boot_stub_va) = self.emit_boot_init(image, &mut out, flag_base)?;
+
         let mut levers: Vec<LeverReport> = Vec::new();
 
-        // Identity / base (the vendor handler + DumpAll). Always applicable — its
-        // success is what makes every toggle addressable.
+        // Identity / base (the vendor handler + DumpAll + always-on boot-init hook).
+        // Always applicable — its success is what makes every toggle addressable.
         levers.push(LeverReport::applied(
             LeverId::Identity,
             vec![
                 ("handler_va", handler_va),
                 ("record_off", record.off as u32),
+                ("boot_init_site", boot_init_site),
+                ("boot_stub_va", boot_stub_va),
             ],
         ));
 
@@ -2970,6 +3446,16 @@ impl Mt1959Engine {
         let mut out = image.to_vec();
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
+
+        // Fail-closed: the classic (MT1939) prologue now RESOLVES via
+        // BOOT_INIT_SIG_CLASSIC, but find_boot_init tags it ClassicUnconfirmed and
+        // emit_boot_init BAILS on that (hardware-unconfirmed leaf-helper call-order) —
+        // tri-state OFF (`0x00`) is unsafe without a boot hook to write `0xFF` at
+        // power-on, and the shared feature stubs (Region-lock etc.) would otherwise boot
+        // every classic drive into their OFF state. The caller (mt1939::modify) degrades
+        // to the DE-only path. Lifting this is a one-line flip in emit_boot_init once the
+        // classic site is blessed on silicon (see TODO(hw-confirm) there).
+        let (_boot_init_site, _boot_stub_va) = self.emit_boot_init(image, &mut out, flag_base)?;
 
         let mut levers: Vec<LeverReport> = Vec::new();
 
