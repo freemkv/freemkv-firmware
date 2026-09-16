@@ -82,6 +82,22 @@ pub const CDB_STATE: usize = 6;
 /// Offset of the 16-bit big-endian allocation length (`cdb[7..9]`).
 pub const CDB_ALLOC_LEN: usize = 7;
 
+/// Minimum data-in allocation length any freemkv vendor command may request.
+///
+/// **Hardware-confirmed (LG BU40N on freemkv firmware):** the drive's `READ
+/// BUFFER` hijack ABORTS (SCSI Check Condition, sense key Aborted Command) any
+/// vendor command whose data-in allocation length is too small — 0, 1, and 2
+/// bytes all abort, while 16 and 64 both succeed. The knock handler needs a
+/// data-in transfer of at least ~16 bytes to run; sub-16-byte transfers are
+/// rejected before the verb executes. We floor every builder at `64` — it
+/// matches [`MEMREAD_LEN`] and the IDENTITY caller's allocation, and is safely
+/// above the ~16-byte minimum.
+///
+/// This affects only the wire transfer size, not the command's meaning: the
+/// verb/feature/state ride in the CDB, so a larger data-in buffer is harmless.
+/// For [`Verb::Get`] the state byte is still read from data offset 0.
+pub const MIN_ALLOC_LEN: u16 = 64;
+
 /// Feature state: **passthrough** — the firmware does not touch this subsystem,
 /// so behaviour is exactly as the drive shipped (OEM). The boot default of every
 /// feature flag, and the value [`Verb::Reset`] restores everywhere. An image with
@@ -211,22 +227,28 @@ pub fn build_cdb(
     cdb
 }
 
-/// Build a `SET feature = state` CDB.
+/// Build a `SET feature = state` CDB. Requests a [`MIN_ALLOC_LEN`]-byte data-in
+/// even though SET returns no payload: the drive aborts sub-16-byte transfers
+/// (HW-confirmed — see [`MIN_ALLOC_LEN`]). The feature/state ride in the CDB.
 #[allow(dead_code)]
 pub fn build_set_cdb(feature: Feature, state: u8) -> [u8; CDB_LEN] {
-    build_cdb(Verb::Set, Some(feature), Some(state), 0)
+    build_cdb(Verb::Set, Some(feature), Some(state), MIN_ALLOC_LEN)
 }
 
-/// Build a `GET feature` CDB (reads back the state byte in a 1-byte data-in).
+/// Build a `GET feature` CDB. Requests a [`MIN_ALLOC_LEN`]-byte data-in (the
+/// drive aborts a 1-byte transfer — HW-confirmed, see [`MIN_ALLOC_LEN`]); the
+/// current state byte is read back from data offset 0.
 #[allow(dead_code)]
 pub fn build_get_cdb(feature: Feature) -> [u8; CDB_LEN] {
-    build_cdb(Verb::Get, Some(feature), None, 1)
+    build_cdb(Verb::Get, Some(feature), None, MIN_ALLOC_LEN)
 }
 
-/// Build a `RESET` CDB (all features → passthrough).
+/// Build a `RESET` CDB (all features → passthrough). Requests a
+/// [`MIN_ALLOC_LEN`]-byte data-in for the same HW min-transfer reason as
+/// [`build_set_cdb`].
 #[allow(dead_code)]
 pub fn build_reset_cdb() -> [u8; CDB_LEN] {
-    build_cdb(Verb::Reset, None, None, 0)
+    build_cdb(Verb::Reset, None, None, MIN_ALLOC_LEN)
 }
 
 /// Build an `IDENTITY` CDB. `alloc_len` sizes the magic+version+state reply.
