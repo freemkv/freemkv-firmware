@@ -58,6 +58,24 @@ reads the feature's state byte:
 This keeps OEM logic bit-intact (stealth, and no re-RE of OEM internals) and makes
 `0xFF` a true "hands-off" everywhere.
 
+### 3.1 Orthogonal flags — the firmware does not orchestrate
+The firmware exposes seven **independent** feature flags and nothing more. Each
+gate reads only its own `flag[Feature]` byte and does its own job; the firmware
+never composes, sequences, or reasons about combinations of features.
+
+- **There is no `RawRead` firmware feature.** "Raw read" is a *host-level* term for
+  the effect of `Ake=off` **+** `Bus=off`, composed by `freemkv-unlock` — not a
+  flag the drive carries. (The old bundled `flag[RawRead]` gate is retired; it
+  decomposes into the independent `Ake` and `Bus` gates.)
+- **`Uhd` / `Bd` are pure media-acceptance gates** — "should this drive accept this
+  disc type?" — unrelated to AKE/BUS/HRL.
+- Any observed ordering (e.g. a refused `Uhd` disc never reaching the AKE path) is
+  an emergent property of the OEM command pipeline, not firmware orchestration.
+
+**All composition, sequencing, and "how the flags are used" lives in
+`freemkv-unlock` and downstream — never in the firmware.** The firmware's only job
+is that each flag, set independently, does its one thing.
+
 ---
 
 ## 4. Runtime state model
