@@ -1019,7 +1019,7 @@ fn busenc_stub_is_wellformed_and_encodes_the_decision() {
 /// erased non-CMAC gap, and the emitted handler must actually range-check
 /// against both bounds, stage through the SRAM scratch cell, and call the OEM
 /// PROGRAM routine. This is the safety proof that the probe verb can physically
-/// only write `[0x1C4000, 0x1D7000)`.
+/// only write `[0x1D0000, 0x1D7000)`.
 #[test]
 fn flashwrite_probe_is_range_bounded_to_the_safe_cell() {
     use super::{
@@ -1027,16 +1027,17 @@ fn flashwrite_probe_is_range_bounded_to_the_safe_cell() {
         FLASHWRITE_SCRATCH_OFF,
     };
 
-    // Compile-time bound proof: the window sits inside the non-CMAC gap (CMAC
-    // ends 0x1B001F), below the HRL regions (0x1D8000/0x1E0000), and is 4-KiB
-    // erase-sector aligned. These are const asserts so a bad widening fails to
-    // compile, not merely at test time.
+    // Compile-time bound proof: the window is the corpus-safe SAVE/config region
+    // 0x1D0000..0x1D7000 — blank and outside CMAC coverage in ALL 118 OEM images
+    // (corpus-wide max CMAC-covered end is 0x1CFFFF), below the HRL regions
+    // (0x1D8000/0x1E0000), and 4-KiB erase-sector aligned. These are const asserts
+    // so a bad widening fails to compile, not merely at test time.
     const _: () = {
-        assert!(FLASHWRITE_ALLOW_LO == 0x001C_4000);
+        assert!(FLASHWRITE_ALLOW_LO == 0x001D_0000);
         assert!(FLASHWRITE_ALLOW_HI == 0x001D_7000);
         assert!(FLASHWRITE_ALLOW_LO < FLASHWRITE_ALLOW_HI);
-        // must clear the CMAC-covered region (ends 0x1B001F)
-        assert!(FLASHWRITE_ALLOW_LO >= 0x001B_0020);
+        // must clear the corpus-wide max CMAC-covered end (0x1CFFFF)
+        assert!(FLASHWRITE_ALLOW_LO >= 0x001D_0000);
         // must stay below the HRL region (0x1D8000)
         assert!(FLASHWRITE_ALLOW_HI <= 0x001D_8000);
         // must be 4-KiB erase-sector aligned
