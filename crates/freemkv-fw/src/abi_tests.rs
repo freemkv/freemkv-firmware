@@ -28,7 +28,6 @@ fn state_sentinels_are_pinned() {
     assert_eq!(STATE_PASSTHROUGH, 0xFF);
     assert_eq!(STATE_OFF, 0x00);
     assert_eq!(STATE_ON, 0x01);
-    assert_eq!(HRL_WIPE_ONCE, 0x02);
     assert_eq!(REGION_BD_A, 0x2A);
     assert_eq!(REGION_BD_B, 0x2B);
     assert_eq!(REGION_BD_C, 0x2C);

@@ -112,9 +112,7 @@ pub enum Verb {
     /// Read one feature's (`cdb[5]`) current state back in the data-in payload.
     Get = 0x03,
     /// Restore every feature to [`STATE_PASSTHROUGH`] (out-of-the-box behaviour).
-    /// Ignores feature/state. NOTE: a prior [`Feature::Hrl`] `wipe-once` is a
-    /// destructive flash change and is NOT undone by RESET — only a reflash or a
-    /// disc that repopulates the HRL restores it.
+    /// Ignores feature/state.
     Reset = 0x04,
     /// Diagnostic RAM peek: [`MEMREAD_LEN`] bytes at the 32-bit address packed
     /// big-endian in `cdb[5..9]`. Read-only.
@@ -153,9 +151,9 @@ pub enum Feature {
     Bd = 0x04,
     /// Host Revocation List handling on the cert path. `passthrough`/[`STATE_OFF`]
     /// = OEM enforce; [`STATE_ON`] (`0x01`) = skip the HRL lookup (revoked certs
-    /// accepted, non-destructive); [`HRL_WIPE_ONCE`] (`0x02`) = one-time PERMANENT
-    /// flash rewrite of the HRL regions to a valid-empty (count-0) list. The wipe
-    /// is destructive and not undone by [`Verb::Reset`].
+    /// accepted, non-destructive). `0x01` (skip) is the only HRL state exposed on
+    /// the wire. `0x02` is a reserved/internal deferred value (see the
+    /// `pub(crate)` [`HRL_WIPE_ONCE`]) that is NOT part of the host-facing ABI.
     Hrl = 0x05,
     /// Drive-host AKE. `passthrough`/[`STATE_OFF`] = OEM real handshake;
     /// [`STATE_ON`] (`0x01`) = null (bypass the handshake; drive acts
@@ -166,14 +164,19 @@ pub enum Feature {
     Bus = 0x07,
 }
 
-/// [`Feature::Hrl`] state: one-time PERMANENT wipe of the flash HRL to valid-empty.
-pub const HRL_WIPE_ONCE: u8 = 0x02;
+/// [`Feature::Hrl`] internal deferred state: one-time PERMANENT wipe of the flash
+/// HRL to valid-empty. **NOT part of the host-facing wire ABI** — it is
+/// `pub(crate)` and referenced only by the gated-off firmware wipe codegen (see
+/// `HRL_WIPE_ARMED`, default `false`). Kept at `0x02` so the deferred codegen
+/// stays compilable; the wire only exposes HRL `skip` (`0x01`).
+#[allow(dead_code)]
+pub(crate) const HRL_WIPE_ONCE: u8 = 0x02;
 
 /// [`Feature::Bd`] state: **force-refuse** BD (AACS 1.0) discs (`0x02`). A distinct
 /// sentinel — deliberately NOT [`STATE_OFF`] (`0x00`, which is the SRAM boot value
-/// of every flag cell) — so an unarmed/boot image leaves BD engaged (OEM). Mirrors
-/// [`HRL_WIPE_ONCE`]'s use of `0x02` as a feature-specific state that is neither the
-/// boot `0x00` nor the passthrough `0xFF` default. See [`Feature::Bd`].
+/// of every flag cell) — so an unarmed/boot image leaves BD engaged (OEM). It is a
+/// feature-specific state that is neither the boot `0x00` nor the passthrough
+/// `0xFF` default. See [`Feature::Bd`].
 pub const STATE_BD_DISABLE: u8 = 0x02;
 
 /// [`Feature::Region`] state: force BD region A. (`0x2A`/`0x2B`/`0x2C` = A/B/C; the
