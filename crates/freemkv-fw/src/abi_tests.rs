@@ -68,13 +68,31 @@ fn build_get_and_reset_cdbs() {
     let cdb = build_get_cdb(Feature::Hrl);
     assert_eq!(cdb[CDB_VERB], Verb::Get as u8);
     assert_eq!(cdb[CDB_FEATURE], Feature::Hrl as u8);
-    // GET requests a 1-byte data-in for the state.
-    assert_eq!(&cdb[CDB_ALLOC_LEN..CDB_ALLOC_LEN + 2], &[0x00, 0x01]);
+    // GET requests a MIN_ALLOC_LEN (64-byte) data-in; the drive aborts a 1-byte
+    // transfer (HW-confirmed). The state is read from data offset 0.
+    assert_eq!(&cdb[CDB_ALLOC_LEN..CDB_ALLOC_LEN + 2], &[0x00, 0x40]);
 
     let cdb = build_reset_cdb();
     assert_eq!(cdb[CDB_VERB], Verb::Reset as u8);
     assert_eq!(cdb[CDB_FEATURE], 0);
     assert_eq!(cdb[CDB_STATE], 0);
+    // RESET floors its data-in at MIN_ALLOC_LEN for the same HW reason.
+    assert_eq!(&cdb[CDB_ALLOC_LEN..CDB_ALLOC_LEN + 2], &[0x00, 0x40]);
+}
+
+#[test]
+fn vendor_commands_floor_alloc_len_at_min_for_hw() {
+    // HW-confirmed (LG BU40N): the READ BUFFER hijack aborts a data-in transfer
+    // smaller than ~16 bytes. Every builder that could otherwise ask for 0/1
+    // bytes must request at least MIN_ALLOC_LEN so the drive does not abort.
+    // MIN_ALLOC_LEN is 64 — comfortably above the ~16-byte hardware floor.
+    assert_eq!(MIN_ALLOC_LEN, 64);
+
+    let alloc =
+        |cdb: &[u8; CDB_LEN]| u16::from_be_bytes([cdb[CDB_ALLOC_LEN], cdb[CDB_ALLOC_LEN + 1]]);
+    assert_eq!(alloc(&build_set_cdb(Feature::Ake, STATE_ON)), MIN_ALLOC_LEN);
+    assert_eq!(alloc(&build_get_cdb(Feature::Ake)), MIN_ALLOC_LEN);
+    assert_eq!(alloc(&build_reset_cdb()), MIN_ALLOC_LEN);
 }
 
 #[test]
