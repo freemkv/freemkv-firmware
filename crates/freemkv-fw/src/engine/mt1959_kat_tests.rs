@@ -31,7 +31,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "714b58780e2806d19878c02803d1d878de2800d101e06d4b1847f0b56c4f1c79022c07d16b485979082926d240189979017022e0042c20d19879ff280ad16548ff21017041708170c170017141718171c17112e05f4e604a11783170517871709178b170d178f17011793171517971719179b171d179f171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a4d4908704b4886420ad34c48864207d24948311c01220123494da847041c00e0484c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb84751e00b2c1ad12e482f4908220123304da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84734e0032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d119a600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e740200c4908800c480c4a9047f0bd0000380d00025bad090075200a00400e000200a01e00500e000200b01e002bda130055464552720c000290af000081810900667265656d6b7620302e372e31";
+    "7c4b58780e2806d19878c02803d1d878de2800d101e0784b1847f0b5774f1c79022c07d176485979082926d240189979017022e0042c20d19879ff280ad17048ff21017041708170c170017141718171c17112e06a4e6b4a11783170517871709178b170d178f17011793171517971719179b171d179f171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a58490870564886420ad35748864207d25448311c01220123544da847041c00e0534c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb84767e00b2c30d13f4806683f4805687619374801783170417871708178b170c178f17001793171417971718179b171c179f171281c2f4908220123304da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84734e0032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11ba600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e740200e4908800e480e4a9047f0bd0000380d00025bad090075200a00400e000200a01e00500e000200b01e002bda130055464552780c00027c0c0002720c000290af000081810900667265656d6b7620302e372e31";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -43,8 +43,8 @@ const EXPECT_HANDLER_HEX: &str =
 // sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
 // with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "f31b1b53617189e6ec59caa7fc0f01b9";
-const EXPECT_CMAC_15: &str = "4dd5d3f1128636a2cca1a340af0acef7";
+const EXPECT_CMAC_1: &str = "3621a15ccbeea094abe727a9387600c6";
+const EXPECT_CMAC_15: &str = "6739b0cfca942e926ecbc92fabc7718a";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -1186,6 +1186,19 @@ fn find_nv_block_resolves_bu40n() {
     assert!(img[0x1E_A000..0x1E_A4B0].iter().all(|&b| b == 0xFF));
 }
 
+/// PHASE 1: the NV DRAM-window base pointer finder must resolve to `0x02000C78` on
+/// BU40N — the SRAM global that holds the flash-write staging translation base. This
+/// value is MT1959-uniform but per-image on MT1939 (7 distinct values), so SAVE must
+/// signature-derive it, not hardcode.
+#[test]
+fn find_nv_dram_base_resolves_bu40n() {
+    let img = bu40n_fixture();
+    let p = Mt1959Engine
+        .find_nv_dram_base(&img)
+        .expect("NV DRAM-window base pointer must resolve on BU40N");
+    assert_eq!(p, 0x0200_0C78, "BU40N flash-write staging base pointer");
+}
+
 /// PHASE 1: the boot-init finder must resolve to the boot-init hook site
 /// (`anchor+4 == 0x13d41a`) on BU40N, and (verified in the fleet sweep) return
 /// `None` on the MT1939-classic lineage rather than failing.
@@ -1463,6 +1476,16 @@ fn mt19xx_corpus_finders_validate() {
             Ok(0x001E_A000) => {}
             Ok(b) => failures.push(format!("NV block resolved 0x{b:x} != 0x1EA000 @ {disp}")),
             Err(e) => failures.push(format!("NV block finder @ {disp}: {e}")),
+        }
+
+        // Flash-write staging base pointer must resolve (per-image; value varies on
+        // MT1939) and be a 4-aligned SRAM pointer — required for SAVE to persist.
+        match eng.find_nv_dram_base(&bytes) {
+            Ok(p) if (0x0200_0000..0x0200_2000).contains(&p) && p & 3 == 0 => {}
+            Ok(p) => failures.push(format!(
+                "NV DRAM base 0x{p:x} not a 4-aligned SRAM ptr @ {disp}"
+            )),
+            Err(e) => failures.push(format!("NV DRAM-base finder @ {disp}: {e}")),
         }
     }
 

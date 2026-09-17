@@ -965,6 +965,46 @@ fn emit_be_word_to_response(a: &mut Asm, src: u16, base_off: u8) {
     }
 }
 
+/// Emit a **flash write** through the OEM PROGRAM engine — the reusable freemkv flash
+/// primitive (SAVE uses it; so can any future freemkv-owned write). The engine can only
+/// source program data from the firmware's reserved NV DRAM window (it applies
+/// `phys = (src & 0x00FFFFFF) + dram_base`), so an SRAM src is unreachable. This:
+///   1. reads the boot-set window globals `dram_base = [dram_base_ptr]` and
+///      `buf_off = [dram_base_ptr + 4]` (the reserved NV scratch offset);
+///   2. CPU-stages `len` bytes from SRAM `src` into `dram_base + buf_off`;
+///   3. calls `PROGRAM(src = buf_off, dest, len, op = 1)` — a 4 KiB-sector RMW that
+///      erases + reprograms while preserving every neighbouring byte in the sector.
+///
+/// Leaves the PROGRAM status word in **r0**. Clobbers r0,r1,r2,r3,r5,r6. `dest`/`src`
+/// are fixed flash/SRAM addresses (compile-time). NOTE: PROGRAM reports "sequence
+/// issued", never "committed" — callers that must confirm should read `dest` back.
+#[allow(clippy::too_many_arguments)]
+fn emit_flash_write(
+    a: &mut Asm,
+    dram_base_ptr: u32,
+    dest: u32,
+    src: u32,
+    len: u8,
+    flash_program: u32,
+) {
+    a.ldr_lit(0, dram_base_ptr);
+    a.ldr_imm(6, 0, 0); // r6 = dram_base = [dram_base_ptr]
+    a.ldr_lit(0, dram_base_ptr + 4);
+    a.ldr_imm(5, 0, 0); // r5 = buf_off = [dram_base_ptr+4] (reserved NV window offset)
+    a.adds_reg(6, 6, 5); // r6 = dram_base + buf_off (DRAM staging target)
+    a.ldr_lit(0, src); // r0 = &src (SRAM)
+    for i in 0..len as u16 {
+        a.ldrb_imm(1, 0, i);
+        a.strb_imm(1, 6, i); // stage src[i] -> DRAM window
+    }
+    a.mov_reg(0, 5); // r0 = src arg = buf_off (window offset; PROGRAM re-adds dram_base)
+    a.ldr_lit(1, dest); // r1 = flash dest offset
+    a.movs_imm(2, len); // r2 = len
+    a.movs_imm(3, 1); // r3 = op=1 (RMW erase, neighbour-preserving)
+    a.ldr_lit(5, flash_program | 1);
+    a.blx(5); // r0 = PROGRAM status word (r4-r11 preserved)
+}
+
 /// The resolved boot-init hook site, tagged by which prologue shape matched.
 ///
 /// The distinction is load-bearing for safety: a [`Self::Modern`] site is the
@@ -1360,6 +1400,71 @@ impl Mt1959Engine {
                 "flash PROGRAM routine (prologue + mailbox 0x{FLASH_MAILBOX:08x} + \
                  controller 0x{FLASH_CONTROLLER:08x} + 0x01ff descriptor) matched {} \
                  candidate(s) (want exactly 1) — refusing to patch",
+                other.len()
+            ),
+        }
+    }
+
+    /// Locate the **NV DRAM-window base pointer** — the SRAM address of the global that
+    /// holds the flash controller's program-source translation base (the engine reads a
+    /// program source as `phys = (src & 0x00FFFFFF) + [ptr]`). freemkv's flash-write
+    /// primitive ([`emit_flash_write`]) stages data into that window and passes a window
+    /// offset, because the OEM program engine cannot source SRAM directly. `[ptr+4]` is
+    /// the reserved NV scratch window offset.
+    ///
+    /// MUST be signature-derived: it is `0x02000C78` on MT1959 but takes SEVEN distinct
+    /// values across the 85 MT1939 images (even within one model line across versions), so
+    /// a hardcoded constant would corrupt every MT1939 flash write. Validated 118/118.
+    ///
+    /// Method: the PROGRAM routine's op=1 RMW path calls two copy helpers (stage +
+    /// overlay) that each load this pointer as their first pc-relative SRAM literal. Scan
+    /// PROGRAM's body for `bl` targets, read each target's first `ldr rX,[pc,#imm]` SRAM
+    /// literal (`0x02000000..0x02002000`, 4-aligned), and return the value loaded by
+    /// **≥2 distinct helpers** — unique corpus-wide. Refuses otherwise.
+    pub fn find_nv_dram_base(&self, image: &[u8]) -> Result<u32> {
+        const SRAM: std::ops::Range<u32> = 0x0200_0000..0x0200_2000;
+        let program = self.find_flash_program(image)? as usize;
+        // Distinct `bl` targets within the PROGRAM body (op=1 RMW calls its copy helpers).
+        let mut targets: Vec<usize> = Vec::new();
+        let end = (program + 0x260).min(image.len().saturating_sub(4));
+        let mut off = program;
+        while off + 4 <= end {
+            if let Some(t) = thumb::decode_bl(image, off) {
+                let t = t as usize;
+                if t < image.len() && !targets.contains(&t) {
+                    targets.push(t);
+                }
+            }
+            off += 2;
+        }
+        // literal -> number of distinct helper routines that load it as their first ldr[pc].
+        let mut hits: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+        for &t in &targets {
+            let tend = (t + 0x40).min(image.len().saturating_sub(2));
+            let mut p = t & !1;
+            while p + 2 <= tend {
+                let hw = u16::from_le_bytes([image[p], image[p + 1]]);
+                if (hw & 0xF800) == 0x4800 {
+                    if let Some(v) = pc_literal(image, p) {
+                        if SRAM.contains(&v) && v & 3 == 0 {
+                            *hits.entry(v).or_default() += 1;
+                        }
+                    }
+                    break; // first ldr[pc] of the routine only
+                }
+                p += 2;
+            }
+        }
+        let winners: Vec<u32> = hits
+            .iter()
+            .filter(|(_, &c)| c >= 2)
+            .map(|(&v, _)| v)
+            .collect();
+        match winners.as_slice() {
+            [one] => Ok(*one),
+            other => bail!(
+                "NV DRAM-window base pointer: {} SRAM literal(s) loaded by >=2 PROGRAM copy \
+                 helpers (want exactly 1) — refusing to resolve the flash-write staging base",
                 other.len()
             ),
         }
@@ -1952,8 +2057,11 @@ impl Mt1959Engine {
         // FlashWrite window is a compile-time bound; assert the resolved NV block agrees
         // so SAVE's destination and that window can never drift apart.
         let save_home = self.find_nv_block(image)?;
+        // Flash-write staging base pointer, signature-derived per image (MT1959 0x02000C78,
+        // but 7 distinct values across MT1939 — a constant would corrupt every MT1939 SAVE).
+        let nv_dram_base_ptr = self.find_nv_dram_base(image)?;
         ensure!(
-            save_home >= FLASHWRITE_ALLOW_LO && save_home < FLASHWRITE_ALLOW_HI,
+            (FLASHWRITE_ALLOW_LO..FLASHWRITE_ALLOW_HI).contains(&save_home),
             "resolved NV/SAVE block 0x{save_home:x} is outside the flash-write window \
              0x{FLASHWRITE_ALLOW_LO:x}..0x{FLASHWRITE_ALLOW_HI:x}"
         );
@@ -2122,18 +2230,23 @@ impl Mt1959Engine {
         a.b(docommit);
         a.bind(not_flash);
 
-        // SAVE (0x0B): persist the live flag table verbatim to flash SAVE_HOME through
-        // the OEM PROGRAM routine. op=1 is the erase-aligned read-modify-write, so the
-        // 8-byte program in the blank head preserves the OEM region record at +0x4B0.
-        // Reply = PROGRAM status word (big-endian) at [0..4].
+        // SAVE (0x0B): persist the live flag table to flash SAVE_HOME. The OEM PROGRAM
+        // engine reads its program-source through the DRAM-window translation, so we
+        // FIRST stage the 8 flag bytes SRAM->DRAM (dram_base + buf_off, both boot-set
+        // globals read at runtime), then call PROGRAM with the WINDOW OFFSET as src.
+        // op=1 RMW preserves the OEM region record at +0x4B0. Reply = status (BE) [0..4].
         a.cmp_imm(4, abi::Verb::Save as u8);
         a.bne(not_save);
-        a.ldr_lit(0, flag_base); // r0 = src: live flag table (SRAM)
-        a.ldr_lit(1, save_home); // r1 = dest flash offset
-        a.movs_imm(2, SAVE_LEN); // r2 = len (8 = slot0 + 7 features)
-        a.movs_imm(3, 1); // r3 = op=1 (erase-aligned RMW)
-        a.ldr_lit(5, flash_program | 1);
-        a.blx(5); // r0 = PROGRAM status word (r4-r11 preserved)
+        // Persist the live flag table to flash SAVE_HOME via the reusable flash-write
+        // primitive (stage SRAM->DRAM window, then OEM PROGRAM op=1 RMW).
+        emit_flash_write(
+            &mut a,
+            nv_dram_base_ptr,
+            save_home,
+            flag_base,
+            SAVE_LEN,
+            flash_program,
+        );
         a.mov_reg(4, 0); // r4 = status (callee-saved; survives the reply writes)
         emit_be_word_to_response(&mut a, 4, 0);
         a.b(docommit);
