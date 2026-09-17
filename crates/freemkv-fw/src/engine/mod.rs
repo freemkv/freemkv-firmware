@@ -18,10 +18,12 @@ use crate::family::{self, ChipFamily};
 use crate::thumb::CommandRecord;
 
 pub mod audit;
+pub mod core;
 pub mod lever;
 pub mod mt1939;
+pub mod mt1939_classic;
+pub mod mt1939_modern;
 pub mod mt1959;
-pub mod mt1959_build;
 pub mod pioneer;
 pub mod profile;
 

@@ -8,7 +8,7 @@
 //!     pass the structural audit.
 
 use super::{audit_image, AuditResult};
-use crate::engine::mt1959_build::is_freemkv_patched;
+use crate::engine::core::is_freemkv_patched;
 use crate::engine::{self, lever::LeverOutcome};
 use freemkv_flash::cmac;
 

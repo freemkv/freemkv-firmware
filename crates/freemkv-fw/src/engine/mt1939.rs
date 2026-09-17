@@ -88,7 +88,7 @@ fn is_classic(image: &[u8]) -> bool {
 }
 
 /// File offsets where masked signature `sig` matches in `image[lo..hi]` (local
-/// matcher so this module stays decoupled from `mt1959_build`'s private one).
+/// matcher so this module stays decoupled from `core`'s private one).
 pub(crate) fn masked_matches(image: &[u8], sig: &[(u16, u16)], lo: usize, hi: usize) -> Vec<usize> {
     let hi = hi.min(image.len());
     let span = sig.len() * 2;
