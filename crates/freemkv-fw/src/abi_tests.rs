@@ -151,18 +151,18 @@ fn dumpall_memread_packs_address_big_endian_at_5_to_9() {
 
 #[test]
 fn flashwrite_packs_offset_big_endian_and_value_at_9() {
-    let cdb = build_flashwrite_cdb(0x001D_0000, 0xA5);
+    let cdb = build_flashwrite_cdb(0x001E_D000, 0xA5);
     assert_eq!(cdb[CDB_OPCODE], READ_BUFFER_OPCODE);
     assert_eq!(cdb[CDB_MODE], KNOCK_MODE);
     assert_eq!(&cdb[CDB_KNOCK..CDB_KNOCK + 2], &KNOCK);
     assert_eq!(cdb[CDB_VERB], Verb::FlashWrite as u8);
     // 32-bit big-endian flash offset at cdb[5..9], value byte at cdb[9].
-    assert_eq!(&cdb[5..9], &[0x00, 0x1D, 0x00, 0x00]);
+    assert_eq!(&cdb[5..9], &[0x00, 0x1E, 0xD0, 0x00]);
     assert_eq!(cdb[9], 0xA5);
-    // Exact wire bytes for the documented probe (write 0xA5 @ the corpus-safe 0x1D0000).
+    // Exact wire bytes for the documented probe (write 0xA5 @ the OEM-unlocked 0x1ED000).
     assert_eq!(
         cdb,
-        [0x3C, 0x0E, 0xC0, 0xDE, 0x0A, 0x00, 0x1D, 0x00, 0x00, 0xA5]
+        [0x3C, 0x0E, 0xC0, 0xDE, 0x0A, 0x00, 0x1E, 0xD0, 0x00, 0xA5]
     );
 }
 

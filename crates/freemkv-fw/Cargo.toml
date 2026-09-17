@@ -27,5 +27,10 @@ freemkv-flash = { path = "../freemkv-flash" }
 # freemkv-flash), so both tools identify a family the same way.
 freemkv-chipset = { path = "../freemkv-chipset" }
 
+[dev-dependencies]
+# Throwaway corpus-scoreboard / golden-KAT harness only (tests/corpus_scoreboard.rs):
+# hash de-wrapped inputs and produced images for the reproducibility lock.
+sha2 = "0.10"
+
 [lints]
 workspace = true

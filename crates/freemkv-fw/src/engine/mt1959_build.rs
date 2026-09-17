@@ -22,7 +22,7 @@
 //! behaviour is byte-identical. `flags` stays `0x01` — which on hardware is a
 //! drive-*ready* gate, NOT a media gate: the command answers with no disc.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 
 use freemkv_flash::cmac;
 
@@ -34,6 +34,9 @@ use crate::family::{Capability, ChipInfo, MediaClass};
 use crate::thumb::{self, Asm, CommandRecord, CommandTable};
 
 /// Grounded facts produced by the Raw-read lever (VID + AKE + Gate-A + deny).
+/// `Default` (all-`0` / empty) is the "feature not wired on this image" value used
+/// when the best-effort raw-read emit misses — the base still ships without it.
+#[derive(Default)]
 struct RawReadFacts {
     ake_gate: u32,
     /// The AKE detour `bl` site (where the redirect was written) — needed by the
@@ -94,6 +97,14 @@ const STRIDE: usize = 8;
 /// Window the dispatch table is searched within.
 const TABLE_LO: usize = 0x0014_0000;
 const TABLE_HI: usize = 0x0016_0000;
+
+/// JBC6 / older-MT1939 dispatch-table window. Same record format as the MT1959
+/// table, relocated above [`TABLE_HI`] (real table ~0x189000 on ASUS BC-12* / LG
+/// CH12/UH12NS40). Consulted by [`Mt1959Engine::find_live_record`] ONLY as an
+/// original-first fallback after the MT1959 window misses. (RE: analysis/jbc6-dispatch.md.)
+const JBC6_TABLE_LO: usize = 0x0018_0000;
+const JBC6_TABLE_HI: usize = 0x0019_0000;
+const _: () = assert!(JBC6_TABLE_LO >= TABLE_HI && JBC6_TABLE_LO < JBC6_TABLE_HI);
 /// Minimum contiguous valid records to treat a byte range as a real table run.
 const MIN_RUN: usize = 8;
 /// Where injected code may live (past the loader); the scanner region and
@@ -194,9 +205,14 @@ const FLASH_POOL_SPAN: usize = 0x400;
 /// the boot-mode word and branches on it: `ldr r0,[pc,#imm]; push {r4,r5,r6,lr};
 /// ldr r0,[r0,#0x18]; lsls r0,r0,#0x18; bmi <…>; movs r1,#0; movs r0,#0`. The
 /// leading `ldr r0,[pc,#imm]` immediate varies per build, so its low byte is masked
-/// (`?? 48`). The boot-init detour replaces the `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`
-/// (the 4 bytes at `anchor+4`), so the hook site is `anchor+4`
-/// ([`Mt1959Engine::find_boot_init`]). Unique (n==1) on all 68 owned MT1959 images;
+/// (`?? 48`). This signature ANCHORS the boot-init hook, but the detour is NOT
+/// written here: the `bmi` at `anchor+8` is the cold/warm-boot split, and the cold
+/// arm (`movs r1,#0; movs r0,#0; bl <bss/SRAM clear>`) ZEROES the flag table before
+/// the two paths rejoin. [`Mt1959Engine::emit_boot_init`] therefore follows the
+/// `bmi` to its convergence target — the `bl <orig_init>` both paths reach AFTER the
+/// clear — and detours THAT, so the boot stub's `0xFF` flag write is never wiped.
+/// [`Mt1959Engine::find_boot_init`] still resolves this anchor's `anchor+4`
+/// (the boot-status reload, left untouched). Unique (n==1) on all 68 owned MT1959 images;
 /// present on the 17 MT1939-classic images only via [`BOOT_INIT_SIG_CLASSIC`]
 /// (an older prologue whose second halfword differs), so the modern shape returns
 /// zero there and [`Mt1959Engine::find_boot_init`] falls back.
@@ -245,25 +261,51 @@ const BOOT_INIT_SIG_CLASSIC: &[(u16, u16)] = &[
 /// `FLASHWRITE_ALLOW_LO <= off < FLASHWRITE_ALLOW_HI`, else the handler refuses
 /// (error status word, PROGRAM routine NOT called).
 ///
-/// The window is `0x1D0000..0x1D7000` — the SAVE/config region proven safe across
-/// the WHOLE 118-image OEM corpus (not just BU40N), by a full-corpus scan:
-///   * blank (all-`0xFF`, i.e. erased/unused) in every one of the 118 images;
+/// The window is the NV block `0x1EA000..0x1EB000` — the SAVE home. Corpus-proven
+/// (all 118 OEM images) as the one always-writable free zone:
+///   * OEM-WRITTEN in every one of the 118 images (the block holds the OEM region /
+///     RPC-2 record at `0x1EA4B0`), so the flash controller UNLOCKS this block on
+///     every drive — a write here actually PERSISTS on hardware;
+///   * its head `0x1EA000..0x1EA4B0` (1200 bytes) is blank (`0xFF`) in every image —
+///     free scratch that clobbers no OEM data;
 ///   * OUTSIDE CMAC coverage in every image — the highest CMAC-covered byte across
-///     the entire corpus is `0x1CFFFF`, so `0x1D0000` clears it by one byte;
-///   * below the HRL regions (`0x1D8000`/`0x1E0000`) and per-unit calibration
-///     (`0x1F0000`).
-/// (The earlier `0x1C4000` lower bound was BU40N-only — non-blank in 85/118 images
-/// — and is retired.) The OEM PROGRAM routine reached here is the drive's GENERAL
-/// flash programmer (28 callers across the image; the HRL wrapper is only one), and
-/// `op=1` is a neighbour-preserving erase-block read-modify-write, so a write here
-/// cannot disturb any other image contents.
-const FLASHWRITE_ALLOW_LO: u32 = 0x001D_0000;
-const FLASHWRITE_ALLOW_HI: u32 = 0x001D_7000;
+///     the corpus is `0x1CFFFF`, so this block clears it by a wide margin.
+///
+/// This REPLACES the earlier `0x1ED000..0x1EF000` (and before it `0x1D0000`) windows,
+/// which the full-corpus block-writability scan proved are ALWAYS-BLANK / never
+/// OEM-written — i.e. controller-LOCKED: writes there do NOT persist (the earlier
+/// on-hardware 1-byte probe that read back `0xFF` failed for exactly this reason).
+/// The OEM PROGRAM routine reached here is the drive's GENERAL flash programmer (28
+/// callers; the HRL wrapper is only one), and `op=1` is a neighbour-preserving
+/// erase-block read-modify-write, so a program in the blank head cannot disturb the
+/// OEM region record lower in the same block.
+const FLASHWRITE_ALLOW_LO: u32 = 0x001E_A000;
+const FLASHWRITE_ALLOW_HI: u32 = 0x001E_B000;
 const _: () = assert!(FLASHWRITE_ALLOW_LO < FLASHWRITE_ALLOW_HI);
-// Must clear the corpus-wide max CMAC-covered end (0x1CFFFF) and stay below the
-// HRL regions (0x1D8000/0x1E0000) — compile-time proven here.
-const _: () = assert!(FLASHWRITE_ALLOW_LO >= 0x001D_0000);
-const _: () = assert!(FLASHWRITE_ALLOW_HI <= 0x001D_8000);
+// Stay inside the corpus-proven-unlocked NV block, 4-KiB erase-sector aligned —
+// compile-time proven here.
+const _: () = assert!(FLASHWRITE_ALLOW_LO >= 0x001E_A000);
+const _: () = assert!(FLASHWRITE_ALLOW_HI <= 0x001E_B000);
+const _: () = assert!(FLASHWRITE_ALLOW_LO.is_multiple_of(0x1000));
+const _: () = assert!(FLASHWRITE_ALLOW_HI.is_multiple_of(0x1000));
+
+/// SAVE home: base of the corpus-universal NV block. [`abi::Verb::Save`] programs the
+/// live flag table verbatim to this flash offset; boot and [`abi::RESET_TO_FLASH`]
+/// load it back. The engine resolves this per image by SIGNATURE via
+/// [`Mt1959Engine::find_nv_block`] (the region record `00 04 05` at block+0x4B0 with a
+/// blank head) — it is NOT a hardcoded build input. This constant is the corpus-
+/// expected value (`0x1EA000` on all 118), used by the compile-time FlashWrite bound
+/// and unit tests; `build_handler` asserts the signature-resolved block agrees with
+/// this window on every build. The head is blank in every image and the block is
+/// controller-unlocked (OEM writes the region record at `+0x4B0`), so `op=1` RMW here
+/// persists our bytes while preserving that OEM record.
+const SAVE_HOME: u32 = 0x001E_A000;
+const _: () = assert!(SAVE_HOME >= FLASHWRITE_ALLOW_LO && SAVE_HOME < FLASHWRITE_ALLOW_HI);
+
+/// SAVE payload length: the full flag table (slot 0 pad + features `0x01..=0x07`),
+/// mirrored byte-for-byte. Blank flash (`0xFF`) == never-saved == all-OEM, so no
+/// magic/version/CRC is needed — absence IS the OEM default.
+const SAVE_LEN: u8 = NUM_FEATURES + 1;
 
 /// Byte offset from [`FLAG_TABLE_BASE`] of the 1-byte SRAM scratch cell the
 /// flash-write probe stages its source byte in before calling the PROGRAM
@@ -876,6 +918,37 @@ fn decode_bl_target(image: &[u8], at: usize) -> Option<u32> {
     Some((at as u32 + 4).wrapping_add(off) & !1)
 }
 
+/// From a resolved [`BOOT_INIT_SIG`] hook `site` (`anchor+4`, the boot-status
+/// reload), follow the cold/warm-boot `bmi` at `anchor+8` to the convergence point
+/// and decode the 32-bit `bl <orig_init>` that sits there.
+///
+/// The `bmi` is a Thumb T1 conditional branch (`0xD4xx`) whose signed 8-bit
+/// immediate is a halfword count relative to `(anchor+8)+4`, so the convergence
+/// address is `conv = (anchor+8) + 4 + (simm8 << 1)`. On BU40N this resolves to
+/// `0x13d428`, the first instruction after the cold-boot bss/SRAM clear rejoins the
+/// warm path. Returns `(conv, orig_init)` — the detour site and the original init
+/// routine the boot stub tail-calls — or `None` when the instruction at `conv` is
+/// not a 32-bit Thumb `bl` (first halfword `0xF000..=0xF7FF`, second
+/// `0xF800..=0xFFFF`), so a build fails closed rather than mis-patching.
+fn boot_init_convergence(image: &[u8], site: usize) -> Option<(usize, u32)> {
+    let anchor = site.checked_sub(4)?;
+    let bmi_at = anchor + 8;
+    let bmi = u16::from_le_bytes([*image.get(bmi_at)?, *image.get(bmi_at + 1)?]);
+    if (bmi & 0xFF00) != 0xD400 {
+        return None; // not the expected cold/warm-boot `bmi`
+    }
+    let simm8 = (bmi & 0x00FF) as u8 as i8 as i32;
+    let conv = ((bmi_at as i32 + 4) + (simm8 << 1)) as usize;
+    // The convergence point MUST be a 32-bit Thumb `bl` (the original init call).
+    let h1 = u16::from_le_bytes([*image.get(conv)?, *image.get(conv + 1)?]);
+    let h2 = u16::from_le_bytes([*image.get(conv + 2)?, *image.get(conv + 3)?]);
+    if !(0xF000..=0xF7FF).contains(&h1) || !(0xF800..=0xFFFF).contains(&h2) {
+        return None;
+    }
+    let orig_init = thumb::decode_bl(image, conv)?;
+    Some((conv, orig_init))
+}
+
 /// Emit code writing the 32-bit register `src` big-endian into the reply buffer
 /// at byte offsets `base_off..base_off+4`, through the drive byte-writer held in
 /// **r7** (`writer(r0=offset, r1=byte)`). Uses r5 as scratch and preserves
@@ -1022,7 +1095,26 @@ impl Mt1959Engine {
     /// with the live media-gated flag and an in-image handler, and requiring
     /// exactly one whose handler lands on a real `push {…,lr}` prologue.
     pub fn find_live_record(&self, image: &[u8], opcode: u8) -> Result<CommandRecord> {
-        self.find_live_record_in(image, opcode, TABLE_LO, TABLE_HI)
+        // MT1959/JB8 dispatch window first. ORIGINAL-FIRST: the 91 images that resolve
+        // here never consult the fallback, so their emit stays byte-identical.
+        match self.find_live_record_in(image, opcode, TABLE_LO, TABLE_HI) {
+            Ok(r) => Ok(r),
+            Err(primary) => {
+                // JBC6 / older-MT1939 lineage (ASUS BC-12*, LG CH12/UH12NS40): the SCSI
+                // dispatch table keeps the SAME record format (opcode@0 / flags@1 /
+                // resv16@2==0 / handler@4, stride 8) but is relocated ABOVE the MT1959
+                // window (real table ~0x189000). Consult [`JBC6_TABLE_LO`]..[`JBC6_TABLE_HI`]
+                // ONLY after the primary misses; the same uniqueness/prologue predicate
+                // applies, so this cannot loosen the primary path. (RE: analysis/jbc6-dispatch.md.)
+                self.find_live_record_in(image, opcode, JBC6_TABLE_LO, JBC6_TABLE_HI)
+                    .map_err(|fallback| {
+                        anyhow!(
+                            "live 0x{opcode:02x} record: MT1959 window ({primary}); \
+                             JBC6 window ({fallback})"
+                        )
+                    })
+            }
+        }
     }
 
     /// [`Self::find_live_record`] over an explicit table window. The MT1959/JB8
@@ -1179,9 +1271,29 @@ impl Mt1959Engine {
     /// control-block base loaded for the `[rN,#0x28]` store is a `0x04..` literal,
     /// so the entry scan keeps only the `ldr r1,[pc]` that targets SRAM.
     pub fn find_response_commit(&self, image: &[u8]) -> Result<(u32, u32)> {
+        // MT1959/JB8 commit window first (ORIGINAL-FIRST: the 91 resolve here and never
+        // reach the fallback, so their emit is byte-identical). JBC6/older-MT1939 places
+        // the same commit routine (same three anchors) above 0xA0000 — consult that
+        // window only on a primary miss. (RE: analysis/jbc6-base-finders.md.)
+        match self.find_response_commit_in(image, 0x0009_0000, 0x000a_0000) {
+            Ok(r) => Ok(r),
+            Err(primary) => self
+                .find_response_commit_in(image, 0x000a_0000, 0x000b_0000)
+                .map_err(|jbc6| {
+                    anyhow!("response-commit: MT1959 window ({primary}); JBC6 window ({jbc6})")
+                }),
+        }
+    }
+
+    /// [`Self::find_response_commit`] over an explicit `[lo,hi)` code window.
+    pub fn find_response_commit_in(
+        &self,
+        image: &[u8],
+        lo: usize,
+        hi: usize,
+    ) -> Result<(u32, u32)> {
         const SRAM: std::ops::Range<u32> = 0x0200_0000..0x0200_2000;
-        let lo = 0x0009_0000usize;
-        let hi = 0x000a_0000usize.min(image.len().saturating_sub(4));
+        let hi = hi.min(image.len().saturating_sub(4));
         // `str r0,[rN,#0x28]`: opcode/imm/rt fixed, rn (bits 5:3) free.
         let is_str_28 = |hw: u16| (hw & 0xFFC7) == 0x6280;
         // `ldr rT,[pc,#imm]` for a specific rT.
@@ -1258,6 +1370,43 @@ impl Mt1959Engine {
                 "flash PROGRAM routine (prologue + mailbox 0x{FLASH_MAILBOX:08x} + \
                  controller 0x{FLASH_CONTROLLER:08x} + 0x01ff descriptor) matched {} \
                  candidate(s) (want exactly 1) — refusing to patch",
+                other.len()
+            ),
+        }
+    }
+
+    /// Locate the **NV block base** (the SAVE home) by the OEM region/RPC-2 record
+    /// SIGNATURE — no hardcoded flash offset. The record `00 04 05` sits at a fixed
+    /// sub-block offset `+0x4B0`, 16-byte aligned, followed by `0xFF` fill, with the
+    /// block head below it (`base..base+0x4B0`) blank — that head is freemkv's write
+    /// scratch. Returns the 4 KiB block base (`0x1EA000` on every corpus image, both
+    /// chips — proven 118/118 by the corpus NV scan). Because SAVE/RESET/boot all read
+    /// and write here, resolving it per-image (rather than trusting a constant) keeps
+    /// the foundation correct even on a re-laid-out or wrapped-then-dewrapped payload.
+    ///
+    /// Refuses (rather than guessing) unless EXACTLY ONE qualifying record exists in the
+    /// top 192 KiB of flash — the structural constraints (record bytes + `+0x4B0`
+    /// sub-offset + `0xFF` fill + a blank ≥0x4B0-byte head) yield a unique hit corpus-
+    /// wide.
+    pub fn find_nv_block(&self, image: &[u8]) -> Result<u32> {
+        const REC: [u8; 3] = [0x00, 0x04, 0x05]; // OEM region/RPC-2 record tag
+        const SUB: usize = 0x4B0; // record offset within its 4 KiB block
+        let lo = image.len().saturating_sub(0x3_0000); // NV lives in the top of flash
+        let hits: Vec<usize> = (lo..image.len().saturating_sub(16))
+            .filter(|&p| {
+                (p & 0xFFF) == SUB
+                    && p >= SUB
+                    && image[p..p + 3] == REC
+                    && image[p + 3..p + 16].iter().all(|&b| b == 0xFF)
+                    && image[p - SUB..p].iter().all(|&b| b == 0xFF)
+            })
+            .collect();
+        match hits.as_slice() {
+            [rec] => Ok((*rec as u32) & !0xFFF),
+            other => bail!(
+                "NV region record (00 04 05 at block+0x4b0 with a blank head) matched {} \
+                 candidate(s) in the top 192 KiB (want exactly 1) — refusing to resolve \
+                 SAVE home",
                 other.len()
             ),
         }
@@ -1809,6 +1958,15 @@ impl Mt1959Engine {
         // OEM flash PROGRAM routine, recovered per image (no hardcoded VA) — the
         // [`abi::Verb::FlashWrite`] probe `bl`s this.
         let flash_program = self.find_flash_program(image)?;
+        // SAVE home, signature-derived per image (no hardcoded offset). The diagnostic
+        // FlashWrite window is a compile-time bound; assert the resolved NV block agrees
+        // so SAVE's destination and that window can never drift apart.
+        let save_home = self.find_nv_block(image)?;
+        ensure!(
+            save_home >= FLASHWRITE_ALLOW_LO && save_home < FLASHWRITE_ALLOW_HI,
+            "resolved NV/SAVE block 0x{save_home:x} is outside the flash-write window \
+             0x{FLASHWRITE_ALLOW_LO:x}..0x{FLASHWRITE_ALLOW_HI:x}"
+        );
         let identity = identity_blob();
         let id_len = identity.len() as u8;
 
@@ -1816,6 +1974,9 @@ impl Mt1959Engine {
         let tail = a.label();
         let knock_ok = a.label();
         let not_set = a.label();
+        let not_reset = a.label();
+        let reset_flash = a.label();
+        let not_save = a.label();
         let clr = a.label();
         let clr_loop = a.label();
         let clrd = a.label();
@@ -1872,14 +2033,35 @@ impl Mt1959Engine {
         a.b(clr); // return a zeroed buffer
         a.bind(not_set);
 
-        // RESET: write STATE_PASSTHROUGH (0xFF) to every feature flag (0x01..=0x07).
+        // RESET: mode rides in the state slot cdb[6].
+        //   RESET_TO_OEM   (0xFF) → 0xFF-fill the flag table (slots 0..=NUM_FEATURES).
+        //   RESET_TO_FLASH (0x00) → reload the saved table from flash SAVE_HOME
+        //                           (blank flash = 0xFF = all-OEM, so this is the same
+        //                           result on a never-saved drive).
+        // Both fall through to clear → zeroed buffer.
         a.cmp_imm(4, abi::Verb::Reset as u8);
-        a.bne(clr); // not Reset → straight to clear (Get/DumpAll/Identity handled after)
+        a.bne(not_reset);
+        a.ldrb_imm(0, 3, abi::CDB_STATE as u16); // r0 = mode (cdb[6])
+        a.cmp_imm(0, abi::RESET_TO_OEM);
+        a.bne(reset_flash);
+        // RESET_TO_OEM: 0xFF to slots 0..=NUM_FEATURES (matches the boot default).
         a.ldr_lit(0, flag_base);
         a.movs_imm(1, abi::STATE_PASSTHROUGH);
-        for feat in 1..=NUM_FEATURES {
-            a.strb_imm(1, 0, feat as u16); // flag[feat] = 0xFF
+        for off in 0..=NUM_FEATURES {
+            a.strb_imm(1, 0, off as u16);
         }
+        a.b(clr);
+        // RESET_TO_FLASH: copy SAVE_LEN bytes from flash SAVE_HOME → flag table.
+        // Flash is XIP-mapped, so this is a plain memory read (no PROGRAM call).
+        a.bind(reset_flash);
+        a.ldr_lit(6, flag_base); // r6 = flag-table base (SRAM), callee-saved
+        a.ldr_lit(2, save_home); // r2 = flash source base (address to read from)
+        for off in 0..SAVE_LEN {
+            a.ldrb_imm(1, 2, off as u16); // r1 = flash[off]
+            a.strb_imm(1, 6, off as u16); // flag[off] = r1
+        }
+        a.b(clr);
+        a.bind(not_reset);
         // fall through to clear → zeroed buffer.
 
         // Clear CLEAR_LEN bytes so no stale buffer data leaks (all data verbs
@@ -1949,6 +2131,23 @@ impl Mt1959Engine {
         emit_be_word_to_response(&mut a, 4, 4);
         a.b(docommit);
         a.bind(not_flash);
+
+        // SAVE (0x0B): persist the live flag table verbatim to flash SAVE_HOME through
+        // the OEM PROGRAM routine. op=1 is the erase-aligned read-modify-write, so the
+        // 8-byte program in the blank head preserves the OEM region record at +0x4B0.
+        // Reply = PROGRAM status word (big-endian) at [0..4].
+        a.cmp_imm(4, abi::Verb::Save as u8);
+        a.bne(not_save);
+        a.ldr_lit(0, flag_base); // r0 = src: live flag table (SRAM)
+        a.ldr_lit(1, save_home); // r1 = dest flash offset
+        a.movs_imm(2, SAVE_LEN); // r2 = len (8 = slot0 + 7 features)
+        a.movs_imm(3, 1); // r3 = op=1 (erase-aligned RMW)
+        a.ldr_lit(5, flash_program | 1);
+        a.blx(5); // r0 = PROGRAM status word (r4-r11 preserved)
+        a.mov_reg(4, 0); // r4 = status (callee-saved; survives the reply writes)
+        emit_be_word_to_response(&mut a, 4, 0);
+        a.b(docommit);
+        a.bind(not_save);
 
         // GET: response byte 0 = flag[cdb[5]=feature].
         a.cmp_imm(4, abi::Verb::Get as u8);
@@ -2974,9 +3173,12 @@ impl Mt1959Engine {
     }
 
     /// The **always-on boot-init** trampoline — the mechanism that makes the
-    /// tri-state safe. Entered by a `bl` that replaces the MT1959 main-task
-    /// prologue's boot-status reload `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` (the 4
-    /// bytes at [`Self::find_boot_init`]'s site = [`BOOT_INIT_SIG`] `anchor+4`).
+    /// tri-state safe. Entered by a `bl` that replaces the cold/warm-boot
+    /// convergence `bl <orig_init>` (the 4 bytes at
+    /// [`boot_init_convergence`]'s `conv`, `0x13d428` on BU40N), i.e. the first
+    /// instruction both boot paths reach AFTER the cold-boot bss/SRAM clear. Patching
+    /// here (not the pre-clear reload at `anchor+4`) is what stops the clear from
+    /// wiping the `0xFF` flag table this stub writes.
     ///
     /// Under the tri-state, a flag value of `0x00` means **OFF** (actively disabled),
     /// but the drive's SRAM flag table reads all-`0x00` at power-on — which would
@@ -2988,32 +3190,47 @@ impl Mt1959Engine {
     /// feature-gated — it runs unconditionally on every boot.
     ///
     /// # Register / frame contract
-    /// The detour is a bare `bl`, and `lr` is already saved on the stack by the
-    /// prologue's own preceding `push {r4,r5,r6,lr}` ([`BOOT_INIT_SIG`] index 1), so
-    /// the `bl`'s clobber of `lr` is harmless and the stub returns to `site+4` via
-    /// `bx lr`. On entry `r0` holds the boot-status base pointer (from the prologue's
-    /// `ldr r0,[pc,#imm]`), which the replayed `ldr r0,[r0,#0x18]` needs; the stub
-    /// saves/restores both `r0` and its `r1` scratch (`push/pop {r0,r1}`) so the
-    /// continuation's `bmi` sees the exact post-`ldr`/`lsls` `r0` value it consumes.
-    /// No other register is touched.
-    fn build_boot_init(&self, flag_base: u32) -> Result<Vec<u8>> {
+    /// The detour replaces the original `bl <orig_init>`, so the stub must run
+    /// `orig_init` itself. It `push {r0,r1,r2,r3,lr}` to preserve everything
+    /// `orig_init` might read (it is an arg-less init in the boot sequence, but the
+    /// args are preserved to be safe) plus the return address, writes the flag table
+    /// (clobbering `r0`/`r1`), then `pop {r0,r1,r2,r3}` to restore the args and
+    /// tail-calls the original via `ldr r3,=orig_init|1; blx r3` (`r3` — the last,
+    /// least-likely arg — is the sole sacrificed scratch, which is harmless for an
+    /// arg-less callee, and `r0..r2` still carry their originals). `blx` reloads `lr`
+    /// with the address of the final `pop {pc}`, which returns to `conv+4` (the
+    /// instruction after the detoured call). The stub does NOT replay the boot-status
+    /// reload `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` — that stays in place at the old
+    /// `anchor+4` site, which is no longer touched.
+    fn build_boot_init(&self, flag_base: u32, orig_init: u32, save_home: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
-        a.push(0x0003); // push {r0,r1}  save the boot-status base ptr (r0) + scratch (r1)
+        a.push(0x010F); // push {r0,r1,r2,r3,lr}  preserve orig_init's args + return addr
         a.ldr_lit(0, flag_base); // r0 = &flag table (SRAM)
         a.movs_imm(1, abi::STATE_PASSTHROUGH); // r1 = 0xFF (OEM passthrough)
         for off in 0..=NUM_FEATURES {
             a.strb_imm(1, 0, off as u16); // flag[off] = 0xFF (slot 0 pad + features 1..=7)
         }
-        a.pop(0x0003); // pop {r0,r1}   restore r0 (boot-status base) + r1
-        a.raw16(0x6980); // replay: ldr  r0,[r0,#0x18]  (boot-status word)
-        a.raw16(0x0600); // replay: lsls r0,r0,#0x18    (r0 consumed by the continuation's bmi)
-        a.bx(14); // bx lr -> boot-init site+4 (main-task continuation)
+        // Load the persisted flag table over the 0xFF defaults so saved settings apply
+        // across a power cycle. Flash is XIP-mapped → a plain memory read. Blank flash
+        // (0xFF) == never-saved == all-OEM, so this is safe on a fresh drive: the copy
+        // just re-writes the same 0xFF. r0 (flag base) is still live from the fill.
+        a.ldr_lit(2, save_home); // r2 = flash source base
+        for off in 0..SAVE_LEN {
+            a.ldrb_imm(1, 2, off as u16); // r1 = flash[off]
+            a.strb_imm(1, 0, off as u16); // flag[off] = r1
+        }
+        a.pop(0x000F); // pop {r0,r1,r2,r3}   restore the args orig_init may read
+        a.ldr_lit(3, orig_init | 1); // r3 = orig_init (Thumb bit set for blx)
+        a.blx(3); // tail-call orig_init; lr := &(pop {pc})
+        a.pop(0x0100); // pop {pc}   return to conv+4 (after the detoured bl)
         a.finish()
     }
 
-    /// Install the always-on boot-init hook: find the site, verify the replaced
-    /// bytes, inject [`Self::build_boot_init`] into covered free space, and write the
-    /// detour `bl`. Returns `(site, stub_va)`.
+    /// Install the always-on boot-init hook: find the anchor, follow its `bmi` to the
+    /// cold/warm-boot convergence `bl <orig_init>`, inject [`Self::build_boot_init`]
+    /// into covered free space, and repoint that `bl` at the stub. Returns
+    /// `(conv, stub_va)` — the convergence detour site (the reported `boot_init_site`)
+    /// and the stub address.
     ///
     /// **Fail-closed** on both no-site and unconfirmed-site:
     /// * `None` from [`Self::find_boot_init`] (prologue is neither known shape) BAILS
@@ -3046,23 +3263,27 @@ impl Mt1959Engine {
                  all-0x00 would disable every feature at power-on."
             ),
         };
-        // Verify the two bytes we replace are exactly `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`
-        // so a mis-anchored site refuses rather than corrupting the prologue.
-        let i0 = u16::from_le_bytes([image[site], image[site + 1]]);
-        let i1 = u16::from_le_bytes([image[site + 2], image[site + 3]]);
-        if i0 != 0x6980 || i1 != 0x0600 {
-            bail!(
-                "boot-init reload (ldr r0,[r0,#0x18]; lsls r0,r0,#0x18) not at 0x{site:x} \
-                 (got 0x{i0:04x} 0x{i1:04x})"
-            );
-        }
-        let bytes = self.build_boot_init(flag_base)?;
+        // Follow the anchor's cold/warm-boot `bmi` to the convergence `bl <orig_init>`
+        // — the first instruction after the cold path rejoins, which runs AFTER the
+        // SRAM clear (and on warm boot). Detouring here, not the pre-clear reload at
+        // `anchor+4`, is what keeps the stub's 0xFF flag table from being wiped.
+        // `boot_init_convergence` also verifies the 4 bytes at `conv` decode as that
+        // `bl` (fail-closed / boot hook unshipped otherwise, rather than guessing).
+        let (conv, orig_init) = boot_init_convergence(image, site).ok_or_else(|| {
+            anyhow!(
+                "boot-init convergence `bl <orig_init>` not resolvable from anchor at 0x{site:x} \
+                 (the bmi target is not a 32-bit Thumb bl) — refusing to ship an unverified boot \
+                 hook rather than mis-patch"
+            )
+        })?;
+        let save_home = self.find_nv_block(image)?;
+        let bytes = self.build_boot_init(flag_base, orig_init, save_home)?;
         let stub_va = self.free_space(out, bytes.len() + 16)?;
-        let bl = thumb::encode_bl(site, stub_va)
+        let bl = thumb::encode_bl(conv, stub_va)
             .ok_or_else(|| anyhow!("boot-init detour `bl` out of range"))?;
         thumb::write(out, stub_va as usize, &bytes);
-        thumb::write(out, site, &bl);
-        Ok((site as u32, stub_va))
+        thumb::write(out, conv, &bl);
+        Ok((conv as u32, stub_va))
     }
 
     /// Full freemkv build: prove the find, inject the handler into covered free
@@ -3072,21 +3293,23 @@ impl Mt1959Engine {
     ///
     /// [`Engine`]: super::Engine
     pub fn build_report(&self, image: &[u8]) -> Result<CreateReport> {
+        // ---- BASE (mandatory) — the verb handler + boot hook + save/reset need these;
+        // a miss means this image cannot carry a freemkv base, so refuse.
         let scanner_entry = self.find_scanner_entry(image)?;
         let cdb_base = self.find_cdb_base(image)?;
         let sense_setter = self.sense_setter(image)?;
         let record = self.find_live_record(image, abi::READ_BUFFER_OPCODE)?;
-        // Grounded VID (0x03) facts, also proven here so a build fails loudly if
-        // any is missing/ambiguous rather than shipping a broken handler.
-        let (vid_producer, vid_out_buf) = self.find_vid_producer(image)?;
-        let vid_gate_setter = self.find_vid_gate_setter(image)?;
-        // Bus Encryption (0x04) hook point — proven locatable and unique (see report).
-        let setdiscmode = self.find_setdiscmode(image)?;
-        let de_off = self.find_de_byte(image)?;
-        // The build-time SRAM scanner independently derives a candidate free cell;
-        // retained for AUDIT only — it is unsound (picks a live-in-use cell), so it
-        // is NOT used as the flag base. See FLAG_TABLE_BASE.
-        let free_sram_cell = self.find_free_sram_cell(image)?;
+        // ---- FEATURE facts (best-effort) — these are per-feature report anchors, NOT
+        // required by the base handler. A miss = that feature is unavailable on this
+        // image (0/None), advertised as such; it must never fail the base build.
+        // (BASE/GATE DECOUPLING: was hard-`?`, which made a single drifted feature
+        // signature refuse an otherwise-perfect base — e.g. the JBC6 lineage.)
+        let (vid_producer, vid_out_buf) = self.find_vid_producer(image).unwrap_or((0, 0));
+        let vid_gate_setter = self.find_vid_gate_setter(image).unwrap_or(0);
+        let setdiscmode = self.find_setdiscmode(image).unwrap_or(0);
+        let de_off = self.find_de_byte(image).ok(); // DowngradeEnable feature (optional)
+                                                    // AUDIT-only candidate cell (unsound; never used as the flag base) — best-effort.
+        let free_sram_cell = self.find_free_sram_cell(image).unwrap_or(0);
         // Flag-table base actually used by the emitted code: the validated 204-byte
         // free hole (chip constant, hardware-proven writable+free across 24 images).
         let flag_base = FLAG_TABLE_BASE;
@@ -3135,18 +3358,31 @@ impl Mt1959Engine {
         // and busenc/uhd/hrl/bd are graceful (unwired = 0/empty on unknown shapes),
         // exactly as `modify` treats them — so `create` no longer diverges on the
         // NB/V5 images the old inline `find_ake_gate` + hard-`?` busenc path failed.
-        let (speed_gate, speed_stub_va) = self.emit_speed(image, &mut out, flag_base)?;
-        let (region_emitter, region_stub_va) = self.emit_region(image, &mut out, flag_base)?;
-        let f = self.emit_rawread(image, &mut out, flag_base)?;
+        // BASE/GATE DECOUPLING: each feature emit is best-effort. A miss leaves the
+        // feature unwired (0) and off the advertised set, but the base image still
+        // ships. On the fully-resolving base (BU40N + the 91) every emit succeeds, so
+        // the free_space order and output are byte-identical (golden KAT unaffected).
+        let (speed_gate, speed_stub_va) = self
+            .emit_speed(image, &mut out, flag_base)
+            .unwrap_or((0, 0));
+        let (region_emitter, region_stub_va) = self
+            .emit_region(image, &mut out, flag_base)
+            .unwrap_or((0, 0));
+        let f = self
+            .emit_rawread(image, &mut out, flag_base)
+            .unwrap_or_default();
 
         // HRL wipe-once is destructive and gated behind HRL_WIPE_ARMED (default
         // off) — its record codegen is `hrl_valid_empty_record`; no image ships the
         // wipe detour until a hardware-validated confirmation flips the constant.
         let _hrl_wipe_armed = HRL_WIPE_ARMED;
 
-        // Downgrade-enable (DE) byte: a build step (not a toggle) — write 0xDE
-        // unconditionally at the identity-page slot. Idempotent on already-DE images.
-        out[de_off as usize] = 0xDE;
+        // Downgrade-enable (DE) byte: write 0xDE at the identity-page slot when the
+        // slot resolved (idempotent on already-DE images). Best-effort: an image whose
+        // identity page isn't located just doesn't get DE — the base still ships.
+        if let Some(off) = de_off {
+            out[off as usize] = 0xDE;
+        }
 
         // repoint handler pointer only; flags stay exactly as OEM shipped.
         let table = CommandTable {
@@ -3196,7 +3432,7 @@ impl Mt1959Engine {
             bd_stub_va: f.bd_stub_va,
             hrl_sites: f.hrl_sites,
             hrl_stub_va: f.hrl_stub_va,
-            de_off,
+            de_off: de_off.unwrap_or(0),
             flag_base,
             free_sram_cell,
         })
