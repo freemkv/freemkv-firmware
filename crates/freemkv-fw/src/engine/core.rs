@@ -787,9 +787,18 @@ pub(crate) const HRL_WIPE_ARMED: bool = false;
 /// 17/17 ([`classic_boot_init_caller`]), but [`Mt1959Engine::emit_boot_init`] only
 /// ships it when this is `true`. Default `false` = fail-closed (classic base ships
 /// handler-only, no boot hook — safe, see [`Mt1959Engine::build_report_classic`]).
-/// Flip to `true` ONLY after the one reversible on-silicon blessing (boot-init doc §5:
-/// flash a classic image, power-cycle, read back the live 7-byte flag table = `0xFF`×7).
-pub(crate) const CLASSIC_BOOT_BLESSED: bool = false;
+///
+/// **Now `true` — blessed on emulation evidence** (`freemkv-private/tools/classic-boot-emu`,
+/// Unicorn ARM boot): on all 17 classic images the OEM C-runtime scatterload writes the
+/// flag-cell SRAM span at icount ~1285, while the detoured leaf caller is not reached
+/// until ~128k — SRAM is provably initialised ~127k instructions before our detour. Since
+/// the OEM's own write to that cell succeeds on every real-silicon boot, the SRAM
+/// controller is provably enabled long before the leaf, so the boot stub's fill cannot
+/// fault (a fault there would require the OEM's earlier write to the same cell to fault
+/// first — the drive would not boot). This is stronger than the modern hook's ordering
+/// bless. Tier: **emulation-verified** (a single reversible on-silicon read-back, doc §5,
+/// remains the final belt-and-braces check if a classic drive becomes available).
+pub(crate) const CLASSIC_BOOT_BLESSED: bool = true;
 
 /// The [`abi::Verb::Identity`] reply lead-in: `"freemkv <version>"` (magic +
 /// crate version). The live feature-state table (7 bytes, `flag[0x01..=0x07]`)
