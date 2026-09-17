@@ -995,8 +995,10 @@ pub(crate) fn decode_bl_target(image: &[u8], at: usize) -> Option<u32> {
 /// `0x13d428`, the first instruction after the cold-boot bss/SRAM clear rejoins the
 /// warm path. Returns `(conv, orig_init)` — the detour site and the original init
 /// routine the boot stub tail-calls — or `None` when the instruction at `conv` is
-/// not a 32-bit Thumb `bl` (first halfword `0xF000..=0xF7FF`, second
-/// `0xF800..=0xFFFF`), so a build fails closed rather than mis-patching.
+/// not a 32-bit Thumb `bl` (first halfword `(h1 & 0xF800) == 0xF000`, second
+/// `(h2 & 0xD000) == 0xD000` — the full ARMv7-M BL(T1) encoding, matching
+/// [`decode_bl_target`]/[`thumb::decode_bl`]), so a build fails closed rather
+/// than mis-patching.
 pub(crate) fn boot_init_convergence(image: &[u8], site: usize) -> Option<(usize, u32)> {
     let anchor = site.checked_sub(4)?;
     let bmi_at = anchor + 8;
@@ -1009,7 +1011,10 @@ pub(crate) fn boot_init_convergence(image: &[u8], site: usize) -> Option<(usize,
     // The convergence point MUST be a 32-bit Thumb `bl` (the original init call).
     let h1 = u16::from_le_bytes([*image.get(conv)?, *image.get(conv + 1)?]);
     let h2 = u16::from_le_bytes([*image.get(conv + 2)?, *image.get(conv + 3)?]);
-    if !(0xF000..=0xF7FF).contains(&h1) || !(0xF800..=0xFFFF).contains(&h2) {
+    // Full Thumb-2 BL(T1) encoding: h1 = 1111 0S imm10, h2 = 11 J1 1 J2 imm11.
+    // The narrow `0xF800..=0xFFFF` on h2 only accepted J1=1,J2=1 and wrongly
+    // rejected valid BLs with J1=0 (0xD000..=0xDFFF) or J2=0 (0xF000..=0xF7FF).
+    if (h1 & 0xF800) != 0xF000 || (h2 & 0xD000) != 0xD000 {
         return None;
     }
     let orig_init = thumb::decode_bl(image, conv)?;
@@ -1121,29 +1126,56 @@ impl Mt1959Engine {
         ];
         let lo = 0x0001_8000usize.min(image.len());
         let hi = 0x0002_0000usize.min(image.len());
+        // Collect every DISTINCT scanner prologue whose 0x40-byte window carries the
+        // full cmp chain, then demand exactly one — the "prove it or refuse" contract
+        // every other finder in this file uses. Adjacent overlapping windows resolve to
+        // the same push-lr and collapse; two genuinely different functions each carrying
+        // the chain would be ambiguous and must refuse rather than silently pick the
+        // first (which may be an incidental literal-pool/switch-table match, not the
+        // real SCSI scanner).
+        let mut prologues: Vec<u32> = Vec::new();
         for base in lo..hi {
             let end = (base + 0x40).min(image.len());
             let w = &image[base..end];
-            if pats.iter().all(|p| w.windows(2).any(|c| c == p)) {
-                // walk back to the function's push {..,lr} (0xB5xx)
-                let mut p = base & !1;
-                for _ in 0..0x80 {
-                    if p < 2 {
-                        break;
-                    }
-                    let hw = u16::from_le_bytes([image[p], image[p + 1]]);
-                    if (hw & 0xFF00) == 0xB500 {
-                        return Ok(p as u32);
-                    }
-                    p -= 2;
+            if !pats.iter().all(|p| w.windows(2).any(|c| c == p)) {
+                continue;
+            }
+            // walk back to the function's push {..,lr} (0xB5xx)
+            let mut p = base & !1;
+            let mut found = None;
+            for _ in 0..0x80 {
+                if p < 2 {
+                    break;
                 }
-                bail!("scanner mode-gate found near 0x{base:x} but no push-lr prologue before it");
+                let hw = u16::from_le_bytes([image[p], image[p + 1]]);
+                if (hw & 0xFF00) == 0xB500 {
+                    found = Some(p as u32);
+                    break;
+                }
+                p -= 2;
+            }
+            match found {
+                Some(pr) if !prologues.contains(&pr) => prologues.push(pr),
+                Some(_) => {}
+                None => {
+                    bail!(
+                        "scanner mode-gate found near 0x{base:x} but no push-lr prologue before it"
+                    )
+                }
             }
         }
-        bail!(
-            "MT1959 scanner signature (READ BUFFER mode-gate cmp chain) not found — cannot prove \
-             the dispatch record format; refusing to patch"
-        )
+        match prologues.as_slice() {
+            [one] => Ok(*one),
+            [] => bail!(
+                "MT1959 scanner signature (READ BUFFER mode-gate cmp chain) not found — cannot \
+                 prove the dispatch record format; refusing to patch"
+            ),
+            many => bail!(
+                "MT1959 scanner signature resolved {} distinct prologues in [0x{lo:x},0x{hi:x}) \
+                 (want exactly 1) — ambiguous, refusing to patch",
+                many.len()
+            ),
+        }
     }
 
     /// The CDB base the scanner loads to read the incoming command: the literal
@@ -1495,8 +1527,15 @@ impl Mt1959Engine {
     /// literal (`0x02000000..0x02002000`, 4-aligned), and return the value loaded by
     /// **≥2 distinct helpers** — unique corpus-wide. Refuses otherwise.
     pub fn find_nv_dram_base(&self, image: &[u8]) -> Result<u32> {
-        const SRAM: std::ops::Range<u32> = 0x0200_0000..0x0200_2000;
         let program = self.find_flash_program(image)? as usize;
+        self.find_nv_dram_base_from(image, program)
+    }
+
+    /// [`Self::find_nv_dram_base`] with the PROGRAM anchor already resolved by the
+    /// caller — avoids a second full-image `find_flash_program` scan when
+    /// [`Self::build_handler`] has one in hand.
+    fn find_nv_dram_base_from(&self, image: &[u8], program: usize) -> Result<u32> {
+        const SRAM: std::ops::Range<u32> = 0x0200_0000..0x0200_2000;
         // Distinct `bl` targets within the PROGRAM body (op=1 RMW calls its copy helpers).
         let mut targets: Vec<usize> = Vec::new();
         let end = (program + 0x260).min(image.len().saturating_sub(4));
@@ -2136,7 +2175,8 @@ impl Mt1959Engine {
         let save_home = self.find_nv_block(image)?;
         // Flash-write staging base pointer, signature-derived per image (MT1959 0x02000C78,
         // but 7 distinct values across MT1939 — a constant would corrupt every MT1939 SAVE).
-        let nv_dram_base_ptr = self.find_nv_dram_base(image)?;
+        // Reuse the PROGRAM anchor already resolved above (no second full-image scan).
+        let nv_dram_base_ptr = self.find_nv_dram_base_from(image, flash_program as usize)?;
         ensure!(
             (FLASHWRITE_ALLOW_LO..FLASHWRITE_ALLOW_HI).contains(&save_home),
             "resolved NV/SAVE block 0x{save_home:x} is outside the flash-write window \
@@ -2794,6 +2834,12 @@ impl Mt1959Engine {
     /// reload before returning, so a mis-anchored match refuses rather than patches.
     pub(crate) fn uhd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
         let anchor = self.find_uhd_classifier(image)? as usize;
+        // find_masked_all only guarantees the signature span (<=20 bytes) is in
+        // bounds; the version-compare arm indexes arm C at anchor+0x16. Refuse a
+        // match too close to EOF rather than panic on a truncated image.
+        if anchor + 0x18 > image.len() {
+            bail!("UHD classifier matched within 0x18 of image end (0x{anchor:x}) — truncated image, refusing");
+        }
         let head = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
         // The finder returns the head of whichever variant resolved. `push {r0-r3}`
         // (0xB40F) => the byte-extraction prologue (primary); `cmp r0,#0x63` (0x2863)
@@ -3010,6 +3056,12 @@ impl Mt1959Engine {
     ///   [`Self::build_bd_stub_ver`], jumping to the deny at `anchor+0x40` on refuse.
     pub(crate) fn bd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
         let anchor = self.find_bd_gate(image)? as usize;
+        // find_masked_all only guarantees the signature span (<=18 bytes) is in
+        // bounds; both arms index further (up to the ver-gate deny head at
+        // anchor+0x40). Refuse a match too close to EOF rather than panic.
+        if anchor + (BD_GATE_VER_DENY_OFF as usize) + 2 > image.len() {
+            bail!("BD gate matched within 0x42 of image end (0x{anchor:x}) — truncated image, refusing");
+        }
         let head = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
         if head == 0x2801 {
             // Explicit REPORT KEY gate: mode-0 class check at anchor+16.
