@@ -3287,7 +3287,11 @@ impl Mt1959Engine {
         // a miss means this image cannot carry a freemkv base, so refuse.
         let scanner_entry = self.find_scanner_entry(image)?;
         let cdb_base = self.find_cdb_base(image)?;
-        let sense_setter = self.sense_setter(image)?;
+        // sense_setter is a REPORT anchor only — build_handler never uses it, and the
+        // classic scanner raises sense inline (no movs r2/r1/r0 + bl triple), so its
+        // modern shape legitimately misses on classic. Best-effort (0 when absent) so
+        // it never blocks the base; byte-identical on every path (emit ignores it).
+        let sense_setter = self.sense_setter(image).unwrap_or(0);
         let record = self.find_live_record(image, abi::READ_BUFFER_OPCODE)?;
         // ---- FEATURE facts (best-effort) — these are per-feature report anchors, NOT
         // required by the base handler. A miss = that feature is unavailable on this
