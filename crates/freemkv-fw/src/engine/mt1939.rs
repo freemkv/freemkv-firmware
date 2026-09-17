@@ -74,6 +74,80 @@ pub(crate) const AKE_GATE_SIG_CLASSIC: &[(u16, u16)] = &[
     (0xF000, 0xF800), // bl   set_agid_state
 ];
 
+/// Classic-generation OEM AACS opcode-`0x45` (**Read Data Key**) arm — the in-transit
+/// bus-encryption key-prog path, and the classic analogue of the modern
+/// [`super::core::AACS45_ARM_SIG_B`]. The arm BODY is byte-shape-identical to the
+/// modern B-shape (`bl <key-prog>; movs r0,#6; muls r0,r4,r0; ldr r1,[pc]; ldrh
+/// r0,[r1,r0]; str r0,[sp,#slot]`); the ONE distinguishing byte is the final spill
+/// slot — classic frames spill the read-data-key halfword to `[sp,#0x1c]` (`0x9007`),
+/// where the modern desktop fleet uses `#0x24` and the BD-combo drives `#0x20`. Pinning
+/// `0x9007` makes this signature match **only** the classic generation (measured: unique
+/// on all 17 MT1939-classic images, `0x9a382`-class arm at `~0x9c280`; **zero** matches
+/// on every modern MT1959 / combo image), so the modern finder and this one never
+/// cross-wire. The match offset IS the arm's leading `bl` (the detour site); its target
+/// is the OEM key-prog primitive the injected stub replays.
+///
+/// Disasm proof (3 of 17): `BH16NS40-NS50 @0x9c280`, `BH40N @0x9c002`,
+/// `BE14NU40 @0x9b942` — all `bl <key-prog>; movs r0,#6; muls r0,r4,r0; ldr r1,[pc];
+/// ldrh r0,[r1,r0]; str r0,[sp,#0x1c]`.
+pub(crate) const AACS45_ARM_SIG_CLASSIC: &[(u16, u16)] = &[
+    (0xF000, 0xF800), // bl <key-prog>   hi   ← match = arm entry / detour site
+    (0xF800, 0xF800), //                 lo
+    (0x2006, 0xFFFF), // movs r0,#6
+    (0x4360, 0xFFFF), // muls r0,r4,r0
+    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]
+    (0x5A08, 0xFFFF), // ldrh r0,[r1,r0]
+    (0x9007, 0xFFFF), // str  r0,[sp,#0x1c]   (classic frame slot — generation marker)
+];
+
+/// Signature of the **classic**-generation flash-resident Host-Revocation-List
+/// (HRL) lookup routine — the classic-codegen analogue of [`super::core::HRL_LOOKUP_SIG`].
+///
+/// The classic AACS cert path checks host revocation with the SAME algorithm as
+/// modern (range-lookup over 8-byte HRL records; returns `1`=host revoked,
+/// `2`=blank/`0xFFFF` sentinel, `0`=clean), and the routine's first **nine**
+/// halfwords are byte-identical to the modern body (`push {r0,r1,r4-r7,lr}; sub
+/// sp,#0xc; ldr r0,[sp,#0xc]; movs r4,r1; bl <count-reader>; movs r7,r0; movs
+/// r0,r4; bl <helper>; str r0,[sp,#8]`). It then DIVERGES: where modern does `adds
+/// r0,r4,#4; lsls r1,r0,#8; ldr r0,[pc,…]` the classic scheduler emits `ldr
+/// r1,[pc,…]; adds r0,r4,#4; ldr r2,[r1]; lsls r0,r0,#8; …` — a different
+/// flash-address-translate order — so [`super::core::HRL_LOOKUP_SIG`] (which pins
+/// modern's 10th halfword `1D20`) matches **0×** on every classic image. This
+/// signature carries the shared prologue plus that classic continuation through the
+/// BE-16 count read (`ldr r2,[r1]; lsls r0,r0,#8; lsrs r0,r0,#8; adds r0,r0,r2;
+/// ldrb r0,[r0]; mov r3,sp; strb r0,[r3,#5]`), masking only the two body `bl`
+/// displacements and the `ldr r1,[pc]` `imm8`.
+///
+/// **Proven UNIQUE (n==1) on every one of the 17 classic images** and **0× on all
+/// 98 non-classic corpus images** — reversed from `STOCK_LG_BH16NS40` and verified
+/// against the capstone traces of BE14NU40 1.00/1.01, BH14NS40, BH16NS40-NS50,
+/// BH40N and WH14/16NS40-NS50. The cert path calls it and tests `cmp r0,#0; bne
+/// <revoke>`; the classic revoke target carries the OEM 6F-deny head `ldrb
+/// r0,[r5,#2]; cmp r0,#0; bne …; movs r0,#0x6f` (register `r5`, i.e. `0x78A8` — the
+/// modern head is `r4`/`0x78A0`). Consumed by [`Mt1959Engine::emit_hrl_classic`].
+pub(crate) const HRL_LOOKUP_SIG_CLASSIC: &[(u16, u16)] = &[
+    (0xB5F3, 0xFFFF), // push {r0,r1,r4,r5,r6,r7,lr}
+    (0xB083, 0xFFFF), // sub  sp,#0xc
+    (0x9803, 0xFFFF), // ldr  r0,[sp,#0xc]
+    (0x000C, 0xFFFF), // movs r4,r1
+    (0xF000, 0xF800), // bl   <count-reader>  hi
+    (0xF800, 0xF800), //                      lo
+    (0x0007, 0xFFFF), // movs r7,r0
+    (0x0020, 0xFFFF), // movs r0,r4
+    (0xF000, 0xF800), // bl   <helper>        hi
+    (0xF800, 0xF800), //                      lo
+    (0x9002, 0xFFFF), // str  r0,[sp,#8]
+    (0x4900, 0xF800), // ldr  r1,[pc,#imm8]   (classic divergence: HRL base cell)
+    (0x1D20, 0xFFFF), // adds r0,r4,#4
+    (0x680A, 0xFFFF), // ldr  r2,[r1]
+    (0x0200, 0xFFFF), // lsls r0,r0,#8
+    (0x0A00, 0xFFFF), // lsrs r0,r0,#8
+    (0x1880, 0xFFFF), // adds r0,r0,r2
+    (0x7800, 0xFFFF), // ldrb r0,[r0]
+    (0x466B, 0xFFFF), // mov  r3,sp
+    (0x7158, 0xFFFF), // strb r0,[r3,#5]
+];
+
 /// The MT1939 platform engine.
 pub struct Mt1939Engine;
 

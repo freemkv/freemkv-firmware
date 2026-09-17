@@ -497,11 +497,13 @@ pub(crate) const SETDISCMODE_SIG: &[(u16, u16)] = &[
 /// `bl <key-prog>; movs r0,#6; muls r0,r4,r0; ldr r1,[pc,#imm]; ldrh r0,[r1,r0];
 /// str r0,[sp,#0x24]`, with only the `bl`/`ldr` immediates and a one-op reordering
 /// (`ldr r1,[pc]` before vs after `muls`) distinguishing two variants. Both variants
-/// are matched (`_A` = BU40N/notebook order, `_B` = BH/WH desktop order); each is
-/// proven UNIQUE per image and each image matches exactly ONE (A xor B) across the
-/// owned desktop + notebook MT1959 fleet (JB8/MT1939-classic images also match `_B`
-/// but never reach this finder — their AKE gate is absent, so `ake_detour` bails
-/// first, leaving `04 03` unwired, which is the intended MT1939 = unsupported result).
+/// are matched (`_A` = BU40N/notebook order, `_B` = BH/WH desktop + BD-combo order);
+/// each is proven UNIQUE per image and each image matches exactly ONE (A xor B) across
+/// the owned desktop + notebook + BD-combo MT1959 fleet. MT1939-**classic** images
+/// carry the same arm body but spill to frame slot `#0x1c` (not `#0x20`/`#0x24`), so
+/// they do NOT match `_A`/`_B` — the classic generation has its own generation-scoped
+/// signature + detour (`AACS45_ARM_SIG_CLASSIC` / `emit_busenc_classic`), keeping this
+/// modern finder from ever wiring a classic image with the modern bus register.
 ///
 /// The match offset IS the arm's leading `bl` (the detour site); the `bl`'s target
 /// (the OEM key-prog primitive) is decoded and replayed by the stub. Register/bit for
@@ -521,6 +523,23 @@ pub(crate) const AACS45_ARM_SIG_A: &[(u16, u16)] = &[
 /// BH/WH16NS60 / BE16NU50 / ASUS desktop variant of [`AACS45_ARM_SIG_A`] — same arm,
 /// `ldr r1,[pc]` and `muls` reordered and no `adds r1,#0xc`. Tried after `_A` so the
 /// BU40N KAT base stays byte-identical (its arm matches `_A`).
+///
+/// The final `str r0,[sp,#slot]` spills the read-data-key halfword to the arm's stack
+/// frame; the slot is a *frame-layout* detail, not part of the arm's identity. Two
+/// frame layouts occur across the B-shape fleet, so the slot is masked to both:
+///   * `#0x24` (`0x9009`) — the desktop BD-writer fleet (BH/WH16NS60 / BE16NU50 / …).
+///   * `#0x20` (`0x9008`) — the BD-read/DVD-write **combo** drives (BC-12B1ST /
+///     BC-12D2HT / CH12NS40 / UH12NS40), whose AACS block is relocated ~`+0x2b000`
+///     and whose slightly larger prologue frame shifts this spill by one word. Their
+///     arm body is otherwise byte-identical (`bl <key-prog>; movs r0,#6; muls r0,r4,r0;
+///     ldr r1,[pc]; ldrh r0,[r1,r0]`), so before this the combos matched 0× and Bus
+///     was mis-reported a genuine miss (measured: 8 combo images, arm at ~`0xa03b8`).
+///
+/// Mask `0xFFFE` accepts `#0x20`/`#0x24` but NOT the MT1939-**classic** slot `#0x1c`
+/// (`0x9007`) — the classic arm has its own generation-scoped signature and detour
+/// (see `AACS45_ARM_SIG_CLASSIC`), so this modern finder must never wire it.
+/// Verified: the fix adds exactly the 8 combos, changes no already-resolving image's
+/// match site, and matches 0 classic images (full-corpus measured).
 pub(crate) const AACS45_ARM_SIG_B: &[(u16, u16)] = &[
     (0xF000, 0xF800), // bl <key-prog>   hi   ← match = arm entry / detour site
     (0xF800, 0xF800), //                 lo
@@ -528,7 +547,7 @@ pub(crate) const AACS45_ARM_SIG_B: &[(u16, u16)] = &[
     (0x4360, 0xFFFF), // muls r0,r4,r0
     (0x4900, 0xFF00), // ldr  r1,[pc,#imm]
     (0x5A08, 0xFFFF), // ldrh r0,[r1,r0]
-    (0x9009, 0xFFFF), // str  r0,[sp,#0x24]
+    (0x9008, 0xFFFE), // str  r0,[sp,#0x20|0x24]  (frame slot; combos spill to #0x20)
 ];
 
 /// MMIO control register for the drive-side AACS **bus-encryption** stage on the
