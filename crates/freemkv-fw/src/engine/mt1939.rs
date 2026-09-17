@@ -110,25 +110,15 @@ pub(crate) fn masked_matches(image: &[u8], sig: &[(u16, u16)], lo: usize, hi: us
     hits
 }
 
-/// Classic AACS producer window the VID/AKE gates live in (engine-scope §3).
-const CLASSIC_AACS_LO: usize = 0x17_0000;
-const CLASSIC_AACS_HI: usize = 0x18_0000;
-
 /// Locate the classic-generation raw-read levers' anchors (VID gate + AKE gate),
 /// each required unique. Returns the two offsets when both are cleanly present.
+/// Full-image scan (de-hardcoded): the classic VID/AKE gates are unique image-wide
+/// on all 17 classic images, but a fixed 0x170000..0x180000 window missed the ones
+/// whose AACS block is relocated (BH16NS40 ~0x139k, BE14NU40 1.01 ~0x180640). The
+/// unique-match guard below keeps it safe.
 fn classic_rawread_anchors(image: &[u8]) -> Option<(u32, u32)> {
-    let vid = masked_matches(
-        image,
-        VID_GATE_SIG_CLASSIC,
-        CLASSIC_AACS_LO,
-        CLASSIC_AACS_HI,
-    );
-    let ake = masked_matches(
-        image,
-        AKE_GATE_SIG_CLASSIC,
-        CLASSIC_AACS_LO,
-        CLASSIC_AACS_HI,
-    );
+    let vid = masked_matches(image, VID_GATE_SIG_CLASSIC, 0, image.len());
+    let ake = masked_matches(image, AKE_GATE_SIG_CLASSIC, 0, image.len());
     match (vid.as_slice(), ake.as_slice()) {
         ([v], [a]) => Some((*v as u32, *a as u32)),
         _ => None,
