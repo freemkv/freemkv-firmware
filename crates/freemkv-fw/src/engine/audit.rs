@@ -13,8 +13,8 @@
 //! finder anchor addresses — those are where a signature *matched*, not where the
 //! `bl` was written, which is why a by-hand anchor check is misleading.
 
+use crate::engine::core::is_freemkv_patched;
 use crate::engine::lever::{LeverId, LeverOutcome, ModifyReport};
-use crate::engine::mt1959_build::is_freemkv_patched;
 use crate::thumb;
 use freemkv_flash::cmac;
 
