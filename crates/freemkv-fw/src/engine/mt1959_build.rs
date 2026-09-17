@@ -94,17 +94,11 @@ const CHAIN_FLAG: u8 = 0x04;
 const TERM_FLAG: u8 = 0x03;
 /// Record stride in bytes.
 const STRIDE: usize = 8;
-/// Window the dispatch table is searched within.
+/// Low bound of the MT1959 dispatch-table search window; also the upper bound of
+/// the injected-code free-space search. The full per-lineage dispatch/commit
+/// windows live in [`super::profile`] (data, consumed by `find_live_record` /
+/// `find_response_commit`).
 const TABLE_LO: usize = 0x0014_0000;
-const TABLE_HI: usize = 0x0016_0000;
-
-/// JBC6 / older-MT1939 dispatch-table window. Same record format as the MT1959
-/// table, relocated above [`TABLE_HI`] (real table ~0x189000 on ASUS BC-12* / LG
-/// CH12/UH12NS40). Consulted by [`Mt1959Engine::find_live_record`] ONLY as an
-/// original-first fallback after the MT1959 window misses. (RE: analysis/jbc6-dispatch.md.)
-const JBC6_TABLE_LO: usize = 0x0018_0000;
-const JBC6_TABLE_HI: usize = 0x0019_0000;
-const _: () = assert!(JBC6_TABLE_LO >= TABLE_HI && JBC6_TABLE_LO < JBC6_TABLE_HI);
 /// Minimum contiguous valid records to treat a byte range as a real table run.
 const MIN_RUN: usize = 8;
 /// Where injected code may live (past the loader); the scanner region and
@@ -1095,30 +1089,25 @@ impl Mt1959Engine {
     /// with the live media-gated flag and an in-image handler, and requiring
     /// exactly one whose handler lands on a real `push {…,lr}` prologue.
     pub fn find_live_record(&self, image: &[u8], opcode: u8) -> Result<CommandRecord> {
-        // MT1959/JB8 dispatch window first. ORIGINAL-FIRST: the 91 images that resolve
-        // here never consult the fallback, so their emit stays byte-identical.
-        match self.find_live_record_in(image, opcode, TABLE_LO, TABLE_HI) {
-            Ok(r) => Ok(r),
-            Err(primary) => {
-                // JBC6 / older-MT1939 lineage (ASUS BC-12*, LG CH12/UH12NS40): the SCSI
-                // dispatch table keeps the SAME record format (opcode@0 / flags@1 /
-                // resv16@2==0 / handler@4, stride 8) but is relocated ABOVE the MT1959
-                // window (real table ~0x189000). Consult [`JBC6_TABLE_LO`]..[`JBC6_TABLE_HI`]
-                // ONLY after the primary misses; the same uniqueness/prologue predicate
-                // applies, so this cannot loosen the primary path. (RE: analysis/jbc6-dispatch.md.)
-                self.find_live_record_in(image, opcode, JBC6_TABLE_LO, JBC6_TABLE_HI)
-                    .map_err(|fallback| {
-                        anyhow!(
-                            "live 0x{opcode:02x} record: MT1959 window ({primary}); \
-                             JBC6 window ({fallback})"
-                        )
-                    })
+        // Dispatch-table windows come from the image's LINEAGE PROFILE (data, not a
+        // `_classic` fork), tried ORIGINAL-FIRST: MT1959 images resolve in the first
+        // (MT1959) window and never consult the relocated JBC6 window, so their emit
+        // stays byte-identical. JBC6/older-MT1939 keep the same record format but a
+        // window above 0x180000; classic lists its own ~0x1a4000 window.
+        let windows = super::profile::for_image(image).live_record_windows;
+        let mut last = None;
+        for &(lo, hi) in windows {
+            match self.find_live_record_in(image, opcode, lo, hi) {
+                Ok(r) => return Ok(r),
+                Err(e) => last = Some(e),
             }
         }
+        Err(last.unwrap_or_else(|| {
+            anyhow!("no dispatch-table window configured for this lineage (opcode 0x{opcode:02x})")
+        }))
     }
 
-    /// [`Self::find_live_record`] over an explicit table window. The MT1959/JB8
-    /// dispatch table lives at [`TABLE_LO`]..[`TABLE_HI`]; the MT1939 **classic**
+    /// [`Self::find_live_record`] over an explicit table window. dispatch table lives in the lineage-profile window (MT1959 at 0x140000..0x160000); the MT1939 **classic**
     /// generation keeps the same `opcode@0/flags@1/handler@4` record format but in
     /// a different window (`~0x1a4000`, engine-scope §1), so the classic engine
     /// calls this with that window.
@@ -1271,18 +1260,19 @@ impl Mt1959Engine {
     /// control-block base loaded for the `[rN,#0x28]` store is a `0x04..` literal,
     /// so the entry scan keeps only the `ldr r1,[pc]` that targets SRAM.
     pub fn find_response_commit(&self, image: &[u8]) -> Result<(u32, u32)> {
-        // MT1959/JB8 commit window first (ORIGINAL-FIRST: the 91 resolve here and never
-        // reach the fallback, so their emit is byte-identical). JBC6/older-MT1939 places
-        // the same commit routine (same three anchors) above 0xA0000 — consult that
-        // window only on a primary miss. (RE: analysis/jbc6-base-finders.md.)
-        match self.find_response_commit_in(image, 0x0009_0000, 0x000a_0000) {
-            Ok(r) => Ok(r),
-            Err(primary) => self
-                .find_response_commit_in(image, 0x000a_0000, 0x000b_0000)
-                .map_err(|jbc6| {
-                    anyhow!("response-commit: MT1959 window ({primary}); JBC6 window ({jbc6})")
-                }),
+        // Commit windows come from the image's LINEAGE PROFILE, tried ORIGINAL-FIRST:
+        // MT1959 resolves in the first window (byte-identical); JBC6/older-MT1939 places
+        // the same commit routine (same three anchors) above 0xA0000, listed second.
+        let windows = super::profile::for_image(image).commit_windows;
+        let mut last = None;
+        for &(lo, hi) in windows {
+            match self.find_response_commit_in(image, lo, hi) {
+                Ok(r) => return Ok(r),
+                Err(e) => last = Some(e),
+            }
         }
+        Err(last
+            .unwrap_or_else(|| anyhow!("no response-commit window configured for this lineage")))
     }
 
     /// [`Self::find_response_commit`] over an explicit `[lo,hi)` code window.
