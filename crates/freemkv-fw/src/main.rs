@@ -31,7 +31,7 @@ use freemkv_flash::{platform, style};
 use freemkv_fw::scheme::{
     select_scheme, Family, IntegrityScheme, MtkCmac, RegionChange, RegionVerdict,
 };
-use freemkv_fw::{abi, engine};
+use freemkv_fw::{abi, api, engine, family};
 
 /// freemkv firmware authoring tool (create / verify / re-sign).
 #[derive(Parser, Debug)]
@@ -56,6 +56,14 @@ enum Command {
         /// Emit a machine-readable JSON report instead of the human table.
         #[arg(long)]
         json: bool,
+        /// STRICT base build: run the all-or-nothing `api::create` (the KAT's
+        /// `build_report`) instead of the never-abort MODIFY path. Refuses (exits
+        /// non-zero) unless the image has a real freemkv BASE — vendor-command
+        /// handler + Save/Reset + boot-init — and, with `--json`, emits base facts
+        /// plus per-feature availability derived from the resolved gates (not the
+        /// modify levers). This is the truthful gate the publish pipeline uses.
+        #[arg(long)]
+        base: bool,
         /// After building, run the structural detour audit (prove each Applied
         /// lever's `bl` and stub actually landed, the record was repointed, the
         /// DE byte is set, and CMAC verifies) and print PASS/FAIL per check.
@@ -126,8 +134,9 @@ fn main() -> ExitCode {
             output,
             in_place,
             json,
+            base,
             audit,
-        } => cmd_create(&input, output, in_place, json, audit),
+        } => cmd_create(&input, output, in_place, json, base, audit),
         Command::Verify { path, family } => cmd_verify(&path, family),
         Command::Info {
             device,
@@ -594,6 +603,7 @@ fn cmd_create(
     out: Option<PathBuf>,
     in_place: bool,
     json: bool,
+    base: bool,
     audit: bool,
 ) -> Result<ExitCode> {
     let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
@@ -614,6 +624,22 @@ fn cmd_create(
         }
         dest
     };
+
+    // STRICT base build: the all-or-nothing `api::create`. It bails (→ non-zero
+    // exit) unless a real freemkv BASE was forged, which is exactly the truthful
+    // publish gate. On success the report's grounded facts tell us which feature
+    // gates actually resolved for THIS image.
+    if base {
+        let outcome = api::create(&image).context("building freemkv BASE firmware")?;
+        std::fs::write(&out_path, outcome.image())
+            .with_context(|| format!("writing {}", out_path.display()))?;
+        if json {
+            println!("{}", base_report_json(&outcome));
+        } else {
+            print_base_report(&outcome, &out_path);
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
 
     // Pick the platform engine (a clean refusal only on an unidentified/garbage
     // image), then MODIFY: apply every lever this image supports and report each
@@ -655,6 +681,156 @@ fn cmd_create(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+/// The truthful per-feature availability for a STRICT base build, derived from
+/// the resolved gate facts in the [`engine::CreateReport`] (NOT the never-abort
+/// modify levers). Each `(display-name, resolved?)` pair says whether that
+/// feature's gate actually landed for THIS image. Order is stable.
+fn base_features(report: &engine::CreateReport) -> Vec<(&'static str, bool)> {
+    vec![
+        ("Speed", report.speed_gate != 0),
+        ("Region-free", report.region_emitter != 0),
+        ("Raw Read", report.ake_gate != 0),
+        ("UHD", report.uhd_stub_va != 0),
+        ("BD", report.bd_stub_va != 0),
+        ("HRL Skip", !report.hrl_sites.is_empty()),
+        ("Downgrade Enable", report.de_off != 0),
+    ]
+}
+
+/// Minimal JSON string escaping for the hand-rolled base report.
+fn json_str(s: &str) -> String {
+    let mut o = String::with_capacity(s.len() + 2);
+    o.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => o.push_str("\\\""),
+            '\\' => o.push_str("\\\\"),
+            '\n' => o.push_str("\\n"),
+            '\r' => o.push_str("\\r"),
+            '\t' => o.push_str("\\t"),
+            c if (c as u32) < 0x20 => o.push_str(&format!("\\u{:04x}", c as u32)),
+            c => o.push(c),
+        }
+    }
+    o.push('"');
+    o
+}
+
+/// Machine-readable STRICT base report: identity + grounded base facts + the
+/// per-feature availability the publish pipeline advertises. `base` is always
+/// `true` here (this path only runs when `api::create` succeeded), so a caller
+/// can gate purely on the process exit code and read `features[]` for the rest.
+fn base_report_json(outcome: &api::CreateOutcome) -> String {
+    let r = &outcome.report;
+    // Identity: from the detected chip (present whenever create succeeded). Media
+    // class is derived the same way the engine's own report derives it.
+    let (vendor, model, rev, vspec, family_label, media) = match &outcome.chip {
+        Some(c) => {
+            let media = family::capability_for(&c.model, c.family)
+                .media_class
+                .label();
+            (
+                c.vendor.clone(),
+                c.model.clone(),
+                c.rev.clone(),
+                c.vendor_specific.clone(),
+                c.family.label(),
+                media,
+            )
+        }
+        None => (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            outcome.engine,
+            "",
+        ),
+    };
+
+    let mut s = String::new();
+    s.push('{');
+    s.push_str("\"base\":true,");
+    s.push_str(&format!("\"engine\":{},", json_str(outcome.engine)));
+    s.push_str(&format!("\"family\":{},", json_str(family_label)));
+    s.push_str(&format!("\"vendor\":{},", json_str(&vendor)));
+    s.push_str(&format!("\"model\":{},", json_str(&model)));
+    s.push_str(&format!("\"rev\":{},", json_str(&rev)));
+    s.push_str(&format!("\"vendor_specific\":{},", json_str(&vspec)));
+    s.push_str(&format!("\"media\":{},", json_str(media)));
+    // Grounded base facts: the addresses that PROVE a real base (handler +
+    // boot-init trampoline that reloads the persisted flag table = Save/Reset).
+    s.push_str("\"base_facts\":{");
+    s.push_str(&format!("\"handler_va\":{},", r.handler_va));
+    s.push_str(&format!("\"boot_stub_va\":{},", r.boot_stub_va));
+    s.push_str(&format!("\"boot_init_site\":{},", r.boot_init_site));
+    s.push_str(&format!("\"de_off\":{},", r.de_off));
+    s.push_str(&format!("\"speed_gate\":{},", r.speed_gate));
+    s.push_str(&format!("\"region_emitter\":{},", r.region_emitter));
+    s.push_str(&format!("\"ake_gate\":{},", r.ake_gate));
+    s.push_str(&format!("\"uhd_stub_va\":{},", r.uhd_stub_va));
+    s.push_str(&format!("\"bd_stub_va\":{},", r.bd_stub_va));
+    s.push_str(&format!("\"hrl_sites\":{}", r.hrl_sites.len()));
+    s.push('}');
+    s.push(',');
+    // Per-feature availability derived from the resolved gates.
+    s.push_str("\"features\":[");
+    for (i, (name, ok)) in base_features(r).into_iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str(&format!("{{\"name\":{},\"ok\":{ok}}}", json_str(name)));
+    }
+    s.push_str("]}");
+    s
+}
+
+/// Human-readable summary for `create --base` (no `--json`): identity, the base
+/// facts, and which feature gates resolved.
+fn print_base_report(outcome: &api::CreateOutcome, out_path: &Path) {
+    let r = &outcome.report;
+    let id = outcome
+        .chip
+        .as_ref()
+        .map(|c| format!("{} {} · rev {}", c.vendor, c.model, c.rev))
+        .unwrap_or_else(|| outcome.engine.to_string());
+    println!();
+    println!(
+        "{} — {} · {} [STRICT base]",
+        style::header(&format!("freemkv-fw {}", env!("CARGO_PKG_VERSION"))),
+        outcome.engine,
+        id,
+    );
+    println!(
+        "  {}",
+        style::dim(&format!(
+            "handler 0x{:x} · boot-init stub 0x{:x} · DE 0x{:x}",
+            r.handler_va, r.boot_stub_va, r.de_off
+        ))
+    );
+    println!();
+    for (name, ok) in base_features(r) {
+        println!(
+            "{}",
+            style::status_line(
+                name,
+                if ok { "available" } else { "unavailable" },
+                if ok {
+                    style::Status::Ok
+                } else {
+                    style::Status::Warn
+                },
+            )
+        );
+    }
+    println!();
+    println!(
+        "Wrote {} {}",
+        out_path.display(),
+        style::dim(&format!("({} bytes)", outcome.image().len())),
+    );
 }
 
 /// Print the per-lever MODIFY report: a summary line + one row per lever with its
