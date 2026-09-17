@@ -125,11 +125,21 @@ fn sha256(data: &[u8]) -> String {
 }
 
 fn load_base() -> Option<Vec<u8>> {
-    // Fixture path comes from the environment only — no owned/private path is
-    // ever baked into this public repo. `FREEMKV_KAT_BASE` points at the OEM
-    // BU40N 1.00 base image; unset (or unreadable) skips the KAT.
-    let path = std::env::var("FREEMKV_KAT_BASE").ok()?;
-    std::fs::read(&path).ok()
+    // `FREEMKV_KAT_BASE` (an explicit OEM BU40N 1.00 path) wins when set. Otherwise
+    // fall back to the committed fixture so the golden KAT actually runs in CI
+    // instead of silently skipping — a skip that passes is the one failure mode this
+    // test exists to prevent. If neither is present/readable, skip (never fail).
+    if let Some(v) = std::env::var("FREEMKV_KAT_BASE")
+        .ok()
+        .and_then(|p| std::fs::read(&p).ok())
+    {
+        return Some(v);
+    }
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/BU40N_OEM_1.00.bin"
+    );
+    std::fs::read(fixture).ok()
 }
 
 #[test]
