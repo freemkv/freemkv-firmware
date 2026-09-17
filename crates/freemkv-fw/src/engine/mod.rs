@@ -23,6 +23,7 @@ pub mod mt1939;
 pub mod mt1959;
 pub mod mt1959_build;
 pub mod pioneer;
+pub mod profile;
 
 pub use lever::ModifyReport;
 
