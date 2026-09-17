@@ -81,12 +81,13 @@ impl Mt1959Engine {
     /// never a feature that would boot into its OFF state without the 0xFF-fill.
     ///
     /// The classic feature set that actually resolves (measured over the 17 classic
-    /// images): **Region-free** (17/17) and **Raw-read** Gate-A + AKE (17/17) — the
-    /// same emits [`Self::build_modify_classic`] proves. **Speed** is a genuine
-    /// architecture miss (no MT1959-style ramp-ceiling gate). **UHD / BD / HRL / Bus**
-    /// are honest misses: their modern full-image finders match 0× on every classic
-    /// image (the classic AACS codegen lacks those MT1959 signatures), so their
-    /// best-effort emits self-refuse and nothing is wired.
+    /// images): **Region-free** 17/17, **Raw-read** Gate-A + AKE 17/17, and **Bus**
+    /// 17/17 (classic AACS-0x45 arm via `emit_busenc_classic`, static-only). **Speed**,
+    /// **UHD** and **BD** are genuine architecture misses on this pre-UHD (2012–2016)
+    /// silicon: no ramp-ceiling gate (Speed), no disc-version classifier (UHD), and no
+    /// separate disc-mode/class REPORT-KEY accept gate (BD — acceptance is purely
+    /// AKE-gated, already handled). **HRL** 17/17 (classic cert-revocation lookup via
+    /// `emit_hrl_classic`). Net classic set: Region + Raw-read/AKE + Bus + HRL = 17/17.
     pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
         // Idempotency: a re-fed freemkv image reports the existing base unchanged.
         if is_freemkv_patched(image) {
@@ -198,26 +199,28 @@ impl Mt1959Engine {
                 vid_producer = fact("vid_producer");
             }
 
-            // Bus / UHD / BD / HRL — the four modern AACS detours. Their finders are
-            // now full-image (de-hardcoded), so they COULD in principle resolve on a
-            // classic image; we TRY each best-effort. In practice every one is an
-            // HONEST MISS on classic: each finder requires a UNIQUE full-image match
-            // of an MT1959 body signature, and a full-image scan of all 17 classic
-            // images finds those signatures **0 times** — the classic AACS codegen
-            // simply does not contain them (measured: `find_aacs45_arm`,
-            // `find_uhd_classifier`, `find_bd_gate`, `find_hrl_lookup` each return
-            // "matched 0 time(s) in [0x0,0x200000)" on all 17). So nothing is wired
-            // and there is zero wrong-detour risk. The attempts are kept — rather than
-            // hard-excluded — because they are self-guarding: a finder only resolves on
-            // a unique signature match, and each detour builder re-verifies the exact
-            // OEM landmark bytes at its site before patching (bailing otherwise), so a
-            // resolve can occur only on genuinely-matching codegen, never a mis-detour.
-            if let Ok((site, bytes)) = self.busenc_detour(image, flag_base) {
-                if let Some(stub_va) = self.commit_classic_detour(&mut out, site, &bytes) {
-                    busenc_detour_site = site as u32;
-                    busenc_stub_va = stub_va;
-                }
+            // Bus — the classic AACS-0x45 (Read Data Key) key-prog arm. The MODERN
+            // busenc_detour misses on classic (the arm spills to a different frame
+            // slot), so we use the classic-specific emit: `emit_busenc_classic` locates
+            // the classic arm via AACS45_ARM_SIG_CLASSIC (unique 17/17) and installs the
+            // SHARED build_busenc_stub (replays OEM key-prog; clears BUSENC_REG's enable
+            // bit only when flag[Bus]==STATE_OFF). Static-only, same HARDWARE-KAT-GATED
+            // caveat as modern Bus: the de-bus register-clear fires only on opt-in
+            // Bus=off; the boot default 0xFF (OEM) replays OEM and is byte-behaviour-inert.
+            if let Ok((site, va)) = self.emit_busenc_classic(image, &mut out, flag_base) {
+                busenc_detour_site = site;
+                busenc_stub_va = va;
             }
+
+            // UHD / BD / HRL — the modern AACS detours, tried best-effort. On classic
+            // these are HONEST MISSES: UHD (no disc-version classifier — these are
+            // pre-UHD 2012–2016 BD writers) and BD (no separate disc-mode/class REPORT-KEY
+            // accept gate; BD acceptance is purely AKE-gated, which freemkv already
+            // handles 17/17) were both disasm-proven genuinely absent — the classic
+            // refusal is generic auth-gated inline sense with no unique anchor, so there
+            // is nothing safe to detour. Each finder self-guards (unique match + landmark
+            // re-verify) and resolves 0× on all 17, so nothing is wired and there is zero
+            // wrong-detour risk.
             if let Ok((site, bytes)) = self.uhd_detour(image, flag_base) {
                 if let Some(stub_va) = self.commit_classic_detour(&mut out, site, &bytes) {
                     uhd_classifier_site = site as u32;
@@ -230,23 +233,16 @@ impl Mt1959Engine {
                     bd_stub_va = stub_va;
                 }
             }
-            if let Ok((sites, _revoke, bytes)) = self.hrl_skip_detour(image, flag_base) {
-                if let Ok(stub_va) = self.free_space(&out, bytes.len() + 16) {
-                    thumb::write(&mut out, stub_va as usize, &bytes);
-                    // Only claim the sites once every `bl` lands (range-checked); a
-                    // partial write would be a wrong detour, so bail the whole feature.
-                    if sites
-                        .iter()
-                        .all(|&s| thumb::encode_bl(s, stub_va).is_some())
-                    {
-                        for &s in &sites {
-                            let bl = thumb::encode_bl(s, stub_va).expect("range re-checked");
-                            thumb::write(&mut out, s, &bl);
-                        }
-                        hrl_sites = sites.iter().map(|&s| s as u32).collect();
-                        hrl_stub_va = stub_va;
-                    }
-                }
+            // HRL — the MODERN hrl_skip_detour misses on classic (the classic lookup
+            // body diverges at the 10th halfword). emit_hrl_classic locates the classic
+            // HRL lookup via HRL_LOOKUP_SIG_CLASSIC (unique 17/17), verifies every cert
+            // site's cmp/bne revoke shape + the classic OEM 6F-deny head, and reuses the
+            // shared build_hrl_skip_stub (flag[Hrl]==STATE_OFF -> force clean/accept
+            // revoked; ON/OEM -> replay OEM). Self-guarding; bails (unwired) on any
+            // mismatch.
+            if let Ok((sites, stub_va)) = self.emit_hrl_classic(image, &mut out, flag_base) {
+                hrl_sites = sites;
+                hrl_stub_va = stub_va;
             }
         }
 
@@ -630,5 +626,200 @@ impl Mt1959Engine {
             ("scratch", scratch),
             ("vid_producer", vid_producer),
         ])
+    }
+
+    /// Bus-encryption (`04 03` "data clear") emission for the MT1939 **classic**
+    /// generation. The classic OEM AACS opcode-`0x45` (**Read Data Key**) arm is
+    /// present and byte-shape-identical to the modern B-shape — only its stack spill
+    /// slot differs (`[sp,#0x1c]`), which is what [`super::mt1939::AACS45_ARM_SIG_CLASSIC`]
+    /// pins so the classic finder matches **only** the classic generation and the modern
+    /// [`Self::find_aacs45_arm`] never wires a classic image with the modern register.
+    ///
+    /// Locate the classic arm (unique full-image on all 17 classic images), decode the
+    /// leading `bl <key-prog>` target, and emit the **shared** [`Self::build_busenc_stub`]:
+    /// it replays the OEM key programming unchanged and, only when `flag[Bus]==STATE_OFF`,
+    /// clears [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`]. Returns `(detour_site, stub_va)`;
+    /// the caller commits (mirrors [`Self::emit_region_classic`]).
+    ///
+    /// # SAFETY — one inherited, hardware-unconfirmed assumption
+    /// The **arm** (the key-prog detour point) is proven on classic by disasm (3/17:
+    /// `BH16NS40-NS50 @0x9c280`, `BH40N @0x9c002`, `BE14NU40 @0x9b942`) and by a unique
+    /// full-corpus match (17/17). What is NOT independently confirmed for MT1939-classic
+    /// silicon is that the bus-encryption MMIO enable is `BUSENC_REG` bit
+    /// [`BUSENC_ENABLE_BIT`] — that constant is inherited from the MT1959 MK-vs-OEM diff
+    /// (a different silicon generation) and there is no MK-classic reference to cross-check
+    /// it against. This is the **same** risk class the modern Bus lever already ships under
+    /// (its own `HARDWARE-KAT-GATED` note), and it is bounded the same way: the register
+    /// write fires **only** in the opt-in `flag[Bus]==STATE_OFF` mode; the default (the
+    /// boot 0xFF-fill → `Bus=OEM`) replays the OEM key-prog call and touches nothing, so
+    /// the wired image is byte-behaviour-identical to OEM until a user explicitly requests
+    /// de-bus. The classic bus register must be confirmed on silicon (golden hardware KAT)
+    /// before the `Bus=off` path is trusted — until then this ships static-only, exactly
+    /// like modern Bus. The replay-only (`!= STATE_OFF`) path is structurally proven.
+    ///
+    /// Wired into [`Self::build_report_classic`] (create/base). Static-only until a
+    /// golden classic-hardware KAT confirms `BUSENC_REG` — same tier as modern Bus.
+    pub(crate) fn emit_busenc_classic(
+        &self,
+        image: &[u8],
+        out: &mut [u8],
+        flag_base: u32,
+    ) -> Result<(u32, u32)> {
+        use super::mt1939::{masked_matches, AACS45_ARM_SIG_CLASSIC};
+        // Full-image scan (de-hardcoded, matching the other classic finders): the
+        // classic 0x45 arm is unique image-wide on all 17 classic images; the
+        // unique-match guard keeps it safe.
+        let site = match masked_matches(image, AACS45_ARM_SIG_CLASSIC, 0, image.len()).as_slice() {
+            [one] => *one,
+            hits => bail!(
+                "classic AACS opcode-0x45 arm matched {} time(s) full-image (want 1) \
+                 — refusing to wire Bus",
+                hits.len()
+            ),
+        };
+        // Re-verify the OEM landmark at the detour site: the arm must start with a
+        // decodable `bl <key-prog>` (the target the stub replays). Bail otherwise so a
+        // resolve can only occur on genuinely-matching codegen, never a mis-detour.
+        let keyprog = thumb::decode_bl(image, site).ok_or_else(|| {
+            anyhow!(
+                "classic AACS opcode-0x45 arm at 0x{site:x} does not start with a `bl <key-prog>`"
+            )
+        })?;
+        let bytes = self.build_busenc_stub(flag_base, keyprog)?;
+
+        // Commit: place the stub in CMAC-covered free space and write the `bl` at the
+        // arm's leading `bl` (replacing the OEM key-prog call, which the stub replays).
+        let stub_va = self.free_space(out, bytes.len() + 16)?;
+        let bl = thumb::encode_bl(site, stub_va)
+            .ok_or_else(|| anyhow!("classic Bus detour `bl` out of range"))?;
+        thumb::write(out, stub_va as usize, &bytes);
+        thumb::write(out, site, &bl);
+        Ok((site as u32, stub_va))
+    }
+
+    /// Host-Revocation-List skip emission for the MT1939 **classic** cert path — the
+    /// classic-codegen analogue of the modern [`Self::hrl_skip_detour`], reusing the
+    /// modern [`Self::build_hrl_skip_stub`] verbatim (the site contract is identical:
+    /// each detour `bl` replaces a `cmp r0,#0; bne <revoke>` so on entry `lr` is the
+    /// CLEAN fall-through and `r0` is the HRL result). Only the SITE FINDER is classic:
+    /// the modern one anchors on [`super::core::HRL_LOOKUP_SIG`] (matches 0× on
+    /// classic) and a `ldrb r0,[r4,#2]` (`0x78A0`) revoke head, whereas classic uses
+    /// [`super::mt1939::HRL_LOOKUP_SIG_CLASSIC`] and an `ldrb r0,[r5,#2]` (`0x78A8`)
+    /// head — and one classic layout reaches the check through a single unconditional
+    /// `b` after the `bl <hrl>` (`bl hrl; b <check>`), which this finder follows.
+    ///
+    /// Grounded, never hardcoded, and self-guarding — a resolve requires ALL of:
+    ///   1. the classic HRL lookup routine present and UNIQUE image-wide;
+    ///   2. every `bl <hrl>` followed (within a short budget, across at most one
+    ///      unconditional `b`) by `cmp r0,#0; bne <T>`, ALL sites agreeing on one `T`;
+    ///   3. `T` carrying the version-invariant classic OEM revoke head
+    ///      `ldrb r0,[r5,#2]; cmp r0,#0; bne …` immediately followed (head+6) by the
+    ///      6F copy-protection sense `movs r0,#0x6f`.
+    ///
+    /// Any disagreement / missing landmark bails (HRL left unwired), so a mis-anchored
+    /// match refuses rather than corrupting the cert path. Commits on a working copy
+    /// (atomic): the stub lands in CMAC-covered free space and every `bl` is
+    /// range-checked before ANY is written. Returns `(cmp_site_offsets, stub_va)`.
+    pub(crate) fn emit_hrl_classic(
+        &self,
+        image: &[u8],
+        out: &mut Vec<u8>,
+        flag_base: u32,
+    ) -> Result<(Vec<u32>, u32)> {
+        use super::mt1939::{masked_matches, HRL_LOOKUP_SIG_CLASSIC};
+
+        // ---- locate the classic HRL lookup routine, required unique image-wide ----
+        let hrl = match masked_matches(image, HRL_LOOKUP_SIG_CLASSIC, 0, image.len()).as_slice() {
+            [one] => *one as u32,
+            hits => bail!(
+                "classic HRL lookup matched {} time(s) image-wide (want 1)",
+                hits.len()
+            ),
+        };
+
+        let hw = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]);
+        let bne_target = |o: usize| -> u32 {
+            let d = (hw(o) & 0xFF) as i32;
+            let d = if d >= 0x80 { d - 0x100 } else { d };
+            (o as i32 + 4 + d * 2) as u32
+        };
+
+        // ---- cert-path check sites: `bl <hrl>` then `cmp r0,#0; bne <revoke>`,
+        //      following at most one unconditional T2 `b` (the classic `bl hrl; b
+        //      <check>` layout). ALL sites must agree on one revoke target. ----
+        let mut sites: Vec<usize> = Vec::new();
+        let mut revoke: Option<u32> = None;
+        let mut o = 0usize;
+        while o + 4 <= image.len() {
+            if decode_bl_target(image, o) == Some(hrl) {
+                let mut p = o + 4;
+                let mut hopped = false;
+                let mut steps = 0;
+                while steps < 40 && p + 4 <= image.len() {
+                    if hw(p) == 0x2800 && (hw(p + 2) & 0xFF00) == 0xD100 {
+                        let t = bne_target(p + 2);
+                        match revoke {
+                            None => revoke = Some(t),
+                            Some(prev) if prev == t => {}
+                            Some(_) => {
+                                bail!("classic HRL check sites disagree on the revoke target")
+                            }
+                        }
+                        sites.push(p);
+                        break;
+                    }
+                    let h = hw(p);
+                    if !hopped && (h & 0xF800) == 0xE000 {
+                        let d = (h & 0x7FF) as i32;
+                        let d = if d >= 0x400 { d - 0x800 } else { d };
+                        p = (p as i32 + 4 + d * 2) as usize;
+                        hopped = true;
+                        steps += 1;
+                        continue;
+                    }
+                    p += 2;
+                    steps += 1;
+                }
+            }
+            o += 2;
+        }
+        let revoke = revoke
+            .ok_or_else(|| anyhow!("no classic HRL cert-path `cmp r0,#0; bne` site found"))?;
+        if sites.is_empty() {
+            bail!("classic HRL lookup located but no cert-check site resolved");
+        }
+
+        // ---- verify the shared revoke target's version-invariant classic OEM head:
+        //      `ldrb r0,[r5,#2]; cmp r0,#0; bne …; movs r0,#0x6f` (the 6F deny). ----
+        let t = revoke as usize;
+        let head_ok = t + 8 <= image.len()
+            && hw(t) == 0x78A8 // ldrb r0,[r5,#2]   (classic r5; modern head is r4/0x78A0)
+            && hw(t + 2) == 0x2800 // cmp  r0,#0
+            && (hw(t + 4) & 0xFF00) == 0xD100 // bne  <loop>
+            && hw(t + 6) == 0x206F; // movs r0,#0x6f   (6F copy-protection sense)
+        if !head_ok {
+            bail!("classic HRL revoke target 0x{revoke:x} lacks the OEM 6F-deny head — refusing");
+        }
+
+        // ---- build the shared skip stub (identical contract to modern) ----
+        let bytes = self.build_hrl_skip_stub(flag_base, revoke)?;
+
+        // ---- commit on a working copy (atomic): range-check EVERY `bl` before any
+        //      is written — a partial write would be a wrong (cert-corrupting) detour.
+        let mut w = out.clone();
+        let stub_va = self.free_space(&w, bytes.len() + 16)?;
+        for &s in &sites {
+            if thumb::encode_bl(s, stub_va).is_none() {
+                bail!("classic HRL detour `bl` out of range at 0x{s:x}");
+            }
+        }
+        thumb::write(&mut w, stub_va as usize, &bytes);
+        for &s in &sites {
+            let bl = thumb::encode_bl(s, stub_va).expect("range re-checked above");
+            thumb::write(&mut w, s, &bl);
+        }
+        *out = w;
+
+        Ok((sites.iter().map(|&s| s as u32).collect(), stub_va))
     }
 }
