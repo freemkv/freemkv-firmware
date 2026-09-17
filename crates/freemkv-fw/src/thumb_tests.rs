@@ -152,3 +152,81 @@ fn read_modify_insert() {
     assert_eq!(addr, 8);
     assert_eq!(&img[8..11], &[1, 2, 3]);
 }
+
+// --- Asm::finish() range-check boundaries -------------------------------------
+// A mis-encoded branch/ldr/adr immediate bricks a drive, so every `bail!` guard
+// in `finish()` must actually fire when its immediate goes out of range. `0xBF00`
+// (nop) is used as neutral filler to open the required distance.
+
+#[test]
+fn finish_bails_on_out_of_range_conditional_branch() {
+    let mut a = Asm::new();
+    let back = a.label();
+    a.bind(back);
+    for _ in 0..200 {
+        a.raw16(0xBF00); // 200 halfwords back >> the ±127 conditional limit
+    }
+    a.beq(back);
+    let err = a.finish().unwrap_err().to_string();
+    assert!(
+        err.contains("conditional branch out of range"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn finish_accepts_in_range_conditional_branch() {
+    let mut a = Asm::new();
+    let back = a.label();
+    a.bind(back);
+    for _ in 0..50 {
+        a.raw16(0xBF00); // ~52 halfwords back, within ±127
+    }
+    a.beq(back);
+    assert!(a.finish().is_ok());
+}
+
+#[test]
+fn finish_bails_on_out_of_range_unconditional_branch() {
+    let mut a = Asm::new();
+    let back = a.label();
+    a.bind(back);
+    for _ in 0..1100 {
+        a.raw16(0xBF00); // >1023 halfwords back, past the unconditional limit
+    }
+    a.b(back);
+    let err = a.finish().unwrap_err().to_string();
+    assert!(
+        err.contains("branch out of range"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn finish_bails_on_out_of_range_ldr_literal() {
+    let mut a = Asm::new();
+    a.ldr_lit(0, 0xDEAD_BEEF);
+    for _ in 0..600 {
+        a.raw16(0xBF00); // pushes the literal pool >1020 bytes past the ldr
+    }
+    let err = a.finish().unwrap_err().to_string();
+    assert!(
+        err.contains("ldr literal out of range"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn finish_bails_on_out_of_range_adr() {
+    let mut a = Asm::new();
+    let blob = a.data_blob(vec![0u8; 4]);
+    a.adr(0, blob);
+    for _ in 0..600 {
+        a.raw16(0xBF00); // pushes the blob >1020 bytes past the adr
+    }
+    let err = a.finish().unwrap_err().to_string();
+    assert!(
+        err.contains("adr target out of range"),
+        "unexpected error: {err}"
+    );
+}
