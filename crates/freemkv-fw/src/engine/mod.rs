@@ -45,11 +45,13 @@ pub struct CreateReport {
     pub handler_va: u32,
     /// Bytes of the injected handler.
     pub handler_bytes: Vec<u8>,
-    /// Always-on boot-init hook site — the MT1959 main-task prologue's boot-status
-    /// reload (`ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`, `BOOT_INIT_SIG` anchor+4)
-    /// replaced by a `bl` to the boot-init stub. The stub writes `0xFF` (OEM
-    /// passthrough) into every flag at power-on, which is what makes the tri-state
-    /// `0x00 == OFF` safe (a freshly powered drive is OEM-behaviour-identical).
+    /// Always-on boot-init hook site — the cold/warm-boot convergence `bl <orig_init>`
+    /// (the `bmi` target of the `BOOT_INIT_SIG` anchor, the first call AFTER the
+    /// cold-boot SRAM clear; `0x13d428` on BU40N) replaced by a `bl` to the boot-init
+    /// stub, which tail-calls `orig_init`. The stub writes `0xFF` (OEM passthrough)
+    /// into every flag at power-on, which is what makes the tri-state `0x00 == OFF`
+    /// safe (a freshly powered drive is OEM-behaviour-identical). Detouring here, not
+    /// the pre-clear reload, keeps the SRAM clear from wiping the flag table.
     pub boot_init_site: u32,
     /// Injection address of the always-on boot-init trampoline.
     pub boot_stub_va: u32,

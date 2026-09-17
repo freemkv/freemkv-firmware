@@ -37,7 +37,8 @@ const EXPECT_HANDLER_HEX: &str =
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
 // in CMAC-covered regions, so these two digests must be regenerated whenever any of
 // them change — including the tri-state redesign: the new always-on boot-init detour
-// (0x13d41a) + its stub, the Speed stub losing its `0x00->OEM` branch, the Region stub
+// (at the cold/warm convergence bl, 0x13d428) + its stub, the Speed stub losing its
+// `0x00->OEM` branch, the Region stub
 // gaining a `0x00` region-lock arm, and the BD-refuse gate moving from the `0x02`
 // sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
 // with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
@@ -215,8 +216,9 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // detours (speed/region/ake/gatea/deny/busenc/uhd/bd/hrl), or the DE byte. 0x400
     // bounds the injected band.
     let injected = EXPECT_HANDLER_VA as usize..EXPECT_HANDLER_VA as usize + 0x480;
-    // Always-on boot-init hook: the main-task prologue's boot-status reload
-    // (`ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`) replaced by a `bl` to the boot stub.
+    // Always-on boot-init hook: the cold/warm-boot convergence `bl <orig_init>`
+    // (the anchor's `bmi` target, after the SRAM clear) replaced by a `bl` to the
+    // boot stub, which tail-calls `orig_init`.
     let boot_detour = report.boot_init_site as usize..report.boot_init_site as usize + 4;
     let speed_detour = report.speed_gate as usize + 4..report.speed_gate as usize + 8;
     let region_detour = report.region_emitter as usize + 6..report.region_emitter as usize + 10;
@@ -279,11 +281,12 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.flag_base, 0x0200_0e40,
         "flag-table base (validated free hole)"
     );
-    // Always-on boot-init hook: the main-task prologue's boot-status reload at
-    // BOOT_INIT_SIG anchor+4 (0x13d416 + 4 = 0x13d41a on 1.00), detoured to a stub
-    // that writes 0xFF into every flag at power-on (tri-state safety).
+    // Always-on boot-init hook: the cold/warm-boot convergence `bl <orig_init>` (the
+    // BOOT_INIT_SIG anchor's `bmi` target, 0x13d428 on 1.00 — the first call AFTER the
+    // cold-boot SRAM clear), detoured to a stub that writes 0xFF into every flag at
+    // power-on (tri-state safety) then tail-calls orig_init.
     assert_eq!(
-        report.boot_init_site, 0x0013_d41a,
+        report.boot_init_site, 0x0013_d428,
         "always-on boot-init hook site (1.00)"
     );
     assert!(report.boot_stub_va != 0, "boot-init stub wired");
@@ -1019,7 +1022,7 @@ fn busenc_stub_is_wellformed_and_encodes_the_decision() {
 /// erased non-CMAC gap, and the emitted handler must actually range-check
 /// against both bounds, stage through the SRAM scratch cell, and call the OEM
 /// PROGRAM routine. This is the safety proof that the probe verb can physically
-/// only write `[0x1D0000, 0x1D7000)`.
+/// only write `[0x1ED000, 0x1EF000)`.
 #[test]
 fn flashwrite_probe_is_range_bounded_to_the_safe_cell() {
     use super::{
@@ -1027,21 +1030,25 @@ fn flashwrite_probe_is_range_bounded_to_the_safe_cell() {
         FLASHWRITE_SCRATCH_OFF,
     };
 
-    // Compile-time bound proof: the window is the corpus-safe SAVE/config region
-    // 0x1D0000..0x1D7000 — blank and outside CMAC coverage in ALL 118 OEM images
-    // (corpus-wide max CMAC-covered end is 0x1CFFFF), below the HRL regions
-    // (0x1D8000/0x1E0000), and 4-KiB erase-sector aligned. These are const asserts
-    // so a bad widening fails to compile, not merely at test time.
+    // Compile-time bound proof: the window is the NV block 0x1EA000..0x1EB000 — the
+    // SAVE home. Corpus-wide block-writability scan (all 118 OEM images) proves this
+    // block is OEM-WRITTEN in every image (holds the region record at 0x1EA4B0), so the
+    // flash controller unlocks it — writes here PERSIST. Its head 0x1EA000..0x1EA4B0 is
+    // blank in every image and outside CMAC coverage (corpus-wide max covered end is
+    // 0x1CFFFF). The retired 0x1ED000 and 0x1D0000 windows were ALWAYS-BLANK/never
+    // OEM-written = controller-LOCKED (writes did not persist — the failed hardware
+    // probe). These are const asserts so a bad widening fails to compile.
     const _: () = {
-        assert!(FLASHWRITE_ALLOW_LO == 0x001D_0000);
-        assert!(FLASHWRITE_ALLOW_HI == 0x001D_7000);
+        assert!(FLASHWRITE_ALLOW_LO == 0x001E_A000);
+        assert!(FLASHWRITE_ALLOW_HI == 0x001E_B000);
         assert!(FLASHWRITE_ALLOW_LO < FLASHWRITE_ALLOW_HI);
         // must clear the corpus-wide max CMAC-covered end (0x1CFFFF)
-        assert!(FLASHWRITE_ALLOW_LO >= 0x001D_0000);
-        // must stay below the HRL region (0x1D8000)
-        assert!(FLASHWRITE_ALLOW_HI <= 0x001D_8000);
+        assert!(FLASHWRITE_ALLOW_LO >= 0x001E_A000);
+        // stays within the single unlocked NV block
+        assert!(FLASHWRITE_ALLOW_HI <= 0x001E_B000);
         // must be 4-KiB erase-sector aligned
         assert!(FLASHWRITE_ALLOW_LO.is_multiple_of(0x1000));
+        assert!(FLASHWRITE_ALLOW_HI.is_multiple_of(0x1000));
     };
 
     let Some(base) = load_base() else {
@@ -1161,6 +1168,24 @@ fn find_flash_program_resolves_bu40n() {
     );
 }
 
+/// PHASE 1: the NV-block (SAVE home) finder must resolve to the region-record block
+/// base `0x1EA000` on BU40N, purely by signature (region record `00 04 05` at
+/// block+0x4B0 with a blank head) — no hardcoded offset.
+#[test]
+fn find_nv_block_resolves_bu40n() {
+    let img = bu40n_fixture();
+    let base = Mt1959Engine
+        .find_nv_block(&img)
+        .expect("NV block must resolve uniquely on BU40N");
+    assert_eq!(
+        base, 0x001E_A000,
+        "NV/SAVE block base must be the frozen 0x1EA000"
+    );
+    // structural: the region record sits at base+0x4B0 and the head is blank scratch.
+    assert_eq!(&img[0x1E_A4B0..0x1E_A4B3], &[0x00, 0x04, 0x05]);
+    assert!(img[0x1E_A000..0x1E_A4B0].iter().all(|&b| b == 0xFF));
+}
+
 /// PHASE 1: the boot-init finder must resolve to the boot-init hook site
 /// (`anchor+4 == 0x13d41a`) on BU40N, and (verified in the fleet sweep) return
 /// `None` on the MT1939-classic lineage rather than failing.
@@ -1177,77 +1202,108 @@ fn find_boot_init_resolves_bu40n() {
     );
 }
 
-/// PHASE 2: the always-on boot-init trampoline. `build_boot_init` must write `0xFF`
-/// (STATE_PASSTHROUGH) into the whole flag table (slot 0 + features 1..=7) and then
-/// replay the two overwritten prologue halfwords before returning — the mechanism
-/// that makes tri-state `0x00 == OFF` safe (a freshly powered drive is OEM-identical).
+/// PHASE 2: the always-on boot-init trampoline. `build_boot_init` must preserve the
+/// original init call's args, write `0xFF` (STATE_PASSTHROUGH) into the whole flag
+/// table (slot 0 + features 1..=7), then tail-call `orig_init` and return — the
+/// mechanism that makes tri-state `0x00 == OFF` safe (a freshly powered drive is
+/// OEM-identical). It must NOT replay the boot-status reload (that stays at the old
+/// `anchor+4` site, which is no longer detoured).
 #[test]
-fn build_boot_init_writes_ff_table_and_replays() {
+fn build_boot_init_writes_ff_table_and_tail_calls_orig() {
     let base = super::FLAG_TABLE_BASE;
-    let stub = Mt1959Engine.build_boot_init(base).expect("boot-init stub");
-    // Loads the flag-table base as a literal.
-    assert!(
-        stub.windows(4)
-            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == base),
-        "boot stub loads the flag-table base"
-    );
-    // Materializes 0xFF (movs r1,#0xFF = 0x21FF).
-    assert!(
+    let orig_init = 0x000a_1dd0u32; // BU40N convergence bl target
+    let stub = Mt1959Engine
+        .build_boot_init(base, orig_init, super::SAVE_HOME)
+        .expect("boot-init stub");
+    let has16 = |v: u16| {
         stub.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x21FF),
-        "boot stub materializes 0xFF"
-    );
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == v)
+    };
+    let has32 = |v: u32| {
+        stub.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
+    };
+    // Preserves orig_init's args + lr: `push {r0,r1,r2,r3,lr}` (0xB50F).
+    assert!(has16(0xB50F), "boot stub pushes {{r0-r3,lr}}");
+    // Loads the flag-table base as a literal.
+    assert!(has32(base), "boot stub loads the flag-table base");
+    // Materializes 0xFF (movs r1,#0xFF = 0x21FF).
+    assert!(has16(0x21FF), "boot stub materializes 0xFF");
     // Eight `strb r1,[r0,#off]` (0x7001 | off<<6) — off 0..=7 (slot 0 pad + all 7 flags).
     for off in 0u16..=7 {
-        let strb = 0x7001 | (off << 6);
         assert!(
-            stub.windows(2)
-                .any(|w| u16::from_le_bytes([w[0], w[1]]) == strb),
+            has16(0x7001 | (off << 6)),
             "boot stub writes 0xFF to flag[{off}]"
         );
     }
-    // Replays `ldr r0,[r0,#0x18]` (0x6980) then `lsls r0,r0,#0x18` (0x0600).
+    // Restores the args before the tail-call: `pop {r0,r1,r2,r3}` (0xBC0F).
     assert!(
-        stub.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x6980),
-        "boot stub replays ldr r0,[r0,#0x18]"
+        has16(0xBC0F),
+        "boot stub pops {{r0-r3}} before tail-calling"
     );
+    // Loads orig_init with the Thumb bit set and tail-calls it: `blx r3` (0x4798).
+    assert!(has32(orig_init | 1), "boot stub loads orig_init|1");
+    assert!(has16(0x4798), "boot stub tail-calls orig_init via blx r3");
+    // Returns to conv+4: `pop {pc}` (0xBD00).
+    assert!(has16(0xBD00), "boot stub returns via pop {{pc}}");
+    // Must NOT replay the boot-status reload (left in place at anchor+4).
     assert!(
-        stub.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x0600),
-        "boot stub replays lsls r0,r0,#0x18"
+        !has16(0x6980),
+        "boot stub must not replay ldr r0,[r0,#0x18]"
     );
+    assert!(!has16(0x0600), "boot stub must not replay lsls r0,r0,#0x18");
 }
 
-/// PHASE 2: `emit_boot_init` on the BU40N fixture must install the detour `bl` at the
-/// boot-init site (over the correct original bytes) and land a stub that replays them.
+/// PHASE 2: `emit_boot_init` on the BU40N fixture must follow the anchor's `bmi` to
+/// the cold/warm convergence `bl <orig_init>` (0x13d428, orig_init = 0xa1dd0) and
+/// detour THAT — not the pre-clear reload at anchor+4 (0x13d41a, left untouched) —
+/// landing a stub that tail-calls orig_init.
 #[test]
 fn emit_boot_init_installs_detour_on_bu40n() {
     let img = bu40n_fixture();
-    let site = 0x0013_d41a_usize;
-    // Precondition: the site holds the boot-status reload we replace.
-    assert_eq!(u16::from_le_bytes([img[site], img[site + 1]]), 0x6980);
-    assert_eq!(u16::from_le_bytes([img[site + 2], img[site + 3]]), 0x0600);
+    let conv = 0x0013_d428_usize;
+    let orig_init = 0x000a_1dd0u32;
+    // Precondition: conv holds the original `bl <orig_init>` we repoint...
+    assert_eq!(
+        crate::thumb::decode_bl(&img, conv),
+        Some(orig_init),
+        "convergence bl decodes to orig_init"
+    );
+    // ...and the pre-clear reload at anchor+4 is the untouched boot-status reload.
+    let reload = 0x0013_d41a_usize;
+    assert_eq!(u16::from_le_bytes([img[reload], img[reload + 1]]), 0x6980);
+    assert_eq!(
+        u16::from_le_bytes([img[reload + 2], img[reload + 3]]),
+        0x0600
+    );
 
     let mut out = img.clone();
     let (s, stub_va) = Mt1959Engine
         .emit_boot_init(&img, &mut out, super::FLAG_TABLE_BASE)
         .expect("boot hook installs on BU40N");
-    assert_eq!(s, site as u32, "detour site");
+    assert_eq!(s, conv as u32, "detour site is the convergence bl");
     assert!(stub_va != 0, "boot stub landed");
 
-    // The site now holds a `bl` to the stub (recomputed via encode_bl).
-    let expected = crate::thumb::encode_bl(site, stub_va).expect("bl encodes");
-    assert_eq!(&out[site..site + 4], &expected, "boot detour bl installed");
-    // The stub replays the two original halfwords it overwrote.
-    let stub = &out[stub_va as usize..stub_va as usize + 0x40];
+    // conv now holds a `bl` to the stub (recomputed via encode_bl)...
+    let expected = crate::thumb::encode_bl(conv, stub_va).expect("bl encodes");
+    assert_eq!(
+        &out[conv..conv + 4],
+        &expected,
+        "boot detour bl installed at conv"
+    );
+    // ...and the anchor+4 reload is left byte-identical (no longer detoured).
+    assert_eq!(
+        &out[reload..reload + 4],
+        &img[reload..reload + 4],
+        "anchor+4 reload untouched"
+    );
+    // The stub tail-calls orig_init (loads its Thumb-tagged address) rather than
+    // replaying the reload.
+    let stub = &out[stub_va as usize..stub_va as usize + 0x80];
     assert!(
-        stub.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x6980)
-            && stub
-                .windows(2)
-                .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x0600),
-        "boot stub replays the overwritten prologue reload"
+        stub.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == orig_init | 1),
+        "boot stub tail-calls orig_init"
     );
 }
 
@@ -1400,6 +1456,13 @@ fn mt19xx_corpus_finders_validate() {
                 row.boot_ambiguous += 1;
                 failures.push(format!("boot-init AMBIGUOUS @ {disp}: {e}"));
             }
+        }
+
+        // NV/SAVE block must resolve by signature to the corpus-universal 0x1EA000.
+        match eng.find_nv_block(&bytes) {
+            Ok(0x001E_A000) => {}
+            Ok(b) => failures.push(format!("NV block resolved 0x{b:x} != 0x1EA000 @ {disp}")),
+            Err(e) => failures.push(format!("NV block finder @ {disp}: {e}")),
         }
     }
 

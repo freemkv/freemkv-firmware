@@ -1356,6 +1356,7 @@ dependencies = [
  "clap",
  "freemkv-chipset",
  "freemkv-flash",
+ "sha2",
 ]
 
 [[package]]
@@ -4823,10 +4824,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "freemkv-unlock"
-version = "1.7.1"
-
-[[patch.unused]]
 name = "freemkv-engine"
 version = "1.7.1"
 
@@ -4836,4 +4833,8 @@ version = "1.7.1"
 
 [[patch.unused]]
 name = "freemkv-keysources"
+version = "1.7.1"
+
+[[patch.unused]]
+name = "freemkv-unlock"
 version = "1.7.1"
