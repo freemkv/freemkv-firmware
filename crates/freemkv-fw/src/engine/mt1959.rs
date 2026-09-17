@@ -65,7 +65,7 @@ struct RawReadFacts {
     /// Injection address of the `04 03` UHD mode-gate neutralizer trampoline. `0`
     /// when not wired.
     uhd_stub_va: u32,
-    /// The three HRL-skip cert-path detour sites (`flag[Feature::Hrl]==STATE_ON`):
+    /// The three HRL-skip cert-path detour sites (`flag[Feature::Hrl]==STATE_OFF`):
     /// each is a `cmp r0,#0; bne <6F/00>` replaced by a `bl` to the shared HRL-skip
     /// stub. Empty when the HRL cert path is not the known shape (lever MISS).
     hrl_sites: Vec<u32>,
@@ -360,7 +360,7 @@ impl Mt1959Engine {
                         facts.push(("uhd_site", f.uhd_site));
                         facts.push(("uhd_stub_va", f.uhd_stub_va));
                     }
-                    // HRL skip (`flag[Feature::Hrl]==STATE_ON`), when wired. One or
+                    // HRL skip (`flag[Feature::Hrl]==STATE_OFF`), when wired. One or
                     // more cert-path detour sites (1 on the NS40/NU50 lineage, 3 on
                     // the BU40N/NS60 desktop lineage) share one stub; each `bl` is
                     // re-checked. Only the first three are named as audit facts (the
@@ -577,7 +577,7 @@ impl Mt1959Engine {
             Err(_) => (0, 0),
         };
 
-        // HRL skip (`flag[Feature::Hrl]==STATE_ON`): one shared stub, a `bl` to it at
+        // HRL skip (`flag[Feature::Hrl]==STATE_OFF`): one shared stub, a `bl` to it at
         // each of the three cert-path `cmp r0,#0; bne <6F/00>` sites. Graceful:
         // images whose HRL cert path is not the known shape leave it unwired.
         // Committed last so the free_space order matches build_report (…→ uhd → hrl).

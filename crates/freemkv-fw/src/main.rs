@@ -269,19 +269,16 @@ fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 // ---------------------------------------------------------------------------
 
 /// Probe a live drive for freemkv firmware by sending the Identity command
-/// (`3C 0E C0 DE 01 …`) built by [`abi::build_cdb`].
+/// (`3C 0E C0 DE 01 …`) built by [`abi::build_identity_cdb`].
 ///
 /// Opens the device read-only (never writes anything) via [`platform::open`].
 ///
-/// NOTE (detection gap): the current firmware Identity handler raises a vendor
-/// *sense* ([`abi::SENSE_IDENTITY`] = `09/F0`), not a data reply, so the
-/// authoritative live check is a CHECK CONDITION carrying that sense. This
-/// data-path check (looking for [`abi::RESP_MAGIC`]) only detects a future
-/// *data-returning* Identity; against the sense-based handler a freemkv drive
-/// currently reads as "not detected" here. Until the sense-aware probe lands,
-/// confirm on hardware with `sg_raw` and inspect the returned sense
-/// (`09/F0` = freemkv, OEM returns `05/24`). Either way this never writes and
-/// never crashes.
+/// The injected Identity handler (engine `build_handler`, IDENTITY arm) returns
+/// [`abi::RESP_MAGIC`] + version + the live feature-state table through the
+/// normal data-in path, so [`abi::verify_response`] on the returned buffer is
+/// the authoritative live check. (The unused [`abi::SENSE_IDENTITY`] constant is
+/// a vestige of an earlier sense-based design and is never emitted.) This never
+/// writes and never crashes.
 fn cmd_verify_device(path: &Path) -> Result<ExitCode> {
     let path_str = path.to_string_lossy();
     let mut dev =
@@ -348,7 +345,11 @@ fn parse_u32(s: &str) -> Result<u32> {
 /// zero-filled to keep byte offsets aligned to `start`. Returns the bytes read.
 fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop: bool) -> Vec<u8> {
     const STOP_AFTER: u32 = 16; // consecutive faults = end of region
-    let mut out = Vec::with_capacity(len as usize);
+                                // Cap the up-front reservation: `--dump --len` is user-supplied and can be up
+                                // to 4 GiB, which would abort the process on `with_capacity` before a single
+                                // SCSI command issues. The Vec still grows to the full length as it reads.
+    const RESERVE_CAP: u64 = 0x0400_0000; // 64 MiB
+    let mut out = Vec::with_capacity(len.min(RESERVE_CAP) as usize);
     let mut faults = 0u32;
     let mut addr = start as u64;
     let end = start as u64 + len;

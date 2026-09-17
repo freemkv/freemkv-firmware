@@ -137,15 +137,19 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 // carries the RESP_MAGIC identity string.
                 match (fact(l, "handler_va"), fact(l, "record_off")) {
                     (Some(hva), Some(roff)) => {
-                        let ok_ptr = (roff as usize) + 8 <= img.len()
-                            && thumb::read_u32(img, roff as usize + 4) == (hva | 1);
+                        // Read the record's handler pointer once, bounds-guarded — the
+                        // audit must never panic, even on a report whose record_off is
+                        // near EOF. Out of bounds reads as 0 (ok_ptr stays false).
+                        let got = ((roff as usize) + 8 <= img.len())
+                            .then(|| thumb::read_u32(img, roff as usize + 4));
+                        let ok_ptr = got == Some(hva | 1);
                         checks.push(AuditCheck {
                             lever: name,
                             what: "record repointed to injected handler".into(),
                             ok: ok_ptr,
                             detail: format!(
                                 "record 0x{roff:08x}+4 -> 0x{:08x} (want 0x{:08x})",
-                                thumb::read_u32(img, roff as usize + 4),
+                                got.unwrap_or(0),
                                 hva | 1
                             ),
                         });
