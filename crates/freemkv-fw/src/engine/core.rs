@@ -661,6 +661,37 @@ pub(crate) const UHD_CLASSIFIER_SIG_VER: &[(u16, u16)] = &[
 /// path (no fabricated sense), and it is **unique** in the REPORT KEY window on
 /// every MT1959 image that carries this shape; images with a different REPORT KEY
 /// codegen leave `Feature::Bd` gracefully unwired (like busenc/uhd/hrl).
+///
+/// # Corpus measurement (why this resolves 36/118, not ~91)
+/// Measured over the 118-image OEM corpus (`/tmp/corpus_dw.tsv`): this gate
+/// resolves UNIQUELY on 36 images (n==1), 0 on the rest, never n>1 — so the sig
+/// is not over-matching. The 36 are exactly the MT1959-lineage images whose
+/// REPORT KEY gate carries this **explicit mode/class** codegen. The peer AACS
+/// cert-path gates (AKE/Region/UHD) resolve on 91 of the 101 MT1959-lineage
+/// images, and the 55-image gap (peer-resolves-but-BD-does-not) was disassembled
+/// to confirm the miss is a genuine codegen fork, NOT a too-narrow window or an
+/// over-exact immediate:
+///   * A **full-image** register-agnostic structural scan for this gate shape
+///     (mode `cmp #1`/`#0`, class `ldrb [rn,#7]; cmp #3`/`#2`, any registers)
+///     finds it on the SAME 36 images and ZERO others — widening the window to
+///     the entire 2 MiB image or generalizing the register allocation adds
+///     nothing. (On the 36 the register-agnostic scan actually finds a *second*
+///     UHD-variant of the gate a few bytes on; the register-pinned exact sig
+///     below is what keeps the match unique — do not relax it.)
+///   * The 55 gap images (e.g. `MT1939_WH16NS40`, `MT1959_BP50NB40-NB50`,
+///     `MT1959_BU40N_78f755…`) use a newer REPORT-KEY/classifier codegen: the
+///     disc *mode* is a packed bitfield read `ldrb rX,[rY]; lsrs rX,#6` (values
+///     0–3) and the class byte moved to a different struct slot (`[r5,#0x1a]`),
+///     with the accept/refuse verdict folded into the descriptor classifier —
+///     there is NO `ldrb class; cmp #2; beq` 2-halfword detour target anywhere
+///     in these images (verified register-agnostic, whole-image). The only
+///     `cmp #2` class checks present sit at NON-unique classifier sites, not the
+///     REPORT-KEY accept gate, so detouring them would be a WRONG match (a
+///     mis-anchored BD detour breaks disc acceptance). Reaching parity with the
+///     peers would require a distinct, silicon-validated detour for the newer
+///     codegen — a separate feature, not a widening of this signature. 36 is the
+///     maximal *correct* set for this detour shape; the rest stay gracefully
+///     unwired.
 pub(crate) const BD_GATE_SIG: &[(u16, u16)] = &[
     (0x2801, 0xFFFF), // cmp  r0,#1          ← anchor (mode==1 test)
     (0xD100, 0xFF00), // bne  <mode-not-1>
@@ -676,22 +707,39 @@ pub(crate) const BD_GATE_SIG: &[(u16, u16)] = &[
 ];
 
 /// Signature of the flash-resident **Host Revocation List (HRL) lookup** routine
-/// (`0x13550e` on BU40N 1.00; relocated per version — `0x13569a` on N1.02,
-/// `0x136302` on 1.04, all byte-identical in shape). Returns `1`=host revoked,
-/// `2`=blank/`0xFFFF` sentinel, `0`=clean. The cert-send path calls it and then
-/// tests `cmp r0,#0; bne <6F/00 emitter>` at three sites; the HRL-skip detour
-/// (`flag[Feature::Hrl]==STATE_ON`) forces the clean (fall-through) path at those
-/// three sites. Prologue: `push {r0,r1,r4-r7,lr}; sub sp,#0xc; ldr r0,[sp,#0xc];
-/// movs r4,r1; bl <…>` — proven UNIQUE in `[0x134000,0x137000)` across the fleet
-/// (the trailing `bl` displacement is masked). Verified in
-/// `research/libredrive/mtk` against the capstone trace of `BU40N_OEM_1.00.bin`.
+/// (`0x13550e` on BU40N 1.00; relocated per version — e.g. `0x13569a` on BU40N
+/// 1.02 / BU50N, `0x134cca` on WH16NS60, `0x138e9a` on BE16NU50 — all
+/// byte-identical in shape across the MT1959 **and** MT1939 lineages). Returns
+/// `1`=host revoked, `2`=blank/`0xFFFF` sentinel, `0`=clean. The cert-send path
+/// calls it and then tests `cmp r0,#0; bne <revoke>` at one or more sites; the
+/// HRL-skip detour (`flag[Feature::Hrl]==STATE_ON`) forces the clean (fall-through)
+/// path at those sites.
+///
+/// The fingerprint is **version-invariant by FUNCTION BODY**, not by the BU40N
+/// prologue alone: `push {r0,r1,r4-r7,lr}; sub sp,#0xc; ldr r0,[sp,#0xc]; movs
+/// r4,r1; bl <count-reader>; movs r7,r0; movs r0,r4; bl <…>; str r0,[sp,#8]; adds
+/// r0,r4,#4`. The three `bl` displacements are masked; the surrounding body ops
+/// are exact. Extending past the prologue is load-bearing: the bare 6-halfword
+/// prologue also occurs (once) on non-AACS DVD-only drives and would false-match,
+/// whereas the 12-halfword body is UNIQUE per image and matches on exactly the 91
+/// AACS-capable images (parity with the peer AKE/Bus/UHD/Region cert-path gates),
+/// 0 on the DVD/CD-only parts. Proven UNIQUE across the 118-image OEM corpus in
+/// `[0x130000,0x140000)`; the sibling AACS helper called alongside it at the same
+/// cert sites (`push {r4,r5,r6,lr}` prologue) does NOT match. Verified against the
+/// capstone traces of BU40N 1.00, BU50N, WH16NS60, and BE16NU50.
 pub(crate) const HRL_LOOKUP_SIG: &[(u16, u16)] = &[
     (0xB5F3, 0xFFFF), // push {r0,r1,r4,r5,r6,r7,lr}
     (0xB083, 0xFFFF), // sub  sp,#0xc
     (0x9803, 0xFFFF), // ldr  r0,[sp,#0xc]
     (0x000C, 0xFFFF), // movs r4,r1
-    (0xF000, 0xF800), // bl   <…>  hi
-    (0xF800, 0xF800), //           lo
+    (0xF000, 0xF800), // bl   <count-reader>  hi
+    (0xF800, 0xF800), //                      lo
+    (0x0007, 0xFFFF), // movs r7,r0
+    (0x0020, 0xFFFF), // movs r0,r4
+    (0xF000, 0xF800), // bl   <…>             hi
+    (0xF800, 0xF800), //                      lo
+    (0x9002, 0xFFFF), // str  r0,[sp,#8]
+    (0x1D20, 0xFFFF), // adds r0,r4,#4
 ];
 
 /// EXTRA CONFIRMATION GATE for the destructive one-time HRL flash wipe
@@ -2917,6 +2965,13 @@ impl Mt1959Engine {
     /// mode-0 class check `ldrb r0,[r2,#7]; cmp r0,#2` the `Feature::Bd` refuse
     /// detour replaces (4 bytes) is at `anchor+16`, and the OEM `beq <accept>` the
     /// stub returns to is at `anchor+20`.
+    ///
+    /// Resolves uniquely on 36/118 of the OEM corpus — the maximal *correct* set
+    /// for this detour shape, NOT an over-fit. The `[0x130000,0x140000)` window
+    /// spans the whole REPORT-KEY code range; widening it to the full image, or
+    /// generalizing the register allocation, adds no matches (verified), and the
+    /// 55 peer-resolving misses are a genuine newer-codegen fork with no equivalent
+    /// detour target. See [`BD_GATE_SIG`] for the disassembly evidence.
     pub fn find_bd_gate(&self, image: &[u8]) -> Result<u32> {
         let lo = 0x0013_0000usize.min(image.len());
         let hi = 0x0014_0000usize.min(image.len());
@@ -2924,27 +2979,42 @@ impl Mt1959Engine {
     }
 
     /// The flash-resident HRL lookup routine, located by [`HRL_LOOKUP_SIG`] and
-    /// proven unique in the cert window. Returns its entry VA.
+    /// proven unique in the AACS cert region. Returns its entry VA. The window is
+    /// the same `[0x130000,0x140000)` the peer cert-path gates (AKE/Bus/UHD/Region)
+    /// scan — the routine relocates across that whole span between versions
+    /// (`0x133666` … `0x139796` observed), and the 12-halfword body signature is
+    /// unique there on the 91 AACS images and absent on the DVD/CD-only parts.
     pub fn find_hrl_lookup(&self, image: &[u8]) -> Result<u32> {
-        let lo = 0x0013_4000usize.min(image.len());
-        let hi = 0x0013_7000usize.min(image.len());
+        let lo = 0x0013_0000usize.min(image.len());
+        let hi = 0x0014_0000usize.min(image.len());
         Ok(find_unique(image, HRL_LOOKUP_SIG, lo, hi, "HRL lookup routine")? as u32)
     }
 
-    /// The three cert-path HRL check sites and their shared 6F/00 revoke target.
+    /// The cert-path HRL check sites and their shared revoke target.
     ///
     /// Grounded, not hardcoded: find the HRL lookup ([`Self::find_hrl_lookup`]),
-    /// then every `bl <hrl_lookup>` in the cert window; each is followed within a
-    /// few instructions by `cmp r0,#0; bne <T>`. All three must share the SAME
-    /// revoke target `T`, and `T` must carry the OEM revoke shape (`ldrb r0,[r4,#2];
-    /// cmp r0,#0; bne …` then the `movs r2,#0; movs r1,#0x6f` 6F/00 sense-setup) —
-    /// so a mis-anchored match refuses rather than patches. Returns
-    /// `(cmp_offsets, revoke_target)`; `cmp_offsets[k]` is where the 4-byte
-    /// `cmp r0,#0; bne T` the detour replaces begins.
+    /// then every `bl <hrl_lookup>` in the cert region; each is followed within a
+    /// few instructions by `cmp r0,#0; bne <T>`. ALL such sites must share the SAME
+    /// revoke target `T` (any disagreement → refuse), and `T` must carry the OEM
+    /// revoke HEAD `ldrb r0,[r4,#2]; cmp r0,#0; bne …` — so a mis-anchored match
+    /// refuses rather than patches. Returns `(cmp_offsets, revoke_target)`;
+    /// `cmp_offsets[k]` is where the 4-byte `cmp r0,#0; bne T` the detour replaces
+    /// begins.
+    ///
+    /// The site COUNT is version-dependent, not fixed: newer desktop/UHD firmware
+    /// (BU40N/BU50N/WH16NS60/BP60NB10 …) checks the HRL at 3 cert sub-paths, while
+    /// the NS40/NS50/NU50 notebook lineage checks it at 1 consolidated site. Both
+    /// are legitimate — the count is not asserted; ≥1 shared-target site is
+    /// required. The 6F/00 sense-setup is NOT keyed on: its `movs r2,#0`/`movs
+    /// r1,#0x6f` pair is inline on the older layout but split across basic blocks
+    /// (reached via `b`) on the branch-away layout, so requiring it inline was the
+    /// original BU40N over-fit that pinned availability to 1/118. Anchoring on the
+    /// unique HRL-lookup BODY plus the invariant revoke HEAD lifts availability to
+    /// parity with the peer AACS gates (91/118) with no wrong matches.
     pub fn find_hrl_skip_sites(&self, image: &[u8]) -> Result<(Vec<usize>, u32)> {
         let hrl = self.find_hrl_lookup(image)?;
-        let lo = 0x0013_5000usize.min(image.len());
-        let hi = 0x0013_8000usize.min(image.len());
+        let lo = 0x0013_0000usize.min(image.len());
+        let hi = 0x0013_c000usize.min(image.len());
         let hw = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]);
         let bne_target = |o: usize| -> u32 {
             let b = hw(o) & 0xFF;
@@ -2969,7 +3039,7 @@ impl Mt1959Engine {
                         match target {
                             None => target = Some(t),
                             Some(prev) if prev == t => {}
-                            Some(_) => bail!("HRL check sites disagree on the 6F/00 revoke target"),
+                            Some(_) => bail!("HRL check sites disagree on the revoke target"),
                         }
                         sites.push(p);
                         break;
@@ -2981,24 +3051,15 @@ impl Mt1959Engine {
         }
         let target =
             target.ok_or_else(|| anyhow!("no HRL cert-path `cmp r0,#0; bne` sites found"))?;
-        if sites.len() != 3 {
-            bail!(
-                "expected exactly 3 HRL cert-path check sites, found {} — refusing to patch",
-                sites.len()
-            );
-        }
-        // Verify the revoke target's OEM shape: `ldrb r0,[r4,#2]; cmp r0,#0; bne`
-        // then the 6F/00 sense-setup `movs r2,#0; movs r1,#0x6f` within 0x14 bytes.
+        // Verify the shared revoke target's version-invariant OEM HEAD:
+        // `ldrb r0,[r4,#2]; cmp r0,#0; bne`.
         let t = target as usize;
-        let revoke_shape = t + 6 <= image.len()
+        let revoke_head = t + 6 <= image.len()
             && hw(t) == 0x78A0
             && hw(t + 2) == 0x2800
             && (hw(t + 4) & 0xFF00) == 0xD100;
-        let emit_near = (0..0x14)
-            .step_by(2)
-            .any(|k| t + k + 4 <= image.len() && hw(t + k) == 0x2200 && hw(t + k + 2) == 0x216F);
-        if !revoke_shape || !emit_near {
-            bail!("HRL revoke target 0x{target:x} lacks the OEM 6F/00 revoke shape — refusing");
+        if !revoke_head {
+            bail!("HRL revoke target 0x{target:x} lacks the OEM revoke HEAD shape — refusing");
         }
         Ok((sites, target))
     }
