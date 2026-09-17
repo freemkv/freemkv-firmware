@@ -360,11 +360,14 @@ impl Mt1959Engine {
                         facts.push(("uhd_site", f.uhd_site));
                         facts.push(("uhd_stub_va", f.uhd_stub_va));
                     }
-                    // HRL skip (`flag[Feature::Hrl]==STATE_ON`), when wired. Three
-                    // cert-path detour sites share one stub; each `bl` is re-checked.
+                    // HRL skip (`flag[Feature::Hrl]==STATE_ON`), when wired. One or
+                    // more cert-path detour sites (1 on the NS40/NU50 lineage, 3 on
+                    // the BU40N/NS60 desktop lineage) share one stub; each `bl` is
+                    // re-checked. Only the first three are named as audit facts (the
+                    // observed maximum); all sites are still detoured in the image.
                     if f.hrl_stub_va != 0 {
                         facts.push(("hrl_stub_va", f.hrl_stub_va));
-                        for (k, &site) in f.hrl_sites.iter().enumerate() {
+                        for (k, &site) in f.hrl_sites.iter().take(3).enumerate() {
                             facts.push((["hrl_site", "hrl_site2", "hrl_site3"][k], site));
                         }
                     }
