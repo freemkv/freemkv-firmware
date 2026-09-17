@@ -43,8 +43,8 @@ const EXPECT_HANDLER_HEX: &str =
 // sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
 // with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "3621a15ccbeea094abe727a9387600c6";
-const EXPECT_CMAC_15: &str = "6739b0cfca942e926ecbc92fabc7718a";
+const EXPECT_CMAC_1: &str = "a352572ed91960119398e75971136383";
+const EXPECT_CMAC_15: &str = "22c0557c19cd196942806d213d7cce4d";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -235,7 +235,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // `Feature::Bd` BD-refuse: the REPORT KEY mode-0 class check detour
     // (report.bd_gate_site), 4 bytes replacing `ldrb r0,[r2,#7]; cmp r0,#2`.
     let bd_detour = report.bd_gate_site as usize..report.bd_gate_site as usize + 4;
-    // HRL skip (`flag[Feature::Hrl]==STATE_ON`): three cert-path detour sites, 4
+    // HRL skip (`flag[Feature::Hrl]==STATE_OFF`): three cert-path detour sites, 4
     // bytes each (a `bl` to the shared HRL-skip stub, replacing `cmp r0,#0; bne`).
     let in_hrl = |i: usize| {
         report
@@ -343,7 +343,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         "BD-refuse (Feature::Bd) detours the REPORT KEY mode-0 class check (1.00)"
     );
     assert!(report.bd_stub_va != 0, "Feature::Bd BD-refuse stub wired");
-    // HRL skip (`flag[Feature::Hrl]==STATE_ON`): the three cert-path check sites
+    // HRL skip (`flag[Feature::Hrl]==STATE_OFF`): the three cert-path check sites
     // (`cmp r0,#0; bne <6F/00>`) after each `bl <hrl_lookup>` (0x13550e on 1.00),
     // all detoured to one shared HRL-skip stub.
     assert_eq!(
@@ -353,7 +353,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     );
     assert!(
         report.hrl_stub_va != 0,
-        "Feature::Hrl STATE_ON (HRL skip) stub wired"
+        "Feature::Hrl STATE_OFF (HRL skip) stub wired"
     );
     assert_eq!(report.de_off, 0x001e_c056, "DE byte offset (1.00)");
 }
@@ -575,8 +575,8 @@ fn pc_literal_past_the_image_tail_is_none_not_panic() {
 /// above. It fails loudly if a stub reads the wrong feature cell or gates on the
 /// wrong value. Each stub reads its own `flag[Feature::X]` (`flag_base + id`) and
 /// arms on `STATE_ON` (0x01):
-///   AKE null / Gate-A → flag[Ake] (0x06), gate `cmp r2,#STATE_ON`  (0x2A01)
-///   Bus off           → flag[Bus] (0x07), gate `cmp r3,#STATE_ON`  (0x2B01)
+///   AKE null / Gate-A → flag[Ake] (0x06), gate `cmp r2,#STATE_OFF` (0x2A00)
+///   Bus off           → flag[Bus] (0x07), gate `cmp r3,#STATE_OFF` (0x2B00)
 ///   UHD force         → flag[Uhd] (0x03), gate `cmp r3,#STATE_ON`  (0x2B01)
 ///   Speed / Region    → flag[Speed] (0x01) / flag[Region] (0x02)
 /// Thumb `cmp rN,#imm8` = `0x2800 | (N<<8) | imm`.
@@ -591,16 +591,16 @@ fn feature_flag_gating_is_reslotted() {
         hay.windows(4)
             .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == cell)
     }
-    const CMP_R2_ON: u16 = 0x2A01; // cmp r2,#STATE_ON
-    const CMP_R3_ON: u16 = 0x2B01; // cmp r3,#STATE_ON
+    const CMP_R3_ON: u16 = 0x2B01; // cmp r3,#STATE_ON (UHD/Region enable direction)
+    const CMP_R2_OFF: u16 = 0x2A00; // cmp r2,#STATE_OFF (AKE/Bus off-direction)
     let base = super::FLAG_TABLE_BASE;
 
     let ake = Mt1959Engine
         .build_ake_stub(base, 0x0010_0000)
         .expect("ake stub");
     assert!(
-        has(&ake, CMP_R2_ON),
-        "AKE-null stub gates on cmp r2,#STATE_ON"
+        has(&ake, CMP_R2_OFF),
+        "AKE-null stub gates on cmp r2,#STATE_OFF (bypass on OFF)"
     );
     assert!(
         reads(&ake, base + Feature::Ake as u32),
@@ -611,8 +611,8 @@ fn feature_flag_gating_is_reslotted() {
         .build_gatea_stub(base, 0x0010_0000, 0x0010_0100, 0x0010_0200)
         .expect("gatea stub");
     assert!(
-        has(&gatea, CMP_R2_ON),
-        "Gate-A stub gates on cmp r2,#STATE_ON"
+        has(&gatea, CMP_R2_OFF),
+        "Gate-A stub gates on cmp r2,#STATE_OFF (AKE bypass on OFF)"
     );
     assert!(
         reads(&gatea, base + Feature::Ake as u32),
@@ -623,8 +623,8 @@ fn feature_flag_gating_is_reslotted() {
         .build_busenc_stub(base, 0x0009_4790)
         .expect("busenc stub");
     assert!(
-        has(&busenc, CMP_R3_ON),
-        "bus-off stub gates on cmp r3,#STATE_ON"
+        has(&busenc, CMP_R3_OFF),
+        "bus-off stub gates on cmp r3,#STATE_OFF"
     );
     assert!(
         reads(&busenc, base + Feature::Bus as u32),
@@ -719,8 +719,8 @@ fn feature_flag_gating_is_reslotted() {
     );
 }
 
-/// The HRL-skip stub (`flag[Feature::Hrl]==STATE_ON`) must read `flag[Hrl]`, gate
-/// on `cmp r3,#STATE_ON` (0x2B01), and carry the 6F/00 revoke target as a literal.
+/// The HRL-skip stub (`flag[Feature::Hrl]==STATE_OFF`) must read `flag[Hrl]`, gate
+/// on `cmp r3,#STATE_OFF` (0x2B00), and carry the 6F/00 revoke target as a literal.
 #[test]
 fn hrl_skip_stub_gates_on_hrl_cell() {
     let base = super::FLAG_TABLE_BASE;
@@ -735,8 +735,8 @@ fn hrl_skip_stub_gates_on_hrl_cell() {
     );
     assert!(
         stub.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x2B01),
-        "HRL-skip stub gates on cmp r3,#STATE_ON"
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x2B00),
+        "HRL-skip stub gates on cmp r3,#STATE_OFF (skip on OFF)"
     );
     assert!(
         stub.windows(4)
@@ -771,9 +771,9 @@ fn hrl_valid_empty_record_is_count_zero_type_0x21() {
 /// STATIC encoding guard for the **classic** AKE accept stub (`build_ake_stub_classic`).
 /// It must (a) replay the overwritten `lsrs r0,r0,#6` as its FIRST instruction (the
 /// classic reject writer folds the AGID compute into the 4 replaced bytes), (b) gate
-/// on `cmp r2,#STATE_ON` (null AKE), and (c) carry both the OEM reject `movs r1,#1`
+/// on `cmp r2,#STATE_OFF` (null AKE bypass), and (c) carry both the OEM reject `movs r1,#1`
 /// and the forced-accept `movs r1,#6`. Thumb: `lsrs r0,r0,#6` = 0x0980,
-/// `cmp r2,#STATE_ON` = 0x2A01.
+/// `cmp r2,#STATE_OFF` = 0x2A00.
 #[test]
 fn classic_ake_stub_replays_lsrs_and_gates_on_state_on() {
     fn has_u16le(hay: &[u8], needle: u16) -> bool {
@@ -789,8 +789,8 @@ fn classic_ake_stub_replays_lsrs_and_gates_on_state_on() {
         "first instruction must replay `lsrs r0,r0,#6`"
     );
     assert!(
-        has_u16le(&stub, 0x2A01),
-        "must gate on cmp r2,#STATE_ON (null AKE)"
+        has_u16le(&stub, 0x2A00),
+        "must gate on cmp r2,#STATE_OFF (null AKE bypass)"
     );
     assert!(
         has_u16le(&stub, 0x2101),
@@ -985,7 +985,7 @@ fn busenc_detour_errors_on_unknown_arm() {
     );
 }
 
-/// The bus-off stub must assemble, be halfword-aligned, gate on `cmp r3,#STATE_ON`,
+/// The bus-off stub must assemble, be halfword-aligned, gate on `cmp r3,#STATE_OFF`,
 /// materialize `BUSENC_REG` (`1<<26`) and clear `BUSENC_ENABLE_BIT`, and read the
 /// Bus feature cell (`flag_base + Feature::Bus`).
 #[test]
@@ -1000,7 +1000,7 @@ fn busenc_stub_is_wellformed_and_encodes_the_decision() {
             .windows(2)
             .any(|w| u16::from_le_bytes([w[0], w[1]]) == n)
     };
-    assert!(has(0x2B01), "gates on cmp r3,#STATE_ON");
+    assert!(has(0x2B00), "gates on cmp r3,#STATE_OFF (bus off on OFF)");
     assert!(
         has(0x2101) && has(0x0689),
         "materializes BUSENC_REG (1<<26)"

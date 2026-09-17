@@ -35,7 +35,7 @@ impl Mt1959Engine {
     /// movs r1,#1` (4 bytes at `AKE_GATE_SIG_CLASSIC`'s `match+6`) — unlike the
     /// MT1959 reject writer, the classic one folds the `lsrs` (AGID compute) into
     /// the replaced bytes, so the stub REPLAYS it. It then forces `r1 = 6` when
-    /// `flag[Ake]==STATE_ON` (accept any host cert) else the OEM `1` (reject), and
+    /// `flag[Ake]==STATE_OFF` (accept any host cert) else the OEM `1` (reject), and
     /// falls through to the shared OEM `bl set_agid_state` call at `back`
     /// (`match+0xa`) that BOTH arms converge on — a single clean call, so the
     /// store happens through the OEM primitive unchanged. `r2` scratch; `r0`=AGID
@@ -47,7 +47,7 @@ impl Mt1959Engine {
         a.lsrs_imm(0, 0, 6); // replay the overwritten `lsrs r0,r0,#6` (r0 = AGID)
         a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
         a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
-        a.cmp_imm(2, abi::STATE_ON); // 0x01 = null AKE (accept any/revoked host cert)
+        a.cmp_imm(2, abi::STATE_OFF); // 0x00 = null AKE / bypass (accept any/revoked host cert); ON/OEM = real handshake
         a.beq(accept);
         a.movs_imm(1, 1); // OEM (00/0xFF): reset to state 1 on a failed cert verify
         a.b(done);

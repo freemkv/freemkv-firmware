@@ -309,7 +309,7 @@ pub(crate) const SPEED_GATE_SIG_R0: &[(u16, u16)] = &[
 /// cert accept/reject decision: on a failed host-cert verify the OEM lands here and
 /// resets to `1`. Raw Read (0x04) detours the RESET writer's `movs r1,#1; b <back>`
 /// (4 bytes at `match+12`) to a flag-gated stub that sets `6` (accept) when
-/// `flag[Ake]==STATE_ON` (null AKE), replicating the OEM `1` when off. Proven unique; the two
+/// `flag[Ake]==STATE_OFF` (null AKE), replicating the OEM `1` when off. Proven unique; the two
 /// `b <back>` displacements are masked (`0xE000/0xF800`). `movs r1,#6` is unique in
 /// the AACS window, which anchors the match.
 pub(crate) const AKE_GATE_SIG: &[(u16, u16)] = &[
@@ -334,7 +334,7 @@ pub(crate) const AKE_GATE_SIG: &[(u16, u16)] = &[
 /// 2-byte `movs r1,#1` at `anchor+10` and `anchor+12` is the shared `bl`. Raw
 /// Read detours that shared `bl` (see [`Mt1959Engine::build_ake_stub_nb`]) — the
 /// stub must PRESERVE `r1` when the flag is off (the accept arm passes through it
-/// too), forcing `6` only when `flag[Ake]==STATE_ON`.
+/// too), forcing `6` only when `flag[Ake]==STATE_OFF`.
 pub(crate) const AKE_GATE_SIG_NB: &[(u16, u16)] = &[
     (0x7AA0, 0xFFFF), // ldrb r0,[r4,#0xa]   AGID byte (r4, not r5)
     (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID   (accept arm)
@@ -712,7 +712,7 @@ pub(crate) const BD_GATE_SIG: &[(u16, u16)] = &[
 /// byte-identical in shape across the MT1959 **and** MT1939 lineages). Returns
 /// `1`=host revoked, `2`=blank/`0xFFFF` sentinel, `0`=clean. The cert-send path
 /// calls it and then tests `cmp r0,#0; bne <revoke>` at one or more sites; the
-/// HRL-skip detour (`flag[Feature::Hrl]==STATE_ON`) forces the clean (fall-through)
+/// HRL-skip detour (`flag[Feature::Hrl]==STATE_OFF`) forces the clean (fall-through)
 /// path at those sites.
 ///
 /// The fingerprint is **version-invariant by FUNCTION BODY**, not by the BU40N
@@ -2537,7 +2537,7 @@ impl Mt1959Engine {
     /// that replaces the OEM RESET writer's `movs r1,#1; b <back>` at
     /// [`AKE_GATE_SIG`]'s `match+12`. On entry `r0 = AGID` (set by the preceding
     /// `ldrb/lsrs`), which is preserved. The stub picks the per-AGID state to write:
-    /// `6` (AKE authenticated → VID gate open) when `flag[Ake]==STATE_ON`, else the
+    /// `6` (AKE authenticated → VID gate open) when `flag[Ake]==STATE_OFF`, else the
     /// OEM `1` (auth failed → reset). It then jumps to `back` — the OEM
     /// `set_agid_state(r0, r1)` call the reset writer branched to — so the store
     /// happens through the OEM primitive unchanged. `r2` is scratch (dead at `back`);
@@ -2554,7 +2554,7 @@ impl Mt1959Engine {
         let done = a.label();
         a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
         a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
-        a.cmp_imm(2, abi::STATE_ON); // 0x01 = null AKE (accept any/revoked host cert)
+        a.cmp_imm(2, abi::STATE_OFF); // 0x00 = null AKE / bypass (accept any/revoked host cert); ON/OEM = real handshake
         a.beq(accept);
         a.movs_imm(1, 1); // OEM (00/0xFF): reset to state 1 on a failed cert verify
         a.b(done);
@@ -2572,7 +2572,7 @@ impl Mt1959Engine {
     /// arm or `1` on the reject arm). Because the accept arm passes through here
     /// too, the stub must **preserve `r1`** when the flag is off (unlike
     /// [`Self::build_ake_stub`], which sits only on the reject writer): it forces
-    /// `r1 = 6` only when `flag[Ake]==STATE_ON`, then tail-jumps to the OEM
+    /// `r1 = 6` only when `flag[Ake]==STATE_OFF`, then tail-jumps to the OEM
     /// `set_agid_state` (`back`) so the store happens through the OEM primitive.
     /// `r2` is scratch (dead at `back`); `lr` is preserved by the outer `bl` and
     /// carries the OEM return, matching the `bl set_agid_state` this replaces.
@@ -2582,7 +2582,7 @@ impl Mt1959Engine {
         let keep = a.label();
         a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
         a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
-        a.cmp_imm(2, abi::STATE_ON); // 0x01 = null AKE (accept any/revoked host cert)
+        a.cmp_imm(2, abi::STATE_OFF); // 0x00 = null AKE / bypass (accept any/revoked host cert); ON/OEM = real handshake
         a.beq(force);
         a.b(keep); // flag off: preserve r1 (accept arm = 6, reject arm = 1)
         a.bind(force);
@@ -2607,7 +2607,7 @@ impl Mt1959Engine {
     /// replays the call **through `r4`** (NOT a low arg register: loading the call
     /// target into `r0..r3` would clobber a key-prog argument, and a >=3-arg AAPCS
     /// key-prog would then program a corrupt read-data-key — the `Bus=off` path would
-    /// return wrong content), and — only when `flag[Bus]==STATE_ON` — clears
+    /// return wrong content), and — only when `flag[Bus]==STATE_OFF` — clears
     /// [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`] before returning to `arm+4` via the
     /// saved `lr`. `r1..r3` are dead across the OEM continuation (it re-establishes
     /// them), so the stub uses them as scratch; `r4` is pushed and reused as the
@@ -2629,11 +2629,11 @@ impl Mt1959Engine {
     /// programming run unchanged and only drop the transport wrap).
     ///
     /// `flag[Bus]` (`flag[Feature::Bus]`) semantics at this site:
-    ///   * `!= STATE_ON` (`passthrough` default / `off`): replay the OEM key-prog `bl`
+    ///   * `!= STATE_OFF` (`passthrough` / `on`): replay the OEM key-prog `bl`
     ///     and return — the register is untouched, **bus encryption ON**.
     ///     Byte-behaviour-identical to OEM, so this mode is inert (stealth) until
     ///     `Bus=on`.
-    ///   * `== STATE_ON` (bus off / data clear): replay the OEM key-prog `bl`, then
+    ///   * `== STATE_OFF` (bus off / data clear): replay the OEM key-prog `bl`, then
     ///     `*BUSENC_REG &= ~BUSENC_ENABLE_BIT` → the transport wrap is off for the
     ///     following `READ(10)`, content comes back AACS-at-rest only.
     ///
@@ -2641,7 +2641,7 @@ impl Mt1959Engine {
     /// specifically the bus-encryption enable (and that clearing it here suppresses
     /// the wrap without disturbing the at-rest read path) comes from the MK-vs-OEM
     /// 1.03 diff and is NOT yet re-proven on this silicon; the golden-UK hardware KAT
-    /// is the final arbiter. The `!= STATE_ON` (bus-ON) path IS structurally proven —
+    /// is the final arbiter. The `!= STATE_OFF` (bus-ON) path IS structurally proven —
     /// it replays the exact OEM key-prog call and touches nothing else.
     pub(crate) fn build_busenc_stub(&self, flag_base: u32, keyprog: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
@@ -2651,7 +2651,7 @@ impl Mt1959Engine {
         a.blx(4); // replay OEM key programming with r0-r3 = original args (return value dead at arm+4)
         a.ldr_lit(3, flag_base + abi::Feature::Bus as u32); // r3 = &flag[Bus]
         a.ldrb_imm(3, 3, 0); // r3 = Bus flag byte
-        a.cmp_imm(3, abi::STATE_ON); // 0x01 = bus off (remove the bus-encryption stage)
+        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = bus off / de-bussed (remove the bus-encryption stage); ON/OEM = bus on
         a.bne(skip); // OEM (00/0xFF): leave BUSENC_REG untouched (bus ON, stealth)
         a.movs_imm(1, 1);
         a.lsls_imm(1, 1, 26); // r1 = 1<<26 = BUSENC_REG (0x0400_0000)
@@ -3064,11 +3064,11 @@ impl Mt1959Engine {
         Ok((sites, target))
     }
 
-    /// The HRL-skip trampoline (`flag[Feature::Hrl]==STATE_ON`). Shared by the three
+    /// The HRL-skip trampoline (`flag[Feature::Hrl]==STATE_OFF`). Shared by the three
     /// cert-path sites: each `bl` replaces `cmp r0,#0; bne <revoke>` (4 bytes) at a
     /// site, so on entry `lr` = that site's CLEAN fall-through and `r0` = the HRL
     /// lookup result (`1`=revoked, `2`=blank, `0`=clean). When `flag[Feature::Hrl]`
-    /// is `STATE_ON` the stub takes the clean path regardless of the result (revoked
+    /// is `STATE_OFF` the stub takes the clean path regardless of the result (revoked
     /// certs accepted, non-destructive); otherwise it replicates OEM exactly (clean
     /// iff `r0==0`, else jump to the `revoke` 6F/00 path). `r3` is saved/restored;
     /// `r0`/`lr` untouched on the clean path, so behaviour is OEM-identical when the
@@ -3081,7 +3081,7 @@ impl Mt1959Engine {
         a.push(0x0008); // push {r3}   (r3 scratch; no inner call → SP alignment moot)
         a.ldr_lit(3, flag_base + abi::Feature::Hrl as u32); // r3 = &flag[Hrl]
         a.ldrb_imm(3, 3, 0); // r3 = HRL flag byte
-        a.cmp_imm(3, abi::STATE_ON); // 0x01 = skip HRL -> force clean
+        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = skip HRL -> force clean; ON/OEM = enforce (OEM)
         a.beq(clean);
         a.cmp_imm(0, 0); // OEM: clean iff HRL result == 0
         a.beq(clean);
@@ -3139,7 +3139,7 @@ impl Mt1959Engine {
     /// start of the AACS opcode-`0x45` arm (located by [`Self::find_aacs45_arm`]).
     /// Returns `(detour_site, stub_bytes)` where a `bl` to the stub is written at
     /// `detour_site` (replacing the OEM `bl`); the stub replays the OEM key-prog call
-    /// and, when `flag[Bus]==STATE_ON`, clears [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`].
+    /// and, when `flag[Bus]==STATE_OFF`, clears [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`].
     /// Errors (→ Bus feature unwired) on images whose opcode-`0x45` arm is not one of the
     /// two known MT1959 shapes.
     pub(crate) fn busenc_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
@@ -3218,10 +3218,10 @@ impl Mt1959Engine {
     /// preceding `ldrb r0,[r0]`), preserved. This gate is reached by a bare
     /// `READ DISC STRUCTURE` (`0xAD` fmt `0x80`) — NO AKE.
     ///
-    /// This is the null-AKE bare-read mode (`flag[Ake]==STATE_ON`): "the cert is
+    /// This is the null-AKE bare-read mode (`flag[Ake]==STATE_OFF`): "the cert is
     /// valid" — the drive is told the host auth already succeeded, so an unlocker can
     /// just issue a bare `0xAD` fmt `0x80` and get the VID with NO cert and NO AKE.
-    /// When `flag[Ake]==STATE_ON` the stub jumps to `authed` (the fall-through that
+    /// When `flag[Ake]==STATE_OFF` the stub jumps to `authed` (the fall-through that
     /// stages+emits VID) regardless of the auth byte; otherwise (`passthrough`/`off`)
     /// it replicates the OEM `cmp #6` (authed on `==6`, which is what the real-AKE
     /// accept path leaves in place). `r2` scratch; `lr` dead
@@ -3240,7 +3240,7 @@ impl Mt1959Engine {
         let authed_direct = a.label(); // 04 02 real-AKE authed: emit WITHOUT touching AGID
         a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
         a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
-        a.cmp_imm(2, abi::STATE_ON); // 0x01 (null AKE): force authed so a bare 0xAD returns the VID
+        a.cmp_imm(2, abi::STATE_OFF); // 0x00 (null AKE / bypass): force authed so a bare 0xAD returns the VID; ON/OEM = real AKE
         a.beq(rearm);
         a.cmp_imm(0, 6); // OEM (00/0xFF): authed iff auth byte == 6 (real AKE ran)
         a.beq(authed_direct);
