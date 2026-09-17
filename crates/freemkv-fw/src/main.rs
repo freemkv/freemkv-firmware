@@ -688,14 +688,18 @@ fn cmd_create(
 /// modify levers). Each `(display-name, resolved?)` pair says whether that
 /// feature's gate actually landed for THIS image. Order is stable.
 fn base_features(report: &engine::CreateReport) -> Vec<(&'static str, bool)> {
+    // The 7 firmware feature FLAGS (flag-table bytes 1..=7), each "available" when its
+    // OEM gate resolved AND the detour stub was actually emitted. Deliberately NOT
+    // listed: "Raw Read" (a host composition of AKE-off + Bus-off — not a fw feature)
+    // and "Downgrade Enable" (a fixed base identity-page byte, not a tri-state flag).
     vec![
-        ("Speed", report.speed_gate != 0),
-        ("Region-free", report.region_emitter != 0),
-        ("Raw Read", report.ake_gate != 0),
+        ("Speed", report.speed_stub_va != 0),
+        ("Region", report.region_stub_va != 0),
         ("UHD", report.uhd_stub_va != 0),
         ("BD", report.bd_stub_va != 0),
-        ("HRL Skip", !report.hrl_sites.is_empty()),
-        ("Downgrade Enable", report.de_off != 0),
+        ("HRL", report.hrl_stub_va != 0),
+        ("AKE", report.ake_stub_va != 0),
+        ("Bus", report.busenc_stub_va != 0),
     ]
 }
 
