@@ -11,11 +11,13 @@
 //!   yields `Identity + Speed + Region + Raw read` applied + `DE`.
 //! * **Classic** (banner `"MT1939 Boot Code"`, marker `+0x50 = 0x58`, 14 images) —
 //!   its own scanner (`0x182e8`, CDB base in **r5** not r3), its own dispatch table
-//!   (`~0x1a4000`), and its own VID/AKE code shapes. The classic VID/AKE gate
-//!   signatures are reversed and proven-unique (captured below), but the classic
-//!   **Identity base** (its sense-setter + injectable handler) is not yet wired, so
-//!   today classic images apply only the **family-agnostic downgrade-enable (DE)**
-//!   lever and report the rest as pending — never an opaque refusal.
+//!   (`~0x1a4000`), and its own VID/AKE code shapes. `create` now ships the classic
+//!   **base** ([`Mt1959Engine::build_report_classic`]): the injected 0x3C-0E handler
+//!   (Identity/SET/GET/SAVE/RESET/DumpAll) + record repoint + CMAC re-sign, proven
+//!   17/17. The always-on boot hook and feature stubs stay gated behind the on-silicon
+//!   boot blessing (`CLASSIC_BOOT_BLESSED`); until then `modify` still applies only the
+//!   **family-agnostic downgrade-enable (DE)** lever and reports the rest as pending —
+//!   never an opaque refusal.
 //!
 //! Integrity: `freemkv_flash::cmac` re-signs **both** generations unchanged
 //! (proven zero-change, table `0x10400`), so `MtkCmac` auto-accepts MT1939.
@@ -139,11 +141,19 @@ impl Engine for Mt1939Engine {
     }
 
     fn create(&self, image: &[u8]) -> Result<CreateReport> {
-        // JB8/MT1959-lineage classic images build via the shared machinery.
+        // Classic-generation MT1939 ("MT1939 Boot Code") has its own base shape
+        // (dispatch-table window, SRAM flag base, inline sense). It builds through
+        // build_report_classic; the modern monolith below covers JB8/JBP6/JBC6.
+        if is_classic(image) {
+            return Mt1959Engine
+                .build_report_classic(image)
+                .map_err(|e| anyhow!("MT1939 classic create: {e:#}"));
+        }
+        // JB8/MT1959-lineage images build via the shared modern machinery.
         Mt1959Engine.build_report(image).map_err(|e| {
             anyhow!(
-                "MT1939 create: {e:#} (classic-generation full build is pending its Identity base; \
-                 use `modify` for the downgrade-enable lever)"
+                "MT1939 create: {e:#} (base build failed; use `modify` for the \
+                 downgrade-enable lever)"
             )
         })
     }

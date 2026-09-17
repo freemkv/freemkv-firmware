@@ -751,6 +751,17 @@ const HRL_LOOKUP_SIG: &[(u16, u16)] = &[
 /// [`Feature::Hrl`]: crate::abi::Feature::Hrl
 const HRL_WIPE_ARMED: bool = false;
 
+/// Bless-gate for the MT1939-**classic** boot-init hook. The classic reload site is
+/// a called leaf helper whose power-on call-order is hardware-unconfirmed: installing
+/// a power-on `0xFF`-fill stub there could brick a classic drive if on-chip SRAM
+/// isn't up yet when the leaf runs. The detour rule resolves statically and uniquely
+/// 17/17 ([`classic_boot_init_caller`]), but [`Mt1959Engine::emit_boot_init`] only
+/// ships it when this is `true`. Default `false` = fail-closed (classic base ships
+/// handler-only, no boot hook — safe, see [`Mt1959Engine::build_report_classic`]).
+/// Flip to `true` ONLY after the one reversible on-silicon blessing (boot-init doc §5:
+/// flash a classic image, power-cycle, read back the live 7-byte flag table = `0xFF`×7).
+const CLASSIC_BOOT_BLESSED: bool = false;
+
 /// The [`abi::Verb::Identity`] reply lead-in: `"freemkv <version>"` (magic +
 /// crate version). The live feature-state table (7 bytes, `flag[0x01..=0x07]`)
 /// is appended after this by the handler at runtime.
@@ -941,6 +952,36 @@ fn boot_init_convergence(image: &[u8], site: usize) -> Option<(usize, u32)> {
     }
     let orig_init = thumb::decode_bl(image, conv)?;
     Some((conv, orig_init))
+}
+
+/// MT1939-classic analogue of [`boot_init_convergence`]. The classic reload site is a
+/// called **leaf helper**: its internal `bmi` targets a `bx lr` (function return), so —
+/// unlike modern — there is NO convergence `bl <orig_init>` inside it to detour. Rule
+/// (RE-proven unique on all 17 classic images): the helper's function entry is
+/// `anchor = site - 4`; detour the helper's **unique caller `bl`** instead. The stub
+/// (`build_boot_init`) does its `0xFF`-fill + flash-load, then tail-calls the helper —
+/// structurally identical to the modern detour, just anchored one call-frame up.
+///
+/// Returns `(caller_bl_site, helper_entry)`. Requires **exactly one** 32-bit Thumb `bl`
+/// image-wide whose target is the helper (fail-closed / `None` on 0 or >1). Validated:
+/// exactly one caller on every classic image, always inside a `push {…,lr}` function.
+fn classic_boot_init_caller(image: &[u8], site: usize) -> Option<(usize, u32)> {
+    let helper = site.checked_sub(4)? as u32; // helper leaf entry (anchor, `ldr r0,[pc]`)
+    let end = image.len().saturating_sub(4);
+    let mut caller: Option<usize> = None;
+    let mut off = 0usize;
+    while off + 4 <= end {
+        if let Some(t) = thumb::decode_bl(image, off) {
+            if t & !1 == helper & !1 {
+                if caller.is_some() {
+                    return None; // >1 caller — ambiguous, fail closed
+                }
+                caller = Some(off);
+            }
+        }
+        off += 2;
+    }
+    caller.map(|c| (c, helper))
 }
 
 /// Emit code writing the 32-bit register `src` big-endian into the reply buffer
@@ -3350,35 +3391,49 @@ impl Mt1959Engine {
     /// a deliberate one-line flip after on-silicon verification, not a code change to
     /// the finder (which is already complete).
     fn emit_boot_init(&self, image: &[u8], out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
-        let site = match self.find_boot_init(image)? {
-            Some(BootInitSite::Modern(s)) => s as usize,
-            // TODO(hw-confirm): bless classic boot-init after on-silicon call-order
-            // verification — swap this bail for `s as usize` to ship the classic hook.
-            Some(BootInitSite::ClassicUnconfirmed(s)) => bail!(
-                "boot-init site 0x{s:x} resolved via the MT1939-classic signature is a called \
-                 leaf helper whose power-on call-order is hardware-unconfirmed. Refusing to ship \
-                 an unblessed classic boot hook (could brick the drive) — classic images degrade \
-                 to DE-only until the site is verified on silicon."
-            ),
+        // Resolve the detour `(conv, orig_init)` per lineage:
+        // * Modern — follow the anchor's cold/warm-boot `bmi` to the convergence
+        //   `bl <orig_init>` (the first instruction after the cold path rejoins, which
+        //   runs AFTER the SRAM clear and on warm boot). Detouring here, not the
+        //   pre-clear reload at `anchor+4`, is what keeps the stub's 0xFF fill alive.
+        //   `boot_init_convergence` also verifies the 4 bytes at `conv` decode as that
+        //   `bl` (fail-closed otherwise, rather than guessing).
+        // * Classic — no such convergence exists (the reload site is a leaf whose `bmi`
+        //   targets `bx lr`); detour the helper's unique caller `bl` instead
+        //   (`classic_boot_init_caller`), tail-calling the helper. Only when blessed.
+        let (conv, orig_init) = match self.find_boot_init(image)? {
+            Some(BootInitSite::Modern(s)) => {
+                boot_init_convergence(image, s as usize).ok_or_else(|| {
+                    anyhow!(
+                        "boot-init convergence `bl <orig_init>` not resolvable from anchor at \
+                         0x{s:x} (the bmi target is not a 32-bit Thumb bl) — refusing to ship an \
+                         unverified boot hook rather than mis-patch"
+                    )
+                })?
+            }
+            Some(BootInitSite::ClassicUnconfirmed(s)) => {
+                if !CLASSIC_BOOT_BLESSED {
+                    bail!(
+                        "boot-init site 0x{s:x} resolved via the MT1939-classic signature is a \
+                         called leaf helper whose power-on call-order is hardware-unconfirmed. \
+                         Refusing to ship an unblessed classic boot hook (could brick the drive) \
+                         — CLASSIC_BOOT_BLESSED is false until the site is verified on silicon."
+                    );
+                }
+                classic_boot_init_caller(image, s as usize).ok_or_else(|| {
+                    anyhow!(
+                        "classic boot-init: the helper at anchor 0x{:x} does not have exactly one \
+                         `bl` caller image-wide (want 1) — refusing to ship an ambiguous detour",
+                        s.saturating_sub(4)
+                    )
+                })?
+            }
             None => bail!(
                 "tri-state OFF is unsafe without a boot-init site: no known boot-init prologue \
                  found on this image (unknown shape). Refusing to ship — a flag table that boots \
                  all-0x00 would disable every feature at power-on."
             ),
         };
-        // Follow the anchor's cold/warm-boot `bmi` to the convergence `bl <orig_init>`
-        // — the first instruction after the cold path rejoins, which runs AFTER the
-        // SRAM clear (and on warm boot). Detouring here, not the pre-clear reload at
-        // `anchor+4`, is what keeps the stub's 0xFF flag table from being wiped.
-        // `boot_init_convergence` also verifies the 4 bytes at `conv` decode as that
-        // `bl` (fail-closed / boot hook unshipped otherwise, rather than guessing).
-        let (conv, orig_init) = boot_init_convergence(image, site).ok_or_else(|| {
-            anyhow!(
-                "boot-init convergence `bl <orig_init>` not resolvable from anchor at 0x{site:x} \
-                 (the bmi target is not a 32-bit Thumb bl) — refusing to ship an unverified boot \
-                 hook rather than mis-patch"
-            )
-        })?;
         let save_home = self.find_nv_block(image)?;
         let bytes = self.build_boot_init(flag_base, orig_init, save_home)?;
         let stub_va = self.free_space(out, bytes.len() + 16)?;
@@ -3542,6 +3597,126 @@ impl Mt1959Engine {
             de_off: de_off.unwrap_or(0),
             flag_base,
             free_sram_cell,
+        })
+    }
+
+    /// MT1939-**classic** create (bare base): the modern [`Self::build_report`]
+    /// monolith is modern-shaped (modern table window, the `FLAG_TABLE_BASE`
+    /// constant, modern `emit_*` windows) and dies on classic at the flag-table
+    /// SRAM assert. This is its classic analogue — the same base every finder in
+    /// `mt1939-classic-identity-base.md` proves 17/17, mirroring the base tier of
+    /// [`Self::build_modify_classic`] but producing a [`CreateReport`].
+    ///
+    /// Ships the injected `0x3C-0E` handler (Identity / SET / GET / SAVE / RESET /
+    /// DumpAll) + record repoint + CMAC re-sign. **No boot-init hook and no feature
+    /// stubs**: the classic boot site is a hardware-unconfirmed leaf helper
+    /// ([`Self::emit_boot_init`] fail-closes on it), and installing a power-on stub
+    /// there could brick a classic drive. A *bare* base never needs it — nothing
+    /// reads the flag table at boot; only explicit host verbs do — so the omission
+    /// is safe (the cosmetic effect is that GET/Identity read uninitialised flag
+    /// cells until the first RESET, not a brick). Feature stubs (which DO need the
+    /// boot 0xFF-fill for tri-state safety) wait on the on-silicon boot blessing.
+    pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
+        // Idempotency: a re-fed freemkv image reports the existing base unchanged.
+        if is_freemkv_patched(image) {
+            bail!("image already carries a freemkv base (classic); nothing to create");
+        }
+
+        // ---- BASE (mandatory) — classic finders, all PROVEN 17/17.
+        let scanner_entry = self
+            .find_scanner_entry(image)
+            .context("classic base: dispatch scanner not found")?;
+        let cdb_base = self
+            .find_cdb_base(image)
+            .context("classic base: CDB base")?;
+        self.find_response_writer(image)
+            .context("classic base: response writer")?;
+        self.find_response_commit(image)
+            .context("classic base: response commit")?;
+        // sense_setter is a REPORT anchor only (build_handler never uses it); the
+        // classic scanner raises sense inline, so the modern shape legitimately
+        // misses. Best-effort (0 when absent) — never blocks the base.
+        let sense_setter = self.sense_setter(image).unwrap_or(0);
+
+        // Classic 0x3C dispatch table lives in its own window (~0x1a4000), NOT the
+        // modern find_live_record windows.
+        const CLASSIC_TABLE_LO: usize = 0x001a_0000;
+        const CLASSIC_TABLE_HI: usize = 0x001a_8000;
+        let record = self
+            .find_live_record_in(
+                image,
+                abi::READ_BUFFER_OPCODE,
+                CLASSIC_TABLE_LO,
+                CLASSIC_TABLE_HI,
+            )
+            .context("classic base: live 0x3C dispatch record")?;
+
+        // Classic SRAM map differs from MT1959 — derive an unreferenced cell from
+        // THIS image (the modern FLAG_TABLE_BASE collides with classic live SRAM).
+        let flag_base = self
+            .find_free_sram_cell(image)
+            .context("classic base: free SRAM cell for the flag table")?;
+
+        let handler_bytes = self
+            .build_handler(image, record.handler, flag_base)
+            .context("classic base: assembling the 3C-0E handler")?;
+
+        let mut out = image.to_vec();
+        let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
+        thumb::write(&mut out, handler_va as usize, &handler_bytes);
+
+        // Repoint the classic 0x3C record's handler; flags stay live.
+        let table = CommandTable {
+            base: 0,
+            stride: STRIDE,
+            opcode_off: 0,
+            flags_off: 1,
+            handler_off: 4,
+            term_flag: TERM_FLAG,
+            max_records: 1,
+        };
+        table.replace(&mut out, &record, handler_va | 1, None);
+        debug_assert_eq!(out[record.off + 1], LIVE_FLAGS, "flags must remain live");
+
+        let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
+
+        Ok(CreateReport {
+            image: signed,
+            scanner_entry,
+            cdb_base,
+            sense_setter,
+            record,
+            handler_va,
+            handler_bytes,
+            // Boot hook intentionally omitted on classic (hardware-gated) — see doc.
+            boot_init_site: 0,
+            boot_stub_va: 0,
+            // No feature stubs in the bare classic base.
+            vid_producer: 0,
+            vid_out_buf: 0,
+            vid_gate_setter: 0,
+            setdiscmode: 0,
+            speed_gate: 0,
+            speed_stub_va: 0,
+            region_emitter: 0,
+            region_stub_va: 0,
+            ake_gate: 0,
+            ake_stub_va: 0,
+            gatea_gate: 0,
+            gatea_stub_va: 0,
+            deny_reset_gate: 0,
+            deny_stub_va: 0,
+            busenc_detour_site: 0,
+            busenc_stub_va: 0,
+            uhd_classifier_site: 0,
+            uhd_stub_va: 0,
+            bd_gate_site: 0,
+            bd_stub_va: 0,
+            hrl_sites: Vec::new(),
+            hrl_stub_va: 0,
+            de_off: 0,
+            flag_base,
+            free_sram_cell: flag_base,
         })
     }
 
