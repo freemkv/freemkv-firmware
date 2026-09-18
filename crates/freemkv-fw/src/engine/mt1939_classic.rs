@@ -221,7 +221,7 @@ impl Mt1959Engine {
             // is nothing safe to detour. Each finder self-guards (unique match + landmark
             // re-verify) and resolves 0× on all 17, so nothing is wired and there is zero
             // wrong-detour risk.
-            if let Ok((site, bytes)) = self.uhd_detour(image, flag_base) {
+            if let Ok((site, bytes)) = self.uhd_gate_detour(image, flag_base) {
                 if let Some(stub_va) = self.commit_classic_detour(&mut out, site, &bytes) {
                     uhd_classifier_site = site as u32;
                     uhd_stub_va = stub_va;
