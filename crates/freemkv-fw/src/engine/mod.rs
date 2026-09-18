@@ -76,7 +76,7 @@ pub struct CreateReport {
     /// Injection address of the Speed (0x02) flag-gated ceiling trampoline.
     pub speed_stub_va: u32,
     /// OEM RPC-state emitter anchor for Region-free (0x03); the detour replaces
-    /// the frame[4] store at `region_emitter+6`.
+    /// the `frame[4]` store at `region_emitter+6`.
     pub region_emitter: u32,
     /// Injection address of the Region-free (0x03) flag-gated emitter trampoline.
     pub region_stub_va: u32,

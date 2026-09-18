@@ -32,7 +32,7 @@ pub enum Lineage {
 #[derive(Debug, Clone, Copy)]
 pub struct LineageProfile {
     pub lineage: Lineage,
-    /// Dispatch-table windows for [`super::core::Mt1959Engine::find_live_record`],
+    /// Dispatch-table windows for `Mt1959Engine::find_live_record`,
     /// tried in order (original-first). Modern lineages list the MT1959 window
     /// then the relocated JBC6 window; classic lists only its own.
     pub live_record_windows: &'static [Window],

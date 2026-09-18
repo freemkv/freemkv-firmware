@@ -7,7 +7,7 @@
 //! Intel-HEX images) therefore fell through `info` as "not a recognizable
 //! MT19xx image". This module closes that gap: it tries each known family's
 //! **in-image magic / signature** in turn and returns a structured
-//! [`ImageIdentity`] — never keying on the filename.
+//! [`ImageIdentity`](crate::imageid::ImageIdentity) — never keying on the filename.
 //!
 //! It lives here (not in `freemkv-chipset`) on purpose: `freemkv-chipset` is the
 //! *shared* step-1 identity both the modify and flash tools must agree on, kept

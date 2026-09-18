@@ -1820,7 +1820,7 @@ impl Mt1959Engine {
 
     /// The Region-free (0x03) RPC-state emitter anchor — the unique
     /// [`REGION_EMIT_SIG`] match (`0x119890` on 1.00, `0x119a84` on 1.03).
-    /// Returns the anchor offset; the frame[4] store the detour replaces is at
+    /// Returns the anchor offset; the `frame[4]` store the detour replaces is at
     /// `anchor+6`.
     pub fn find_region_emitter(&self, image: &[u8]) -> Result<u32> {
         // Full-image scan: `REGION_EMIT_SIG` is a single exact 20-byte hit image-wide
@@ -2638,7 +2638,7 @@ impl Mt1959Engine {
     /// **bus-encryption** stage the MK (LibreDrive-family) way. Entered by a `bl`
     /// that replaces the OEM `bl <key-prog>` at the start of the AACS **opcode-`0x45`
     /// (Read Data Key)** arm (`0x95eec` on BU40N 1.00), located via
-    /// [`Mt1959Engine::busenc_detour`] / [`AACS45_DISPATCH_SIG`]. `keyprog` is the
+    /// [`Mt1959Engine::busenc_detour`] / `AACS45_DISPATCH_SIG`. `keyprog` is the
     /// absolute target of that replaced `bl` (decoded from the image), which the stub
     /// REPLAYS so the OEM key programming still runs exactly as shipped.
     ///
