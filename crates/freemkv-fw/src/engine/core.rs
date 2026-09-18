@@ -1509,27 +1509,38 @@ impl Mt1959Engine {
     }
 
     /// Locate the **NV block base** (the SAVE home) by the OEM region/RPC-2 record
-    /// SIGNATURE — no hardcoded flash offset. The record `00 04 05` sits at a fixed
-    /// sub-block offset `+0x4B0`, 16-byte aligned, followed by `0xFF` fill, with the
-    /// block head below it (`base..base+0x4B0`) blank — that head is freemkv's write
-    /// scratch. Returns the 4 KiB block base (`0x1EA000` on every corpus image, both
-    /// chips — proven 118/118 by the corpus NV scan). Because SAVE/RESET/boot all read
-    /// and write here, resolving it per-image (rather than trusting a constant) keeps
-    /// the foundation correct even on a re-laid-out or wrapped-then-dewrapped payload.
+    /// SIGNATURE — no hardcoded flash offset AND no hard-pinned sub-block alignment.
+    /// The record `00 04 05` sits `0x4B0` bytes into its 4 KiB block, followed by
+    /// `0xFF` fill, with the block head below it (`base..base+0x4B0`) blank — that head
+    /// is freemkv's write scratch. Returns the flash-relative 4 KiB block base
+    /// (`0x1EA000` on every corpus image, both chips — proven 118/118 by the corpus NV
+    /// scan). Because SAVE/RESET/boot all read and write here, resolving it per-image
+    /// (rather than trusting a constant) keeps the foundation correct.
+    ///
+    /// The earlier revision additionally pinned the record to `(p & 0xFFF) == 0x4B0` —
+    /// i.e. it assumed flash offset 0 == file offset 0. That silently failed on the
+    /// vendor-WRAPPED dumps (a 0x800-byte cdrinfo ASCII header, or a 4-byte ASUS length
+    /// prefix `00 20 00 00` with a trailing ECDSA signature) which shift the whole flash
+    /// image by a non-4 KiB-aligned header, so the record no longer lands on a `0x…4B0`
+    /// file offset. De-hardcoding to a pure signature match (per the standing lesson:
+    /// any hard-pinned offset is suspect — blocks/images relocate across MT19xx variants
+    /// and wrappers) recovers all of them. Masking the FOUND record to its enclosing
+    /// 4 KiB block (`& !0xFFF`) still yields the flash-relative `0x1EA000` because every
+    /// observed wrapper header is smaller than `0x1000 - 0x4B0`, so the record stays
+    /// inside the same aligned block as the true NV base.
     ///
     /// Refuses (rather than guessing) unless EXACTLY ONE qualifying record exists in the
-    /// top 192 KiB of flash — the structural constraints (record bytes + `+0x4B0`
-    /// sub-offset + `0xFF` fill + a blank ≥0x4B0-byte head) yield a unique hit corpus-
-    /// wide.
+    /// top 256 KiB of flash — the structural constraints (record bytes + `0xFF` fill +
+    /// a blank 0x4B0-byte head) yield a unique hit corpus-wide.
     pub fn find_nv_block(&self, image: &[u8]) -> Result<u32> {
         const REC: [u8; 3] = [0x00, 0x04, 0x05]; // OEM region/RPC-2 record tag
         const SUB: usize = 0x4B0; // record offset within its 4 KiB block
-        let lo = image.len().saturating_sub(0x3_0000); // NV lives in the top of flash
+                                  // NV lives high in flash; the window is len-relative so a prepended
+                                  // vendor header (which shifts the image up) never pushes it out.
+        let lo = image.len().saturating_sub(0x4_0000).max(SUB);
         let hits: Vec<usize> = (lo..image.len().saturating_sub(16))
             .filter(|&p| {
-                (p & 0xFFF) == SUB
-                    && p >= SUB
-                    && image[p..p + 3] == REC
+                image[p..p + 3] == REC
                     && image[p + 3..p + 16].iter().all(|&b| b == 0xFF)
                     && image[p - SUB..p].iter().all(|&b| b == 0xFF)
             })
@@ -1537,8 +1548,8 @@ impl Mt1959Engine {
         match hits.as_slice() {
             [rec] => Ok((*rec as u32) & !0xFFF),
             other => bail!(
-                "NV region record (00 04 05 at block+0x4b0 with a blank head) matched {} \
-                 candidate(s) in the top 192 KiB (want exactly 1) — refusing to resolve \
+                "NV region record (00 04 05 with a blank 0x4B0-byte head) matched {} \
+                 candidate(s) in the top 256 KiB (want exactly 1) — refusing to resolve \
                  SAVE home",
                 other.len()
             ),
