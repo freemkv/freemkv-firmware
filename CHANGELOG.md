@@ -6,6 +6,35 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1]
+
+Major firmware redesign (0.7.x → 0.8.x). Pairs with the freemkv stack 1.7.2
+(freemkv-unlock mirrors this ABI). Flash with `freemkv-flash flash`, then rip
+with autorip / the freemkv CLI 1.7.2.
+
+### Added
+- **Vendor ABI v2** — the drive command grammar is now verb + feature + state:
+  `Save` (0x0B), `RESET`-to-flash/OEM modes, and explicit encodings for the seven
+  orthogonal feature flags (Speed, Region, UHD, BD, HRL, AKE, BUS). The
+  HRL/AKE/BUS unlock direction is `off = unlock` (`0x00`). Vendor-command data-in
+  is floored at `MIN_ALLOC_LEN` (the drive aborts a sub-16-byte data-in — HW-confirmed).
+- **Seven orthogonal feature flags** exposed and reported by `base` availability.
+  "Raw read" is host-composed (AKE-off + BUS-off), not a firmware feature.
+- **MT1939-classic support** — classic base create/verify (118/118) with
+  classic-specific feature gates; boot-init hook blessed on emulation evidence.
+- **SAVE/RESET/boot foundation** — persist the feature table to flash and reload
+  it on boot; signature-derived NV SAVE-home.
+
+### Changed
+- UHD folded into the single REPORT-KEY media-accept gate (one media check, not two).
+- All AACS finders de-hardcoded to full-image signature match with a uniqueness
+  guard (no hard address windows / pinned frame slots), fixing cross-variant misses.
+- Engine split into a shared core + per-lineage builders; golden KAT regenerated.
+
+### Feature availability (118-image OEM corpus)
+- Region / AKE / BUS / HRL: 118/118. Speed / UHD / BD: 101/118 (the 17
+  MT1939-classic images lack these by genuine architectural limitation).
+
 ## [0.7.1]
 
 ### Added
