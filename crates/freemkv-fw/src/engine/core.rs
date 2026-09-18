@@ -568,80 +568,6 @@ const _: () = assert!(BUSENC_REG == 1u32 << 26);
 /// the MK-vs-OEM diff, not yet re-confirmed on this silicon by us.
 pub(crate) const BUSENC_ENABLE_BIT: u8 = 0x10;
 
-/// Signature of the OEM disc-version classifier prologue (`0xcb3c0` on BU40N 1.00,
-/// `0xcb3a4` on the owned 1.03 images — **byte-identical**, only relocated). This is
-/// the exact function MK's LibreDrive-family firmware hooks on the UHD (AACS 2.0)
-/// path: MK replaces this 10-byte prologue with a call into its injected stub, and
-/// the stub (with no runtime callback registered) returns the processed disc-version
-/// as `0` — i.e. it **forces the disc-version the classifier sees to 0**, so a UHD
-/// disc is never categorized into the "mode 1" bucket the downstream REPORT KEY gate
-/// refuses with sense `6F/01`.
-///
-/// The prologue saves the incoming args, reserves a `0x24`-byte frame, reloads the
-/// disc-version dword (the first stack arg, saved by the `push {r0-r3}`) into `r0`,
-/// and seeds `r5=6` for the per-byte category loop:
-///   `push {r0,r1,r2,r3}; push {r4,r5,r6,r7,lr}; sub sp,#0x24;
-///    ldr r0,[sp,#0x38]; movs r5,#6`
-///
-/// Proven UNIQUE on BU40N 1.00 (single match in `[0xc0000,0xd0000)`) and matched
-/// byte-identically on the owned 1.03 images. freemkv detours the version reload
-/// `ldr r0,[sp,#0x38]` (+`movs r5,#6`, the 4 bytes at `match+6`) to a flag-gated
-/// stub ([`Mt1959Engine::build_uhd_stub`]) that replays both and — only when
-/// `flag[Uhd]==STATE_ON` — zeros the disc-version (MK-parity). `lr` is already saved on
-/// the stack by the preceding `push {r4-r7,lr}`, so the detour `bl` may clobber it
-/// freely and the stub returns with `bx lr` to `match+10` (the classifier body).
-pub(crate) const UHD_CLASSIFIER_SIG: &[(u16, u16)] = &[
-    (0xB40F, 0xFFFF), // push {r0,r1,r2,r3}
-    (0xB5F0, 0xFFFF), // push {r4,r5,r6,r7,lr}
-    (0xB089, 0xFFFF), // sub  sp,#0x24
-    (0x980E, 0xFFFF), // ldr  r0,[sp,#0x38]   disc-version reload ← detour site (match+6)
-    (0x2506, 0xFFFF), // movs r5,#6           (match+8; consumed by the 4-byte detour bl)
-];
-
-/// Signature of the **version-compare** disc-version classifier — the NB/NS/newer-MK
-/// codegen that classifies by disc-version *thresholds* instead of the byte-extraction
-/// prologue [`UHD_CLASSIFIER_SIG`] matches. This is the SAME UHD mode-gate, only a
-/// different compiler shape, and covers the MT1959 images the primary signature misses
-/// (~1/3 of the fleet: BU40N `1.01`/`1.04`, BP50NB40, WH14NS40 `1.05`, BE16NU50, …).
-///
-/// The classifier loads the disc-version halfword (`ldrh r0,[r1]`) and buckets it by
-/// two band edges, writing the class code into `r2`:
-///   ```text
-///   ldrh r0,[r1]              (match-2)   ← detour site (with the following `cmp`)
-///   cmp  r0,#0x63             (match+0)   ← ANCHOR (the unique head)
-///   bls  <lo-band>            (match+2)   return target of the stub's stealth path
-///   movs r2,#2               (match+4)   class = UHD/BD (mode-1 — the refused bucket)
-///   b    <join1>
-///   ldrh r0,[r1]                          reload for the second compare
-///   cmp  r0,#0x5e
-///   bls  <arm-C>
-///   movs r2,#1                            mid band
-///   movs r1,#0x73; movs r0,#1; b <join2>
-///   movs r2,#3               (match+0x16) ← arm C (lowest band == what version-0 hits)
-///   ...join1: movs r1,#0x73; movs r0,#3
-///   join2: bl <compose_disc_mode>        packs (r0<<16)|(r1<<8)|r2 into the mode word
-///   ```
-/// `movs r2,#2` (`r2==2`) is the UHD "mode 1" the downstream REPORT KEY gate refuses
-/// with `6F/01`; arm C (`r2==3`, `r0==3`) is exactly the class a disc-version of `0`
-/// falls into. So "force the seen disc-version to 0" here = **route to arm C**: the
-/// stub (only when `flag[Feature::Uhd]==STATE_ON`) branches straight to `match+0x16`,
-/// which is byte-for-byte the version-0 outcome (MK-parity), and otherwise replays
-/// `ldrh r0,[r1]; cmp r0,#0x63` verbatim (stealth). The two `bls` displacements are
-/// masked. Consulted **only when [`UHD_CLASSIFIER_SIG`] matches zero** (original-first),
-/// so the BU40N KAT base and every image the byte-extraction shape covers are untouched.
-pub(crate) const UHD_CLASSIFIER_SIG_VER: &[(u16, u16)] = &[
-    (0x2863, 0xFFFF), // cmp  r0,#0x63     ← anchor (the `ldrh r0,[r1]` is at match-2)
-    (0xD900, 0xFF00), // bls  <lo-band>
-    (0x2202, 0xFFFF), // movs r2,#2        class = UHD/BD (mode-1, the refused bucket)
-    (0xE000, 0xF800), // b    <join1>
-    (0x8808, 0xFFFF), // ldrh r0,[r1]      reload for the second compare
-    (0x285E, 0xFFFF), // cmp  r0,#0x5e
-    (0xD900, 0xFF00), // bls  <arm-C>
-    (0x2201, 0xFFFF), // movs r2,#1
-    (0x2173, 0xFFFF), // movs r1,#0x73
-    (0x2001, 0xFFFF), // movs r0,#1
-];
-
 /// Signature of the AACS **REPORT KEY disc-mode/class accept gate** — the code
 /// that decides whether the drive engages a disc for AACS key exchange, keyed on
 /// the disc *mode* (`0`=BD/AACS-1.0, `1`=UHD/AACS-2.0 mode-1) and the classifier's
@@ -2768,183 +2694,6 @@ impl Mt1959Engine {
         a.finish()
     }
 
-    /// The Raw Read `04 03` **UHD mode-gate neutralizer** trampoline (MK-style
-    /// classifier hook). Entered by a `bl` that replaces the disc-version classifier
-    /// prologue's reload `ldr r0,[sp,#0x38]; movs r5,#6` (4 bytes at
-    /// [`UHD_CLASSIFIER_SIG`]'s `match+6`). It replays both overwritten instructions
-    /// and, only when `flag[Uhd]==STATE_ON`, zeros the disc-version so a UHD (AACS 2.0)
-    /// disc is never categorized into the "mode 1" bucket the downstream REPORT KEY
-    /// gate refuses with sense `6F/01`.
-    ///
-    /// # Register / frame contract
-    /// The detour is a bare `bl` (it does **not** push), so `sp` is unchanged from the
-    /// classifier's frame — the stub's replayed `ldr r0,[sp,#0x38]` therefore resolves
-    /// to the exact same slot (the saved first arg = the disc-version dword) the OEM
-    /// instruction would have. `lr` is already saved on the stack by the classifier's
-    /// own preceding `push {r4,r5,r6,r7,lr}`, so the `bl`'s clobber of `lr` is harmless
-    /// and the stub returns to `match+10` (the classifier body) with `bx lr`. `r0`
-    /// (disc-version) and `r5` (=6, the per-byte category-loop shift seed) are the two
-    /// live outputs the continuation consumes; `r3` is scratch, dead at `match+10`
-    /// (the continuation recomputes `r2`/`r3` before use).
-    ///
-    /// `flag[Uhd]` (`flag[Feature::Uhd]`) semantics at this site:
-    ///   * `!= STATE_ON` (`passthrough` / `off`): replay `ldr r0,[sp,#0x38]; movs r5,#6`
-    ///     verbatim and return — the disc-version is untouched, so classification is
-    ///     byte-behaviour-identical to OEM. Inert (stealth) until `Uhd=on`.
-    ///   * `== STATE_ON` (full UHD bypass): after the replay, `r0 = 0` → the classifier
-    ///     sees disc-version `0`, dodging the UHD mode-1 categorization (MK-parity: MK's
-    ///     injected stub returns the same forced-`0`).
-    ///
-    /// **`STATE_OFF` (`0x00`) is RESERVED (== OEM) on this byte-extraction classifier
-    /// shape.** The class this classifier assigns is derived from *several* disc-version
-    /// bytes through a per-byte category loop (not a single hookable value the reload
-    /// controls), so a genuine force-refuse cannot be grounded here from the single
-    /// `r0` reload without deeper RE. OFF therefore falls through the `!= STATE_ON`
-    /// (verbatim replay) path — safe (boot-behaviour-identical) but a no-op. The
-    /// genuine UHD OFF IS emitted on the version-compare classifier shape (see
-    /// [`Self::build_uhd_stub_ver`]), which exposes a distinct `movs r2,#2` mode-1 arm.
-    ///
-    /// **HARDWARE-KAT-GATED HYPOTHESIS.** That neutralizing this categorization (the
-    /// exact site MK hooks) is what lifts the UHD mode-1 refusal — and that it, together
-    /// with the already-shipped bus-encryption bit-clear, yields readable at-rest UHD
-    /// content on the vendor path — comes from the MK-vs-OEM diff and is NOT re-proven on
-    /// this silicon; a hardware UHD rip is the final arbiter. The `!= 3` (stealth) path
-    /// IS structurally proven — it replays the two OEM instructions and touches nothing
-    /// else.
-    pub(crate) fn build_uhd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
-        let skip = a.label();
-        a.raw16(0x980E); // replay: ldr r0,[sp,#0x38]  (r0 = disc-version; sp unchanged by the bl)
-        a.movs_imm(5, 6); // replay: movs r5,#6         (per-byte category-loop shift seed)
-        a.ldr_lit(3, flag_base + abi::Feature::Uhd as u32); // r3 = &flag[Uhd]
-        a.ldrb_imm(3, 3, 0); // r3 = UHD flag byte
-        a.cmp_imm(3, abi::STATE_ON); // 0x01 = force UHD (neutralize the mode gate)
-        a.bne(skip); // OEM (00/0xFF): leave the disc-version untouched (stealth)
-        a.movs_imm(0, 0); // armed: disc-version -> 0 (MK-parity; dodges the UHD mode-1 bucket)
-        a.bind(skip);
-        a.bx(14); // bx lr -> classifier continuation (match+10)
-        a.finish()
-    }
-
-    /// Resolve the `04 03` UHD mode-gate neutralizer detour: the classifier prologue's
-    /// disc-version reload (located by [`Self::find_uhd_classifier`]). Returns
-    /// `(detour_site, stub_bytes)` where a `bl` to the stub is written at
-    /// `detour_site` (= classifier `anchor+6`, replacing `ldr r0,[sp,#0x38]; movs
-    /// r5,#6`). Verifies the two replaced halfwords are exactly the OEM prologue
-    /// reload before returning, so a mis-anchored match refuses rather than patches.
-    pub(crate) fn uhd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
-        let anchor = self.find_uhd_classifier(image)? as usize;
-        // find_masked_all only guarantees the signature span (<=20 bytes) is in
-        // bounds; the version-compare arm indexes arm C at anchor+0x16. Refuse a
-        // match too close to EOF rather than panic on a truncated image.
-        if anchor + 0x18 > image.len() {
-            bail!("UHD classifier matched within 0x18 of image end (0x{anchor:x}) — truncated image, refusing");
-        }
-        let head = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
-        // The finder returns the head of whichever variant resolved. `push {r0-r3}`
-        // (0xB40F) => the byte-extraction prologue (primary); `cmp r0,#0x63` (0x2863)
-        // => the version-compare variant. Each has its own detour site + stub, verified
-        // against the OEM bytes before patching so a mis-anchored match refuses.
-        if head == 0xB40F {
-            // Primary: replace the disc-version reload `ldr r0,[sp,#0x38]; movs r5,#6`
-            // (4 bytes at anchor+6); the stub returns to the classifier body at anchor+10.
-            let site = anchor + 6;
-            let ldr = u16::from_le_bytes([image[site], image[site + 1]]);
-            let movs = u16::from_le_bytes([image[site + 2], image[site + 3]]);
-            if ldr != 0x980E || movs != 0x2506 {
-                bail!(
-                    "UHD classifier reload (ldr r0,[sp,#0x38]; movs r5,#6) not at 0x{site:x} \
-                     (got 0x{ldr:04x} 0x{movs:04x})"
-                );
-            }
-            Ok((site, self.build_uhd_stub(flag_base)?))
-        } else {
-            // Version-compare variant: the anchor is `cmp r0,#0x63`, preceded by the
-            // disc-version load `ldrh r0,[r1]` at anchor-2. Replace those 4 bytes
-            // (ldrh + cmp) with the `bl`; the stub replays both (stealth) or, when armed,
-            // branches straight to arm C at anchor+0x16 (`movs r2,#3` == the class a
-            // disc-version of 0 hits). Verify all three OEM landmarks before patching.
-            let site = anchor - 2;
-            let ldrh = u16::from_le_bytes([image[site], image[site + 1]]);
-            let cmp = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
-            let arm_c_va = (anchor + 0x16) as u32;
-            let arm_c = u16::from_le_bytes([image[anchor + 0x16], image[anchor + 0x17]]);
-            // The mode-1 (UHD-refused) class arm `movs r2,#2` is at anchor+4 (index 2
-            // of UHD_CLASSIFIER_SIG_VER); the OFF path routes here to force-refuse UHD.
-            let mode1_va = (anchor + 4) as u32;
-            let mode1 = u16::from_le_bytes([image[anchor + 4], image[anchor + 5]]);
-            if ldrh != 0x8808 || cmp != 0x2863 || arm_c != 0x2203 || mode1 != 0x2202 {
-                bail!(
-                    "UHD version-compare classifier landmarks off at anchor 0x{anchor:x} \
-                     (ldrh@-2=0x{ldrh:04x} cmp=0x{cmp:04x} mode1@+4=0x{mode1:04x} \
-                     armC@+0x16=0x{arm_c:04x})"
-                );
-            }
-            Ok((
-                site,
-                self.build_uhd_stub_ver(flag_base, arm_c_va, mode1_va)?,
-            ))
-        }
-    }
-
-    /// Version-compare sibling of [`Self::build_uhd_stub`] — the `04 03` UHD mode-gate
-    /// neutralizer for images whose classifier buckets by disc-version *thresholds*
-    /// ([`UHD_CLASSIFIER_SIG_VER`]). Entered by a `bl` that replaces `ldrh r0,[r1];
-    /// cmp r0,#0x63` (the 4 bytes at the anchor's `match-2`).
-    ///
-    /// # Register / frame contract
-    /// A bare `bl` (no push), so `sp`/`r1` are unchanged — the replayed `ldrh r0,[r1]`
-    /// resolves to the same disc-version halfword the OEM load would. `r3` is scratch:
-    /// the classifier never feeds `r3` to the class-compose call (`compose_disc_mode`
-    /// sets `r3=0` on entry), and no arm reads it, so clobbering it is invisible on both
-    /// paths. `lr` is caller-saved (the function returns via its own `pop {…,pc}`, and
-    /// re-arms `lr` at the class-compose `bl`), so the `bl`'s `lr` clobber is harmless.
-    ///
-    /// `flag[Feature::Uhd]` tri-state at this site:
-    ///   * `STATE_PASSTHROUGH` (0xFF) / anything else: replay `ldrh r0,[r1]; cmp
-    ///     r0,#0x63` verbatim and `bx lr` to the caller's `bls` (anchor+2) —
-    ///     classification is byte-behaviour-identical to OEM. Inert (stealth); the
-    ///     boot hook guarantees `0xFF` at power-on.
-    ///   * `STATE_ON` (0x01): branch straight to arm C (`arm_c_va` = anchor+0x16,
-    ///     `movs r2,#3`), the exact class a disc-version of `0` produces — so a UHD
-    ///     disc dodges the `r2==2` mode-1 bucket the REPORT KEY gate refuses
-    ///     (MK-parity, force-ENABLE UHD).
-    ///   * `STATE_OFF` (0x00): branch straight to the `movs r2,#2` mode-1 arm
-    ///     (`mode1_va` = anchor+4) — the UHD/AACS-2.0 bucket the REPORT KEY gate
-    ///     refuses with `6F/01`, so the drive genuinely reports/behaves as no-UHD
-    ///     (force-DISABLE UHD). The genuine OFF this classifier shape can express.
-    ///
-    /// **HARDWARE-KAT-GATED HYPOTHESIS** — same status as [`Self::build_uhd_stub`]: the
-    /// stealth path is structurally proven (a verbatim replay); the armed ON/OFF
-    /// branch targets are the OEM classifier's own class arms, but their end effect on
-    /// the UHD refusal is the MK-vs-OEM hypothesis, not re-proven on this silicon.
-    pub(crate) fn build_uhd_stub_ver(
-        &self,
-        flag_base: u32,
-        arm_c_va: u32,
-        mode1_va: u32,
-    ) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
-        let force_on = a.label();
-        let force_off = a.label();
-        a.raw16(0x8808); // replay: ldrh r0,[r1]   (r0 = disc-version; r1 unchanged by the bl)
-        a.ldr_lit(3, flag_base + abi::Feature::Uhd as u32); // r3 = &flag[Uhd]
-        a.ldrb_imm(3, 3, 0); // r3 = UHD flag byte
-        a.cmp_imm(3, abi::STATE_ON); // 0x01 = force UHD ON (neutralize the mode gate)
-        a.beq(force_on);
-        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force UHD OFF (route to the refused mode-1 bucket)
-        a.beq(force_off);
-        a.cmp_imm(0, 0x63); // stealth: replay `cmp r0,#0x63` LAST so the caller's `bls` sees OEM flags
-        a.bx(14); // bx lr -> caller's `bls` at anchor+2 (OEM classification)
-        a.bind(force_on);
-        a.ldr_lit(3, arm_c_va | 1); // ON: arm C (movs r2,#3) == disc-version-0 class (engage UHD)
-        a.bx(3);
-        a.bind(force_off);
-        a.ldr_lit(3, mode1_va | 1); // OFF: mode-1 arm (movs r2,#2) == UHD bucket REPORT KEY refuses
-        a.bx(3);
-        a.finish()
-    }
-
     /// The `Feature::Bd` **BD (AACS 1.0) capability-refuse** trampoline. Entered by a
     /// `bl` that replaces the REPORT KEY gate's mode-0 class check `ldrb r0,[r2,#7];
     /// cmp r0,#2` (4 bytes at [`BD_GATE_SIG`]'s `anchor+16`). On entry `r2 = the
@@ -2984,6 +2733,48 @@ impl Mt1959Engine {
         a.bx(14); // bx lr -> caller's `beq <accept>` at anchor+20 (OEM acceptance)
         a.bind(refuse);
         a.cmp_imm(0, 0xff); // armed: class never 0xff -> Z=0 -> caller's `beq` falls through to OEM deny (6F)
+        a.bx(14);
+        a.finish()
+    }
+
+    /// The `Feature::Uhd` **UHD (AACS 2.0) media accept/refuse** trampoline — the UHD
+    /// sibling of [`Self::build_bd_stub`] on the SAME REPORT KEY accept gate. Entered
+    /// by a `bl` that replaces the gate's UHD class check `ldrb r0,[r2,#7]; cmp r0,#3`
+    /// (4 bytes at [`BD_GATE_SIG`]'s `anchor+4`). On entry `r2 = the per-disc class
+    /// struct` (loaded by the gate's own `ldr r2,[pc]`, undisturbed by a `bl`); the
+    /// stub replays the class load and returns to `anchor+8` — the OEM `bne <deny>`
+    /// that the gate reaches for a class-3 (UHD/AACS-2.0) disc.
+    ///
+    /// # Register / frame contract
+    /// A bare `bl` (no push), so `sp`/`r2` are unchanged — the replayed `ldrb
+    /// r0,[r2,#7]` reads the same class byte the OEM load would. `r0`/`r3` are scratch:
+    /// the accept continuation (falls through past `anchor+8`) and the shared `<deny>`
+    /// block both recompute `r0` before use and never read `r3`, so clobbering them is
+    /// invisible. `lr` is caller-saved (the enclosing function returns via its own
+    /// `pop {…,pc}`), so the `bl`'s `lr` clobber is harmless.
+    ///
+    /// `flag[Uhd]` tri-state at this site (uniform `0xFF`/`0x01`/`0x00`; the always-on
+    /// boot hook writes `0xFF` at power-on, so `0x00` OFF is never seen at boot):
+    ///   * `!= STATE_OFF` (`0xFF` passthrough / `0x01` on): replay `ldrb r0,[r2,#7];
+    ///     cmp r0,#3` verbatim, so the caller's `bne` sees the exact OEM flags — UHD
+    ///     acceptance is byte-behaviour-identical to OEM (the drive reads UHD discs
+    ///     natively; ON is accept). Inert (stealth) until armed OFF.
+    ///   * `== STATE_OFF` (`0x00`): after the class replay, force a non-equal compare
+    ///     (`cmp r0,#0xff`; class is never `0xff`) so the caller's `bne <deny>` IS
+    ///     taken and control jumps into the OEM `6F/05` deny block — the drive REFUSES
+    ///     the UHD disc, symmetric with the BD arm.
+    pub(crate) fn build_uhd_gate_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        let refuse = a.label();
+        a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
+        a.ldr_lit(3, flag_base + abi::Feature::Uhd as u32); // r3 = &flag[Uhd]
+        a.ldrb_imm(3, 3, 0); // r3 = Uhd flag byte
+        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force UHD refuse (0xFF passthrough / 0x01 on stay OEM)
+        a.beq(refuse);
+        a.cmp_imm(0, 3); // stealth: replay `cmp r0,#3` LAST so the caller's `bne` sees OEM flags
+        a.bx(14); // bx lr -> caller's `bne <deny>` at anchor+8 (class==3 -> Z=1 -> accept)
+        a.bind(refuse);
+        a.cmp_imm(0, 0xff); // armed: class never 0xff -> Z=0 -> caller's `bne` jumps to OEM deny (6F/05)
         a.bx(14);
         a.finish()
     }
@@ -3097,6 +2888,45 @@ impl Mt1959Engine {
         }
     }
 
+    /// Resolve the `Feature::Uhd` media-gate arm on the SAME AACS accept gate the BD
+    /// arm hooks ([`Self::find_bd_gate`]). The explicit REPORT KEY gate carries a UHD
+    /// class-3 check `ldrb r0,[r2,#7]; cmp r0,#3` at `anchor+4` (BU40N `0x1365c2`),
+    /// paired with a `bne <deny>` at `anchor+8`. Returns `(detour_site, stub_bytes)`
+    /// where a `bl` to [`Self::build_uhd_gate_stub`] is written at `anchor+4`, replacing
+    /// those 4 bytes; the stub returns to the `bne` at `anchor+8`. Verifies the exact
+    /// OEM bytes before returning, so a mis-anchored match refuses rather than patches.
+    ///
+    /// Only the explicit gate shape (`BD_GATE_SIG`, anchor head `cmp r0,#1` = 0x2801)
+    /// exposes this class-3 UHD arm. The descriptor-classifier gate shape
+    /// (`BD_GATE_SIG_VER`) buckets disc mode differently and has no class-3 check at a
+    /// fixed offset, so UHD is UNAVAILABLE there — this returns an `Err` (the caller
+    /// leaves `uhd_stub_va = 0`, feature not applied), never a guessed site.
+    pub(crate) fn uhd_gate_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
+        let anchor = self.find_bd_gate(image)? as usize;
+        if anchor + (BD_GATE_VER_DENY_OFF as usize) + 2 > image.len() {
+            bail!("media gate matched within 0x42 of image end (0x{anchor:x}) — truncated image, refusing");
+        }
+        let head = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
+        if head != 0x2801 {
+            bail!(
+                "UHD media-gate arm unavailable on this codegen (anchor 0x{anchor:x} head \
+                 0x{head:04x} != explicit REPORT KEY gate 0x2801) — leaving UHD unwired"
+            );
+        }
+        // Explicit REPORT KEY gate: UHD class-3 check `ldrb r0,[r2,#7]; cmp r0,#3` at
+        // anchor+4; the stub returns to the paired `bne <deny>` at anchor+8.
+        let site = anchor + 4;
+        let ldrb = u16::from_le_bytes([image[site], image[site + 1]]);
+        let cmp = u16::from_le_bytes([image[site + 2], image[site + 3]]);
+        if ldrb != 0x79D0 || cmp != 0x2803 {
+            bail!(
+                "UHD gate class-3 check (ldrb r0,[r2,#7]; cmp r0,#3) not at 0x{site:x} \
+                 (got 0x{ldrb:04x} 0x{cmp:04x})"
+            );
+        }
+        Ok((site, self.build_uhd_gate_stub(flag_base)?))
+    }
+
     /// Locate the OEM AACS opcode-`0x45` (Read Data Key) arm and the target of its
     /// leading `bl` (the OEM key-prog primitive). Tries [`AACS45_ARM_SIG_A`] first
     /// (BU40N/notebook order — keeps the KAT base byte-identical), then
@@ -3123,46 +2953,6 @@ impl Mt1959Engine {
         Ok((arm, keyprog))
     }
 
-    /// The OEM disc-version classifier anchor. Two codegen shapes carry the same UHD
-    /// mode gate, tried original-first:
-    ///
-    /// * primary — the byte-extraction prologue ([`UHD_CLASSIFIER_SIG`], `0xcb3c0` on
-    ///   BU40N 1.00). The reload `ldr r0,[sp,#0x38]` the `04 03` detour replaces (4
-    ///   bytes, with the following `movs r5,#6`) is at `anchor+6`; the stub returns to
-    ///   the classifier body at `anchor+10`.
-    /// * variant — the version-compare shape ([`UHD_CLASSIFIER_SIG_VER`], consulted
-    ///   only when the prologue matches zero). The anchor is `cmp r0,#0x63`; the detour
-    ///   replaces `ldrh r0,[r1]; cmp r0,#0x63` (4 bytes at `anchor-2`) and, when armed,
-    ///   routes to arm C (`movs r2,#3`) at `anchor+0x16`.
-    ///
-    /// [`Self::uhd_detour`] disambiguates by the anchor's head halfword and applies the
-    /// matching site + stub. Either shape must resolve UNIQUELY.
-    pub fn find_uhd_classifier(&self, image: &[u8]) -> Result<u32> {
-        // Full-image scan: both classifier signatures are unique image-wide (measured
-        // maxn==1 across the corpus). The old 0xc0000..0xd0000 window excluded the
-        // ~+0x2b000-relocated MT1939-modern block (classifier lifted above 0xd0000).
-        let (lo, hi) = (0, image.len());
-        // Original-first (same pattern as `find_aacs45_arm`): the byte-extraction
-        // prologue shape wins wherever it resolves, so the BU40N KAT base and every
-        // image that shape covers stay on the primary detour byte-for-byte. Only when
-        // the prologue matches ZERO do we fall back to the version-compare variant.
-        match find_masked_all(image, UHD_CLASSIFIER_SIG, lo, hi).as_slice() {
-            [one] => Ok(*one as u32),
-            [] => Ok(find_unique(
-                image,
-                UHD_CLASSIFIER_SIG_VER,
-                lo,
-                hi,
-                "UHD disc-version classifier (version-compare)",
-            )? as u32),
-            hits => bail!(
-                "UHD disc-version classifier signature matched {} time(s) in \
-                 [0x{lo:x},0x{hi:x}) (want exactly 1) — refusing to patch",
-                hits.len()
-            ),
-        }
-    }
-
     /// The AACS media accept-gate anchor. Two codegen shapes carry the same disc
     /// mode/class accept/refuse decision, tried **original-first** (full-image; both
     /// signatures are unique image-wide, maxn==1 measured):
@@ -3178,7 +2968,7 @@ impl Mt1959Engine {
     /// [`Self::bd_detour`] disambiguates on the anchor head and applies the matching
     /// site + stub. Either shape must resolve UNIQUELY.
     pub fn find_bd_gate(&self, image: &[u8]) -> Result<u32> {
-        // Original-first (same pattern as `find_uhd_classifier`): the explicit
+        // Original-first (same pattern as `find_aacs45_arm`): the explicit
         // REPORT KEY shape wins wherever it resolves, so the BU40N KAT base and the
         // 36 explicit-shape images keep the original detour byte-for-byte. Only when
         // it matches ZERO do we fall back to the descriptor-classifier variant.

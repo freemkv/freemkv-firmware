@@ -561,15 +561,17 @@ impl Mt1959Engine {
             Err(_) => (0, 0),
         };
 
-        // `04 03` UHD mode-gate neutralizer (MK-style classifier hook): detour the
-        // classifier prologue's disc-version reload (via uhd_detour → find_uhd_classifier).
-        // Images whose classifier prologue is not the known MT1959 shape leave it unwired
-        // (0). Committed last so the free_space order matches build_report (…→ busenc → uhd).
-        let (uhd_site, uhd_stub_va) = match self.uhd_detour(image, flag_base) {
+        // `Feature::Uhd` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
+        // accept gate's UHD class-3 check (via uhd_gate_detour → find_bd_gate) — the
+        // UHD sibling of the BD arm on the SAME gate. When `flag[Uhd]==STATE_OFF` the
+        // stub forces the OEM deny; unarmed it replays OEM (UHD reads are native).
+        // Images on the descriptor-classifier gate shape (no class-3 arm) leave it
+        // unwired (0). Committed so the free_space order matches build_report (…→ busenc → uhd).
+        let (uhd_site, uhd_stub_va) = match self.uhd_gate_detour(image, flag_base) {
             Ok((site, bytes)) => {
                 let stub_va = self.free_space(&w, bytes.len() + 16)?;
                 let bl = thumb::encode_bl(site, stub_va)
-                    .ok_or_else(|| anyhow!("UHD mode-gate detour `bl` out of range"))?;
+                    .ok_or_else(|| anyhow!("UHD media-gate detour `bl` out of range"))?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
                 thumb::write(&mut w, site, &bl);
                 (site as u32, stub_va)

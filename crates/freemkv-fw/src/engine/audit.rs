@@ -213,15 +213,15 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 {
                     check_bl(&mut checks, name, "bus-enc detour bl", img, site, stub);
                 }
-                // `04 03` UHD mode-gate neutralizer detour (disc-version classifier
-                // prologue). Present only when wired (classifier prologue is a known
-                // MT1959 shape); optional, like the bus-enc detour above. Proves the
-                // MK-style classifier hook's `bl` + stub landed.
+                // `Feature::Uhd` UHD media accept/refuse detour (REPORT KEY class-3 arm
+                // on the SAME accept gate as BD). Present only when wired (explicit
+                // REPORT KEY gate shape); optional, like the bus-enc detour above.
+                // Proves the UHD arm's `bl` + stub landed at the class-3 check.
                 if let (Some(site), Some(stub)) = (fact(l, "uhd_site"), fact(l, "uhd_stub_va")) {
                     check_bl(
                         &mut checks,
                         name,
-                        "UHD mode-gate detour bl",
+                        "UHD media-gate detour bl",
                         img,
                         site,
                         stub,

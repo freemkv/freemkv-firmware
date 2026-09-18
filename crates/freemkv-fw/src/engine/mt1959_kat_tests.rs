@@ -31,7 +31,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "7c4b58780e2806d19878c02803d1d878de2800d101e0784b1847f0b5774f1c79022c07d176485979082926d240189979017022e0042c20d19879ff280ad17048ff21017041708170c170017141718171c17112e06a4e6b4a11783170517871709178b170d178f17011793171517971719179b171d179f171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a58490870564886420ad35748864207d25448311c01220123544da847041c00e0534c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb84767e00b2c30d13f4806683f4805687619374801783170417871708178b170c178f17001793171417971718179b171c179f171281c2f4908220123304da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84734e0032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11ba600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e740200e4908800e480e4a9047f0bd0000380d00025bad090075200a00400e000200a01e00500e000200b01e002bda130055464552780c00027c0c0002720c000290af000081810900667265656d6b7620302e382e30";
+    "7c4b58780e2806d19878c02803d1d878de2800d101e0784b1847f0b5774f1c79022c07d176485979082926d240189979017022e0042c20d19879ff280ad17048ff21017041708170c170017141718171c17112e06a4e6b4a11783170517871709178b170d178f17011793171517971719179b171d179f171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a58490870564886420ad35748864207d25448311c01220123544da847041c00e0534c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb84767e00b2c30d13f4806683f4805687619374801783170417871708178b170c178f17001793171417971718179b171c179f171281c2f4908220123304da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84734e0032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11ba600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e740200e4908800e480e4a9047f0bd0000380d00025bad090075200a00400e000200a01e00500e000200b01e002bda130055464552780c00027c0c0002720c000290af000081810900667265656d6b7620302e382e31";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -43,8 +43,8 @@ const EXPECT_HANDLER_HEX: &str =
 // sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
 // with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "4a45138837e2e8cad870355e7f84a1e4";
-const EXPECT_CMAC_15: &str = "df096a3eab71a255607dfb7e4de79b76";
+const EXPECT_CMAC_1: &str = "bb7586d846239341d0e45d2a83d69f1c";
+const EXPECT_CMAC_15: &str = "739da990a30d58678c6ca51c75b85c5d";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -238,9 +238,8 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // Raw Read `04 03` "data clear" (bus-off): the AACS opcode-0x45 arm detour
     // (report.busenc_detour_site), 4 bytes of the arm's leading `bl`.
     let busenc_detour = report.busenc_detour_site as usize..report.busenc_detour_site as usize + 4;
-    // Raw Read `04 03` UHD mode-gate neutralizer: the disc-version classifier
-    // prologue detour (report.uhd_classifier_site), 4 bytes replacing the reload
-    // `ldr r0,[sp,#0x38]; movs r5,#6`.
+    // `Feature::Uhd` UHD media accept/refuse: the REPORT KEY class-3 arm detour
+    // (report.uhd_classifier_site), 4 bytes replacing `ldrb r0,[r2,#7]; cmp r0,#3`.
     let uhd_detour = report.uhd_classifier_site as usize..report.uhd_classifier_site as usize + 4;
     // `Feature::Bd` BD-refuse: the REPORT KEY mode-0 class check detour
     // (report.bd_gate_site), 4 bytes replacing `ldrb r0,[r2,#7]; cmp r0,#2`.
@@ -333,16 +332,16 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.busenc_stub_va != 0,
         "Raw Read `04 03` bus-off (data clear) stub wired"
     );
-    // Raw Read `04 03` UHD mode-gate neutralizer (MK-style classifier hook): the
-    // detour of the disc-version classifier prologue's reload at classifier+6
-    // (0xcb3c0 anchor → 0xcb3c6 site on 1.00).
+    // `Feature::Uhd` UHD media accept/refuse (REPORT KEY class-3 arm): the UHD class
+    // check `ldrb r0,[r2,#7]; cmp r0,#3` at the accept gate's anchor+4 (0x1365be anchor
+    // → 0x1365c2 site on 1.00), the UHD sibling of the BD arm on the SAME gate.
     assert_eq!(
-        report.uhd_classifier_site, 0x000c_b3c6,
-        "UHD mode-gate (04 03) detours the disc-version classifier reload (1.00)"
+        report.uhd_classifier_site, 0x0013_65c2,
+        "UHD media-gate arm detours the REPORT KEY class-3 check (1.00)"
     );
     assert!(
         report.uhd_stub_va != 0,
-        "Raw Read `04 03` UHD mode-gate neutralizer stub wired"
+        "UHD media-gate accept/refuse stub wired"
     );
     // `Feature::Bd` BD-refuse (REPORT KEY mode-0 class gate): the mode-0 class check
     // `ldrb r0,[r2,#7]; cmp r0,#2` at the gate anchor+16 (0x1365be anchor → 0x1365ce
@@ -520,13 +519,12 @@ fn finders_hold_across_owned_images() {
                 .unwrap_or_else(|e| panic!("AACS opcode-0x45 arm @ {disp}: {e}"));
             assert!(site != 0, "bus-off detour site @ {disp}");
         }
-        // MK-style UHD mode-gate neutralizer (`04 03`): the disc-version classifier
-        // prologue resolves UNIQUELY (via `find_unique`) on OEM-line MT1959 images.
-        // MK-flashed images have this exact prologue overwritten by MK's own hook, so
-        // it is asserted only where it resolves — never hard-fails on an image whose
-        // classifier is already hooked (that is the expected MK state).
-        if let Ok(uhd) = eng.find_uhd_classifier(&bytes) {
-            assert!(uhd != 0, "UHD classifier anchor @ {disp}");
+        // UHD media accept/refuse arm on the REPORT KEY accept gate (the UHD sibling
+        // of the BD arm on the SAME gate). Resolves on the explicit REPORT KEY gate
+        // shape; asserted only where it resolves — the descriptor-classifier gate
+        // shape has no class-3 arm, so UHD is intentionally unavailable there.
+        if let Ok((uhd, _bytes)) = eng.uhd_gate_detour(&bytes, super::FLAG_TABLE_BASE) {
+            assert!(uhd != 0, "UHD media-gate arm @ {disp}");
         }
         // The SRAM scanner is model-agnostic — it must resolve a free gap on every
         // VID-capable owned image. The Speed/Region/DE finders are BU40N-shaped, so
@@ -656,11 +654,13 @@ fn feature_flag_gating_is_reslotted() {
         assert!(has(&busenc, needle), "busenc stub must emit {what}");
     }
 
-    let uhd = Mt1959Engine.build_uhd_stub(base).expect("uhd stub");
-    assert!(has(&uhd, CMP_R3_ON), "UHD stub gates on cmp r3,#STATE_ON");
+    // UHD media-gate arm gates on `cmp r3,#STATE_OFF` (0x2B00) — the uniform `0x00`
+    // OFF, symmetric with the BD arm on the same accept gate — and reads flag[Uhd].
+    let uhd = Mt1959Engine.build_uhd_gate_stub(base).expect("uhd gate stub");
+    assert!(has(&uhd, CMP_R3_OFF), "UHD gate stub gates on cmp r3,#STATE_OFF");
     assert!(
         reads(&uhd, base + Feature::Uhd as u32),
-        "UHD stub reads flag[Uhd]"
+        "UHD gate stub reads flag[Uhd]"
     );
 
     let speed = Mt1959Engine
