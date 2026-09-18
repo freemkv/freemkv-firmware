@@ -656,8 +656,13 @@ fn feature_flag_gating_is_reslotted() {
 
     // UHD media-gate arm gates on `cmp r3,#STATE_OFF` (0x2B00) — the uniform `0x00`
     // OFF, symmetric with the BD arm on the same accept gate — and reads flag[Uhd].
-    let uhd = Mt1959Engine.build_uhd_gate_stub(base).expect("uhd gate stub");
-    assert!(has(&uhd, CMP_R3_OFF), "UHD gate stub gates on cmp r3,#STATE_OFF");
+    let uhd = Mt1959Engine
+        .build_uhd_gate_stub(base)
+        .expect("uhd gate stub");
+    assert!(
+        has(&uhd, CMP_R3_OFF),
+        "UHD gate stub gates on cmp r3,#STATE_OFF"
+    );
     assert!(
         reads(&uhd, base + Feature::Uhd as u32),
         "UHD gate stub reads flag[Uhd]"
