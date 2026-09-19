@@ -134,11 +134,23 @@ pub const STATE_ON: u8 = 0x01;
 
 /// [`Verb::Reset`] mode (rides in the state slot `cdb[6]`): reload the saved flash
 /// config block back into the RAM feature-state table, discarding any un-saved RAM
-/// changes. The non-destructive "revert to last SAVE" mode.
+/// changes. Marker-gated — a never-saved drive (NV slot-0 marker `0xFF`) loads the
+/// baked create-time defaults instead. The non-destructive "revert to last SAVE".
 pub const RESET_TO_FLASH: u8 = 0x00;
 
-/// [`Verb::Reset`] mode (rides in the state slot `cdb[6]`): force every feature to
-/// [`STATE_PASSTHROUGH`] (OEM behaviour everywhere), regardless of the saved config.
+/// [`Verb::Reset`] mode (rides in the state slot `cdb[6]`): restore the baked
+/// per-create **defaults** (the create-time `DEFAULT_FLAGS`, e.g. UHD/BD on) into
+/// the RAM feature-state table. RAM-only — does not touch flash. This is what a
+/// never-saved drive boots to.
+pub const RESET_TO_DEFAULTS: u8 = 0x01;
+
+/// [`Verb::Reset`] mode (rides in the state slot `cdb[6]`): TRUE OEM. Forces every
+/// feature to [`STATE_PASSTHROUGH`] (`0xFF`) in RAM **and** writes the NV config
+/// block all-`0xFF` — marker included — so the drive is byte-for-byte identical to
+/// a never-saved/never-configured drive (no trace it was ever set). Because the
+/// marker is then `0xFF`, the NEXT boot loads the baked defaults, exactly like a
+/// fresh drive. (The NV write is the same SAVE flash primitive with an all-`0xFF`
+/// payload; op=1 RMW preserves the OEM region record at `+0x4B0`.)
 pub const RESET_TO_OEM: u8 = 0xFF;
 
 /// The verb selector in `cdb[4]`. These numeric values ARE the wire protocol and
@@ -155,9 +167,10 @@ pub enum Verb {
     /// Read one feature's (`cdb[5]`) current state back in the data-in payload.
     Get = 0x03,
     /// Restore the RAM feature-state table. The mode rides in `cdb[6]` (the state
-    /// slot): [`RESET_TO_FLASH`] (`0x00`) reloads the saved flash config block back
-    /// into RAM (discarding un-saved changes), [`RESET_TO_OEM`] (`0xFF`) forces every
-    /// feature to [`STATE_PASSTHROUGH`] (out-of-the-box behaviour). Ignores feature.
+    /// slot): [`RESET_TO_FLASH`] (`0x00`) reloads the saved config (marker-gated),
+    /// [`RESET_TO_DEFAULTS`] (`0x01`) restores the baked create-time defaults, and
+    /// [`RESET_TO_OEM`] (`0xFF`) forces true OEM passthrough in RAM AND blanks the NV
+    /// block (traceless). Ignores feature.
     Reset = 0x04,
     /// Diagnostic RAM peek: [`MEMREAD_LEN`] bytes at the 32-bit address packed
     /// big-endian in `cdb[5..9]`. Read-only.
