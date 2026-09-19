@@ -6,6 +6,34 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2]
+
+### Fixed
+- **UHD/BD media-accept now survives a power-cycle.** The boot hook used to fill
+  the feature-flag table with `0xFF` (OEM passthrough) on every power-on, so a
+  drive that had UHD enabled only in RAM reverted to *refusing* UHD discs after a
+  reboot ("Not Ready — Incompatible medium installed", no current profile), and a
+  host that only checks readiness (autorip's drive poll) never saw the disc. The
+  boot hook and `RESET`-to-OEM now fill the table from a baked per-create
+  **defaults table** instead, and `create` ships **UHD and BD = `STATE_ON`** by
+  default — so a flashed drive engages UHD/BD discs out of the box and after every
+  power-cycle.
+
+### Added
+- **NV saved-marker (flag-table slot 0).** `SAVE` now stamps slot 0 non-`0xFF` to
+  record "a config exists"; the boot hook / `RESET`-to-flash apply the saved
+  feature bytes only when the marker is set, else fall back to the baked defaults.
+  This lets a user deliberately `save` an all-passthrough config (which is
+  byte-identical to erased flash) and have it honoured across a reboot, instead of
+  being mistaken for "never saved" and overwritten by the defaults.
+
+### Notes
+- Defaults are baked into the CMAC-covered boot/reset stubs, so they persist
+  through a flash (the NV block itself is not written by the image update).
+  Hardware-validated on BU40N: boot→defaults, save→marker→reload honours the saved
+  config, reset-to-OEM→defaults. A per-image `--oem-uhd`/`--oem-bd` create opt-out
+  (leave a feature at OEM passthrough) is the planned follow-up.
+
 ## [0.8.1]
 
 Major firmware redesign (0.7.x → 0.8.x). Pairs with the freemkv stack 1.7.2
