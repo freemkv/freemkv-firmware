@@ -6,6 +6,26 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3]
+
+### Changed
+- **`Verb::Reset` now has three modes** (mode in `cdb[6]`), fixing an 0.8.2
+  misnomer where "reset to OEM" actually restored the baked defaults:
+  - `RESET_TO_FLASH` (`0x00`) — reload the saved config (marker-gated); unchanged.
+  - `RESET_TO_DEFAULTS` (`0x01`, **new**) — restore the baked create-time
+    `DEFAULT_FLAGS` (UHD/BD on) into RAM. This is what boot uses on a never-saved
+    drive. (0.8.2's `RESET_TO_OEM` did this — it moved here and got the honest name.)
+  - `RESET_TO_OEM` (`0xFF`) — now **true OEM**: forces every RAM flag to
+    passthrough AND writes the NV block all-`0xFF` (marker included), leaving the
+    drive byte-for-byte identical to a never-saved/never-configured one (**no
+    trace**). Because the marker is then `0xFF`, the next boot loads the baked
+    defaults, exactly like a fresh drive.
+
+### Notes
+- The NV blank is the ordinary SAVE flash primitive with an all-`0xFF` payload
+  (op=1 RMW preserves the OEM region record at `+0x4B0`) — no special erase.
+- ABI codes are mirrored by `freemkv-unlock` and `freemkv-fw-tester`.
+
 ## [0.8.2]
 
 ### Fixed

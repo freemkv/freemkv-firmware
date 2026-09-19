@@ -2155,6 +2155,7 @@ impl Mt1959Engine {
         let knock_ok = a.label();
         let not_set = a.label();
         let not_reset = a.label();
+        let reset_defaults = a.label();
         let reset_flash = a.label();
         let reset_flash_saved = a.label();
         let not_save = a.label();
@@ -2214,29 +2215,54 @@ impl Mt1959Engine {
         a.b(clr); // return a zeroed buffer
         a.bind(not_set);
 
-        // RESET: mode rides in the state slot cdb[6].
-        //   RESET_TO_OEM   (0xFF) → restore the baked DEFAULT_FLAGS (this image's
-        //                           create-time defaults, e.g. UHD/BD on).
-        //   RESET_TO_FLASH (0x00) → reload the saved config from flash SAVE_HOME
-        //                           when the slot-0 marker says one exists; on a
-        //                           never-saved drive (marker 0xFF) fall back to the
-        //                           same DEFAULT_FLAGS the boot hook uses.
-        // Both fall through to clear → zeroed buffer.
+        // RESET: mode rides in the state slot cdb[6]. Three modes:
+        //   RESET_TO_OEM      (0xFF) → TRUE OEM: force every RAM flag to passthrough
+        //                              (0xFF) AND blank the NV block (write it all
+        //                              0xFF, marker included) so the drive is
+        //                              byte-for-byte a never-saved drive — traceless.
+        //   RESET_TO_DEFAULTS (0x01) → restore the baked create-time DEFAULT_FLAGS
+        //                              (e.g. UHD/BD on) into RAM. RAM-only.
+        //   RESET_TO_FLASH    (0x00) → reload the saved config (marker-gated); a
+        //                              never-saved drive (marker 0xFF) falls back to
+        //                              DEFAULT_FLAGS, mirroring the boot hook.
+        // All fall through to clear → zeroed buffer.
         a.cmp_imm(4, abi::Verb::Reset as u8);
         a.bne(not_reset);
         a.ldrb_imm(0, 3, abi::CDB_STATE as u16); // r0 = mode (cdb[6])
+                                                 // RESET_TO_OEM (0xFF): RAM all-passthrough + blank NV (traceless).
         a.cmp_imm(0, abi::RESET_TO_OEM);
+        a.bne(reset_defaults);
+        a.ldr_lit(0, flag_base);
+        a.movs_imm(1, abi::STATE_PASSTHROUGH); // 0xFF
+        for off in 0..=NUM_FEATURES {
+            a.strb_imm(1, 0, off as u16); // RAM flag[0..=7] = 0xFF (incl slot-0 marker)
+        }
+        // Persist the all-0xFF table to NV via the SAVE flash primitive (staging
+        // source = the flag table we just filled). This clears the slot-0 marker to
+        // 0xFF, so the NV is indistinguishable from never-saved; op=1 RMW preserves
+        // the OEM region record at +0x4B0. Unlike SAVE, we do NOT stamp the marker.
+        emit_flash_write(
+            &mut a,
+            nv_dram_base_ptr,
+            save_home,
+            flag_base,
+            SAVE_LEN,
+            flash_program,
+        );
+        a.b(clr);
+        // RESET_TO_DEFAULTS (0x01): restore the baked DEFAULTS to RAM (slots 0..=7).
+        a.bind(reset_defaults);
+        a.cmp_imm(0, abi::RESET_TO_DEFAULTS);
         a.bne(reset_flash);
-        // RESET_TO_OEM: restore the baked DEFAULTS to slots 0..=NUM_FEATURES.
         a.ldr_lit(0, flag_base);
         for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
             a.movs_imm(1, val);
             a.strb_imm(1, 0, off as u16);
         }
         a.b(clr);
-        // RESET_TO_FLASH: marker-gated reload, mirroring the boot hook. Slot-0 marker
-        // 0xFF = never saved → restore DEFAULTS; else copy the saved feature bytes
-        // (1..=NUM_FEATURES) verbatim. Flash is XIP-mapped (plain memory read).
+        // RESET_TO_FLASH (0x00, and the default for any other mode): marker-gated
+        // reload, mirroring the boot hook. Slot-0 marker 0xFF = never saved → restore
+        // DEFAULTS; else copy the saved feature bytes (1..=NUM_FEATURES) verbatim.
         a.bind(reset_flash);
         a.ldr_lit(6, flag_base); // r6 = flag-table base (SRAM), callee-saved
         a.ldr_lit(2, save_home); // r2 = flash source base (NV/SAVE home)
