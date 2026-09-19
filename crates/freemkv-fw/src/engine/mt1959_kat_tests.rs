@@ -31,7 +31,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "7c4b58780e2806d19878c02803d1d878de2800d101e0784b1847f0b5774f1c79022c07d176485979082926d240189979017022e0042c20d19879ff280ad17048ff21017041708170c170017141718171c17112e06a4e6b4a11783170517871709178b170d178f17011793171517971719179b171d179f171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a58490870564886420ad35748864207d25448311c01220123544da847041c00e0534c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb84767e00b2c30d13f4806683f4805687619374801783170417871708178b170c178f17001793171417971718179b171c179f171281c2f4908220123304da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84734e0032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11ba600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e740200e4908800e480e4a9047f0bd0000380d00025bad090075200a00400e000200a01e00500e000200b01e002bda130055464552780c00027c0c0002720c000290af000081810900667265656d6b7620302e382e31";
+    "8a4b58780e2806d19878c02803d1d878de2800d101e0864b1847f0b5854f1c79022c07d18448597908293fd24018997901703be0042c39d19879ff2811d17e48ff210170ff214170ff2181700121c17001210171ff214171ff218171ff21c17124e0754e754a1178ff2910d1ff213170ff217170ff21b1700121f17001213171ff217171ff21b171ff21f1710ee0517871709178b170d178f17011793171517971719179b171d179f171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5a490870584886420ad35848864207d25648311c01220123564da847041c00e0554c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb8476ae00b2c33d13b48012101703f4806683f4805687619374801783170417871708178b170c178f17001793171417971718179b171c179f171281c2f4908220123304da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84734e0032c08d120485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11ba600250d2d04d2281c715db8470135f8e70c4e0d250122082a05d2b15c281cb84701350132f7e740200e4908800e480e4a9047f0bd0000380d00025bad090075200a00400e000200a01e00500e000200b01e002bda130055464552780c00027c0c0002720c000290af000081810900667265656d6b7620302e382e32";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -43,8 +43,8 @@ const EXPECT_HANDLER_HEX: &str =
 // sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
 // with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "bb7586d846239341d0e45d2a83d69f1c";
-const EXPECT_CMAC_15: &str = "739da990a30d58678c6ca51c75b85c5d";
+const EXPECT_CMAC_1: &str = "d08a801092c980f84f2dede3f3389ec3";
+const EXPECT_CMAC_15: &str = "8c9632ed124868c61ce06ad108a924d6";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -1231,13 +1231,15 @@ fn find_boot_init_resolves_bu40n() {
 }
 
 /// PHASE 2: the always-on boot-init trampoline. `build_boot_init` must preserve the
-/// original init call's args, write `0xFF` (STATE_PASSTHROUGH) into the whole flag
-/// table (slot 0 + features 1..=7), then tail-call `orig_init` and return — the
-/// mechanism that makes tri-state `0x00 == OFF` safe (a freshly powered drive is
-/// OEM-identical). It must NOT replay the boot-status reload (that stays at the old
-/// `anchor+4` site, which is no longer detoured).
+/// original init call's args, fill the flag table (slot 0 marker + features 1..=7)
+/// with the baked [`super::DEFAULT_FLAGS`] (UHD/BD = `STATE_ON`, the rest `0xFF`
+/// passthrough), then apply the persisted config ONLY when NV slot-0 marker != 0xFF
+/// (marker-gated overlay), then tail-call `orig_init` and return. No default is
+/// `0x00`, so a freshly powered drive still never sees an OFF flag at boot (the
+/// invariant that keeps tri-state `0x00 == OFF` safe). It must NOT replay the
+/// boot-status reload (that stays at the old `anchor+4` site).
 #[test]
-fn build_boot_init_writes_ff_table_and_tail_calls_orig() {
+fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
     let base = super::FLAG_TABLE_BASE;
     let orig_init = 0x000a_1dd0u32; // BU40N convergence bl target
     let stub = Mt1959Engine
@@ -1255,15 +1257,48 @@ fn build_boot_init_writes_ff_table_and_tail_calls_orig() {
     assert!(has16(0xB50F), "boot stub pushes {{r0-r3,lr}}");
     // Loads the flag-table base as a literal.
     assert!(has32(base), "boot stub loads the flag-table base");
-    // Materializes 0xFF (movs r1,#0xFF = 0x21FF).
-    assert!(has16(0x21FF), "boot stub materializes 0xFF");
-    // Eight `strb r1,[r0,#off]` (0x7001 | off<<6) — off 0..=7 (slot 0 pad + all 7 flags).
+    // Materializes the DEFAULTS: 0xFF passthrough (movs r1,#0xFF = 0x21FF) for the
+    // OEM-default features AND 0x01 STATE_ON (movs r1,#0x01 = 0x2101) for UHD/BD.
+    assert!(
+        has16(0x21FF),
+        "boot stub materializes 0xFF passthrough default"
+    );
+    assert!(
+        has16(0x2101),
+        "boot stub materializes 0x01 (UHD/BD ship ON by default)"
+    );
+    // Sanity on the constant itself: UHD and BD default ON, everything else OFF-safe
+    // (never 0x00) passthrough.
+    assert_eq!(
+        super::DEFAULT_FLAGS[crate::abi::Feature::Uhd as usize],
+        crate::abi::STATE_ON,
+        "UHD default is ON"
+    );
+    assert_eq!(
+        super::DEFAULT_FLAGS[crate::abi::Feature::Bd as usize],
+        crate::abi::STATE_ON,
+        "BD default is ON"
+    );
+    assert!(
+        super::DEFAULT_FLAGS
+            .iter()
+            .all(|&b| b != crate::abi::STATE_OFF),
+        "no default may be 0x00 (would make a fresh drive boot a feature OFF)"
+    );
+    // Eight `strb r1,[r0,#off]` (0x7001 | off<<6) — off 0..=7 (slot 0 marker + all 7 flags).
     for off in 0u16..=7 {
-        assert!(
-            has16(0x7001 | (off << 6)),
-            "boot stub writes 0xFF to flag[{off}]"
-        );
+        assert!(has16(0x7001 | (off << 6)), "boot stub writes flag[{off}]");
     }
+    // Marker-gated overlay: loads SAVE_HOME as a literal, reads the slot-0 marker,
+    // and compares it to 0xFF (cmp r1,#0xFF = 0x29FF) — the "is a config saved?" gate.
+    assert!(
+        has32(super::SAVE_HOME),
+        "boot stub loads the SAVE_HOME literal"
+    );
+    assert!(
+        has16(0x29FF),
+        "boot stub tests the saved-marker against 0xFF (marker-gated overlay)"
+    );
     // Restores the args before the tail-call: `pop {r0,r1,r2,r3}` (0xBC0F).
     assert!(
         has16(0xBC0F),

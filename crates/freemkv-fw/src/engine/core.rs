@@ -245,10 +245,38 @@ const _: () = assert!(FLASHWRITE_ALLOW_HI.is_multiple_of(0x1000));
 pub(crate) const SAVE_HOME: u32 = 0x001E_A000;
 const _: () = assert!(SAVE_HOME >= FLASHWRITE_ALLOW_LO && SAVE_HOME < FLASHWRITE_ALLOW_HI);
 
-/// SAVE payload length: the full flag table (slot 0 pad + features `0x01..=0x07`),
-/// mirrored byte-for-byte. Blank flash (`0xFF`) == never-saved == all-OEM, so no
-/// magic/version/CRC is needed — absence IS the OEM default.
+/// SAVE payload length: the full flag table (slot 0 marker + features `0x01..=0x07`),
+/// mirrored byte-for-byte. Slot 0 (formerly unused pad) now carries the
+/// [`NV_SAVED_MARKER`]: erased flash reads `0xFF` == never-saved, so the boot hook
+/// falls back to [`DEFAULT_FLAGS`]; any real SAVE stamps slot 0 non-`0xFF`, and the
+/// boot hook then applies the saved feature bytes verbatim (even an all-`0xFF`
+/// "everything passthrough" config the user deliberately saved).
 pub(crate) const SAVE_LEN: u8 = NUM_FEATURES + 1;
+
+/// Per-create feature DEFAULTS the boot hook and [`abi::Verb::Reset`]
+/// ([`abi::RESET_TO_OEM`]) apply when no config has been SAVEd (slot-0 marker is
+/// `0xFF`). Index = feature id; slot 0 is the marker, unused as a feature. UHD
+/// (`0x03`) and BD (`0x04`) ship [`abi::STATE_ON`] so a flashed drive engages
+/// UHD/BD discs out of the box AND after every power-cycle — the fix for a
+/// rebooted drive reverting to OEM passthrough (UHD refused). Every other feature
+/// stays [`abi::STATE_PASSTHROUGH`] (stealth OEM behaviour).
+///
+/// This is a compile-time constant today (the create-time `--oem-uhd`/`--oem-bd`
+/// per-image override threads a runtime copy through the emitters — TODO). Baked
+/// into the boot/reset stubs, which are CMAC-covered, so it persists.
+pub(crate) const DEFAULT_FLAGS: [u8; NUM_FEATURES as usize + 1] = {
+    let mut d = [abi::STATE_PASSTHROUGH; NUM_FEATURES as usize + 1];
+    d[abi::Feature::Uhd as usize] = abi::STATE_ON;
+    d[abi::Feature::Bd as usize] = abi::STATE_ON;
+    d
+};
+
+/// Value stamped into NV slot 0 by [`abi::Verb::Save`] to mark "a config has been
+/// saved". Erased flash is `0xFF` (never saved → boot uses [`DEFAULT_FLAGS`]); any
+/// non-`0xFF` marker means the saved feature bytes are authoritative. `0x01` is the
+/// canonical stamp; the boot/reset load tests `!= 0xFF`, not `== 0x01`, so a future
+/// config-version bump in this byte still reads as "saved".
+pub(crate) const NV_SAVED_MARKER: u8 = 0x01;
 
 /// Byte offset from [`FLAG_TABLE_BASE`] of the 1-byte SRAM scratch cell the
 /// flash-write probe stages its source byte in before calling the PROGRAM
@@ -2128,6 +2156,7 @@ impl Mt1959Engine {
         let not_set = a.label();
         let not_reset = a.label();
         let reset_flash = a.label();
+        let reset_flash_saved = a.label();
         let not_save = a.label();
         let clr = a.label();
         let clr_loop = a.label();
@@ -2186,31 +2215,44 @@ impl Mt1959Engine {
         a.bind(not_set);
 
         // RESET: mode rides in the state slot cdb[6].
-        //   RESET_TO_OEM   (0xFF) → 0xFF-fill the flag table (slots 0..=NUM_FEATURES).
-        //   RESET_TO_FLASH (0x00) → reload the saved table from flash SAVE_HOME
-        //                           (blank flash = 0xFF = all-OEM, so this is the same
-        //                           result on a never-saved drive).
+        //   RESET_TO_OEM   (0xFF) → restore the baked DEFAULT_FLAGS (this image's
+        //                           create-time defaults, e.g. UHD/BD on).
+        //   RESET_TO_FLASH (0x00) → reload the saved config from flash SAVE_HOME
+        //                           when the slot-0 marker says one exists; on a
+        //                           never-saved drive (marker 0xFF) fall back to the
+        //                           same DEFAULT_FLAGS the boot hook uses.
         // Both fall through to clear → zeroed buffer.
         a.cmp_imm(4, abi::Verb::Reset as u8);
         a.bne(not_reset);
         a.ldrb_imm(0, 3, abi::CDB_STATE as u16); // r0 = mode (cdb[6])
         a.cmp_imm(0, abi::RESET_TO_OEM);
         a.bne(reset_flash);
-        // RESET_TO_OEM: 0xFF to slots 0..=NUM_FEATURES (matches the boot default).
+        // RESET_TO_OEM: restore the baked DEFAULTS to slots 0..=NUM_FEATURES.
         a.ldr_lit(0, flag_base);
-        a.movs_imm(1, abi::STATE_PASSTHROUGH);
-        for off in 0..=NUM_FEATURES {
+        for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
+            a.movs_imm(1, val);
             a.strb_imm(1, 0, off as u16);
         }
         a.b(clr);
-        // RESET_TO_FLASH: copy SAVE_LEN bytes from flash SAVE_HOME → flag table.
-        // Flash is XIP-mapped, so this is a plain memory read (no PROGRAM call).
+        // RESET_TO_FLASH: marker-gated reload, mirroring the boot hook. Slot-0 marker
+        // 0xFF = never saved → restore DEFAULTS; else copy the saved feature bytes
+        // (1..=NUM_FEATURES) verbatim. Flash is XIP-mapped (plain memory read).
         a.bind(reset_flash);
         a.ldr_lit(6, flag_base); // r6 = flag-table base (SRAM), callee-saved
-        a.ldr_lit(2, save_home); // r2 = flash source base (address to read from)
-        for off in 0..SAVE_LEN {
-            a.ldrb_imm(1, 2, off as u16); // r1 = flash[off]
-            a.strb_imm(1, 6, off as u16); // flag[off] = r1
+        a.ldr_lit(2, save_home); // r2 = flash source base (NV/SAVE home)
+        a.ldrb_imm(1, 2, 0); // r1 = NV slot-0 saved marker
+        a.cmp_imm(1, abi::STATE_PASSTHROUGH); // 0xFF == never saved
+        a.bne(reset_flash_saved);
+        // No saved config: restore DEFAULTS (r6 = flag base).
+        for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
+            a.movs_imm(1, val);
+            a.strb_imm(1, 6, off as u16);
+        }
+        a.b(clr);
+        a.bind(reset_flash_saved);
+        for off in 1..SAVE_LEN {
+            a.ldrb_imm(1, 2, off as u16); // r1 = saved flag[off]
+            a.strb_imm(1, 6, off as u16); // flag[off] = saved value
         }
         a.b(clr);
         a.bind(not_reset);
@@ -2291,8 +2333,17 @@ impl Mt1959Engine {
         // op=1 RMW preserves the OEM region record at +0x4B0. Reply = status (BE) [0..4].
         a.cmp_imm(4, abi::Verb::Save as u8);
         a.bne(not_save);
-        // Persist the live flag table to flash SAVE_HOME via the reusable flash-write
-        // primitive (stage SRAM->DRAM window, then OEM PROGRAM op=1 RMW).
+        // Stamp the saved-marker into flag-table slot 0 BEFORE staging, so the
+        // persisted NV block records "a config exists" (slot 0 != 0xFF). The boot
+        // hook / RESET_TO_FLASH test this marker: 0xFF (erased) → baked DEFAULTS,
+        // else → the saved feature bytes. Without the stamp, a deliberately-saved
+        // all-0xFF config would be indistinguishable from never-saved and the boot
+        // hook would wrongly re-apply DEFAULTS.
+        a.ldr_lit(0, flag_base);
+        a.movs_imm(1, NV_SAVED_MARKER);
+        a.strb_imm(1, 0, 0); // flag[0] = saved marker (slot 0)
+                             // Persist the live flag table to flash SAVE_HOME via the reusable flash-write
+                             // primitive (stage SRAM->DRAM window, then OEM PROGRAM op=1 RMW).
         emit_flash_write(
             &mut a,
             nv_dram_base_ptr,
@@ -3348,20 +3399,32 @@ impl Mt1959Engine {
     ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         a.push(0x010F); // push {r0,r1,r2,r3,lr}  preserve orig_init's args + return addr
+                        // Fill the flag table with the baked per-create DEFAULTS (slot 0 marker +
+                        // features 1..=7). Per-byte because the values differ (UHD/BD = 0x01, the
+                        // rest 0xFF); slot 0's default is 0xFF (a fresh RAM marker, overwritten only
+                        // by SAVE). This REPLACES the old blind 0xFF-fill so a never-saved drive
+                        // boots with UHD/BD accepted instead of OEM-refused.
         a.ldr_lit(0, flag_base); // r0 = &flag table (SRAM)
-        a.movs_imm(1, abi::STATE_PASSTHROUGH); // r1 = 0xFF (OEM passthrough)
-        for off in 0..=NUM_FEATURES {
-            a.strb_imm(1, 0, off as u16); // flag[off] = 0xFF (slot 0 pad + features 1..=7)
+        for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
+            a.movs_imm(1, val); // r1 = DEFAULT_FLAGS[off]
+            a.strb_imm(1, 0, off as u16); // flag[off] = default
         }
-        // Load the persisted flag table over the 0xFF defaults so saved settings apply
-        // across a power cycle. Flash is XIP-mapped → a plain memory read. Blank flash
-        // (0xFF) == never-saved == all-OEM, so this is safe on a fresh drive: the copy
-        // just re-writes the same 0xFF. r0 (flag base) is still live from the fill.
-        a.ldr_lit(2, save_home); // r2 = flash source base
-        for off in 0..SAVE_LEN {
-            a.ldrb_imm(1, 2, off as u16); // r1 = flash[off]
-            a.strb_imm(1, 0, off as u16); // flag[off] = r1
+        // Overlay the persisted config ONLY when it exists: NV slot 0 (the saved
+        // marker) is 0xFF on erased/never-saved flash, in which case the baked
+        // DEFAULTS stand. Any non-0xFF marker means a real SAVE — apply the saved
+        // feature bytes (1..=7) verbatim, so a user's explicit config (even
+        // all-0xFF passthrough) wins across a power cycle. Flash is XIP-mapped, so
+        // this is a plain memory read (no PROGRAM call). r0 stays live from the fill.
+        let keep_defaults = a.label();
+        a.ldr_lit(2, save_home); // r2 = flash source base (NV/SAVE home)
+        a.ldrb_imm(1, 2, 0); // r1 = NV slot-0 saved marker
+        a.cmp_imm(1, abi::STATE_PASSTHROUGH); // 0xFF == never saved
+        a.beq(keep_defaults);
+        for off in 1..SAVE_LEN {
+            a.ldrb_imm(1, 2, off as u16); // r1 = saved flag[off]
+            a.strb_imm(1, 0, off as u16); // flag[off] = saved value
         }
+        a.bind(keep_defaults);
         a.pop(0x000F); // pop {r0,r1,r2,r3}   restore the args orig_init may read
         a.ldr_lit(3, orig_init | 1); // r3 = orig_init (Thumb bit set for blx)
         a.blx(3); // tail-call orig_init; lr := &(pop {pc})

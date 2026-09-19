@@ -1312,14 +1312,14 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "freemkv-flash"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1350,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1361,7 +1361,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "eframe",
@@ -4822,3 +4822,19 @@ dependencies = [
  "syn 3.0.6",
  "winnow 1.0.4",
 ]
+
+[[patch.unused]]
+name = "freemkv-unlock"
+version = "1.7.1"
+
+[[patch.unused]]
+name = "freemkv-engine"
+version = "1.7.1"
+
+[[patch.unused]]
+name = "freemkv-i18n"
+version = "1.7.1"
+
+[[patch.unused]]
+name = "freemkv-keysources"
+version = "1.7.1"

@@ -51,10 +51,13 @@ pub struct CreateReport {
     /// Always-on boot-init hook site — the cold/warm-boot convergence `bl <orig_init>`
     /// (the `bmi` target of the `BOOT_INIT_SIG` anchor, the first call AFTER the
     /// cold-boot SRAM clear; `0x13d428` on BU40N) replaced by a `bl` to the boot-init
-    /// stub, which tail-calls `orig_init`. The stub writes `0xFF` (OEM passthrough)
-    /// into every flag at power-on, which is what makes the tri-state `0x00 == OFF`
-    /// safe (a freshly powered drive is OEM-behaviour-identical). Detouring here, not
-    /// the pre-clear reload, keeps the SRAM clear from wiping the flag table.
+    /// stub, which tail-calls `orig_init`. The stub fills the flag table with the
+    /// baked per-create `DEFAULT_FLAGS` (UHD/BD ship `STATE_ON`, the rest `0xFF`
+    /// passthrough) and then overlays the persisted config only when the NV slot-0
+    /// saved-marker says one exists. No default is `0x00`, so a freshly powered drive
+    /// still never boots a feature to OFF (the invariant that keeps tri-state
+    /// `0x00 == OFF` safe). Detouring here, not the pre-clear reload, keeps the SRAM
+    /// clear from wiping the flag table.
     pub boot_init_site: u32,
     /// Injection address of the always-on boot-init trampoline.
     pub boot_stub_va: u32,
