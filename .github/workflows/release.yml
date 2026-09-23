@@ -24,9 +24,16 @@ name: release
 # and are skipped on the static-musl Linux leg, where the windowing/GPU stack
 # does not link; the portable Linux CLI is built there instead.
 #
-# Build jobs check out libfreemkv + freemkv-unlock as sibling subdirectories
-# (freemkv-flash path-deps ../../../libfreemkv, which path-deps ../freemkv-unlock)
-# and run under `working-directory: freemkv-firmware`, exactly as ci.yml does.
+# Build jobs check themselves out into `freemkv-firmware/` and use the shared
+# checkout-siblings composite to clone libfreemkv + freemkv-unlock alongside
+# them (freemkv-flash path-deps ../../../libfreemkv, which path-deps
+# ../freemkv-unlock), running under `working-directory: freemkv-firmware`,
+# exactly as ci.yml does.
+#
+# A release is cut from `main`, so the siblings are pinned to `main` (ref: main)
+# — a version tag is not a branch name, so without this the composite's default
+# would fall back to `dev` and the shipped binary would be built against the
+# UNRELEASED sibling tips instead of the released ones.
 
 on:
   push:
@@ -65,9 +72,24 @@ jobs:
           fi
           echo "Version match: $cargo_ver"
 
+  # Single source of truth for the MSRV: `rust-version` in Cargo.toml, so the
+  # shipped binary is built with the same compiler CI gates on and the pin
+  # cannot drift from the manifest.
+  resolve-msrv:
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.msrv.outputs.v }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: msrv
+        shell: bash
+        run: echo "v=$(grep -m1 -E '^[[:space:]]*rust-version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')" >> "$GITHUB_OUTPUT"
+
   build:
-    # Deliberately does NOT `needs: verify`: verify is a fast tripwire that fails
-    # the run on a version mismatch, but packaging can start in parallel.
+    # verify is a fast tripwire that fails the run on a version mismatch, but
+    # packaging can start in parallel — so `build` only waits on resolve-msrv
+    # (a few seconds) to learn the toolchain, not on `verify`.
+    needs: resolve-msrv
     strategy:
       # One red leg (e.g. a backend that stops compiling on its host) must not
       # cancel the others — the platforms that do build should still ship.
@@ -114,21 +136,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
-        with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
+          checkout: libfreemkv freemkv-unlock
+          ref: main
 
-      # Pin to the toolchain the project targets (rust-version = "1.94"), so the
-      # shipped binary is built with the same compiler CI gates on.
-      - uses: dtolnay/rust-toolchain@1.94.0
+      # Pin to the toolchain the project targets (rust-version), so the shipped
+      # binary is built with the same compiler CI gates on.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2

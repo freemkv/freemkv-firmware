@@ -1,5 +1,7 @@
 # freemkv-flash
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14740/badge)](https://www.bestpractices.dev/projects/14740)
+
 > # ⚠️ BETA — USE AT YOUR OWN RISK
 > **Barely tested.** A full flash cycle (dump → flash → verify) has been
 > exercised on **exactly one drive model — an LG `HL-DT-ST BD-RE BU40N` (rev

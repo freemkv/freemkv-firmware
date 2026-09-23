@@ -13,15 +13,35 @@ name: qa
 # What this gate CANNOT cover: real flashing needs a sacrificial MT19xx drive,
 # and no hosted runner has one. That leg stays on hardware, by hand.
 #
-# Build jobs check out libfreemkv + freemkv-unlock as sibling subdirectories
-# (freemkv-flash path-deps ../../../libfreemkv, which path-deps ../freemkv-unlock)
-# and run under `working-directory: freemkv-firmware`, exactly as ci.yml does.
+# Build jobs check themselves out into `freemkv-firmware/` and use the shared
+# checkout-siblings composite to clone libfreemkv + freemkv-unlock alongside
+# them at the branch-matched ref (on qa: qa). freemkv-flash path-deps
+# ../../../libfreemkv, which path-deps ../freemkv-unlock, and the flat sibling
+# layout resolves both exactly as they resolve locally.
 on:
   push:
     branches: [qa]
   workflow_dispatch:
 
+# A re-push to qa supersedes its own in-progress run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Single source of truth for the MSRV — see ci.yml. Jobs that build/test AT
+  # the MSRV read `needs.resolve-msrv.outputs.v` from Cargo.toml's rust-version;
+  # clippy (cross-lint) runs on stable instead.
+  resolve-msrv:
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.msrv.outputs.v }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: msrv
+        shell: bash
+        run: echo "v=$(grep -m1 -E '^[[:space:]]*rust-version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')" >> "$GITHUB_OUTPUT"
+
   # ── Name the candidate ────────────────────────────────────────────────
   # Every push to `qa` is a release candidate, so every push gets a tag:
   # v<version>-rc<N>, N incrementing. Runs FIRST and does not depend on the
@@ -52,6 +72,7 @@ jobs:
   # out, inlining changes what the optimiser proves. A test that only passes in
   # debug never guarded the binary anyone ships.
   release-tests:
+    needs: resolve-msrv
     strategy:
       fail-fast: false
       matrix:
@@ -64,17 +85,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@1.94.0
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
@@ -82,7 +98,8 @@ jobs:
 
   # clippy's output is target-dependent: cfg-gated code only gets linted on the
   # target it compiles for. Linting solely on the dev host is how a lint that CI
-  # rejects reaches a push.
+  # rejects reaches a push. clippy runs on stable (matches ci.yml's lint job);
+  # build/test stay on the MSRV pin.
   cross-lint:
     runs-on: ubuntu-latest
     defaults:
@@ -92,17 +109,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
-        with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@1.94.0
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
@@ -114,6 +124,7 @@ jobs:
   # #[cfg(windows)] half of the SCSI transport compiles on no other runner, so
   # without this it is first built at release time.
   windows-build:
+    needs: resolve-msrv
     runs-on: windows-latest
     defaults:
       run:
@@ -122,17 +133,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@1.94.0
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
@@ -155,6 +161,7 @@ jobs:
   #   FREEMKV_FW_CORPUS=/path/to/hoard/organized,/path/to/hoard/incoming \
   #     cargo +1.94 test -p freemkv-fw --test corpus_create_verify -- --nocapture
   forge-corpus:
+    needs: resolve-msrv
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -163,17 +170,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@1.94.0
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware

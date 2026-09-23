@@ -9,16 +9,35 @@ on:
     branches: [main, dev, qa]
   pull_request:
 
+# Rapid dev pushes supersede their own in-progress runs instead of stacking.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # freemkv-firmware's `freemkv-flash` crate path-deps ../../../libfreemkv (its
 # `scsi` feature is the single source of truth for the per-OS SCSI backends),
-# and libfreemkv in turn path-deps ../freemkv-unlock. actions/checkout refuses a
-# `path:` outside $GITHUB_WORKSPACE, so every build job checks all three repos
-# into sibling subdirectories and runs with `working-directory: freemkv-firmware`
-# — the layout under which the path deps resolve exactly as they do locally.
+# and libfreemkv in turn path-deps ../freemkv-unlock. Every build job checks
+# itself out into `freemkv-firmware/` and uses the shared checkout-siblings
+# composite to clone libfreemkv + freemkv-unlock alongside it at the
+# branch-matched ref (qa->qa, main->main, else dev) — the flat layout under
+# which the path deps resolve exactly as they do locally.
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Single source of truth for the MSRV: `rust-version` in Cargo.toml. Every job
+  # that builds AT the MSRV consumes needs.resolve-msrv.outputs.v so the floor
+  # cannot drift. clippy deliberately runs on `stable`.
+  resolve-msrv:
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.msrv.outputs.v }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: msrv
+        shell: bash
+        run: echo "v=$(grep -m1 -E '^[[:space:]]*rust-version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')" >> "$GITHUB_OUTPUT"
+
   # CI owns the changelog: main may never carry a version without a CHANGELOG.md
   # entry for it. Hard-fails on main (and PRs targeting main); warns elsewhere so
   # an in-progress dev/qa branch whose entry isn't written yet is not blocked.
@@ -43,51 +62,68 @@ jobs:
           fi
           echo "::warning::${msg} (allowed on ${GITHUB_REF_NAME:-unknown}; required before it can reach main)."
 
-  lint:
+  # BUG B2: a stale Cargo.lock used to slip through every gate and only fail at
+  # the release `cargo build --locked` — days after the drift landed (it broke
+  # v0.8.1/v0.8.2). This surfaces the same drift on every dev/qa push in ~1 min:
+  # `cargo metadata --locked` refuses to rewrite the lock, so a lock that no
+  # longer matches the manifests fails here instead of at the release tag.
+  locked:
+    needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
+        with:
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
+      - name: Cargo.lock is up to date (--locked)
+        working-directory: freemkv-firmware
+        run: cargo metadata --locked --format-version=1 >/dev/null
+
+  # fmt on the pinned MSRV; clippy on stable so new-lint debt is a blocking gate
+  # the pinned version would hide. --all-targets lints the test code too.
+  lint:
+    needs: resolve-msrv
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v7
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          path: freemkv-firmware
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
+          checkout: libfreemkv freemkv-unlock
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: clippy
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
+          components: rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
       - run: cargo fmt --all --check
         working-directory: freemkv-firmware
-      # --all-targets so the test code is linted too, not just the libraries.
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo +stable clippy --all-targets --all-features -- -D warnings
         working-directory: freemkv-firmware
 
   test:
+    needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@stable
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
@@ -97,23 +133,17 @@ jobs:
 
   # cargo-deny — audits the RESOLVED graph (RUSTSEC advisories, licence
   # allow-list, source/ban hygiene) against the committed Cargo.lock + deny.toml.
-  # Same 3-repo checkout as `test` so cargo metadata resolves the path deps.
+  # Same sibling checkout as `test` so cargo metadata resolves the path deps.
+  # Runs on stable: it resolves and audits the graph, it does not build code.
   deny:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
-        with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
+          checkout: libfreemkv freemkv-unlock
       - uses: dtolnay/rust-toolchain@stable
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
@@ -126,23 +156,19 @@ jobs:
   # release-candidate branches — dev is the fast lane. `if` SKIPS the job (it
   # does not queue), so a release gate is never blocked by a never-scheduled job.
   check-macos:
+    needs: resolve-msrv
     if: github.ref_name == 'qa' || github.ref_name == 'main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@stable
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
@@ -150,23 +176,19 @@ jobs:
         working-directory: freemkv-firmware
 
   check-windows:
+    needs: resolve-msrv
     if: github.ref_name == 'qa' || github.ref_name == 'main'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@stable
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
@@ -177,27 +199,22 @@ jobs:
   #
   # Reports line coverage to Codecov. Deliberately NOT wired into any release
   # gate: it is informational only and no other job `needs:` it. Mirrors the
-  # `test` job's layout — same stable toolchain, same sibling checkout so
-  # the path deps resolve. cargo-llvm-cov comes as a prebuilt binary from
+  # `test` job's layout — same MSRV toolchain, same sibling checkout so the path
+  # deps resolve. cargo-llvm-cov comes as a prebuilt binary from
   # taiki-e/install-action, so it is toolchain-independent.
   coverage:
+    needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: actions/checkout@v7
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
         with:
-          repository: freemkv/libfreemkv
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: libfreemkv
-      - uses: actions/checkout@v7
+          checkout: libfreemkv freemkv-unlock
+      - uses: dtolnay/rust-toolchain@master
         with:
-          repository: freemkv/freemkv-unlock
-          ref: "${{ github.ref_name == 'qa' && 'qa' || 'dev' }}"
-          path: freemkv-unlock
-      - uses: dtolnay/rust-toolchain@stable
-        with:
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
         with:
