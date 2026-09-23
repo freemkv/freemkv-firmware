@@ -927,8 +927,8 @@ pub(crate) fn emit_flash_write(
 ///
 /// The distinction is load-bearing for safety: a [`Self::Modern`] site is the
 /// MT1959 main-task prologue whose power-on boot hook is HARDWARE-CONFIRMED, so
-/// [`Mt1959Engine::emit_boot_init`] ships it. A [`Self::ClassicUnconfirmed`] site
-/// is the MT1939-classic leaf helper (matched by [`BOOT_INIT_SIG_CLASSIC`]) whose
+/// `Mt1959Engine::emit_boot_init` ships it. A [`Self::ClassicUnconfirmed`] site
+/// is the MT1939-classic leaf helper (matched by `BOOT_INIT_SIG_CLASSIC`) whose
 /// runtime power-on call-order has NOT been verified on silicon, so `emit_boot_init`
 /// FAILS CLOSED on it — the classic images degrade to DE-only exactly as before,
 /// while the site now resolves and is unit-tested.
@@ -1314,10 +1314,10 @@ impl Mt1959Engine {
     /// r3=op)`) — the entry a [`abi::Verb::FlashWrite`] `bl`s. Returns the routine's
     /// address (`0x13da2a` on BU40N 1.00; VA == file offset in this flat image).
     ///
-    /// The raw prologue [`FLASH_PROGRAM_SIG`] is NOT unique: it also matches a decoy
+    /// The raw prologue `FLASH_PROGRAM_SIG` is NOT unique: it also matches a decoy
     /// erase routine that shares the prologue (`0x8faa` on BU40N). Disambiguate by the
     /// candidate's constant table (`+0..+FLASH_POOL_SPAN`), requiring ALL THREE of the
-    /// mailbox constant [`FLASH_MAILBOX`], the controller constant [`FLASH_CONTROLLER`],
+    /// mailbox constant `FLASH_MAILBOX`, the controller constant `FLASH_CONTROLLER`,
     /// and a descriptor pointer word in `[0x01ff_0000, 0x0200_0000)`. Only the true
     /// PROGRAM routine carries all three (the decoy lacks the descriptor), which yields
     /// exactly one qualifying candidate across the owned MT19xx corpus. Refuses (rather
@@ -1353,7 +1353,7 @@ impl Mt1959Engine {
     /// Locate the **NV DRAM-window base pointer** — the SRAM address of the global that
     /// holds the flash controller's program-source translation base (the engine reads a
     /// program source as `phys = (src & 0x00FFFFFF) + [ptr]`). freemkv's flash-write
-    /// primitive ([`emit_flash_write`]) stages data into that window and passes a window
+    /// primitive (`emit_flash_write`) stages data into that window and passes a window
     /// offset, because the OEM program engine cannot source SRAM directly. `[ptr+4]` is
     /// the reserved NV scratch window offset.
     ///
@@ -1474,9 +1474,9 @@ impl Mt1959Engine {
     /// detour is written (`anchor+4`, over `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`).
     /// Returns `0x13d41a` on BU40N 1.00.
     ///
-    /// [`BOOT_INIT_SIG`] is unique (n==1) on every owned MT1959 image. On the
+    /// `BOOT_INIT_SIG` is unique (n==1) on every owned MT1959 image. On the
     /// MT1939-classic lineage the modern shape returns zero and an ORDERED FALLBACK
-    /// to [`BOOT_INIT_SIG_CLASSIC`] recovers the same reload site (tagged
+    /// to `BOOT_INIT_SIG_CLASSIC` recovers the same reload site (tagged
     /// [`BootInitSite::ClassicUnconfirmed`]). Ordering is MANDATORY and the reason
     /// this is not a merged scan: the classic helper ALSO matches inside 157 modern
     /// images, so a simultaneous scan would make modern images ambiguous. The modern
@@ -1695,7 +1695,7 @@ impl Mt1959Engine {
     }
 
     /// `SetDiscMode`, the read-datapath disc-mode dispatcher (`0x43cb0` on 1.00),
-    /// located by [`SETDISCMODE_SIG`] and proven unique. This is the Bus
+    /// located by `SETDISCMODE_SIG` and proven unique. This is the Bus
     /// Encryption (subfn 0x04) hook point; see the build report for why it is not
     /// yet wired.
     pub fn find_setdiscmode(&self, image: &[u8]) -> Result<u32> {
@@ -1706,7 +1706,7 @@ impl Mt1959Engine {
 
     /// The Speed (0x02) ramp-ceiling gate anchor. Returns `(anchor, idx_reg)`
     /// where `idx_reg` is the register the ramp holds `speed_index` in (`2` for the
-    /// original [`SPEED_GATE_SIG`], `0` for the [`SPEED_GATE_SIG_R0`] variant); the
+    /// original `SPEED_GATE_SIG`, `0` for the `SPEED_GATE_SIG_R0` variant); the
     /// gate `cmp/bhi` the detour replaces begins at `anchor+4` for both. Original
     /// first so the BU40N KAT base always resolves to the `r2` shape.
     pub fn find_speed_gate(&self, image: &[u8]) -> Result<(u32, u8)> {
@@ -1733,7 +1733,7 @@ impl Mt1959Engine {
     }
 
     /// The Region-free (0x03) RPC-state emitter anchor — the unique
-    /// [`REGION_EMIT_SIG`] match (`0x119890` on 1.00, `0x119a84` on 1.03).
+    /// `REGION_EMIT_SIG` match (`0x119890` on 1.00, `0x119a84` on 1.03).
     /// Returns the anchor offset; the `frame[4]` store the detour replaces is at
     /// `anchor+6`.
     pub fn find_region_emitter(&self, image: &[u8]) -> Result<u32> {
@@ -1755,7 +1755,7 @@ impl Mt1959Engine {
         Ok(find_unique(image, REGION_EMIT_SIG, lo, hi, "RPC-state emitter")? as u32)
     }
 
-    /// The AACS AKE accept-gate anchor — the unique [`AKE_GATE_SIG`] match
+    /// The AACS AKE accept-gate anchor — the unique `AKE_GATE_SIG` match
     /// (`0x136594` on 1.00). Returns the anchor; the RESET writer the Raw Read
     /// detour replaces (`movs r1,#1; b <back>`, 4 bytes) is at `anchor+12`.
     pub fn find_ake_gate(&self, image: &[u8]) -> Result<u32> {
@@ -1765,9 +1765,9 @@ impl Mt1959Engine {
         Ok(find_unique(image, AKE_GATE_SIG, 0, image.len(), "AACS AKE accept gate")? as u32)
     }
 
-    /// The NB-class AKE accept-gate anchor — the unique [`AKE_GATE_SIG_NB`] match.
+    /// The NB-class AKE accept-gate anchor — the unique `AKE_GATE_SIG_NB` match.
     /// Returns the anchor; the shared `bl set_agid_state` the Raw Read NB detour
-    /// replaces is at `anchor+12` (see [`AKE_GATE_SIG_NB`]).
+    /// replaces is at `anchor+12` (see `AKE_GATE_SIG_NB`).
     pub fn find_ake_gate_nb(&self, image: &[u8]) -> Result<u32> {
         Ok(find_unique(
             image,
@@ -1779,9 +1779,9 @@ impl Mt1959Engine {
     }
 
     /// The NB-class `1.V5` AKE accept-gate anchor — the unique
-    /// [`AKE_GATE_SIG_NB_V5`] match. Returns the anchor; the reject writer
+    /// `AKE_GATE_SIG_NB_V5` match. Returns the anchor; the reject writer
     /// (`movs r1,#1`) is at `anchor+12` and the shared `bl set_agid_state` the
-    /// Raw Read detour replaces is at `anchor+14` (see [`AKE_GATE_SIG_NB_V5`]).
+    /// Raw Read detour replaces is at `anchor+14` (see `AKE_GATE_SIG_NB_V5`).
     pub fn find_ake_gate_nb_v5(&self, image: &[u8]) -> Result<u32> {
         Ok(find_unique(
             image,
@@ -1802,7 +1802,7 @@ impl Mt1959Engine {
     /// `bl <aacs_session_reset>` itself → four more subsystem re-inits → `pop
     /// {r4,pc}`. On BU40N 1.00 this is at VA `0x00044874`.
     ///
-    /// Used by the [`Feature::Encryption`] revert arm (`SET encryption != 0x00`)
+    /// Used by the [`abi::Feature::Encryption`] revert arm (`SET encryption != 0x00`)
     /// so that flipping from a de-bussed session back to OEM/on ACTUALLY
     /// re-wraps the drive at runtime — the fw obeys the flag both directions.
     /// The plain `aacs_session_reset` is insufficient (empirically: kickoff
@@ -2195,7 +2195,7 @@ impl Mt1959Engine {
         a.push(0x01F0); // push {r4,r5,r6,r7,lr}
         a.ldr_lit(7, writer | 1); // r7 = byte-writer for `clr`
         a.ldrb_imm(4, 3, abi::CDB_VERB as u16); // r4 = verb = cdb[4]
-        // Assemble the 32-bit target VA in r6 (both Call and Poke use it).
+                                                // Assemble the 32-bit target VA in r6 (both Call and Poke use it).
         a.ldrb_imm(6, 3, 5);
         a.lsls_imm(6, 6, 8);
         a.ldrb_imm(0, 3, 6);
@@ -2304,21 +2304,21 @@ impl Mt1959Engine {
         a.adds_reg(0, 0, 1); // r0 = &flag[feature]
         a.ldrb_imm(1, 3, abi::CDB_STATE as u16); // r1 = state (cdb[6])
         a.strb_imm(1, 0, 0); // flag[feature] = state
-        // No rearm-on-SET. Image-wide BL scan (0.8.14) proved the OEM re-arms
-        // bus-encryption ONLY via its non-BL disc-insert path (a hardware/ISR
-        // event), never through a `bl <aacs_session_rearm>` — the sole caller
-        // of that wrapper is inside the cold-boot init at 0x0013d444, and there
-        // is no `blx <thumb-tagged>` dispatch either (the wrapper's VA is not
-        // present as a 32-bit literal anywhere in the image). Firing the
-        // wrapper from a vendor-CDB SET context couples its session_reset +
-        // subsystem re-init side-effects into the shared engine data path and
-        // wedges every subsequent vendor CDB, even when re-arming an already-
-        // armed engine (i.e. with no medium). The AKE detour handles both
-        // directions of `Feature::Encryption` in software on the next data
-        // read regardless of the hardware arm state, so SET only needs to
-        // record the flag — hardware re-arms bus-enc itself when the disc-insert
-        // ISR runs. The `find_aacs_session_rearm` finder stays (its KAT still
-        // exercises it) for the record; nothing bakes it into the handler.
+                             // No rearm-on-SET. Image-wide BL scan (0.8.14) proved the OEM re-arms
+                             // bus-encryption ONLY via its non-BL disc-insert path (a hardware/ISR
+                             // event), never through a `bl <aacs_session_rearm>` — the sole caller
+                             // of that wrapper is inside the cold-boot init at 0x0013d444, and there
+                             // is no `blx <thumb-tagged>` dispatch either (the wrapper's VA is not
+                             // present as a 32-bit literal anywhere in the image). Firing the
+                             // wrapper from a vendor-CDB SET context couples its session_reset +
+                             // subsystem re-init side-effects into the shared engine data path and
+                             // wedges every subsequent vendor CDB, even when re-arming an already-
+                             // armed engine (i.e. with no medium). The AKE detour handles both
+                             // directions of `Feature::Encryption` in software on the next data
+                             // read regardless of the hardware arm state, so SET only needs to
+                             // record the flag — hardware re-arms bus-enc itself when the disc-insert
+                             // ISR runs. The `find_aacs_session_rearm` finder stays (its KAT still
+                             // exercises it) for the record; nothing bakes it into the handler.
         a.b(clr); // return a zeroed buffer
         a.bind(not_set);
 
@@ -3072,15 +3072,15 @@ impl Mt1959Engine {
     /// mode/class accept/refuse decision, tried **original-first** (full-image; both
     /// signatures are unique image-wide, maxn==1 measured):
     ///
-    /// * explicit REPORT KEY gate ([`BD_GATE_SIG`], `0x1365be` on BU40N 1.00, anchor
+    /// * explicit REPORT KEY gate (`BD_GATE_SIG`, `0x1365be` on BU40N 1.00, anchor
     ///   head `cmp r0,#1`) — resolves on 36 images. The mode-0 class check the
     ///   `Feature::Bd` detour replaces is at `anchor+16`.
-    /// * descriptor-classifier gate ([`BD_GATE_SIG_VER`], anchor head `ldrb r2,[r1]`)
+    /// * descriptor-classifier gate (`BD_GATE_SIG_VER`, anchor head `ldrb r2,[r1]`)
     ///   — the newer codegen the other AACS carriers use; consulted only when the
     ///   explicit sig matches ZERO, so the BU40N KAT base and the 36 stay
     ///   byte-identical. The mode==0 test the detour replaces is at `anchor+6`.
     ///
-    /// [`Self::bd_detour`] disambiguates on the anchor head and applies the matching
+    /// `Self::bd_detour` disambiguates on the anchor head and applies the matching
     /// site + stub. Either shape must resolve UNIQUELY.
     pub fn find_bd_gate(&self, image: &[u8]) -> Result<u32> {
         // Original-first (same pattern as `find_aacs45_arm`): the explicit
@@ -3104,7 +3104,7 @@ impl Mt1959Engine {
         }
     }
 
-    /// The flash-resident HRL lookup routine, located by [`HRL_LOOKUP_SIG`] and
+    /// The flash-resident HRL lookup routine, located by `HRL_LOOKUP_SIG` and
     /// proven unique image-wide. Returns its entry VA. The routine relocates
     /// between versions (`0x133666` … `0x139796` on the mainline, ~`0x146xxx` on the
     /// ~+0x2b000-shifted MT1939-modern block, ~`0x16axxx` on the far-shifted
@@ -3525,14 +3525,15 @@ impl Mt1959Engine {
     /// always-on 0xFF fill.
     pub(crate) fn resolve_boot_init_pair(&self, image: &[u8]) -> Result<(usize, u32)> {
         match self.find_boot_init(image)? {
-            Some(BootInitSite::Modern(s)) => boot_init_convergence(image, s as usize)
-                .ok_or_else(|| {
+            Some(BootInitSite::Modern(s)) => {
+                boot_init_convergence(image, s as usize).ok_or_else(|| {
                     anyhow!(
                         "boot-init convergence `bl <orig_init>` not resolvable from anchor at \
                          0x{s:x} (the bmi target is not a 32-bit Thumb bl) — refusing to ship an \
                          unverified boot hook rather than mis-patch"
                     )
-                }),
+                })
+            }
             Some(BootInitSite::ClassicUnconfirmed(s)) => {
                 if !CLASSIC_BOOT_BLESSED {
                     bail!(
@@ -3556,13 +3557,6 @@ impl Mt1959Engine {
                  all-0x00 would disable every feature at power-on."
             ),
         }
-    }
-
-    /// Convenience wrapper: just the detour site (the value later reported as
-    /// [`crate::engine::CreateReport::boot_init_site`]), for callers that need
-    /// the [`abi::Verb::Reboot`] boot-function-entry literal but not `orig_init`.
-    pub(crate) fn resolve_boot_init_site(&self, image: &[u8]) -> Result<u32> {
-        self.resolve_boot_init_pair(image).map(|(conv, _)| conv as u32)
     }
 
     /// Install the always-on boot-init hook: find the anchor, follow its `bmi` to the
@@ -3731,7 +3725,7 @@ pub(crate) fn classic_boot_init_caller(image: &[u8], site: usize) -> Option<(usi
     caller.map(|c| (c, helper))
 }
 
-/// Which Thumb-2 wide branch encoding the caller of [`Mt1959Engine::ake_detour`]
+/// Which Thumb-2 wide branch encoding the caller of `Mt1959Engine::ake_detour`
 /// must use when writing the 4-byte install patch at the returned `reset_site`.
 ///
 /// * [`WideB`](Self::WideB) — Thumb-2 wide `B` (`B.W`, T4 encoding via

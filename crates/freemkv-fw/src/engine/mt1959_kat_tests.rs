@@ -960,10 +960,7 @@ fn debug_knock_dispatches_call_and_poke() {
         .create(&base)
         .expect("create must succeed on the OEM base");
     let hb = &report.handler_bytes;
-    let has_u16 = |v: u16| {
-        hb.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == v)
-    };
+    let has_u16 = |v: u16| hb.windows(2).any(|w| u16::from_le_bytes([w[0], w[1]]) == v);
     // DEBUG_KNOCK gate: both bytes must appear as `cmp r0,#imm8` (0x2800 | imm8).
     let dk = crate::abi::DEBUG_KNOCK;
     assert_eq!(dk, [0xDE, 0xB9], "wire bytes for DEBUG_KNOCK (pin)");
@@ -1023,10 +1020,7 @@ fn verb_reboot_bakes_boot_function_entry_and_r0_4() {
         .create(&base)
         .expect("create must succeed on the OEM base");
     let hb = &report.handler_bytes;
-    let has_u16 = |v: u16| {
-        hb.windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == v)
-    };
+    let has_u16 = |v: u16| hb.windows(2).any(|w| u16::from_le_bytes([w[0], w[1]]) == v);
     let has_u32 = |v: u32| {
         hb.windows(4)
             .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
@@ -1386,7 +1380,10 @@ fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
     // Preserves orig_init's args + lr AND pads with r4 so sp is 8-byte aligned
     // at the downstream `blx r3` (AAPCS entry alignment):
     // `push {r0,r1,r2,r3,r4,lr}` (0xB51F).
-    assert!(has16(0xB51F), "boot stub pushes {{r0-r4, lr}} (r4 pad for sp align)");
+    assert!(
+        has16(0xB51F),
+        "boot stub pushes {{r0-r4, lr}} (r4 pad for sp align)"
+    );
     // Loads the flag-table base as a literal.
     assert!(has32(base), "boot stub loads the flag-table base");
     // Materializes the DEFAULTS: 0xFF passthrough (movs r1,#0xFF = 0x21FF) for the

@@ -322,7 +322,7 @@ pub enum Feature {
     /// revoked certs accepted, non-destructive); [`STATE_ON`] (`0x01`) = on (enforce
     /// the HRL). Polarity note: OFF now means "skip" — the pre-migration spec put
     /// skip on `0x01`. `0x02` is a reserved/internal deferred value (see the
-    /// `pub(crate)` [`HRL_WIPE_ONCE`]) that is NOT part of the host-facing ABI.
+    /// `pub(crate)` `HRL_WIPE_ONCE`) that is NOT part of the host-facing ABI.
     Hrl = 0x05,
     /// Content encryption / drive-host AKE (single consolidated feature — hardware
     /// proved on BU40N/MT1959 that toggling this alone de-busses content reads).

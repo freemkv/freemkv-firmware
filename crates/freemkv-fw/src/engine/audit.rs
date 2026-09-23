@@ -15,8 +15,8 @@
 
 use crate::engine::core::is_freemkv_patched;
 use crate::engine::lever::{LeverId, LeverOutcome, ModifyReport};
-use thumb_asm as thumb;
 use freemkv_flash::cmac;
+use thumb_asm as thumb;
 
 /// One structural check with its verdict.
 #[derive(Debug, Clone)]

@@ -156,7 +156,7 @@ const BD_UHD_UNLOCK: &[(&str, MediaClass, bool)] = {
 
 /// Resolve the capability for a model/family.
 ///
-/// Looks the model's primary token up in the baked [`BD_UHD_UNLOCK`] table
+/// Looks the model's primary token up in the baked `BD_UHD_UNLOCK` table
 /// (uppercase substring match, longest token first so `BW-16D1HT` wins over a
 /// hypothetical `BW-16`). A hit gives the mapped media class + AACS/region
 /// scope. A miss falls back to the family default: every `MTEKMT19xx` part is a

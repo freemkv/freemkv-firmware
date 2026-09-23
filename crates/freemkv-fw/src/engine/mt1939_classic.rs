@@ -68,7 +68,7 @@ impl Mt1959Engine {
     ///
     /// Ships the injected `0x3C-0E` handler (Identity / SET / GET / SAVE / RESET /
     /// DumpAll) + record repoint + CMAC re-sign, and — now that the classic boot
-    /// hook is blessed ([`CLASSIC_BOOT_BLESSED`], emulation-verified) — the always-on
+    /// hook is blessed (`CLASSIC_BOOT_BLESSED`, emulation-verified) — the always-on
     /// boot-init hook plus the classic feature stubs, mirroring the modern
     /// [`Self::build_report`] structure (boot FIRST, then features).
     ///
@@ -76,7 +76,7 @@ impl Mt1959Engine {
     /// power-on, which is what makes the tri-state `0x00 == OFF` invariant every
     /// feature stub relies on hold on a freshly powered drive. It is therefore
     /// emitted FIRST and every feature emit is gated on its success; if
-    /// [`Self::emit_boot_init`] fails on some classic image, this falls back to a
+    /// `Self::emit_boot_init` fails on some classic image, this falls back to a
     /// BARE base (handler + record repoint + CMAC only) and ships NO feature stub —
     /// never a feature that would boot into its OFF state without the 0xFF-fill.
     ///
@@ -145,12 +145,7 @@ impl Mt1959Engine {
         // function entry can flip this back on.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler(
-                image,
-                record.handler,
-                flag_base,
-                boot_function_entry,
-            )
+            .build_handler(image, record.handler, flag_base, boot_function_entry)
             .context("classic base: assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -417,12 +412,7 @@ impl Mt1959Engine {
         // function entry can flip this back on.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler(
-                image,
-                record.handler,
-                flag_base,
-                boot_function_entry,
-            )
+            .build_handler(image, record.handler, flag_base, boot_function_entry)
             .context("classic base: assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -505,8 +495,7 @@ impl Mt1959Engine {
         levers.push(if cap.bd_aacs {
             match self.emit_rawread_classic(image, &mut out, flag_base) {
                 Ok(mut facts) => {
-                    if let Ok((sites, stub_va)) =
-                        self.emit_hrl_classic(image, &mut out, flag_base)
+                    if let Ok((sites, stub_va)) = self.emit_hrl_classic(image, &mut out, flag_base)
                     {
                         if stub_va != 0 {
                             facts.push(("hrl_stub_va", stub_va));
@@ -570,7 +559,12 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("classic Region detour `bl` out of range"))?;
         thumb::write(out, region_stub_va as usize, &region_bytes);
         thumb::write(out, region_site, &bl);
-        crate::install_guard::assert_bl_install(out, region_site, region_stub_va, "classic Region")?;
+        crate::install_guard::assert_bl_install(
+            out,
+            region_site,
+            region_stub_va,
+            "classic Region",
+        )?;
         Ok((region_emitter, region_stub_va))
     }
 

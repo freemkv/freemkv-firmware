@@ -101,7 +101,7 @@ pub enum Confidence {
 
 /// Everything the tools could read off the image about its chip identity. The
 /// `banner`, `vendor`, `model`, `rev`, and `marker_0x50` fields are display /
-/// corroboration only — the `family` is decided by [`ChipFamily::from_digits`]
+/// corroboration only — the `family` is decided by `ChipFamily::from_digits`
 /// over the `MTEKMT19xx` pattern (or the banner fallback).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChipInfo {

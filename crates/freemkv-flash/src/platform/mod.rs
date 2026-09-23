@@ -163,7 +163,7 @@ pub use mock::MockScsiDevice;
 /// Open the platform's real SCSI backend for `path`.
 ///
 /// The per-OS transports (SG_IO / IOKit / SPTI) live in libfreemkv's `scsi`
-/// feature; [`adapter::TransportDevice`] bridges one to this crate's
+/// feature; `adapter::TransportDevice` bridges one to this crate's
 /// [`ScsiDevice`] contract. `writable` is retained for source compatibility but
 /// is now moot — libfreemkv opens the device O_RDWR, and the read-only
 /// `info`/`dump` paths simply never issue a write.

@@ -7,7 +7,7 @@
 //!
 //! * [`detect_chip`] — family + model/rev from image bytes, keyed on the
 //!   authoritative `MTEKMT19xx` identity string (pattern-searched, not a
-//!   fixed-offset read — see [`detect`] for why the banner and the `+0x50`
+//!   fixed-offset read — see `detect` for why the banner and the `+0x50`
 //!   marker are deliberately *not* family gates);
 //! * [`Capability`] / [`capability_for`] — the media-class + lever-scope
 //!   taxonomy the per-image "which features apply" gate consults.

@@ -7,14 +7,14 @@
 //!
 //! ## DUMP is supported; FLASH is NOT
 //! The full drive-memory image can be read out (read-only). Every WRITE (flash)
-//! primitive returns [`flash_unsupported`]; freemkv-flash never programs a
+//! primitive returns `flash_unsupported`; freemkv-flash never programs a
 //! Pioneer/Renesas drive.
 //!
 //! ## The one allowed write: the vendor "enable" knock
 //! The SOLE write this family ever issues is the universal Pioneer "enable"
 //! knock — `WRITE_BUFFER` mode 0x02 / buffer id 0x41 @ 0xA5AAAA, no payload
 //! (`3B 02 41 A5 AA AA 00 00 00 00`) — which flips the drive into raw-read mode.
-//! It is idempotent and gated to the dump path in [`read_full_image`]; it is
+//! It is idempotent and gated to the dump path in `read_full_image`; it is
 //! never sent during classify / identity / info.
 //!
 //! ## RAW READ
@@ -143,7 +143,7 @@ pub(crate) fn flash_unsupported(family: Family) -> anyhow::Error {
 
 /// Implement [`crate::drive::DriveFamily`] for a Pioneer/Renesas struct: DUMP
 /// (read-only) is supported; every WRITE (flash) primitive returns
-/// [`flash_unsupported`]. Shared by [`Pioneer`] and
+/// `flash_unsupported`. Shared by [`Pioneer`] and
 /// [`super::renesas::Renesas`], which differ only in [`Family`].
 #[macro_export]
 macro_rules! renesas_pioneer_drive_family {

@@ -131,12 +131,7 @@ impl Mt1959Engine {
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
 
         let handler_bytes = self
-            .build_handler(
-                image,
-                record.handler,
-                flag_base,
-                boot_function_entry,
-            )
+            .build_handler(image, record.handler, flag_base, boot_function_entry)
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -312,12 +307,7 @@ impl Mt1959Engine {
         let resolved_boot_init_site = boot_init_pair.0 as u32;
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
         let handler_bytes = self
-            .build_handler(
-                image,
-                record.handler,
-                flag_base,
-                boot_function_entry,
-            )
+            .build_handler(image, record.handler, flag_base, boot_function_entry)
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -587,8 +577,10 @@ impl Mt1959Engine {
                 thumb::encode_b_wide(reset_site, ake_stub_va)
                     .ok_or_else(|| anyhow!("AKE detour `B.W` out of range"))?
             }
-            crate::engine::core::AkeInstallShape::WideBl => thumb::encode_bl(reset_site, ake_stub_va)
-                .ok_or_else(|| anyhow!("AKE detour `BL` out of range"))?,
+            crate::engine::core::AkeInstallShape::WideBl => {
+                thumb::encode_bl(reset_site, ake_stub_va)
+                    .ok_or_else(|| anyhow!("AKE detour `BL` out of range"))?
+            }
         };
         thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);
         thumb::write(&mut w, reset_site, &ake_install);
@@ -602,7 +594,12 @@ impl Mt1959Engine {
         // BL-over-tail-call bug before flash.
         match ake_install_shape {
             crate::engine::core::AkeInstallShape::WideB => {
-                crate::install_guard::assert_b_wide_install(&w, reset_site, ake_stub_va, "AKE (B.W)")?;
+                crate::install_guard::assert_b_wide_install(
+                    &w,
+                    reset_site,
+                    ake_stub_va,
+                    "AKE (B.W)",
+                )?;
             }
             crate::engine::core::AkeInstallShape::WideBl => {
                 crate::install_guard::assert_bl_install(&w, reset_site, ake_stub_va, "AKE (BL)")?;
