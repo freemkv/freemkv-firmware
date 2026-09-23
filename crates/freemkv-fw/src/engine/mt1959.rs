@@ -130,28 +130,12 @@ impl Mt1959Engine {
         let resolved_boot_init_site = boot_init_pair.0 as u32;
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
 
-        // Resolve the AACS session-**rearm** primitive up front so the handler can
-        // bake it in as the revert target for SET encryption != 0x00. Prefer the
-        // full rearm wrapper (find_aacs_session_rearm — the OEM disc-insert entry
-        // that does aacs_session_reset PLUS the bit-20 engine-control-word write
-        // that actually re-arms bus-encryption); fall back to the plain reset if
-        // rearm can't be resolved on this image (the reset alone tears the AGID
-        // ladder down but does not re-arm bus-enc — kickoff Fact 4 — so the
-        // fallback is a functional degrade, not equivalent). Best-effort (0 when
-        // both absent): an image whose primitive shape doesn't match still gets a
-        // working handler; the flag's *revert direction* just skips the emit.
-        let aacs_reset_for_handler = self
-            .find_aacs_session_rearm(image)
-            .or_else(|_| self.find_aacs_session_reset(image))
-            .unwrap_or(0);
-
         let handler_bytes = self
             .build_handler(
                 image,
                 record.handler,
                 flag_base,
                 boot_function_entry,
-                aacs_reset_for_handler,
             )
             .context("assembling the 3C-0E handler")?;
 
@@ -162,6 +146,20 @@ impl Mt1959Engine {
         // large erased run shrinks past each blob and the next lands after it.
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
+        // Absence guard: the AACS session-rearm wrapper VA (if resolvable)
+        // MUST NOT appear as a callable literal in the handler bytes. Strategy A
+        // (0.8.14) removed the rearm-on-SET call; a future refactor that
+        // reintroduces the wrapper as a `blx` target would silently wedge the
+        // vendor-CDB path with no medium. See `install_guard::assert_literal_absent`.
+        if let Ok(rearm) = self.find_aacs_session_rearm(image) {
+            crate::install_guard::assert_literal_absent(
+                &out,
+                handler_va as usize,
+                handler_va as usize + handler_bytes.len(),
+                rearm,
+                "SET-Encryption rearm removal",
+            )?;
+        }
 
         // Always-on boot-init hook — installed FIRST (right after the handler, before
         // any feature stub) so the free_space allocation order is identical on the
@@ -313,28 +311,27 @@ impl Mt1959Engine {
         let boot_init_pair = self.resolve_boot_init_pair(image)?;
         let resolved_boot_init_site = boot_init_pair.0 as u32;
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
-        // Same aacs_reset resolution as build_report — rearm-first (the OEM
-        // disc-insert wrapper that actually re-arms bus-enc), reset as fallback,
-        // best-effort (0 disables emit). Byte-identical handler bytes across
-        // create/modify on the same base.
-        let aacs_reset_for_handler = self
-            .find_aacs_session_rearm(image)
-            .or_else(|_| self.find_aacs_session_reset(image))
-            .unwrap_or(0);
-
         let handler_bytes = self
             .build_handler(
                 image,
                 record.handler,
                 flag_base,
                 boot_function_entry,
-                aacs_reset_for_handler,
             )
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
+        if let Ok(rearm) = self.find_aacs_session_rearm(image) {
+            crate::install_guard::assert_literal_absent(
+                &out,
+                handler_va as usize,
+                handler_va as usize + handler_bytes.len(),
+                rearm,
+                "SET-Encryption rearm removal",
+            )?;
+        }
 
         // Always-on boot-init hook (see build_report): same allocation slot on both
         // paths (handler → boot → …), so create and modify stay byte-identical.

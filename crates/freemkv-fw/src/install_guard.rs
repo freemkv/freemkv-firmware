@@ -54,3 +54,35 @@ pub fn assert_b_wide_install(
     }
     Ok(())
 }
+
+/// Emit-time absence guard: the Thumb-tagged VA `forbidden` (auto-ORed with 1)
+/// MUST NOT appear as a 32-bit little-endian literal anywhere in `img[start..end]`.
+///
+/// Used by the handler emit to prove the AACS session-rearm wrapper is never
+/// baked as a `blx` target literal in the injected handler bytes. Strategy A
+/// (0.8.14) removed the rearm-on-SET call after image-wide BL scan proved the
+/// OEM does not gate the wrapper (its sole caller is inside the cold-boot init
+/// path, non-medium-conditional); firing it from a vendor-CDB context couples
+/// the shared engine and wedges every subsequent vendor CDB with no medium
+/// loaded. A future refactor that silently reintroduces the wrapper as a
+/// callable target will fail this guard at emit time.
+pub fn assert_literal_absent(
+    img: &[u8],
+    start: usize,
+    end: usize,
+    forbidden: u32,
+    lever: &str,
+) -> anyhow::Result<()> {
+    let want = forbidden | 1;
+    let end = end.min(img.len());
+    if start < end
+        && img[start..end]
+            .windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == want)
+    {
+        anyhow::bail!(
+            "{lever}: forbidden literal 0x{want:08x} baked in handler at 0x{start:x}..0x{end:x}"
+        );
+    }
+    Ok(())
+}

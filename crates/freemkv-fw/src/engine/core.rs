@@ -2094,7 +2094,6 @@ impl Mt1959Engine {
         oem_handler: u32,
         flag_base: u32,
         boot_function_entry: u32,
-        aacs_reset: u32,
     ) -> Result<Vec<u8>> {
         let cdb = self.find_cdb_base(image)?;
         let (writer, commit_off) = self.find_response_writer(image)?;
@@ -2305,36 +2304,21 @@ impl Mt1959Engine {
         a.adds_reg(0, 0, 1); // r0 = &flag[feature]
         a.ldrb_imm(1, 3, abi::CDB_STATE as u16); // r1 = state (cdb[6])
         a.strb_imm(1, 0, 0); // flag[feature] = state
-        // Revert primitive: on SET Encryption to a non-off state (0xFF passthrough /
-        // 0x01 on), fire the OEM AACS session-**rearm** wrapper so the drive
-        // actually re-arms bus-encryption on the next read. The plain
-        // `aacs_session_reset` alone is insufficient (kickoff Fact 4 — direct
-        // call returns SCSI Good but observable state is identical): tearing
-        // the AGID ladder down without re-running the six subsystem re-inits
-        // and the bit-20 engine-control-word "arm bus-enc" store leaves the
-        // drive in a de-bussed ladder even after the flag is set back to OEM,
-        // so the flag only *reads* right, doesn't *do* what it says. The full
-        // rearm wrapper (find_aacs_session_rearm) fixes both directions of the
-        // flag as the contract requires. Skipped for SET encryption 0x00
-        // (that's the arm that *installs* the de-bus via the AKE detour on the
-        // next read). Skipped for every non-Encryption feature (their gates
-        // read the flag at each op — no session state to rearm). `aacs_reset==0`
-        // disables the emit entirely, used by classic engines where neither
-        // primitive is resolvable.
-        if aacs_reset != 0 {
-            let no_reset = a.label();
-            a.ldrb_imm(0, 3, abi::CDB_FEATURE as u16); // r0 = feature id (reload cdb[5])
-            a.cmp_imm(0, abi::Feature::Encryption as u8);
-            a.bne(no_reset);
-            a.cmp_imm(1, 0); // r1 still = state just written
-            a.beq(no_reset); // 0x00 = arm de-bus; do NOT rearm
-            a.ldr_lit(2, aacs_reset | 1); // r2 = &aacs_session_rearm (thumb)
-            a.blx(2); // rearm(); AAPCS-callee (push {r4,lr}/pop {r4,pc}) so r4..r11
-                      // are preserved — our r4 (verb byte) and r5..r7 (writer, etc.)
-                      // ride through unchanged, same effective contract as the plain
-                      // reset primitive that this replaces.
-            a.bind(no_reset);
-        }
+        // No rearm-on-SET. Image-wide BL scan (0.8.14) proved the OEM re-arms
+        // bus-encryption ONLY via its non-BL disc-insert path (a hardware/ISR
+        // event), never through a `bl <aacs_session_rearm>` — the sole caller
+        // of that wrapper is inside the cold-boot init at 0x0013d444, and there
+        // is no `blx <thumb-tagged>` dispatch either (the wrapper's VA is not
+        // present as a 32-bit literal anywhere in the image). Firing the
+        // wrapper from a vendor-CDB SET context couples its session_reset +
+        // subsystem re-init side-effects into the shared engine data path and
+        // wedges every subsequent vendor CDB, even when re-arming an already-
+        // armed engine (i.e. with no medium). The AKE detour handles both
+        // directions of `Feature::Encryption` in software on the next data
+        // read regardless of the hardware arm state, so SET only needs to
+        // record the flag — hardware re-arms bus-enc itself when the disc-insert
+        // ISR runs. The `find_aacs_session_rearm` finder stays (its KAT still
+        // exercises it) for the record; nothing bakes it into the handler.
         a.b(clr); // return a zeroed buffer
         a.bind(not_set);
 

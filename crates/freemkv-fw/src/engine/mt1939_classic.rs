@@ -144,24 +144,12 @@ impl Mt1959Engine {
         // no side effect); a future signature dedicated to the classic boot
         // function entry can flip this back on.
         let boot_function_entry: u32 = 0;
-        // Best-effort revert primitive for SET encryption != 0x00: prefer the
-        // full AACS session-rearm wrapper (bit-20 bus-enc re-arm store + all
-        // subsystem re-inits + aacs_session_reset), fall back to the plain
-        // session-reset if rearm's shape doesn't match on this classic image.
-        // Classic images may match neither; 0 is safe — the handler emit skips
-        // the reset call entirely in that case.
-        let aacs_reset_for_handler = self
-            .find_aacs_session_rearm(image)
-            .or_else(|_| self.find_aacs_session_reset(image))
-            .unwrap_or(0);
-
         let handler_bytes = self
             .build_handler(
                 image,
                 record.handler,
                 flag_base,
                 boot_function_entry,
-                aacs_reset_for_handler,
             )
             .context("classic base: assembling the 3C-0E handler")?;
 
@@ -428,24 +416,12 @@ impl Mt1959Engine {
         // no side effect); a future signature dedicated to the classic boot
         // function entry can flip this back on.
         let boot_function_entry: u32 = 0;
-        // Best-effort revert primitive for SET encryption != 0x00: prefer the
-        // full AACS session-rearm wrapper (bit-20 bus-enc re-arm store + all
-        // subsystem re-inits + aacs_session_reset), fall back to the plain
-        // session-reset if rearm's shape doesn't match on this classic image.
-        // Classic images may match neither; 0 is safe — the handler emit skips
-        // the reset call entirely in that case.
-        let aacs_reset_for_handler = self
-            .find_aacs_session_rearm(image)
-            .or_else(|_| self.find_aacs_session_reset(image))
-            .unwrap_or(0);
-
         let handler_bytes = self
             .build_handler(
                 image,
                 record.handler,
                 flag_base,
                 boot_function_entry,
-                aacs_reset_for_handler,
             )
             .context("classic base: assembling the 3C-0E handler")?;
 

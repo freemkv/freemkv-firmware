@@ -6,16 +6,33 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.14]
+## [0.9.0]
+
+First public release since 0.8.3. Consolidates the 0.8.4–0.8.14 development
+line: the `Encryption` flag-set consolidation, the boot-time de-bus fix, the
+`thumb-asm` extraction, and a flasher hardening pass. Hardware-validated on
+BU40N 1.00 — empty-tray base certification 59/59, and a UHD disc run proving
+de-bussed reads end-to-end (every sampled unit opens with the AACS unit key).
+
+**Consumers must update**: the `Ake` (`0x06`) + `Bus` (`0x07`) feature pair is
+retired in favour of a single `Encryption` (`0x06`) lever. Wire id `0x07` no
+longer exists. `freemkv-unlock` 1.7.5 carries the matching change.
 
 ### Changed
 - **Every Thumb primitive now comes from the standalone `thumb-asm` crate.**
   `crates/freemkv-fw/src/thumb.rs` collapsed to a thin shim over
-  `thumb_asm::*` plus two anyhow-flavored install-guard helpers
-  (`assert_bl_install` / `assert_b_wide_install`). Byte-for-byte identical
-  emit verified (image sha256 pre- and post-migration match). Path-dep
-  during co-development; the crate is at `../../thumb-asm` awaiting a
-  crates.io publish.
+  `thumb_asm::*` plus the anyhow-flavored install-guard helpers in
+  `install_guard.rs`. Byte-for-byte identical emit verified (image sha256
+  pre- and post-migration match). Now consumed from crates.io.
+- **`Feature::Ake` + `Feature::Bus` retired into one `Feature::Encryption`.**
+  Six flags total. `0x00` = every drive-side encryption/cert requirement
+  relaxed; `0xFF` = OEM passthrough; `0x01` = on. Wire id `0x07` (`Bus`) is
+  retired — empirically inert as a separate datapath lever on BU40N/MT1959,
+  since the single `Encryption` lever de-busses on its own.
+- **Boot-init site resolved once per build.** New `resolve_boot_init_pair`
+  is the single source of truth for the detour `(conv, orig_init)` pair;
+  `resolve_boot_init_site` and `emit_boot_init` both consume it, eliminating
+  a redundant second `find_boot_init` image scan on every create/modify.
 
 ### Added
 - **Emit-time install guards at every detour site.** After each
@@ -53,6 +70,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `bl` there). Added `thumb::encode_b_wide` and `thumb::decode_b_wide` next
   to their `bl` counterparts. Audit updated to accept either encoding at
   the AKE install site.
+- **`SET Encryption` no longer fires the AACS session-rearm wrapper.** The
+  0.8.13 revert primitive called the OEM rearm wrapper from the vendor-CDB
+  SET handler whenever `Encryption` moved to a non-off state. An image-wide
+  branch scan proved the OEM only ever reaches that wrapper from its
+  cold-boot init path — there is no medium-gated caller, and its VA is not
+  present as a call-target literal anywhere in the image. Firing it from a
+  vendor-CDB context couples its `aacs_session_reset` + subsystem re-init
+  side-effects into the shared engine datapath, which wedged every
+  subsequent vendor CDB on a drive with no medium loaded (SCSI errors on
+  all following GETs, persisting for the session). The AKE detour already
+  handles both directions of the flag in software on the next data read,
+  and the drive re-arms bus-encryption itself on disc insert, so `SET` now
+  only records the flag. Verified on hardware: base certification went
+  54/5 → 59/0, and a UHD disc run returns every sampled unit de-bussed.
+- **Flasher refuses to report success on ambiguity.** `wait_ready` now bails
+  after 45 s instead of looping forever; post-settle sense hard-fails on
+  MEDIUM/HARDWARE/ABORTED and warns (rather than silently swallowing) on an
+  unparseable or errored reply; unverified read-back chunks and a failed
+  firmware-identity read-back both bail instead of printing and continuing.
+  `--allow-crossflash` now refuses when the drive's current firmware cannot
+  be identified. Drive classification requires the `MT19` boot banner at
+  `0x003000` in addition to the GET CONFIG `0x010C` echo, so a compliant
+  non-MTK drive can no longer be misclassified as MediaTek. Tar dump members
+  are length-checked and capped at 256 KiB before allocation, and the
+  medium-status guard re-probes immediately before `flash_open` to close a
+  preflight→open TOCTOU window.
+
+### Security
+- **Emit-time absence guard for the rearm wrapper.** `assert_literal_absent`
+  refuses to ship an image whose injected handler contains the AACS
+  session-rearm VA as a Thumb-tagged call-target literal, so a future
+  refactor cannot silently reintroduce the vendor-CDB wedge described above.
 
 ## [0.8.13]
 
