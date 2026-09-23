@@ -1094,8 +1094,10 @@ fn verb_reboot_arm_has_correct_positional_shape() {
     let cmp_reboot = 0x2C00u16 | (crate::abi::Verb::Reboot as u16);
     assert_eq!(cmp_reboot, 0x2C0F, "cmp r4,#Verb::Reboot pin");
     let hws: Vec<u16> = hb
-        .chunks_exact(2)
-        .map(|w| u16::from_le_bytes([w[0], w[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|w| u16::from_le_bytes(*w))
         .collect();
     let anchor = hws
         .iter()

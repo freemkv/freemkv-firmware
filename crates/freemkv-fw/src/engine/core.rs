@@ -3513,10 +3513,11 @@ impl Mt1959Engine {
     }
 
     /// Resolve the boot-init detour `(conv, orig_init)` pair WITHOUT writing
-    /// anything — the single source of truth for both [`Self::resolve_boot_init_site`]
-    /// (which returns just `conv`) and [`Self::emit_boot_init`] (which consumes the
-    /// full pair). Threading the pre-resolved pair through eliminates the
-    /// second [`Self::find_boot_init`] scan that used to run inside `emit_boot_init`.
+    /// anything — the single source of truth for callers that need the detour
+    /// site (the `Verb::Reboot` boot-function-entry literal is `conv - 0x10`)
+    /// and for `emit_boot_init`, which consumes the full pair. Threading the
+    /// pre-resolved pair through eliminates the second `find_boot_init` scan
+    /// that used to run inside `emit_boot_init`.
     ///
     /// Fail-closed rules:
     /// modern → follow the anchor's `bmi` to the cold/warm convergence `bl`;

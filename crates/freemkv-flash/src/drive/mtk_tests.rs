@@ -188,7 +188,7 @@ fn read_tar_refuses_oversized_member_before_allocating() {
         // truncates to the header's declared size, so read_tar hits our
         // size guard on the declared size, not the body. That's exactly
         // the point: reject before allocation.
-        let body = vec![0u8; 32];
+        let body = [0u8; 32];
         b.append(&header, &body[..]).expect("append body");
         b.finish().expect("finalize tar");
     }

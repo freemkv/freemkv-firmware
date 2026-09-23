@@ -87,10 +87,12 @@ fn check_bl(
         lever,
         what,
         img,
-        site,
-        stub,
-        thumb::encode_bl(site as usize, stub),
-        "bl",
+        BranchInstall {
+            site,
+            stub,
+            expected: thumb::encode_bl(site as usize, stub),
+            kind: "bl",
+        },
     );
 }
 
@@ -149,16 +151,29 @@ fn check_ake_detour(
     });
 }
 
+/// One branch install to verify: where the emitter wrote it, where it should
+/// reach, the exact 4 bytes it should have produced (`None` when the target was
+/// out of branch range), and the mnemonic for the failure text.
+struct BranchInstall {
+    site: u32,
+    stub: u32,
+    expected: Option<[u8; 4]>,
+    kind: &'static str,
+}
+
 fn check_branch_impl(
     checks: &mut Vec<AuditCheck>,
     lever: &'static str,
     what: &str,
     img: &[u8],
-    site: u32,
-    stub: u32,
-    expected: Option<[u8; 4]>,
-    kind: &str,
+    branch: BranchInstall,
 ) {
+    let BranchInstall {
+        site,
+        stub,
+        expected,
+        kind,
+    } = branch;
     let s = site as usize;
     let (ok, detail) = match expected {
         None => (

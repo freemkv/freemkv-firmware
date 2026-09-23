@@ -239,9 +239,7 @@ fn identity_audit_flags_missing_reboot_literal() {
     // silently accept a Reboot arm that dispatches but never invokes the boot
     // function, so this negative case is the load-bearing guard.
     let mut mutated = img.clone();
-    for i in ha + 8..ha + 12 {
-        mutated[i] = 0xFF;
-    }
+    mutated[ha + 8..ha + 12].fill(0xFF);
     let blanked = report_with(
         mutated,
         LeverReport::applied(
