@@ -14,6 +14,77 @@ fn verb_values_are_pinned_to_the_wire_protocol() {
     assert_eq!(Verb::FlashWrite as u8, 0x0A);
     // Save — the only verb that persists the RAM state table to flash.
     assert_eq!(Verb::Save as u8, 0x0B);
+    // Call — interactive fw-exploration `blx target(r0)`, debug-knock only.
+    assert_eq!(Verb::Call as u8, 0x0C);
+    // Poke — arbitrary single-byte store, debug-knock only.
+    assert_eq!(Verb::Poke as u8, 0x0D);
+    // Reboot — invoke the boot function's cold entry (baked target), debug-knock only.
+    assert_eq!(Verb::Reboot as u8, 0x0F);
+}
+
+#[test]
+fn debug_knock_is_distinct_from_safe_knock() {
+    assert_eq!(KNOCK, [0xC0, 0xDE]);
+    assert_eq!(DEBUG_KNOCK, [0xDE, 0xB9]);
+    assert_ne!(KNOCK, DEBUG_KNOCK);
+}
+
+#[test]
+fn build_call_and_poke_cdbs_carry_debug_knock_and_target() {
+    // Call: target packed BE at cdb[5..9], r0 arg at cdb[9], DEBUG_KNOCK at cdb[2..4].
+    let cdb = build_call_cdb(0x000C_AE18, 0x42);
+    assert_eq!(cdb[CDB_OPCODE], READ_BUFFER_OPCODE);
+    assert_eq!(cdb[CDB_MODE], KNOCK_MODE);
+    assert_eq!(&cdb[CDB_KNOCK..CDB_KNOCK + 2], &DEBUG_KNOCK);
+    assert_eq!(cdb[CDB_VERB], Verb::Call as u8);
+    assert_eq!(&cdb[5..9], &[0x00, 0x0C, 0xAE, 0x18]);
+    assert_eq!(cdb[9], 0x42);
+
+    // Poke: target packed BE at cdb[5..9], value byte at cdb[9], DEBUG_KNOCK.
+    // Exercise four target addresses spanning the ranges the verb legitimately
+    // reaches — SRAM base, an MMIO cell, the AACS ladder state region, and the
+    // 0x00000000 edge — to catch any off-by-one in address serialization.
+    for (target, val, want) in [
+        (0x0403_204Cu32, 0xA5u8, [0x04, 0x03, 0x20, 0x4C]),
+        (0x0200_0000, 0x11, [0x02, 0x00, 0x00, 0x00]), // SRAM base
+        (0x0403_2000, 0x22, [0x04, 0x03, 0x20, 0x00]), // MMIO cell
+        (0x01FF_9E00, 0x33, [0x01, 0xFF, 0x9E, 0x00]), // AACS ladder state region
+        (0x0000_0000, 0x44, [0x00, 0x00, 0x00, 0x00]), // edge / low address
+    ] {
+        let cdb = build_poke_cdb(target, val);
+        assert_eq!(cdb[CDB_OPCODE], READ_BUFFER_OPCODE);
+        assert_eq!(cdb[CDB_MODE], KNOCK_MODE);
+        assert_eq!(&cdb[CDB_KNOCK..CDB_KNOCK + 2], &DEBUG_KNOCK);
+        assert_eq!(cdb[CDB_VERB], Verb::Poke as u8);
+        assert_eq!(
+            &cdb[5..9],
+            &want,
+            "poke target 0x{target:08x} BE-packing at cdb[5..9]"
+        );
+        assert_eq!(cdb[9], val, "poke value byte at cdb[9] for 0x{target:08x}");
+    }
+
+    // Reboot: no target/arg on the wire — verb byte + DEBUG_KNOCK + floored alloc.
+    let cdb = build_reboot_cdb();
+    assert_eq!(cdb[CDB_OPCODE], READ_BUFFER_OPCODE);
+    assert_eq!(cdb[CDB_MODE], KNOCK_MODE);
+    assert_eq!(&cdb[CDB_KNOCK..CDB_KNOCK + 2], &DEBUG_KNOCK);
+    assert_eq!(cdb[CDB_VERB], Verb::Reboot as u8);
+    // No target/arg carried on the wire (baked into the fw at build time). Slots
+    // 5..7 are zero; cdb[7..9] is the alloc_len (MIN_ALLOC_LEN, floored so the
+    // drive does not abort the data-in). cdb[9] (control) is zero.
+    assert_eq!(&cdb[5..7], &[0, 0]);
+    assert_eq!(cdb[9], 0);
+    // Alloc length floors at MIN_ALLOC_LEN (drive aborts sub-16-byte transfers).
+    assert_eq!(
+        u16::from_be_bytes([cdb[CDB_ALLOC_LEN], cdb[CDB_ALLOC_LEN + 1]]),
+        MIN_ALLOC_LEN
+    );
+    // Exact wire bytes for the reboot CDB.
+    assert_eq!(
+        cdb,
+        [0x3C, 0x0E, 0xDE, 0xB9, 0x0F, 0x00, 0x00, 0x00, 0x40, 0x00]
+    );
 }
 
 #[test]
@@ -23,8 +94,8 @@ fn feature_values_are_pinned_to_the_wire_protocol() {
     assert_eq!(Feature::Uhd as u8, 0x03);
     assert_eq!(Feature::Bd as u8, 0x04);
     assert_eq!(Feature::Hrl as u8, 0x05);
-    assert_eq!(Feature::Ake as u8, 0x06);
-    assert_eq!(Feature::Bus as u8, 0x07);
+    assert_eq!(Feature::Encryption as u8, 0x06);
+    // Wire id 0x07 (former `Bus`) is retired / unassigned.
 }
 
 #[test]
@@ -133,8 +204,11 @@ fn vendor_commands_floor_alloc_len_at_min_for_hw() {
 
     let alloc =
         |cdb: &[u8; CDB_LEN]| u16::from_be_bytes([cdb[CDB_ALLOC_LEN], cdb[CDB_ALLOC_LEN + 1]]);
-    assert_eq!(alloc(&build_set_cdb(Feature::Ake, STATE_ON)), MIN_ALLOC_LEN);
-    assert_eq!(alloc(&build_get_cdb(Feature::Ake)), MIN_ALLOC_LEN);
+    assert_eq!(
+        alloc(&build_set_cdb(Feature::Encryption, STATE_ON)),
+        MIN_ALLOC_LEN
+    );
+    assert_eq!(alloc(&build_get_cdb(Feature::Encryption)), MIN_ALLOC_LEN);
     assert_eq!(alloc(&build_reset_cdb(RESET_TO_OEM)), MIN_ALLOC_LEN);
     assert_eq!(alloc(&build_save_cdb()), MIN_ALLOC_LEN);
 }

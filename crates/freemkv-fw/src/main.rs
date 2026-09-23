@@ -86,7 +86,7 @@ enum Command {
         #[arg(long, value_enum)]
         family: Option<Family>,
     },
-    /// Probe a live freemkv drive over the vendor command (`3C 0E C0 DE`):
+    /// Probe a live freemkv drive over the vendor command:
     /// identity, or a memory read via [`abi::Verb::DumpAll`].
     ///
     /// With no dump flags: prints the drive's freemkv identity.
@@ -269,7 +269,7 @@ fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 // ---------------------------------------------------------------------------
 
 /// Probe a live drive for freemkv firmware by sending the Identity command
-/// (`3C 0E C0 DE 01 …`) built by [`abi::build_identity_cdb`].
+/// built by [`abi::build_identity_cdb`].
 ///
 /// Opens the device read-only (never writes anything) via [`platform::open`].
 ///
@@ -689,18 +689,17 @@ fn cmd_create(
 /// modify levers). Each `(display-name, resolved?)` pair says whether that
 /// feature's gate actually landed for THIS image. Order is stable.
 fn base_features(report: &engine::CreateReport) -> Vec<(&'static str, bool)> {
-    // The 7 firmware feature FLAGS (flag-table bytes 1..=7), each "available" when its
+    // The 6 firmware feature FLAGS (flag-table bytes 1..=6), each "available" when its
     // OEM gate resolved AND the detour stub was actually emitted. Deliberately NOT
-    // listed: "Raw Read" (a host composition of AKE-off + Bus-off — not a fw feature)
-    // and "Downgrade Enable" (a fixed base identity-page byte, not a tri-state flag).
+    // listed: "Raw Read" (a host composition — not a fw feature) and "Downgrade
+    // Enable" (a fixed base identity-page byte, not a tri-state flag).
     vec![
         ("Speed", report.speed_stub_va != 0),
         ("Region", report.region_stub_va != 0),
         ("UHD", report.uhd_stub_va != 0),
         ("BD", report.bd_stub_va != 0),
         ("HRL", report.hrl_stub_va != 0),
-        ("AKE", report.ake_stub_va != 0),
-        ("Bus", report.busenc_stub_va != 0),
+        ("Encryption", report.ake_stub_va != 0),
     ]
 }
 

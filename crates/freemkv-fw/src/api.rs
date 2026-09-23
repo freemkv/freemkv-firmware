@@ -108,7 +108,7 @@ pub struct ProbeOutcome {
     pub detail: String,
 }
 
-/// Send the freemkv identity command (`3C 0E C0 DE 01 …`) to `device` and
+/// Send the freemkv identity command (`abi::build_identity_cdb`) to `device` and
 /// report whether a freemkv drive answered. Read-only; never writes.
 pub fn probe_device(device: &str) -> Result<ProbeOutcome> {
     let mut dev = platform::open(device, false).with_context(|| format!("opening {device}"))?;

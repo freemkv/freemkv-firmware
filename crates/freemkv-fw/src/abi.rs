@@ -31,7 +31,7 @@
 //! ```text
 //!   cdb[0]    = 0x3C  (READ BUFFER)          ← standard opcode; bridge-safe
 //!   cdb[1]    = 0x0E  (KNOCK_MODE)           ← OEM's jump table rejects modes >= 0x0E
-//!   cdb[2..4] = 0xC0 0xDE (KNOCK)            ← defence-in-depth signature
+//!   cdb[2..4] = KNOCK (or DEBUG_KNOCK)       ← defence-in-depth signature
 //!   cdb[4]    = Verb                         ← IDENTITY / SET / GET / RESET / DUMPALL
 //!   cdb[5]    = Feature id                   ← SET/GET only (else 0)
 //!   cdb[6]    = State byte                   ← SET only (else 0)
@@ -43,11 +43,13 @@
 //! RAM address big-endian in `cdb[5..9]` (no feature/state/alloc), and the handler
 //! always commits a fixed [`MEMREAD_LEN`]-byte window.
 //!
-//! The full discriminator is the 4-byte prefix `3C 0E C0 DE`: standard opcode +
-//! OEM-unused mode + knock. OEM's `0x3C` handler rejects mode `0x0E` at its own
-//! jump-table bound, so the knock bytes never confuse it; the freemkv handler
-//! intercepts mode `0x0E` and tail-calls the original handler for every other
-//! mode, leaving OEM `READ BUFFER` behaviour byte-identical.
+//! The full discriminator is the 4-byte prefix `READ_BUFFER_OPCODE || KNOCK_MODE
+//! || KNOCK` (or `... || DEBUG_KNOCK` for the debug-only verbs): a standard
+//! opcode plus the OEM-unused mode plus the two-byte knock. OEM's `0x3C`
+//! handler rejects mode `0x0E` at its own jump-table bound, so the knock bytes
+//! never confuse it; the freemkv handler intercepts mode `0x0E` and tail-calls
+//! the original handler for every other mode, leaving OEM `READ BUFFER`
+//! behaviour byte-identical.
 
 /// Standard SCSI `READ BUFFER` opcode — the command freemkv hijacks.
 pub const READ_BUFFER_OPCODE: u8 = 0x3C;
@@ -57,9 +59,22 @@ pub const READ_BUFFER_OPCODE: u8 = 0x3C;
 /// uses `0x0E`, so it is collision-free.
 pub const KNOCK_MODE: u8 = 0x0E;
 
-/// Two-byte knock at `cdb[2..4]` ("C0DE") — a defence-in-depth signature behind
-/// the mode discriminator.
+/// Two-byte knock at `cdb[2..4]` ("C0DE") — the *safe* knock, carried by every
+/// durable verb (Identity/Set/Get/Reset/DumpAll/FlashWrite/Save). A CDB whose
+/// mode is [`KNOCK_MODE`] but whose knock is not this value is routed to a
+/// different, more-restricted dispatch (currently only [`DEBUG_KNOCK`] +
+/// [`Verb::Call`]), so a typo on the verb byte cannot cross the safe/debug line.
 pub const KNOCK: [u8; 2] = [0xC0, 0xDE];
+
+/// Two-byte knock at `cdb[2..4]` — the *debug* knock, distinct from the safe
+/// [`KNOCK`] by construction (`assert_ne!(KNOCK, DEBUG_KNOCK)` in the ABI tests).
+/// The only frame that authorizes debug-only verbs ([`Verb::Call`], [`Verb::Poke`],
+/// [`Verb::Reboot`]).
+/// The fw's dispatch never crosses knocks, so a typo of a safe verb vs a debug
+/// verb under the wrong knock always falls through to the zeroed reply — Call,
+/// Poke, and Reboot can never be accidentally invoked via [`KNOCK`], and no safe
+/// verb can be accidentally invoked via [`DEBUG_KNOCK`].
+pub const DEBUG_KNOCK: [u8; 2] = [0xDE, 0xB9];
 
 /// Response-framing magic that leads a self-identifying reply: [`Verb::Identity`]
 /// answers `RESP_MAGIC` + version + the current feature-state table.
@@ -192,6 +207,71 @@ pub enum Verb {
     /// `Save` commits them (and survive a power cycle only once saved). Ignores
     /// feature/state. See [`build_save_cdb`].
     Save = 0x0B,
+    /// **Debug-knock only.** Interactive fw-exploration `blx target` primitive.
+    /// `CDB[5..9]` = 32-bit target VA (big-endian); `CDB[9]` = single u8 that
+    /// is loaded into r0 as the sole register argument (r1..r3 are undefined).
+    /// The handler ORs the thumb bit into the address and does `blx target`.
+    /// Returns a zeroed data buffer. Refused under the safe [`KNOCK`]; only
+    /// executed under [`DEBUG_KNOCK`]. Non-durable / diagnostic: it does not
+    /// appear in the durable feature grammar. See [`build_call_cdb`].
+    Call = 0x0C,
+    /// **Debug-knock only.** Poke a single byte to an arbitrary address.
+    /// `CDB[5..9]` = 32-bit target address (big-endian, RAM or MMIO);
+    /// `CDB[9]` = byte value to store. The handler does `*(u8*)target = value`
+    /// with NO bounds check. Refused under the safe [`KNOCK`]. Intended for
+    /// interactive discovery of MMIO/state-cell control on a live drive without
+    /// reflashing (pair with [`Verb::DumpAll`] for the read side). Non-durable
+    /// / diagnostic. See [`build_poke_cdb`].
+    Poke = 0x0D,
+    /// Debug-knock only. Invokes the firmware's boot function entry with r0=4 to
+    /// force the cold path (BSS clear + C-runtime data init + full post-init
+    /// sequence). Recovers a wedged drive without a power cycle (SCSI target
+    /// briefly returns Aborted Command mid-reboot, then comes back ~5s later;
+    /// the safe-knock verb chain is re-armed to its power-on defaults). The
+    /// target VA is baked into the emitted handler at build time (resolved from
+    /// the boot-init signature = `boot_init_site - 0x10`), so no CDB arguments
+    /// are carried beyond the verb byte. See [`build_reboot_cdb`].
+    ///
+    /// # Drive-side hardware ceiling on chained reboots (BU40N 1.00, measured)
+    ///
+    /// This verb is a **soft re-entry** into the firmware's own boot function,
+    /// not a hardware CPU/SATA reset. The drive can absorb ~5 of these in a
+    /// session; the ~6th chained reboot at any spacing (measured up to a 60 s
+    /// gap with a sustained-stability probe) drops the drive to
+    /// `DID_BAD_TARGET` at the SATA layer, and only a physical power-cycle
+    /// to the drive recovers. The `DID_BAD_TARGET` symptom is precise: the
+    /// endpoint is *gone from the bus*, which is a physical-layer failure —
+    /// **the SATA PHY / link OOB negotiation FSM**, not the AACS coprocessor
+    /// (which IS re-initialised on every reboot via
+    /// `boot_function_entry` → `0x00044874` → `aacs_session_reset`
+    /// (`0x000CAE18`), verified by static trace of the fixture image).
+    ///
+    /// **Do not chase a stronger in-firmware reset primitive.** A prior
+    /// static disassembly over the OEM image confirmed:
+    ///
+    /// * **Zero `SControl.DET` writes exist anywhere in the image** — there
+    ///   is no software path in Thumb or ARM state that renegotiates the
+    ///   SATA link OOB. The PHY is brought up once by the C-runtime scatter-
+    ///   load + `.init_array` at `0x0001B768` (reached only from the true
+    ///   power-on reset vector) and never re-armed.
+    /// * No reachable watchdog-feed register write.
+    /// * No SoC-level RESET / `AIRCR` write reachable from Thumb.
+    /// * The strongest software-side candidate — the mode-init trampoline at
+    ///   VA `0x0013DE00` (ARM state; disables IRQ+FIQ, re-runs the full
+    ///   C-runtime including every `.init_array` constructor) — is strictly
+    ///   stronger than `boot_function_entry(r0=4)` but still does not cycle
+    ///   the SATA PHY. It would not clear the accumulating link-layer state
+    ///   either.
+    ///
+    /// So the accumulating state lives outside the ARM CPU's writable
+    /// register domain, in the SATA PHY / link FSM. Only cycling SATA power
+    /// to the drive (i.e. shutting down the host and cutting drive power)
+    /// clears it.
+    ///
+    /// Callers that need to chain more than ~4 reboots per session must
+    /// budget a physical power-cycle between rounds. Test suites should cap
+    /// at ≤4 chained reboots per run.
+    Reboot = 0x0F,
 }
 
 /// The feature selector in `cdb[5]` for [`Verb::Set`] / [`Verb::Get`]. Each feature
@@ -200,9 +280,9 @@ pub enum Verb {
 ///
 /// Features are orthogonal: the familiar "modes" are just combinations —
 /// e.g. OEM-style UHD rip = [`Feature::Uhd`]=on + [`Feature::Hrl`]=off +
-/// [`Feature::Bus`]=off; full bypass = [`Feature::Ake`]=off + [`Feature::Bus`]=off
+/// [`Feature::Encryption`]=off; full bypass = [`Feature::Encryption`]=off
 /// (+ [`Feature::Uhd`]=on for a UHD disc). Under the migrated spec the bypass
-/// direction is uniformly [`STATE_OFF`] (`0x00`) for HRL/AKE/BUS.
+/// direction is uniformly [`STATE_OFF`] (`0x00`) for HRL/Encryption.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 #[allow(dead_code)]
@@ -243,21 +323,15 @@ pub enum Feature {
     /// the HRL). Polarity note: OFF now means "skip" — the pre-migration spec put
     /// skip on `0x01`. `0x02` is a reserved/internal deferred value (see the
     /// `pub(crate)` [`HRL_WIPE_ONCE`]) that is NOT part of the host-facing ABI.
-    // TODO(spec-migration): engine gates must flip HRL/AKE/BUS to == STATE_OFF for
-    // the bypass/skip/off direction (the enable direction is now STATE_ON == 0x01).
     Hrl = 0x05,
-    /// Drive-host AKE. [`STATE_PASSTHROUGH`] (`0xFF`) = OEM real handshake;
-    /// [`STATE_OFF`] (`0x00`) = off (null/bypass — the drive acts pre-authenticated,
-    /// no handshake performed); [`STATE_ON`] (`0x01`) = on (require the real
-    /// handshake). Polarity note: OFF now means "null/bypass" — the pre-migration
-    /// spec put null on `0x01`.
-    Ake = 0x06,
-    /// In-transit AACS bus encryption. [`STATE_PASSTHROUGH`] (`0xFF`) = OEM (bus
-    /// encryption on); [`STATE_OFF`] (`0x00`) = off (de-bussed — content returned
-    /// with no bus encryption); [`STATE_ON`] (`0x01`) = on (bus encryption).
-    /// Polarity note: OFF now means "de-bussed" — the pre-migration spec put the
-    /// off/de-bussed direction on `0x01`.
-    Bus = 0x07,
+    /// Content encryption / drive-host AKE (single consolidated feature — hardware
+    /// proved on BU40N/MT1959 that toggling this alone de-busses content reads).
+    /// [`STATE_PASSTHROUGH`] (`0xFF`) = OEM real handshake; [`STATE_OFF`] (`0x00`)
+    /// = off (null/bypass — the drive acts pre-authenticated, no handshake
+    /// performed, content reads back de-bussed); [`STATE_ON`] (`0x01`) = on
+    /// (require the real handshake). Polarity note: OFF means "null/bypass".
+    /// Wire id `0x07` is retired (was `Bus`, proved inert as a datapath lever).
+    Encryption = 0x06,
 }
 
 /// [`Feature::Hrl`] internal deferred state: one-time PERMANENT wipe of the flash
@@ -299,7 +373,10 @@ pub const REGION_BD_C: u8 = 0x0C;
 /// (`0x0A..=0x0C`) values.
 pub const REGION_FREE: u8 = 0x0F;
 
-/// Build a 10-byte host CDB for a verb over the `3C 0E C0 DE …` frame.
+/// Build a 10-byte host CDB for a safe verb over the `READ_BUFFER_OPCODE ||
+/// KNOCK_MODE || KNOCK || verb || …` frame. Debug-only verbs use their own
+/// builders ([`build_call_cdb`], [`build_poke_cdb`]) since they carry
+/// [`DEBUG_KNOCK`] instead of [`KNOCK`].
 ///
 /// `feature`/`state` land at `cdb[5]`/`cdb[6]` (0 when the verb ignores them);
 /// `alloc_len` is the data-in buffer size, 16-bit big-endian at `cdb[7..9]`.
@@ -403,6 +480,67 @@ pub fn build_flashwrite_cdb(off: u32, val: u8) -> [u8; CDB_LEN] {
     cdb[7] = (off >> 8) as u8;
     cdb[8] = off as u8;
     cdb[9] = val;
+    cdb
+}
+
+/// Build a 10-byte CDB for [`Verb::Call`]: `blx target(r0)` where `target` is
+/// packed big-endian in `cdb[5..9]` and the u8 `r0` register argument rides in
+/// `cdb[9]`. Carries the [`DEBUG_KNOCK`] at `cdb[2..4]` — the ONLY
+/// frame the fw honours for Call. The handler ORs the thumb bit into the
+/// address at runtime. r1..r3 are undefined at callee entry.
+#[allow(dead_code)]
+pub fn build_call_cdb(target: u32, r0: u8) -> [u8; CDB_LEN] {
+    let mut cdb = [0u8; CDB_LEN];
+    cdb[CDB_OPCODE] = READ_BUFFER_OPCODE;
+    cdb[CDB_MODE] = KNOCK_MODE;
+    cdb[CDB_KNOCK..CDB_KNOCK + 2].copy_from_slice(&DEBUG_KNOCK);
+    cdb[CDB_VERB] = Verb::Call as u8;
+    cdb[5] = (target >> 24) as u8;
+    cdb[6] = (target >> 16) as u8;
+    cdb[7] = (target >> 8) as u8;
+    cdb[8] = target as u8;
+    cdb[9] = r0;
+    cdb
+}
+
+/// Build a 10-byte CDB for [`Verb::Poke`]: write a single byte `val` to the
+/// arbitrary 32-bit address `target` (RAM or MMIO). Target is packed
+/// big-endian in `cdb[5..9]` and `val` rides in `cdb[9]`. Carries the
+/// [`DEBUG_KNOCK`] at `cdb[2..4]`. NO bounds check on the address —
+/// this is a diagnostic primitive for on-drive state discovery, not a durable
+/// verb.
+#[allow(dead_code)]
+pub fn build_poke_cdb(target: u32, val: u8) -> [u8; CDB_LEN] {
+    let mut cdb = [0u8; CDB_LEN];
+    cdb[CDB_OPCODE] = READ_BUFFER_OPCODE;
+    cdb[CDB_MODE] = KNOCK_MODE;
+    cdb[CDB_KNOCK..CDB_KNOCK + 2].copy_from_slice(&DEBUG_KNOCK);
+    cdb[CDB_VERB] = Verb::Poke as u8;
+    cdb[5] = (target >> 24) as u8;
+    cdb[6] = (target >> 16) as u8;
+    cdb[7] = (target >> 8) as u8;
+    cdb[8] = target as u8;
+    cdb[9] = val;
+    cdb
+}
+
+/// Build a 10-byte CDB for [`Verb::Reboot`]: force the firmware boot function's
+/// cold path (soft-reboot the controller). Carries the [`DEBUG_KNOCK`] at
+/// `cdb[2..4]`. NO arguments are transmitted on the wire — the target VA is
+/// baked into the emitted handler at build time (per-image, resolved from the
+/// boot-init signature). Requests a [`MIN_ALLOC_LEN`]-byte data-in like every
+/// other durable-shape verb: the drive returns Aborted Command mid-reboot
+/// anyway, so callers should tolerate a rejection on this send and re-probe
+/// identity after a short delay.
+#[allow(dead_code)]
+pub fn build_reboot_cdb() -> [u8; CDB_LEN] {
+    let mut cdb = [0u8; CDB_LEN];
+    cdb[CDB_OPCODE] = READ_BUFFER_OPCODE;
+    cdb[CDB_MODE] = KNOCK_MODE;
+    cdb[CDB_KNOCK..CDB_KNOCK + 2].copy_from_slice(&DEBUG_KNOCK);
+    cdb[CDB_VERB] = Verb::Reboot as u8;
+    cdb[CDB_ALLOC_LEN] = (MIN_ALLOC_LEN >> 8) as u8;
+    cdb[CDB_ALLOC_LEN + 1] = MIN_ALLOC_LEN as u8;
     cdb
 }
 

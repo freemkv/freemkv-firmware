@@ -4,7 +4,7 @@
 //! scanner signature that proves the dispatch-record format, and the grounded
 //! finds (CDB base, sense-setter, the `0x3C` handler) that are *derived from the
 //! image*, never hardcoded. This module is just the [`Engine`] wiring; it
-//! composes the dumb [`crate::thumb`] verbs against that knowledge.
+//! composes the dumb [`thumb_asm`] verbs against that knowledge.
 
 use anyhow::{anyhow, bail, Context, Result};
 
@@ -15,7 +15,7 @@ use super::lever::{LeverId, LeverReport, Validation};
 use super::{CreateReport, Engine, ModifyReport};
 use crate::abi;
 use crate::family::{self, Capability, ChipInfo, MediaClass};
-use crate::thumb::{self, CommandTable};
+use thumb_asm::{self as thumb, CommandTable};
 
 /// The MT1959 platform engine.
 pub struct Mt1959Engine;
@@ -50,13 +50,6 @@ struct RawReadFacts {
     gatea_stub_va: u32,
     deny_site: u32,
     deny_stub_va: u32,
-    /// `04 03` "data clear" bus-off detour site — the OEM `bl <key-prog>` at the start
-    /// of the AACS opcode-0x45 arm, replaced by a `bl` to the busenc stub. `0` when not
-    /// wired (image whose opcode-0x45 arm is not a known MT1959 shape).
-    busenc_site: u32,
-    /// Injection address of the `04 03` bus-off (MK-style bit-clear) trampoline.
-    /// `0` when not wired.
-    busenc_stub_va: u32,
     /// `04 03` UHD mode-gate neutralizer detour site — the classifier prologue's
     /// disc-version reload (`UHD_CLASSIFIER_SIG` match+6), replaced by a `bl` to the
     /// UHD stub. `0` when not wired (image whose classifier prologue is not the known
@@ -115,8 +108,8 @@ impl Mt1959Engine {
         let flag_base = FLAG_TABLE_BASE;
         // Hybrid safety belt: cells are chip constants, but assert per-image they
         // sit in mapped RAM and are unreferenced before we commit. The table holds
-        // `flag[Feature::X]` for feature ids `1..=NUM_FEATURES` (slot 0 is unused
-        // padding), so it spans `NUM_FEATURES + 1` = 8 bytes.
+        // `flag[Feature::X]` for feature ids `1..=NUM_FEATURES` (slot 0 is the
+        // NV saved-marker), so it spans `NUM_FEATURES + 1` = 7 bytes.
         let flag_table_len = NUM_FEATURES as u32 + 1;
         self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
         // TEMPORARY flash-write probe: its 1-byte SRAM source-staging cell lives in
@@ -129,8 +122,37 @@ impl Mt1959Engine {
             "flash-write scratch",
         )?;
 
+        // Resolve the boot-init detour `(conv, orig_init)` pair once, up front,
+        // so we can bake the boot function's entry VA (conv - 0x10) into the
+        // handler as the target of Verb::Reboot AND thread the same pair into
+        // `emit_boot_init` below — no second `find_boot_init` scan.
+        let boot_init_pair = self.resolve_boot_init_pair(image)?;
+        let resolved_boot_init_site = boot_init_pair.0 as u32;
+        let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
+
+        // Resolve the AACS session-**rearm** primitive up front so the handler can
+        // bake it in as the revert target for SET encryption != 0x00. Prefer the
+        // full rearm wrapper (find_aacs_session_rearm — the OEM disc-insert entry
+        // that does aacs_session_reset PLUS the bit-20 engine-control-word write
+        // that actually re-arms bus-encryption); fall back to the plain reset if
+        // rearm can't be resolved on this image (the reset alone tears the AGID
+        // ladder down but does not re-arm bus-enc — kickoff Fact 4 — so the
+        // fallback is a functional degrade, not equivalent). Best-effort (0 when
+        // both absent): an image whose primitive shape doesn't match still gets a
+        // working handler; the flag's *revert direction* just skips the emit.
+        let aacs_reset_for_handler = self
+            .find_aacs_session_rearm(image)
+            .or_else(|_| self.find_aacs_session_reset(image))
+            .unwrap_or(0);
+
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base)
+            .build_handler(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                aacs_reset_for_handler,
+            )
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -145,19 +167,25 @@ impl Mt1959Engine {
         // any feature stub) so the free_space allocation order is identical on the
         // create and modify paths (handler → boot → speed → region → raw-read). It
         // writes 0xFF into every flag at power-on, which is what makes the tri-state
-        // `0x00 == OFF` safe. Fail-closed if the site is absent (see emit_boot_init).
-        let (boot_init_site, boot_stub_va) = self.emit_boot_init(image, &mut out, flag_base)?;
+        // `0x00 == OFF` safe. The pre-resolved pair is threaded through so we don't
+        // re-scan for the site.
+        let (boot_init_site, boot_stub_va) =
+            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair)?;
+        debug_assert_eq!(
+            boot_init_site, resolved_boot_init_site,
+            "boot_init_site drifted between resolve and emit"
+        );
 
         // Speed / Region / Raw-read levers are emitted through the exact same
         // `emit_*` helpers `build_modify` uses (single source of truth), so a fresh
         // `create` and a `modify` on the same base produce byte-for-byte identical
         // images — asserted by `create_and_modify_agree_on_base`. Each helper
         // re-finds its own anchors and preserves the `free_space` allocation order
-        // (handler → speed → region → raw-read[ake → gatea → deny → busenc → uhd →
+        // (handler → speed → region → raw-read[ake → gatea → deny → uhd →
         // hrl → bd]). The AKE gate is resolved via `ake_detour` (desktop → NB → V5),
-        // and busenc/uhd/hrl/bd are graceful (unwired = 0/empty on unknown shapes),
+        // and uhd/hrl/bd are graceful (unwired = 0/empty on unknown shapes),
         // exactly as `modify` treats them — so `create` no longer diverges on the
-        // NB/V5 images the old inline `find_ake_gate` + hard-`?` busenc path failed.
+        // NB/V5 images the old inline `find_ake_gate` path failed.
         // BASE/GATE DECOUPLING: each feature emit is best-effort. A miss leaves the
         // feature unwired (0) and off the advertised set, but the base image still
         // ships. On the fully-resolving base (BU40N + the 91) every emit succeeds, so
@@ -210,6 +238,7 @@ impl Mt1959Engine {
             handler_bytes,
             boot_init_site,
             boot_stub_va,
+            boot_function_entry,
             vid_producer,
             vid_out_buf,
             vid_gate_setter,
@@ -224,8 +253,6 @@ impl Mt1959Engine {
             gatea_stub_va: f.gatea_stub_va,
             deny_reset_gate: f.deny_site,
             deny_stub_va: f.deny_stub_va,
-            busenc_detour_site: f.busenc_site,
-            busenc_stub_va: f.busenc_stub_va,
             uhd_classifier_site: f.uhd_site,
             uhd_stub_va: f.uhd_stub_va,
             bd_gate_site: f.bd_site,
@@ -280,8 +307,29 @@ impl Mt1959Engine {
             1,
             "flash-write scratch",
         )?;
+        // Boot function entry baked into the Verb::Reboot arm — same rule as
+        // build_report (conv - 0x10). Resolve the pair once and thread it into
+        // `emit_boot_init` below to avoid a second `find_boot_init` scan.
+        let boot_init_pair = self.resolve_boot_init_pair(image)?;
+        let resolved_boot_init_site = boot_init_pair.0 as u32;
+        let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
+        // Same aacs_reset resolution as build_report — rearm-first (the OEM
+        // disc-insert wrapper that actually re-arms bus-enc), reset as fallback,
+        // best-effort (0 disables emit). Byte-identical handler bytes across
+        // create/modify on the same base.
+        let aacs_reset_for_handler = self
+            .find_aacs_session_rearm(image)
+            .or_else(|_| self.find_aacs_session_reset(image))
+            .unwrap_or(0);
+
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base)
+            .build_handler(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                aacs_reset_for_handler,
+            )
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -292,12 +340,20 @@ impl Mt1959Engine {
         // paths (handler → boot → …), so create and modify stay byte-identical.
         // Fail-closed if the boot-init site is absent — a base prerequisite now, since
         // tri-state OFF is unsafe without it.
-        let (boot_init_site, boot_stub_va) = self.emit_boot_init(image, &mut out, flag_base)?;
+        let (boot_init_site, boot_stub_va) =
+            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair)?;
+        debug_assert_eq!(
+            boot_init_site, resolved_boot_init_site,
+            "boot_init_site drifted between resolve and emit"
+        );
 
         let mut levers: Vec<LeverReport> = Vec::new();
 
         // Identity / base (the vendor handler + DumpAll + always-on boot-init hook).
         // Always applicable — its success is what makes every toggle addressable.
+        // `boot_function_entry` is recorded so the structural audit can verify the
+        // debug-knock Reboot arm baked the correct Thumb-tagged literal into the
+        // emitted handler bytes (see engine::audit).
         levers.push(LeverReport::applied(
             LeverId::Identity,
             vec![
@@ -305,6 +361,7 @@ impl Mt1959Engine {
                 ("record_off", record.off as u32),
                 ("boot_init_site", boot_init_site),
                 ("boot_stub_va", boot_stub_va),
+                ("boot_function_entry", boot_function_entry),
             ],
         ));
 
@@ -348,12 +405,6 @@ impl Mt1959Engine {
                         ("deny_stub_va", f.deny_stub_va),
                         ("vid_producer", f.vid_producer),
                     ];
-                    // `04 03` "data clear" bus-off detour, when wired (opcode-0x45 arm
-                    // is a known MT1959 shape). Recorded so the audit re-checks its `bl`.
-                    if f.busenc_stub_va != 0 {
-                        facts.push(("busenc_site", f.busenc_site));
-                        facts.push(("busenc_stub_va", f.busenc_stub_va));
-                    }
                     // `04 03` UHD mode-gate neutralizer, when wired (classifier prologue
                     // is a known MT1959 shape). Recorded so the audit re-checks its `bl`.
                     if f.uhd_stub_va != 0 {
@@ -448,6 +499,7 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
         thumb::write(out, speed_stub_va as usize, &speed_bytes);
         thumb::write(out, cmp_at, &bl);
+        crate::install_guard::assert_bl_install(out, cmp_at, speed_stub_va, "Speed")?;
         Ok((speed_gate, speed_stub_va))
     }
 
@@ -462,6 +514,7 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("Region detour `bl` out of range"))?;
         thumb::write(out, region_stub_va as usize, &region_bytes);
         thumb::write(out, region_site, &bl);
+        crate::install_guard::assert_bl_install(out, region_site, region_stub_va, "Region")?;
         Ok((region_emitter, region_stub_va))
     }
 
@@ -479,8 +532,13 @@ impl Mt1959Engine {
         // ---- validate (read-only) ----
         // AKE accept gate — BU40N/desktop (reject-writer detour) or NB-class
         // (shared-`bl` detour). Resolved by `ake_detour`; BU40N matches the
-        // original signature first, so its `reset_site`/`ake_bytes` are unchanged.
-        let (reset_site, ake_bytes, ake_gate) = self.ake_detour(image, flag_base)?;
+        // original signature first. `install_shape` picks the correct 4-byte
+        // encoding at the detour site: `WideB` (Thumb-2 wide `B`) for the
+        // BU40N tail-call site so `lr` is preserved through the shared setter,
+        // `WideBl` for NB shared-`bl` sites where OEM already had a `bl` and
+        // `lr = site+4` is the intended return.
+        let (reset_site, ake_bytes, ake_gate, ake_install_shape) =
+            self.ake_detour(image, flag_base)?;
 
         // Producer Gate-A.
         let gatea_anchor = self.find_vid_gate(image)?;
@@ -527,46 +585,53 @@ impl Mt1959Engine {
         // ---- commit on a working copy (atomic) ----
         let mut w = out.clone();
         let ake_stub_va = self.free_space(&w, ake_bytes.len() + 16)?;
-        let ake_bl = thumb::encode_bl(reset_site, ake_stub_va)
-            .ok_or_else(|| anyhow!("AKE detour `bl` out of range"))?;
+        let ake_install = match ake_install_shape {
+            crate::engine::core::AkeInstallShape::WideB => {
+                thumb::encode_b_wide(reset_site, ake_stub_va)
+                    .ok_or_else(|| anyhow!("AKE detour `B.W` out of range"))?
+            }
+            crate::engine::core::AkeInstallShape::WideBl => thumb::encode_bl(reset_site, ake_stub_va)
+                .ok_or_else(|| anyhow!("AKE detour `BL` out of range"))?,
+        };
         thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);
-        thumb::write(&mut w, reset_site, &ake_bl);
+        thumb::write(&mut w, reset_site, &ake_install);
+        // Emit-time decode-back guard: the AKE install site is load-bearing —
+        // a wrong encoding (BL where B.W is required, or a mis-computed
+        // displacement) means the freshly-flashed image can boot into a
+        // detour that either corrupts the outer function's `lr` or jumps to
+        // the wrong stub VA. Decode the 4 bytes we just wrote with the
+        // shape-appropriate decoder and assert the resolved target is exactly
+        // `ake_stub_va`. Cheap in-tool check; would have caught the 0.8.13
+        // BL-over-tail-call bug before flash.
+        match ake_install_shape {
+            crate::engine::core::AkeInstallShape::WideB => {
+                crate::install_guard::assert_b_wide_install(&w, reset_site, ake_stub_va, "AKE (B.W)")?;
+            }
+            crate::engine::core::AkeInstallShape::WideBl => {
+                crate::install_guard::assert_bl_install(&w, reset_site, ake_stub_va, "AKE (BL)")?;
+            }
+        }
 
         let gatea_stub_va = self.free_space(&w, gatea_bytes.len() + 16)?;
         let gatea_bl = thumb::encode_bl(gatea_cmp, gatea_stub_va)
             .ok_or_else(|| anyhow!("Gate-A detour `bl` out of range"))?;
         thumb::write(&mut w, gatea_stub_va as usize, &gatea_bytes);
         thumb::write(&mut w, gatea_cmp, &gatea_bl);
+        crate::install_guard::assert_bl_install(&w, gatea_cmp, gatea_stub_va, "Gate-A")?;
 
         let deny_stub_va = self.free_space(&w, deny_bytes.len() + 16)?;
         let deny_bl = thumb::encode_bl(deny_site, deny_stub_va)
             .ok_or_else(|| anyhow!("deny-reset detour `bl` out of range"))?;
         thumb::write(&mut w, deny_stub_va as usize, &deny_bytes);
         thumb::write(&mut w, deny_site, &deny_bl);
-
-        // `04 03` "data clear" (remove the drive-side bus-encryption stage, MK-style):
-        // detour the OEM `bl <key-prog>` at the start of the AACS opcode-0x45 arm (via
-        // busenc_detour → find_aacs45_arm). Images whose 0x45 arm is not a known
-        // MT1959 shape leave the mode unwired (0). Committed last so the free_space
-        // order matches build_report (…→ deny → busenc).
-        let (busenc_site, busenc_stub_va) = match self.busenc_detour(image, flag_base) {
-            Ok((site, bytes)) => {
-                let stub_va = self.free_space(&w, bytes.len() + 16)?;
-                let bl = thumb::encode_bl(site, stub_va)
-                    .ok_or_else(|| anyhow!("bus-enc detour `bl` out of range"))?;
-                thumb::write(&mut w, stub_va as usize, &bytes);
-                thumb::write(&mut w, site, &bl);
-                (site as u32, stub_va)
-            }
-            Err(_) => (0, 0),
-        };
+        crate::install_guard::assert_bl_install(&w, deny_site, deny_stub_va, "Deny-reset")?;
 
         // `Feature::Uhd` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
         // accept gate's UHD class-3 check (via uhd_gate_detour → find_bd_gate) — the
         // UHD sibling of the BD arm on the SAME gate. When `flag[Uhd]==STATE_OFF` the
         // stub forces the OEM deny; unarmed it replays OEM (UHD reads are native).
         // Images on the descriptor-classifier gate shape (no class-3 arm) leave it
-        // unwired (0). Committed so the free_space order matches build_report (…→ busenc → uhd).
+        // unwired (0). Committed so the free_space order matches build_report (…→ deny → uhd).
         let (uhd_site, uhd_stub_va) = match self.uhd_gate_detour(image, flag_base) {
             Ok((site, bytes)) => {
                 let stub_va = self.free_space(&w, bytes.len() + 16)?;
@@ -574,6 +639,7 @@ impl Mt1959Engine {
                     .ok_or_else(|| anyhow!("UHD media-gate detour `bl` out of range"))?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
                 thumb::write(&mut w, site, &bl);
+                crate::install_guard::assert_bl_install(&w, site, stub_va, "UHD")?;
                 (site as u32, stub_va)
             }
             Err(_) => (0, 0),
@@ -591,6 +657,7 @@ impl Mt1959Engine {
                     let bl = thumb::encode_bl(site, stub_va)
                         .ok_or_else(|| anyhow!("HRL-skip detour `bl` out of range"))?;
                     thumb::write(&mut w, site, &bl);
+                    crate::install_guard::assert_bl_install(&w, site, stub_va, "HRL-skip")?;
                 }
                 (sites.iter().map(|&s| s as u32).collect(), stub_va)
             }
@@ -610,6 +677,7 @@ impl Mt1959Engine {
                     .ok_or_else(|| anyhow!("BD-refuse detour `bl` out of range"))?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
                 thumb::write(&mut w, site, &bl);
+                crate::install_guard::assert_bl_install(&w, site, stub_va, "BD-refuse")?;
                 (site as u32, stub_va)
             }
             Err(_) => (0, 0),
@@ -624,8 +692,6 @@ impl Mt1959Engine {
             gatea_stub_va,
             deny_site: deny_site as u32,
             deny_stub_va,
-            busenc_site,
-            busenc_stub_va,
             uhd_site,
             uhd_stub_va,
             hrl_sites,

@@ -3,7 +3,7 @@
 //! `create --json` says a lever was `Applied`, and the image self-verifies (CMAC),
 //! but neither proves the detour actually landed where it must. This audit closes
 //! that gap: for every `Applied` lever it recomputes the **exact** expected hook
-//! bytes with the emitter's own [`crate::thumb::encode_bl`] and asserts they are
+//! bytes with the emitter's own [`thumb_asm::encode_bl`] and asserts they are
 //! present in the produced image at the emitter's real hook site (`speed_gate+4`,
 //! `region_emitter+6`, the AKE/Gate-A/deny `bl` sites), that the injected stub is
 //! not blank flash, that the hijacked record was repointed to the injected handler,
@@ -15,7 +15,7 @@
 
 use crate::engine::core::is_freemkv_patched;
 use crate::engine::lever::{LeverId, LeverOutcome, ModifyReport};
-use crate::thumb;
+use thumb_asm as thumb;
 use freemkv_flash::cmac;
 
 /// One structural check with its verdict.
@@ -82,12 +82,88 @@ fn check_bl(
     site: u32,
     stub: u32,
 ) {
+    check_branch_impl(
+        checks,
+        lever,
+        what,
+        img,
+        site,
+        stub,
+        thumb::encode_bl(site as usize, stub),
+        "bl",
+    );
+}
+
+/// AKE-detour install check: passes if the 4 bytes at `site` are either the
+/// Thumb-2 wide `B.W` (BU40N/desktop tail-call install) OR the wide `BL`
+/// (NB-class shared-call install) targeting `stub`. See `AkeInstallShape` in
+/// `crate::engine::core` for which variant each gate resolution produces.
+fn check_ake_detour(
+    checks: &mut Vec<AuditCheck>,
+    lever: &'static str,
+    img: &[u8],
+    site: u32,
+    stub: u32,
+) {
     let s = site as usize;
-    let expected = thumb::encode_bl(s, stub);
+    let expected_bw = thumb::encode_b_wide(s, stub);
+    let expected_bl = thumb::encode_bl(s, stub);
+    if s + 4 > img.len() {
+        checks.push(AuditCheck {
+            lever,
+            what: "AKE detour branch".to_string(),
+            ok: false,
+            detail: format!("hook site 0x{site:08x} past end of image"),
+        });
+        return;
+    }
+    let found = &img[s..s + 4];
+    let ok = expected_bw.as_ref().is_some_and(|e| found == e)
+        || expected_bl.as_ref().is_some_and(|e| found == e);
+    let kind_matched = if expected_bw.as_ref().is_some_and(|e| found == e) {
+        "b.w"
+    } else if expected_bl.as_ref().is_some_and(|e| found == e) {
+        "bl"
+    } else {
+        "neither"
+    };
+    let (ok, detail) = if ok && !stub_present(img, stub) {
+        (
+            false,
+            format!("AKE branch present ({kind_matched}) but stub at 0x{stub:08x} is blank (0xFF)"),
+        )
+    } else {
+        (
+            ok,
+            format!(
+                "site 0x{site:08x} -> stub 0x{stub:08x} ({kind_matched}): b.w={:02x?}, bl={:02x?}, found {:02x?}",
+                expected_bw, expected_bl, found
+            ),
+        )
+    };
+    checks.push(AuditCheck {
+        lever,
+        what: "AKE detour branch".to_string(),
+        ok,
+        detail,
+    });
+}
+
+fn check_branch_impl(
+    checks: &mut Vec<AuditCheck>,
+    lever: &'static str,
+    what: &str,
+    img: &[u8],
+    site: u32,
+    stub: u32,
+    expected: Option<[u8; 4]>,
+    kind: &str,
+) {
+    let s = site as usize;
     let (ok, detail) = match expected {
         None => (
             false,
-            format!("bl 0x{site:08x} -> 0x{stub:08x} out of range"),
+            format!("{kind} 0x{site:08x} -> 0x{stub:08x} out of range"),
         ),
         Some(exp) => {
             if s + 4 > img.len() {
@@ -97,7 +173,7 @@ fn check_bl(
                 (
                     found == exp,
                     format!(
-                        "site 0x{site:08x} -> stub 0x{stub:08x}: expected {:02x?}, found {:02x?}",
+                        "site 0x{site:08x} -> stub 0x{stub:08x} ({kind}): expected {:02x?}, found {:02x?}",
                         exp, found
                     ),
                 )
@@ -108,7 +184,7 @@ fn check_bl(
     let mut detail = detail;
     if ok && !stub_present(img, stub) {
         ok = false;
-        detail = format!("bl present but stub at 0x{stub:08x} is blank (0xFF)");
+        detail = format!("{kind} present but stub at 0x{stub:08x} is blank (0xFF)");
     }
     checks.push(AuditCheck {
         lever,
@@ -159,6 +235,37 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                             ok: is_freemkv_patched(img) && stub_present(img, hva),
                             detail: format!("handler_va 0x{hva:08x}"),
                         });
+                        // Debug-knock Reboot arm: when the build resolved a boot
+                        // function entry (modern MT1959 geometry), the emitted
+                        // handler MUST carry that entry as a Thumb-tagged 32-bit
+                        // literal — the `ldr r6,[pc,#imm]` load feeding the `blx r6`.
+                        // Missing it means the wire verb dispatches but the actual
+                        // reboot never happens. Classic reports `boot_function_entry
+                        // == 0` (Reboot arm inert on purpose) → no assertion.
+                        if let Some(entry) = fact(l, "boot_function_entry") {
+                            if entry != 0 {
+                                let want = entry | 1;
+                                // Handler is <2 KiB; scan a 4-KiB window from handler_va
+                                // — bounded and cheap. Never panics on short images.
+                                let start = hva as usize;
+                                let end = start.saturating_add(0x1000).min(img.len());
+                                let found = if start < end {
+                                    img[start..end].windows(4).any(|w| {
+                                        u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == want
+                                    })
+                                } else {
+                                    false
+                                };
+                                checks.push(AuditCheck {
+                                    lever: name,
+                                    what: "Reboot boot-function-entry literal baked".into(),
+                                    ok: found,
+                                    detail: format!(
+                                        "want u32 0x{want:08x} in handler at 0x{hva:08x} (window +0x1000)"
+                                    ),
+                                });
+                            }
+                        }
                     }
                     _ => checks.push(AuditCheck {
                         lever: name,
@@ -195,7 +302,12 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
             LeverId::RawRead => {
                 let before = checks.len();
                 if let (Some(site), Some(stub)) = (fact(l, "ake_site"), fact(l, "ake_stub_va")) {
-                    check_bl(&mut checks, name, "AKE detour bl", img, site, stub);
+                    // AKE install shape depends on the resolved gate variant:
+                    // BU40N/desktop uses `B.W` (tail-call preservation); NB
+                    // variants use `BL`. Try `B.W` first, fall back to `BL`; a
+                    // valid install must be one of the two encodings targeting
+                    // the AKE stub.
+                    check_ake_detour(&mut checks, name, img, site, stub);
                 }
                 if let (Some(site), Some(stub)) = (fact(l, "gatea_gate"), fact(l, "gatea_stub_va"))
                 {
@@ -203,15 +315,6 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
                 if let (Some(site), Some(stub)) = (fact(l, "deny_site"), fact(l, "deny_stub_va")) {
                     check_bl(&mut checks, name, "deny-reset detour bl", img, site, stub);
-                }
-                // `04 03` "data clear" bus-off detour (AACS opcode-0x45 arm). Present
-                // only when wired (opcode-0x45 arm is a known MT1959 shape); optional,
-                // so no facts here is not a miss on its own — the AKE/Gate-A/deny facts
-                // above cover that. Proves the MK-style detour's `bl` + stub landed.
-                if let (Some(site), Some(stub)) =
-                    (fact(l, "busenc_site"), fact(l, "busenc_stub_va"))
-                {
-                    check_bl(&mut checks, name, "bus-enc detour bl", img, site, stub);
                 }
                 // `Feature::Uhd` UHD media accept/refuse detour (REPORT KEY class-3 arm
                 // on the SAME accept gate as BD). Present only when wired (explicit

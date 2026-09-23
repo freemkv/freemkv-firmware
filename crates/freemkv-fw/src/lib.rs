@@ -14,6 +14,6 @@ pub mod scheme;
 // The generic Thumb toolkit. Parts are wired into the apply path; the rest is
 // the platform-neutral API the engines are migrating onto — kept public so the
 // migration can land without churn.
-pub mod thumb;
+pub mod install_guard;
 
 pub mod api;

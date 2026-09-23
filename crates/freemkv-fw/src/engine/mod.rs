@@ -1,6 +1,6 @@
 //! Platform engines: the *knowledge* half of the tool.
 //!
-//! The [`crate::thumb`] toolkit supplies platform-neutral verbs (find / read /
+//! The [`thumb_asm`] toolkit supplies platform-neutral verbs (find / read /
 //! modify / insert / assemble). An **engine** supplies the platform-specific
 //! knowledge those verbs operate on — the scanner signature that proves the
 //! dispatch-record format, the CDB base, the sense-setter, the handler to
@@ -15,7 +15,7 @@
 use anyhow::Result;
 
 use crate::family::{self, ChipFamily};
-use crate::thumb::CommandRecord;
+use thumb_asm::CommandRecord;
 
 pub mod audit;
 pub mod core;
@@ -61,6 +61,16 @@ pub struct CreateReport {
     pub boot_init_site: u32,
     /// Injection address of the always-on boot-init trampoline.
     pub boot_stub_va: u32,
+    /// The firmware's boot function entry (the `push {r4,r5,r6,lr}` prologue of
+    /// the main-task/boot init). Computed at build time as `boot_init_site - 0x10`
+    /// (`0x0013D418` on BU40N 1.00 with `boot_init_site = 0x0013D428`). Baked as
+    /// a Thumb-tagged literal into the [`abi::Verb::Reboot`] arm of the injected
+    /// handler so a debug-knock Reboot CDB soft-reboots the drive via the boot
+    /// function's cold path (r0=4 forces the cold arm). `0` when the base ships
+    /// without a boot-init site (fail-closed elsewhere; kept 0 for audit).
+    ///
+    /// [`abi::Verb::Reboot`]: crate::abi::Verb::Reboot
+    pub boot_function_entry: u32,
     /// OEM Volume-ID producer entry (subfn 0x03 calls it to stage the clear VID).
     pub vid_producer: u32,
     /// The producer's clear-VID scratch buffer (runtime address, read by 0x03).
@@ -68,10 +78,7 @@ pub struct CreateReport {
     /// OEM per-AGID AKE gate-setter primitive (0x03 opens the gate through it).
     pub vid_gate_setter: u32,
     /// `SetDiscMode` dispatcher — the read-datapath disc-mode anchor. Located and
-    /// proven unique, but DELIBERATELY NOT wired: bus-off is done the MK way instead,
-    /// by clearing the bus-encryption enable bit of the read-datapath MMIO register on
-    /// the AACS opcode-0x45 path (see `busenc_detour_site`). Reported for audit /
-    /// future use.
+    /// proven unique, reported for audit / future post-flash `Verb::Call` exploration.
     pub setdiscmode: u32,
     /// Speed (0x02) ramp-ceiling gate anchor (the `ldr r1,[pc]` of the ramp
     /// self-ceiling test); the detour replaces the `cmp/bhi` at `gate+4`.
@@ -83,10 +90,12 @@ pub struct CreateReport {
     pub region_emitter: u32,
     /// Injection address of the Region-free (0x03) flag-gated emitter trampoline.
     pub region_stub_va: u32,
-    /// AACS AKE accept-gate anchor for Raw Read (0x04); the detour replaces the
-    /// RESET state writer (`movs r1,#1; b <back>`) at `ake_gate+12`.
+    /// AACS AKE accept-gate anchor for Encryption (`Feature::Encryption`); the
+    /// detour replaces the RESET state writer (`movs r1,#1; b <back>`) at
+    /// `ake_gate+12`.
     pub ake_gate: u32,
-    /// Injection address of the Raw Read (0x04) flag-gated AKE accept trampoline.
+    /// Injection address of the Encryption (`Feature::Encryption`) flag-gated AKE
+    /// accept trampoline.
     pub ake_stub_va: u32,
     /// The VID producer's own gate site (`cmp r0,#6; bne <deny>`), detoured by the
     /// Gate-A trampoline. `VID_GATE_SIG` match+18.
@@ -100,14 +109,6 @@ pub struct CreateReport {
     pub deny_reset_gate: u32,
     /// Injection address of the Raw Read (0x04) deny-path AACS-reset trampoline.
     pub deny_stub_va: u32,
-    /// AACS opcode-0x45 (Read Data Key) arm detour site for Raw Read `04 03` "data
-    /// clear" (drive-side bus-encryption removal, MK-style); the detour replaces the
-    /// arm's leading `bl <key-prog>`, and the stub clears the bus-enc enable bit of
-    /// the read-datapath MMIO register when `flag[RawRead]==3`.
-    pub busenc_detour_site: u32,
-    /// Injection address of the Raw Read `04 03` bus-off (MK-style bit-clear)
-    /// trampoline.
-    pub busenc_stub_va: u32,
     /// Raw Read `04 03` UHD mode-gate neutralizer detour site — the disc-version
     /// classifier prologue's reload (`ldr r0,[sp,#0x38]`, `UHD_CLASSIFIER_SIG`
     /// match+6). The stub replays the reload and, when `flag[RawRead]==3`, zeros the

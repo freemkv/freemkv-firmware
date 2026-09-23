@@ -16,7 +16,7 @@ use super::mt1959::Mt1959Engine;
 use super::CreateReport;
 use crate::abi;
 use crate::family::{Capability, ChipInfo};
-use crate::thumb::{self, Asm, CommandTable};
+use thumb_asm::{self as thumb, Asm, CommandTable};
 
 impl Mt1959Engine {
     /// The **classic**-generation per-AGID session-struct base. The classic VID
@@ -45,7 +45,7 @@ impl Mt1959Engine {
         let accept = a.label();
         let done = a.label();
         a.lsrs_imm(0, 0, 6); // replay the overwritten `lsrs r0,r0,#6` (r0 = AGID)
-        a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
+        a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32); // r2 = &flag[Encryption]
         a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
         a.cmp_imm(2, abi::STATE_OFF); // 0x00 = null AKE / bypass (accept any/revoked host cert); ON/OEM = real handshake
         a.beq(accept);
@@ -56,7 +56,7 @@ impl Mt1959Engine {
         a.bind(done);
         a.ldr_lit(2, back | 1); // -> shared OEM `bl set_agid_state` call site
         a.bx(2);
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// MT1939-**classic** create (bare base): the modern [`Self::build_report`]
@@ -81,13 +81,13 @@ impl Mt1959Engine {
     /// never a feature that would boot into its OFF state without the 0xFF-fill.
     ///
     /// The classic feature set that actually resolves (measured over the 17 classic
-    /// images): **Region-free** 17/17, **Raw-read** Gate-A + AKE 17/17, and **Bus**
-    /// 17/17 (classic AACS-0x45 arm via `emit_busenc_classic`, static-only). **Speed**,
-    /// **UHD** and **BD** are genuine architecture misses on this pre-UHD (2012–2016)
-    /// silicon: no ramp-ceiling gate (Speed), no disc-version classifier (UHD), and no
-    /// separate disc-mode/class REPORT-KEY accept gate (BD — acceptance is purely
-    /// AKE-gated, already handled). **HRL** 17/17 (classic cert-revocation lookup via
-    /// `emit_hrl_classic`). Net classic set: Region + Raw-read/AKE + Bus + HRL = 17/17.
+    /// images): **Region-free** 17/17, **Raw-read** Gate-A + Encryption 17/17.
+    /// **Speed**, **UHD** and **BD** are genuine architecture misses on this pre-UHD
+    /// (2012–2016) silicon: no ramp-ceiling gate (Speed), no disc-version classifier
+    /// (UHD), and no separate disc-mode/class REPORT-KEY accept gate (BD — acceptance
+    /// is purely AKE-gated, already handled). **HRL** 17/17 (classic cert-revocation
+    /// lookup via `emit_hrl_classic`). Net classic set: Region + Raw-read/Encryption
+    /// + HRL = 17/17.
     pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
         // Idempotency: a re-fed freemkv image reports the existing base unchanged.
         if is_freemkv_patched(image) {
@@ -129,8 +129,40 @@ impl Mt1959Engine {
             .find_free_sram_cell(image)
             .context("classic base: free SRAM cell for the flag table")?;
 
+        // Classic reboot verb: bake `boot_init_site - 0x10` (the classic caller_bl_site,
+        // minus 0x10 — the analogous offset to the modern boot function prologue). If
+        // the classic site refuses to resolve, treat the reboot verb as unwired (0)
+        // rather than failing the whole classic base build.
+        // Classic Verb::Reboot: RETIRED (baked as 0 = inert). The modern
+        // `boot_init_site - 0x10` offset is anchored on BOOT_INIT_SIG's fixed
+        // `bmi +3`, so on modern images subtracting 0x10 always lands at the
+        // boot function's push prologue. The classic BOOT_INIT_SIG_CLASSIC
+        // resolves a caller-bl inside whichever parent function calls the
+        // classic leaf helper, and that VA has no fixed offset to any function
+        // entry. Baking `site - 0x10` would blx into garbage and wedge the
+        // drive. Reboot on classic images is left inert (returns zeroed reply,
+        // no side effect); a future signature dedicated to the classic boot
+        // function entry can flip this back on.
+        let boot_function_entry: u32 = 0;
+        // Best-effort revert primitive for SET encryption != 0x00: prefer the
+        // full AACS session-rearm wrapper (bit-20 bus-enc re-arm store + all
+        // subsystem re-inits + aacs_session_reset), fall back to the plain
+        // session-reset if rearm's shape doesn't match on this classic image.
+        // Classic images may match neither; 0 is safe — the handler emit skips
+        // the reset call entirely in that case.
+        let aacs_reset_for_handler = self
+            .find_aacs_session_rearm(image)
+            .or_else(|_| self.find_aacs_session_reset(image))
+            .unwrap_or(0);
+
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base)
+            .build_handler(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                aacs_reset_for_handler,
+            )
             .context("classic base: assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -152,8 +184,6 @@ impl Mt1959Engine {
         let mut gatea_stub_va = 0u32;
         let mut deny_reset_gate = 0u32;
         let mut vid_producer = 0u32;
-        let mut busenc_detour_site = 0u32;
-        let mut busenc_stub_va = 0u32;
         let mut uhd_classifier_site = 0u32;
         let mut uhd_stub_va = 0u32;
         let mut bd_gate_site = 0u32;
@@ -169,7 +199,10 @@ impl Mt1959Engine {
         // repoint + CMAC only) — never ship a feature stub without the 0xFF-fill,
         // or the drive would boot every feature into its OFF state. Each feature
         // emit inside the boot-success arm is otherwise best-effort.
-        if let Ok((site, va)) = self.emit_boot_init(image, &mut out, flag_base) {
+        if let Ok((site, va)) = self
+            .resolve_boot_init_pair(image)
+            .and_then(|pair| self.emit_boot_init(image, &mut out, flag_base, pair))
+        {
             boot_init_site = site;
             boot_stub_va = va;
 
@@ -197,19 +230,6 @@ impl Mt1959Engine {
                 ake_stub_va = fact("ake_stub_va");
                 deny_reset_gate = fact("deny");
                 vid_producer = fact("vid_producer");
-            }
-
-            // Bus — the classic AACS-0x45 (Read Data Key) key-prog arm. The MODERN
-            // busenc_detour misses on classic (the arm spills to a different frame
-            // slot), so we use the classic-specific emit: `emit_busenc_classic` locates
-            // the classic arm via AACS45_ARM_SIG_CLASSIC (unique 17/17) and installs the
-            // SHARED build_busenc_stub (replays OEM key-prog; clears BUSENC_REG's enable
-            // bit only when flag[Bus]==STATE_OFF). Static-only, same HARDWARE-KAT-GATED
-            // caveat as modern Bus: the de-bus register-clear fires only on opt-in
-            // Bus=off; the boot default 0xFF (OEM) replays OEM and is byte-behaviour-inert.
-            if let Ok((site, va)) = self.emit_busenc_classic(image, &mut out, flag_base) {
-                busenc_detour_site = site;
-                busenc_stub_va = va;
             }
 
             // UHD / BD / HRL — the modern AACS detours, tried best-effort. On classic
@@ -281,6 +301,7 @@ impl Mt1959Engine {
             handler_bytes,
             boot_init_site,
             boot_stub_va,
+            boot_function_entry,
             vid_producer,
             vid_out_buf: 0,
             vid_gate_setter: 0,
@@ -297,8 +318,6 @@ impl Mt1959Engine {
             deny_reset_gate,
             // Classic ships no deny-reset detour (deny stays OEM) — stub 0.
             deny_stub_va: 0,
-            busenc_detour_site,
-            busenc_stub_va,
             uhd_classifier_site,
             uhd_stub_va,
             bd_gate_site,
@@ -322,6 +341,12 @@ impl Mt1959Engine {
         let bl = thumb::encode_bl(site, stub_va)?;
         thumb::write(out, stub_va as usize, bytes);
         thumb::write(out, site, &bl);
+        // Emit-time decode-back guard — miss-is-graceful per this fn's
+        // `Option` contract, so an install-shape failure returns None
+        // (feature left unwired, base still ships) rather than panicking.
+        if thumb::decode_bl(out, site) != Some(stub_va) {
+            return None;
+        }
         Some(stub_va)
     }
 
@@ -388,8 +413,40 @@ impl Mt1959Engine {
             .find_free_sram_cell(image)
             .context("classic base: free SRAM cell for the flag table")?;
 
+        // Classic reboot verb: same rule as build_report_classic — bake
+        // `boot_init_site - 0x10` from the classic caller_bl_site when it
+        // resolves (blessed), else 0 (unwired). Keeps modify byte-identical to
+        // create on the classic base.
+        // Classic Verb::Reboot: RETIRED (baked as 0 = inert). The modern
+        // `boot_init_site - 0x10` offset is anchored on BOOT_INIT_SIG's fixed
+        // `bmi +3`, so on modern images subtracting 0x10 always lands at the
+        // boot function's push prologue. The classic BOOT_INIT_SIG_CLASSIC
+        // resolves a caller-bl inside whichever parent function calls the
+        // classic leaf helper, and that VA has no fixed offset to any function
+        // entry. Baking `site - 0x10` would blx into garbage and wedge the
+        // drive. Reboot on classic images is left inert (returns zeroed reply,
+        // no side effect); a future signature dedicated to the classic boot
+        // function entry can flip this back on.
+        let boot_function_entry: u32 = 0;
+        // Best-effort revert primitive for SET encryption != 0x00: prefer the
+        // full AACS session-rearm wrapper (bit-20 bus-enc re-arm store + all
+        // subsystem re-inits + aacs_session_reset), fall back to the plain
+        // session-reset if rearm's shape doesn't match on this classic image.
+        // Classic images may match neither; 0 is safe — the handler emit skips
+        // the reset call entirely in that case.
+        let aacs_reset_for_handler = self
+            .find_aacs_session_rearm(image)
+            .or_else(|_| self.find_aacs_session_reset(image))
+            .unwrap_or(0);
+
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base)
+            .build_handler(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                aacs_reset_for_handler,
+            )
             .context("classic base: assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -404,18 +461,24 @@ impl Mt1959Engine {
         // every classic drive into their OFF state. The caller (mt1939::modify) degrades
         // to the DE-only path. Lifting this is a one-line flip in emit_boot_init once the
         // classic site is blessed on silicon (see TODO(hw-confirm) there).
-        let (_boot_init_site, _boot_stub_va) = self.emit_boot_init(image, &mut out, flag_base)?;
+        let boot_init_pair = self.resolve_boot_init_pair(image)?;
+        let (_boot_init_site, _boot_stub_va) =
+            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair)?;
 
         let mut levers: Vec<LeverReport> = Vec::new();
 
         // Identity / vendor handler + DumpAll — structurally valid, self-verifies,
         // passes the structural audit → produced unconditionally (static-only label).
+        // `boot_function_entry` is 0 on classic (Reboot arm emits inert — see
+        // build_handler); recorded here so the audit can skip the Reboot-literal
+        // check without special-casing classic.
         levers.push(LeverReport::applied(
             LeverId::Identity,
             vec![
                 ("handler_va", handler_va),
                 ("record_off", record.off as u32),
                 ("flag_base", flag_base),
+                ("boot_function_entry", boot_function_entry),
             ],
         ));
 
@@ -454,9 +517,30 @@ impl Mt1959Engine {
         // Gate-A stub is byte-for-byte the MT1959 one); the deny path is left
         // byte-identical to OEM (no deny-reset detour). Structurally audited; the
         // static-only label already carries the pending-hardware-KAT caveat.
+        //
+        // HRL-skip is emitted alongside RawRead (and its facts folded in),
+        // MIRRORING `build_report_classic` — otherwise create and modify
+        // produce non-identical images on the same classic base and
+        // `corpus_create_and_modify_agree_byte_for_byte` fails once
+        // `CLASSIC_BOOT_BLESSED` is true. Modern `build_modify` (mt1959.rs)
+        // folds HRL facts into the RawRead lever the same way; keep the two
+        // engines symmetric so downstream (audit / reporter) sees one lever
+        // shape regardless of family.
         levers.push(if cap.bd_aacs {
             match self.emit_rawread_classic(image, &mut out, flag_base) {
-                Ok(facts) => LeverReport::applied(LeverId::RawRead, facts),
+                Ok(mut facts) => {
+                    if let Ok((sites, stub_va)) =
+                        self.emit_hrl_classic(image, &mut out, flag_base)
+                    {
+                        if stub_va != 0 {
+                            facts.push(("hrl_stub_va", stub_va));
+                            for (k, &s) in sites.iter().take(3).enumerate() {
+                                facts.push((["hrl_site", "hrl_site2", "hrl_site3"][k], s));
+                            }
+                        }
+                    }
+                    LeverReport::applied(LeverId::RawRead, facts)
+                }
                 Err(e) => LeverReport::missed(LeverId::RawRead, format!("{e:#}")),
             }
         } else {
@@ -510,6 +594,7 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("classic Region detour `bl` out of range"))?;
         thumb::write(out, region_stub_va as usize, &region_bytes);
         thumb::write(out, region_site, &bl);
+        crate::install_guard::assert_bl_install(out, region_site, region_stub_va, "classic Region")?;
         Ok((region_emitter, region_stub_va))
     }
 
@@ -607,12 +692,14 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("classic Gate-A detour `bl` out of range"))?;
         thumb::write(&mut w, gatea_stub_va as usize, &gatea_bytes);
         thumb::write(&mut w, gatea_cmp, &gatea_bl);
+        crate::install_guard::assert_bl_install(&w, gatea_cmp, gatea_stub_va, "classic Gate-A")?;
 
         let ake_stub_va = self.free_space(&w, ake_bytes.len() + 16)?;
         let ake_bl = thumb::encode_bl(ake_site, ake_stub_va)
             .ok_or_else(|| anyhow!("classic AKE detour `bl` out of range"))?;
         thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);
         thumb::write(&mut w, ake_site, &ake_bl);
+        crate::install_guard::assert_bl_install(&w, ake_site, ake_stub_va, "classic AKE")?;
 
         *out = w;
         Ok(vec![
@@ -626,75 +713,6 @@ impl Mt1959Engine {
             ("scratch", scratch),
             ("vid_producer", vid_producer),
         ])
-    }
-
-    /// Bus-encryption (`04 03` "data clear") emission for the MT1939 **classic**
-    /// generation. The classic OEM AACS opcode-`0x45` (**Read Data Key**) arm is
-    /// present and byte-shape-identical to the modern B-shape — only its stack spill
-    /// slot differs (`[sp,#0x1c]`), which is what [`super::mt1939::AACS45_ARM_SIG_CLASSIC`]
-    /// pins so the classic finder matches **only** the classic generation and the modern
-    /// [`Self::find_aacs45_arm`] never wires a classic image with the modern register.
-    ///
-    /// Locate the classic arm (unique full-image on all 17 classic images), decode the
-    /// leading `bl <key-prog>` target, and emit the **shared** [`Self::build_busenc_stub`]:
-    /// it replays the OEM key programming unchanged and, only when `flag[Bus]==STATE_OFF`,
-    /// clears [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`]. Returns `(detour_site, stub_va)`;
-    /// the caller commits (mirrors [`Self::emit_region_classic`]).
-    ///
-    /// # SAFETY — one inherited, hardware-unconfirmed assumption
-    /// The **arm** (the key-prog detour point) is proven on classic by disasm (3/17:
-    /// `BH16NS40-NS50 @0x9c280`, `BH40N @0x9c002`, `BE14NU40 @0x9b942`) and by a unique
-    /// full-corpus match (17/17). What is NOT independently confirmed for MT1939-classic
-    /// silicon is that the bus-encryption MMIO enable is `BUSENC_REG` bit
-    /// [`BUSENC_ENABLE_BIT`] — that constant is inherited from the MT1959 MK-vs-OEM diff
-    /// (a different silicon generation) and there is no MK-classic reference to cross-check
-    /// it against. This is the **same** risk class the modern Bus lever already ships under
-    /// (its own `HARDWARE-KAT-GATED` note), and it is bounded the same way: the register
-    /// write fires **only** in the opt-in `flag[Bus]==STATE_OFF` mode; the default (the
-    /// boot 0xFF-fill → `Bus=OEM`) replays the OEM key-prog call and touches nothing, so
-    /// the wired image is byte-behaviour-identical to OEM until a user explicitly requests
-    /// de-bus. The classic bus register must be confirmed on silicon (golden hardware KAT)
-    /// before the `Bus=off` path is trusted — until then this ships static-only, exactly
-    /// like modern Bus. The replay-only (`!= STATE_OFF`) path is structurally proven.
-    ///
-    /// Wired into [`Self::build_report_classic`] (create/base). Static-only until a
-    /// golden classic-hardware KAT confirms `BUSENC_REG` — same tier as modern Bus.
-    pub(crate) fn emit_busenc_classic(
-        &self,
-        image: &[u8],
-        out: &mut [u8],
-        flag_base: u32,
-    ) -> Result<(u32, u32)> {
-        use super::mt1939::{masked_matches, AACS45_ARM_SIG_CLASSIC};
-        // Full-image scan (de-hardcoded, matching the other classic finders): the
-        // classic 0x45 arm is unique image-wide on all 17 classic images; the
-        // unique-match guard keeps it safe.
-        let site = match masked_matches(image, AACS45_ARM_SIG_CLASSIC, 0, image.len()).as_slice() {
-            [one] => *one,
-            hits => bail!(
-                "classic AACS opcode-0x45 arm matched {} time(s) full-image (want 1) \
-                 — refusing to wire Bus",
-                hits.len()
-            ),
-        };
-        // Re-verify the OEM landmark at the detour site: the arm must start with a
-        // decodable `bl <key-prog>` (the target the stub replays). Bail otherwise so a
-        // resolve can only occur on genuinely-matching codegen, never a mis-detour.
-        let keyprog = thumb::decode_bl(image, site).ok_or_else(|| {
-            anyhow!(
-                "classic AACS opcode-0x45 arm at 0x{site:x} does not start with a `bl <key-prog>`"
-            )
-        })?;
-        let bytes = self.build_busenc_stub(flag_base, keyprog)?;
-
-        // Commit: place the stub in CMAC-covered free space and write the `bl` at the
-        // arm's leading `bl` (replacing the OEM key-prog call, which the stub replays).
-        let stub_va = self.free_space(out, bytes.len() + 16)?;
-        let bl = thumb::encode_bl(site, stub_va)
-            .ok_or_else(|| anyhow!("classic Bus detour `bl` out of range"))?;
-        thumb::write(out, stub_va as usize, &bytes);
-        thumb::write(out, site, &bl);
-        Ok((site as u32, stub_va))
     }
 
     /// Host-Revocation-List skip emission for the MT1939 **classic** cert path — the
@@ -751,7 +769,7 @@ impl Mt1959Engine {
         let mut revoke: Option<u32> = None;
         let mut o = 0usize;
         while o + 4 <= image.len() {
-            if decode_bl_target(image, o) == Some(hrl) {
+            if thumb::decode_bl(image, o) == Some(hrl) {
                 let mut p = o + 4;
                 let mut hopped = false;
                 let mut steps = 0;
@@ -817,6 +835,7 @@ impl Mt1959Engine {
         for &s in &sites {
             let bl = thumb::encode_bl(s, stub_va).expect("range re-checked above");
             thumb::write(&mut w, s, &bl);
+            crate::install_guard::assert_bl_install(&w, s, stub_va, "classic HRL-skip")?;
         }
         *out = w;
 

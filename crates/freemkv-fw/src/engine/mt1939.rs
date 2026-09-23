@@ -74,32 +74,6 @@ pub(crate) const AKE_GATE_SIG_CLASSIC: &[(u16, u16)] = &[
     (0xF000, 0xF800), // bl   set_agid_state
 ];
 
-/// Classic-generation OEM AACS opcode-`0x45` (**Read Data Key**) arm — the in-transit
-/// bus-encryption key-prog path, and the classic analogue of the modern
-/// [`super::core::AACS45_ARM_SIG_B`]. The arm BODY is byte-shape-identical to the
-/// modern B-shape (`bl <key-prog>; movs r0,#6; muls r0,r4,r0; ldr r1,[pc]; ldrh
-/// r0,[r1,r0]; str r0,[sp,#slot]`); the ONE distinguishing byte is the final spill
-/// slot — classic frames spill the read-data-key halfword to `[sp,#0x1c]` (`0x9007`),
-/// where the modern desktop fleet uses `#0x24` and the BD-combo drives `#0x20`. Pinning
-/// `0x9007` makes this signature match **only** the classic generation (measured: unique
-/// on all 17 MT1939-classic images, `0x9a382`-class arm at `~0x9c280`; **zero** matches
-/// on every modern MT1959 / combo image), so the modern finder and this one never
-/// cross-wire. The match offset IS the arm's leading `bl` (the detour site); its target
-/// is the OEM key-prog primitive the injected stub replays.
-///
-/// Disasm proof (3 of 17): `BH16NS40-NS50 @0x9c280`, `BH40N @0x9c002`,
-/// `BE14NU40 @0x9b942` — all `bl <key-prog>; movs r0,#6; muls r0,r4,r0; ldr r1,[pc];
-/// ldrh r0,[r1,r0]; str r0,[sp,#0x1c]`.
-pub(crate) const AACS45_ARM_SIG_CLASSIC: &[(u16, u16)] = &[
-    (0xF000, 0xF800), // bl <key-prog>   hi   ← match = arm entry / detour site
-    (0xF800, 0xF800), //                 lo
-    (0x2006, 0xFFFF), // movs r0,#6
-    (0x4360, 0xFFFF), // muls r0,r4,r0
-    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]
-    (0x5A08, 0xFFFF), // ldrh r0,[r1,r0]
-    (0x9007, 0xFFFF), // str  r0,[sp,#0x1c]   (classic frame slot — generation marker)
-];
-
 /// Signature of the **classic**-generation flash-resident Host-Revocation-List
 /// (HRL) lookup routine — the classic-codegen analogue of [`super::core::HRL_LOOKUP_SIG`].
 ///

@@ -26,6 +26,14 @@ freemkv-flash = { path = "../freemkv-flash" }
 # Shared step-1 chipset detection + capability taxonomy (also used by
 # freemkv-flash), so both tools identify a family the same way.
 freemkv-chipset = { path = "../freemkv-chipset" }
+# Generic ARM-Thumb (T1/T2) instruction builder, encoder/decoder, and patch-site
+# finder — the single source of truth for every Thumb primitive this crate
+# builds detours out of. Published crate; we are a pure consumer. The two
+# anyhow-flavored emit-time install guards (`assert_bl_install` /
+# `assert_b_wide_install`) that adapt `thumb_asm`'s decoders to this crate's
+# `anyhow::Result` error type live in `src/install_guard.rs`; every actual
+# encode/decode/find primitive lives in the upstream crate.
+thumb-asm = "0.1"
 
 [dev-dependencies]
 # Throwaway corpus-scoreboard / golden-KAT harness only (tests/corpus_scoreboard.rs):

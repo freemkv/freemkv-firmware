@@ -31,7 +31,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "9e4b58780e2806d19878c02803d1d878de2800d101e09a4b1847f0b5994f1c79022c07d198485979082968d240189979017064e0042c62d19879ff2826d19248ff21017041708170c170017141718171c1718e4806688e48056876198a4801783170417871708178b170c178f17001793171417971718179b171c179f171281c844908220123844da84738e0012811d17d48ff210170ff214170ff2181700121c17001210171ff214171ff218171ff21c17124e0744e774a1178ff2910d1ff213170ff217170ff21b1700121f17001213171ff217171ff21b171ff21f1710ee0517871709178b170d178f17011793171517971719179b171d179f171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5c490870594886420ad35b48864207d25848311c01220123554da847041c00e0564c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb8476ae00b2c33d13a48012101703a4806683a4805687619364801783170417871708178b170c178f17001793171417971718179b171c179f171281c304908220123304da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84734e0032c08d11f485979082904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11ba600250d2d04d2281c715db8470135f8e70b4e0d250122082a05d2b15c281cb84701350132f7e740200d4908800d480e4a9047f0bd380d00025bad090075200a00400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e382e33";
+    "b54b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0ad4b1847f0b5ad4f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab047002482e00d2c03d1587a307000247ce00f2c04d1a04e0420b047002475e0002473e0f0b59b4f1c79022c12d19b485979012900d269e0072900d366e04018997901705879062803d1002901d0944a90475be0042c59d19879ff2823d18f48ff21017041708170c1700171417181718c4806688c4805687619884801783170417871708178b170c178f17001793171417971718179b171281c844907220123834da84732e001280fd17c48ff210170ff214170ff2181700121c17001210171ff214171ff21817120e0744e774a1178ff290ed1ff213170ff217170ff21b1700121f17001213171ff217171ff21b1710ce0517871709178b170d178f17011793171517971719179b171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5f4908705c4886420ad35d48864207d25b48311c01220123584da847041c00e0594c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb8476ae00b2c31d13c48012101703c4806683c4805687619384801783170417871708178b170c178f17001793171417971718179b171281c344907220123334da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84736e0032c0ad122485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11da600250e2d04d2281c715db8470135f8e70d4e0e250122072a05d2b15c281cb84701350132f7e74020104908801048104a9047f0bd0000380d00025bad090075200a0019d41300400e000275480400780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e382e3134";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -43,8 +43,8 @@ const EXPECT_HANDLER_HEX: &str =
 // sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
 // with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "8d8482ec69502148762a608a0cb459b4";
-const EXPECT_CMAC_15: &str = "b4d4b04384f9116335348da4e9c10568";
+const EXPECT_CMAC_1: &str = "f08de0b749ebd97a6ae3fa9461890245";
+const EXPECT_CMAC_15: &str = "6f196ef245defe7492a9f0f60b803e93";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -223,7 +223,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
 
     // Every changed byte must fall in an accounted-for region: the injected band
     // (3C handler + every stub), the repointed record, the CMAC table, the OEM-code
-    // detours (speed/region/ake/gatea/deny/busenc/uhd/bd/hrl), or the DE byte. 0x400
+    // detours (speed/region/ake/gatea/deny/uhd/bd/hrl), or the DE byte. 0x400
     // bounds the injected band.
     let injected = EXPECT_HANDLER_VA as usize..EXPECT_HANDLER_VA as usize + 0x520;
     // Always-on boot-init hook: the cold/warm-boot convergence `bl <orig_init>`
@@ -235,9 +235,6 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     let ake_detour = report.ake_gate as usize + 12..report.ake_gate as usize + 16;
     let gatea_detour = report.gatea_gate as usize..report.gatea_gate as usize + 4;
     let deny_detour = report.deny_reset_gate as usize..report.deny_reset_gate as usize + 4;
-    // Raw Read `04 03` "data clear" (bus-off): the AACS opcode-0x45 arm detour
-    // (report.busenc_detour_site), 4 bytes of the arm's leading `bl`.
-    let busenc_detour = report.busenc_detour_site as usize..report.busenc_detour_site as usize + 4;
     // `Feature::Uhd` UHD media accept/refuse: the REPORT KEY class-3 arm detour
     // (report.uhd_classifier_site), 4 bytes replacing `ldrb r0,[r2,#7]; cmp r0,#3`.
     let uhd_detour = report.uhd_classifier_site as usize..report.uhd_classifier_site as usize + 4;
@@ -252,6 +249,12 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
             .iter()
             .any(|&s| (s as usize..s as usize + 4).contains(&i))
     };
+    // Track the highest offset within the injected band that actually changed,
+    // so we can prove the ACTUAL band is smaller than the hardcoded 0x520 ceiling
+    // (post-check debug_assert below). CreateReport carries only stub bases, not
+    // sizes, so a fully derived ceiling isn't available yet — this preserves the
+    // fail-loud property until stub sizes ride on the report.
+    let mut max_injected_delta_off: usize = 0;
     for (i, (a, b)) in base.iter().zip(img.iter()).enumerate() {
         if a != b {
             let in_record = (EXPECT_RECORD_OFF + 4..EXPECT_RECORD_OFF + 8).contains(&i);
@@ -269,15 +272,31 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
                     || ake_detour.contains(&i)
                     || gatea_detour.contains(&i)
                     || deny_detour.contains(&i)
-                    || busenc_detour.contains(&i)
                     || uhd_detour.contains(&i)
                     || bd_detour.contains(&i)
                     || in_hrl(i)
                     || i == report.de_off as usize,
                 "unexpected byte change at 0x{i:x}"
             );
+            if injected.contains(&i) {
+                let delta = i - EXPECT_HANDLER_VA as usize;
+                if delta > max_injected_delta_off {
+                    max_injected_delta_off = delta;
+                }
+            }
         }
     }
+    // Bound the ACTUAL injected band well below the 0x520 constant: the true tail
+    // must land within `handler_bytes.len() + 0x400`. A stub-size regression that
+    // widens the band past this bound trips loudly, and it lets us shrink 0x520
+    // later once CreateReport carries every stub size.
+    let derived_ceiling = report.handler_bytes.len() + 0x400;
+    debug_assert!(
+        max_injected_delta_off < derived_ceiling,
+        "injected band overran derived ceiling: max delta 0x{max_injected_delta_off:x} \
+         >= handler_bytes.len() (0x{:x}) + 0x400 (0x{derived_ceiling:x})",
+        report.handler_bytes.len()
+    );
 
     // The build-time SRAM scanner still reports its (unsound) candidate for audit,
     // but the flag base actually used is the validated 204-byte free hole at
@@ -322,16 +341,6 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.deny_stub_va != 0,
         "Raw Read (0x04) deny-path AACS-reset stub wired"
     );
-    // Raw Read `04 03` "data clear" (bus-off): the MK-style detour of the OEM
-    // `bl <key-prog>` at the start of the AACS opcode-0x45 arm (0x95eec on 1.00).
-    assert_eq!(
-        report.busenc_detour_site, 0x0009_5eec,
-        "bus-off (04 03) detours the AACS opcode-0x45 arm's leading bl (1.00)"
-    );
-    assert!(
-        report.busenc_stub_va != 0,
-        "Raw Read `04 03` bus-off (data clear) stub wired"
-    );
     // `Feature::Uhd` UHD media accept/refuse (REPORT KEY class-3 arm): the UHD class
     // check `ldrb r0,[r2,#7]; cmp r0,#3` at the accept gate's anchor+4 (0x1365be anchor
     // → 0x1365c2 site on 1.00), the UHD sibling of the BD arm on the SAME gate.
@@ -365,6 +374,51 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         "Feature::Hrl STATE_OFF (HRL skip) stub wired"
     );
     assert_eq!(report.de_off, 0x001e_c056, "DE byte offset (1.00)");
+
+    // AKE detour install shape — the load-bearing regression guard for the
+    // 0.8.14 fix. The reject-writer site (`ake_gate + 12` = 0x001365a0 on
+    // BU40N 1.00) originally held `movs r1,#1; b <set_agid_state>` — a
+    // tail-call whose shared setter's `bx lr` returns to the OUTER function's
+    // caller via the caller's own `lr`. Installing a wide `BL` there
+    // clobbers `lr` with `site+4`, so the shared setter's `bx lr` lands at
+    // the entry of an unrelated leaf that clears a bit in MMIO 0x04000000
+    // and disarms drive-side bus-encryption on every reject-arm path. The
+    // correct install is a Thumb-2 wide `B` (`B.W`, T4) — same 4 bytes, but
+    // `lr` is left alone.
+    //
+    // This test decodes the 4 bytes at the detour site and asserts:
+    //   1. They decode as a wide `B.W` (not `BL`).
+    //   2. Their target is exactly `ake_stub_va`.
+    // Together these prove the shape enum (`AkeInstallShape::WideB`) is wired
+    // through `ake_detour` → the emit-time install → and lands byte-correct
+    // in the produced image, so the 0.8.13 boot-time bus-disarm regression
+    // cannot recur silently.
+    let ake_install_site = report.ake_gate as usize + 12;
+    let install_bytes = &img[ake_install_site..ake_install_site + 4];
+    assert_eq!(
+        install_bytes.len(),
+        4,
+        "AKE detour install site 0x{ake_install_site:x} must be 4 bytes"
+    );
+    let decoded_b = thumb_asm::decode_b_wide(img, ake_install_site);
+    let decoded_bl = thumb_asm::decode_bl(img, ake_install_site);
+    assert_eq!(
+        decoded_b,
+        Some(report.ake_stub_va),
+        "AKE install at 0x{ake_install_site:x} must be a wide `B.W` to ake_stub_va=0x{:x} \
+         (bytes = {:02x?}, decode_b_wide = {:?}, decode_bl = {:?})",
+        report.ake_stub_va,
+        install_bytes,
+        decoded_b,
+        decoded_bl,
+    );
+    assert!(
+        decoded_bl.is_none(),
+        "AKE install at 0x{ake_install_site:x} must NOT decode as a `BL` — a `BL` here would \
+         clobber `lr` and re-run an unrelated leaf's MMIO bit-clear on every reject-arm path \
+         (the 0.8.13 regression). decode_bl = {:?}",
+        decoded_bl,
+    );
 }
 
 /// The two firmware images the VID (0x03) finders must resolve identically,
@@ -509,16 +563,6 @@ fn finders_hold_across_owned_images() {
             .unwrap_or_else(|e| panic!("VID gate-setter @ {disp}: {e}"));
         eng.find_setdiscmode(&bytes)
             .unwrap_or_else(|e| panic!("SetDiscMode @ {disp}: {e}"));
-        // MK-style bus-off (`04 03`): the AACS opcode-0x45 arm must resolve UNIQUELY
-        // on every image whose desktop OR notebook AKE gate is present (the MT1959
-        // lineage this mechanism applies to). JB8/MT1939-classic images have no such
-        // AKE gate, so `ake_detour` (hence bus-off) is intentionally not asserted.
-        if eng.ake_detour(&bytes, super::FLAG_TABLE_BASE).is_ok() {
-            let (site, _keyprog) = eng
-                .find_aacs45_arm(&bytes)
-                .unwrap_or_else(|e| panic!("AACS opcode-0x45 arm @ {disp}: {e}"));
-            assert!(site != 0, "bus-off detour site @ {disp}");
-        }
         // UHD media accept/refuse arm on the REPORT KEY accept gate (the UHD sibling
         // of the BD arm on the SAME gate). Resolves on the explicit REPORT KEY gate
         // shape; asserted only where it resolves — the descriptor-classifier gate
@@ -611,8 +655,8 @@ fn feature_flag_gating_is_reslotted() {
         "AKE-null stub gates on cmp r2,#STATE_OFF (bypass on OFF)"
     );
     assert!(
-        reads(&ake, base + Feature::Ake as u32),
-        "AKE-null stub reads flag[Ake]"
+        reads(&ake, base + Feature::Encryption as u32),
+        "AKE-null stub reads flag[Encryption]"
     );
 
     let gatea = Mt1959Engine
@@ -623,36 +667,9 @@ fn feature_flag_gating_is_reslotted() {
         "Gate-A stub gates on cmp r2,#STATE_OFF (AKE bypass on OFF)"
     );
     assert!(
-        reads(&gatea, base + Feature::Ake as u32),
-        "Gate-A stub reads flag[Ake] (pre-authenticated path)"
+        reads(&gatea, base + Feature::Encryption as u32),
+        "Gate-A stub reads flag[Encryption] (pre-authenticated path)"
     );
-
-    let busenc = Mt1959Engine
-        .build_busenc_stub(base, 0x0009_4790)
-        .expect("busenc stub");
-    assert!(
-        has(&busenc, CMP_R3_OFF),
-        "bus-off stub gates on cmp r3,#STATE_OFF"
-    );
-    assert!(
-        reads(&busenc, base + Feature::Bus as u32),
-        "bus-off stub reads flag[Bus]"
-    );
-    // Materializes BUSENC_REG (movs r1,#1; lsls r1,r1,#26), clears the enable bit
-    // (movs r3,#0x10; bics r2,r3), and replays the OEM key-prog call through r4
-    // (blx r4 — NOT a low arg register, so the key-prog args in r0-r3 survive).
-    for (needle, what) in [
-        (0x2101u16, "movs r1,#1 (BUSENC_REG base)"),
-        (0x0689u16, "lsls r1,r1,#26 (BUSENC_REG = 1<<26)"),
-        (0x2310u16, "movs r3,#0x10 (BUSENC_ENABLE_BIT)"),
-        (0x439au16, "bics r2,r3 (clear the bus-enc enable bit)"),
-        (
-            0x47a0u16,
-            "blx r4 (replay OEM key-prog; r0-r3 args preserved)",
-        ),
-    ] {
-        assert!(has(&busenc, needle), "busenc stub must emit {what}");
-    }
 
     // UHD media-gate arm gates on `cmp r3,#STATE_OFF` (0x2B00) — the uniform `0x00`
     // OFF, symmetric with the BD arm on the same accept gate — and reads flag[Uhd].
@@ -924,112 +941,194 @@ fn ake_gate_finds_nb_variant_and_original_absent() {
         .is_err());
 }
 
-/// The desktop AKE gate (the `04 01/02/03` anchor). Success writer `movs r1,#6` at
-/// index 2 (anchor+4), its `b <set_agid_state>` at index 3 (anchor+6); reset writer
-/// `movs r1,#1` at index 6 (anchor+12).
-/// The invariant tail of the AACS opcode-0x45 arm body (after its leading 4-byte
-/// `bl <key-prog>`), variant A (BU40N/notebook order) and variant B (BH/WH desktop
-/// order). Prefixed at build time with a real `bl` to the synthetic key-prog target.
-const ARM_A_TAIL: [u16; 6] = [0x2006, 0x4900, 0x4360, 0x310C, 0x5A08, 0x9009];
-const ARM_B_TAIL: [u16; 5] = [0x2006, 0x4360, 0x4900, 0x5A08, 0x9009];
-
-/// Lay down a synthetic opcode-0x45 arm (leading `bl <keyprog>` + body tail) at
-/// `anchor` and return the image.
-fn arm_image(anchor: usize, keyprog: u32, tail: &[u16]) -> Vec<u8> {
-    let mut img = vec![0u8; 0x14_1000];
-    let bl = crate::thumb::encode_bl(anchor, keyprog).expect("bl encodes");
-    crate::thumb::write(&mut img, anchor, &bl);
-    put_hw(&mut img, anchor + 4, tail);
-    img
-}
-
-/// `busenc_detour` must resolve variant A's opcode-0x45 arm, return the arm's
-/// leading `bl` as the detour site, and emit a stub that REPLAYS the decoded
-/// key-prog target — on a synthetic arm, no owned image needed.
+/// The debug-knock branch is emitted correctly:
+///   (a) knock preamble carries `cmp r0,#DEBUG_KNOCK[0]` AND `cmp r0,#DEBUG_KNOCK[1]`
+///       so the fw can route to `debug_ok` only when both bytes match.
+///   (b) inside `debug_ok`, `cmp r4,#Verb::Call` selects the `blx rN` path (the
+///       arbitrary-VA call).
+///   (c) inside `debug_ok`, `cmp r4,#Verb::Poke` selects the `strb r0,[r6,#0]`
+///       path (the arbitrary single-byte store).
+/// Safety (Call cannot be reached under [`super::KNOCK`]) is a preamble-branching
+/// invariant enforced by construction, not a bit-pattern KAT can check on its own.
 #[test]
-fn busenc_detour_resolves_arm_variant_a() {
-    let anchor = 0x9_5000usize;
-    let keyprog = 0x9_4790u32;
-    let img = arm_image(anchor, keyprog, &ARM_A_TAIL);
-    let (site, bytes) = Mt1959Engine
-        .busenc_detour(&img, super::FLAG_TABLE_BASE)
-        .expect("busenc detour must resolve on the variant-A arm");
-    assert_eq!(site, anchor, "detour replaces the arm's leading bl");
-    // The stub must carry the decoded key-prog target as a literal (| thumb bit) so
-    // it can replay the OEM key-programming call.
-    let carries = bytes
-        .windows(4)
-        .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == (keyprog | 1));
-    assert!(
-        carries,
-        "stub must replay the decoded key-prog call (keyprog|1)"
-    );
-}
-
-/// `busenc_detour` must also resolve the BH/WH desktop variant-B arm shape (tried
-/// after A), same detour-site + key-prog-replay contract.
-#[test]
-fn busenc_detour_resolves_arm_variant_b() {
-    let anchor = 0x9_6000usize;
-    let keyprog = 0x9_4568u32;
-    let img = arm_image(anchor, keyprog, &ARM_B_TAIL);
-    let (site, bytes) = Mt1959Engine
-        .busenc_detour(&img, super::FLAG_TABLE_BASE)
-        .expect("busenc detour must resolve on the variant-B arm");
-    assert_eq!(site, anchor, "detour replaces the arm's leading bl");
-    assert!(
-        bytes
-            .windows(4)
-            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == (keyprog | 1)),
-        "stub must replay the decoded key-prog call"
-    );
-}
-
-/// `busenc_detour` must return a clean error (never panic, never mis-patch) when the
-/// arm body matches neither variant — the `04 03` mode is then left unwired.
-#[test]
-fn busenc_detour_errors_on_unknown_arm() {
-    let mut img = arm_image(0x9_5000, 0x9_4790, &ARM_A_TAIL);
-    // Corrupt the `str r0,[sp,#0x24]` tail halfword so neither SIG_A nor SIG_B matches.
-    put_hw(&mut img, 0x9_5000 + 4 + 2 * 5, &[0x9008]);
-    assert!(
-        Mt1959Engine
-            .busenc_detour(&img, super::FLAG_TABLE_BASE)
-            .is_err(),
-        "an unknown opcode-0x45 arm must yield a clean error, never a wrong patch"
-    );
-}
-
-/// The bus-off stub must assemble, be halfword-aligned, gate on `cmp r3,#STATE_OFF`,
-/// materialize `BUSENC_REG` (`1<<26`) and clear `BUSENC_ENABLE_BIT`, and read the
-/// Bus feature cell (`flag_base + Feature::Bus`).
-#[test]
-fn busenc_stub_is_wellformed_and_encodes_the_decision() {
-    let bytes = Mt1959Engine
-        .build_busenc_stub(super::FLAG_TABLE_BASE, 0x0009_4790)
-        .expect("stub assembles");
-    assert!(!bytes.is_empty());
-    assert_eq!(bytes.len() % 2, 0, "Thumb code is halfword-aligned");
-    let has = |n: u16| {
-        bytes
-            .windows(2)
-            .any(|w| u16::from_le_bytes([w[0], w[1]]) == n)
+fn debug_knock_dispatches_call_and_poke() {
+    let Some(base) = load_base() else {
+        eprintln!("SKIP: KAT base image not present (set FREEMKV_KAT_BASE)");
+        return;
     };
-    assert!(has(0x2B00), "gates on cmp r3,#STATE_OFF (bus off on OFF)");
+    let report = Mt1959Engine
+        .create(&base)
+        .expect("create must succeed on the OEM base");
+    let hb = &report.handler_bytes;
+    let has_u16 = |v: u16| {
+        hb.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == v)
+    };
+    // DEBUG_KNOCK gate: both bytes must appear as `cmp r0,#imm8` (0x2800 | imm8).
+    let dk = crate::abi::DEBUG_KNOCK;
+    assert_eq!(dk, [0xDE, 0xB9], "wire bytes for DEBUG_KNOCK (pin)");
     assert!(
-        has(0x2101) && has(0x0689),
-        "materializes BUSENC_REG (1<<26)"
+        has_u16(0x2800 | dk[0] as u16),
+        "handler must carry `cmp r0,#{:#x}` (DEBUG_KNOCK[0])",
+        dk[0]
     );
     assert!(
-        has(0x2310) && has(0x439A),
-        "clears BUSENC_ENABLE_BIT (movs r3,#0x10; bics r2,r3)"
+        has_u16(0x2800 | dk[1] as u16),
+        "handler must carry `cmp r0,#{:#x}` (DEBUG_KNOCK[1])",
+        dk[1]
     );
-    // Reads the Bus feature flag byte (flag_base + Feature::Bus).
-    let flag_cell = super::FLAG_TABLE_BASE + crate::abi::Feature::Bus as u32;
-    let reads_flag = bytes
-        .windows(4)
-        .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == flag_cell);
-    assert!(reads_flag, "stub loads &flag[Bus] as a literal");
+    // Verb dispatch inside debug_ok: `cmp r4,#imm8` = 0x2C00 | imm8.
+    let call_verb = crate::abi::Verb::Call as u16;
+    let poke_verb = crate::abi::Verb::Poke as u16;
+    assert!(
+        has_u16(0x2C00 | call_verb),
+        "handler must carry `cmp r4,#Verb::Call` inside debug_ok"
+    );
+    assert!(
+        has_u16(0x2C00 | poke_verb),
+        "handler must carry `cmp r4,#Verb::Poke` inside debug_ok"
+    );
+    // Call tail: `blx rN` (Thumb T1: 0x4780 | (N<<3)).
+    let blx_reg = |n: u16| 0x4780u16 | (n << 3);
+    let carries_blx = (0..8u16).any(|n| has_u16(blx_reg(n)));
+    assert!(
+        carries_blx,
+        "handler must issue a `blx rN` (debug-knock Call tail)"
+    );
+    // Poke tail: `strb r0,[r6,#0]` (Thumb T1: 0x7000 | (imm5<<6) | (Rn<<3) | Rt
+    // = 0x7000 | 0 | (6<<3) | 0 = 0x7030). The exact register combo — target in
+    // r6, value in r0 — is what the debug-knock Poke handler emits.
+    assert!(
+        has_u16(0x7030),
+        "handler must emit `strb r0,[r6,#0]` (debug-knock Poke tail)"
+    );
+}
+
+/// PHASE 3: the debug-knock Reboot verb (`Verb::Reboot`, 0x0F). The emitted
+/// handler must:
+///   (a) contain a `cmp r4,#Verb::Reboot` inside `debug_ok`;
+///   (b) carry the boot-function-entry as a Thumb-tagged 32-bit literal
+///       (`boot_init_site - 0x10 | 1` — for BU40N 1.00, `0x0013D419`);
+///   (c) load r0=4 (movs r0,#4 = 0x2004) after the Reboot match — the cold-path
+///       selector the boot function's `ldr r0,[r0,#0x18]; lsls #0x18; bmi <warm>`
+///       gate needs to take the cold arm;
+///   (d) follow with a `blx rN` — the actual soft-reboot invocation.
+#[test]
+fn verb_reboot_bakes_boot_function_entry_and_r0_4() {
+    let Some(base) = load_base() else {
+        eprintln!("SKIP: KAT base image not present (set FREEMKV_KAT_BASE)");
+        return;
+    };
+    let report = Mt1959Engine
+        .create(&base)
+        .expect("create must succeed on the OEM base");
+    let hb = &report.handler_bytes;
+    let has_u16 = |v: u16| {
+        hb.windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == v)
+    };
+    let has_u32 = |v: u32| {
+        hb.windows(4)
+            .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
+    };
+
+    // Boot function entry: baked at build time as (boot_init_site - 0x10) with
+    // the Thumb bit set. BU40N 1.00: boot_init_site = 0x0013D428, so the entry
+    // is 0x0013D418 and the emitted literal is 0x0013D419.
+    let expected_entry = 0x0013_D418u32;
+    assert_eq!(
+        report.boot_init_site.wrapping_sub(0x10),
+        expected_entry,
+        "boot_function_entry = boot_init_site - 0x10 (1.00)"
+    );
+    assert_eq!(
+        report.boot_function_entry, expected_entry,
+        "boot_function_entry reported on CreateReport"
+    );
+    assert!(
+        has_u32(expected_entry | 1),
+        "handler must carry the boot function entry Thumb-tagged literal (0x{:08x})",
+        expected_entry | 1
+    );
+
+    // Verb dispatch inside debug_ok: `cmp r4,#imm8` = 0x2C00 | imm8.
+    let reboot_verb = crate::abi::Verb::Reboot as u16;
+    assert_eq!(reboot_verb, 0x0F, "Verb::Reboot pin");
+    assert!(
+        has_u16(0x2C00 | reboot_verb),
+        "handler must carry `cmp r4,#Verb::Reboot` inside debug_ok"
+    );
+
+    // r0 setup for cold path: `movs r0,#4` (Thumb T1 = 0x2004).
+    assert!(
+        has_u16(0x2004),
+        "handler must emit `movs r0,#4` (cold-path selector for the boot function)"
+    );
+
+    // Reboot tail: `blx rN` (Thumb T1: 0x4780 | (N<<3)). The Call arm also
+    // emits a `blx`, so any register 0..7 satisfies "a blx is emitted".
+    let blx_reg = |n: u16| 0x4780u16 | (n << 3);
+    let carries_blx = (0..8u16).any(|n| has_u16(blx_reg(n)));
+    assert!(
+        carries_blx,
+        "handler must issue a `blx rN` (debug-knock Reboot invocation)"
+    );
+}
+
+/// PHASE 3b: **positional** Reboot arm shape check — the non-positional scans
+/// in [`verb_reboot_bakes_boot_function_entry_and_r0_4`] all pass individually
+/// even if the emitted arm is reordered (e.g. r0 setup after the blx, or a
+/// `blx r5` where r6 holds an unrelated pointer). This test locks the ORDER:
+/// find the FIRST occurrence of `cmp r4,#Verb::Reboot` (0x2C0F) in the emitted
+/// handler bytes, and within the following 12 halfwords (24 bytes) verify these
+/// four halfwords appear IN ORDER: (a) a `bne` (halfword & 0xFF00 == 0xD100)
+/// skipping the arm on mismatch; (b) an `ldr r6,[pc,#imm]` (0x4E00..=0x4EFF)
+/// loading the boot-function-entry Thumb literal; (c) a `movs r0,#4` (0x2004)
+/// staging the cold-path selector; (d) a `blx r6` (0x47B0) actually invoking
+/// the boot function.
+#[test]
+fn verb_reboot_arm_has_correct_positional_shape() {
+    let Some(base) = load_base() else {
+        eprintln!("SKIP: KAT base image not present (set FREEMKV_KAT_BASE)");
+        return;
+    };
+    let report = Mt1959Engine
+        .create(&base)
+        .expect("create must succeed on the OEM base");
+    let hb = &report.handler_bytes;
+
+    let cmp_reboot = 0x2C00u16 | (crate::abi::Verb::Reboot as u16);
+    assert_eq!(cmp_reboot, 0x2C0F, "cmp r4,#Verb::Reboot pin");
+    let hws: Vec<u16> = hb
+        .chunks_exact(2)
+        .map(|w| u16::from_le_bytes([w[0], w[1]]))
+        .collect();
+    let anchor = hws
+        .iter()
+        .position(|&h| h == cmp_reboot)
+        .expect("cmp r4,#Verb::Reboot must appear in the handler");
+    let window_end = (anchor + 1 + 12).min(hws.len());
+    let after = &hws[anchor + 1..window_end];
+
+    // Ordered predicates: each looks forward from wherever the last one landed.
+    let mut cursor = 0usize;
+    let mut find_from = |pred: &dyn Fn(u16) -> bool, what: &str| -> usize {
+        let hit = after[cursor..]
+            .iter()
+            .position(|&h| pred(h))
+            .unwrap_or_else(|| {
+                panic!("Reboot arm: missing {what} within 12 halfwords of cmp r4,#Verb::Reboot")
+            });
+        cursor += hit + 1;
+        cursor - 1
+    };
+    let _bne_at = find_from(&|h| (h & 0xFF00) == 0xD100, "bne (0xD1??)");
+    let _ldr_at = find_from(
+        &|h| (0x4E00..=0x4EFF).contains(&h),
+        "ldr r6,[pc,#imm] (0x4E??)",
+    );
+    let _movs_at = find_from(&|h| h == 0x2004, "movs r0,#4 (0x2004)");
+    let _blx_at = find_from(&|h| h == 0x47B0, "blx r6 (0x47B0)");
 }
 
 /// TEMPORARY flash-write probe ([`abi::Verb::FlashWrite`]): the destination
@@ -1037,7 +1136,7 @@ fn busenc_stub_is_wellformed_and_encodes_the_decision() {
 /// erased non-CMAC gap, and the emitted handler must actually range-check
 /// against both bounds, stage through the SRAM scratch cell, and call the OEM
 /// PROGRAM routine. This is the safety proof that the probe verb can physically
-/// only write `[0x1ED000, 0x1EF000)`.
+/// only write `[0x1EA000, 0x1EB000)` — the corpus-proven-unlocked NV/SAVE block.
 #[test]
 fn flashwrite_probe_is_range_bounded_to_the_safe_cell() {
     use super::{
@@ -1183,6 +1282,37 @@ fn find_flash_program_resolves_bu40n() {
     );
 }
 
+/// PHASE 1: the AACS session-**rearm** wrapper finder must resolve to `0x00044874`
+/// on BU40N 1.00 — the routine OEM firmware calls at disc-insert to bring bus-enc
+/// UP (aacs_session_reset + the bit-20 engine-control-word arm store + coprocessor
+/// arm mailbox), and the primitive baked as the SET-Encryption revert target so
+/// `SET encryption 0xFF` from a de-bussed session actually re-wraps the drive at
+/// runtime. Also asserts it is DIFFERENT from `find_aacs_session_reset`
+/// (`0x000CAE18`): the two must never collapse to the same VA, or we've lost the
+/// bus-enc re-arm and are back to the 0.8.12 revert-latch bug.
+#[test]
+fn find_aacs_session_rearm_resolves_bu40n() {
+    let img = bu40n_fixture();
+    let rearm = Mt1959Engine
+        .find_aacs_session_rearm(&img)
+        .expect("AACS session-rearm wrapper must resolve uniquely on BU40N");
+    assert_eq!(
+        rearm, 0x0004_4874,
+        "AACS session-rearm wrapper must resolve to the frozen BU40N VA (the disc-insert entry)"
+    );
+    let reset = Mt1959Engine
+        .find_aacs_session_reset(&img)
+        .expect("AACS session-reset must resolve too (rearm depends on it for target-verify)");
+    assert_eq!(
+        reset, 0x000c_ae18,
+        "AACS session-reset must resolve to the frozen BU40N VA"
+    );
+    assert_ne!(
+        rearm, reset,
+        "rearm and reset MUST be distinct VAs — collapse means the bus-enc re-arm is lost"
+    );
+}
+
 /// PHASE 1: the NV-block (SAVE home) finder must resolve to the region-record block
 /// base `0x1EA000` on BU40N, purely by signature (region record `00 04 05` at
 /// block+0x4B0 with a blank head) — no hardcoded offset.
@@ -1231,7 +1361,7 @@ fn find_boot_init_resolves_bu40n() {
 }
 
 /// PHASE 2: the always-on boot-init trampoline. `build_boot_init` must preserve the
-/// original init call's args, fill the flag table (slot 0 marker + features 1..=7)
+/// original init call's args, fill the flag table (slot 0 marker + features 1..=6)
 /// with the baked [`super::DEFAULT_FLAGS`] (UHD/BD = `STATE_ON`, the rest `0xFF`
 /// passthrough), then apply the persisted config ONLY when NV slot-0 marker != 0xFF
 /// (marker-gated overlay), then tail-call `orig_init` and return. No default is
@@ -1253,8 +1383,10 @@ fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
         stub.windows(4)
             .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
     };
-    // Preserves orig_init's args + lr: `push {r0,r1,r2,r3,lr}` (0xB50F).
-    assert!(has16(0xB50F), "boot stub pushes {{r0-r3,lr}}");
+    // Preserves orig_init's args + lr AND pads with r4 so sp is 8-byte aligned
+    // at the downstream `blx r3` (AAPCS entry alignment):
+    // `push {r0,r1,r2,r3,r4,lr}` (0xB51F).
+    assert!(has16(0xB51F), "boot stub pushes {{r0-r4, lr}} (r4 pad for sp align)");
     // Loads the flag-table base as a literal.
     assert!(has32(base), "boot stub loads the flag-table base");
     // Materializes the DEFAULTS: 0xFF passthrough (movs r1,#0xFF = 0x21FF) for the
@@ -1285,8 +1417,8 @@ fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
             .all(|&b| b != crate::abi::STATE_OFF),
         "no default may be 0x00 (would make a fresh drive boot a feature OFF)"
     );
-    // Eight `strb r1,[r0,#off]` (0x7001 | off<<6) — off 0..=7 (slot 0 marker + all 7 flags).
-    for off in 0u16..=7 {
+    // Seven `strb r1,[r0,#off]` (0x7001 | off<<6) — off 0..=6 (slot 0 marker + all 6 flags).
+    for off in 0u16..=6 {
         assert!(has16(0x7001 | (off << 6)), "boot stub writes flag[{off}]");
     }
     // Marker-gated overlay: loads SAVE_HOME as a literal, reads the slot-0 marker,
@@ -1307,8 +1439,11 @@ fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
     // Loads orig_init with the Thumb bit set and tail-calls it: `blx r3` (0x4798).
     assert!(has32(orig_init | 1), "boot stub loads orig_init|1");
     assert!(has16(0x4798), "boot stub tail-calls orig_init via blx r3");
-    // Returns to conv+4: `pop {pc}` (0xBD00).
-    assert!(has16(0xBD00), "boot stub returns via pop {{pc}}");
+    // Returns to conv+4 AND restores the r4 sp-align pad: `pop {r4, pc}` (0xBD10).
+    assert!(
+        has16(0xBD10),
+        "boot stub returns via pop {{r4, pc}} (restores the r4 sp-align pad)"
+    );
     // Must NOT replay the boot-status reload (left in place at anchor+4).
     assert!(
         !has16(0x6980),
@@ -1328,7 +1463,7 @@ fn emit_boot_init_installs_detour_on_bu40n() {
     let orig_init = 0x000a_1dd0u32;
     // Precondition: conv holds the original `bl <orig_init>` we repoint...
     assert_eq!(
-        crate::thumb::decode_bl(&img, conv),
+        thumb_asm::decode_bl(&img, conv),
         Some(orig_init),
         "convergence bl decodes to orig_init"
     );
@@ -1341,14 +1476,17 @@ fn emit_boot_init_installs_detour_on_bu40n() {
     );
 
     let mut out = img.clone();
+    let pair = Mt1959Engine
+        .resolve_boot_init_pair(&img)
+        .expect("resolve pair on BU40N");
     let (s, stub_va) = Mt1959Engine
-        .emit_boot_init(&img, &mut out, super::FLAG_TABLE_BASE)
+        .emit_boot_init(&img, &mut out, super::FLAG_TABLE_BASE, pair)
         .expect("boot hook installs on BU40N");
     assert_eq!(s, conv as u32, "detour site is the convergence bl");
     assert!(stub_va != 0, "boot stub landed");
 
     // conv now holds a `bl` to the stub (recomputed via encode_bl)...
-    let expected = crate::thumb::encode_bl(conv, stub_va).expect("bl encodes");
+    let expected = thumb_asm::encode_bl(conv, stub_va).expect("bl encodes");
     assert_eq!(
         &out[conv..conv + 4],
         &expected,
@@ -1375,9 +1513,8 @@ fn emit_boot_init_installs_detour_on_bu40n() {
 #[test]
 fn emit_boot_init_fails_closed_without_a_site() {
     let img = vec![0u8; 0x20_0000];
-    let mut out = img.clone();
     let err = Mt1959Engine
-        .emit_boot_init(&img, &mut out, super::FLAG_TABLE_BASE)
+        .resolve_boot_init_pair(&img)
         .expect_err("must fail closed when no boot-init site exists");
     let msg = format!("{err:#}");
     assert!(
@@ -1630,11 +1767,12 @@ fn classic_boot_init_resolves_but_emit_fails_closed() {
             "classic boot-init site @ {} must land on `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`",
             path.display()
         );
-        // Production emit MUST fail closed on the unconfirmed classic site.
-        let mut out = bytes.clone();
+        // Production emit MUST fail closed on the unconfirmed classic site
+        // (the gate now lives in resolve_boot_init_pair, which emit_boot_init
+        // consumes — so a bailed resolve is what prevents shipping).
         let err = eng
-            .emit_boot_init(&bytes, &mut out, super::FLAG_TABLE_BASE)
-            .expect_err("emit_boot_init must fail closed on a ClassicUnconfirmed site");
+            .resolve_boot_init_pair(&bytes)
+            .expect_err("resolve_boot_init_pair must fail closed on a ClassicUnconfirmed site");
         let msg = format!("{err:#}");
         assert!(
             msg.contains("hardware-unconfirmed") || msg.contains("classic"),
@@ -1645,4 +1783,33 @@ fn classic_boot_init_resolves_but_emit_fails_closed() {
     if checked == 0 {
         eprintln!("SKIP: no MT1939-classic image found in the corpus for the fallback test");
     }
+}
+
+/// Locks the fix for the DEBUG_KNOCK-fall-through-into-safe-dispatch bug: each
+/// debug-verb arm inside `debug_ok` (Call, Poke, Reboot, unknown) MUST clobber r4
+/// (the verb byte) before `b(clr)` so a debug-knock CDB whose verb byte collides
+/// with a safe verb id (e.g. `0x0A` FlashWrite, `0x0B` Save, `0x03` Get, `0x09`
+/// DumpAll, `0x01` Identity) cannot execute the safe verb by falling through the
+/// shared `clr` -> safe-dispatch chain. The clobber is a Thumb `movs r4,#0`
+/// (`0x2400`); at least four occurrences must be present in the emitted handler
+/// bytes (one per exit path in debug_ok). If a future edit drops the clobber on
+/// any arm, this count drops and the test fails.
+#[test]
+fn debug_knock_clobbers_r4_before_falling_through_to_safe_dispatch() {
+    let Some(base) = load_base() else {
+        eprintln!("SKIP: KAT base image not present (set FREEMKV_KAT_BASE)");
+        return;
+    };
+    let report = Mt1959Engine
+        .create(&base)
+        .expect("create must succeed on the OEM base");
+    let hb = &report.handler_bytes;
+    let clobbers = hb
+        .windows(2)
+        .filter(|w| u16::from_le_bytes([w[0], w[1]]) == 0x2400)
+        .count();
+    assert!(
+        clobbers >= 4,
+        "debug_ok must emit at least 4 `movs r4,#0` (0x2400) clobbers (one per Call/Poke/Reboot/unknown exit); found {clobbers}"
+    );
 }

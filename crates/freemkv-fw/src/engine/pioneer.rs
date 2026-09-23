@@ -2,7 +2,7 @@
 //!
 //! Pioneer/Renesas optical controllers are a different platform (different SRAM
 //! map, hook points, and integrity scheme). When support lands, this becomes a
-//! real [`crate::engine::Engine`] impl composing the same [`crate::thumb`] verbs — no new
+//! real [`crate::engine::Engine`] impl composing the same [`thumb_asm`] verbs — no new
 //! patching logic, only new platform facts. Until then it is intentionally
 //! empty so the extension point is visible.
 //!

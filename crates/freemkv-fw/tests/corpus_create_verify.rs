@@ -37,6 +37,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use freemkv_flash::cmac;
+use freemkv_fw::engine;
 
 /// File offset of the ASCII drive descriptor (mirrors `family::DESCRIPTOR_OFFSET`).
 const DESCRIPTOR_OFFSET: usize = 0x1EC000;
@@ -333,4 +334,122 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
         failed.len(),
         forgeable
     );
+}
+
+/// Fleet-wide `create == modify` invariant: the strict all-or-nothing `create`
+/// path and the never-abort `modify` path must produce BYTE-IDENTICAL images on
+/// every corpus image where `create` succeeds. Extends the single-BU40N guard
+/// (`create_and_modify_agree_on_base`) to the whole hoard, and catches any
+/// capability-gate drift that would let `modify` skip levers `create` insists on.
+///
+/// Gated behind the same env var (`FREEMKV_FW_CORPUS`) as the outer create+verify
+/// matrix so a laptop-side `cargo test` skips it cleanly; CI points it at the
+/// full 118-image hoard. When `FREEMKV_FW_CORPUS` is unset, we also honour
+/// `FREEMKV_KAT_HOARD` (a colon-separated list of directories) — the same env
+/// var the engine-side finder tests use — so either wiring gets coverage.
+#[test]
+fn corpus_create_and_modify_agree_byte_for_byte() {
+    let corpus = std::env::var("FREEMKV_FW_CORPUS").ok().or_else(|| {
+        // `FREEMKV_KAT_HOARD` is colon-separated; the classify+collect logic here
+        // expects comma-separated. Normalize the separator so either shape works.
+        std::env::var("FREEMKV_KAT_HOARD")
+            .ok()
+            .map(|s| s.replace(':', ","))
+    });
+    let Some(corpus) = corpus else {
+        eprintln!(
+            "skipping corpus_create_and_modify_agree_byte_for_byte: \
+             set FREEMKV_FW_CORPUS or FREEMKV_KAT_HOARD to run it"
+        );
+        return;
+    };
+
+    let dirs: Vec<PathBuf> = corpus
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .collect();
+    let mut bins = Vec::new();
+    for dir in &dirs {
+        if !dir.is_dir() {
+            eprintln!(
+                "warning: corpus dir does not exist or is not a dir: {}",
+                dir.display()
+            );
+            continue;
+        }
+        collect_bins(dir, &mut bins);
+    }
+    bins.sort();
+    bins.dedup();
+
+    assert!(
+        !bins.is_empty(),
+        "corpus env resolved to zero .bin files — check the path(s)"
+    );
+
+    let mut checked = 0usize;
+    let mut disagree: Vec<(PathBuf, String)> = Vec::new();
+    for path in &bins {
+        let Ok(image) = std::fs::read(path) else {
+            continue;
+        };
+        // Only assert the invariant on FORGEABLE images: on refused inputs, `create`
+        // errors and there is nothing to compare. This mirrors the outer matrix.
+        if !matches!(classify(&image), Classification::Forgeable) {
+            continue;
+        }
+        // If the platform engine won't select this image at all, skip cleanly —
+        // classify only reads bytes, so a rare mismatch (e.g. entropy just under
+        // the bar but no MTK engine claims it) shouldn't fail here.
+        let Ok(eng) = engine::detect(&image) else {
+            continue;
+        };
+        // Every image where `create` succeeds must also `modify` cleanly and
+        // produce the same bytes — this is what lets `modify` (the user-facing
+        // never-abort driver) safely stand in for `create` in production paths.
+        let Ok(cr) = eng.create(&image) else {
+            // `create` refused: `modify` is allowed to still succeed with a
+            // smaller lever set, so we skip this image (matches the intent of
+            // testing the "on every image where create succeeds" invariant).
+            continue;
+        };
+        let mr = match eng.modify(&image) {
+            Ok(r) => r,
+            Err(e) => {
+                disagree.push((path.clone(), format!("create OK but modify errored: {e:#}")));
+                continue;
+            }
+        };
+        checked += 1;
+        if cr.image != mr.image {
+            // Find the first divergence + a short prefix, for triage.
+            let first = cr
+                .image
+                .iter()
+                .zip(mr.image.iter())
+                .position(|(a, b)| a != b)
+                .unwrap_or(cr.image.len().min(mr.image.len()));
+            disagree.push((
+                path.clone(),
+                format!(
+                    "create/modify bytes differ (create.len={} modify.len={} first-diff=0x{first:x})",
+                    cr.image.len(),
+                    mr.image.len(),
+                ),
+            ));
+        }
+    }
+
+    assert!(
+        disagree.is_empty(),
+        "{} image(s) failed the create==modify invariant (out of {checked} checked):\n{}",
+        disagree.len(),
+        disagree
+            .iter()
+            .map(|(p, d)| format!("  {}: {d}", p.display()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    eprintln!("create==modify OK over {checked} corpus images");
 }

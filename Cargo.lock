@@ -1312,14 +1312,14 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.8.3"
+version = "0.8.14"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "freemkv-flash"
-version = "0.8.3"
+version = "0.8.14"
 dependencies = [
  "aes",
  "anyhow",
@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.8.3"
+version = "0.8.14"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1350,18 +1350,19 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.8.3"
+version = "0.8.14"
 dependencies = [
  "anyhow",
  "clap",
  "freemkv-chipset",
  "freemkv-flash",
  "sha2",
+ "thumb-asm",
 ]
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.8.3"
+version = "0.8.14"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1962,7 +1963,7 @@ checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
 name = "libfreemkv"
-version = "1.7.1"
+version = "1.7.4"
 dependencies = [
  "libc",
  "tracing",
@@ -3381,6 +3382,12 @@ dependencies = [
  "quote",
  "syn 3.0.6",
 ]
+
+[[package]]
+name = "thumb-asm"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "150771bb70f6f82d011edddd249780f1778c990a26c56afe3cd70fe86124f25e"
 
 [[package]]
 name = "tiff"
@@ -4822,3 +4829,19 @@ dependencies = [
  "syn 3.0.6",
  "winnow 1.0.4",
 ]
+
+[[patch.unused]]
+name = "freemkv-engine"
+version = "1.7.4"
+
+[[patch.unused]]
+name = "freemkv-i18n"
+version = "1.7.4"
+
+[[patch.unused]]
+name = "freemkv-keysources"
+version = "1.7.4"
+
+[[patch.unused]]
+name = "freemkv-unlock"
+version = "1.7.4"

@@ -1,4 +1,4 @@
-//! MT1959 grounded find/build/patch — the *knowledge* the dumb [`crate::thumb`]
+//! MT1959 grounded find/build/patch — the *knowledge* the dumb [`thumb_asm`]
 //! verbs are pointed at, all **derived from the drive's own code**, never
 //! hardcoded.
 //!
@@ -15,7 +15,7 @@
 //!   pointer cross-checked to land on a real `push {…,lr}` prologue.
 //!
 //! The freemkv command is a hijack of the standard `READ BUFFER` (`0x3C`)
-//! handler, discriminated by an OEM-unused mode: `cdb[1]==0x0E` plus a `C0 DE`
+//! handler, discriminated by an OEM-unused mode: `cdb[1]==KNOCK_MODE` plus a
 //! knock at `cdb[2..4]`. On a match the handler dispatches on the sub-function
 //! (`cdb[4]`) and returns a data payload via the drive's own response path
 //! (byte-writer + commit); on a miss it tail-calls the original handler, so OEM
@@ -30,7 +30,7 @@ use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use crate::abi;
 use crate::family::{Capability, ChipInfo, MediaClass};
-use crate::thumb::{self, Asm, CommandRecord};
+use thumb_asm::{self as thumb, Asm, CommandRecord};
 
 // The wire frame (opcode / mode / knock / identity sense) is defined once in
 // `crate::abi` and imported here — the engine emits exactly what the host ABI
@@ -57,10 +57,13 @@ pub(crate) const CODE_REGION_START: usize = 0x0000_9c00;
 /// Bytes cleared in the response buffer before writing a reply (so no stale
 /// buffer data leaks into the padding beyond the payload).
 pub(crate) const CLEAR_LEN: u8 = 64;
-/// Number of feature flags (Feature ids `0x01..=0x07`). Sizes the SRAM flag
+/// Number of feature flags (Feature ids `0x01..=0x06`). Sizes the SRAM flag
 /// table, bounds the [`abi::Verb::Reset`] sweep, and sizes the
 /// [`abi::Verb::Identity`] feature-state table appended after the magic+version.
-pub(crate) const NUM_FEATURES: u8 = 7;
+/// (Was `7` before the ABI consolidation: wire id `0x07` — the retired `Bus`
+/// feature — is now unassigned; `Feature::Encryption` at `0x06` is the sole
+/// content-encryption toggle.)
+pub(crate) const NUM_FEATURES: u8 = 6;
 
 /// The SRAM (on-chip working RAM) window scanned by [`Mt1959Engine::find_free_sram_cell`]
 /// and holding every runtime flag/scratch cell.
@@ -245,7 +248,7 @@ const _: () = assert!(FLASHWRITE_ALLOW_HI.is_multiple_of(0x1000));
 pub(crate) const SAVE_HOME: u32 = 0x001E_A000;
 const _: () = assert!(SAVE_HOME >= FLASHWRITE_ALLOW_LO && SAVE_HOME < FLASHWRITE_ALLOW_HI);
 
-/// SAVE payload length: the full flag table (slot 0 marker + features `0x01..=0x07`),
+/// SAVE payload length: the full flag table (slot 0 marker + features `0x01..=0x06`),
 /// mirrored byte-for-byte. Slot 0 (formerly unused pad) now carries the
 /// [`NV_SAVED_MARKER`]: erased flash reads `0xFF` == never-saved, so the boot hook
 /// falls back to [`DEFAULT_FLAGS`]; any real SAVE stamps slot 0 non-`0xFF`, and the
@@ -281,7 +284,7 @@ pub(crate) const NV_SAVED_MARKER: u8 = 0x01;
 /// Byte offset from [`FLAG_TABLE_BASE`] of the 1-byte SRAM scratch cell the
 /// flash-write probe stages its source byte in before calling the PROGRAM
 /// routine (`r0 = &scratch`). Sits in the same validated 204-byte free hole as
-/// the flag table, past the 8-byte flag table (slots `0x00..=0x07`), guard-
+/// the flag table, past the 7-byte flag table (slots `0x00..=0x06`), guard-
 /// checked per image by [`Mt1959Engine::assert_sram_cell_free`].
 pub(crate) const FLASHWRITE_SCRATCH_OFF: u32 = 0x10;
 
@@ -511,91 +514,6 @@ pub(crate) const SETDISCMODE_SIG: &[(u16, u16)] = &[
     (0x1EE3, 0xFFFF), // subs r3,r4,#3     (mode-3 jump-table index)
 ];
 
-/// Signature of the OEM AACS command dispatcher's opcode-`0x45` (**Read Data Key**)
-/// arm — the point MK's LibreDrive-family firmware detours to turn OFF the drive-side
-/// bus-encryption stage (see [`Mt1959Engine::busenc_detour`]). The arm is the entry
-/// the command dispatcher branches to for opcode `0x45` (`0x95eec` on BU40N 1.00),
-/// and its first instruction is a `bl` into the OEM key-derivation primitive whose
-/// target the injected stub REPLAYS so the OEM key programming still runs.
-///
-/// The dispatcher's *ladder* structure varies across the MT1959 fleet (a `cmp r3,#op`
-/// chain on BU40N/BU50N + notebook, a `cmp r1,#op` binary search on the
-/// BH/WH16NS60 / BE16NU50 / ASUS desktop sub-family), so the ladder is NOT a stable
-/// anchor. The arm BODY, however, is byte-shape-invariant across the whole lineage:
-/// `bl <key-prog>; movs r0,#6; muls r0,r4,r0; ldr r1,[pc,#imm]; ldrh r0,[r1,r0];
-/// str r0,[sp,#0x24]`, with only the `bl`/`ldr` immediates and a one-op reordering
-/// (`ldr r1,[pc]` before vs after `muls`) distinguishing two variants. Both variants
-/// are matched (`_A` = BU40N/notebook order, `_B` = BH/WH desktop + BD-combo order);
-/// each is proven UNIQUE per image and each image matches exactly ONE (A xor B) across
-/// the owned desktop + notebook + BD-combo MT1959 fleet. MT1939-**classic** images
-/// carry the same arm body but spill to frame slot `#0x1c` (not `#0x20`/`#0x24`), so
-/// they do NOT match `_A`/`_B` — the classic generation has its own generation-scoped
-/// signature + detour (`AACS45_ARM_SIG_CLASSIC` / `emit_busenc_classic`), keeping this
-/// modern finder from ever wiring a classic image with the modern bus register.
-///
-/// The match offset IS the arm's leading `bl` (the detour site); the `bl`'s target
-/// (the OEM key-prog primitive) is decoded and replayed by the stub. Register/bit for
-/// the bus-off write are recovered at build time from the stub's own emitted constants
-/// ([`BUSENC_REG`] = `1<<26`, [`BUSENC_ENABLE_BIT`]).
-pub(crate) const AACS45_ARM_SIG_A: &[(u16, u16)] = &[
-    (0xF000, 0xF800), // bl <key-prog>   hi   ← match = arm entry / detour site
-    (0xF800, 0xF800), //                 lo
-    (0x2006, 0xFFFF), // movs r0,#6
-    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]
-    (0x4360, 0xFFFF), // muls r0,r4,r0
-    (0x310C, 0xFFFF), // adds r1,#0xc
-    (0x5A08, 0xFFFF), // ldrh r0,[r1,r0]
-    (0x9009, 0xFFFF), // str  r0,[sp,#0x24]
-];
-
-/// BH/WH16NS60 / BE16NU50 / ASUS desktop variant of [`AACS45_ARM_SIG_A`] — same arm,
-/// `ldr r1,[pc]` and `muls` reordered and no `adds r1,#0xc`. Tried after `_A` so the
-/// BU40N KAT base stays byte-identical (its arm matches `_A`).
-///
-/// The final `str r0,[sp,#slot]` spills the read-data-key halfword to the arm's stack
-/// frame; the slot is a *frame-layout* detail, not part of the arm's identity. Two
-/// frame layouts occur across the B-shape fleet, so the slot is masked to both:
-///   * `#0x24` (`0x9009`) — the desktop BD-writer fleet (BH/WH16NS60 / BE16NU50 / …).
-///   * `#0x20` (`0x9008`) — the BD-read/DVD-write **combo** drives (BC-12B1ST /
-///     BC-12D2HT / CH12NS40 / UH12NS40), whose AACS block is relocated ~`+0x2b000`
-///     and whose slightly larger prologue frame shifts this spill by one word. Their
-///     arm body is otherwise byte-identical (`bl <key-prog>; movs r0,#6; muls r0,r4,r0;
-///     ldr r1,[pc]; ldrh r0,[r1,r0]`), so before this the combos matched 0× and Bus
-///     was mis-reported a genuine miss (measured: 8 combo images, arm at ~`0xa03b8`).
-///
-/// Mask `0xFFFE` accepts `#0x20`/`#0x24` but NOT the MT1939-**classic** slot `#0x1c`
-/// (`0x9007`) — the classic arm has its own generation-scoped signature and detour
-/// (see `AACS45_ARM_SIG_CLASSIC`), so this modern finder must never wire it.
-/// Verified: the fix adds exactly the 8 combos, changes no already-resolving image's
-/// match site, and matches 0 classic images (full-corpus measured).
-pub(crate) const AACS45_ARM_SIG_B: &[(u16, u16)] = &[
-    (0xF000, 0xF800), // bl <key-prog>   hi   ← match = arm entry / detour site
-    (0xF800, 0xF800), //                 lo
-    (0x2006, 0xFFFF), // movs r0,#6
-    (0x4360, 0xFFFF), // muls r0,r4,r0
-    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]
-    (0x5A08, 0xFFFF), // ldrh r0,[r1,r0]
-    (0x9008, 0xFFFE), // str  r0,[sp,#0x20|0x24]  (frame slot; combos spill to #0x20)
-];
-
-/// MMIO control register for the drive-side AACS **bus-encryption** stage on the
-/// read datapath (a chip constant, same address on every MT1959 image). Bit
-/// [`BUSENC_ENABLE_BIT`] enables the in-transit bus wrap the host must otherwise
-/// undo. OEM 1.00 materializes this address inline as `movs rN,#1; lsls rN,rN,#26`
-/// (`1<<26`); the injected bus-off stub rebuilds it the same way.
-pub(crate) const BUSENC_REG: u32 = 0x0400_0000;
-/// The bus-off stub materializes [`BUSENC_REG`] as `movs r1,#1; lsls r1,r1,#26`
-/// (`1<<26`) — the exact idiom OEM 1.00 uses inline. Keep the constant and the
-/// emitted shift in lockstep.
-const _: () = assert!(BUSENC_REG == 1u32 << 26);
-/// Bit of [`BUSENC_REG`] that ENABLES the bus-encryption/scramble stage. Clearing
-/// it makes the drive emit at-rest-only ciphertext (host decrypts with the real
-/// title key). MK's LibreDrive-family firmware clears exactly this bit on the AACS
-/// data-key (opcode `0x45`) path. **HARDWARE-KAT-GATED:** that bit `0x10` (and not
-/// another bit of this register) is specifically the bus enable is proven only by
-/// the MK-vs-OEM diff, not yet re-confirmed on this silicon by us.
-pub(crate) const BUSENC_ENABLE_BIT: u8 = 0x10;
-
 /// Signature of the AACS **REPORT KEY disc-mode/class accept gate** — the code
 /// that decides whether the drive engages a disc for AACS key exchange, keyed on
 /// the disc *mode* (`0`=BD/AACS-1.0, `1`=UHD/AACS-2.0 mode-1) and the classifier's
@@ -774,7 +692,7 @@ pub(crate) const HRL_WIPE_ARMED: bool = false;
 pub(crate) const CLASSIC_BOOT_BLESSED: bool = true;
 
 /// The [`abi::Verb::Identity`] reply lead-in: `"freemkv <version>"` (magic +
-/// crate version). The live feature-state table (7 bytes, `flag[0x01..=0x07]`)
+/// crate version). The live feature-state table (6 bytes, `flag[0x01..=0x06]`)
 /// is appended after this by the handler at runtime.
 pub(crate) fn identity_blob() -> Vec<u8> {
     format!(
@@ -912,32 +830,8 @@ pub(crate) fn find_unique(
     }
 }
 
-/// Decode a Thumb-2 `BL` at `at` and return its absolute target (thumb bit
-/// cleared), or `None` if the two halfwords there are not a `BL`. Used to verify
-/// a wildcard-matched call actually targets a known routine.
-pub(crate) fn decode_bl_target(image: &[u8], at: usize) -> Option<u32> {
-    if at + 4 > image.len() {
-        return None;
-    }
-    let h1 = u16::from_le_bytes([image[at], image[at + 1]]);
-    let h2 = u16::from_le_bytes([image[at + 2], image[at + 3]]);
-    // BL: h1 = 1111 0S imm10 ; h2 = 11 J1 1 J2 imm11
-    if (h1 & 0xF800) != 0xF000 || (h2 & 0xD000) != 0xD000 {
-        return None;
-    }
-    let s = ((h1 >> 10) & 1) as u32;
-    let imm10 = (h1 & 0x03FF) as u32;
-    let j1 = ((h2 >> 13) & 1) as u32;
-    let j2 = ((h2 >> 11) & 1) as u32;
-    let imm11 = (h2 & 0x07FF) as u32;
-    let i1 = 1 - (j1 ^ s);
-    let i2 = 1 - (j2 ^ s);
-    let mut off = (s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | (imm11 << 1);
-    if off & (1 << 24) != 0 {
-        off |= !0u32 << 25; // sign-extend from bit 24
-    }
-    Some((at as u32 + 4).wrapping_add(off) & !1)
-}
+// (`decode_bl_target` removed 0.8.14: use [`thumb::decode_bl`] from the
+// standalone `thumb-asm` crate — same contract, single source of truth.)
 
 /// From a resolved [`BOOT_INIT_SIG`] hook `site` (`anchor+4`, the boot-status
 /// reload), follow the cold/warm-boot `bmi` at `anchor+8` to the convergence point
@@ -946,13 +840,11 @@ pub(crate) fn decode_bl_target(image: &[u8], at: usize) -> Option<u32> {
 /// The `bmi` is a Thumb T1 conditional branch (`0xD4xx`) whose signed 8-bit
 /// immediate is a halfword count relative to `(anchor+8)+4`, so the convergence
 /// address is `conv = (anchor+8) + 4 + (simm8 << 1)`. On BU40N this resolves to
-/// `0x13d428`, the first instruction after the cold-boot bss/SRAM clear rejoins the
-/// warm path. Returns `(conv, orig_init)` — the detour site and the original init
-/// routine the boot stub tail-calls — or `None` when the instruction at `conv` is
-/// not a 32-bit Thumb `bl` (first halfword `(h1 & 0xF800) == 0xF000`, second
-/// `(h2 & 0xD000) == 0xD000` — the full ARMv7-M BL(T1) encoding, matching
-/// [`decode_bl_target`]/[`thumb::decode_bl`]), so a build fails closed rather
-/// than mis-patching.
+/// `0x13d428`, the first instruction after the cold-boot bss/SRAM clear rejoins
+/// the warm path. Returns `(conv, orig_init)` — the detour site and the original
+/// init routine the boot stub tail-calls — or `None` when [`thumb::decode_bl`]
+/// on `conv` returns `None` (i.e. the instruction at `conv` is not a full
+/// Thumb-2 BL(T1) encoding), so a build fails closed rather than mis-patching.
 pub(crate) fn boot_init_convergence(image: &[u8], site: usize) -> Option<(usize, u32)> {
     let anchor = site.checked_sub(4)?;
     let bmi_at = anchor + 8;
@@ -962,15 +854,9 @@ pub(crate) fn boot_init_convergence(image: &[u8], site: usize) -> Option<(usize,
     }
     let simm8 = (bmi & 0x00FF) as u8 as i8 as i32;
     let conv = ((bmi_at as i32 + 4) + (simm8 << 1)) as usize;
-    // The convergence point MUST be a 32-bit Thumb `bl` (the original init call).
-    let h1 = u16::from_le_bytes([*image.get(conv)?, *image.get(conv + 1)?]);
-    let h2 = u16::from_le_bytes([*image.get(conv + 2)?, *image.get(conv + 3)?]);
-    // Full Thumb-2 BL(T1) encoding: h1 = 1111 0S imm10, h2 = 11 J1 1 J2 imm11.
-    // The narrow `0xF800..=0xFFFF` on h2 only accepted J1=1,J2=1 and wrongly
-    // rejected valid BLs with J1=0 (0xD000..=0xDFFF) or J2=0 (0xF000..=0xF7FF).
-    if (h1 & 0xF800) != 0xF000 || (h2 & 0xD000) != 0xD000 {
-        return None;
-    }
+    // `thumb::decode_bl` (thumb-asm) fully validates the Thumb-2 BL(T1) shape
+    // internally — it returns `None` unless h1/h2 match the encoding — so no
+    // separate pre-check is needed here.
     let orig_init = thumb::decode_bl(image, conv)?;
     Some((conv, orig_init))
 }
@@ -1906,6 +1792,80 @@ impl Mt1959Engine {
         )? as u32)
     }
 
+    /// The OEM AACS engine full **session-rearm** wrapper — the superset routine
+    /// that OEM firmware calls at disc-insert / medium-loaded to bring the AACS
+    /// session UP from a clean state. Structure: `push {r4,lr}` → three subsystem
+    /// gate/state BLs → the bit-20 write to the engine control word at
+    /// `[ptr+4]` (`ldr r2,[pc]; ldr r0,[r2,#4]; movs r1,#1; lsls r1,#0x14;
+    /// orrs r0,r1; str r0,[r2,#4]` — the "arm bus-encryption" store the plain
+    /// [`Self::find_aacs_session_reset`] primitive does NOT do) → a BL → then
+    /// `bl <aacs_session_reset>` itself → four more subsystem re-inits → `pop
+    /// {r4,pc}`. On BU40N 1.00 this is at VA `0x00044874`.
+    ///
+    /// Used by the [`Feature::Encryption`] revert arm (`SET encryption != 0x00`)
+    /// so that flipping from a de-bussed session back to OEM/on ACTUALLY
+    /// re-wraps the drive at runtime — the fw obeys the flag both directions.
+    /// The plain `aacs_session_reset` is insufficient (empirically: kickoff
+    /// Fact 4 — direct call returns SCSI Good but the state cell at
+    /// `0x01ff9e04` and all observable reads are identical); the bit-20 write
+    /// and the four re-init BLs after it are what actually re-arm bus-enc.
+    ///
+    /// Located by the unique 32-byte inner idiom starting from the routine's
+    /// `push {r4,lr}` — three wildcarded BLs, the six-halfword bit-20 store
+    /// (which is the strongest fingerprint: setting bit-20 of `[ptr+4]` via the
+    /// exact `ldr/ldr/movs/lsls/orrs/str` chain), a wildcarded BL, and the
+    /// first halfword of the BL to `aacs_session_reset`. Uniqueness is verified
+    /// by decoding that trailing BL and requiring its target to be the
+    /// already-resolved `find_aacs_session_reset` entry — same "prove it or
+    /// refuse" pattern the reset finder uses to disambiguate its AGID loop.
+    pub fn find_aacs_session_rearm(&self, image: &[u8]) -> Result<u32> {
+        let reset = self.find_aacs_session_reset(image)?;
+        // 16-halfword rearm signature (32 bytes). BL halfwords are matched as
+        // BL-shaped (0xF000/0xF800 for hi, 0xC000/0xC000 for lo), tighter than
+        // pure wildcard so foreign non-BL sequences with matching mid-body ops
+        // do not collide. The bit-20 store idiom (items 8..=13) is what makes
+        // this unique image-wide.
+        const SIG: &[(u16, u16)] = &[
+            (0xB510, 0xFFFF), // push {r4, lr}
+            (0xF000, 0xF800),
+            (0xC000, 0xC000), // bl <gate-mmio>
+            (0xF000, 0xF800),
+            (0xC000, 0xC000), // bl <state-bit-21>
+            (0xF000, 0xF800),
+            (0xC000, 0xC000), // bl <state-zero>
+            (0x4A00, 0xFF00), // ldr r2,[pc,#imm]   ─┐
+            (0x6850, 0xFFFF), // ldr r0,[r2,#4]     │
+            (0x2101, 0xFFFF), // movs r1,#1         │  bit-20 write:
+            (0x0509, 0xFFFF), // lsls r1,r1,#0x14   │  "arm bus-encryption"
+            (0x4308, 0xFFFF), // orrs r0,r1         │
+            (0x6050, 0xFFFF), // str r0,[r2,#4]    ─┘
+            (0xF000, 0xF800),
+            (0xC000, 0xC000), // bl <state-orrs>
+            (0xF000, 0xF800), // bl <aacs_session_reset> (first halfword only;
+                              //     target verified below by decoding the full
+                              //     32-bit BL, which needs bytes 30..=33).
+        ];
+        // The trailing BL to aacs_session_reset sits at match+30 (32 bytes: 1
+        // push + 3 BLs*4 + 6 mid-body*2 + 1 BL*4 + 1 halfword = 30 bytes to the
+        // BL start; the BL itself is 4 bytes wide).
+        let hits: Vec<usize> = find_masked_all(image, SIG, 0, image.len())
+            .into_iter()
+            .filter(|&m| thumb::decode_bl(image, m + 30) == Some(reset))
+            .collect();
+        let m = match hits.as_slice() {
+            [one] => *one,
+            [] => bail!(
+                "aacs_session_rearm signature not found (want the OEM disc-insert wrapper \
+                 whose trailing bl targets aacs_session_reset at 0x{reset:x})"
+            ),
+            _ => bail!(
+                "aacs_session_rearm signature matched {} time(s) (want exactly 1) — refusing",
+                hits.len()
+            ),
+        };
+        Ok(m as u32)
+    }
+
     /// The OEM AACS engine session-reset routine (`aacs_session_reset`) — the
     /// primitive that idles the AACS hardware engine (a direct engine gate-bit
     /// clear followed by a mailbox reset), used by the Raw Read deny-path detour
@@ -1945,7 +1905,7 @@ impl Mt1959Engine {
         // The set_agid_state BL sits 14 bytes into the match (2+2+4+2+2+2).
         let hits: Vec<usize> = find_masked_all(image, SIG, lo, hi)
             .into_iter()
-            .filter(|&m| decode_bl_target(image, m + 14) == Some(setter))
+            .filter(|&m| thumb::decode_bl(image, m + 14) == Some(setter))
             .collect();
         let m = match hits.as_slice() {
             [one] => *one,
@@ -2110,14 +2070,15 @@ impl Mt1959Engine {
     ///     flag (`0x01..=0x07`); returns a zeroed buffer.
     ///   * [`abi::Verb::Get`] — returns `flag[cdb[5]=feature]` in response byte 0.
     ///   * [`abi::Verb::Identity`] — returns [`abi::RESP_MAGIC`] + version + the
-    ///     live feature-state table (`flag[0x01..=0x07]`).
+    ///     live feature-state table (`flag[0x01..=0x06]`).
     ///   * [`abi::Verb::DumpAll`] — peek `CLEAR_LEN` bytes at the 32-bit address
     ///     packed big-endian in `cdb[5..9]`.
     ///   * any other verb — zeroed buffer.
     ///
     /// Each OEM-code trampoline reads its own `flag[feature]` byte (Speed
     /// `flag[0x01]`, Region `flag[0x02]`, UHD `flag[0x03]`, BD `flag[0x04]`, HRL
-    /// `flag[0x05]`, AKE `flag[0x06]`, Bus `flag[0x07]`) as a uniform tri-state:
+    /// `flag[0x05]`, Encryption `flag[0x06]`; wire id `0x07` is retired — was `Bus`)
+    /// as a uniform tri-state:
     /// `0xFF` = OEM passthrough, `0x01` = on/armed, `0x00` = off (actively disabled).
     /// The always-on boot-init hook writes `0xFF` into every flag at power-on, so an
     /// unarmed or RESET image is byte-behaviour-identical to OEM and a gate only ever
@@ -2127,7 +2088,14 @@ impl Mt1959Engine {
     /// opcode, so a command with no/short data phase desyncs the transfer (ABORTED
     /// COMMAND + wedged FIFO). Every verb therefore commits the same `CLEAR_LEN`
     /// window (payload leading, zero-padded).
-    pub fn build_handler(&self, image: &[u8], oem_handler: u32, flag_base: u32) -> Result<Vec<u8>> {
+    pub fn build_handler(
+        &self,
+        image: &[u8],
+        oem_handler: u32,
+        flag_base: u32,
+        boot_function_entry: u32,
+        aacs_reset: u32,
+    ) -> Result<Vec<u8>> {
         let cdb = self.find_cdb_base(image)?;
         let (writer, commit_off) = self.find_response_writer(image)?;
         let (commit, length_field) = self.find_response_commit(image)?;
@@ -2173,27 +2141,140 @@ impl Mt1959Engine {
         let tbl_loop = a.label();
         let docommit = a.label();
 
-        // knock: cdb[1]==KNOCK_MODE && cdb[2..4]==KNOCK, else tail-call OEM.
+        // knock preamble: two distinct knocks route to two isolated dispatches.
+        //   cdb[1] must equal KNOCK_MODE (freemkv's sub-command mode)  → else OEM
+        //   cdb[2..4] == KNOCK        (safe knock)  → safe dispatch  (knock_ok)
+        //   cdb[2..4] == DEBUG_KNOCK  (debug knock) → debug dispatch (debug_ok)
+        //   else → OEM tail-call
+        //
+        // The two branches share NO verb bytes: a typo of a safe verb vs a debug
+        // verb (e.g. Set 0x02 vs Call 0x0C) is safe by construction — the wrong
+        // knock never reaches the wrong dispatch. Debug-only verbs (Call, Poke,
+        // and any future tear-down primitive) live ONLY under DEBUG_KNOCK; every
+        // durable verb lives under KNOCK.
+        let debug_ok = a.label();
+        let try_debug_knock = a.label();
         a.ldr_lit(3, cdb);
         a.ldrb_imm(0, 3, 1);
         a.cmp_imm(0, abi::KNOCK_MODE);
         a.bne(tail);
         a.ldrb_imm(0, 3, 2);
         a.cmp_imm(0, abi::KNOCK[0]);
-        a.bne(tail);
+        a.bne(try_debug_knock);
         a.ldrb_imm(0, 3, 3);
         a.cmp_imm(0, abi::KNOCK[1]);
-        a.bne(tail);
-        // matched -> jump over the OEM tail block (kept next to the knock `bne`s
-        // so those conditional branches stay in range as the handler grows).
+        a.bne(try_debug_knock);
         a.b(knock_ok);
+
+        a.bind(try_debug_knock);
+        a.ldrb_imm(0, 3, 2);
+        a.cmp_imm(0, abi::DEBUG_KNOCK[0]);
+        a.bne(tail);
+        a.ldrb_imm(0, 3, 3);
+        a.cmp_imm(0, abi::DEBUG_KNOCK[1]);
+        a.bne(tail);
+        a.b(debug_ok);
 
         // knock miss: tail-call the original handler, registers/lr as entered.
         a.bind(tail);
         a.ldr_lit(3, oem_handler | 1);
         a.bx(3);
 
-        // matched: r7 = byte-writer, r4 = verb.
+        // DEBUG-KNOCK dispatch — reached ONLY when cdb[2..4] == DEBUG_KNOCK. r4 = verb
+        // byte (cdb[4]) so multiple debug primitives can share this branch:
+        //   Verb::Call (0x0C): blx target(r0), where target = cdb[5..9] BE and
+        //                      r0 = cdb[9] (a single u8 register arg).
+        //   Verb::Poke (0x0D): *(u8*)target = value, where target = cdb[5..9] BE
+        //                      and value = cdb[9]. NO bounds check — this is a
+        //                      diagnostic primitive for on-drive state discovery.
+        //   (any other verb): zeroed reply, no side effect.
+        //
+        // Both primitives assemble the 32-bit target VA in r6 upfront, then the
+        // verb match picks the tail. Callee-saved r5/r6 are used for the target
+        // and thumb-bit scratch so the OEM function/MMIO write sees a clean r0.
+        a.bind(debug_ok);
+        a.push(0x01F0); // push {r4,r5,r6,r7,lr}
+        a.ldr_lit(7, writer | 1); // r7 = byte-writer for `clr`
+        a.ldrb_imm(4, 3, abi::CDB_VERB as u16); // r4 = verb = cdb[4]
+        // Assemble the 32-bit target VA in r6 (both Call and Poke use it).
+        a.ldrb_imm(6, 3, 5);
+        a.lsls_imm(6, 6, 8);
+        a.ldrb_imm(0, 3, 6);
+        a.adds_reg(6, 6, 0); // |= target[23:16]
+        a.lsls_imm(6, 6, 8);
+        a.ldrb_imm(0, 3, 7);
+        a.adds_reg(6, 6, 0); // |= target[15:8]
+        a.lsls_imm(6, 6, 8);
+        a.ldrb_imm(0, 3, 8);
+        a.adds_reg(6, 6, 0); // |= target[7:0]  → r6 = full 32-bit VA
+
+        // Verb::Call → thumb-OR r6, load r0 = cdb[9] arg, blx.
+        //
+        // The trailing `movs r4,#0` before `b(clr)` is a SAFETY CLOBBER: the
+        // safe-verb dispatch chain (bind(clr) → clr_loop → clrd → FlashWrite →
+        // Save → Get → DumpAll → Identity → docommit) reads r4 as the verb byte.
+        // On a DEBUG_KNOCK frame the verb byte might collide with a safe verb id
+        // (e.g. FlashWrite=0x0A, Save=0x0B, Get=0x03, DumpAll=0x09, Identity=0x01),
+        // so without clobbering r4 the fall-through into `clr` would then match
+        // the safe verb and execute it under DEBUG_KNOCK — breaking the
+        // documented "no safe verb via DEBUG_KNOCK" invariant. Setting r4=0 makes
+        // every safe `cmp r4,#imm` bne past the dispatch and reach `docommit`
+        // with a well-formed zeroed reply, no side effects.
+        let not_debug_call = a.label();
+        a.cmp_imm(4, abi::Verb::Call as u8);
+        a.bne(not_debug_call);
+        a.movs_imm(5, 1);
+        a.orrs(6, 5); // r6 |= 1 (Thumb bit for blx)
+        a.ldrb_imm(0, 3, 9); // r0 = cdb[9] (single u8 register arg)
+        a.blx(6);
+        a.movs_imm(4, 0); // clobber verb byte before falling through to safe dispatch
+        a.b(clr);
+        a.bind(not_debug_call);
+
+        // Verb::Poke → *(u8*)r6 = cdb[9]. Direct byte store; no thumb OR, no blx.
+        let not_debug_poke = a.label();
+        a.cmp_imm(4, abi::Verb::Poke as u8);
+        a.bne(not_debug_poke);
+        a.ldrb_imm(0, 3, 9); // r0 = value
+        a.strb_imm(0, 6, 0); // *r6 = r0
+        a.movs_imm(4, 0); // clobber verb byte (see Call arm comment above)
+        a.b(clr);
+        a.bind(not_debug_poke);
+
+        // Verb::Reboot → invoke the firmware's boot function entry with r0=4 to
+        // force the cold path (BSS clear + C-runtime data init + full post-init).
+        // The target VA is BAKED at build time (per-image, resolved from the
+        // boot-init signature = `boot_init_site - 0x10` for the modern MT1959
+        // convergence-bl geometry). The literal is Thumb-tagged so `blx target`
+        // jumps in Thumb mode. r0=4 makes the boot function's `ldr r0,[r0,#0x18];
+        // lsls #0x18; bmi <warm>` take the cold arm on every start-up shape. The
+        // drive resets the CPU inside the callee, so control never returns here.
+        //
+        // When boot_function_entry == 0 (Reboot unavailable: build path where the
+        // boot-init site did not resolve OR non-modern-geometry callers like the
+        // classic path where `site - 0x10` does not point at a valid function
+        // entry), the arm is emitted as INERT: just `cmp/bne/clobber/b clr`,
+        // no `blx`. The verb still returns a zeroed reply; it just doesn't reset.
+        let not_debug_reboot = a.label();
+        a.cmp_imm(4, abi::Verb::Reboot as u8);
+        a.bne(not_debug_reboot);
+        if boot_function_entry != 0 {
+            a.ldr_lit(6, boot_function_entry | 1); // r6 = boot function entry | Thumb bit
+            a.movs_imm(0, 4); // r0 = 4 (cold-path selector)
+            a.blx(6);
+        }
+        a.movs_imm(4, 0); // clobber verb byte (see Call arm comment above)
+        a.b(clr);
+        a.bind(not_debug_reboot);
+
+        // Unknown debug verb → zeroed reply. Verb byte must be clobbered before
+        // falling through to `clr` so a safe-verb-id in cdb[4] under DEBUG_KNOCK
+        // does not execute the safe verb (see Call arm comment above).
+        a.movs_imm(4, 0);
+        a.b(clr);
+
+        // SAFE-KNOCK dispatch — reached when cdb[2..4] == KNOCK.
+        // r7 = byte-writer, r4 = verb (cdb[4]).
         a.bind(knock_ok);
         a.push(0x01F0); // push {r4,r5,r6,r7,lr}
         a.ldr_lit(7, writer | 1);
@@ -2204,14 +2285,56 @@ impl Mt1959Engine {
         a.bne(not_set);
         a.ldr_lit(0, flag_base); // r0 = flag-table base (SRAM)
         a.ldrb_imm(1, 3, abi::CDB_FEATURE as u16); // r1 = feature id (cdb[5])
-                                                   // Bounds-clamp the feature id: valid ids are 1..=NUM_FEATURES, so anything
-                                                   // >= NUM_FEATURES+1 is rejected (return a zeroed buffer, no write). Without
-                                                   // this an id such as 0xC8 would `strb` into live SRAM past the flag hole.
+                                                   // Bounds-clamp the feature id: valid ids are 1..=NUM_FEATURES — id 0 (the
+                                                   // NV saved-marker slot) is rejected, and anything >= NUM_FEATURES+1 is
+                                                   // rejected too (return a zeroed buffer, no write). Without the lower bound
+                                                   // an id of 0 would corrupt the NV saved-marker cell; without the upper bound
+                                                   // an id such as 0xC8 would `strb` into live SRAM past the flag hole.
+        a.cmp_imm(1, 1);
+        let set_lo_ok = a.label();
+        a.bhs(set_lo_ok);
+        a.b(clr); // id == 0 → refuse (slot-0 is the NV saved-marker)
+        a.bind(set_lo_ok);
         a.cmp_imm(1, NUM_FEATURES + 1);
-        a.bhs(clr);
+        // bhs(clr) is out of T1 range now that the bare-VID CDB build has grown
+        // the SET body. Reroute via a local blo skip + T2 unconditional b(clr).
+        let feature_ok = a.label();
+        a.blo(feature_ok);
+        a.b(clr);
+        a.bind(feature_ok);
         a.adds_reg(0, 0, 1); // r0 = &flag[feature]
         a.ldrb_imm(1, 3, abi::CDB_STATE as u16); // r1 = state (cdb[6])
         a.strb_imm(1, 0, 0); // flag[feature] = state
+        // Revert primitive: on SET Encryption to a non-off state (0xFF passthrough /
+        // 0x01 on), fire the OEM AACS session-**rearm** wrapper so the drive
+        // actually re-arms bus-encryption on the next read. The plain
+        // `aacs_session_reset` alone is insufficient (kickoff Fact 4 — direct
+        // call returns SCSI Good but observable state is identical): tearing
+        // the AGID ladder down without re-running the six subsystem re-inits
+        // and the bit-20 engine-control-word "arm bus-enc" store leaves the
+        // drive in a de-bussed ladder even after the flag is set back to OEM,
+        // so the flag only *reads* right, doesn't *do* what it says. The full
+        // rearm wrapper (find_aacs_session_rearm) fixes both directions of the
+        // flag as the contract requires. Skipped for SET encryption 0x00
+        // (that's the arm that *installs* the de-bus via the AKE detour on the
+        // next read). Skipped for every non-Encryption feature (their gates
+        // read the flag at each op — no session state to rearm). `aacs_reset==0`
+        // disables the emit entirely, used by classic engines where neither
+        // primitive is resolvable.
+        if aacs_reset != 0 {
+            let no_reset = a.label();
+            a.ldrb_imm(0, 3, abi::CDB_FEATURE as u16); // r0 = feature id (reload cdb[5])
+            a.cmp_imm(0, abi::Feature::Encryption as u8);
+            a.bne(no_reset);
+            a.cmp_imm(1, 0); // r1 still = state just written
+            a.beq(no_reset); // 0x00 = arm de-bus; do NOT rearm
+            a.ldr_lit(2, aacs_reset | 1); // r2 = &aacs_session_rearm (thumb)
+            a.blx(2); // rearm(); AAPCS-callee (push {r4,lr}/pop {r4,pc}) so r4..r11
+                      // are preserved — our r4 (verb byte) and r5..r7 (writer, etc.)
+                      // ride through unchanged, same effective contract as the plain
+                      // reset primitive that this replaces.
+            a.bind(no_reset);
+        }
         a.b(clr); // return a zeroed buffer
         a.bind(not_set);
 
@@ -2235,7 +2358,7 @@ impl Mt1959Engine {
         a.ldr_lit(0, flag_base);
         a.movs_imm(1, abi::STATE_PASSTHROUGH); // 0xFF
         for off in 0..=NUM_FEATURES {
-            a.strb_imm(1, 0, off as u16); // RAM flag[0..=7] = 0xFF (incl slot-0 marker)
+            a.strb_imm(1, 0, off as u16); // RAM flag[0..=6] = 0xFF (incl slot-0 marker)
         }
         // Persist the all-0xFF table to NV via the SAVE flash primitive (staging
         // source = the flag table we just filled). This clears the slot-0 marker to
@@ -2388,10 +2511,13 @@ impl Mt1959Engine {
         a.bne(not_get);
         a.ldr_lit(0, flag_base);
         a.ldrb_imm(1, 3, abi::CDB_FEATURE as u16); // r1 = feature id
-                                                   // Bounds-clamp the feature id (same window as SET): an id >= NUM_FEATURES+1
-                                                   // would `ldrb` from live SRAM past the flag hole. Out of range → fall through
-                                                   // to `not_get` (verb isn't DumpAll/Identity either, so it reaches `docommit`
-                                                   // and returns the already-zeroed buffer).
+                                                   // Bounds-clamp the feature id (same window as SET): valid ids are 1..=NUM_FEATURES —
+                                                   // id 0 (the NV saved-marker slot) is rejected, and >= NUM_FEATURES+1 is rejected
+                                                   // (else it would `ldrb` from live SRAM past the flag hole). Out of range → fall
+                                                   // through to `not_get` (verb isn't DumpAll/Identity either, so it reaches
+                                                   // `docommit` and returns the already-zeroed buffer).
+        a.cmp_imm(1, 1);
+        a.blo(not_get); // id == 0 → refuse (slot-0 is the NV saved-marker)
         a.cmp_imm(1, NUM_FEATURES + 1);
         a.bhs(not_get);
         a.adds_reg(0, 0, 1); // r0 = &flag[feature]
@@ -2441,12 +2567,12 @@ impl Mt1959Engine {
         a.adds_imm(5, 1);
         a.b(id_loop);
         a.bind(id_done);
-        // append flag[0x01..=0x07] at offsets id_len.. (r5 = dest offset, r2 = feature).
+        // append flag[0x01..=0x06] at offsets id_len.. (r5 = dest offset, r2 = feature).
         a.ldr_lit(6, flag_base);
         a.movs_imm(5, id_len);
         a.movs_imm(2, 1);
         a.bind(tbl_loop);
-        a.cmp_imm(2, NUM_FEATURES + 1); // stop after feature 0x07
+        a.cmp_imm(2, NUM_FEATURES + 1); // stop after feature 0x06
         a.bhs(docommit);
         a.ldrb_reg(1, 6, 2); // r1 = flag[feature]
         a.mov_reg(0, 5); // dest offset
@@ -2464,7 +2590,7 @@ impl Mt1959Engine {
         a.ldr_lit(2, commit | 1);
         a.blx(2);
         a.pop(0x01F0); // pop {r4,r5,r6,r7,pc}
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// The Speed (0x02) flag-gated ceiling trampoline. Entered by a `bl` that
@@ -2548,7 +2674,7 @@ impl Mt1959Engine {
             a.ldr_lit(0, exit | 1); // taken: r0 dead at the OEM ramp-exit target
             a.bx(0); // jump to the OEM ramp exit
         }
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// The Region-free (0x03) flag-gated RPC-emitter trampoline. Entered by a `bl`
@@ -2648,18 +2774,24 @@ impl Mt1959Engine {
         a.bind(tail);
         a.strb_imm(1, 0, 8); // frame[7] = 0 (reserved, always)
         a.pop(0x0118); // pop {r3,r4,pc} — replicate the emitter epilogue
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
-    /// The Raw Read (0x04) flag-gated AKE accept-gate trampoline. Entered by a `bl`
-    /// that replaces the OEM RESET writer's `movs r1,#1; b <back>` at
-    /// [`AKE_GATE_SIG`]'s `match+12`. On entry `r0 = AGID` (set by the preceding
-    /// `ldrb/lsrs`), which is preserved. The stub picks the per-AGID state to write:
-    /// `6` (AKE authenticated → VID gate open) when `flag[Ake]==STATE_OFF`, else the
-    /// OEM `1` (auth failed → reset). It then jumps to `back` — the OEM
-    /// `set_agid_state(r0, r1)` call the reset writer branched to — so the store
-    /// happens through the OEM primitive unchanged. `r2` is scratch (dead at `back`);
-    /// `lr` is dead (the `bl` clobbers it, matching the OEM `b` that saved nothing).
+    /// The Raw Read (0x04) flag-gated AKE accept-gate trampoline. Entered by a
+    /// Thumb-2 wide **`B` (`B.W`, T4)** — NOT a `BL` — that replaces the OEM
+    /// RESET writer's `movs r1,#1; b <back>` at [`AKE_GATE_SIG`]'s `match+12`
+    /// (see `AkeInstallShape::WideB` at the caller in `mt1959.rs`). On entry
+    /// `r0 = AGID` (set by the preceding `ldrb/lsrs`), which is preserved. The
+    /// stub picks the per-AGID state to write: `6` (AKE authenticated → VID
+    /// gate open) when `flag[Ake]==STATE_OFF`, else the OEM `1` (auth failed →
+    /// reset). It then jumps to `back` — the OEM `set_agid_state(r0, r1)` call
+    /// the reset writer branched to — so the store happens through the OEM
+    /// primitive unchanged. `r2` is scratch (dead at `back`); `lr` is the
+    /// OUTER function's own return address, unchanged through this whole
+    /// detour (this is why the install MUST be `B.W`, not `BL` — a `BL`
+    /// would clobber `lr` with `site+4`, and `<back>`'s trailing `bx lr`
+    /// would then land inside the outer function on the entry of an unrelated
+    /// leaf routine, breaking the OEM tail-call semantics).
     ///
     /// This is the `04 02` mode: "accept ANY host cert, revoked or not." The host
     /// still drives the real AKE (`0xA3`/`0xA4`) and may present a revoked (or any)
@@ -2670,8 +2802,8 @@ impl Mt1959Engine {
         let mut a = Asm::new();
         let accept = a.label();
         let done = a.label();
-        a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
-        a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
+        a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32); // r2 = &flag[Encryption]
+        a.ldrb_imm(2, 2, 0); // r2 = Encryption flag byte
         a.cmp_imm(2, abi::STATE_OFF); // 0x00 = null AKE / bypass (accept any/revoked host cert); ON/OEM = real handshake
         a.beq(accept);
         a.movs_imm(1, 1); // OEM (00/0xFF): reset to state 1 on a failed cert verify
@@ -2681,7 +2813,7 @@ impl Mt1959Engine {
         a.bind(done);
         a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
         a.bx(2);
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// NB-class Raw Read (0x04) AKE accept-gate trampoline. Entered by a `bl` that
@@ -2698,8 +2830,8 @@ impl Mt1959Engine {
         let mut a = Asm::new();
         let force = a.label();
         let keep = a.label();
-        a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
-        a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
+        a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32); // r2 = &flag[Encryption]
+        a.ldrb_imm(2, 2, 0); // r2 = Encryption flag byte
         a.cmp_imm(2, abi::STATE_OFF); // 0x00 = null AKE / bypass (accept any/revoked host cert); ON/OEM = real handshake
         a.beq(force);
         a.b(keep); // flag off: preserve r1 (accept arm = 6, reject arm = 1)
@@ -2708,79 +2840,13 @@ impl Mt1959Engine {
         a.bind(keep);
         a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
         a.bx(2);
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
-    /// The Raw Read `04 03` "data clear" trampoline — removes the drive-side AACS
-    /// **bus-encryption** stage the MK (LibreDrive-family) way. Entered by a `bl`
-    /// that replaces the OEM `bl <key-prog>` at the start of the AACS **opcode-`0x45`
-    /// (Read Data Key)** arm (`0x95eec` on BU40N 1.00), located via
-    /// [`Mt1959Engine::busenc_detour`] / `AACS45_DISPATCH_SIG`. `keyprog` is the
-    /// absolute target of that replaced `bl` (decoded from the image), which the stub
-    /// REPLAYS so the OEM key programming still runs exactly as shipped.
-    ///
-    /// On entry `r0..r3` still hold the OEM `bl <key-prog>` arguments (a `bl` does not
-    /// disturb them) and `lr = arm+4` (the OEM continuation, where the arm ignores the
-    /// call's return value — it does `movs r0,#6` immediately). The stub saves `lr`,
-    /// replays the call **through `r4`** (NOT a low arg register: loading the call
-    /// target into `r0..r3` would clobber a key-prog argument, and a >=3-arg AAPCS
-    /// key-prog would then program a corrupt read-data-key — the `Bus=off` path would
-    /// return wrong content), and — only when `flag[Bus]==STATE_OFF` — clears
-    /// [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`] before returning to `arm+4` via the
-    /// saved `lr`. `r1..r3` are dead across the OEM continuation (it re-establishes
-    /// them), so the stub uses them as scratch; `r4` is pushed and reused as the
-    /// call-target scratch — the key-prog callee preserves it (AAPCS callee-saved), and
-    /// the `pop` restores it to its entry value, so the OEM continuation sees it
-    /// unchanged.
-    ///
-    /// # Mechanism
-    /// AACS bus encryption is a drive-side hardware stage on the read datapath, gated
-    /// by [`BUSENC_ENABLE_BIT`] of the MMIO control register [`BUSENC_REG`]. OEM
-    /// leaves it set, so content `READ(10)` is double-wrapped (AACS-at-rest **plus**
-    /// the in-transit bus wrap) and even a correct title key yields garbage. Clearing
-    /// the bit on the opcode-`0x45` path — the point the firmware programs the read
-    /// data key for the session, immediately before the host issues `READ(10)` —
-    /// disables the added bus wrap, so the drive emits at-rest-only ciphertext the
-    /// host decrypts with the real title key. This is the mechanism the MK firmware
-    /// uses; the bit-clear is the load-bearing action (MK additionally installs a
-    /// matching bus-less key, which is unnecessary here because we let the OEM key
-    /// programming run unchanged and only drop the transport wrap).
-    ///
-    /// `flag[Bus]` (`flag[Feature::Bus]`) semantics at this site:
-    ///   * `!= STATE_OFF` (`passthrough` / `on`): replay the OEM key-prog `bl`
-    ///     and return — the register is untouched, **bus encryption ON**.
-    ///     Byte-behaviour-identical to OEM, so this mode is inert (stealth) until
-    ///     `Bus=on`.
-    ///   * `== STATE_OFF` (bus off / data clear): replay the OEM key-prog `bl`, then
-    ///     `*BUSENC_REG &= ~BUSENC_ENABLE_BIT` → the transport wrap is off for the
-    ///     following `READ(10)`, content comes back AACS-at-rest only.
-    ///
-    /// **HARDWARE-KAT-GATED HYPOTHESIS.** That bit `0x10` of `0x0400_0000` is
-    /// specifically the bus-encryption enable (and that clearing it here suppresses
-    /// the wrap without disturbing the at-rest read path) comes from the MK-vs-OEM
-    /// 1.03 diff and is NOT yet re-proven on this silicon; the golden-UK hardware KAT
-    /// is the final arbiter. The `!= STATE_OFF` (bus-ON) path IS structurally proven —
-    /// it replays the exact OEM key-prog call and touches nothing else.
-    pub(crate) fn build_busenc_stub(&self, flag_base: u32, keyprog: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
-        let skip = a.label();
-        a.push(0x0110); // push {r4, lr}   (r4 saved, then reused as the call-target scratch)
-        a.ldr_lit(4, keyprog | 1); // r4 = &oem_key_prog (thumb); r0-r3 (key-prog args) untouched
-        a.blx(4); // replay OEM key programming with r0-r3 = original args (return value dead at arm+4)
-        a.ldr_lit(3, flag_base + abi::Feature::Bus as u32); // r3 = &flag[Bus]
-        a.ldrb_imm(3, 3, 0); // r3 = Bus flag byte
-        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = bus off / de-bussed (remove the bus-encryption stage); ON/OEM = bus on
-        a.bne(skip); // OEM (00/0xFF): leave BUSENC_REG untouched (bus ON, stealth)
-        a.movs_imm(1, 1);
-        a.lsls_imm(1, 1, 26); // r1 = 1<<26 = BUSENC_REG (0x0400_0000)
-        a.ldr_imm(2, 1, 0); // r2 = *BUSENC_REG
-        a.movs_imm(3, BUSENC_ENABLE_BIT); // r3 = bus-enc enable bit (0x10)
-        a.bics(2, 3); // r2 &= ~0x10   (turn the bus-encryption stage OFF)
-        a.str_imm(2, 1, 0); // *BUSENC_REG = r2
-        a.bind(skip);
-        a.pop(0x0110); // pop {r4, pc} -> arm+4 (OEM continuation) via the saved lr
-        a.finish()
-    }
+    // (Retired 0.8.9: `build_busenc_stub` + `build_debus_stub`. Hardware proved
+    // the `Feature::Bus` datapath lever inert, so both stubs and their sigs were
+    // removed together. The surviving `Feature::Encryption` de-busses content via
+    // `build_ake_stub` alone — empirically verified on BU40N/MT1959.)
 
     /// The `Feature::Bd` **BD (AACS 1.0) capability-refuse** trampoline. Entered by a
     /// `bl` that replaces the REPORT KEY gate's mode-0 class check `ldrb r0,[r2,#7];
@@ -2822,7 +2888,7 @@ impl Mt1959Engine {
         a.bind(refuse);
         a.cmp_imm(0, 0xff); // armed: class never 0xff -> Z=0 -> caller's `beq` falls through to OEM deny (6F)
         a.bx(14);
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// The `Feature::Uhd` **UHD (AACS 2.0) media accept/refuse** trampoline — the UHD
@@ -2864,7 +2930,7 @@ impl Mt1959Engine {
         a.bind(refuse);
         a.cmp_imm(0, 0xff); // armed: class never 0xff -> Z=0 -> caller's `bne` jumps to OEM deny (6F/05)
         a.bx(14);
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// Newer-codegen sibling of [`Self::build_bd_stub`] — the `Feature::Bd` BD-refuse
@@ -2918,7 +2984,7 @@ impl Mt1959Engine {
         a.pop(0x0008); // restore r3, sp = sub-imm
         a.cmp_imm(2, 0); // re-establish Z=(mode==0) for the OEM `bne` at anchor+10
         a.bx(14); // bx lr -> anchor+10 (OEM continuation)
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// Resolve the `Feature::Bd` media-gate refuse detour, dispatching on the shape
@@ -3015,31 +3081,8 @@ impl Mt1959Engine {
         Ok((site, self.build_uhd_gate_stub(flag_base)?))
     }
 
-    /// Locate the OEM AACS opcode-`0x45` (Read Data Key) arm and the target of its
-    /// leading `bl` (the OEM key-prog primitive). Tries [`AACS45_ARM_SIG_A`] first
-    /// (BU40N/notebook order — keeps the KAT base byte-identical), then
-    /// [`AACS45_ARM_SIG_B`] (BH/WH desktop order). Returns `(detour_site, keyprog)`
-    /// where `detour_site` is the arm's leading `bl` (proven unique) and `keyprog`
-    /// is that `bl`'s absolute target. Errors (→ `04 03` left unwired) if neither
-    /// variant resolves uniquely.
-    pub(crate) fn find_aacs45_arm(&self, image: &[u8]) -> Result<(usize, u32)> {
-        // Full-image scan: both 0x45-arm signatures are unique image-wide (maxn==1
-        // measured across the corpus). The old CODE_REGION_START..TABLE_LO window
-        // capped at 0x140000 and excluded the ~+0x2b000-relocated MT1939-modern block.
-        let (lo, hi) = (0, image.len());
-        let arm = match find_masked_all(image, AACS45_ARM_SIG_A, lo, hi).as_slice() {
-            [one] => *one,
-            [] => find_unique(image, AACS45_ARM_SIG_B, lo, hi, "AACS opcode-0x45 arm")?,
-            hits => bail!(
-                "AACS opcode-0x45 arm (A) matched {} time(s) (want exactly 1) — refusing to patch",
-                hits.len()
-            ),
-        };
-        let keyprog = thumb::decode_bl(image, arm).ok_or_else(|| {
-            anyhow!("AACS opcode-0x45 arm at 0x{arm:x} does not start with a `bl <key-prog>`")
-        })?;
-        Ok((arm, keyprog))
-    }
+    // (Retired 0.8.9: `find_aacs45_arm` — only used to wire the deleted
+    // `Feature::Bus` bus-encryption trampoline.)
 
     /// The AACS media accept-gate anchor. Two codegen shapes carry the same disc
     /// mode/class accept/refuse decision, tried **original-first** (full-image; both
@@ -3135,7 +3178,7 @@ impl Mt1959Engine {
         let mut target: Option<u32> = None;
         let mut o = lo;
         while o + 4 <= hi {
-            if decode_bl_target(image, o) == Some(hrl) {
+            if thumb::decode_bl(image, o) == Some(hrl) {
                 // nearest following `cmp r0,#0; bne T` within 12 halfwords.
                 let mut p = o + 4;
                 let end = (o + 4 + 24).min(hi.saturating_sub(4));
@@ -3198,7 +3241,7 @@ impl Mt1959Engine {
         a.bind(clean);
         a.pop(0x0008); // restore r3
         a.bx(14); // bx lr -> the site's clean fall-through
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// Resolve the HRL-skip detour: returns `(cmp_offsets, revoke, stub_bytes)`. A
@@ -3241,28 +3284,41 @@ impl Mt1959Engine {
         [0x21, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00]
     }
 
-    /// Resolve the `04 03` bus-off detour the MK way: the OEM `bl <key-prog>` at the
-    /// start of the AACS opcode-`0x45` arm (located by [`Self::find_aacs45_arm`]).
-    /// Returns `(detour_site, stub_bytes)` where a `bl` to the stub is written at
-    /// `detour_site` (replacing the OEM `bl`); the stub replays the OEM key-prog call
-    /// and, when `flag[Bus]==STATE_OFF`, clears [`BUSENC_ENABLE_BIT`] of [`BUSENC_REG`].
-    /// Errors (→ Bus feature unwired) on images whose opcode-`0x45` arm is not one of the
-    /// two known MT1959 shapes.
-    pub(crate) fn busenc_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
-        let (detour_site, keyprog) = self.find_aacs45_arm(image)?;
-        let bytes = self.build_busenc_stub(flag_base, keyprog)?;
-        Ok((detour_site, bytes))
-    }
+    // (Retired 0.8.9: `busenc_detour` + `debus_detour` — the `Feature::Bus`
+    // datapath lever was proved inert on hardware, so both detours plus their
+    // supporting sigs and stubs were removed together.)
+
+    // (AkeInstallShape is defined at module scope below — see the enum at the
+    // end of this file so the type is namable from `crate::engine::core::`.)
 
     /// Resolve the AKE detour site + stub for whichever gate variant this image
     /// carries. Tries the BU40N/desktop [`AKE_GATE_SIG`] first (so BU40N stays
     /// byte-identical), then the NB-class [`AKE_GATE_SIG_NB`]. Returns
-    /// `(detour_site, stub_bytes, anchor)` where a `bl` to the stub is written at
-    /// `detour_site`. Errors (→ RawRead `SignatureNotFound`) only if neither
+    /// `(detour_site, stub_bytes, anchor, install_shape)`. The caller writes the
+    /// detour with `thumb::encode_b_wide` when `install_shape ==
+    /// AkeInstallShape::WideB` (BU40N/desktop tail-call site — `bl` here would
+    /// corrupt the outer function's `lr`) or `thumb::encode_bl` when
+    /// `install_shape == AkeInstallShape::WideBl` (NB-class shared-`bl` site —
+    /// the OEM already had a `bl` there, so `lr` is meant to be set to
+    /// `site+4`). Errors (→ RawRead `SignatureNotFound`) only if neither
     /// variant matches.
-    pub(crate) fn ake_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>, u32)> {
+    pub(crate) fn ake_detour(
+        &self,
+        image: &[u8],
+        flag_base: u32,
+    ) -> Result<(usize, Vec<u8>, u32, AkeInstallShape)> {
         // Original (BU40N / BP60NB10 / desktop): detour the reject writer
         // `movs r1,#1; b <back>` (4 bytes at anchor+12).
+        //
+        // NOTE on install shape: the OEM instructions here end in an UNCONDITIONAL
+        // `b <back>` — a tail-call. `<back>` is `set_agid_state`, a shared leaf
+        // that returns via `bx lr` (its `lr` was set by the OUTER function's
+        // caller, not by anything at this site). If we install with a `bl` we
+        // clobber `lr` with `reset_site+4`, an address INSIDE the outer function,
+        // and `<back>`'s return then lands at the entry of an unrelated leaf
+        // (`push {r4,lr}` + MMIO clear at 0x04000000 bit 0x10). Install as a
+        // Thumb-2 wide `B` (`B.W` T4) so `lr` flows through unchanged and the
+        // tail-call semantics match OEM exactly.
         if let Ok(ake_gate) = self.find_ake_gate(image) {
             let reset_site = ake_gate as usize + 12;
             let movs_hw = u16::from_le_bytes([image[reset_site], image[reset_site + 1]]);
@@ -3282,9 +3338,13 @@ impl Mt1959Engine {
             }
             let ake_back = (b_at as i32 + 4 + disp * 2) as u32;
             let bytes = self.build_ake_stub(flag_base, ake_back)?;
-            return Ok((reset_site, bytes, ake_gate));
+            return Ok((reset_site, bytes, ake_gate, AkeInstallShape::WideB));
         }
-        // NB-class: detour the shared `bl set_agid_state` at anchor+12.
+        // NB-class: detour the shared `bl set_agid_state` at anchor+12. The
+        // OEM already installs a `bl` here — installing our own `bl` is a
+        // like-for-like replacement, `lr = bl_site+4` is exactly what the OEM
+        // `bl set_agid_state` would have set, so `set_agid_state`'s `bx lr`
+        // returns to the correct in-function continuation.
         if let Ok(nb_gate) = self.find_ake_gate_nb(image) {
             let reject = nb_gate as usize + 10;
             let movs_hw = u16::from_le_bytes([image[reject], image[reject + 1]]);
@@ -3297,12 +3357,12 @@ impl Mt1959Engine {
             let back = thumb::decode_bl(image, bl_site)
                 .ok_or_else(|| anyhow!("NB AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
             let bytes = self.build_ake_stub_nb(flag_base, back)?;
-            return Ok((bl_site, bytes, nb_gate));
+            return Ok((bl_site, bytes, nb_gate, AkeInstallShape::WideBl));
         }
         // NB-class `1.V5`: reject arm re-reads the AGID byte, so the reject writer
         // is at anchor+12 and the shared `bl set_agid_state` at anchor+14. Both
         // arms converge on that shared `bl`, so the NB stub (which PRESERVES r1
-        // when the flag is off) applies verbatim.
+        // when the flag is off) applies verbatim. Same install shape as NB.
         let v5_gate = self.find_ake_gate_nb_v5(image)?;
         let reject = v5_gate as usize + 12;
         let movs_hw = u16::from_le_bytes([image[reject], image[reject + 1]]);
@@ -3315,7 +3375,7 @@ impl Mt1959Engine {
         let back = thumb::decode_bl(image, bl_site)
             .ok_or_else(|| anyhow!("NB 1.V5 AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
         let bytes = self.build_ake_stub_nb(flag_base, back)?;
-        Ok((bl_site, bytes, v5_gate))
+        Ok((bl_site, bytes, v5_gate, AkeInstallShape::WideBl))
     }
 
     /// The Raw Read (0x04) flag-gated producer Gate-A trampoline. Entered by a `bl`
@@ -3344,8 +3404,8 @@ impl Mt1959Engine {
         let mut a = Asm::new();
         let rearm = a.label(); // 04 01 bare-read: reset AGID selector, then emit
         let authed_direct = a.label(); // 04 02 real-AKE authed: emit WITHOUT touching AGID
-        a.ldr_lit(2, flag_base + abi::Feature::Ake as u32); // r2 = &flag[Ake]
-        a.ldrb_imm(2, 2, 0); // r2 = AKE flag byte
+        a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32); // r2 = &flag[Encryption]
+        a.ldrb_imm(2, 2, 0); // r2 = Encryption flag byte
         a.cmp_imm(2, abi::STATE_OFF); // 0x00 (null AKE / bypass): force authed so a bare 0xAD returns the VID; ON/OEM = real AKE
         a.beq(rearm);
         a.cmp_imm(0, 6); // OEM (00/0xFF): authed iff auth byte == 6 (real AKE ran)
@@ -3364,7 +3424,7 @@ impl Mt1959Engine {
         a.bind(authed_direct);
         a.ldr_lit(2, authed | 1); // proceed to stage + emit VID
         a.bx(2);
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// The Raw Read (0x04) deny-path AACS-reset trampoline (Option C). Entered by a
@@ -3384,7 +3444,7 @@ impl Mt1959Engine {
         a.movs_imm(2, 2); // replay: movs r2,#2   (sense ASCQ)
         a.movs_imm(1, 0x6f); // replay: movs r1,#0x6f (sense ASC)
         a.pop(0x0110); // pop {r4, pc} -> OEM continuation (movs r0,#5; b set_sense)
-        a.finish()
+        a.finish().map_err(anyhow::Error::from)
     }
 
     /// The **always-on boot-init** trampoline — the mechanism that makes the
@@ -3424,12 +3484,21 @@ impl Mt1959Engine {
         save_home: u32,
     ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
-        a.push(0x010F); // push {r0,r1,r2,r3,lr}  preserve orig_init's args + return addr
+        // push {r0,r1,r2,r3,r4,lr} — preserve orig_init's args + return addr,
+        // AND include an even-count `r4` pad so sp is 8-byte aligned at the
+        // downstream `blx r3` call site. Without the pad the 5-word push
+        // followed by a 4-word pop leaves sp at S-4 (4-mod-8) at the call,
+        // breaking AAPCS entry alignment. Benign for a pure Thumb-1
+        // `orig_init` on BU40N (no `ldrd/strd`/64-bit/VFP that observes it),
+        // but a latent hazard for any lineage where the callee widens. The
+        // sibling deny-reset stub (`build_deny_reset_stub` above) already
+        // uses this same pattern for the same reason.
+        a.push(0x011F); // push {r0-r4, lr}       6 words → sp 8-aligned
                         // Fill the flag table with the baked per-create DEFAULTS (slot 0 marker +
-                        // features 1..=7). Per-byte because the values differ (UHD/BD = 0x01, the
-                        // rest 0xFF); slot 0's default is 0xFF (a fresh RAM marker, overwritten only
-                        // by SAVE). This REPLACES the old blind 0xFF-fill so a never-saved drive
-                        // boots with UHD/BD accepted instead of OEM-refused.
+                        // features 1..=NUM_FEATURES). Per-byte because the values differ (UHD/BD =
+                        // 0x01, the rest 0xFF); slot 0's default is 0xFF (a fresh RAM marker,
+                        // overwritten only by SAVE). This REPLACES the old blind 0xFF-fill so a
+                        // never-saved drive boots with UHD/BD accepted instead of OEM-refused.
         a.ldr_lit(0, flag_base); // r0 = &flag table (SRAM)
         for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
             a.movs_imm(1, val); // r1 = DEFAULT_FLAGS[off]
@@ -3438,9 +3507,10 @@ impl Mt1959Engine {
         // Overlay the persisted config ONLY when it exists: NV slot 0 (the saved
         // marker) is 0xFF on erased/never-saved flash, in which case the baked
         // DEFAULTS stand. Any non-0xFF marker means a real SAVE — apply the saved
-        // feature bytes (1..=7) verbatim, so a user's explicit config (even
-        // all-0xFF passthrough) wins across a power cycle. Flash is XIP-mapped, so
-        // this is a plain memory read (no PROGRAM call). r0 stays live from the fill.
+        // feature bytes (1..=NUM_FEATURES) verbatim, so a user's explicit config
+        // (even all-0xFF passthrough) wins across a power cycle. Flash is
+        // XIP-mapped, so this is a plain memory read (no PROGRAM call). r0 stays
+        // live from the fill.
         let keep_defaults = a.label();
         a.ldr_lit(2, save_home); // r2 = flash source base (NV/SAVE home)
         a.ldrb_imm(1, 2, 0); // r1 = NV slot-0 saved marker
@@ -3453,9 +3523,62 @@ impl Mt1959Engine {
         a.bind(keep_defaults);
         a.pop(0x000F); // pop {r0,r1,r2,r3}   restore the args orig_init may read
         a.ldr_lit(3, orig_init | 1); // r3 = orig_init (Thumb bit set for blx)
-        a.blx(3); // tail-call orig_init; lr := &(pop {pc})
-        a.pop(0x0100); // pop {pc}   return to conv+4 (after the detoured bl)
-        a.finish()
+        a.blx(3); // tail-call orig_init at sp=S-8 (AAPCS-aligned); lr := &(pop {pc})
+        a.pop(0x0110); // pop {r4, pc}   restore r4 pad + return to conv+4
+        a.finish().map_err(anyhow::Error::from)
+    }
+
+    /// Resolve the boot-init detour `(conv, orig_init)` pair WITHOUT writing
+    /// anything — the single source of truth for both [`Self::resolve_boot_init_site`]
+    /// (which returns just `conv`) and [`Self::emit_boot_init`] (which consumes the
+    /// full pair). Threading the pre-resolved pair through eliminates the
+    /// second [`Self::find_boot_init`] scan that used to run inside `emit_boot_init`.
+    ///
+    /// Fail-closed rules:
+    /// modern → follow the anchor's `bmi` to the cold/warm convergence `bl`;
+    /// classic → the helper's unique caller `bl`, gated behind [`CLASSIC_BOOT_BLESSED`].
+    /// A [`None`] boot-init prologue bails: tri-state OFF is unsafe without the
+    /// always-on 0xFF fill.
+    pub(crate) fn resolve_boot_init_pair(&self, image: &[u8]) -> Result<(usize, u32)> {
+        match self.find_boot_init(image)? {
+            Some(BootInitSite::Modern(s)) => boot_init_convergence(image, s as usize)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "boot-init convergence `bl <orig_init>` not resolvable from anchor at \
+                         0x{s:x} (the bmi target is not a 32-bit Thumb bl) — refusing to ship an \
+                         unverified boot hook rather than mis-patch"
+                    )
+                }),
+            Some(BootInitSite::ClassicUnconfirmed(s)) => {
+                if !CLASSIC_BOOT_BLESSED {
+                    bail!(
+                        "boot-init site 0x{s:x} resolved via the MT1939-classic signature is a \
+                         called leaf helper whose power-on call-order is hardware-unconfirmed. \
+                         Refusing to ship an unblessed classic boot hook (could brick the drive) \
+                         — CLASSIC_BOOT_BLESSED is false until the site is verified on silicon."
+                    );
+                }
+                classic_boot_init_caller(image, s as usize).ok_or_else(|| {
+                    anyhow!(
+                        "classic boot-init: the helper at anchor 0x{:x} does not have exactly one \
+                         `bl` caller image-wide (want 1) — refusing to ship an ambiguous detour",
+                        s.saturating_sub(4)
+                    )
+                })
+            }
+            None => bail!(
+                "tri-state OFF is unsafe without a boot-init site: no known boot-init prologue \
+                 found on this image (unknown shape). Refusing to ship — a flag table that boots \
+                 all-0x00 would disable every feature at power-on."
+            ),
+        }
+    }
+
+    /// Convenience wrapper: just the detour site (the value later reported as
+    /// [`crate::engine::CreateReport::boot_init_site`]), for callers that need
+    /// the [`abi::Verb::Reboot`] boot-function-entry literal but not `orig_init`.
+    pub(crate) fn resolve_boot_init_site(&self, image: &[u8]) -> Result<u32> {
+        self.resolve_boot_init_pair(image).map(|(conv, _)| conv as u32)
     }
 
     /// Install the always-on boot-init hook: find the anchor, follow its `bmi` to the
@@ -3483,50 +3606,15 @@ impl Mt1959Engine {
         image: &[u8],
         out: &mut [u8],
         flag_base: u32,
+        boot_init_pair: (usize, u32),
     ) -> Result<(u32, u32)> {
-        // Resolve the detour `(conv, orig_init)` per lineage:
-        // * Modern — follow the anchor's cold/warm-boot `bmi` to the convergence
-        //   `bl <orig_init>` (the first instruction after the cold path rejoins, which
-        //   runs AFTER the SRAM clear and on warm boot). Detouring here, not the
-        //   pre-clear reload at `anchor+4`, is what keeps the stub's 0xFF fill alive.
-        //   `boot_init_convergence` also verifies the 4 bytes at `conv` decode as that
-        //   `bl` (fail-closed otherwise, rather than guessing).
-        // * Classic — no such convergence exists (the reload site is a leaf whose `bmi`
-        //   targets `bx lr`); detour the helper's unique caller `bl` instead
-        //   (`classic_boot_init_caller`), tail-calling the helper. Only when blessed.
-        let (conv, orig_init) = match self.find_boot_init(image)? {
-            Some(BootInitSite::Modern(s)) => {
-                boot_init_convergence(image, s as usize).ok_or_else(|| {
-                    anyhow!(
-                        "boot-init convergence `bl <orig_init>` not resolvable from anchor at \
-                         0x{s:x} (the bmi target is not a 32-bit Thumb bl) — refusing to ship an \
-                         unverified boot hook rather than mis-patch"
-                    )
-                })?
-            }
-            Some(BootInitSite::ClassicUnconfirmed(s)) => {
-                if !CLASSIC_BOOT_BLESSED {
-                    bail!(
-                        "boot-init site 0x{s:x} resolved via the MT1939-classic signature is a \
-                         called leaf helper whose power-on call-order is hardware-unconfirmed. \
-                         Refusing to ship an unblessed classic boot hook (could brick the drive) \
-                         — CLASSIC_BOOT_BLESSED is false until the site is verified on silicon."
-                    );
-                }
-                classic_boot_init_caller(image, s as usize).ok_or_else(|| {
-                    anyhow!(
-                        "classic boot-init: the helper at anchor 0x{:x} does not have exactly one \
-                         `bl` caller image-wide (want 1) — refusing to ship an ambiguous detour",
-                        s.saturating_sub(4)
-                    )
-                })?
-            }
-            None => bail!(
-                "tri-state OFF is unsafe without a boot-init site: no known boot-init prologue \
-                 found on this image (unknown shape). Refusing to ship — a flag table that boots \
-                 all-0x00 would disable every feature at power-on."
-            ),
-        };
+        // Detour pair is pre-resolved by [`Self::resolve_boot_init_pair`]:
+        // * Modern — the cold/warm-boot convergence `bl <orig_init>` (first
+        //   instruction after the cold path rejoins, which runs AFTER the SRAM
+        //   clear and on warm boot). Detouring here — not the pre-clear reload
+        //   at `anchor+4` — keeps the stub's 0xFF fill alive.
+        // * Classic — the helper's unique caller `bl` (only when blessed).
+        let (conv, orig_init) = boot_init_pair;
         let save_home = self.find_nv_block(image)?;
         let bytes = self.build_boot_init(flag_base, orig_init, save_home)?;
         let stub_va = self.free_space(out, bytes.len() + 16)?;
@@ -3657,6 +3745,26 @@ pub(crate) fn classic_boot_init_caller(image: &[u8], site: usize) -> Option<(usi
         off += 2;
     }
     caller.map(|c| (c, helper))
+}
+
+/// Which Thumb-2 wide branch encoding the caller of [`Mt1959Engine::ake_detour`]
+/// must use when writing the 4-byte install patch at the returned `reset_site`.
+///
+/// * [`WideB`](Self::WideB) — Thumb-2 wide `B` (`B.W`, T4 encoding via
+///   [`thumb_asm::encode_b_wide`]). Used on the BU40N/desktop reject-writer
+///   site where OEM has `movs r1,#1; b <back>` (a tail-call). Preserves `lr`
+///   so the shared setter's `bx lr` returns to the outer function's caller,
+///   matching OEM.
+/// * [`WideBl`](Self::WideBl) — Thumb-2 wide `BL` (via
+///   [`thumb_asm::encode_bl`]). Used on the NB-class shared-`bl` sites where
+///   OEM already had a `bl set_agid_state` — `lr = site+4` is exactly what OEM
+///   sets, so a like-for-like `bl` install is byte-behaviour-identical.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AkeInstallShape {
+    /// Thumb-2 wide `B` (`B.W`, T4). Preserves `lr`.
+    WideB,
+    /// Thumb-2 wide `BL`. Sets `lr = site+4`.
+    WideBl,
 }
 
 #[cfg(test)]

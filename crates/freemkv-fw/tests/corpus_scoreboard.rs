@@ -111,7 +111,22 @@ fn corpus_scoreboard() {
         let lin = lineage(&image).to_string();
         let key = (r.chip.clone(), lin.clone());
         let res = std::panic::catch_unwind(|| freemkv_fw::api::create(&image));
-        let ok = matches!(&res, Ok(Ok(_)));
+        // Per-image Verb::Reboot invariant: either the build path exposes NO
+        // reboot arm (classic + non-BU40N-shape images report
+        // `boot_function_entry == 0` and emit an inert Reboot arm), OR — for
+        // the modern MT1959 convergence-bl geometry — the entry MUST be
+        // exactly `boot_init_site - 0x10` (equivalently, `entry + 0x10 ==
+        // boot_init_site`). An image that falls into neither bucket has a
+        // real bug in the Reboot derivation and must FAIL the row.
+        let reboot_ok = match &res {
+            Ok(Ok(o)) => {
+                let r = &o.report;
+                r.boot_function_entry == 0
+                    || r.boot_function_entry.wrapping_add(0x10) == r.boot_init_site
+            }
+            _ => true, // failures logged separately; nothing to check here
+        };
+        let ok = matches!(&res, Ok(Ok(_))) && reboot_ok;
 
         // ---- golden-KAT row (reproducibility lock) ----
         let mut kj = String::new();
@@ -194,8 +209,15 @@ fn corpus_scoreboard() {
         } else {
             fail += 1;
             buckets.entry(key).or_default().1 += 1;
-            let detail = match res {
+            let detail = match &res {
                 Ok(Err(e)) => format!("{e:#}"),
+                Ok(Ok(o)) if !reboot_ok => {
+                    let r = &o.report;
+                    format!(
+                        "Verb::Reboot invariant violated: boot_function_entry=0x{:08x}, boot_init_site=0x{:08x} (want entry==0 OR entry+0x10==site)",
+                        r.boot_function_entry, r.boot_init_site,
+                    )
+                }
                 Ok(Ok(_)) => unreachable!(),
                 Err(_) => "PANIC during create".to_string(),
             };

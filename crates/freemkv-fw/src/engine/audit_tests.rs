@@ -70,100 +70,6 @@ fn kat_base_audits_and_is_idempotent() {
     assert!(cmac::verify(&r1.image), "output must self-verify");
 }
 
-/// Build a one-lever `ModifyReport` (RawRead Applied) over `image`, carrying the
-/// given bus-off facts, so the structural audit can be exercised synthetically.
-fn rawread_busenc_report(
-    image: Vec<u8>,
-    busenc_site: u32,
-    busenc_stub_va: u32,
-) -> crate::engine::lever::ModifyReport {
-    use crate::engine::lever::{LeverId, LeverReport, ModifyReport, Validation};
-    ModifyReport {
-        engine: "MT1959",
-        family: "MT1959".into(),
-        vendor: "HL-DT-ST".into(),
-        model: "BD-RE BU40N".into(),
-        rev: "1.00".into(),
-        vendor_specific: "N000000".into(),
-        media: "BD/UHD".into(),
-        levers: vec![LeverReport::applied(
-            LeverId::RawRead,
-            vec![
-                ("busenc_site", busenc_site),
-                ("busenc_stub_va", busenc_stub_va),
-            ],
-        )],
-        image,
-        validation: Validation::StaticOnly,
-    }
-}
-
-/// Locate the "bus-off detour bl" audit check verdict, if produced.
-fn busenc_check_ok(a: &AuditResult) -> Option<bool> {
-    a.checks
-        .iter()
-        .find(|c| c.what == "bus-enc detour bl")
-        .map(|c| c.ok)
-}
-
-/// The structural audit must PASS the bus-off detour check when the `04 03` `bl`
-/// landed correctly at the recorded site and the stub is non-blank.
-#[test]
-fn audit_passes_when_busenc_bl_landed() {
-    let site = 0x100u32;
-    let stub = 0x200u32;
-    let mut img = vec![0u8; 0x400];
-    let bl = crate::thumb::encode_bl(site as usize, stub).expect("bl in range");
-    img[site as usize..site as usize + 4].copy_from_slice(&bl);
-    // stub must not be blank flash (0xFF) — leave it as non-0xFF zeros.
-    let report = rawread_busenc_report(img.clone(), site, stub);
-    let audit = audit_image(&img, &report);
-    assert_eq!(
-        busenc_check_ok(&audit),
-        Some(true),
-        "bus-off detour check must pass:\n{}",
-        fmt_failures(&audit)
-    );
-}
-
-/// The audit must FAIL the bus-off check when the recorded `bl` is not present at
-/// the site (guards against a lever reporting Applied without the detour landing).
-#[test]
-fn audit_fails_when_busenc_bl_missing() {
-    let site = 0x100u32;
-    let stub = 0x200u32;
-    let img = vec![0u8; 0x400]; // no `bl` written at `site`
-    let report = rawread_busenc_report(img.clone(), site, stub);
-    let audit = audit_image(&img, &report);
-    assert_eq!(
-        busenc_check_ok(&audit),
-        Some(false),
-        "bus-off detour check must fail when the bl is absent"
-    );
-}
-
-/// The audit must FAIL the bus-off check when the `bl` landed but the stub slot is
-/// blank flash (0xFF) — a detour to an un-injected stub is not effective.
-#[test]
-fn audit_fails_when_busenc_stub_blank() {
-    let site = 0x100u32;
-    let stub = 0x200u32;
-    let mut img = vec![0u8; 0x400];
-    let bl = crate::thumb::encode_bl(site as usize, stub).expect("bl in range");
-    img[site as usize..site as usize + 4].copy_from_slice(&bl);
-    // Blank the stub region with 0xFF → stub_present() must reject it.
-    for b in &mut img[stub as usize..stub as usize + 16] {
-        *b = 0xFF;
-    }
-    let report = rawread_busenc_report(img.clone(), site, stub);
-    let audit = audit_image(&img, &report);
-    assert_eq!(
-        busenc_check_ok(&audit),
-        Some(false),
-        "bus-off detour check must fail when the stub is blank flash"
-    );
-}
-
 /// Synthetic structural-audit checks for a classic Raw-read report: the Gate-A
 /// `bl` check PASSES when the detour landed on a written stub, FAILS when the
 /// stub is blank flash, and the "detour facts present" check FAILS when an
@@ -172,7 +78,7 @@ fn audit_fails_when_busenc_stub_blank() {
 #[test]
 fn raw_read_audit_flags_blank_stub_and_missing_facts() {
     use crate::engine::lever::{LeverId, LeverReport, ModifyReport, Validation};
-    use crate::thumb;
+    use thumb_asm as thumb;
 
     fn report_with(image: Vec<u8>, lever: LeverReport) -> ModifyReport {
         ModifyReport {
@@ -251,6 +157,135 @@ fn raw_read_audit_flags_blank_stub_and_missing_facts() {
     assert!(
         !rr_check(&audit_image(&orig, &empty), "detour facts present").ok,
         "missing facts must fail"
+    );
+}
+
+/// Synthetic negative case for the Identity lever's Reboot boot-function-entry
+/// literal check: with a well-formed handler region (RESP_MAGIC present, record
+/// repointed) plus the Thumb-tagged entry literal baked in, the check passes;
+/// blanking the literal in the handler region flips the check to FAIL while
+/// leaving the RESP_MAGIC / record-repoint checks passing. This is the
+/// negative gate that closes the Reboot-arm-inert failure mode without
+/// requiring the KAT base to be present.
+#[test]
+fn identity_audit_flags_missing_reboot_literal() {
+    use crate::engine::lever::{LeverId, LeverReport, ModifyReport, Validation};
+
+    fn report_with(image: Vec<u8>, lever: LeverReport) -> ModifyReport {
+        ModifyReport {
+            engine: "MT1959",
+            family: "f".into(),
+            vendor: "v".into(),
+            model: "m".into(),
+            rev: "r".into(),
+            vendor_specific: String::new(),
+            media: "BD".into(),
+            levers: vec![lever],
+            image,
+            validation: Validation::StaticOnly,
+        }
+    }
+    fn id_check<'a>(a: &'a AuditResult, what: &str) -> &'a crate::engine::audit::AuditCheck {
+        a.checks
+            .iter()
+            .find(|c| c.lever == "Identity" && c.what == what)
+            .unwrap_or_else(|| panic!("no Identity check {what:?}"))
+    }
+
+    let handler_va = 0x0000_1000u32;
+    let record_off = 0x0000_2000u32;
+    // BU40N 1.00: boot_init_site - 0x10 = 0x0013D428 - 0x10 = 0x0013D418.
+    let boot_entry = 0x0013_D418u32;
+
+    // --- landed: RESP_MAGIC in handler, record repointed, literal baked.
+    let mut img = vec![0xFFu8; 0x4000];
+    // Record: keep flags at record_off+1 untouched (audit only reads the handler
+    // pointer at record_off+4..+8); write handler_va|1 there.
+    img[record_off as usize + 4..record_off as usize + 8]
+        .copy_from_slice(&(handler_va | 1).to_le_bytes());
+    // Handler bytes: place RESP_MAGIC + a Thumb-tagged boot_entry literal near the
+    // start of the handler window (well within the +0x1000 scan).
+    let ha = handler_va as usize;
+    img[ha..ha + 7].copy_from_slice(crate::abi::RESP_MAGIC);
+    img[ha + 8..ha + 12].copy_from_slice(&(boot_entry | 1).to_le_bytes());
+
+    let baked = report_with(
+        img.clone(),
+        LeverReport::applied(
+            LeverId::Identity,
+            vec![
+                ("handler_va", handler_va),
+                ("record_off", record_off),
+                ("boot_function_entry", boot_entry),
+            ],
+        ),
+    );
+    let a = audit_image(&img, &baked);
+    assert!(
+        id_check(&a, "record repointed to injected handler").ok,
+        "record repoint must pass in the well-formed baseline"
+    );
+    assert!(
+        id_check(&a, "handler injected (RESP_MAGIC present)").ok,
+        "RESP_MAGIC + non-blank handler must pass in the baseline"
+    );
+    assert!(
+        id_check(&a, "Reboot boot-function-entry literal baked").ok,
+        "baked Thumb-tagged entry literal must pass the check"
+    );
+
+    // --- Reboot literal blanked in the handler region: everything else stays
+    // passing, only the Reboot-literal check flips to FAIL. The audit must not
+    // silently accept a Reboot arm that dispatches but never invokes the boot
+    // function, so this negative case is the load-bearing guard.
+    let mut mutated = img.clone();
+    for i in ha + 8..ha + 12 {
+        mutated[i] = 0xFF;
+    }
+    let blanked = report_with(
+        mutated,
+        LeverReport::applied(
+            LeverId::Identity,
+            vec![
+                ("handler_va", handler_va),
+                ("record_off", record_off),
+                ("boot_function_entry", boot_entry),
+            ],
+        ),
+    );
+    let a = audit_image(&img, &blanked);
+    assert!(
+        id_check(&a, "record repointed to injected handler").ok,
+        "record repoint still passes after literal mutation"
+    );
+    assert!(
+        id_check(&a, "handler injected (RESP_MAGIC present)").ok,
+        "RESP_MAGIC still present after literal mutation"
+    );
+    assert!(
+        !id_check(&a, "Reboot boot-function-entry literal baked").ok,
+        "missing Thumb-tagged entry literal must fail the check"
+    );
+
+    // --- boot_function_entry == 0 (classic geometry): the Reboot check is
+    // intentionally NOT emitted at all, because the arm ships inert on classic.
+    let inert = report_with(
+        img,
+        LeverReport::applied(
+            LeverId::Identity,
+            vec![
+                ("handler_va", handler_va),
+                ("record_off", record_off),
+                ("boot_function_entry", 0),
+            ],
+        ),
+    );
+    let a = audit_image(&vec![0xFFu8; 0x4000], &inert);
+    assert!(
+        !a.checks
+            .iter()
+            .any(|c| c.lever == "Identity" && c.what == "Reboot boot-function-entry literal baked"),
+        "boot_function_entry == 0 emits no Reboot-literal check (classic geometry)"
     );
 }
 
