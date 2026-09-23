@@ -6,6 +6,192 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.14]
+
+### Changed
+- **Every Thumb primitive now comes from the standalone `thumb-asm` crate.**
+  `crates/freemkv-fw/src/thumb.rs` collapsed to a thin shim over
+  `thumb_asm::*` plus two anyhow-flavored install-guard helpers
+  (`assert_bl_install` / `assert_b_wide_install`). Byte-for-byte identical
+  emit verified (image sha256 pre- and post-migration match). Path-dep
+  during co-development; the crate is at `../../thumb-asm` awaiting a
+  crates.io publish.
+
+### Added
+- **Emit-time install guards at every detour site.** After each
+  `thumb::write(&mut buf, site, &bl)` in `mt1959.rs` and
+  `mt1939_classic.rs` the 4 bytes are decoded back and asserted to reach
+  the intended stub VA. Twelve sites total — Speed, Region, Gate-A,
+  deny-reset, UHD, HRL (per loop iteration), BD, plus the classic Region,
+  Gate-A, AKE, HRL (per loop iteration), and the shared classic
+  `commit_classic_detour` covering UHD+BD. Would have caught the 0.8.13
+  BL-over-tail-call bug at emit time.
+- **`AkeInstallShape` regression KAT.** The byte-exact hand-built KAT now
+  additionally decodes the AKE detour site on the fixture image and
+  asserts (a) it decodes as a wide `B.W` to `ake_stub_va`, (b) it does
+  NOT decode as a `BL`. Prevents any future silent reversion of the
+  install shape.
+
+### Fixed
+- **BU40N/desktop AKE detour install is now a wide `B`, not a wide `BL`.** The
+  AKE reject-writer site (`AKE_GATE_SIG`'s `match+12`) has an OEM tail-call
+  idiom: `movs r1,#1; b <set_agid_state>`. `set_agid_state` is a shared leaf
+  that returns via `bx lr`, using the OUTER function's `lr` (set by *its*
+  caller). Installing a `bl <build_ake_stub>` here clobbered `lr` with
+  `site+4`, so `set_agid_state`'s `bx lr` no longer returned to the outer
+  caller — it fell into an unrelated leaf at `site+4` that clears bit 0x10
+  of MMIO `0x04000000`, disabling drive-side bus-encryption at boot on every
+  reject-arm path (fires on the drive's internal AKE cycle at disc-load,
+  before any host command). Symptom: fresh cold-boot with `Encryption=0xFF`
+  should have left the drive bus-wrapped like OEM, but empirically it
+  came up de-bussed. The install is now a Thumb-2 wide `B` (`B.W`, T4 —
+  same 4 bytes, `hw2` base `0x9000` instead of `0xD000`) so `lr` flows
+  unchanged through the detour and the tail-call semantics match OEM
+  exactly. `ake_detour` now returns an `AkeInstallShape` enum so the caller
+  picks `B.W` for the BU40N/desktop tail-call site and `BL` for the NB-class
+  shared-`bl` sites (which were correct as-is because OEM already had a
+  `bl` there). Added `thumb::encode_b_wide` and `thumb::decode_b_wide` next
+  to their `bl` counterparts. Audit updated to accept either encoding at
+  the AKE install site.
+
+## [0.8.13]
+
+### Fixed
+- **`Feature::Encryption` revert now actually re-arms the drive-side bus.** The
+  0.8.12 revert used the plain `aacs_session_reset` primitive at VA `0xCAE18`,
+  which empirically tears the AGID ladder down but does NOT re-arm bus-encryption
+  (kickoff Fact 4: direct call returns SCSI Good, drive alive, but the state
+  cell at `0x01ff9e04` and every observable read is identical before/after).
+  The correct primitive is the OEM's own **session-rearm wrapper** at
+  `0x00044874` on BU40N 1.00 — the routine OEM firmware itself calls at
+  disc-insert / medium-loaded to bring the AACS session UP. That wrapper does
+  `aacs_session_reset` PLUS the six subsystem re-inits it tears down, including
+  the bit-20 write to the engine control word (`ldr r0,[r2,#4]; movs r1,#1;
+  lsls r1,#0x14; orrs r0,r1; str r0,[r2,#4]` — the "arm bus-encryption" store
+  the plain reset lacks) and the AACS coprocessor arm mailbox
+  (`r0=1; blx 0xd9b68`). The SET-Encryption arm now bakes this wrapper as the
+  revert target with a rearm-first / reset-fallback resolution, so `SET
+  encryption 0xFF` (or `0x01`) from a de-bussed session re-wraps the drive
+  synchronously and the fw obeys the flag in both directions — the runtime
+  half of the "6 flags in NV; boot loads; fw obeys; SET re-obeys" contract.
+- **Uniqueness-verified finder for the rearm wrapper.** `find_aacs_session_rearm`
+  matches a 32-byte inner idiom (three wildcard BLs + the six-halfword bit-20
+  bus-enc arm store + a wildcard BL + the first halfword of the BL to
+  `aacs_session_reset`); the trailing BL's target is decoded and required to
+  equal the already-resolved `find_aacs_session_reset` entry, so the match is
+  proven-unique image-wide and cannot ship a mis-patched revert.
+
+## [0.8.12]
+
+### Fixed
+- **`Feature::Encryption` is now truly bidirectional.** `SET encryption` to a
+  non-off state (`0xFF` passthrough / `0x01` on) now invokes the OEM
+  `aacs_session_reset` primitive so any latched de-bus session is torn down
+  synchronously — the flag can be flipped back to OEM and the *drive actually
+  reverts to bus-wrapped reads*. Previously the drive could stay latched
+  de-bussed after the initial `set encryption 0x00`, so `set encryption 0xFF`
+  only *read* right but didn't *do* what it said. `SET encryption 0x00` is
+  unchanged (the AKE detour applies the de-bus on the next read); the reset is
+  emitted only on the revert direction. `aacs_reset` resolution is best-effort
+  (`.unwrap_or(0)`), so images whose signature doesn't match still build — the
+  handler simply skips the emit block on those.
+
+## [0.8.11]
+
+### ABI BREAK
+- **Removed `Feature::Bus`** (wire id `0x07` retired). Empirically proved on
+  BU40N/MT1959 that toggling `Bus` alone had no observable content-decrypt effect
+  — the drive-side bus wrap was inert as a *separate* datapath lever. The Bus
+  toggle is gone from the wire ABI; `0x07` is unassigned.
+- **Renamed `Feature::Ake` (`0x06`) → `Feature::Encryption`.** The single
+  consolidated master encryption/cert bypass: `STATE_OFF` (`0x00`) = every
+  drive-side encryption/cert requirement gone (cert-AKE relaxed, bus-wrap off —
+  what used to need a cert now doesn't); `STATE_PASSTHROUGH` (`0xFF`) = OEM
+  real handshake; `STATE_ON` (`0x01`) = require the real handshake. Hosts that
+  used to write `Ake=off + Bus=off` now write **one** `Encryption=off`.
+- **Added `Verb::Reboot` (`0x0F`)** — DEBUG_KNOCK-only. Invokes the firmware's
+  boot function entry with `r0=4` to force the cold path (BSS clear + C-runtime
+  data init + full post-init). Recovers a wedged drive without a power cycle;
+  the safe-knock verb chain is re-armed to its power-on defaults. The target VA
+  is baked into the emitted handler at build time (`boot_init_site - 0x10`), so
+  no CDB arguments are carried beyond the verb byte.
+- **Added `Verb::Call` (`0x0C`)** — DEBUG_KNOCK-only. Interactive `blx target`
+  primitive: `CDB[5..9]` = 32-bit target VA (BE); `CDB[9]` = single u8 loaded
+  into `r0`. Non-durable / diagnostic.
+- **Added `Verb::Poke` (`0x0D`)** — DEBUG_KNOCK-only. Poke a single byte to an
+  arbitrary address: `CDB[5..9]` = 32-bit target (BE); `CDB[9]` = value. NO
+  bounds check. Non-durable / diagnostic.
+- **Added `DEBUG_KNOCK` (`DE B9`)** — a distinct two-byte knock at `cdb[2..4]`,
+  by-construction different from the safe [`KNOCK`] (`C0 DE`). Debug-only verbs
+  (`Call`, `Poke`, `Reboot`) dispatch ONLY under `DEBUG_KNOCK`; safe verbs
+  dispatch ONLY under `KNOCK`. The two dispatches never cross, so a typo of a
+  safe verb vs a debug verb under the wrong knock always falls through to a
+  zeroed reply — `Call`/`Poke`/`Reboot` can never be accidentally invoked via
+  the safe knock, and no safe verb can be accidentally invoked via `DEBUG_KNOCK`.
+
+### Fixed
+- **DEBUG_KNOCK fall-through into safe dispatch** — the `debug_ok` block's
+  unknown-verb arm now clobbers `r4` before falling through to `clr`, so a
+  safe-verb id in `cdb[4]` under `DEBUG_KNOCK` can never execute the safe verb.
+- **Classic `Verb::Reboot` baked the wrong VA** — the classic build path now
+  reports `boot_function_entry == 0` and emits an INERT Reboot arm (no `blx`),
+  because `site - 0x10` on classic does not point at a valid function entry.
+  The verb still returns a zeroed reply; it just doesn't reset.
+- **Feature id `0` in SET/GET** — the handler's bounds check now rejects id `0`
+  in both the SET and GET arms. Slot 0 is the NV saved-marker cell; a SET with
+  id `0` would have overwritten the marker (making a genuinely-saved config
+  look never-saved), and a GET with id `0` would have leaked it.
+
+### Removed
+- **Dead detours:** `debus_detour`, `busenc_detour`, and the SET-time bare-VID
+  replay are gone. Consolidation into a single `Encryption` feature made all
+  three redundant: the one gate that empirically moves the needle stays, the
+  others are dead code paths that added exploit surface without effect.
+
+## [0.8.4] – [0.8.10] (unreleased umbrella)
+
+The 0.8.4–0.8.10 window collapsed the wire ABI to its post-hardware-proof
+shape. No 0.8.4–0.8.10 image ever shipped as a tagged release; the individual
+version bumps served as milestones in the KAT-locked emit-byte progression. The
+consolidated highlights:
+
+### Added
+- **Debug-knock family (built up across 0.8.7–0.8.9):** `Verb::Call`,
+  `Verb::Poke`, and `Verb::Reboot` all landed under a distinct `DEBUG_KNOCK`
+  (`DE B9`) at `cdb[2..4]`. The fw's dispatch NEVER crosses knocks: safe verbs
+  under safe knock only, debug verbs under debug knock only. Positional KAT
+  assertions lock the emitted Reboot arm to its `bne / ldr r6,[pc,#imm] / movs
+  r0,#4 / blx r6` shape.
+- **Structural release-gate audit checks `Verb::Reboot`** — when the build path
+  resolves a `boot_function_entry` (modern MT1959 geometry), the emitter now
+  records the entry as an `Identity` lever fact and the audit verifies the
+  Thumb-tagged 32-bit literal `entry | 1` is present in the injected handler.
+  Classic builds report `entry == 0` and the check is skipped.
+
+### Changed
+- **Consolidation of Ake + Bus → Encryption (0.8.10).** Empirical bench work on
+  BU40N/MT1959 proved `Bus` inert as a *separate* lever; the AKE-bypass path
+  alone de-busses content on the wire. The two independent features are now
+  one master `Encryption` feature at wire id `0x06`; wire id `0x07` is retired.
+- Number of orthogonal feature flags: **7 → 6**.
+- Feature-flag table SRAM span: `NUM_FEATURES + 1 = 7 bytes` (slot 0 = NV
+  saved-marker; slots `0x01..=0x06` = feature bytes). FlashWrite scratch cell
+  moves accordingly, unchanged in address.
+- **FlashWrite allowlist re-anchored to the NV/SAVE block** (`0x1EA000..0x1EB000`).
+  Corpus-proven (all 118 OEM images) as the one always-writable free zone: OEM
+  writes its region record at `+0x4B0` so the flash controller unlocks it, the
+  head `0x1EA000..0x1EA4B0` is blank in every image, and the block is outside
+  CMAC coverage. The retired `0x1ED000..0x1EF000` and `0x1D0000` windows were
+  always-blank / never-OEM-written = controller-locked (writes didn't persist).
+
+### Fixed
+- **Host mirror was missing `Verb::FlashWrite` (`0x0A`)** — the drift-guard test
+  didn't pin `0x0A`, so a host build could compile without a wire-id for it.
+  Now added to the enum and the wire-values pin test.
+- **Stale comment drift** — internal docstrings that described the feature-flag
+  table as `8 bytes` (`0x00..=0x07`) or `flag[0x01..=0x07]` were carried forward
+  from the pre-consolidation code; all corrected to `7 bytes` / `flag[0x01..=0x06]`.
+
 ## [0.8.3]
 
 ### Changed
