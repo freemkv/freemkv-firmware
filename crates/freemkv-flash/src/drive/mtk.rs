@@ -56,6 +56,16 @@ pub const ROM_1EC000_LEN: u32 = 0x100;
 pub const ROM_1F0000_OFFSET: u32 = 0x1F0000;
 /// Per-unit calibration NVRAM region length (64 KiB).
 pub const ROM_1F0000_LEN: u32 = 0x10000;
+
+/// Per-member cap for [`UserDump::read_tar`] — hard ceiling on how many bytes
+/// a single tar entry may carry before we refuse. The largest legitimate
+/// member is `rom_1F0000.bin` at 64 KiB; the cap sits well above that so
+/// firmware/ROM regions never bump against it, but low enough that a hostile
+/// tar cannot force a large allocation before the per-member length gate in
+/// `UserDump::from_members` runs. 256 KiB gives 4× headroom over the largest
+/// legitimate member — plenty for any future region grow, still far below
+/// the ~16 GiB "declared size" a naive `read_to_end` would swallow.
+pub const READ_TAR_MEMBER_CAP: usize = 256 * 1024;
 /// INQUIRY allocation length used by the identity flow.
 pub const INQUIRY_LEN: u16 = 96;
 /// GET CONFIGURATION allocation length for the fd_* field descriptors.
@@ -414,6 +424,13 @@ pub struct UserDump {
 
 impl UserDump {
     /// Build a [`UserDump`] from `(name, data)` members in any order.
+    ///
+    /// Every member is length-bounded to its documented size. A tar file whose
+    /// `rom_1F0000.bin` is 128 KiB would otherwise overrun the flash target at
+    /// `0x200000` when restored; a member > 16 MiB would silently truncate the
+    /// 24-bit CDB length field the WRITE BUFFER writes go out with. Refuse
+    /// tar-supplied lengths that don't match the exact per-member size the
+    /// drive actually stores.
     pub fn from_members(members: Vec<(&str, Vec<u8>)>) -> Result<Self> {
         let mut rom_003000 = None;
         let mut rom_1ec000 = None;
@@ -436,16 +453,27 @@ impl UserDump {
             }
             *slot = Some(data);
         }
-        let take = |slot: Option<Vec<u8>>, name: &str| {
-            slot.ok_or_else(|| anyhow!("missing dump member '{name}'"))
+        // Load slots, then per-member size gate — reject any tar whose member
+        // length doesn't match the fixed on-drive region size.
+        let check_len = |slot: Option<Vec<u8>>, name: &str, want: usize| -> Result<Vec<u8>> {
+            let data = slot.ok_or_else(|| anyhow!("missing dump member '{name}'"))?;
+            if data.len() != want {
+                bail!(
+                    "dump member '{name}' has length {} — expected exactly {want} bytes; \
+                     refusing to restore (a wrong-size member would either overrun the \
+                     on-drive region or truncate the CDB length field)",
+                    data.len()
+                );
+            }
+            Ok(data)
         };
         Ok(Self {
-            rom_003000: take(rom_003000, "rom_003000.bin")?,
-            rom_1ec000: take(rom_1ec000, "rom_1EC000.bin")?,
-            rom_1f0000: take(rom_1f0000, "rom_1F0000.bin")?,
-            inq: take(inq, "inq.bin")?,
-            fd_fwdate: take(fd_fwdate, "fd_fwdate.bin")?,
-            fd_sn: take(fd_sn, "fd_sn.bin")?,
+            rom_003000: check_len(rom_003000, "rom_003000.bin", ROM_003000_LEN as usize)?,
+            rom_1ec000: check_len(rom_1ec000, "rom_1EC000.bin", ROM_1EC000_LEN as usize)?,
+            rom_1f0000: check_len(rom_1f0000, "rom_1F0000.bin", ROM_1F0000_LEN as usize)?,
+            inq: check_len(inq, "inq.bin", INQUIRY_LEN as usize)?,
+            fd_fwdate: check_len(fd_fwdate, "fd_fwdate.bin", FD_LEN as usize)?,
+            fd_sn: check_len(fd_sn, "fd_sn.bin", FD_LEN as usize)?,
         })
     }
 
@@ -496,6 +524,14 @@ impl UserDump {
     }
 
     /// Read a dump-style `.tar` back into a [`UserDump`].
+    ///
+    /// Per-member size is capped BEFORE `read_to_end` — the
+    /// `UserDump::from_members` per-member length gate that follows would
+    /// reject an oversized member, but only AFTER we'd already allocated the
+    /// full attacker-controlled length into memory. Cap the tar-header-
+    /// declared size (`entry.size()`) at [`READ_TAR_MEMBER_CAP`] and refuse
+    /// early, so a hostile ~16 GiB tar member cannot force a large-buffer
+    /// allocation just to be told "wrong size" by `from_members`.
     pub fn read_tar<R: Read>(r: R) -> Result<Self> {
         let mut archive = tar::Archive::new(r);
         let mut members = Vec::new();
@@ -506,8 +542,29 @@ impl UserDump {
                 .to_str()
                 .context("non-UTF8 tar member name")?
                 .to_string();
-            let mut data = Vec::new();
-            entry.read_to_end(&mut data)?;
+            // Header-declared size — early refusal against oversized inputs.
+            let declared = entry.size();
+            if declared > READ_TAR_MEMBER_CAP as u64 {
+                bail!(
+                    "tar member '{}' declares {declared} bytes (> {READ_TAR_MEMBER_CAP} cap); \
+                     refusing to allocate a buffer this large before the length gate runs",
+                    super::sanitize_ascii(&name)
+                );
+            }
+            // Read into a capacity-hinted buffer; `take` bounds the actual
+            // bytes read too, so a mismatched header (declared < actual)
+            // still can't blow past the cap.
+            let mut data = Vec::with_capacity(declared as usize);
+            entry
+                .by_ref()
+                .take(READ_TAR_MEMBER_CAP as u64 + 1)
+                .read_to_end(&mut data)?;
+            if data.len() > READ_TAR_MEMBER_CAP {
+                bail!(
+                    "tar member '{}' body exceeded the {READ_TAR_MEMBER_CAP}-byte cap",
+                    super::sanitize_ascii(&name)
+                );
+            }
             let canonical = MEMBER_NAMES
                 .iter()
                 .copied()
@@ -563,6 +620,15 @@ pub fn parse_sense(data: &[u8]) -> Option<(u8, u8, u8)> {
         }
         _ => None,
     }
+}
+
+/// SCSI sense keys that unambiguously indicate a programming failure on the
+/// MTK flash path: MEDIUM (0x3), HARDWARE (0x4), ABORTED (0xB). The post-settle
+/// and post-flash sense checks both hard-fail on these three; every other key
+/// is non-fatal at that layer (read-back verify + re-enumeration are the
+/// authorities).
+pub fn sense_key_is_fatal(key: u8) -> bool {
+    matches!(key, 0x3 | 0x4 | 0xB)
 }
 
 /// Parse a GET CONFIGURATION single-feature descriptor (fd_sn / fd_fwdate).
@@ -853,14 +919,66 @@ impl DriveFamily for Mtk {
     fn wait_ready(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
         use std::time::{Duration, Instant};
         // After the last chunk the drive keeps programming and reports TEST UNIT
-        // READY as an error until done. Poll until the transport returns Ok, then
-        // let read-back verify judge; give up after a generous ceiling.
+        // READY as an error until done. Poll until the transport returns Ok. If
+        // the ceiling elapses without a good reply the drive is still busy or
+        // has genuinely faulted — either way the flash is NOT settled and the
+        // caller MUST NOT continue as if it were.
         let deadline = Instant::now() + Duration::from_secs(45);
-        while dev.command_in(&cdb_test_unit_ready(), 0).is_err() {
-            if Instant::now() >= deadline {
+        loop {
+            if dev.command_in(&cdb_test_unit_ready(), 0).is_ok() {
                 break;
             }
+            if Instant::now() >= deadline {
+                bail!(
+                    "drive did not settle after the flash burn within 45 s — TEST UNIT READY \
+                     never came back Ok. The flash may have FAILED, or the drive is hung; do \
+                     NOT trust the exit code as success. Physically power-cycle the drive and \
+                     re-verify its firmware identity before shipping."
+                );
+            }
             std::thread::sleep(Duration::from_millis(500));
+        }
+        // Post-settle sense check. `flash_close`'s REQUEST SENSE fires BEFORE
+        // this wait, i.e. against a still-programming drive whose sense is
+        // transient (mid-program). A hardware fault that only manifests after
+        // programming completes would not be caught by that early check —
+        // catch it here, on the settled drive, where the sense reflects the
+        // final flash outcome. Same "hard fail keys" list as `flash_close`
+        // (MEDIUM 0x3, HARDWARE 0x4, ABORTED 0xB); every other key here is
+        // benign (drive settled Ok but had a stale UNIT ATTENTION etc.).
+        //
+        // If the sense query itself errors or returns unparseable bytes,
+        // WARN — silently swallowing the failure would narrow the backstop
+        // back down to relying on downstream read-back verify alone, and the
+        // operator has no way to know that happened. Matches the sibling
+        // `flash_close` behaviour on unparseable sense.
+        let sense = match dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!(
+                    "warning: post-settle REQUEST SENSE errored ({e:#}); relying on read-back \
+                     verify — the drive settled but its final sense state is unknown."
+                );
+                Vec::new()
+            }
+        };
+        match parse_sense(&sense) {
+            Some((key, asc, ascq)) if sense_key_is_fatal(key) => {
+                bail!(
+                    "post-settle sense reports a flash fault — {}; the flash may have FAILED. \
+                     Physically confirm the drive's firmware identity before shipping.",
+                    crate::platform::describe_sense(key, asc, ascq)
+                );
+            }
+            Some(_) => {}
+            None if !sense.is_empty() => {
+                eprintln!(
+                    "warning: post-settle REQUEST SENSE returned an unparseable {}-byte reply; \
+                     relying on read-back verify.",
+                    sense.len()
+                );
+            }
+            None => {}
         }
         Ok(())
     }
@@ -922,10 +1040,10 @@ impl DriveFamily for Mtk {
             .command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)
             .unwrap_or_default();
         match parse_sense(&sense) {
-            // Hard-fail ONLY on an unambiguous programming failure: MEDIUM (0x3),
-            // HARDWARE (0x4), ABORTED (0xB). Every other key is non-fatal here
-            // (see the catch-all) — the drive re-enumeration is the authority.
-            Some((key, asc, ascq)) if matches!(key, 0x3 | 0x4 | 0xB) => {
+            // Hard-fail ONLY on an unambiguous programming failure (see
+            // `sense_key_is_fatal`). Every other key is non-fatal here — the
+            // drive re-enumeration is the authority.
+            Some((key, asc, ascq)) if sense_key_is_fatal(key) => {
                 bail!(
                     "drive reported an error after flash — {}; the flash may have FAILED",
                     crate::platform::describe_sense(key, asc, ascq)

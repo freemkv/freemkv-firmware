@@ -10,6 +10,35 @@ fn classify_mtk_from_get_config_010c() {
     assert_eq!(classify(&mut dev), Family::Mtk);
 }
 
+/// Regression guard: a drive that answers GET CONFIG 0x010C with the standard
+/// MMC "Firmware Information" descriptor (as any compliant non-MTK drive
+/// implementing feature 0x010C would) but does NOT carry the MT19 boot banner
+/// at `0x003000` MUST classify as [`Family::Unknown`] — never MTK. This is
+/// exactly the mis-classification the `has_mt19_banner` gate was added to
+/// prevent (0x010C alone is not authoritative; the banner is the hardware
+/// signature that anchors the MTK identification).
+#[test]
+fn classify_unknown_when_010c_matches_but_mt19_banner_absent() {
+    let mut fd = vec![0u8; 28];
+    fd[8] = 0x01;
+    fd[9] = 0x0C;
+    // Only the 0x010C echo is wired; the 0x003000 boot-ROM read falls to the
+    // mock's zero-fill default, so `has_mt19_banner` sees no `MT19` substring
+    // and returns false. Without the banner gate this would incorrectly
+    // classify MTK.
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
+        fd,
+    );
+    assert_eq!(
+        classify(&mut dev),
+        Family::Unknown,
+        "0x010C echo alone must NOT be enough to classify as MTK — the MT19 boot banner is \
+         a required second gate. A compliant non-MTK drive that also implements 0x010C would \
+         otherwise be misclassified and become a `flash --allow-crossflash` target."
+    );
+}
+
 #[test]
 fn classify_pioneer_from_read_buffer_f1() {
     let mut dev = MockScsiDevice::pioneer();

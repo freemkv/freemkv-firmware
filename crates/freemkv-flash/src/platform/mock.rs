@@ -97,16 +97,36 @@ impl MockScsiDevice {
     }
 
     /// A mock that classifies as MediaTek: GET CONFIGURATION 0x010C echoes the
-    /// `01 0C` feature descriptor. All other reads zero-fill.
+    /// `01 0C` feature descriptor AND the boot-ROM region at `0x003000` carries
+    /// the ASCII `MT19` short-form boot banner (`"MT1959 Boot BU5..."` at
+    /// offset 0 of the 32-byte region) — the MT19-family vendor signature
+    /// the classifier cross-checks via `has_mt19_banner`.
     pub fn mtk() -> Self {
         let mut fd = vec![0u8; 28];
         // GET CONFIG header (8) + feature descriptor: feature code at bytes 8..10.
         fd[8] = 0x01;
         fd[9] = 0x0C;
-        Self::new().on(
-            |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
-            fd,
-        )
+        let mut boot_rom = vec![0u8; 32];
+        // Short boot-banner: `MT1959 Boot BU5...` — the ASCII substring the
+        // classifier's `has_mt19_banner` scans the 32-byte 0x003000 region
+        // for (`MT19` — appears in both `MT1959` and `MT1939` variants).
+        boot_rom[0..15].copy_from_slice(b"MT1959 Boot BU5");
+        // Reading `ROM_003000_OFFSET = 0x3000` with `MODE_6` and `BUFFER_ID = 0x00`:
+        // CDB[0]=0x3C, CDB[1]=mode6, CDB[2]=0x00 buffer-id, CDB[3..6]=offset(0x003000).
+        Self::new()
+            .on(
+                |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
+                fd,
+            )
+            .on(
+                |cdb| {
+                    cdb.first() == Some(&0x3C)
+                        && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
+                        && cdb.get(2) == Some(&0x00)
+                        && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..])
+                },
+                boot_rom,
+            )
     }
 
     /// Mark this mock as having a disc loaded, so [`ScsiDevice::medium_status`]

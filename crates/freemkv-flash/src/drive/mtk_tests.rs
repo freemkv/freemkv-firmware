@@ -97,6 +97,111 @@ fn tar_round_trip() {
     assert_eq!(UserDump::from_tar_bytes(&bytes).unwrap(), dump);
 }
 
+/// `UserDump::from_members` MUST refuse a member whose length does not match
+/// the on-drive region size exactly. A too-large `rom_1F0000.bin` would
+/// overrun the 0x200000 flash target on restore; a >16 MiB member would
+/// truncate the 24-bit CDB length field the WRITE BUFFER writes go out
+/// with. Confirm every member enforces its expected size independently.
+#[test]
+fn from_members_rejects_wrong_size_members() {
+    fn base_members() -> Vec<(&'static str, Vec<u8>)> {
+        vec![
+            ("rom_003000.bin", vec![0; ROM_003000_LEN as usize]),
+            ("rom_1EC000.bin", vec![0; ROM_1EC000_LEN as usize]),
+            ("rom_1F0000.bin", vec![0; ROM_1F0000_LEN as usize]),
+            ("inq.bin", vec![0; 96]),
+            ("fd_fwdate.bin", vec![0; 28]),
+            ("fd_sn.bin", vec![0; 28]),
+        ]
+    }
+
+    // Baseline: correct sizes → accepted.
+    assert!(UserDump::from_members(base_members()).is_ok());
+
+    // Each member's size is checked independently — mutating any one of
+    // them (too large OR too small) must refuse.
+    let mutations: &[(&str, Vec<u8>, &str)] = &[
+        ("rom_003000.bin", vec![0; 0], "empty rom_003000.bin"),
+        (
+            "rom_003000.bin",
+            vec![0; ROM_003000_LEN as usize + 1],
+            "one-byte oversize rom_003000.bin",
+        ),
+        (
+            "rom_1EC000.bin",
+            vec![0; ROM_1EC000_LEN as usize - 1],
+            "one-byte undersize rom_1EC000.bin",
+        ),
+        // The load-bearing one: an oversized rom_1F0000 would restore past
+        // the 0x200000 flash-target boundary. Guard MUST refuse.
+        (
+            "rom_1F0000.bin",
+            vec![0; ROM_1F0000_LEN as usize * 2],
+            "2x oversize rom_1F0000.bin (would overrun flash on restore)",
+        ),
+        ("inq.bin", vec![0; 32], "undersize inq.bin"),
+        ("fd_fwdate.bin", vec![0; 128], "oversize fd_fwdate.bin"),
+    ];
+
+    for (name, data, label) in mutations {
+        let mut members = base_members();
+        // Replace the named member with the mutated data.
+        for m in members.iter_mut() {
+            if m.0 == *name {
+                m.1 = data.clone();
+                break;
+            }
+        }
+        let err = UserDump::from_members(members).expect_err(&format!(
+            "from_members MUST refuse a {label} — mismatched per-member length is a \
+             restore-time overrun / truncation hazard"
+        ));
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains(name) && msg.contains("expected"),
+            "error message must name the offending member and its expected size (got: {msg})"
+        );
+    }
+}
+
+/// The `read_tar` size cap must refuse a tar member whose declared header
+/// size exceeds [`READ_TAR_MEMBER_CAP`] BEFORE allocating a full-length
+/// buffer for it. Without this guard a hostile 100-GiB header would force
+/// a large allocation and only THEN get rejected by `from_members`'s
+/// per-member length gate.
+#[test]
+fn read_tar_refuses_oversized_member_before_allocating() {
+    // Build a minimal single-entry tar whose header claims a size just
+    // beyond the cap. `tar::Builder` writes the header verbatim, so we
+    // can drive `read_tar` into the oversize branch without allocating
+    // the full body ourselves.
+    let mut buf: Vec<u8> = Vec::new();
+    {
+        let mut b = tar::Builder::new(&mut buf);
+        let mut header = tar::Header::new_gnu();
+        header
+            .set_path("rom_1F0000.bin")
+            .expect("set_path on header");
+        header.set_size(READ_TAR_MEMBER_CAP as u64 + 1);
+        header.set_cksum();
+        // Body bytes: use a real (much smaller) body — the tar reader
+        // truncates to the header's declared size, so read_tar hits our
+        // size guard on the declared size, not the body. That's exactly
+        // the point: reject before allocation.
+        let body = vec![0u8; 32];
+        b.append(&header, &body[..]).expect("append body");
+        b.finish().expect("finalize tar");
+    }
+    let err = UserDump::read_tar(&buf[..]).expect_err(
+        "read_tar MUST refuse a member whose declared size exceeds READ_TAR_MEMBER_CAP",
+    );
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("rom_1F0000.bin") && msg.contains("cap"),
+        "error message must name the offending member and the cap (got: {msg})"
+    );
+}
+
 #[test]
 fn parse_field_descriptor_serial_and_helpers() {
     let mut data = vec![

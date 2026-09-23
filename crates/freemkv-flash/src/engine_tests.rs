@@ -187,6 +187,39 @@ fn flash_execute_fails_on_mismatch_inside_a_cmac_protected_range() {
     );
 }
 
+/// Codeaudit HIGH-4 (`tests` lens): the post-flash "unverified > 0" bail —
+/// added when `.warn+exit-0` was upgraded to `.bail!` — had no test path
+/// that would trigger it. This test forces a read-back to ERROR (not
+/// mismatch) on a protected chunk, so the engine's `differing`+`first_bad`
+/// path is not taken and `unverified` increments; the flash must then
+/// bail with the "read-back INCOMPLETE" message and NOT exit 0.
+#[test]
+fn flash_execute_bails_on_unverified_read_back_of_protected_chunk() {
+    let bad_offset = (CHUNK * 5) as u32; // 0x14000, inside a CMAC-active range
+    let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
+    assert!((0x11000..=0x1FFFF).contains(&bad_offset));
+    let want = offset_bytes(bad_offset);
+    // `on_fail` refuses the read entirely — `readback` returns Err, the
+    // engine's match falls through to the `has_protected` arm, and
+    // `unverified` increments. With protected ranges non-empty AND no
+    // differing bytes AND unverified > 0, the new bail! must fire.
+    let mut dev = MockScsiDevice::echoing().on_fail(
+        move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+        "simulated read-back transport error",
+    );
+    let req = bin_req(image, true);
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("read-back INCOMPLETE") || msg.contains("unverified"),
+        "expected the codeaudit-driven 'unverified > 0' bail, got: {msg}"
+    );
+    assert!(
+        !msg.contains("read-back verify FAILED"),
+        "must NOT be the 'differing bytes' bail — the mock errored, it didn't mismatch"
+    );
+}
+
 #[test]
 fn flash_execute_tolerates_readback_mismatch_outside_protected_ranges() {
     // A mismatch OUTSIDE every CMAC-protected range — here the per-unit NVRAM/
@@ -558,9 +591,24 @@ fn crossflash_warns_when_the_drive_silicon_is_unconfirmed() {
 }
 
 #[test]
-fn crossflash_flag_lets_a_wrong_model_image_flash_end_to_end() {
-    // A signed MT1959 image built for WH16NS60, flashed onto a drive reporting
-    // BU40N. Without the flag the model gate refuses; with it, the flash proceeds.
+fn crossflash_flag_refuses_when_drive_firmware_is_unreadable() {
+    // Two behaviours in one test:
+    //
+    // 1. Without `--allow-crossflash`, a wrong-model image is refused at the
+    //    model-name gate regardless of drive firmware — the existing "model
+    //    gate is authoritative" contract.
+    //
+    // 2. With `--allow-crossflash`, the sub-family gate (`MT1959` vs
+    //    `MT1939`) becomes load-bearing and MUST be verified by reading the
+    //    drive's current firmware. If that read succeeds but the bytes
+    //    aren't identifiable as an MT19xx image (as here — the mock's
+    //    default zero-fill response), the flash MUST refuse. Previously the
+    //    engine used `.ok()` on `detect_chip` and silently treated an
+    //    unidentifiable firmware as "family unknown, warn and proceed",
+    //    which let a cross-family flash slip through on any drive whose
+    //    firmware couldn't be identified — the exact class of brick this
+    //    gate exists to prevent. See the codeaudit HIGH-1 fix in
+    //    `engine.rs::flash` where `drive_fine_family` is now `?`-propagated.
     let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
 
     let mut refused = bin_req(image.clone(), true);
@@ -570,8 +618,17 @@ fn crossflash_flag_lets_a_wrong_model_image_flash_end_to_end() {
     );
 
     refused.allow_crossflash = true;
-    flash(&mut MockScsiDevice::new(), &Mtk, &refused)
-        .expect("crossflash proceeds with --allow-crossflash on same-chipset silicon");
+    let err = flash(&mut MockScsiDevice::new(), &Mtk, &refused).expect_err(
+        "crossflash MUST refuse when the drive's current firmware cannot be identified as an \
+         MT19xx image — an unidentifiable read is not 'family unknown, warn and proceed'",
+    );
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("identifying the drive's silicon family")
+            || msg.contains("undetectable")
+            || msg.contains("MTEKMT19"),
+        "error must name the fine-family identification failure (got: {msg})"
+    );
 }
 
 #[test]

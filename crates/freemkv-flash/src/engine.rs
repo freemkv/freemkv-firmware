@@ -654,12 +654,28 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // --allow-crossflash was passed, which waives the MODEL match (but never the
     // chipset-family gate). For crossflash we read the drive's CURRENT firmware to
     // confirm its exact silicon (MT1959 vs MT1939) from real bytes.
+    //
+    // If `--allow-crossflash` is set, the fine-family read MUST succeed and
+    // detect_chip MUST identify a family — a read error here silently masks
+    // the "non-overridable" MT1959-vs-MT1939 gate that `decide_crossflash`
+    // enforces, letting an incompatible cross-family flash proceed with only
+    // a warning. That's the exact class of bug the gate exists to prevent
+    // (writing MT1959 CDBs at MT1939 silicon or vice versa → drive brick).
+    // On the normal (non-crossflash) path this read is skipped, so the model-
+    // name gate is authoritative and this stricter treatment doesn't affect
+    // the common case.
     let drive_fine_family = if req.allow_crossflash {
-        drive
-            .read_full_image(dev)
-            .ok()
-            .and_then(|(bytes, _, _)| freemkv_chipset::detect_chip(&bytes).ok())
-            .map(|c| c.family)
+        let (bytes, _, _) = drive.read_full_image(dev).with_context(|| {
+            "reading the drive's current firmware to confirm silicon family for --allow-crossflash \
+             (the fine-family gate MUST succeed under --allow-crossflash; a read failure here \
+             cannot be treated as 'family unknown, warn and proceed' because that would let an \
+             MT1959→MT1939 (or vice-versa) cross-family flash slip past the non-overridable gate)"
+        })?;
+        let chip = freemkv_chipset::detect_chip(&bytes).with_context(|| {
+            "identifying the drive's silicon family from its current firmware (for the \
+             --allow-crossflash gate)"
+        })?;
+        Some(chip.family)
     } else {
         None
     };
@@ -697,6 +713,15 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         bail!("SAFETY GATE: {}", block.0);
     }
 
+    // Final tray/medium re-check: the top-of-function `guard_no_medium` runs
+    // before the pre-flash dump, CMAC verify, crossflash gate, and plan
+    // print — a multi-SCSI-round-trip window in which a user could
+    // physically insert a disc or the drive could report a settling tray
+    // as loaded. The write path is the whole reason the guard exists, so
+    // re-probe RIGHT before `flash_open`; a stale check is the same class
+    // of hazard as no check at all (drive controller can wedge mid-program
+    // when servicing a medium).
+    guard_no_medium(dev, req.execute)?;
     println!(
         "\n{}",
         style::bold("EXECUTING flash — do not power off or disconnect the drive...")
@@ -786,19 +811,18 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
             )
         );
     } else if unverified > 0 {
-        // Some protected chunks could not be read back, so verification is
-        // incomplete — don't imply the whole protected image was confirmed.
-        println!(
-            "{}",
-            style::status_line(
-                "flash complete — read-back INCOMPLETE",
-                &format!(
-                    "{} verified; could not read back {} protected chunk(s)",
-                    human_size(checked),
-                    unverified
-                ),
-                style::Status::Warn
-            )
+        // Some protected chunks could not be read back — verification is
+        // incomplete and the flash's success is NOT confirmed. On a "final
+        // prod flash" workflow the caller has to know this before shipping,
+        // so surface it as a hard error rather than a warning + exit 0. If
+        // an operator explicitly wants to proceed with an incomplete
+        // read-back, they can re-run `info` after the drive re-enumerates
+        // and inspect the fingerprint themselves.
+        bail!(
+            "flash complete but read-back INCOMPLETE: could not read back {unverified} \
+             integrity-protected chunk(s) ({} verified). Do NOT trust the exit code as \
+             success — physically confirm the drive's firmware identity before shipping.",
+            human_size(checked),
         );
     } else {
         println!(
@@ -820,7 +844,14 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
              rejects a bad image. The firmware identity below is the real result."
         )
     );
-    // Positive proof the new firmware is resident and booted.
+    // Positive proof the new firmware is resident and booted. The
+    // firmware-identity readback IS the authoritative "flash succeeded"
+    // signal on this platform, so an unreadable identity here is not an
+    // acceptable exit state — bail! rather than merely printing a dim line
+    // and returning Ok. Callers that only care about "flash bytes shipped"
+    // and not "drive is confirmed running the new firmware" can inspect
+    // the error class; this at least stops the exit code from claiming
+    // success on a drive that never came back cleanly.
     match drive.firmware_report(dev) {
         Ok(Some(r)) => match r.matched {
             Some(m) => println!(
@@ -840,13 +871,16 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
             ),
         },
         // The drive is still re-enumerating (or reports nothing): we can't
-        // confirm the resident firmware here — say so rather than end silently.
-        _ => println!(
-            "{}",
-            style::dim_line(
-                "  could not read back firmware identity yet (drive still re-enumerating); \
-                 re-run `info` in a moment to confirm."
-            )
+        // confirm the resident firmware here. Refuse to exit 0 on that.
+        Ok(None) => bail!(
+            "flash complete but drive did not report a firmware identity — the drive is \
+             likely still re-enumerating or has failed to come back. Physically confirm \
+             the drive is alive (`info /dev/sgX`) before treating this flash as successful."
+        ),
+        Err(e) => bail!(
+            "flash complete but firmware-identity read-back errored ({e:#}); the drive \
+             is not confirmed running the new image. Physically re-verify before \
+             shipping."
         ),
     }
     Ok(())

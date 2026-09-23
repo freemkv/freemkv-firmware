@@ -14,6 +14,10 @@ use super::{Direction, MediumStatus, ScsiDevice};
 
 /// Per-command timeout (matches the deleted SG_IO backend's `DEFAULT_TIMEOUT_MS`).
 const TIMEOUT_MS: u32 = 30_000;
+
+/// Spin-up (START STOP UNIT, IMMED off) blocks until the medium is ready; a cold
+/// BD/UHD can take a while to spin up, so allow generously beyond a normal cmd.
+const SPINUP_TIMEOUT_MS: u32 = 60_000;
 /// SCSI status byte: CHECK CONDITION (sense data available).
 const CHECK_CONDITION: u8 = 0x02;
 
@@ -141,59 +145,89 @@ impl ScsiDevice for TransportDevice {
     }
 
     fn medium_status(&mut self) -> Result<MediumStatus> {
-        // Standard TEST UNIT READY (opcode 0x00, 6-byte CDB), no data phase.
-        //   GOOD (status 0)                    => a disc is loaded (DiscPresent).
-        //   NOT READY / no medium (key 0x2 ASC => ClosedEmpty, or TrayOpen when
-        //     0x3A): ASCQ 0x02 = tray open        ASCQ 0x02 (see medium_status_from_sense).
-        //   self-clearing UNIT ATTENTION (0x6) => retried once, then re-judged.
-        //   any other decoded sense            => DiscPresent (spinning up /
-        //                                         becoming-ready / unparsable) so we
-        //                                         NEVER flash unless closed+empty is proven.
-        // A senseless transport failure (dead bus) propagates as Err.
-        let cdb = [0u8; 6];
-        for attempt in 0..2 {
-            let mut none: [u8; 0] = [];
-            match self
-                .inner
-                .execute(&cdb, DataDirection::None, &mut none, TIMEOUT_MS)
-            {
-                Ok(r) => {
-                    if r.status == 0 {
-                        return Ok(MediumStatus::DiscPresent);
-                    }
-                    match sense_kaa(&r.sense) {
-                        Some((k, a, q)) => {
-                            if let Some(s) = super::medium_status_from_sense(k, a, q) {
-                                return Ok(s);
-                            }
-                            if k == 0x6 && attempt == 0 {
-                                continue;
-                            }
-                            return Ok(MediumStatus::DiscPresent);
-                        }
-                        None => return Ok(MediumStatus::DiscPresent),
-                    }
-                }
-                Err(e) => {
-                    if let Some(s) = e.scsi_sense() {
-                        if let Some(st) =
-                            super::medium_status_from_sense(s.sense_key, s.asc, s.ascq)
-                        {
-                            return Ok(st);
-                        }
-                        if s.sense_key == 0x6 && attempt == 0 {
-                            continue;
-                        }
-                        return Ok(MediumStatus::DiscPresent);
-                    }
-                    return Err(anyhow!(
-                        "TEST UNIT READY transport failure on {}: {e}",
-                        self.path
-                    ));
+        // FAIL-CLOSED: TEST UNIT READY alone can't tell an empty tray from a
+        // loaded-but-SPUN-DOWN disc (both answer "medium not present", 0x3A), so
+        // a first no-medium verdict is re-checked after a spin-up (see below).
+        match self.probe_tur()? {
+            Tur::Present => Ok(MediumStatus::DiscPresent),
+            Tur::TrayOpen => Ok(MediumStatus::TrayOpen),
+            Tur::NoMedium => {
+                self.spin_up_best_effort();
+                match self.probe_tur()? {
+                    // Still no medium after spin-up → genuinely empty. Anything
+                    // else (became ready / unsettled) is a loaded disc — never
+                    // flash unless empty is PROVEN.
+                    Tur::NoMedium => Ok(MediumStatus::ClosedEmpty),
+                    _ => Ok(MediumStatus::DiscPresent),
                 }
             }
         }
-        Ok(MediumStatus::DiscPresent)
+    }
+}
+
+/// TEST UNIT READY verdict, collapsed to the three states the flash guard cares
+/// about. `Present` also covers becoming-ready / spinning-up / unparsable — any
+/// non-empty, unsettled state — so the caller fails closed (never flashes).
+enum Tur {
+    Present,
+    NoMedium,
+    TrayOpen,
+}
+
+impl TransportDevice {
+    /// One TEST UNIT READY (opcode 0x00), classified into [`Tur`]. A self-
+    /// clearing UNIT ATTENTION (key 0x6) is retried once. A senseless transport
+    /// failure (dead bus) propagates as `Err`.
+    fn probe_tur(&mut self) -> Result<Tur> {
+        let cdb = [0u8; 6];
+        for attempt in 0..2 {
+            let mut none: [u8; 0] = [];
+            let sense = match self
+                .inner
+                .execute(&cdb, DataDirection::None, &mut none, TIMEOUT_MS)
+            {
+                Ok(r) if r.status == 0 => return Ok(Tur::Present),
+                Ok(r) => sense_kaa(&r.sense),
+                Err(e) => match e.scsi_sense() {
+                    Some(s) => Some((s.sense_key, s.asc, s.ascq)),
+                    None => {
+                        return Err(anyhow!(
+                            "TEST UNIT READY transport failure on {}: {e}",
+                            self.path
+                        ));
+                    }
+                },
+            };
+            match sense {
+                Some((k, a, q)) => {
+                    match super::medium_status_from_sense(k, a, q) {
+                        Some(MediumStatus::TrayOpen) => return Ok(Tur::TrayOpen),
+                        Some(_) => return Ok(Tur::NoMedium),
+                        None => {}
+                    }
+                    if k == 0x6 && attempt == 0 {
+                        continue; // self-clearing UNIT ATTENTION — retry once
+                    }
+                    // becoming-ready / initializing / unparsable → treat as present
+                    return Ok(Tur::Present);
+                }
+                None => return Ok(Tur::Present),
+            }
+        }
+        Ok(Tur::Present)
+    }
+
+    /// Best-effort spin-up: START STOP UNIT (0x1B) with START=1, IMMED=0 so the
+    /// drive blocks until the medium is spun up. Errors are ignored — an empty
+    /// tray simply has nothing to start; the point is that a loaded disc becomes
+    /// ready before the re-probe, closing the spun-down-disc fail-open.
+    fn spin_up_best_effort(&mut self) {
+        // [0]=0x1B opcode, [1]=0 (IMMED off, block until ready), [4]=0x01 START.
+        let cdb = [0x1B, 0x00, 0x00, 0x00, 0x01, 0x00];
+        let mut none: [u8; 0] = [];
+        let _ = self
+            .inner
+            .execute(&cdb, DataDirection::None, &mut none, SPINUP_TIMEOUT_MS);
     }
 }
 
@@ -258,6 +292,114 @@ mod tests {
             inner: Box::new(SenseErrTransport { sense }),
             path: "test".to_string(),
         }
+    }
+
+    /// Scripts TEST UNIT READY replies in order (None = GOOD, Some(k,a,q) =
+    /// CHECK CONDITION) and acks START STOP UNIT (0x1B), so the multi-step
+    /// medium detection (probe → spin-up → re-probe) is deterministic.
+    struct ScriptedTransport {
+        tur: std::collections::VecDeque<Option<(u8, u8, u8)>>,
+    }
+    fn fixed_sense(k: u8, a: u8, q: u8) -> [u8; 32] {
+        let mut s = [0u8; 32];
+        s[0] = 0x70;
+        s[2] = k;
+        s[12] = a;
+        s[13] = q;
+        s
+    }
+    impl ScsiTransport for ScriptedTransport {
+        fn execute(
+            &mut self,
+            cdb: &[u8],
+            _dir: DataDirection,
+            _buf: &mut [u8],
+            _timeout_ms: u32,
+        ) -> libfreemkv::error::Result<ScsiResult> {
+            if cdb.first() == Some(&0x1B) {
+                // START STOP UNIT ack (spin-up).
+                return Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: 0,
+                    sense: [0u8; 32],
+                });
+            }
+            match self.tur.pop_front().flatten() {
+                None => Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: 0,
+                    sense: [0u8; 32],
+                }),
+                Some((k, a, q)) => Ok(ScsiResult {
+                    status: CHECK_CONDITION,
+                    bytes_transferred: 0,
+                    sense: fixed_sense(k, a, q),
+                }),
+            }
+        }
+    }
+    fn dev_scripted(tur: impl IntoIterator<Item = Option<(u8, u8, u8)>>) -> TransportDevice {
+        TransportDevice {
+            inner: Box::new(ScriptedTransport {
+                tur: tur.into_iter().collect(),
+            }),
+            path: "test".to_string(),
+        }
+    }
+
+    /// THE INCIDENT: a loaded-but-spun-down disc first reports "medium not
+    /// present" (0x3A) to TEST UNIT READY, then GOOD after a spin-up. It MUST be
+    /// classified DiscPresent so the flash guard refuses — never flash with a
+    /// disc in.
+    #[test]
+    fn spun_down_disc_becomes_present_after_spinup() {
+        let mut dev = dev_scripted([Some((0x2, 0x3A, 0x00)), None]);
+        assert!(matches!(
+            dev.medium_status().unwrap(),
+            MediumStatus::DiscPresent
+        ));
+    }
+
+    /// A genuinely empty tray reports no-medium on BOTH probes (spin-up finds
+    /// nothing) → ClosedEmpty, so an empty-tray drive can still be flashed.
+    #[test]
+    fn truly_empty_tray_is_closed_empty_after_spinup() {
+        let mut dev = dev_scripted([Some((0x2, 0x3A, 0x00)), Some((0x2, 0x3A, 0x00))]);
+        assert!(matches!(
+            dev.medium_status().unwrap(),
+            MediumStatus::ClosedEmpty
+        ));
+    }
+
+    /// A ready, loaded disc (GOOD) is present immediately — no spin-up needed.
+    #[test]
+    fn ready_disc_is_present() {
+        let mut dev = dev_scripted([None]);
+        assert!(matches!(
+            dev.medium_status().unwrap(),
+            MediumStatus::DiscPresent
+        ));
+    }
+
+    /// An open tray (ASCQ 0x02) is reported as TrayOpen (the guard refuses that too).
+    #[test]
+    fn open_tray_is_tray_open() {
+        let mut dev = dev_scripted([Some((0x2, 0x3A, 0x02))]);
+        assert!(matches!(
+            dev.medium_status().unwrap(),
+            MediumStatus::TrayOpen
+        ));
+    }
+
+    /// After spin-up a disc may still be BECOMING READY (0x04/0x01) — that is a
+    /// loaded disc, so it must be DiscPresent (fail-closed), not empty.
+    #[test]
+    fn becoming_ready_after_spinup_is_present() {
+        let mut dev = dev_scripted([Some((0x2, 0x3A, 0x00)), Some((0x2, 0x04, 0x01))]);
+        assert!(matches!(
+            dev.medium_status().unwrap(),
+            MediumStatus::DiscPresent
+        ));
     }
 
     /// REGRESSION GUARD (0.5.0→0.6.0 backend swap): a discless drive answers

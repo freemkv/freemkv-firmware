@@ -124,12 +124,22 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
 
 /// Classify a drive using only proven discriminators.
 ///
-/// * GET_CONFIG 0x46 feature 0x010C echoing `01 0C` ⇒ [`Family::Mtk`].
+/// * GET_CONFIG 0x46 feature 0x010C echoing `01 0C` **AND** the drive's
+///   boot-ROM region at `0x003000` containing the ASCII `MT19` substring
+///   (the MediaTek MT19-family boot-banner short-form; `has_mt19_banner`
+///   scans the 32-byte region for it) ⇒ [`Family::Mtk`]. Both gates
+///   required: feature 0x010C is the standard MMC "Firmware Information"
+///   descriptor and any compliant non-MTK drive that implements it would
+///   otherwise be misclassified as MTK; the MT19-family boot banner
+///   ("MT1959 Boot ..." / "MT1939 Boot ...") is a hardware signature no
+///   unrelated drive would happen to echo. (The longer `MTEKMT19xx`
+///   identity tag lives in a different flash region at `0x1EC000 + 0x34`
+///   and is NOT what this gate checks — see `has_mt19_banner` for why.)
 /// * READ_BUFFER buffer-id 0xF1 succeeding ⇒ Pioneer / Renesas (an INQUIRY
 ///   vendor of `RENESAS` picks Renesas; otherwise Pioneer).
 /// * neither ⇒ [`Family::Unknown`].
 pub fn classify(dev: &mut dyn ScsiDevice) -> Family {
-    if get_config_is_mtk(dev) {
+    if get_config_is_mtk(dev) && has_mt19_banner(dev) {
         return Family::Mtk;
     }
     if read_buffer_f1_ok(dev) {
@@ -146,6 +156,32 @@ pub fn classify(dev: &mut dyn ScsiDevice) -> Family {
 fn get_config_is_mtk(dev: &mut dyn ScsiDevice) -> bool {
     let cdb = mtk::cdb_get_config(mtk::FEATURE_FWDATE, 32);
     matches!(dev.command_in(&cdb, 32), Ok(d) if d.len() >= 10 && d[8] == 0x01 && d[9] == 0x0C)
+}
+
+/// True iff the drive's boot-ROM region at `0x003000` carries the ASCII
+/// **`MT19`** boot-banner substring — the MediaTek MT19-family vendor
+/// signature ("MT1959 Boot ..." / "MT1939 Boot ..." across every MT19xx
+/// part). Backstops the standard MMC feature check so a compliant non-MTK
+/// drive that also implements feature 0x010C cannot be misclassified as MTK
+/// (which would then let a `flash --allow-crossflash` write MTK CDBs at a
+/// Pioneer/Renesas controller).
+///
+/// The banner is a stable per-part on-flash string that the OEM ships in
+/// every MT19xx image; we look for `MT19` rather than the more specific
+/// `MTEKMT19` because the 32-byte boot-banner region carries the short
+/// form (e.g. `"MT1959 Boot BU5"`), while the longer `MTEKMT19xx` tag lives
+/// in a different region (`0x1EC000 + 0x34`, the identity descriptor).
+fn has_mt19_banner(dev: &mut dyn ScsiDevice) -> bool {
+    let cdb = mtk::cdb_read_buffer(
+        mtk::MODE_6,
+        mtk::ROM_BUFFER_ID,
+        mtk::ROM_003000_OFFSET,
+        mtk::ROM_003000_LEN,
+    );
+    let Ok(rom) = dev.command_in(&cdb, mtk::ROM_003000_LEN as usize) else {
+        return false;
+    };
+    rom.windows(4).any(|w| w == b"MT19")
 }
 
 fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
