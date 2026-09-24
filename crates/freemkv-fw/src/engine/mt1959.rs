@@ -726,3 +726,7 @@ impl Mt1959Engine {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "mt1959_tests.rs"]
+mod tests;

@@ -841,3 +841,7 @@ impl Mt1959Engine {
         Ok((sites.iter().map(|&s| s as u32).collect(), stub_va))
     }
 }
+
+#[cfg(test)]
+#[path = "mt1939_classic_tests.rs"]
+mod tests;

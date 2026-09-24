@@ -109,3 +109,7 @@ pub fn profile_for(lineage: Lineage) -> &'static LineageProfile {
 pub fn for_image(image: &[u8]) -> &'static LineageProfile {
     profile_for(detect_lineage(image))
 }
+
+#[cfg(test)]
+#[path = "profile_tests.rs"]
+mod tests;
