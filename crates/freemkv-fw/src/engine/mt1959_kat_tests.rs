@@ -31,7 +31,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "b14b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a94b1847f0b5a94f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700247be00d2c03d1587a3070002475e00f2c04d19c4e0420b04700246ee000246ce0f0b5974f1c79022c0bd197485979012900d262e0072900d35fe04018997901705be0042c59d19879ff2823d18e48ff21017041708170c1700171417181718b4806688b4805687619874801783170417871708178b170c178f17001793171417971718179b171281c824907220123824da84732e001280fd17b48ff210170ff214170ff2181700121c17001210171ff214171ff21817120e0734e764a1178ff290ed1ff213170ff217170ff21b1700121f17001213171ff217171ff21b1710ce0517871709178b170d178f17011793171517971719179b171ffe70025402d04d2281c0021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948311c01220123564da847041c00e0574c350e0020291cb84735022d0e0120291cb84735042d0e0220291cb84735062d0e0320291cb847250e0420291cb84725022d0e0520291cb84725042d0e0620291cb84725062d0e0720291cb8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b171281c324907220123324da847041c250e0020291cb84725022d0e0120291cb84725042d0e0220291cb84725062d0e0320291cb84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad2281c715db8470135f8e7012c13d11ca600250d2d04d2281c715db8470135f8e70c4e0d250122072a05d2b15c281cb84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e392e30";
+    "b14b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a94b1847f0b5a94f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700247be00d2c03d1587a3070002475e00f2c04d19c4e0420b04700246ee000246ce0f0b5974f1c79022c0bd197485979012900d262e0072900d35fe04018997901705be0042c59d19879ff2823d18e48ff21017041708170c1700171417181718b4806688b4805687619874801783170417871708178b170c178f17001793171417971718179b1712846824907220123824da84732e001280fd17b48ff210170ff214170ff2181700121c17001210171ff214171ff21817120e0734e764a1178ff290ed1ff213170ff217170ff21b1700121f17001213171ff217171ff21b1710ce0517871709178b170d178f17011793171517971719179b171ffe70025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948314601220123564da847044600e0574c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b1712846324907220123324da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ca600250d2d04d22846715db8470135f8e70c4e0d250122072a05d2b15c2846b84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e392e31";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -43,8 +43,11 @@ const EXPECT_HANDLER_HEX: &str =
 // sentinel to the uniform `0x00` OFF. Regenerate against the OEM base (run this test
 // with FREEMKV_KAT_BASE set and copy the `left:` values). Expected drift, not a
 // regression — the test skips when the base is absent.
-const EXPECT_CMAC_1: &str = "9ba24a4536c846864413b364162b22a0";
-const EXPECT_CMAC_15: &str = "2312983a72f12bd5157cbab586cd1bd2";
+// Re-signed 0.9.1: the AKE stub gained the per-session de-bus latch clear
+// (see `ake_stub_clears_the_debus_latch_and_preserves_lr`), so the injected
+// band moved. EXPECT_HANDLER_HEX is unchanged, confining the delta to the stub.
+const EXPECT_CMAC_1: &str = "0de91df23689a33a3b4cccaa93f1a5fb";
+const EXPECT_CMAC_15: &str = "f591535858aeb94759ee8e27d42683d4";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -647,8 +650,9 @@ fn feature_flag_gating_is_reslotted() {
     const CMP_R2_OFF: u16 = 0x2A00; // cmp r2,#STATE_OFF (AKE/Bus off-direction)
     let base = super::FLAG_TABLE_BASE;
 
+    const AKE_RESET: u32 = 0x000c_ae18; // aacs_session_reset on BU40N
     let ake = Mt1959Engine
-        .build_ake_stub(base, 0x0010_0000)
+        .build_ake_stub(base, 0x0010_0000, AKE_RESET)
         .expect("ake stub");
     assert!(
         has(&ake, CMP_R2_OFF),
@@ -658,9 +662,16 @@ fn feature_flag_gating_is_reslotted() {
         reads(&ake, base + Feature::Encryption as u32),
         "AKE-null stub reads flag[Encryption]"
     );
+    // 0.9.1: the forced-auth arm must ALSO clear the bus-encryption latch, or
+    // the drive wraps content with a key the host never negotiated and no key
+    // can decrypt it. Thumb-tagged, because it is reached by `blx`.
+    assert!(
+        reads(&ake, AKE_RESET | 1),
+        "AKE-null stub calls aacs_session_reset (Thumb-tagged) to clear the de-bus latch"
+    );
 
     let gatea = Mt1959Engine
-        .build_gatea_stub(base, 0x0010_0000, 0x0010_0100, 0x0010_0200)
+        .build_gatea_stub(base, 0x0010_0000, 0x0010_0100, 0x0010_0200, AKE_RESET)
         .expect("gatea stub");
     assert!(
         has(&gatea, CMP_R2_OFF),
@@ -1811,4 +1822,91 @@ fn debug_knock_clobbers_r4_before_falling_through_to_safe_dispatch() {
         clobbers >= 4,
         "debug_ok must emit at least 4 `movs r4,#0` (0x2400) clobbers (one per Call/Poke/Reboot/unknown exit); found {clobbers}"
     );
+}
+
+/// 0.9.1: the AKE stub's forced-auth arm clears the bus-encryption latch, and
+/// must do so WITHOUT destroying the return address.
+///
+/// # Why this test exists
+/// Forcing AGID state 6 opens the VID gate but also arms the drive's
+/// bus-encryption engine, and the forced path negotiates no bus key — so the
+/// drive wraps content with a key nobody has and every rip fails after an
+/// exhaustive, hopeless key search. Calling `aacs_session_reset` per-session
+/// clears it (proven on BU40N: 0/16 -> 16/16, 4/4 trials, across both cold
+/// boots and disc inserts).
+///
+/// The hazard is `lr`. This stub is entered by a **B.W specifically so `lr`
+/// still holds the OUTER function's return address**, and `blx` destroys it.
+/// Get the save/restore wrong and the drive returns to a garbage address on
+/// every AKE — on every boot, unrecoverably. Thumb `pop` cannot write `lr`, so
+/// the only correct form is pop-into-a-register then `mov lr, rN`. These
+/// assertions pin that exact shape.
+#[test]
+fn ake_stub_clears_the_debus_latch_and_preserves_lr() {
+    const RESET: u32 = 0x000c_ae18;
+    const BACK: u32 = 0x0010_0000;
+    let base = super::FLAG_TABLE_BASE;
+
+    for (name, stub) in [
+        (
+            "bu40n",
+            Mt1959Engine
+                .build_ake_stub(base, BACK, RESET)
+                .expect("ake stub"),
+        ),
+        (
+            "nb",
+            Mt1959Engine
+                .build_ake_stub_nb(base, BACK, RESET)
+                .expect("ake stub nb"),
+        ),
+    ] {
+        let has16 = |v: u16| {
+            stub.windows(2)
+                .any(|w| u16::from_le_bytes([w[0], w[1]]) == v)
+        };
+        let has32 = |v: u32| {
+            stub.windows(4)
+                .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
+        };
+
+        assert!(
+            has32(RESET | 1),
+            "{name}: must load aacs_session_reset Thumb-tagged for blx"
+        );
+        assert!(
+            has16(0x4790),
+            "{name}: must actually call it (blx r2), not merely hold the literal"
+        );
+        // push {r0, lr} = 0xB400 | 0x0101. Saving lr is the whole safety story;
+        // saving r0 keeps the AGID across a callee free to clobber r0-r3.
+        assert!(
+            has16(0xB501),
+            "{name}: must push {{r0, lr}} before the call"
+        );
+        // pop {r0, r2} = 0xBC00 | 0x0005 — NOT pop {r0, pc}, which would return
+        // from the stub instead of continuing to the state write.
+        assert!(
+            has16(0xBC05),
+            "{name}: must pop {{r0, r2}} (r2 receives the saved lr)"
+        );
+        assert!(
+            !has16(0xBD01),
+            "{name}: must not `pop {{r0, pc}}` — that returns instead of restoring lr"
+        );
+        // mov lr, r2 = 0x4696. Without this the outer return address stays
+        // clobbered by the blx and the drive branches into hyperspace.
+        assert!(
+            has16(0x4696),
+            "{name}: must restore lr from r2 (`mov lr, r2`)"
+        );
+        // The forced state must still be written.
+        assert!(has16(0x2106), "{name}: still forces state 6");
+        // And the lever must remain gated — an ungated clear would fire on an
+        // OEM/passthrough drive and change stock behaviour.
+        assert!(
+            has16(0x2A00),
+            "{name}: clear stays gated on flag[Encryption] == STATE_OFF"
+        );
+    }
 }

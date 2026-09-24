@@ -559,9 +559,10 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("classic Region detour `bl` out of range"))?;
         thumb::write(out, region_stub_va as usize, &region_bytes);
         thumb::write(out, region_site, &bl);
-        crate::install_guard::assert_bl_install(
+        crate::install_guard::verify_branch(
             out,
             region_site,
+            thumb::BranchKind::Bl,
             region_stub_va,
             "classic Region",
         )?;
@@ -623,8 +624,18 @@ impl Mt1959Engine {
         let gatea_authed = (gatea_cmp + 4) as u32;
         // Classic AGID struct = CDB base (the finder fix), NOT the r7 heuristic.
         let agid_struct = self.find_vid_agid_struct_classic(image)?;
-        let gatea_bytes =
-            self.build_gatea_stub(flag_base, agid_struct, gatea_authed, gatea_deny)?;
+        // Same de-bus latch clear the modern path installs — see
+        // `build_gatea_stub`. Resolved here so the classic bare-read arm gets it
+        // too; a classic image that cannot resolve it refuses rather than
+        // shipping a Gate-A that forces auth without clearing the latch.
+        let classic_aacs_reset = self.find_aacs_session_reset(image)?;
+        let gatea_bytes = self.build_gatea_stub(
+            flag_base,
+            agid_struct,
+            gatea_authed,
+            gatea_deny,
+            classic_aacs_reset,
+        )?;
 
         // Scratch clear-VID buffer (audit-only: no stub consumes it — the producer
         // stages the clear VID there itself; pinned unique for the audit).
@@ -662,14 +673,26 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("classic Gate-A detour `bl` out of range"))?;
         thumb::write(&mut w, gatea_stub_va as usize, &gatea_bytes);
         thumb::write(&mut w, gatea_cmp, &gatea_bl);
-        crate::install_guard::assert_bl_install(&w, gatea_cmp, gatea_stub_va, "classic Gate-A")?;
+        crate::install_guard::verify_branch(
+            &w,
+            gatea_cmp,
+            thumb::BranchKind::Bl,
+            gatea_stub_va,
+            "classic Gate-A",
+        )?;
 
         let ake_stub_va = self.free_space(&w, ake_bytes.len() + 16)?;
         let ake_bl = thumb::encode_bl(ake_site, ake_stub_va)
             .ok_or_else(|| anyhow!("classic AKE detour `bl` out of range"))?;
         thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);
         thumb::write(&mut w, ake_site, &ake_bl);
-        crate::install_guard::assert_bl_install(&w, ake_site, ake_stub_va, "classic AKE")?;
+        crate::install_guard::verify_branch(
+            &w,
+            ake_site,
+            thumb::BranchKind::Bl,
+            ake_stub_va,
+            "classic AKE",
+        )?;
 
         *out = w;
         Ok(vec![
@@ -805,7 +828,13 @@ impl Mt1959Engine {
         for &s in &sites {
             let bl = thumb::encode_bl(s, stub_va).expect("range re-checked above");
             thumb::write(&mut w, s, &bl);
-            crate::install_guard::assert_bl_install(&w, s, stub_va, "classic HRL-skip")?;
+            crate::install_guard::verify_branch(
+                &w,
+                s,
+                thumb::BranchKind::Bl,
+                stub_va,
+                "classic HRL-skip",
+            )?;
         }
         *out = w;
 

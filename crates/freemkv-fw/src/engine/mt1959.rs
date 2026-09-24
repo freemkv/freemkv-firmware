@@ -486,7 +486,13 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
         thumb::write(out, speed_stub_va as usize, &speed_bytes);
         thumb::write(out, cmp_at, &bl);
-        crate::install_guard::assert_bl_install(out, cmp_at, speed_stub_va, "Speed")?;
+        crate::install_guard::verify_branch(
+            out,
+            cmp_at,
+            thumb::BranchKind::Bl,
+            speed_stub_va,
+            "Speed",
+        )?;
         Ok((speed_gate, speed_stub_va))
     }
 
@@ -501,7 +507,13 @@ impl Mt1959Engine {
             .ok_or_else(|| anyhow!("Region detour `bl` out of range"))?;
         thumb::write(out, region_stub_va as usize, &region_bytes);
         thumb::write(out, region_site, &bl);
-        crate::install_guard::assert_bl_install(out, region_site, region_stub_va, "Region")?;
+        crate::install_guard::verify_branch(
+            out,
+            region_site,
+            thumb::BranchKind::Bl,
+            region_stub_va,
+            "Region",
+        )?;
         Ok((region_emitter, region_stub_va))
     }
 
@@ -546,11 +558,17 @@ impl Mt1959Engine {
         let gatea_deny = (gatea_bne as i32 + 4 + d * 2) as u32;
         let gatea_authed = (gatea_cmp + 4) as u32;
         let vid_agid_struct = self.find_vid_agid_struct(image)?;
-        let gatea_bytes =
-            self.build_gatea_stub(flag_base, vid_agid_struct, gatea_authed, gatea_deny)?;
-
-        // Deny-path AACS reset.
+        // Resolved before Gate-A because the bare-read arm now clears the
+        // bus-encryption latch with it (see `build_gatea_stub`), as well as the
+        // deny path below.
         let aacs_reset = self.find_aacs_session_reset(image)?;
+        let gatea_bytes = self.build_gatea_stub(
+            flag_base,
+            vid_agid_struct,
+            gatea_authed,
+            gatea_deny,
+            aacs_reset,
+        )?;
         let deny_site = gatea_deny as usize + 0x10;
         if deny_site + 4 > image.len() {
             bail!("deny sense-setup site 0x{deny_site:x} is past the end of the image");
@@ -572,53 +590,47 @@ impl Mt1959Engine {
         // ---- commit on a working copy (atomic) ----
         let mut w = out.clone();
         let ake_stub_va = self.free_space(&w, ake_bytes.len() + 16)?;
-        let ake_install = match ake_install_shape {
-            crate::engine::core::AkeInstallShape::WideB => {
-                thumb::encode_b_wide(reset_site, ake_stub_va)
-                    .ok_or_else(|| anyhow!("AKE detour `B.W` out of range"))?
-            }
-            crate::engine::core::AkeInstallShape::WideBl => {
-                thumb::encode_bl(reset_site, ake_stub_va)
-                    .ok_or_else(|| anyhow!("AKE detour `BL` out of range"))?
-            }
-        };
         thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);
-        thumb::write(&mut w, reset_site, &ake_install);
-        // Emit-time decode-back guard: the AKE install site is load-bearing —
-        // a wrong encoding (BL where B.W is required, or a mis-computed
-        // displacement) means the freshly-flashed image can boot into a
-        // detour that either corrupts the outer function's `lr` or jumps to
-        // the wrong stub VA. Decode the 4 bytes we just wrote with the
-        // shape-appropriate decoder and assert the resolved target is exactly
-        // `ake_stub_va`. Cheap in-tool check; would have caught the 0.8.13
-        // BL-over-tail-call bug before flash.
-        match ake_install_shape {
-            crate::engine::core::AkeInstallShape::WideB => {
-                crate::install_guard::assert_b_wide_install(
-                    &w,
-                    reset_site,
-                    ake_stub_va,
-                    "AKE (B.W)",
-                )?;
-            }
-            crate::engine::core::AkeInstallShape::WideBl => {
-                crate::install_guard::assert_bl_install(&w, reset_site, ake_stub_va, "AKE (BL)")?;
-            }
-        }
+        // The AKE install site is load-bearing: a wrong encoding (a `BL` where
+        // the OEM tail-call needs `B.W`, or a mis-computed displacement) ships
+        // an image that boots into a detour which either corrupts the outer
+        // function's `lr` or jumps to the wrong stub. `install_branch` encodes,
+        // writes and decodes back in one step, so the shape used to patch and
+        // the shape used to verify cannot drift apart — which is exactly how
+        // the 0.8.13 BL-over-tail-call bug reached a flashed drive.
+        crate::install_guard::install_branch(
+            &mut w,
+            reset_site,
+            ake_install_shape,
+            ake_stub_va,
+            "AKE",
+        )?;
 
         let gatea_stub_va = self.free_space(&w, gatea_bytes.len() + 16)?;
         let gatea_bl = thumb::encode_bl(gatea_cmp, gatea_stub_va)
             .ok_or_else(|| anyhow!("Gate-A detour `bl` out of range"))?;
         thumb::write(&mut w, gatea_stub_va as usize, &gatea_bytes);
         thumb::write(&mut w, gatea_cmp, &gatea_bl);
-        crate::install_guard::assert_bl_install(&w, gatea_cmp, gatea_stub_va, "Gate-A")?;
+        crate::install_guard::verify_branch(
+            &w,
+            gatea_cmp,
+            thumb::BranchKind::Bl,
+            gatea_stub_va,
+            "Gate-A",
+        )?;
 
         let deny_stub_va = self.free_space(&w, deny_bytes.len() + 16)?;
         let deny_bl = thumb::encode_bl(deny_site, deny_stub_va)
             .ok_or_else(|| anyhow!("deny-reset detour `bl` out of range"))?;
         thumb::write(&mut w, deny_stub_va as usize, &deny_bytes);
         thumb::write(&mut w, deny_site, &deny_bl);
-        crate::install_guard::assert_bl_install(&w, deny_site, deny_stub_va, "Deny-reset")?;
+        crate::install_guard::verify_branch(
+            &w,
+            deny_site,
+            thumb::BranchKind::Bl,
+            deny_stub_va,
+            "Deny-reset",
+        )?;
 
         // `Feature::Uhd` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
         // accept gate's UHD class-3 check (via uhd_gate_detour → find_bd_gate) — the
@@ -633,7 +645,13 @@ impl Mt1959Engine {
                     .ok_or_else(|| anyhow!("UHD media-gate detour `bl` out of range"))?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
                 thumb::write(&mut w, site, &bl);
-                crate::install_guard::assert_bl_install(&w, site, stub_va, "UHD")?;
+                crate::install_guard::verify_branch(
+                    &w,
+                    site,
+                    thumb::BranchKind::Bl,
+                    stub_va,
+                    "UHD",
+                )?;
                 (site as u32, stub_va)
             }
             Err(_) => (0, 0),
@@ -651,7 +669,13 @@ impl Mt1959Engine {
                     let bl = thumb::encode_bl(site, stub_va)
                         .ok_or_else(|| anyhow!("HRL-skip detour `bl` out of range"))?;
                     thumb::write(&mut w, site, &bl);
-                    crate::install_guard::assert_bl_install(&w, site, stub_va, "HRL-skip")?;
+                    crate::install_guard::verify_branch(
+                        &w,
+                        site,
+                        thumb::BranchKind::Bl,
+                        stub_va,
+                        "HRL-skip",
+                    )?;
                 }
                 (sites.iter().map(|&s| s as u32).collect(), stub_va)
             }
@@ -671,7 +695,13 @@ impl Mt1959Engine {
                     .ok_or_else(|| anyhow!("BD-refuse detour `bl` out of range"))?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
                 thumb::write(&mut w, site, &bl);
-                crate::install_guard::assert_bl_install(&w, site, stub_va, "BD-refuse")?;
+                crate::install_guard::verify_branch(
+                    &w,
+                    site,
+                    thumb::BranchKind::Bl,
+                    stub_va,
+                    "BD-refuse",
+                )?;
                 (site as u32, stub_va)
             }
             Err(_) => (0, 0),
