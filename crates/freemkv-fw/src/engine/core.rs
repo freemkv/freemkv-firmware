@@ -30,7 +30,7 @@ use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use crate::abi;
 use crate::family::{Capability, ChipInfo, MediaClass};
-use thumb_asm::{self as thumb, Asm, CommandRecord};
+use thumb_asm::{self as thumb, Asm, BranchKind, CommandRecord};
 
 // The wire frame (opcode / mode / knock / identity sense) is defined once in
 // `crate::abi` and imported here — the engine emits exactly what the host ABI
@@ -813,6 +813,17 @@ pub(crate) fn find_masked_all(
 /// Locate `sig`'s single occurrence in `[lo, hi)`, failing loudly if it is absent
 /// or ambiguous (more than one hit) — the "prove it or refuse" contract every
 /// grounded finder uses.
+///
+/// Thin shim over [`thumb_asm::find_one_in`] (0.11.1+). Its `FindError` carries
+/// `count` and `first`, but not the lever label we want the operator to see —
+/// so this wrapper stays, re-flavouring the typed error as an `anyhow` bail
+/// that names the signature and the search window.
+///
+/// Signature semantics: upstream steps past a match by the full pattern length
+/// (non-overlapping); our old hand-rolled loop stepped by one halfword
+/// (overlap-permitting). For real 32-byte instruction-sequence signatures no
+/// self-overlap is possible, so the two produce identical results on every
+/// signature in this crate — pinned by the byte-exact KAT.
 pub(crate) fn find_unique(
     image: &[u8],
     sig: &[(u16, u16)],
@@ -820,13 +831,22 @@ pub(crate) fn find_unique(
     hi: usize,
     what: &str,
 ) -> Result<usize> {
-    match find_masked_all(image, sig, lo, hi).as_slice() {
-        [one] => Ok(*one),
-        hits => bail!(
-            "{what} signature matched {} time(s) in [0x{lo:x},0x{hi:x}) (want exactly 1) — \
-             refusing to patch",
-            hits.len()
+    let hi = hi.min(image.len());
+    if lo >= hi {
+        bail!("{what} signature: empty search window [0x{lo:x},0x{hi:x})");
+    }
+    match thumb_asm::find_one_in(image, thumb_asm::Needle::Masked(sig), lo..hi) {
+        Ok(off) => Ok(off),
+        Err(thumb_asm::FindError::NotFound) => {
+            bail!("{what} signature matched 0 time(s) in [0x{lo:x},0x{hi:x}) — refusing to patch")
+        }
+        Err(thumb_asm::FindError::Ambiguous { count, first }) => bail!(
+            "{what} signature matched {count} time(s) in [0x{lo:x},0x{hi:x}) \
+             (first at 0x{first:x}, want exactly 1) — refusing to patch"
         ),
+        // `FindError` is `#[non_exhaustive]` (0.11.0+): any future variant is
+        // still a "refuse rather than guess" outcome, so surface it as one.
+        Err(e) => bail!("{what} signature: {e}"),
     }
 }
 
@@ -2764,7 +2784,7 @@ impl Mt1959Engine {
     /// The Raw Read (0x04) flag-gated AKE accept-gate trampoline. Entered by a
     /// Thumb-2 wide **`B` (`B.W`, T4)** — NOT a `BL` — that replaces the OEM
     /// RESET writer's `movs r1,#1; b <back>` at [`AKE_GATE_SIG`]'s `match+12`
-    /// (see `AkeInstallShape::WideB` at the caller in `mt1959.rs`). On entry
+    /// (see `BranchKind::BWide` at the caller in `mt1959.rs`). On entry
     /// `r0 = AGID` (set by the preceding `ldrb/lsrs`), which is preserved. The
     /// stub picks the per-AGID state to write: `6` (AKE authenticated → VID
     /// gate open) when `flag[Ake]==STATE_OFF`, else the OEM `1` (auth failed →
@@ -2782,7 +2802,7 @@ impl Mt1959Engine {
     /// cert; when the OEM verify FAILS and would reset to state 1, this stub forces
     /// state 6 instead, so the AKE completes and a bus-key `0xAD` read yields the
     /// VID. `04 01` does NOT act here (that mode is the bare-read Gate-A path).
-    pub(crate) fn build_ake_stub(&self, flag_base: u32, back: u32) -> Result<Vec<u8>> {
+    pub(crate) fn build_ake_stub(&self, flag_base: u32, back: u32, reset: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let accept = a.label();
         let done = a.label();
@@ -2793,6 +2813,43 @@ impl Mt1959Engine {
         a.movs_imm(1, 1); // OEM (00/0xFF): reset to state 1 on a failed cert verify
         a.b(done);
         a.bind(accept);
+        // ---- De-bus latch clear (0.9.1) --------------------------------
+        // Forcing state 6 opens the VID gate, but the SAME "authenticated"
+        // state also ARMS the drive's bus-encryption engine — and the forced
+        // path never negotiates a bus key, so the drive wraps content with a
+        // key the host does not have. No key can then decrypt the content, and
+        // every rip fails after an exhaustive, hopeless key search.
+        //
+        // The latch is set by power-on AND by the OEM's disc-insert rearm ISR.
+        // That is why a boot-time or SET-time clear is NOT enough: any disc
+        // change re-arms it while `flag[Encryption]` still reads 0x00, which is
+        // exactly the "ripped one disc fine, nothing since" report. Clearing it
+        // HERE means it is cleared per-session, for the session about to read,
+        // no matter how it came to be set.
+        //
+        // PROVEN ON HARDWARE (BU40N, fw 0.8.14) before this code was written:
+        // cold boot or disc insert -> 0/16 units open; `Verb::Call` to
+        // `aacs_session_reset` -> 16/16; 4/4 trials, drive alive each time,
+        // key-service then returns the correct key in ~2.5s instead of 422
+        // after ~55s. `hw-tester debus-persist` is the regression test.
+        //
+        // This is the LIGHT primitive deliberately: `aacs_session_reset` does a
+        // gate-bit clear plus a mailbox reset and nothing else. The heavier
+        // `aacs_session_rearm` wrapper (which also does the bit-20 arm and four
+        // subsystem re-inits) is what wedged the engine when fired from a
+        // vendor-CDB context in 0.8.14 — see the no-rearm-on-SET note in the
+        // handler. Do not "upgrade" this call to the wrapper.
+        //
+        // Register contract: `lr` here is the OUTER function's return address
+        // (this stub is entered by B.W precisely so `lr` survives), and `blx`
+        // destroys it — so `lr` is saved and restored around the call. Thumb
+        // `pop` cannot write `lr`, hence the pop-into-r2 + `mov lr, r2`. `r0`
+        // (the AGID) is saved because the callee is free to clobber r0-r3.
+        a.push(0x0101); // push {r0, lr}   AGID + the outer return address
+        a.ldr_lit(2, reset | 1); // r2 = aacs_session_reset (Thumb-tagged)
+        a.blx(2); // clobbers lr and r0-r3
+        a.pop(0x0005); // pop {r0, r2}    r0 = AGID, r2 = saved lr
+        a.mov_reg(14, 2); // mov lr, r2      restore the outer return address
         a.movs_imm(1, 6); // forced: state 6 (AKE authenticated)
         a.bind(done);
         a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
@@ -2810,7 +2867,12 @@ impl Mt1959Engine {
     /// `set_agid_state` (`back`) so the store happens through the OEM primitive.
     /// `r2` is scratch (dead at `back`); `lr` is preserved by the outer `bl` and
     /// carries the OEM return, matching the `bl set_agid_state` this replaces.
-    pub(crate) fn build_ake_stub_nb(&self, flag_base: u32, back: u32) -> Result<Vec<u8>> {
+    pub(crate) fn build_ake_stub_nb(
+        &self,
+        flag_base: u32,
+        back: u32,
+        reset: u32,
+    ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let force = a.label();
         let keep = a.label();
@@ -2820,6 +2882,20 @@ impl Mt1959Engine {
         a.beq(force);
         a.b(keep); // flag off: preserve r1 (accept arm = 6, reject arm = 1)
         a.bind(force);
+        // De-bus latch clear — same rationale and the same hardware proof as
+        // [`Self::build_ake_stub`]; see the long note there. Only the forced
+        // arm clears, so an OEM/on drive is byte-behaviour-identical.
+        //
+        // `lr` here is the OEM return set by the `bl` this stub replaces (the
+        // caller's `bx lr` needs it), so it is saved and restored across the
+        // `blx` exactly as in the BU40N variant. `r1` is NOT saved: this arm
+        // overwrites it with 6 immediately afterwards, so the callee clobbering
+        // it is harmless — but `r0` (the AGID) is.
+        a.push(0x0101); // push {r0, lr}
+        a.ldr_lit(2, reset | 1); // r2 = aacs_session_reset (Thumb-tagged)
+        a.blx(2); // clobbers lr and r0-r3
+        a.pop(0x0005); // pop {r0, r2}   r0 = AGID, r2 = saved lr
+        a.mov_reg(14, 2); // mov lr, r2     restore the return address
         a.movs_imm(1, 6); // forced: state 6 (AKE authenticated)
         a.bind(keep);
         a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
@@ -3272,7 +3348,7 @@ impl Mt1959Engine {
     // datapath lever was proved inert on hardware, so both detours plus their
     // supporting sigs and stubs were removed together.)
 
-    // (AkeInstallShape is defined at module scope below — see the enum at the
+    // (BranchKind comes from thumb_asm — see the enum there at the
     // end of this file so the type is namable from `crate::engine::core::`.)
 
     /// Resolve the AKE detour site + stub for whichever gate variant this image
@@ -3280,9 +3356,9 @@ impl Mt1959Engine {
     /// byte-identical), then the NB-class [`AKE_GATE_SIG_NB`]. Returns
     /// `(detour_site, stub_bytes, anchor, install_shape)`. The caller writes the
     /// detour with `thumb::encode_b_wide` when `install_shape ==
-    /// AkeInstallShape::WideB` (BU40N/desktop tail-call site — `bl` here would
+    /// BranchKind::BWide` (BU40N/desktop tail-call site — `bl` here would
     /// corrupt the outer function's `lr`) or `thumb::encode_bl` when
-    /// `install_shape == AkeInstallShape::WideBl` (NB-class shared-`bl` site —
+    /// `install_shape == BranchKind::Bl` (NB-class shared-`bl` site —
     /// the OEM already had a `bl` there, so `lr` is meant to be set to
     /// `site+4`). Errors (→ RawRead `SignatureNotFound`) only if neither
     /// variant matches.
@@ -3290,7 +3366,13 @@ impl Mt1959Engine {
         &self,
         image: &[u8],
         flag_base: u32,
-    ) -> Result<(usize, Vec<u8>, u32, AkeInstallShape)> {
+    ) -> Result<(usize, Vec<u8>, u32, BranchKind)> {
+        // The de-bus latch clear every AKE stub variant below bakes in. Resolved
+        // once, here, so a failure to find it refuses the whole AKE lever rather
+        // than shipping a stub that forces auth without clearing the latch —
+        // which is precisely the 0.8.14/0.9.0 defect (drive wraps with a key the
+        // host never negotiated, no key can decrypt, every rip fails).
+        let reset = self.find_aacs_session_reset(image)?;
         // Original (BU40N / BP60NB10 / desktop): detour the reject writer
         // `movs r1,#1; b <back>` (4 bytes at anchor+12).
         //
@@ -3321,8 +3403,8 @@ impl Mt1959Engine {
                 disp -= 0x800;
             }
             let ake_back = (b_at as i32 + 4 + disp * 2) as u32;
-            let bytes = self.build_ake_stub(flag_base, ake_back)?;
-            return Ok((reset_site, bytes, ake_gate, AkeInstallShape::WideB));
+            let bytes = self.build_ake_stub(flag_base, ake_back, reset)?;
+            return Ok((reset_site, bytes, ake_gate, BranchKind::BWide));
         }
         // NB-class: detour the shared `bl set_agid_state` at anchor+12. The
         // OEM already installs a `bl` here — installing our own `bl` is a
@@ -3340,8 +3422,8 @@ impl Mt1959Engine {
             let bl_site = nb_gate as usize + 12;
             let back = thumb::decode_bl(image, bl_site)
                 .ok_or_else(|| anyhow!("NB AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
-            let bytes = self.build_ake_stub_nb(flag_base, back)?;
-            return Ok((bl_site, bytes, nb_gate, AkeInstallShape::WideBl));
+            let bytes = self.build_ake_stub_nb(flag_base, back, reset)?;
+            return Ok((bl_site, bytes, nb_gate, BranchKind::Bl));
         }
         // NB-class `1.V5`: reject arm re-reads the AGID byte, so the reject writer
         // is at anchor+12 and the shared `bl set_agid_state` at anchor+14. Both
@@ -3358,8 +3440,8 @@ impl Mt1959Engine {
         let bl_site = v5_gate as usize + 14;
         let back = thumb::decode_bl(image, bl_site)
             .ok_or_else(|| anyhow!("NB 1.V5 AKE: no `bl set_agid_state` at 0x{bl_site:x}"))?;
-        let bytes = self.build_ake_stub_nb(flag_base, back)?;
-        Ok((bl_site, bytes, v5_gate, AkeInstallShape::WideBl))
+        let bytes = self.build_ake_stub_nb(flag_base, back, reset)?;
+        Ok((bl_site, bytes, v5_gate, BranchKind::Bl))
     }
 
     /// The Raw Read (0x04) flag-gated producer Gate-A trampoline. Entered by a `bl`
@@ -3384,6 +3466,7 @@ impl Mt1959Engine {
         agid_struct: u32,
         authed: u32,
         deny: u32,
+        reset: u32,
     ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let rearm = a.label(); // 04 01 bare-read: reset AGID selector, then emit
@@ -3400,6 +3483,37 @@ impl Mt1959Engine {
         // byte[agid_struct+0xa]>>6 is >= 2; a prior read or 04 00 deny advances it.
         // Reset it to AGID 0 (byte &= 0x3F) so each read runs fresh. 04 02 untouched.
         a.bind(rearm);
+        // ---- De-bus latch clear (0.9.1) --------------------------------
+        // Telling the drive "the host is already authenticated" also ARMS its
+        // bus-encryption engine — and this bare-read path negotiates no bus
+        // key, so the drive wraps content with a key the host cannot have.
+        // Nothing can then decrypt it: every key is tried and every one fails.
+        //
+        // The latch is set by power-on AND by the OEM's disc-insert rearm ISR,
+        // so a boot-time or SET-time clear is not enough — any disc change
+        // re-arms it while the flag still reads 0x00. Clearing HERE puts it on
+        // the path that runs for the bare `0xAD` read itself, which is the
+        // read that precedes content, every session.
+        //
+        // PLACEMENT PROVEN ON HARDWARE before this was written, with
+        // `hw-tester callprobe` splicing this exact routine into each
+        // seam of a live read cycle: control 0/16 wrapped; clear before the
+        // cycle, between the bare-VID read and the scan, and between the scan
+        // and the content reads all 16/16. 0.9.1's first attempt put the call
+        // in `build_ake_stub` instead and measured 0/16 — that stub sits on the
+        // cert-REJECT writer (`04 02`), which a bare no-cert read never
+        // reaches, so it never ran. Gate-A (`04 01`) is the path this flow
+        // actually takes. Do not move this back.
+        //
+        // Registers: `lr` is dead here (the producer saved its own), so the
+        // `blx` clobbering it is harmless and no save/restore is needed. `r0`
+        // (the per-AGID auth byte) and `r1` are preserved across the call
+        // because the callee may clobber r0-r3; the two-word push also keeps
+        // `sp` 8-byte aligned at the call, per AAPCS.
+        a.push(0x0003); // push {r0, r1}
+        a.ldr_lit(2, reset | 1); // r2 = aacs_session_reset (Thumb-tagged)
+        a.blx(2);
+        a.pop(0x0003); // pop {r0, r1}
         a.ldr_lit(2, agid_struct); // r2 = &per-AGID session struct
         a.ldrb_imm(3, 2, 0xa); // r3 = byte[base+0xa] (AGID selector in top 2 bits)
         a.movs_imm(1, 0xC0); // r1 = 0xC0 (top-two-bits mask)
@@ -3597,10 +3711,12 @@ impl Mt1959Engine {
         let save_home = self.find_nv_block(image)?;
         let bytes = self.build_boot_init(flag_base, orig_init, save_home)?;
         let stub_va = self.free_space(out, bytes.len() + 16)?;
-        let bl = thumb::encode_bl(conv, stub_va)
-            .ok_or_else(|| anyhow!("boot-init detour `bl` out of range"))?;
         thumb::write(out, stub_va as usize, &bytes);
-        thumb::write(out, conv, &bl);
+        // Decode-back guarded like every other install site. This one was the
+        // lone exception, which is backwards: it is the always-on power-on
+        // hook, so a mis-encoded branch here misfires on every boot rather
+        // than only when a feature is exercised.
+        crate::install_guard::install_branch(out, conv, BranchKind::Bl, stub_va, "boot-init")?;
         Ok((conv as u32, stub_va))
     }
 
@@ -3724,26 +3840,6 @@ pub(crate) fn classic_boot_init_caller(image: &[u8], site: usize) -> Option<(usi
         off += 2;
     }
     caller.map(|c| (c, helper))
-}
-
-/// Which Thumb-2 wide branch encoding the caller of `Mt1959Engine::ake_detour`
-/// must use when writing the 4-byte install patch at the returned `reset_site`.
-///
-/// * [`WideB`](Self::WideB) — Thumb-2 wide `B` (`B.W`, T4 encoding via
-///   [`thumb_asm::encode_b_wide`]). Used on the BU40N/desktop reject-writer
-///   site where OEM has `movs r1,#1; b <back>` (a tail-call). Preserves `lr`
-///   so the shared setter's `bx lr` returns to the outer function's caller,
-///   matching OEM.
-/// * [`WideBl`](Self::WideBl) — Thumb-2 wide `BL` (via
-///   [`thumb_asm::encode_bl`]). Used on the NB-class shared-`bl` sites where
-///   OEM already had a `bl set_agid_state` — `lr = site+4` is exactly what OEM
-///   sets, so a like-for-like `bl` install is byte-behaviour-identical.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AkeInstallShape {
-    /// Thumb-2 wide `B` (`B.W`, T4). Preserves `lr`.
-    WideB,
-    /// Thumb-2 wide `BL`. Sets `lr = site+4`.
-    WideBl,
 }
 
 #[cfg(test)]

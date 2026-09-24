@@ -6,6 +6,52 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1]
+
+A dependency-correctness release: no behavioural change to any lever, but the
+emitted code is now correct by construction where 0.9.0 was correct by
+coincidence. Hardware-validated 0.9.0 images remain sound — see below.
+
+### Changed
+
+- **Branch installs go through `thumb_asm::install_branch`.** `install_guard.rs`
+  no longer hand-rolls its decode-back assertions; it keeps only the anyhow
+  re-flavouring of the crate's typed `InstallMismatch` (plus
+  `assert_literal_absent`, which has no upstream equivalent), exactly as that
+  file's own 0.9.0 header comment said to do once a framework-agnostic
+  equivalent landed upstream. `AkeInstallShape` is retired in favour of
+  `thumb_asm::BranchKind` — it was that enum under a different name.
+
+  The AKE install site is the reason this matters. It used to match on the
+  install shape to pick an *encoder*, write the bytes, then match on the shape
+  again to pick a *decoder* to verify with — two matches that could disagree.
+  A shape/guard disagreement is precisely the 0.8.13 BL-over-tail-call bug:
+  installed as `BL`, and nothing checked it should have been `B.W`.
+  `install_branch` encodes, writes and verifies against one `BranchKind`, so
+  the two cannot drift. Byte-neutral: the golden KAT and both AES-CMAC digests
+  are unchanged.
+
+### Fixed
+
+- **`mov_reg` now emits a real `MOV (register)`, not a flag-setting `ADDS`.**
+  Upgrading `thumb-asm` from 0.1.0 to 0.10.0 (0.1.0 has been yanked upstream)
+  corrects an encoding bug in the assembler: `Asm::mov_reg` was emitting
+  `0x1C00|…` — `adds rd, rm, #0` — which clobbers the condition flags and
+  cannot address r8–r15. It now emits the architectural `MOV (register)` T1,
+  `0x4600|…` (ARM ARM A7.7.77). Upstream added `movs_reg` for callers that
+  actually wanted the flag-setting form; nothing here does.
+
+  This changes exactly 21 emitted bytes across the injected handler, all of
+  them the high byte of a `mov_reg` halfword (12x `1c29→4629`, 6x
+  `1c28→4628`, 2x `1c04→4604`, 1x `1c31→4631`) — same image length, same
+  registers, verified byte-for-byte to contain no other encoding change. The
+  golden KAT and its two AES-CMAC digests were deliberately re-blessed.
+
+  Shipped 0.9.0 images are not at risk: all nine `mov_reg` sites use low
+  registers and none reads the flags afterwards, so the stray `adds` was
+  inert there. The new encoding is correct unconditionally rather than by
+  coincidence, which is the reason to take it.
+
 ## [0.9.0]
 
 First public release since 0.8.3. Consolidates the 0.8.4–0.8.14 development
