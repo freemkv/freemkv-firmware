@@ -247,3 +247,54 @@ fn verify_response_matches_only_the_magic_lead() {
     assert!(!verify_response(b"nope"));
     assert!(!verify_response(b""));
 }
+
+/// Every 32-bit CDB field must be packed big-endian, and each shift must be
+/// individually load-bearing.
+///
+/// The pre-existing builders' tests all used targets whose top byte was zero
+/// (`0x000C_AE18`), which makes `target >> 24` and `target << 24` both produce
+/// `0x00` — so a mutation swapping those operators changed nothing observable
+/// and survived a full mutation run. A target with four DISTINCT NON-ZERO
+/// bytes removes that blind spot: every byte position then pins exactly one
+/// shift amount, and any swapped or mis-sized shift lands a wrong byte.
+///
+/// This matters on the wire: these fields carry the ARM address the drive will
+/// jump to or write at, so a wrong shift silently retargets a debug-knock verb.
+#[test]
+fn cdb_32bit_fields_pack_big_endian_with_every_shift_load_bearing() {
+    const T: u32 = 0xDE_AD_BE_EF;
+    const BE: [u8; 4] = [0xDE, 0xAD, 0xBE, 0xEF];
+
+    let call = build_call_cdb(T, 0x5A);
+    assert_eq!(
+        &call[5..9],
+        &BE,
+        "Call target must be big-endian; a swapped shift shows up as a wrong byte here"
+    );
+    assert_eq!(call[9], 0x5A, "Call r0 arg rides at cdb[9]");
+
+    let poke = build_poke_cdb(T, 0xA5);
+    assert_eq!(&poke[5..9], &BE, "Poke target must be big-endian");
+    assert_eq!(poke[9], 0xA5, "Poke value byte rides at cdb[9]");
+
+    let memread = build_memread_cdb(T);
+    assert_eq!(&memread[5..9], &BE, "DumpAll address must be big-endian");
+
+    // The flash-write verb is the one that PROGRAMS FLASH, so its address
+    // packing is the least forgiving of the four. Its own test uses
+    // 0x001E_D000, whose top byte is zero — the same blind spot this test
+    // exists to close — so cover it here with a target that has none.
+    let fw = build_flashwrite_cdb(T, 0x5A);
+    assert_eq!(
+        &fw[5..9],
+        &BE,
+        "flash-write offset must be big-endian; a swapped shift here programs the wrong address"
+    );
+
+    // Each byte position pins one shift: assert them individually so a failure
+    // names which shift broke rather than just "the slice differs".
+    assert_eq!(call[5], 0xDE, "cdb[5] is target >> 24");
+    assert_eq!(call[6], 0xAD, "cdb[6] is target >> 16");
+    assert_eq!(call[7], 0xBE, "cdb[7] is target >> 8");
+    assert_eq!(call[8], 0xEF, "cdb[8] is target & 0xFF");
+}

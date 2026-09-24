@@ -20,6 +20,239 @@ fn masked_matches_basic() {
     assert_eq!(masked_matches(&img, sig, 0, 4), vec![0]);
 }
 
+/// `span` is `sig.len() * 2` (halfwords → bytes), and the walk is `off + span
+/// <= hi`. A signature whose LAST halfword sits on the final halfword of the
+/// window must still be found: an engine that silently loses matches at the tail
+/// of a scan window picks the wrong anchor (or none) for a lever, which is a
+/// wrong-image-for-this-drive bug.
+#[test]
+fn masked_matches_finds_a_match_in_the_final_halfword_of_the_window() {
+    let img = [0xAAu8, 0xBB, 0x11, 0x22];
+    let sig = &[(0x2211u16, 0xFFFFu16)][..];
+    assert_eq!(
+        masked_matches(&img, sig, 0, img.len()),
+        vec![2],
+        "the last halfword of the window is in scope (span = len*2, bound is `<=`)"
+    );
+}
+
+/// The `lo + span > hi` fast-exit is an ADDITION: the window must be measured
+/// from its start, never scaled by it. A window that begins deep in the image
+/// (`lo` large) and is exactly wide enough for the signature must still be
+/// scanned — the classic anchors live ~0x17_0000 into a 2 MiB image, so a
+/// mis-scaled guard would blind the finder on exactly the real inputs.
+#[test]
+fn masked_matches_scans_a_window_that_starts_deep_into_the_image() {
+    let mut img = vec![0u8; 8];
+    img[6] = 0x11;
+    img[7] = 0x22;
+    let sig = &[(0x2211u16, 0xFFFFu16)][..];
+    assert_eq!(
+        masked_matches(&img, sig, 6, 8),
+        vec![6],
+        "lo=6, span=2, hi=8 → exactly one candidate offset, and it matches"
+    );
+}
+
+/// Each signature halfword `i` is read at `off + i*2` — its own slot. Reading
+/// them at any other stride would let an unrelated byte pattern satisfy a
+/// multi-halfword signature, which is how a finder lands a detour on the wrong
+/// instruction. The existing `masked_matches_basic` fixture masks its second
+/// halfword's low byte, so it cannot see a stride bug; this one is fully exact.
+#[test]
+fn masked_matches_reads_each_signature_halfword_at_its_own_offset() {
+    let img = [0x11u8, 0x22, 0x33, 0x44, 0x00, 0x00];
+    let sig = &[(0x2211u16, 0xFFFFu16), (0x4433u16, 0xFFFFu16)][..];
+    assert_eq!(
+        masked_matches(&img, sig, 0, img.len()),
+        vec![0],
+        "halfword 1 must be read at off+2, not at any other stride"
+    );
+}
+
+/// Lay a masked signature down as bytes that match it exactly (`val & mask`).
+fn materialize(sig: &[(u16, u16)]) -> Vec<u8> {
+    sig.iter()
+        .flat_map(|&(val, mask)| (val & mask).to_le_bytes())
+        .collect()
+}
+
+/// A 2 MiB zero image carrying one VID gate and one AKE gate at chosen offsets.
+fn image_with_classic_gates(vid_at: Option<usize>, ake_at: &[usize]) -> Vec<u8> {
+    let mut img = vec![0u8; 0x20_0000];
+    if let Some(off) = vid_at {
+        let bytes = materialize(VID_GATE_SIG_CLASSIC);
+        img[off..off + bytes.len()].copy_from_slice(&bytes);
+    }
+    let bytes = materialize(AKE_GATE_SIG_CLASSIC);
+    for &off in ake_at {
+        img[off..off + bytes.len()].copy_from_slice(&bytes);
+    }
+    img
+}
+
+/// The classic raw-read anchors are the REAL matched offsets of the two gates,
+/// not a constant and not `None`. These two addresses are where the classic
+/// detour would be written, so returning anything else means emitting a branch
+/// at an address that is not the gate — the bricking class.
+#[test]
+fn classic_rawread_anchors_reports_the_two_matched_gate_offsets() {
+    let vid_off = 0x0017_1000usize;
+    let ake_off = 0x0017_9000usize;
+    let img = image_with_classic_gates(Some(vid_off), &[ake_off]);
+    assert_eq!(
+        classic_rawread_anchors(&img),
+        Some((vid_off as u32, ake_off as u32)),
+        "both gates are unique → their own offsets are reported verbatim"
+    );
+}
+
+/// Uniqueness is the safety property: a gate that matches twice means the
+/// signature does not pin a single site on this image, so no anchor may be
+/// reported. Reporting one of them would be a coin flip over which gate the
+/// detour lands on.
+#[test]
+fn classic_rawread_anchors_refuses_a_gate_that_matches_more_than_once() {
+    let vid_off = 0x0017_1000usize;
+    let img = image_with_classic_gates(Some(vid_off), &[0x0017_9000, 0x0018_9000]);
+    assert_eq!(
+        classic_rawread_anchors(&img),
+        None,
+        "two AKE matches → ambiguous, must not report an anchor"
+    );
+    let img = image_with_classic_gates(None, &[0x0017_9000]);
+    assert_eq!(
+        classic_rawread_anchors(&img),
+        None,
+        "no VID match → must not report an anchor"
+    );
+}
+
+/// A synthetic classic-generation image: `"MT1939 Boot Code"` banner, an MTEK
+/// identity page (so the DE byte has a home), and a parseable — but inactive —
+/// CMAC table so the closing `resign` succeeds. Nothing else is present, so the
+/// classic base finders miss and `modify` lands on its DE-only fallback, which
+/// is the code path these tests pin.
+fn synthetic_classic_de_only_image(de_byte: u8) -> Vec<u8> {
+    let mut img = vec![0u8; 0x20_0000];
+    img[freemkv_chipset::BANNER_OFFSET..freemkv_chipset::BANNER_OFFSET + 16]
+        .copy_from_slice(b"MT1939 Boot Code");
+    let desc = freemkv_chipset::DESCRIPTOR_OFFSET;
+    img[desc..desc + 0x40].fill(b' ');
+    img[desc..desc + 8].copy_from_slice(b"HL-DT-ST");
+    img[desc + 0x08..desc + 0x08 + 11].copy_from_slice(b"BD-RE  X100");
+    img[desc + 0x18..desc + 0x1C].copy_from_slice(b"1.00");
+    img[desc + 0x34..desc + 0x3E].copy_from_slice(b"MTEKMT1939");
+    img[desc + DE_OFF_IN_DESCRIPTOR] = de_byte;
+    // Table entries all `0xFF` (unused): parse_table succeeds, nothing to sign.
+    for i in 0..cmac::ENTRY_COUNT {
+        let off = cmac::TABLE_OFFSET + i * cmac::ENTRY_SIZE;
+        img[off..off + cmac::ENTRY_SIZE].fill(0xFF);
+    }
+    img
+}
+
+/// The DE-only fallback writes `0xDE` at the identity page's `+0x56` slot — the
+/// downgrade-enable byte — and reports THAT offset as its grounded fact. The
+/// address is `DESCRIPTOR_OFFSET + 0x56`; any other arithmetic writes a stray
+/// byte into an unrelated page of a firmware image that is about to be flashed.
+#[test]
+fn mt1939_de_only_fallback_sets_the_downgrade_byte_at_the_identity_page_offset() {
+    let img = synthetic_classic_de_only_image(0x00);
+    let want_off = (freemkv_chipset::DESCRIPTOR_OFFSET + DE_OFF_IN_DESCRIPTOR) as u32;
+    let r = Mt1939Engine
+        .modify(&img)
+        .expect("a classic image with an identity page is always modifiable (DE at minimum)");
+    let de = r
+        .levers
+        .iter()
+        .find(|l| l.id == LeverId::DowngradeEnable)
+        .expect("DE lever present");
+    assert_eq!(
+        de.outcome,
+        LeverOutcome::Applied,
+        "a 0x00 DE byte must be APPLIED, not reported as already set"
+    );
+    assert_eq!(
+        de.facts,
+        vec![("de_off", want_off)],
+        "the grounded DE offset must be DESCRIPTOR_OFFSET + 0x56"
+    );
+    assert_eq!(
+        r.image[want_off as usize], 0xDE,
+        "the downgrade-enable byte itself must be 0xDE in the produced image"
+    );
+    assert_eq!(
+        r.image[..want_off as usize],
+        img[..want_off as usize],
+        "the DE lever must touch nothing before its own byte"
+    );
+}
+
+/// Idempotency at the byte level: an image whose DE byte is already `0xDE` is
+/// reported `AlreadyPresent`, never re-applied. Mis-reading that byte would
+/// make every re-run claim a fresh patch on an unchanged image.
+#[test]
+fn mt1939_de_only_fallback_reports_an_already_set_downgrade_byte_as_idempotent() {
+    let img = synthetic_classic_de_only_image(0xDE);
+    let r = Mt1939Engine.modify(&img).expect("modify");
+    let de = r
+        .levers
+        .iter()
+        .find(|l| l.id == LeverId::DowngradeEnable)
+        .expect("DE lever present");
+    assert_eq!(
+        de.outcome,
+        LeverOutcome::AlreadyPresent,
+        "a DE byte already 0xDE is idempotent, not a fresh apply"
+    );
+}
+
+/// An MT1939-banner image with NO MTEK identity page has no DE slot and no
+/// classic base, so nothing at all is effective: `modify` must REFUSE cleanly
+/// rather than hand back an image it did not change. The refusal is the signal
+/// that the drive owner needs a different tool, not a green light.
+#[test]
+fn mt1939_refuses_an_image_with_nothing_effective_to_apply() {
+    let mut img = vec![0u8; 0x20_0000];
+    img[freemkv_chipset::BANNER_OFFSET..freemkv_chipset::BANNER_OFFSET + 16]
+        .copy_from_slice(b"MT1939 Boot Code");
+    for i in 0..cmac::ENTRY_COUNT {
+        let off = cmac::TABLE_OFFSET + i * cmac::ENTRY_SIZE;
+        img[off..off + cmac::ENTRY_SIZE].fill(0xFF);
+    }
+    let err = Mt1939Engine
+        .modify(&img)
+        .expect_err("no identity page → nothing modifiable → clean refusal");
+    assert!(
+        err.to_string().contains("nothing modifiable"),
+        "expected the 'nothing modifiable' refusal, got: {err:#}"
+    );
+}
+
+/// A NON-classic (JB8 / MT1959-lineage) MT1939 image must be routed to the
+/// shared MT1959 machinery, not to the DE-only fallback: the fallback applies
+/// one byte and reports the other four levers pending, so a routing inversion
+/// silently ships a drive a near-empty patch. Env-gated on a real image because
+/// the shared build only succeeds on real MT1959-lineage geometry.
+#[test]
+fn mt1939_routes_a_non_classic_image_to_the_shared_mt1959_machinery() {
+    let Ok(path) = std::env::var("FREEMKV_KAT_BASE") else {
+        eprintln!("skip: set FREEMKV_KAT_BASE to an MT1959-lineage image");
+        return;
+    };
+    let img = std::fs::read(&path).expect("read KAT base");
+    assert!(!is_classic(&img), "{path} must be a non-classic image");
+    let r = Mt1939Engine.modify(&img).expect("modify");
+    assert!(
+        r.levers
+            .iter()
+            .any(|l| l.id == LeverId::Identity && l.outcome.is_effective()),
+        "the shared build must engage (Identity effective); the DE-only fallback \
+         emits no Identity lever at all"
+    );
+}
+
 #[test]
 fn is_classic_reads_the_banner() {
     let mut img = vec![0u8; 0x4000];

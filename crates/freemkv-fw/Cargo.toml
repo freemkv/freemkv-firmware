@@ -33,7 +33,7 @@ freemkv-chipset = { path = "../freemkv-chipset" }
 # `assert_b_wide_install`) that adapt `thumb_asm`'s decoders to this crate's
 # `anyhow::Result` error type live in `src/install_guard.rs`; every actual
 # encode/decode/find primitive lives in the upstream crate.
-thumb-asm = "0.1"
+thumb-asm = "=0.11.1"
 
 [dev-dependencies]
 # Throwaway corpus-scoreboard / golden-KAT harness only (tests/corpus_scoreboard.rs):

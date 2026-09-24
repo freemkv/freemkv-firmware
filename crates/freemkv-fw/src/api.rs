@@ -135,3 +135,7 @@ pub fn probe_device(device: &str) -> Result<ProbeOutcome> {
         }),
     }
 }
+
+#[cfg(test)]
+#[path = "api_tests.rs"]
+mod tests;
