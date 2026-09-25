@@ -31,7 +31,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
 /// copy the `left:` values). This is expected drift, not a real regression.
 const EXPECT_HANDLER_HEX: &str =
-    "b14b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a94b1847f0b5a94f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700247be00d2c03d1587a3070002475e00f2c04d19c4e0420b04700246ee000246ce0f0b5974f1c79022c0bd197485979012900d262e0072900d35fe04018997901705be0042c59d19879ff2823d18e48ff21017041708170c1700171417181718b4806688b4805687619874801783170417871708178b170c178f17001793171417971718179b1712846824907220123824da84732e001280fd17b48ff210170ff214170ff2181700121c17001210171ff214171ff21817120e0734e764a1178ff290ed1ff213170ff217170ff21b1700121f17001213171ff217171ff21b1710ce0517871709178b170d178f17011793171517971719179b171ffe70025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948314601220123564da847044600e0574c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b1712846324907220123324da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ca600250d2d04d22846715db8470135f8e70c4e0d250122072a05d2b15c2846b84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e392e31";
+    "b14b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a94b1847f0b5a94f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700247be00d2c03d1587a3070002475e00f2c04d19c4e0420b04700246ee000246ce0f0b5974f1c79022c0bd197485979012900d262e0072900d35fe04018997901705be0042c59d19879ff2823d18e48ff21017041708170c1700171417181718b4806688b4805687619874801783170417871708178b170c178f17001793171417971718179b1712846824907220123824da84732e001280fd17b48ff210170ff214170ff2181700121c17001210171ff214171ff21817120e0734e764a1178ff290ed1ff213170ff217170ff21b1700121f17001213171ff217171ff21b1710ce0517871709178b170d178f17011793171517971719179b171ffe70025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948314601220123564da847044600e0574c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b1712846324907220123324da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ca600250d2d04d22846715db8470135f8e70c4e0d250122072a05d2b15c2846b84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e392e32";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -46,8 +46,8 @@ const EXPECT_HANDLER_HEX: &str =
 // Re-signed 0.9.1: the AKE stub gained the per-session de-bus latch clear
 // (see `ake_stub_clears_the_debus_latch_and_preserves_lr`), so the injected
 // band moved. EXPECT_HANDLER_HEX is unchanged, confining the delta to the stub.
-const EXPECT_CMAC_1: &str = "0de91df23689a33a3b4cccaa93f1a5fb";
-const EXPECT_CMAC_15: &str = "f591535858aeb94759ee8e27d42683d4";
+const EXPECT_CMAC_1: &str = "d6c4a738dae01b84b00cda4ef4218376";
+const EXPECT_CMAC_15: &str = "91b86f09b75dfbcd3fdf711d5e2bcde0";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -238,12 +238,21 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     let ake_detour = report.ake_gate as usize + 12..report.ake_gate as usize + 16;
     let gatea_detour = report.gatea_gate as usize..report.gatea_gate as usize + 4;
     let deny_detour = report.deny_reset_gate as usize..report.deny_reset_gate as usize + 4;
-    // `Feature::Uhd` UHD media accept/refuse: the REPORT KEY class-3 arm detour
+    // `Feature::Unrestricted` UHD media accept/refuse: the REPORT KEY class-3 arm detour
     // (report.uhd_classifier_site), 4 bytes replacing `ldrb r0,[r2,#7]; cmp r0,#3`.
     let uhd_detour = report.uhd_classifier_site as usize..report.uhd_classifier_site as usize + 4;
     // `Feature::Bd` BD-refuse: the REPORT KEY mode-0 class check detour
     // (report.bd_gate_site), 4 bytes replacing `ldrb r0,[r2,#7]; cmp r0,#2`.
     let bd_detour = report.bd_gate_site as usize..report.bd_gate_site as usize + 4;
+    // `Feature::Unrestricted` auth-cell state-band widen: the OEM `cmp r0,#0xC; bne`
+    // detour (report.auth_cell_site), 4 bytes replacing `cmp r0,#0xC; bne <deny>`.
+    // Guarded against site==0 (unwired), which would otherwise degenerate to
+    // range 0..4 and silently allow unrelated byte-0..3 changes.
+    let auth_cell_detour = if report.auth_cell_site != 0 {
+        report.auth_cell_site as usize..report.auth_cell_site as usize + 4
+    } else {
+        0..0
+    };
     // HRL skip (`flag[Feature::Hrl]==STATE_OFF`): three cert-path detour sites, 4
     // bytes each (a `bl` to the shared HRL-skip stub, replacing `cmp r0,#0; bne`).
     let in_hrl = |i: usize| {
@@ -277,6 +286,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
                     || deny_detour.contains(&i)
                     || uhd_detour.contains(&i)
                     || bd_detour.contains(&i)
+                    || auth_cell_detour.contains(&i)
                     || in_hrl(i)
                     || i == report.de_off as usize,
                 "unexpected byte change at 0x{i:x}"
@@ -344,7 +354,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.deny_stub_va != 0,
         "Raw Read (0x04) deny-path AACS-reset stub wired"
     );
-    // `Feature::Uhd` UHD media accept/refuse (REPORT KEY class-3 arm): the UHD class
+    // `Feature::Unrestricted` UHD media accept/refuse (REPORT KEY class-3 arm): the UHD class
     // check `ldrb r0,[r2,#7]; cmp r0,#3` at the accept gate's anchor+4 (0x1365be anchor
     // → 0x1365c2 site on 1.00), the UHD sibling of the BD arm on the SAME gate.
     assert_eq!(
@@ -364,6 +374,19 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         "BD-refuse (Feature::Bd) detours the REPORT KEY mode-0 class check (1.00)"
     );
     assert!(report.bd_stub_va != 0, "Feature::Bd BD-refuse stub wired");
+    // `Feature::Unrestricted` auth-cell state-band widen (`AUTH_CELL_SIG` at
+    // 0x0013681c on BU40N 1.00): the OEM `cmp (state>>4),#0xC; bne <6F/02>` at
+    // anchor+10 = 0x00136826, detoured to a stub that widens the accepted
+    // top-nibble set to include `0xEx` when `flag[Unrestricted]==STATE_ON`, and
+    // replays OEM byte-for-byte otherwise (STATE_OFF or STATE_PASSTHROUGH).
+    assert_eq!(
+        report.auth_cell_site, 0x0013_6826,
+        "auth-cell widen (Feature::Unrestricted) detours the state-band cmp (1.00)"
+    );
+    assert!(
+        report.auth_cell_stub_va != 0,
+        "Feature::Unrestricted auth-cell widen stub wired"
+    );
     // HRL skip (`flag[Feature::Hrl]==STATE_OFF`): the three cert-path check sites
     // (`cmp r0,#0; bne <6F/00>`) after each `bl <hrl_lookup>` (0x13550e on 1.00),
     // all detoured to one shared HRL-skip stub.
@@ -692,8 +715,39 @@ fn feature_flag_gating_is_reslotted() {
         "UHD gate stub gates on cmp r3,#STATE_OFF"
     );
     assert!(
-        reads(&uhd, base + Feature::Uhd as u32),
-        "UHD gate stub reads flag[Uhd]"
+        reads(&uhd, base + Feature::Unrestricted as u32),
+        "UHD gate stub reads flag[Unrestricted]"
+    );
+
+    // Auth-cell widen stub — the 9th lever. Uses `cmp r3,#STATE_ON` (0x2B01, ONLY
+    // widens when flag == STATE_ON), NOT the peer `cmp r3,#STATE_OFF` convention:
+    // for auth-cell, PASSTHROUGH (0xFF) must replay OEM (which refuses `0xEx`) —
+    // it is NOT an OEM-legal accept like the peer stubs' PASSTHROUGH is. Also
+    // emits the OEM-replay `cmp r0,#0xC` (0x280C) and reads `flag[Unrestricted]`.
+    // Deny target rides on a bx-via-r3 pool literal (`deny_va | 1`).
+    let deny_va = 0x0013_68f4u32;
+    let auth_cell = Mt1959Engine
+        .build_authcell_widen_stub(base, deny_va)
+        .expect("auth-cell widen stub");
+    assert!(
+        has(&auth_cell, CMP_R3_ON),
+        "auth-cell widen stub gates on cmp r3,#STATE_ON (NOT the peer cmp r3,#STATE_OFF)"
+    );
+    assert!(
+        !has(&auth_cell, CMP_R3_OFF),
+        "auth-cell widen stub must NOT use cmp r3,#STATE_OFF (would collapse PASSTHROUGH into ON)"
+    );
+    assert!(
+        has(&auth_cell, 0x280C),
+        "auth-cell widen stub replays OEM cmp r0,#0xC (0x280C) on the stealth arm"
+    );
+    assert!(
+        reads(&auth_cell, base + Feature::Unrestricted as u32),
+        "auth-cell widen stub reads flag[Unrestricted]"
+    );
+    assert!(
+        reads(&auth_cell, deny_va | 1),
+        "auth-cell widen stub carries the thumb-tagged deny_va literal for the stealth-deny bx"
     );
 
     let speed = Mt1959Engine
@@ -723,10 +777,9 @@ fn feature_flag_gating_is_reslotted() {
         !has(&bd, 0x2B02),
         "BD-refuse stub must NOT gate on the retired `cmp r3,#0x02` sentinel"
     );
-    assert!(
-        reads(&bd, base + Feature::Bd as u32),
-        "BD-refuse stub reads flag[Bd]"
-    );
+    #[allow(deprecated)]
+    let bd_flag = base + Feature::Bd as u32;
+    assert!(reads(&bd, bd_flag), "BD-refuse stub reads flag[Bd]");
 
     // Region tri-state encodes all three canonical states: reads flag[Region], gates
     // on `cmp r3,#STATE_ON` (0x2B01, region-free) and `cmp r3,#STATE_OFF` (0x2B00,
@@ -1412,12 +1465,14 @@ fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
     // Sanity on the constant itself: UHD and BD default ON, everything else OFF-safe
     // (never 0x00) passthrough.
     assert_eq!(
-        super::DEFAULT_FLAGS[crate::abi::Feature::Uhd as usize],
+        super::DEFAULT_FLAGS[crate::abi::Feature::Unrestricted as usize],
         crate::abi::STATE_ON,
         "UHD default is ON"
     );
+    #[allow(deprecated)]
+    let bd_idx = crate::abi::Feature::Bd as usize;
     assert_eq!(
-        super::DEFAULT_FLAGS[crate::abi::Feature::Bd as usize],
+        super::DEFAULT_FLAGS[bd_idx],
         crate::abi::STATE_ON,
         "BD default is ON"
     );

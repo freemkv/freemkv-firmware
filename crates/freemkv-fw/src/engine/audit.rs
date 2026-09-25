@@ -331,7 +331,7 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 if let (Some(site), Some(stub)) = (fact(l, "deny_site"), fact(l, "deny_stub_va")) {
                     check_bl(&mut checks, name, "deny-reset detour bl", img, site, stub);
                 }
-                // `Feature::Uhd` UHD media accept/refuse detour (REPORT KEY class-3 arm
+                // `Feature::Unrestricted` UHD media accept/refuse detour (REPORT KEY class-3 arm
                 // on the SAME accept gate as BD). Present only when wired (explicit
                 // REPORT KEY gate shape); optional, like the bus-enc detour above.
                 // Proves the UHD arm's `bl` + stub landed at the class-3 check.
@@ -351,6 +351,24 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 // landed at the mode-0 class check.
                 if let (Some(site), Some(stub)) = (fact(l, "bd_site"), fact(l, "bd_stub_va")) {
                     check_bl(&mut checks, name, "BD-refuse detour bl", img, site, stub);
+                }
+                // `Feature::Unrestricted` auth-cell state-band widen detour
+                // (`AUTH_CELL_SIG` `anchor+10`, the post-classification
+                // `cmp (state>>4),#0xC; bne <6F/02>`). Present only when wired
+                // (image carries the extended `ldr r4,[pc,...] = 0x01FF9E04` prefix);
+                // optional. Proves the widen `bl` + stub landed at the state-band
+                // check.
+                if let (Some(site), Some(stub)) =
+                    (fact(l, "auth_cell_site"), fact(l, "auth_cell_stub_va"))
+                {
+                    check_bl(
+                        &mut checks,
+                        name,
+                        "auth-cell widen detour bl",
+                        img,
+                        site,
+                        stub,
+                    );
                 }
                 // HRL skip (`flag[Feature::Hrl]==STATE_ON`): one shared stub reached
                 // by a `bl` at each of the three cert-path check sites. Present only

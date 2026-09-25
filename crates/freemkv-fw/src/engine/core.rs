@@ -267,9 +267,10 @@ pub(crate) const SAVE_LEN: u8 = NUM_FEATURES + 1;
 /// This is a compile-time constant today (the create-time `--oem-uhd`/`--oem-bd`
 /// per-image override threads a runtime copy through the emitters — TODO). Baked
 /// into the boot/reset stubs, which are CMAC-covered, so it persists.
+#[allow(deprecated)] // `Feature::Bd` is deprecated in 0.9.2 but still occupies its own NV slot for wire-ABI round-trip.
 pub(crate) const DEFAULT_FLAGS: [u8; NUM_FEATURES as usize + 1] = {
     let mut d = [abi::STATE_PASSTHROUGH; NUM_FEATURES as usize + 1];
-    d[abi::Feature::Uhd as usize] = abi::STATE_ON;
+    d[abi::Feature::Unrestricted as usize] = abi::STATE_ON;
     d[abi::Feature::Bd as usize] = abi::STATE_ON;
     d
 };
@@ -623,6 +624,61 @@ pub(crate) const BD_GATE_SIG_VER: &[(u16, u16)] = &[
 /// block (`movs r2,#1; movs r1,#0x6f; movs r0,#5; …`). Fixed across every carrier
 /// (the intervening instruction count is invariant); verified `== 0x40` on all 98.
 pub(crate) const BD_GATE_VER_DENY_OFF: u32 = 0x40;
+
+/// Signature of the **auth-cell state-band gate** — the post-classification check
+/// that reads the RAM state byte at `0x01FF9E04`, isolates its top nibble
+/// (`byte >> 4`), and requires the nibble to equal `0xC` before the auth cell will
+/// engage. On BU40N 1.00 the check sits at `0x00136826` inside the SCSI command
+/// dispatcher; the OEM `bne` at `anchor+12` jumps to a `6F/02 Incompatible medium`
+/// emitter at `anchor + 16 + (disp8 * 2)` (0x001368F4 on BU40N 1.00) whenever the
+/// top nibble is not `0xC`.
+///
+/// The [`Feature::Unrestricted`] lever hooks this gate to widen the accepted nibble
+/// set. For 99% of media the phase-counter cascade lands the state byte at
+/// `0xCx` (nibble `0xC` — passes). A small fraction of triple-layer UHDs
+/// (specifically those whose disc descriptor drives the mode-0 arm of
+/// `f_84996` at file offset `0x00084996`) land the state byte at `0xEx`, which
+/// the OEM `cmp #0xC` rejects. Widening the gate under a runtime flag lets those
+/// discs through without touching the descriptor-parse path itself.
+///
+/// # Anchor identity
+/// The sig anchors on the pc-relative `ldr r4, [pc, #imm]` that loads the state
+/// byte's RAM address literal `0x01FF9E04`. This is the unique identifier for
+/// this gate (multiple `ldrb r0,[Rn]; lsrs #4; cmp #0xC; bne` shapes exist
+/// image-wide — the one we want is preceded specifically by the `0x01FF9E04`
+/// literal load). Anchored on the `ldr` and extended through the branch, the
+/// pattern resolves UNIQUELY on BU40N 1.00 (measured).
+///
+/// # Detour geometry
+/// - anchor+0:  `ldr r4, [pc, #imm]`  → literal pool holds `0x01FF9E04`
+/// - anchor+2:  `movs r0, #0`
+/// - anchor+4:  `strb r0, [r3, #9]`
+/// - anchor+6:  `ldrb r0, [r4]`         (r0 = state byte)
+/// - anchor+8:  `lsrs r0, r0, #4`
+/// - anchor+10: `cmp  r0, #0xC`         ← **detour site** (4 bytes replaced)
+/// - anchor+12: `bne  <deny>`
+///
+/// The 4 bytes at anchor+10 (`cmp` + `bne`) are replaced with a `bl` to
+/// [`Mt1959Engine::build_authcell_widen_stub`]. Return address is anchor+14
+/// (the OEM accept-arm, `movs r2,#1` on BU40N 1.00).
+pub(crate) const AUTH_CELL_SIG: &[(u16, u16)] = &[
+    (0x4C00, 0xFF00), // ldr r4, [pc, #imm]  Rt=r4 fixed; imm masked
+    (0x2000, 0xFFFF), // movs r0, #0
+    (0x7258, 0xFFFF), // strb r0, [r3, #9]
+    (0x7820, 0xFFFF), // ldrb r0, [r4]
+    (0x0900, 0xFFFF), // lsrs r0, r0, #4
+    (0x280C, 0xFFFF), // cmp  r0, #0xC       ← detour site (anchor+10)
+    (0xD100, 0xFF00), // bne  <deny>         disp8 masked (deny_va computed)
+];
+
+/// Byte offset from the [`AUTH_CELL_SIG`] anchor to the 4-byte detour site
+/// (`cmp r0, #0xC; bne <deny>`). Fixed across carriers.
+pub(crate) const AUTH_CELL_DETOUR_OFF: u32 = 10;
+
+/// Byte offset from the [`AUTH_CELL_SIG`] anchor to the OEM `bne` whose disp8
+/// resolves the deny target VA (the `6F/02` emitter). Reader:
+/// `deny_va = anchor + AUTH_CELL_BNE_OFF + 4 + ((halfword & 0xFF) as i8 as i32) * 2`.
+pub(crate) const AUTH_CELL_BNE_OFF: u32 = 12;
 
 /// Signature of the flash-resident **Host Revocation List (HRL) lookup** routine
 /// (`0x13550e` on BU40N 1.00; relocated per version — e.g. `0x13569a` on BU40N
@@ -2935,6 +2991,7 @@ impl Mt1959Engine {
     ///     (`cmp r0,#0xff`; class is never `0xff`) so the caller's `beq <accept>` is
     ///     NOT taken and control falls into the OEM deny block, which raises the
     ///     drive's own `6F` refusal sense — the drive REFUSES the BD disc.
+    #[allow(deprecated)] // BD-refuse stub reads the deprecated `Feature::Bd` slot; retirement to `Unrestricted` is deferred (would re-bless the golden KAT).
     pub(crate) fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let refuse = a.label();
@@ -2951,7 +3008,7 @@ impl Mt1959Engine {
         a.finish().map_err(anyhow::Error::from)
     }
 
-    /// The `Feature::Uhd` **UHD (AACS 2.0) media accept/refuse** trampoline — the UHD
+    /// The `Feature::Unrestricted` **UHD (AACS 2.0) media accept/refuse** trampoline — the UHD
     /// sibling of [`Self::build_bd_stub`] on the SAME REPORT KEY accept gate. Entered
     /// by a `bl` that replaces the gate's UHD class check `ldrb r0,[r2,#7]; cmp r0,#3`
     /// (4 bytes at [`BD_GATE_SIG`]'s `anchor+4`). On entry `r2 = the per-disc class
@@ -2967,7 +3024,7 @@ impl Mt1959Engine {
     /// invisible. `lr` is caller-saved (the enclosing function returns via its own
     /// `pop {…,pc}`), so the `bl`'s `lr` clobber is harmless.
     ///
-    /// `flag[Uhd]` tri-state at this site (uniform `0xFF`/`0x01`/`0x00`; the always-on
+    /// `flag[Unrestricted]` tri-state at this site (uniform `0xFF`/`0x01`/`0x00`; the always-on
     /// boot hook writes `0xFF` at power-on, so `0x00` OFF is never seen at boot):
     ///   * `!= STATE_OFF` (`0xFF` passthrough / `0x01` on): replay `ldrb r0,[r2,#7];
     ///     cmp r0,#3` verbatim, so the caller's `bne` sees the exact OEM flags — UHD
@@ -2981,8 +3038,8 @@ impl Mt1959Engine {
         let mut a = Asm::new();
         let refuse = a.label();
         a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
-        a.ldr_lit(3, flag_base + abi::Feature::Uhd as u32); // r3 = &flag[Uhd]
-        a.ldrb_imm(3, 3, 0); // r3 = Uhd flag byte
+        a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // r3 = &flag[Unrestricted]
+        a.ldrb_imm(3, 3, 0); // r3 = Unrestricted flag byte
         a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force UHD refuse (0xFF passthrough / 0x01 on stay OEM)
         a.beq(refuse);
         a.cmp_imm(0, 3); // stealth: replay `cmp r0,#3` LAST so the caller's `bne` sees OEM flags
@@ -3021,6 +3078,7 @@ impl Mt1959Engine {
     ///     OEM `6F/05` deny at `deny_va` — the drive REFUSES the BD disc using its own
     ///     refusal sense. Any other mode (`r2 != 0`, e.g. UHD/AACS-2.0 mode-1) takes
     ///     the stealth path, so the UHD arm is never affected.
+    #[allow(deprecated)] // BD-refuse stub reads the deprecated `Feature::Bd` slot; retirement to `Unrestricted` is deferred (would re-bless the golden KAT).
     pub(crate) fn build_bd_stub_ver(
         &self,
         flag_base: u32,
@@ -3102,7 +3160,7 @@ impl Mt1959Engine {
         }
     }
 
-    /// Resolve the `Feature::Uhd` media-gate arm on the SAME AACS accept gate the BD
+    /// Resolve the `Feature::Unrestricted` media-gate arm on the SAME AACS accept gate the BD
     /// arm hooks ([`Self::find_bd_gate`]). The explicit REPORT KEY gate carries a UHD
     /// class-3 check `ldrb r0,[r2,#7]; cmp r0,#3` at `anchor+4` (BU40N `0x1365c2`),
     /// paired with a `bne <deny>` at `anchor+8`. Returns `(detour_site, stub_bytes)`
@@ -3139,6 +3197,131 @@ impl Mt1959Engine {
             );
         }
         Ok((site, self.build_uhd_gate_stub(flag_base)?))
+    }
+
+    /// The [`Feature::Unrestricted`] **auth-cell state-band widen** trampoline. Entered
+    /// by a `bl` that replaces `cmp r0,#0xC; bne <deny>` (4 bytes at
+    /// [`AUTH_CELL_SIG`]'s `anchor+10`). On entry `r0 = state_byte >> 4` (the top
+    /// nibble the OEM `cmp` was about to compare against `0xC`); `deny_va` is the
+    /// OEM `6F/02 Incompatible medium` emitter reached by the OEM `bne`.
+    ///
+    /// # Register / frame contract
+    /// A bare `bl` (no push in the caller). `r3` is scratch inside the stub —
+    /// preserved across the flag load via `push {r3}` / `pop {r3}` because the OEM
+    /// accept-arm at `anchor+14` reads `r3` (it holds `sp` from `mov r3, sp` at
+    /// `anchor-14`). `r0` is dead after the OEM `bne` on both arms (the deny-arm
+    /// recomputes r0 in the sense emitter; the accept-arm starts with
+    /// `movs r2, #1` and doesn't read r0), so clobbering the shifted-index is safe.
+    /// `lr` is caller-saved.
+    ///
+    /// # Flag semantics
+    /// [`Feature::Unrestricted`] tri-state at this site (uniform tri-state):
+    /// * `!= STATE_OFF` (`0xFF` passthrough / `0x01` armed on): **widen** — the
+    ///   stub returns immediately, so the caller falls into the OEM accept-arm at
+    ///   `anchor+14` regardless of the shifted-index value. This lets state values
+    ///   in the `0xEx` band (which the OEM `cmp` would refuse) pass the gate.
+    /// * `== STATE_OFF` (`0x00`): **stealth** — replay the OEM `cmp r0, #0xC`. On
+    ///   equal, return to the caller's accept-arm; on not-equal, jump to `deny_va`
+    ///   (the OEM `6F/02` emitter), giving byte-behaviour-identical semantics to
+    ///   OEM. Inert when the feature is armed OFF.
+    pub(crate) fn build_authcell_widen_stub(
+        &self,
+        flag_base: u32,
+        deny_va: u32,
+    ) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        let armed = a.label();
+        let stealth_deny = a.label();
+        // Preserve r3 (live on the OEM accept-arm at anchor+14).
+        a.push(0x0008); // push {r3}
+        a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // r3 = &flag[Unrestricted]
+        a.ldrb_imm(3, 3, 0); // r3 = flag byte
+                             // Tri-state, distinct from the peer stubs: only STATE_ON (0x01) widens.
+                             // STATE_OFF (0x00) and STATE_PASSTHROUGH (0xFF) both replay the OEM
+                             // `cmp r0,#0xC; bne <deny>` byte-for-byte — passthrough here is
+                             // stealth-OEM (drive refuses `0xEx` states, as shipped), not "on".
+                             // The peer stubs use `!= STATE_OFF` because their PASSTHROUGH and ON
+                             // both resolve to an OEM-legal accept; here they diverge, so we test
+                             // equality against STATE_ON explicitly.
+        a.cmp_imm(3, abi::STATE_ON);
+        a.beq(armed);
+        // Stealth (STATE_OFF or STATE_PASSTHROUGH): replay OEM `cmp r0, #0xC`;
+        // branch to deny_va on !=.
+        a.cmp_imm(0, 0xC);
+        a.bne(stealth_deny);
+        // r0 == 0xC (stealth accept): restore r3 and return; caller lands at accept-arm.
+        a.pop(0x0008);
+        a.bx(14);
+        a.bind(stealth_deny);
+        // r0 != 0xC (stealth deny): restore r3 and jump to the OEM 6F/02 emitter.
+        a.pop(0x0008);
+        a.ldr_lit(3, deny_va | 1); // thumb bit
+        a.bx(3);
+        a.bind(armed);
+        // Unrestricted == STATE_ON (0x01): widen — return unconditionally so the
+        // caller's accept-arm at anchor+14 runs regardless of the nibble value.
+        a.pop(0x0008);
+        a.bx(14);
+        a.finish()
+            .map_err(|e| anyhow!("build_authcell_widen_stub: {e}"))
+    }
+
+    /// Resolve the [`Feature::Unrestricted`] auth-cell widen detour. Returns
+    /// `(detour_site, stub_bytes)` — the caller writes a `bl` at `detour_site`
+    /// (the 4 bytes at `anchor + AUTH_CELL_DETOUR_OFF` that were the OEM
+    /// `cmp r0,#0xC; bne <deny>`) and places `stub_bytes` at a free-space VA it
+    /// allocates.
+    ///
+    /// Graceful: images that don't carry this specific gate shape (the
+    /// `ldr r4, [pc, ...] = 0x01FF9E04` + `cmp r0,#0xC; bne` extended sig) leave
+    /// the lever unwired.
+    pub(crate) fn auth_cell_widen_detour(
+        &self,
+        image: &[u8],
+        flag_base: u32,
+    ) -> Result<(usize, Vec<u8>)> {
+        let anchor = find_unique(image, AUTH_CELL_SIG, 0, image.len(), "auth-cell state-band")?;
+        let detour_site = anchor + AUTH_CELL_DETOUR_OFF as usize;
+        let bne_off = anchor + AUTH_CELL_BNE_OFF as usize;
+        // The OEM `bne <deny>` disp8 gives us the deny_va — signed 8-bit,
+        // halfword-scaled, relative to (bne_addr + 4). Use checked arithmetic
+        // so a crafted disp8 that would wrap can't produce a nonsense VA baked
+        // into the stub.
+        let bne_hw = u16::from_le_bytes([image[bne_off], image[bne_off + 1]]);
+        let disp8 = (bne_hw & 0xFF) as u8 as i8 as isize;
+        let deny_va_signed = (bne_off as isize)
+            .checked_add(4)
+            .and_then(|v| v.checked_add(disp8.checked_mul(2)?))
+            .ok_or_else(|| anyhow!("auth-cell deny_va disp8 arithmetic overflow"))?;
+        if deny_va_signed < 0 {
+            bail!("auth-cell deny_va resolves negative from disp8 (0x{bne_hw:04x})");
+        }
+        let deny_va = deny_va_signed as u32;
+        // Deny landmark: the resolved VA must (a) live inside the image and
+        // (b) point at a non-null halfword — a crafted image whose sig matches
+        // but whose `bne` disp8 lands in erased/zero flash would otherwise be
+        // signed and emitted with a stub that jumps to garbage on hardware.
+        // Peer detours (`bd_detour`) perform an equivalent landmark check.
+        if (deny_va as usize)
+            .checked_add(2)
+            .map(|end| end > image.len())
+            .unwrap_or(true)
+        {
+            bail!(
+                "auth-cell deny_va 0x{deny_va:x} outside image (len 0x{:x})",
+                image.len()
+            );
+        }
+        let deny_head = u16::from_le_bytes([image[deny_va as usize], image[deny_va as usize + 1]]);
+        if deny_head == 0x0000 || deny_head == 0xFFFF {
+            bail!(
+                "auth-cell deny_va 0x{deny_va:x} lands on filler halfword 0x{deny_head:04x} — not a code target"
+            );
+        }
+        Ok((
+            detour_site,
+            self.build_authcell_widen_stub(flag_base, deny_va)?,
+        ))
     }
 
     // (Retired 0.8.9: `find_aacs45_arm` — only used to wire the deleted

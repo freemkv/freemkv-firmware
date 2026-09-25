@@ -160,6 +160,91 @@ fn raw_read_audit_flags_blank_stub_and_missing_facts() {
     );
 }
 
+/// The 9th lever (`Feature::Unrestricted` → auth-cell state-band widen) reports
+/// `auth_cell_site` + `auth_cell_stub_va` when wired; the audit's `check_bl`
+/// re-derives the expected `bl` and compares it to the bytes at the site. A
+/// blank stub at the reported VA must fail the check; a well-formed `bl` +
+/// non-blank stub must pass. Without this coverage the whole audit path for
+/// the 9th lever runs untested — any regression in `check_bl` wiring would
+/// silently emit "audit-green" builds where the widen bl is malformed.
+#[test]
+fn raw_read_audit_flags_blank_auth_cell_stub() {
+    use crate::engine::lever::{LeverId, LeverReport, ModifyReport, Validation};
+    use thumb_asm as thumb;
+
+    fn report_with(image: Vec<u8>, lever: LeverReport) -> ModifyReport {
+        ModifyReport {
+            engine: "MT1959",
+            family: "f".into(),
+            vendor: "v".into(),
+            model: "m".into(),
+            rev: "r".into(),
+            vendor_specific: String::new(),
+            media: "BD".into(),
+            levers: vec![lever],
+            image,
+            validation: Validation::StaticOnly,
+        }
+    }
+    fn rr_check<'a>(a: &'a AuditResult, what: &str) -> &'a crate::engine::audit::AuditCheck {
+        a.checks
+            .iter()
+            .find(|c| c.lever == "Raw read" && c.what == what)
+            .unwrap_or_else(|| panic!("no Raw-read check {what:?}"))
+    }
+
+    let site = 0x1000u32;
+    let stub = 0x2000u32;
+
+    // Landed: real bl at site + non-blank stub → passes.
+    let mut img = vec![0xFFu8; 0x4000];
+    let bl = thumb::encode_bl(site as usize, stub).unwrap();
+    thumb::write(&mut img, site as usize, &bl);
+    thumb::write(&mut img, stub as usize, &[0x11u8; 16]);
+    let orig = img.clone();
+    let landed = report_with(
+        img,
+        LeverReport::applied(
+            LeverId::RawRead,
+            vec![
+                ("auth_cell_site", site),
+                ("auth_cell_stub_va", stub),
+                // The lever's audit-guard requires SOME other detour proof too.
+                ("gatea_gate", 0x0800),
+                ("gatea_stub_va", 0x0900),
+            ],
+        ),
+    );
+    let mut img2 = landed.image.clone();
+    let bl_g = thumb::encode_bl(0x0800usize, 0x0900).unwrap();
+    thumb::write(&mut img2, 0x0800, &bl_g);
+    thumb::write(&mut img2, 0x0900, &[0x22u8; 16]);
+    let landed = ModifyReport {
+        image: img2,
+        ..landed
+    };
+    assert!(
+        rr_check(&audit_image(&orig, &landed), "auth-cell widen detour bl").ok,
+        "landed auth-cell bl must pass"
+    );
+
+    // Blank stub at the reported VA → fails.
+    let mut img = vec![0xFFu8; 0x4000];
+    thumb::write(&mut img, site as usize, &bl); // stub left blank
+    let orig = img.clone();
+    let blank = report_with(
+        img,
+        LeverReport::applied(
+            LeverId::RawRead,
+            vec![("auth_cell_site", site), ("auth_cell_stub_va", stub)],
+        ),
+    );
+    assert!(
+        !rr_check(&audit_image(&orig, &blank), "auth-cell widen detour bl").ok,
+        "blank auth-cell stub must fail"
+    );
+}
+
 /// Synthetic negative case for the Identity lever's Reboot boot-function-entry
 /// literal check: with a well-formed handler region (RESP_MAGIC present, record
 /// repointed) plus the Thumb-tagged entry literal baked in, the check passes;

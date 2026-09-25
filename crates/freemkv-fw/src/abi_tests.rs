@@ -91,8 +91,10 @@ fn build_call_and_poke_cdbs_carry_debug_knock_and_target() {
 fn feature_values_are_pinned_to_the_wire_protocol() {
     assert_eq!(Feature::Speed as u8, 0x01);
     assert_eq!(Feature::Region as u8, 0x02);
-    assert_eq!(Feature::Uhd as u8, 0x03);
-    assert_eq!(Feature::Bd as u8, 0x04);
+    assert_eq!(Feature::Unrestricted as u8, 0x03);
+    #[allow(deprecated)]
+    let bd = Feature::Bd as u8;
+    assert_eq!(bd, 0x04);
     assert_eq!(Feature::Hrl as u8, 0x05);
     assert_eq!(Feature::Encryption as u8, 0x06);
     // Wire id 0x07 (former `Bus`) is retired / unassigned.
@@ -147,9 +149,9 @@ fn build_cdb_lays_out_the_knock_frame() {
 
 #[test]
 fn build_set_cdb_carries_feature_and_state() {
-    let cdb = build_set_cdb(Feature::Uhd, STATE_ON);
+    let cdb = build_set_cdb(Feature::Unrestricted, STATE_ON);
     assert_eq!(cdb[CDB_VERB], Verb::Set as u8);
-    assert_eq!(cdb[CDB_FEATURE], Feature::Uhd as u8);
+    assert_eq!(cdb[CDB_FEATURE], Feature::Unrestricted as u8);
     assert_eq!(cdb[CDB_STATE], STATE_ON);
 
     // Speed's state byte IS the cap value.
@@ -161,6 +163,27 @@ fn build_set_cdb_carries_feature_and_state() {
     let cdb = build_set_cdb(Feature::Region, REGION_BD_A);
     assert_eq!(cdb[CDB_FEATURE], 0x02);
     assert_eq!(cdb[CDB_STATE], 0x0A);
+}
+
+/// `Feature::Bd` is deprecated as of 0.9.2 (its semantics folded into
+/// `Feature::Unrestricted`) but the wire ABI must still round-trip its byte
+/// through SET/GET into the spare NV slot — hosts on older builds keep working.
+/// This test pins that promise: a build_set/build_get pair round-trips
+/// `Bd`'s discriminant unchanged, and both encode via the same generic
+/// feature-byte path as the live features.
+#[test]
+#[allow(deprecated)]
+fn feature_bd_wire_round_trips_via_set_and_get_after_deprecation() {
+    let set = build_set_cdb(Feature::Bd, STATE_ON);
+    assert_eq!(set[CDB_VERB], Verb::Set as u8);
+    assert_eq!(set[CDB_FEATURE], 0x04, "Bd wire discriminant is 0x04");
+    assert_eq!(set[CDB_STATE], STATE_ON);
+
+    let get = build_get_cdb(Feature::Bd);
+    assert_eq!(get[CDB_VERB], Verb::Get as u8);
+    assert_eq!(get[CDB_FEATURE], 0x04, "Bd GET wire discriminant is 0x04");
+    // GET returns a MIN_ALLOC_LEN payload; the state rides at data offset 0.
+    assert_eq!(&get[CDB_ALLOC_LEN..CDB_ALLOC_LEN + 2], &[0x00, 0x40]);
 }
 
 #[test]

@@ -305,6 +305,12 @@ impl Mt1959Engine {
             uhd_stub_va,
             bd_gate_site,
             bd_stub_va,
+            // Auth-cell state-band widen (MT1959-family only): the classic MT1939
+            // lineage does not carry the extended `ldr r4,[pc,...] = 0x01FF9E04`
+            // shape (its post-classification path is different), so this lever is
+            // never wired on classic. Report 0s.
+            auth_cell_site: 0,
+            auth_cell_stub_va: 0,
             hrl_sites,
             hrl_stub_va,
             de_off: de_off.unwrap_or(0),

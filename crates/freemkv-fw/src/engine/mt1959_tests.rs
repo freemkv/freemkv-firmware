@@ -131,7 +131,7 @@ fn speed_lever_is_out_of_scope_for_a_cd_only_non_aacs_model() {
 /// reported — the structural audit re-derives each `bl` from these facts, so a
 /// wired-but-unreported detour is an installed branch nobody ever re-checks.
 #[test]
-fn rawread_reports_the_uhd_hrl_and_bd_facts_whenever_those_detours_are_wired() {
+fn rawread_reports_the_uhd_hrl_bd_and_auth_cell_facts_whenever_those_detours_are_wired() {
     let img = fixture();
     let rep = Mt1959Engine
         .build_modify(&img, &bu40n_chip(), &cap(MediaClass::UhdBd, true, true))
@@ -146,6 +146,8 @@ fn rawread_reports_the_uhd_hrl_and_bd_facts_whenever_those_detours_are_wired() {
         "hrl_site",
         "bd_site",
         "bd_stub_va",
+        "auth_cell_site",
+        "auth_cell_stub_va",
     ] {
         let v = fact(rr, key).unwrap_or_else(|| {
             panic!(

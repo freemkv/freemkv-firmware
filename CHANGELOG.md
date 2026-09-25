@@ -6,6 +6,61 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2]
+
+Feature release: unifies UHD and BD acceptance under a single lever
+(`Feature::Unrestricted`) and adds a new 9th lever that widens the drive's
+post-classification state-band gate at `0x00136826`. Fixes silent
+`0x30/0x02 Incompatible medium` refusal on triple-layer UHDs whose disc
+descriptor drives the mode-0 arm of `f_84996`, causing the state byte at
+`0x01ff9e04` to land on the `0xE*` band that the OEM `cmp (state>>4),#0xC`
+gate refuses. Golden KAT re-blessed once (deliberate) to cover the injected
+stub bytes.
+
+### Changed
+
+- **`Feature::Uhd` renamed to `Feature::Unrestricted`.** Same numeric
+  discriminant (`0x03`), same behaviour on the UHD arm — this rename
+  documents the intended semantic: one flag controls all AACS media
+  acceptance (BD, UHD, and now the state-band gate). The wire ABI byte is
+  identical; existing hosts continue to interoperate. `Feature::Bd` (`0x04`)
+  is preserved for round-trip and is now marked
+  `#[deprecated(since = "0.9.2")]` — `SET`/`GET` on `Bd` still round-trip via
+  its own NV slot.
+- **`thumb-asm` bumped `0.11.1` → `=0.13.0`.** Test-only / no behaviour
+  change on the encoder API. 0.12.0's `#[non_exhaustive]` widening and
+  Target-parameterised decoders don't attach here; 0.13.0's flag-liveness +
+  CBZ-relocate APIs aren't reachable from the MT19xx stubs. Integer-overflow
+  hardening in `Asm::finish` / `CommandTable::find` /
+  `analysis::function_start` / `isa::disassemble` takes effect automatically.
+
+### Added
+
+- **New lever `Feature::Unrestricted` → auth-cell state-band widen at
+  `0x00136826`.** Resolves the OEM `cmp (state>>4),#0xC; bne <6F/02>` gate
+  via the extended `AUTH_CELL_SIG` (7 halfwords anchored on the pc-relative
+  `ldr r4, [pc, ...] = 0x01FF9E04`; UNIQUE on BU40N 1.00). The stub, emitted
+  by `Mt1959Engine::build_authcell_widen_stub`, widens the accepted top-nibble
+  set when armed and replays OEM byte-for-byte when off. Wired last in the
+  Raw Read lever emission order so the stub sits at the end of the injected
+  band. `CreateReport` gains `auth_cell_site` + `auth_cell_stub_va` (zero
+  when unwired — e.g. on MT1939 classic, where the anchor shape doesn't
+  exist).
+- **Structural audit coverage for the auth-cell widen `bl`.** `audit.rs`
+  adds an `auth_cell_site` + `auth_cell_stub_va` fact pair check, matching
+  the shape used by the UHD / BD / HRL detours.
+
+### Fixed
+
+- Silent `0x30/0x02 Incompatible medium installed` refusal on a specific
+  triple-layer UHD (observed on BU40N 1.00 fw-flashed drive at 10.1.7.13):
+  the drive-side disc classifier lands `[0x01ff9e04]` on `0xE8` for this
+  disc (top nibble `0xE`) instead of the usual `0xC*`, which the un-hooked
+  OEM `cmp` at `0x00136826` refused. Static analysis (three parallel
+  passes) confirmed all 100 writers of `[0x01ff9e04]` are byte-identical
+  between OEM and modified builds; the fix widens the gate itself under a
+  flag rather than touching the classifier.
+
 ## [0.9.1]
 
 A dependency-correctness release: no behavioural change to any lever, but the

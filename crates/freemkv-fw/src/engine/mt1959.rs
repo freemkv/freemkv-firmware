@@ -71,6 +71,14 @@ struct RawReadFacts {
     bd_site: u32,
     /// Injection address of the `Feature::Bd` BD-refuse trampoline. `0` when not wired.
     bd_stub_va: u32,
+    /// `Feature::Unrestricted` auth-cell state-band widen detour site — the OEM
+    /// `cmp r0,#0xC; bne <deny>` at `AUTH_CELL_SIG` `anchor+10`
+    /// (`0x00136826` on BU40N 1.00), replaced by a `bl` to the widen stub. `0`
+    /// when not wired (image does not carry the known auth-cell shape).
+    auth_cell_site: u32,
+    /// Injection address of the `Feature::Unrestricted` auth-cell widen trampoline.
+    /// `0` when not wired.
+    auth_cell_stub_va: u32,
     vid_producer: u32,
 }
 
@@ -175,8 +183,9 @@ impl Mt1959Engine {
         // images — asserted by `create_and_modify_agree_on_base`. Each helper
         // re-finds its own anchors and preserves the `free_space` allocation order
         // (handler → speed → region → raw-read[ake → gatea → deny → uhd →
-        // hrl → bd]). The AKE gate is resolved via `ake_detour` (desktop → NB → V5),
-        // and uhd/hrl/bd are graceful (unwired = 0/empty on unknown shapes),
+        // hrl → bd → auth-cell]). The AKE gate is resolved via `ake_detour`
+        // (desktop → NB → V5), and uhd/hrl/bd/auth-cell are graceful
+        // (unwired = 0/empty on unknown shapes),
         // exactly as `modify` treats them — so `create` no longer diverges on the
         // NB/V5 images the old inline `find_ake_gate` path failed.
         // BASE/GATE DECOUPLING: each feature emit is best-effort. A miss leaves the
@@ -250,6 +259,8 @@ impl Mt1959Engine {
             uhd_stub_va: f.uhd_stub_va,
             bd_gate_site: f.bd_site,
             bd_stub_va: f.bd_stub_va,
+            auth_cell_site: f.auth_cell_site,
+            auth_cell_stub_va: f.auth_cell_stub_va,
             hrl_sites: f.hrl_sites,
             hrl_stub_va: f.hrl_stub_va,
             de_off: de_off.unwrap_or(0),
@@ -415,6 +426,13 @@ impl Mt1959Engine {
                     if f.bd_stub_va != 0 {
                         facts.push(("bd_site", f.bd_site));
                         facts.push(("bd_stub_va", f.bd_stub_va));
+                    }
+                    // `Feature::Unrestricted` auth-cell state-band widen detour
+                    // (post-classification `state>>4 == 0xC` gate), when wired.
+                    // Recorded so the audit re-checks its `bl`.
+                    if f.auth_cell_stub_va != 0 {
+                        facts.push(("auth_cell_site", f.auth_cell_site));
+                        facts.push(("auth_cell_stub_va", f.auth_cell_stub_va));
                     }
                     LeverReport::applied(LeverId::RawRead, facts)
                 }
@@ -632,7 +650,7 @@ impl Mt1959Engine {
             "Deny-reset",
         )?;
 
-        // `Feature::Uhd` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
+        // `Feature::Unrestricted` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
         // accept gate's UHD class-3 check (via uhd_gate_detour → find_bd_gate) — the
         // UHD sibling of the BD arm on the SAME gate. When `flag[Uhd]==STATE_OFF` the
         // stub forces the OEM deny; unarmed it replays OEM (UHD reads are native).
@@ -707,6 +725,35 @@ impl Mt1959Engine {
             Err(_) => (0, 0),
         };
 
+        // `Feature::Unrestricted` auth-cell state-band widen: detour the OEM
+        // `cmp (state>>4),#0xC; bne <6F/02>` at `AUTH_CELL_SIG` `anchor+10`
+        // (`0x00136826` on BU40N 1.00). When armed the stub returns immediately
+        // so the caller enters the accept-arm regardless of nibble value; when
+        // OFF the stub replays OEM (`cmp r0,#0xC`; deny on !=). Fixes drives that
+        // land the state byte on the `0xEx` band on specific triple-layer UHDs.
+        // Graceful: images that don't carry the `ldr r4,[pc,...] = 0x01FF9E04`
+        // prefix leave it unwired (0). Committed last so the free_space order
+        // matches build_report (…→ bd → auth-cell).
+        let (auth_cell_site, auth_cell_stub_va) =
+            match self.auth_cell_widen_detour(image, flag_base) {
+                Ok((site, bytes)) => {
+                    let stub_va = self.free_space(&w, bytes.len() + 16)?;
+                    let bl = thumb::encode_bl(site, stub_va)
+                        .ok_or_else(|| anyhow!("auth-cell widen detour `bl` out of range"))?;
+                    thumb::write(&mut w, stub_va as usize, &bytes);
+                    thumb::write(&mut w, site, &bl);
+                    crate::install_guard::verify_branch(
+                        &w,
+                        site,
+                        thumb::BranchKind::Bl,
+                        stub_va,
+                        "auth-cell widen",
+                    )?;
+                    (site as u32, stub_va)
+                }
+                Err(_) => (0, 0),
+            };
+
         *out = w;
         Ok(RawReadFacts {
             ake_gate,
@@ -722,6 +769,8 @@ impl Mt1959Engine {
             hrl_stub_va,
             bd_site,
             bd_stub_va,
+            auth_cell_site,
+            auth_cell_stub_va,
             vid_producer,
         })
     }
