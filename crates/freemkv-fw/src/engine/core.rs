@@ -735,8 +735,8 @@ pub(crate) const HRL_WIPE_ARMED: bool = false;
 /// ships it when this is `true`. Default `false` = fail-closed (classic base ships
 /// handler-only, no boot hook — safe, see [`Mt1959Engine::build_report_classic`]).
 ///
-/// **Now `true` — blessed on emulation evidence** (`private-repo/tools/boot-emulator`,
-/// Unicorn ARM boot): on all 17 classic images the OEM C-runtime scatterload writes the
+/// **Now `true` — blessed on emulation evidence** (Unicorn ARM boot
+/// emulation): on all 17 classic images the OEM C-runtime scatterload writes the
 /// flag-cell SRAM span at icount ~1285, while the detoured leaf caller is not reached
 /// until ~128k — SRAM is provably initialised ~127k instructions before our detour. Since
 /// the OEM's own write to that cell succeeds on every real-silicon boot, the SRAM
@@ -2887,7 +2887,7 @@ impl Mt1959Engine {
         // cold boot or disc insert -> 0/16 units open; `Verb::Call` to
         // `aacs_session_reset` -> 16/16; 4/4 trials, drive alive each time,
         // key-service then returns the correct key in ~2.5s instead of 422
-        // after ~55s. `hw-tester debus-persist` is the regression test.
+        // after ~55s.
         //
         // This is the LIGHT primitive deliberately: `aacs_session_reset` does a
         // gate-bit clear plus a mailbox reset and nothing else. The heavier
@@ -3679,7 +3679,7 @@ impl Mt1959Engine {
         // read that precedes content, every session.
         //
         // PLACEMENT PROVEN ON HARDWARE before this was written, with
-        // `hw-tester callprobe` splicing this exact routine into each
+        // a hardware probe splicing this exact routine into each
         // seam of a live read cycle: control 0/16 wrapped; clear before the
         // cycle, between the bare-VID read and the scan, and between the scan
         // and the content reads all 16/16. 0.9.1's first attempt put the call

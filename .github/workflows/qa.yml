@@ -152,8 +152,8 @@ jobs:
   #
   # This gates on the committed OEM fixture under crates/freemkv-fw/tests/fixtures/
   # (stock manufacturer dumps ONLY — no MakeMKV-modified images are committed to
-  # this PUBLIC repo). The full corpus, including MK-signed images, lives in the
-  # private private-corpus and is never pulled into a public run (it would leak
+  # this PUBLIC repo). The full corpus, including MK-signed images, lives in a
+  # private store and is never pulled into a public run (it would leak
   # firmware via logs/artifacts).
   #
   # The FULL corpus is still run the same way, just manually / locally, by

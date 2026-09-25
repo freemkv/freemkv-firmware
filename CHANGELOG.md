@@ -360,7 +360,7 @@ consolidated highlights:
 ### Notes
 - The NV blank is the ordinary SAVE flash primitive with an all-`0xFF` payload
   (op=1 RMW preserves the OEM region record at `+0x4B0`) — no special erase.
-- ABI codes are mirrored by `freemkv-unlock` and `hw-tester`.
+- ABI codes are mirrored by `freemkv-unlock`.
 
 ## [0.8.2]
 

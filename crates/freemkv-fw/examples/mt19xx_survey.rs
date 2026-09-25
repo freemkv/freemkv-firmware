@@ -73,7 +73,7 @@ fn main() {
     if roots.is_empty() {
         eprintln!(
             "usage: mt19xx_survey ROOT [ROOT ...]   (or set FREEMKV_KAT_HOARD)\n\
-             no corpus root given — pass a private-corpus directory to survey."
+             no corpus root given — pass a firmware image directory to survey."
         );
         std::process::exit(2);
     }

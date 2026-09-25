@@ -15,8 +15,7 @@
 //! classify the whole hoard, and only it owns the brand [`crate::flashset::CATALOG`]
 //! this wires into, so multi-family identification belongs on the flash side.
 //!
-//! Fingerprints (sources: our own hoard sweep + two recon passes over
-//! `private-corpus/organized/**`):
+//! Fingerprints (sources: sweeps of our firmware corpus):
 //! * MT19xx — delegated to [`freemkv_chipset::detect_chip`] (unchanged);
 //! * MediaTek encrypted envelope — a constant 16-byte header on the otherwise
 //!   opaque HL-DT-ST distribution images (no plaintext tag/banner);

@@ -10,8 +10,7 @@
 //!
 //! Sources of truth (per the campaign's sources-of-truth rule): the MT1959
 //! recipe is our hardware-proven path; the 18-brand catalog is transcribed from
-//! the firmware/flasher-derived recipes at
-//! `private-corpus/cdrinfo/<Brand>/cdb.json` (which cite flasher `.exe` /
+//! the firmware/flasher-derived recipes (which cite flasher `.exe` /
 //! firmware-image RE and the XFlash oracle — never DVDFab or forum models).
 //! Every recipe has `host_side_key = false`: no brand needs a host secret, so a
 //! generic verbatim writer is never crypto-blocked.
