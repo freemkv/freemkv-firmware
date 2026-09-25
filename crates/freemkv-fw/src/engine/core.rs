@@ -633,7 +633,7 @@ pub(crate) const BD_GATE_VER_DENY_OFF: u32 = 0x40;
 /// emitter at `anchor + 16 + (disp8 * 2)` (0x001368F4 on BU40N 1.00) whenever the
 /// top nibble is not `0xC`.
 ///
-/// The [`Feature::Unrestricted`] lever hooks this gate to widen the accepted nibble
+/// The [`abi::Feature::Unrestricted`] lever hooks this gate to widen the accepted nibble
 /// set. For 99% of media the phase-counter cascade lands the state byte at
 /// `0xCx` (nibble `0xC` — passes). A small fraction of triple-layer UHDs
 /// (specifically those whose disc descriptor drives the mode-0 arm of
@@ -3199,7 +3199,7 @@ impl Mt1959Engine {
         Ok((site, self.build_uhd_gate_stub(flag_base)?))
     }
 
-    /// The [`Feature::Unrestricted`] **auth-cell state-band widen** trampoline. Entered
+    /// The [`abi::Feature::Unrestricted`] **auth-cell state-band widen** trampoline. Entered
     /// by a `bl` that replaces `cmp r0,#0xC; bne <deny>` (4 bytes at
     /// [`AUTH_CELL_SIG`]'s `anchor+10`). On entry `r0 = state_byte >> 4` (the top
     /// nibble the OEM `cmp` was about to compare against `0xC`); `deny_va` is the
@@ -3215,7 +3215,7 @@ impl Mt1959Engine {
     /// `lr` is caller-saved.
     ///
     /// # Flag semantics
-    /// [`Feature::Unrestricted`] tri-state at this site (uniform tri-state):
+    /// [`abi::Feature::Unrestricted`] tri-state at this site (uniform tri-state):
     /// * `!= STATE_OFF` (`0xFF` passthrough / `0x01` armed on): **widen** — the
     ///   stub returns immediately, so the caller falls into the OEM accept-arm at
     ///   `anchor+14` regardless of the shifted-index value. This lets state values
@@ -3266,7 +3266,7 @@ impl Mt1959Engine {
             .map_err(|e| anyhow!("build_authcell_widen_stub: {e}"))
     }
 
-    /// Resolve the [`Feature::Unrestricted`] auth-cell widen detour. Returns
+    /// Resolve the [`abi::Feature::Unrestricted`] auth-cell widen detour. Returns
     /// `(detour_site, stub_bytes)` — the caller writes a `bl` at `detour_site`
     /// (the 4 bytes at `anchor + AUTH_CELL_DETOUR_OFF` that were the OEM
     /// `cmp r0,#0xC; bne <deny>`) and places `stub_bytes` at a free-space VA it

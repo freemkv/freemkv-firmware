@@ -53,7 +53,7 @@ stub bytes.
 ### Fixed
 
 - Silent `0x30/0x02 Incompatible medium installed` refusal on a specific
-  triple-layer UHD (observed on BU40N 1.00 fw-flashed drive at 10.1.7.13):
+  triple-layer UHD (observed on a BU40N 1.00 fw-flashed drive):
   the drive-side disc classifier lands `[0x01ff9e04]` on `0xE8` for this
   disc (top nibble `0xE`) instead of the usual `0xC*`, which the un-hooked
   OEM `cmp` at `0x00136826` refused. Static analysis (three parallel
