@@ -2886,7 +2886,7 @@ impl Mt1959Engine {
         // PROVEN ON HARDWARE (BU40N, fw 0.8.14) before this code was written:
         // cold boot or disc insert -> 0/16 units open; `Verb::Call` to
         // `aacs_session_reset` -> 16/16; 4/4 trials, drive alive each time,
-        // key-service then returns the correct key in ~2.5s instead of 422
+        // the key service then returns the correct key in ~2.5s instead of 422
         // after ~55s.
         //
         // This is the LIGHT primitive deliberately: `aacs_session_reset` does a
