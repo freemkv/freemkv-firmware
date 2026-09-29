@@ -61,16 +61,16 @@ pub fn construct_ud04_signed_candidate(
         tar.append_data(&mut header, path, bytes.as_slice())?;
     }
     let out = tar.into_inner()?;
-    validate_signed_candidate(&out, "BDR-UD04")?;
+    validate_envelope_package(&out, "BDR-UD04")?;
     Ok(out)
 }
 
-/// Structural, codec and signature checks for a generated encrypted pair.
-/// This intentionally does not claim that a physical drive trusts its key.
-pub fn validate_signed_candidate(bytes: &[u8], product: &str) -> Result<()> {
+/// Structural, codec and signature checks for a Pioneer envelope pair,
+/// regardless of whether it came from an updater or a live capture.
+pub fn validate_envelope_package(bytes: &[u8], product: &str) -> Result<()> {
     let bundle = Bundle::from_tar_bytes(bytes)?;
     if bundle.components.len() != 2 {
-        bail!("UD04 signed candidate requires Kernel and Normal");
+        bail!("Pioneer package requires Kernel and Normal");
     }
     let kernel = bundle
         .components
@@ -82,42 +82,28 @@ pub fn validate_signed_candidate(bytes: &[u8], product: &str) -> Result<()> {
         .iter()
         .find(|c| c.role == Role::Main)
         .context("signed candidate Normal is missing")?;
-    validate_signed_pair(&kernel.bytes, &normal.bytes, product)
+    validate_envelope_pair(&kernel.bytes, &normal.bytes, product)
 }
 
-/// Validate the two envelope members of a UD04 candidate without a tar wrapper.
-pub fn validate_signed_pair(kernel: &[u8], normal: &[u8], product: &str) -> Result<()> {
-    if !product.split_whitespace().any(|s| s == "BDR-UD04") {
-        bail!("signed candidate is only established for BDR-UD04");
-    }
+/// Validate a pair without interpreting its provenance or archival labels.
+pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Result<()> {
     let kh = pioneer_codec::header_info(kernel).context("invalid Kernel header")?;
     let nh = pioneer_codec::header_info(normal).context("invalid Normal header")?;
-    if kh.model != "BDR-UD04"
+    if !product.split_whitespace().any(|part| part == kh.model)
         || nh.model != kh.model
-        || kh.hardware_version != "SAT 8A10"
         || nh.hardware_version != kh.hardware_version
-        || kh.revision != "BKP"
-        || nh.revision != "1.14"
-        || kh.destination != "GENERAL"
-        || nh.destination != "GENERAL"
     {
-        bail!("signed candidate identity does not match the UD04 capture profile");
+        bail!("Pioneer envelope identity does not match the drive");
     }
-    let decoded_kernel = pioneer_codec::decode_envelope(kernel)
-        .context("signed candidate Kernel cannot be decoded")?;
+    crate::drive::pioneer::offline_linear_fe_data_out(kernel, normal)?;
+    let decoded_kernel =
+        pioneer_codec::decode_envelope(kernel).context("Kernel cannot be decoded")?;
     let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
-        .context("signed candidate Normal cannot be receiver-decoded")?;
-    pioneer_codec::builder::validate_ud04_encrypted_pair(
-        &pioneer_codec::builder::Ud04EncryptedPair {
-            kernel: kernel.to_vec(),
-            normal: normal.to_vec(),
-        },
-        &decoded_kernel.image,
-        &decoded_normal.image,
-    )
-    .map_err(|e| anyhow::anyhow!(e))?;
-    if !zero_be32_sum(&decoded_kernel.image) || !zero_be32_sum(&decoded_normal.image) {
-        bail!("signed candidate decoded checksum is invalid");
+        .context("Normal cannot be receiver-decoded")?;
+    if decoded_kernel.repack(&decoded_kernel.image).as_deref() != Some(kernel)
+        || decoded_normal.repack(&decoded_normal.image).as_deref() != Some(normal)
+    {
+        bail!("Pioneer envelope does not round-trip exactly");
     }
     Ok(())
 }
@@ -125,7 +111,7 @@ pub fn validate_signed_pair(kernel: &[u8], normal: &[u8], product: &str) -> Resu
 /// Read bounded live UD04 regions twice and save a self-signed encrypted
 /// package candidate. This issues no flash commands.
 pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let (kernel, normal, revision, envelope_id) = read_ud04_pair(dev)?;
+    let (kernel, normal, revision, envelope_id) = read_profile_pair(dev)?;
     construct_ud04_signed_candidate(&kernel, &normal, &envelope_id, &revision)
 }
 
@@ -293,30 +279,65 @@ fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec
     Ok(image)
 }
 
-/// Capture the established UD04 1.14 firmware regions using the supplied pair
-/// as framing templates. Reads only Kernel and Normal, twice for consistency.
-/// Issues the documented zero-payload service knock, but no flash writes.
-/// Unsupported templates/identity and mismatches fail without returning a backup.
-fn read_ud04_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String, String)> {
+/// Facts required to read a live firmware image. Each row needs independent
+/// receiver-side evidence; an envelope's geometry alone cannot prove where
+/// the installed image resides in READ BUFFER address space.
+struct CaptureProfile {
+    model: &'static str,
+    revision: &'static str,
+    hardware: &'static [u8; 8],
+    kernel_start: usize,
+    normal_start: usize,
+}
+
+const CAPTURE_PROFILES: &[CaptureProfile] = &[CaptureProfile {
+    model: "BDR-UD04",
+    revision: "1.14",
+    hardware: b"SAT 8A10",
+    kernel_start: 0x400000,
+    normal_start: 0x410000,
+}];
+
+/// Select an evidenced receiver profile, then capture each declared region
+/// twice. No OEM envelope or previously saved backup is read.
+fn read_profile_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String, String)> {
     let inquiry = dev.command_in(&[0x12, 0, 0, 0, 36, 0], 36)?;
-    if inquiry.len() != 36
-        || &inquiry[8..16] != b"PIONEER "
-        || !String::from_utf8_lossy(&inquiry[16..32])
-            .split_whitespace()
-            .any(|s| s == "BDR-UD04")
-        || &inquiry[32..36] != b"1.14"
-    {
-        bail!("backup profile requires PIONEER BDR-UD04 1.14");
+    if inquiry.len() != 36 || &inquiry[8..16] != b"PIONEER " {
+        bail!("drive does not have a Pioneer INQUIRY identity");
     }
     let f1 = dev.command_in(&[0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0], 48)?;
-    if f1.len() != 48 || &f1[16..24] != b"SAT 8A10" {
-        bail!("backup profile requires SAT 8A10");
-    }
+    let profile = CAPTURE_PROFILES
+        .iter()
+        .find(|profile| {
+            String::from_utf8_lossy(&inquiry[16..32])
+                .split_whitespace()
+                .any(|part| part == profile.model)
+                && inquiry[32..36] == *profile.revision.as_bytes()
+                && f1.len() == 48
+                && f1[16..24] == *profile.hardware
+        })
+        .context("no evidenced Pioneer live-capture profile matches this drive")?;
+    let kernel_len = profile
+        .normal_start
+        .checked_sub(profile.kernel_start)
+        .filter(|len| *len > 0 && *len <= 0x100000)
+        .context("invalid Kernel/Normal address span")?;
     dev.command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])?;
-    let kernel = read_region(dev, 0x400000, 0x10000)?;
-    let normal = read_region(dev, 0x410000, 0x1c7500)?;
-    if read_region(dev, 0x400000, kernel.len())? != kernel
-        || read_region(dev, 0x410000, normal.len())? != normal
+    let normal_head = read_region(dev, profile.normal_start, 24)?;
+    if !normal_head.starts_with(b"PIONEER ") {
+        bail!("Normal image header is missing at the discovered base");
+    }
+    let normal_len = u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize;
+    if !(0x2000..=0x800000).contains(&normal_len)
+        || !normal_len.is_multiple_of(0x100)
+        || profile.normal_start + normal_len > 0x1000000
+    {
+        bail!("Normal image declares an invalid length");
+    }
+    let kernel = read_region(dev, profile.kernel_start, kernel_len)?;
+    let normal = read_region(dev, profile.normal_start, normal_len)?;
+    if read_region(dev, profile.kernel_start, kernel_len)? != kernel
+        || read_region(dev, profile.normal_start, normal_len)? != normal
     {
         bail!("firmware reads changed between passes; no backup produced");
     }
@@ -327,14 +348,14 @@ fn read_ud04_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String,
 
 /// Read the bounded UD04 firmware regions and construct a raw-path backup.
 pub fn capture_plain_backup(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let (kernel, normal, revision, _) = read_ud04_pair(dev)?;
+    let (kernel, normal, revision, _) = read_profile_pair(dev)?;
     construct_ud04_plain_candidate(&kernel, &normal, &revision)
 }
 
 /// Read the same UD04 regions and reproduce a supplied reference envelope pair.
 pub fn capture_reference_backup(dev: &mut dyn ScsiDevice, template: &[u8]) -> Result<Vec<u8>> {
     reference_pair(template)?; // Reject unsupported profiles before any command.
-    let (kernel, normal, _, _) = read_ud04_pair(dev)?;
+    let (kernel, normal, _, _) = read_profile_pair(dev)?;
     let bytes = reconstruct_candidate(template, &kernel, &normal)?;
     // Current bounded profile promises exact equivalence to the known pair.
     reference_pair(&bytes).context("captured firmware differs from established reference pair")?;
@@ -517,7 +538,7 @@ mod tests {
             std::fs::write(path, &candidate).unwrap();
         }
         assert_eq!(replay.knocks, 1);
-        validate_signed_candidate(&candidate, "BD-RW BDR-UD04").unwrap();
+        validate_envelope_package(&candidate, "BD-RW BDR-UD04").unwrap();
         assert!(validate_reference_backup(&candidate, "BD-RW BDR-UD04").is_err());
         let bundle = Bundle::from_tar_bytes(&candidate).unwrap();
         let kernel = bundle
@@ -534,7 +555,9 @@ mod tests {
             crate::drive::pioneer::offline_linear_fe_data_out(&kernel.bytes, &normal.bytes)
                 .unwrap();
         if let Ok(path) = std::env::var("PIONEER_UD04_AUTOFLASHER_BUNDLE_FIXTURE") {
-            let original = Bundle::from_tar_bytes(&std::fs::read(path).unwrap()).unwrap();
+            let original_bytes = std::fs::read(path).unwrap();
+            validate_envelope_package(&original_bytes, "BD-RW BDR-UD04").unwrap();
+            let original = Bundle::from_tar_bytes(&original_bytes).unwrap();
             let original_kernel = original
                 .components
                 .iter()
@@ -580,7 +603,7 @@ mod tests {
         replay.reads = 0;
         crate::engine::pioneer_signed_candidate(&mut replay, &drive, &output).unwrap();
         let saved = std::fs::read(&output).unwrap();
-        validate_signed_candidate(&saved, "BD-RW BDR-UD04").unwrap();
+        validate_envelope_package(&saved, "BD-RW BDR-UD04").unwrap();
         std::fs::remove_file(&output).unwrap();
         replay.knocks = 0;
         replay.reads = 0;

@@ -424,7 +424,7 @@ pub fn pioneer_signed_candidate(
     let target_model = drive.identity(dev).product;
     let bytes = crate::pioneer_backup::capture_signed_candidate(dev)?;
     let saved_len = save_validated(out, &bytes, |candidate| {
-        crate::pioneer_backup::validate_signed_candidate(candidate, &target_model)
+        crate::pioneer_backup::validate_envelope_package(candidate, &target_model)
     })?;
     println!(
         "{}",
