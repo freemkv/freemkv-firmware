@@ -66,7 +66,7 @@ pub fn construct_signed_candidate(
     Ok(out)
 }
 
-/// Firmware build dates, when present as a unique YY/MM/DD literal in the
+/// Firmware build dates, when present as a unique YY/MM/DD or MmmDD,YYYY literal in the
 /// captured Normal image, are recoverable without a model or offset table.
 fn unique_embedded_date(image: &[u8]) -> Option<&str> {
     let mut found = None;
@@ -77,6 +77,29 @@ fn unique_embedded_date(image: &[u8]) -> Option<&str> {
                 .iter()
                 .all(|&i| field[i].is_ascii_digit())
         {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(std::str::from_utf8(field).ok()?);
+        }
+    }
+    for field in image.windows(10) {
+        let month = [
+            b"Jan", b"Feb", b"Mar", b"Apr", b"May", b"Jun", b"Jul", b"Aug", b"Sep", b"Oct", b"Nov",
+            b"Dec",
+        ]
+        .iter()
+        .position(|m| field[..3] == **m);
+        if month.is_some()
+            && field[5] == b','
+            && [3, 4, 6, 7, 8, 9]
+                .iter()
+                .all(|&i| field[i].is_ascii_digit())
+        {
+            let day = (field[3] - b'0') * 10 + field[4] - b'0';
+            if !(1..=31).contains(&day) {
+                continue;
+            }
             if found.is_some() {
                 return None;
             }
@@ -178,7 +201,14 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
     let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
         .context("Normal cannot be receiver-decoded")?;
     if !pioneer_codec::builder::normal_authentication_valid(normal, &decoded_kernel.image)
-        || decoded_normal.info.layout != "normal"
+        || decoded_normal.info.layout
+            != if pioneer_codec::builder::scaled_normal_geometry_from_kernel(&decoded_kernel.image)
+                .is_some()
+            {
+                "normal-scaled-key"
+            } else {
+                "normal"
+            }
         || !zero_be32_sum(&decoded_kernel.image)
         || !zero_be32_sum(&decoded_normal.image)
     {
@@ -392,6 +422,8 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
     if kernel.get(0x1000..0x1008) != Some(&f1[16..24]) {
         bail!("captured Kernel hardware differs from drive identity");
     }
+    pioneer_codec::builder::kernel_layout_from_image(&kernel)
+        .context("captured Kernel receiver layout is unsupported; Normal capture not attempted")?;
     let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24)?;
     if !normal_head.starts_with(b"PIONEER ") {
         bail!("Normal image header is missing at the discovered base");
@@ -530,6 +562,58 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unsupported_capture_identity_stops_before_service_entry_or_memory_reads() {
+        struct IdentityOnly {
+            f1: Vec<u8>,
+            commands: usize,
+        }
+        impl ScsiDevice for IdentityOnly {
+            fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+                self.commands += 1;
+                match self.commands {
+                    1 => {
+                        assert_eq!(cdb, [0x12, 0, 0, 0, 36, 0]);
+                        assert_eq!(len, 36);
+                        let mut inquiry = vec![b' '; 36];
+                        inquiry[8..16].copy_from_slice(b"PIONEER ");
+                        Ok(inquiry)
+                    }
+                    2 => {
+                        assert_eq!(cdb, [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0]);
+                        assert_eq!(len, 48);
+                        Ok(self.f1.clone())
+                    }
+                    _ => panic!("unsupported identity must not trigger memory reads"),
+                }
+            }
+            fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+                panic!("unsupported identity must not trigger service entry")
+            }
+            fn describe(&self) -> String {
+                "identity-only test transport".into()
+            }
+        }
+        for hardware in [b"ATA 0009", b"SCSI0001", b"UNKNOWN "] {
+            let mut f1 = vec![0; 48];
+            f1[16..24].copy_from_slice(hardware);
+            let mut dev = IdentityOnly { f1, commands: 0 };
+            assert!(read_h8_image_pair(&mut dev)
+                .unwrap_err()
+                .to_string()
+                .contains("H8/SAT hardware identity"));
+            assert_eq!(dev.commands, 2);
+        }
+        for length in [0, 16, 23, 47, 49] {
+            let mut dev = IdentityOnly {
+                f1: vec![0; length],
+                commands: 0,
+            };
+            assert!(read_h8_image_pair(&mut dev).is_err());
+            assert_eq!(dev.commands, 2);
+        }
+    }
+
+    #[test]
     fn embedded_identity_preserves_spacing_and_rejects_model_prefixes() {
         let mut inquiry = [b' '; 36];
         inquiry[8..15].copy_from_slice(b"PIONEER");
@@ -608,6 +692,25 @@ mod tests {
     }
 
     #[test]
+    fn unknown_sat_receiver_stops_after_kernel_capture() {
+        let mut dump = vec![0; NORMAL_IMAGE_BASE];
+        dump[KERNEL_IMAGE_BASE + 0x1000..KERNEL_IMAGE_BASE + 0x1008]
+            .copy_from_slice(b"SAT 8A10");
+        // The replay has no Normal bytes. Any read beyond the Kernel panics,
+        // proving rejection occurs before guessing Normal geometry.
+        let mut replay = CaptureReplay {
+            dump,
+            reads: 0,
+            knocks: 0,
+            corrupt_second_pass: false,
+        };
+        let error = read_h8_image_pair(&mut replay).unwrap_err();
+        assert!(error.to_string().contains("receiver layout is unsupported"));
+        assert_eq!(replay.knocks, 1);
+        assert!(replay.reads > 0);
+    }
+
+    #[test]
     fn oem_pair_rebuilds_from_decoded_images_when_configured() {
         let Ok(path) = std::env::var("PIONEER_PAIR_KAT") else {
             return;
@@ -647,11 +750,28 @@ mod tests {
             .find(|c| c.role == Role::Main)
             .unwrap();
         assert_eq!(&rn.bytes[..0x160], &normal.bytes[..0x160]);
-        assert_eq!(&rn.bytes[0x1f0..0x200], &normal.bytes[0x1f0..0x200]);
-        assert_eq!(
-            pioneer_codec::signature::verify_normal_signature(&normal.bytes),
-            pioneer_codec::signature::verify_normal_signature(&rn.bytes)
-        );
+        if h.destination == "GENERAL" || h.destination.starts_with("ID") {
+            assert_eq!(&rn.bytes[0x1f0..0x200], &normal.bytes[0x1f0..0x200]);
+        } else {
+            assert!(rn.bytes[0x1f0..]
+                .starts_with(format!("NORMAL.{}\0", h.revision.replace('.', "")).as_bytes()));
+        }
+        if pioneer_codec::builder::normal_authentication_from_kernel(&k.image)
+            == Some(pioneer_codec::builder::NormalAuthentication::ScaledChecksumOnly)
+        {
+            assert!(pioneer_codec::builder::normal_authentication_valid(
+                &normal.bytes,
+                &k.image
+            ));
+            assert!(pioneer_codec::builder::normal_authentication_valid(
+                &rn.bytes, &k.image
+            ));
+        } else {
+            assert_eq!(
+                pioneer_codec::signature::verify_normal_signature(&normal.bytes),
+                pioneer_codec::signature::verify_normal_signature(&rn.bytes)
+            );
+        }
         let dk = pioneer_codec::decode_envelope(&rk.bytes).unwrap();
         let dn = pioneer_codec::decode_envelope_with_kernel(&rn.bytes, &dk).unwrap();
         assert_eq!(dk.image, k.image);
@@ -726,6 +846,21 @@ mod tests {
             eprintln!("varying seeds: {group}: {values:x?}");
         }
         assert!(!groups.is_empty());
+    }
+
+    #[test]
+    fn embedded_build_date_preserves_formats_and_rejects_ambiguity() {
+        assert_eq!(
+            unique_embedded_date(b"model 1.10 Sep18,2008   "),
+            Some("Sep18,2008")
+        );
+        assert_eq!(
+            unique_embedded_date(b"model 1.14 20/06/15   "),
+            Some("20/06/15")
+        );
+        assert_eq!(unique_embedded_date(b"Sep18,2008 20/06/15"), None);
+        assert_eq!(unique_embedded_date(b"Sep00,2008"), None);
+        assert_eq!(unique_embedded_date(b"Bog18,2008"), None);
     }
 
     #[test]
@@ -998,6 +1133,7 @@ mod tests {
         let mut built = 0;
         let mut exact_text = 0;
         let mut exact_name = 0;
+        let mut generated_name = 0;
         let mut signature_range_match = 0;
         let mut failures = Vec::new();
         while let Some(dir) = dirs.pop() {
@@ -1078,11 +1214,20 @@ mod tests {
                         exact_name += usize::from(
                             rebuilt_normal.bytes[0x1f0..0x200] == normal.bytes[0x1f0..0x200],
                         );
-                        signature_range_match += usize::from(
+                        if h.destination != "GENERAL" && !h.destination.starts_with("ID") {
+                            assert!(rebuilt_normal.bytes[0x1f0..].starts_with(
+                                format!("NORMAL.{}\0", h.revision.replace('.', "")).as_bytes()
+                            ));
+                            generated_name += 1;
+                        }
+                        signature_range_match += usize::from(if pioneer_codec::builder::normal_authentication_from_kernel(&k.image) == Some(pioneer_codec::builder::NormalAuthentication::ScaledChecksumOnly) {
+                            pioneer_codec::builder::normal_authentication_valid(&normal.bytes, &k.image)
+                                && pioneer_codec::builder::normal_authentication_valid(&rebuilt_normal.bytes, &k.image)
+                        } else {
                             pioneer_codec::signature::verify_normal_signature(
                                 &rebuilt_normal.bytes,
-                            ) == pioneer_codec::signature::verify_normal_signature(&normal.bytes),
-                        );
+                            ) == pioneer_codec::signature::verify_normal_signature(&normal.bytes)
+                        });
                     }
                     Err(error) => failures.push(format!("{}: {error:#}", h.hardware_version)),
                 }
@@ -1094,7 +1239,12 @@ mod tests {
         }
         assert!(built > 0);
         assert_eq!(exact_text, built, "OEM textual header drift");
-        assert_eq!(exact_name, built, "OEM embedded filename drift");
+        eprintln!("explicit generated Normal filenames: {generated_name}");
+        assert_eq!(
+            exact_name + generated_name,
+            built,
+            "unexplained embedded filename drift"
+        );
         assert_eq!(signature_range_match, built, "OEM signature range drift");
     }
 
