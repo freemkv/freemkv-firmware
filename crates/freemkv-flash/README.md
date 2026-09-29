@@ -31,7 +31,10 @@ The per-unit files document the captured state and are checked for
 coherence; they are **not** automatically written after reboot. This is
 not a promise to restore every mutable NVRAM or calibration byte.
 
-For Pioneer, `backup` and live `flash` are blocked. Renesas identity alone
+For Pioneer, `backup DRIVE --template matching-UD04-1.14.tar` has a bounded
+BDR-UD04 1.14 read-only path: it captures Kernel and Normal twice and saves
+only if the reconstructed tar equals the supplied signed OEM pair byte for
+byte. Other Pioneer backups and live `flash` remain blocked. Renesas identity alone
 selects no flash protocol. The known
 `READ_BUFFER 02/B0` view is a runtime address-space mapping, not a proven
 restorable `.enc` or persistent flash backup. A `flash` dry run can print the

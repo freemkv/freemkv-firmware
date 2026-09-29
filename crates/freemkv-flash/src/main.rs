@@ -3,7 +3,7 @@
 //! Firmware backup and flash commands; `info` is the default:
 //! * `freemkv-flash <dev|file>` / `info <dev|file>` — identify + classify a
 //!   live drive or a firmware image `.bin` (same family key the flash gate uses).
-//! * `freemkv-flash backup <dev> [-o backup.tar]` — supported restorable backup.
+//! * `freemkv-flash backup <dev> [-o backup.tar]` — firmware package capture.
 //! * `freemkv-flash flash <dev> -i <file> [flags]` — backed-up write path.
 
 use std::path::{Path, PathBuf};
@@ -59,14 +59,14 @@ enum Command {
         /// SCSI device path (e.g. /dev/sg0) or a firmware image file (.bin).
         device: String,
     },
-    /// Save a firmware backup (Pioneer UD04 1.14 requires --template).
+    /// Save a firmware backup; current Pioneer profile is BDR-UD04 1.14.
     Backup {
         /// SCSI device path (e.g. /dev/sg0).
         device: String,
         /// Output .tar path (default: `<product>_<rev>.backup.tar`).
         #[arg(short, long)]
         out: Option<PathBuf>,
-        /// Matching Kernel + Normal tar for the established Pioneer backup profile.
+        /// Matching signed OEM Kernel+Normal tar (currently UD04 1.14 only).
         #[arg(long)]
         template: Option<PathBuf>,
     },
@@ -152,7 +152,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
         Some(Command::Info { device }) => cmd_info(&device),
-        Some(Command::Backup { device, out, template }) => cmd_backup(&device, out, template),
+        Some(Command::Backup {
+            device,
+            out,
+            template,
+        }) => cmd_backup(&device, out, template),
         Some(Command::Flash(args)) => cmd_flash(args),
         None => match cli.device {
             Some(device) => cmd_info(&device),
@@ -212,15 +216,9 @@ fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     Ok(family)
 }
 
-/// Classify and gate the restorable backup path. Pioneer is refused
-/// because their known read channel exposes a mapped view, not an update image.
-fn classify_for_backup(dev: &mut dyn platform::ScsiDevice, has_template: bool) -> Result<Family> {
+/// Classify a drive for a backend's bounded backup path.
+fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     let family = resolved_family(dev)?;
-    if family == Family::Pioneer && !has_template {
-        anyhow::bail!(
-            "Pioneer backup requires --template with the established UD04 1.14 Kernel + Normal pair"
-        );
-    }
     if drive::for_family(family).backup_extension().is_none() {
         return Err(drive::unsupported_family_error(family));
     }
@@ -228,9 +226,12 @@ fn classify_for_backup(dev: &mut dyn platform::ScsiDevice, has_template: bool) -
 }
 
 fn cmd_backup(device: &str, out: Option<PathBuf>, template: Option<PathBuf>) -> Result<()> {
-    let template = template.map(std::fs::read).transpose().context("reading backup template")?;
+    let template = template
+        .map(std::fs::read)
+        .transpose()
+        .context("reading backup template")?;
     let mut dev = platform::open(device, false)?;
-    let family = classify_for_backup(dev.as_mut(), template.is_some())?;
+    let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
     let out = match out {
         Some(o) => o,

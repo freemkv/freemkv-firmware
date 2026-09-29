@@ -23,10 +23,10 @@ pub mod flashset;
 /// Signature-driven drive-family identification for a firmware IMAGE.
 pub mod imageid;
 pub mod manifest;
-/// Read-only validation of extractor-produced Pioneer firmware bundles.
-pub mod pioneer_bundle;
 /// Offline reconstruction of Pioneer backup candidates from captured images.
 pub mod pioneer_backup;
+/// Read-only validation of extractor-produced Pioneer firmware bundles.
+pub mod pioneer_bundle;
 pub mod platform;
 pub mod probe;
 pub mod style;

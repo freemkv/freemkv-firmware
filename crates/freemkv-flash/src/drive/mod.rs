@@ -349,14 +349,26 @@ pub trait FirmwareBackend: Sync {
 
     /// Capture with optional envelope templates. Backends must explicitly opt
     /// into templates; unsupported options are never silently ignored.
-    fn capture_backup_with_template(&self, dev: &mut dyn ScsiDevice, template: Option<&[u8]>) -> Result<Vec<u8>> {
-        if template.is_some() { return Err(anyhow::anyhow!("this backend does not accept backup templates")); }
+    fn capture_backup_with_template(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        template: Option<&[u8]>,
+    ) -> Result<Vec<u8>> {
+        if template.is_some() {
+            return Err(anyhow::anyhow!(
+                "this backend does not accept backup templates"
+            ));
+        }
         self.capture_backup(dev)
     }
 
     /// Validate backup inputs before querying or changing device state.
     fn validate_backup_template(&self, template: Option<&[u8]>) -> Result<()> {
-        if template.is_some() { return Err(anyhow::anyhow!("this backend does not accept backup templates")); }
+        if template.is_some() {
+            return Err(anyhow::anyhow!(
+                "this backend does not accept backup templates"
+            ));
+        }
         Ok(())
     }
 

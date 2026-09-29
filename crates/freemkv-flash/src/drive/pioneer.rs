@@ -763,12 +763,24 @@ impl DriveFamily for Pioneer {
     fn family(&self) -> Family {
         Family::Pioneer
     }
-    fn backup_extension(&self) -> Option<&'static str> { Some("tar") }
-    fn validate_backup_template(&self, template: Option<&[u8]>) -> Result<()> {
-        crate::pioneer_backup::validate_template(template.ok_or_else(|| anyhow!("Pioneer backup requires --template with the established UD04 1.14 pair"))?)
+    fn backup_extension(&self) -> Option<&'static str> {
+        Some("tar")
     }
-    fn capture_backup_with_template(&self, dev: &mut dyn ScsiDevice, template: Option<&[u8]>) -> Result<Vec<u8>> {
-        crate::pioneer_backup::capture_reference_backup(dev, template.ok_or_else(|| anyhow!("Pioneer backup requires --template with the established UD04 1.14 pair"))?)
+    fn validate_backup_template(&self, template: Option<&[u8]>) -> Result<()> {
+        let template = template.ok_or_else(|| {
+            anyhow::anyhow!("Pioneer encrypted backup requires a matching signed OEM template")
+        })?;
+        crate::pioneer_backup::validate_template(template)
+    }
+    fn capture_backup_with_template(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        template: Option<&[u8]>,
+    ) -> Result<Vec<u8>> {
+        let template = template.ok_or_else(|| {
+            anyhow::anyhow!("Pioneer encrypted backup requires a matching signed OEM template")
+        })?;
+        crate::pioneer_backup::capture_reference_backup(dev, template)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
         crate::pioneer_backup::validate_reference_backup(bytes, target_model)

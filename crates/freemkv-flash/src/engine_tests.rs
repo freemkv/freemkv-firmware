@@ -198,13 +198,11 @@ fn pioneer_offline_plan_rejects_untraced_model_without_device_io() {
 }
 
 #[test]
-fn pioneer_backup_command_refuses_before_capture_or_write() {
+fn pioneer_backup_requires_signed_oem_template_before_device_io() {
     let mut dev = MockScsiDevice::pioneer();
     let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
     let err = backup(&mut dev, &*for_family(Family::Pioneer), &out).unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("Pioneer backup requires --template"));
+    assert!(format!("{err:#}").contains("requires a matching signed OEM template"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
     assert!(!out.exists());

@@ -7,6 +7,110 @@ use crate::platform::ScsiDevice;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
+fn zero_be32_sum(image: &[u8]) -> bool {
+    image.len() % 4 == 0
+        && image.chunks_exact(4).fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(word.try_into().unwrap()))
+        }) == 0
+}
+
+fn backup_header(
+    id: &str,
+    revision: &str,
+    hardware: &str,
+    kernel_tag: &str,
+    role: &str,
+    kernel_version2: &str,
+) -> Result<Vec<u8>> {
+    let lines = format!(
+        "********  Copyright(c) 2000 Pioneer Corporation  ********\r\n\
+         This is microcode file.\r\n\
+         ID : {id}\r\n\
+         Revision Level : {revision}\r\n\
+         Hardware Version : {hardware}\r\n\
+         Kernel Version : {kernel_tag}\r\n\
+         Destination : BACKUP\r\n\
+         File Type : {role}\r\n\
+         Generated Date : BACKUP\r\n\
+         Kernel Version2 : {kernel_version2}\r\n"
+    );
+    if lines.len() > 0x160
+        || [id, revision, hardware, kernel_tag, role, kernel_version2]
+            .iter()
+            .any(|s| s.is_empty() || !s.is_ascii() || s.bytes().any(|b| b < 0x20 || b == 0x7f))
+    {
+        bail!("invalid synthetic Pioneer backup identity");
+    }
+    let mut header = vec![0; 0x200];
+    header[..lines.len()].copy_from_slice(lines.as_bytes());
+    Ok(header)
+}
+
+/// Construct a UD04 raw-path package from the two captured images alone.
+/// This matches the receiver's traced plaintext framing; it is an offline
+/// candidate until transfer and persistent restore have been exercised.
+pub fn construct_ud04_plain_candidate(
+    kernel: &[u8],
+    normal: &[u8],
+    inquiry_revision: &str,
+) -> Result<Vec<u8>> {
+    if kernel.len() != 0x10000
+        || normal.len() < 0x2000
+        || normal.len() % 0x100 != 0
+        || !zero_be32_sum(kernel)
+        || !zero_be32_sum(normal)
+    {
+        bail!("UD04 raw image length or checksum is invalid");
+    }
+    let hardware = std::str::from_utf8(&kernel[0x1000..0x1008])?.trim();
+    let kernel_tag = std::str::from_utf8(&kernel[0x1008..0x1010])?.trim();
+    let kernel_version2 = std::str::from_utf8(&kernel[0x1010..0x1014])?.trim();
+    let id = std::str::from_utf8(&normal[..16])?.trim();
+    if hardware != "SAT 8A10"
+        || id != "PIONEER BDR-US04"
+        || kernel_tag.is_empty()
+        || kernel_version2.is_empty()
+        || u32::from_be_bytes(normal[20..24].try_into().unwrap()) as usize != normal.len()
+    {
+        bail!("captured images do not satisfy the traced UD04 raw receiver identity");
+    }
+    let mut k = backup_header(
+        id,
+        "BACKUP",
+        hardware,
+        kernel_tag,
+        "Kernel",
+        kernel_version2,
+    )?;
+    k.resize(0x1200, 0);
+    k.extend_from_slice(kernel);
+    let mut n = backup_header(
+        id,
+        inquiry_revision,
+        hardware,
+        kernel_tag,
+        "Normal",
+        kernel_version2,
+    )?;
+    n.resize(0x10200, 0);
+    n.extend_from_slice(normal);
+    let mut tar = tar::Builder::new(Vec::new());
+    for (path, bytes) in [
+        ("components/backup-kernel.enc", &k),
+        ("components/backup-normal.enc", &n),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_cksum();
+        tar.append_data(&mut header, path, bytes.as_slice())?;
+    }
+    let out = tar.into_inner()?;
+    Bundle::from_tar_bytes(&out).context("synthetic backup package failed intake")?;
+    Ok(out)
+}
+
 fn reference_pair(bytes: &[u8]) -> Result<Bundle> {
     let bundle = Bundle::from_tar_bytes(bytes)?;
     if bundle.components.len() != 2 {
@@ -71,8 +175,7 @@ fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec
 /// as framing templates. Reads only Kernel and Normal, twice for consistency.
 /// Issues the documented zero-payload service knock, but no flash writes.
 /// Unsupported templates/identity and mismatches fail without returning a backup.
-pub fn capture_reference_backup(dev: &mut dyn ScsiDevice, template: &[u8]) -> Result<Vec<u8>> {
-    reference_pair(template)?; // Reject unsupported profiles before any command.
+fn read_ud04_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String)> {
     let inquiry = dev.command_in(&[0x12, 0, 0, 0, 36, 0], 36)?;
     if inquiry.len() != 36
         || &inquiry[8..16] != b"PIONEER "
@@ -95,6 +198,19 @@ pub fn capture_reference_backup(dev: &mut dyn ScsiDevice, template: &[u8]) -> Re
     {
         bail!("firmware reads changed between passes; no backup produced");
     }
+    Ok((kernel, normal, "1.14".into()))
+}
+
+/// Read the bounded UD04 firmware regions and construct a raw-path backup.
+pub fn capture_plain_backup(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    let (kernel, normal, revision) = read_ud04_pair(dev)?;
+    construct_ud04_plain_candidate(&kernel, &normal, &revision)
+}
+
+/// Read the same UD04 regions and reproduce a supplied reference envelope pair.
+pub fn capture_reference_backup(dev: &mut dyn ScsiDevice, template: &[u8]) -> Result<Vec<u8>> {
+    reference_pair(template)?; // Reject unsupported profiles before any command.
+    let (kernel, normal, _) = read_ud04_pair(dev)?;
     let bytes = reconstruct_candidate(template, &kernel, &normal)?;
     // Current bounded profile promises exact equivalence to the known pair.
     reference_pair(&bytes).context("captured firmware differs from established reference pair")?;
@@ -106,7 +222,9 @@ pub fn validate_reference_backup(bytes: &[u8], product: &str) -> Result<Vec<u8>>
     if !product.split_whitespace().any(|s| s == "BDR-UD04") {
         bail!("UD04 backup target mismatch");
     }
-    Ok(reference_pair(bytes)?
+    let reference = reference_pair(bytes)
+        .context("Pioneer restore accepts only the exact established OEM reference pair")?;
+    Ok(reference
         .components
         .into_iter()
         .find(|c| c.role == Role::Main)
@@ -206,9 +324,8 @@ mod tests {
 
     impl ScsiDevice for CaptureReplay {
         fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-            if cdb == [0x12, 0, 0, 0, 36, 0] {
-                assert_eq!(len, 36);
-                let mut data = vec![0; 36];
+            if cdb == [0x12, 0, 0, 0, len as u8, 0] && matches!(len, 36 | 96) {
+                let mut data = vec![0; len];
                 data[8..16].copy_from_slice(b"PIONEER ");
                 data[16..32].copy_from_slice(b"BD-RW BDR-UD04  ");
                 data[32..36].copy_from_slice(b"1.14");
@@ -220,7 +337,13 @@ mod tests {
                 data[16..24].copy_from_slice(b"SAT 8A10");
                 return Ok(data);
             }
-            assert_eq!(self.knocks, 1);
+            if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
+                bail!("Pioneer does not implement the MTK identity buffer");
+            }
+            assert_eq!(
+                self.knocks, 1,
+                "unexpected pre-knock CDB: {cdb:02x?}, len={len}"
+            );
             assert_eq!(cdb.len(), 10);
             assert_eq!(&cdb[..3], &[0x3c, 2, 0xb0]);
             assert_eq!(&cdb[6..], &[0, 0, len as u8, 0]);
@@ -267,6 +390,49 @@ mod tests {
         // Explicitly documented UD04 capture mapping, not generic read offsets.
         let ki = dump[0x400000..0x410000].to_vec();
         let ni = dump[0x410000..0x5d7500].to_vec();
+        let synthetic = construct_ud04_plain_candidate(&ki, &ni, "1.14").unwrap();
+        if let Ok(output) = std::env::var("PIONEER_PLAIN_BACKUP_KAT_OUTPUT") {
+            std::fs::write(output, &synthetic).unwrap();
+        }
+        assert!(validate_reference_backup(&synthetic, "BD-RW BDR-UD04").is_err());
+        let synthetic_bundle = Bundle::from_tar_bytes(&synthetic).unwrap();
+        let raw_kernel = synthetic_bundle
+            .components
+            .iter()
+            .find(|c| c.role == Role::Kernel)
+            .unwrap();
+        let raw_normal = synthetic_bundle
+            .components
+            .iter()
+            .find(|c| c.role == Role::Main)
+            .unwrap();
+        let decoded_kernel = pioneer_codec::decode_envelope(&raw_kernel.bytes).unwrap();
+        let decoded_normal =
+            pioneer_codec::decode_envelope_with_kernel(&raw_normal.bytes, &decoded_kernel).unwrap();
+        assert_eq!(decoded_kernel.image, ki);
+        assert_eq!(decoded_normal.image, ni);
+        assert_eq!(decoded_kernel.repack(&ki).unwrap(), raw_kernel.bytes);
+        assert_eq!(decoded_normal.repack(&ni).unwrap(), raw_normal.bytes);
+        assert_eq!(raw_kernel.bytes.len(), 0x11200);
+        assert_eq!(&raw_kernel.bytes[0x1200..], ki);
+        assert_eq!(&raw_normal.bytes[0x10200..], ni);
+        assert!(raw_kernel.bytes[0x200..0x1200].iter().all(|&b| b == 0));
+        assert!(raw_normal.bytes[0x200..0x10200].iter().all(|&b| b == 0));
+        assert_eq!(
+            pioneer_codec::header_info(&raw_kernel.bytes)
+                .unwrap()
+                .revision,
+            "BACKUP"
+        );
+        assert_eq!(
+            pioneer_codec::header_info(&raw_normal.bytes)
+                .unwrap()
+                .revision,
+            "1.14"
+        );
+        let mut tampered = ni.clone();
+        tampered[0x100] ^= 1;
+        assert!(construct_ud04_plain_candidate(&ki, &tampered, "1.14").is_err());
         let rebuilt = reconstruct_candidate(&template, &ki, &ni).unwrap();
         let mut replay = CaptureReplay {
             dump: dump.clone(),
@@ -279,6 +445,39 @@ mod tests {
             rebuilt
         );
         assert_eq!(replay.knocks, 1);
+        replay.reads = 0;
+        replay.knocks = 0;
+        assert_eq!(capture_plain_backup(&mut replay).unwrap(), synthetic);
+        assert_eq!(replay.knocks, 1);
+        let mut engine_replay = CaptureReplay {
+            dump: dump.clone(),
+            reads: 0,
+            knocks: 0,
+            corrupt_second_pass: false,
+        };
+        let output =
+            std::env::temp_dir().join(format!("ud04-plain-backup-{}.tar", std::process::id()));
+        let _ = std::fs::remove_file(&output);
+        let error = crate::engine::backup(
+            &mut engine_replay,
+            &*crate::drive::for_family(crate::drive::Family::Pioneer),
+            &output,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("matching signed OEM template"));
+        assert_eq!(engine_replay.reads, 0);
+        assert_eq!(engine_replay.knocks, 0);
+        assert!(!output.exists());
+        crate::engine::backup_with_template(
+            &mut engine_replay,
+            &*crate::drive::for_family(crate::drive::Family::Pioneer),
+            &output,
+            Some(&template),
+        )
+        .unwrap();
+        assert_eq!(std::fs::read(&output).unwrap(), template);
+        assert_eq!(engine_replay.knocks, 1);
+        std::fs::remove_file(&output).unwrap();
         replay.reads = 0;
         replay.knocks = 0;
         replay.corrupt_second_pass = true;

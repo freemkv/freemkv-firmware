@@ -46,9 +46,11 @@ Every command classifies the drive first, using only proven discriminators:
 | `READ_BUFFER 0xF1` succeeds | **Pioneer / Renesas** | classified, ❌ no |
 | neither | **Unknown** | ❌ never flashed |
 
-`info` prints the detected family. `backup` and live `flash` remain unavailable
-for Pioneer because no restorable backup path has been proven. The Pioneer
-planner opens no drive.
+`info` prints the detected family. Pioneer `backup` has one bounded read-only
+profile: BDR-UD04 1.14 with the exact matching signed OEM Kernel+Normal tar
+passed to `--template`. It saves a backup only when both fresh drive reads
+reconstruct that same tar byte for byte. Template-free Pioneer backup and live
+`flash` remain unavailable. The Pioneer flash planner opens no drive.
 
 ## Flash workflow
 

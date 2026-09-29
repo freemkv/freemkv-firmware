@@ -382,7 +382,12 @@ pub fn backup(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path) -> 
 }
 
 /// Save a firmware backup using optional backend-specific envelope templates.
-pub fn backup_with_template(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path, template: Option<&[u8]>) -> Result<()> {
+pub fn backup_with_template(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn DriveFamily,
+    out: &Path,
+    template: Option<&[u8]>,
+) -> Result<()> {
     drive.validate_backup_template(template)?;
     if drive.backup_extension().is_none() {
         bail!(
