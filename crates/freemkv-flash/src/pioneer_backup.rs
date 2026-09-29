@@ -77,10 +77,16 @@ fn unique_embedded_date(image: &[u8]) -> Option<&str> {
                 .iter()
                 .all(|&i| field[i].is_ascii_digit())
         {
-            if found.is_some() {
+            let month = (field[3] - b'0') * 10 + field[4] - b'0';
+            let day = (field[6] - b'0') * 10 + field[7] - b'0';
+            if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+                continue;
+            }
+            let value = std::str::from_utf8(field).ok()?;
+            if found.is_some_and(|previous| previous != value) {
                 return None;
             }
-            found = Some(std::str::from_utf8(field).ok()?);
+            found = Some(value);
         }
     }
     for field in image.windows(10) {
@@ -100,10 +106,11 @@ fn unique_embedded_date(image: &[u8]) -> Option<&str> {
             if !(1..=31).contains(&day) {
                 continue;
             }
-            if found.is_some() {
+            let value = std::str::from_utf8(field).ok()?;
+            if found.is_some_and(|previous| previous != value) {
                 return None;
             }
-            found = Some(std::str::from_utf8(field).ok()?);
+            found = Some(value);
         }
     }
     found
@@ -694,8 +701,7 @@ mod tests {
     #[test]
     fn unknown_sat_receiver_stops_after_kernel_capture() {
         let mut dump = vec![0; NORMAL_IMAGE_BASE];
-        dump[KERNEL_IMAGE_BASE + 0x1000..KERNEL_IMAGE_BASE + 0x1008]
-            .copy_from_slice(b"SAT 8A10");
+        dump[KERNEL_IMAGE_BASE + 0x1000..KERNEL_IMAGE_BASE + 0x1008].copy_from_slice(b"SAT 8A10");
         // The replay has no Normal bytes. Any read beyond the Kernel panics,
         // proving rejection occurs before guessing Normal geometry.
         let mut replay = CaptureReplay {
@@ -859,6 +865,17 @@ mod tests {
             Some("20/06/15")
         );
         assert_eq!(unique_embedded_date(b"Sep18,2008 20/06/15"), None);
+        assert_eq!(unique_embedded_date(b"20/06/15 20/06/15"), Some("20/06/15"));
+        assert_eq!(
+            unique_embedded_date(b"Sep18,2008 Sep18,2008"),
+            Some("Sep18,2008")
+        );
+        assert_eq!(unique_embedded_date(b"20/06/15 20/06/16"), None);
+        assert_eq!(
+            unique_embedded_date(b"20/00/15 20/13/15 20/06/00 20/06/32"),
+            None
+        );
+        assert_eq!(unique_embedded_date(b"99/99/99 20/06/15"), Some("20/06/15"));
         assert_eq!(unique_embedded_date(b"Sep00,2008"), None);
         assert_eq!(unique_embedded_date(b"Bog18,2008"), None);
     }
@@ -1237,6 +1254,10 @@ mod tests {
         for failure in &failures {
             eprintln!("unsupported: {failure}");
         }
+        assert!(
+            failures.is_empty(),
+            "decoded OEM pairs failed reconstruction: {failures:?}"
+        );
         assert!(built > 0);
         assert_eq!(exact_text, built, "OEM textual header drift");
         eprintln!("explicit generated Normal filenames: {generated_name}");
