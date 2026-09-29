@@ -643,10 +643,12 @@ fn plan_pioneer_bounded_bundle(
             if let Ok(steps) =
                 crate::drive::pioneer::offline_linear_fe_data_out(&kernel.bytes, &normal.bytes)
             {
-                if !stated_matches("BDR-UD04")
+                let banner = crate::drive::pioneer::parse_banner(&normal.bytes)
+                    .context("Normal banner missing")?;
+                if !stated_matches(&banner.model)
                     && !bundle.public_model.as_deref().is_some_and(stated_matches)
                 {
-                    bail!("stated drive model {model:?} matches neither the listed model nor the UD04 resource");
+                    bail!("stated drive model {model:?} matches neither the listed model nor the resource");
                 }
                 println!(
                     "{}",
@@ -658,14 +660,9 @@ fn plan_pioneer_bounded_bundle(
                 println!("{}", style::kv("stated model", model));
                 println!("{}", style::kv("Kernel SHA-256", &kernel_hash));
                 println!("{}", style::kv("Normal SHA-256", &normal_hash));
-                println!(
-                    "{}",
-                    style::kv(
-                        "entry/finish control",
-                        "PIONEER BDR-US04 + 6123789A + 236 zero bytes"
-                    )
-                );
-                println!("Data-out shape: 04/FF entry; three 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
+                println!("{}", style::kv("resource model", &banner.model));
+                println!("{}", style::kv("resource hardware", &banner.hardware));
+                println!("Data-out shape: 04/FF entry; {} 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::KernelFe).count(), steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
                 println!("OFFLINE ONLY: entry-state branch, preflight, status/completion, drive acceptance, and restoration are unverified; no device I/O or live writes.");
                 if verbose {
                     for step in &steps {

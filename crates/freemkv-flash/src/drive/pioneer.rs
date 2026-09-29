@@ -581,7 +581,28 @@ pub fn offline_bdr212_v105_data_out<'a>(
     offline_bounded_oem_data_out(profile, kernel, normal, seed)
 }
 
-/// Validate and plan the established UD04 linear-FE format from its contents.
+/// A receiver/transfer profile is selected from envelope facts. Adding a
+/// model requires independent updater evidence for its control word and wire
+/// framing; no release filename or OEM hash belongs in this registry.
+struct LinearFeProfile {
+    model: &'static str,
+    hardware: &'static str,
+    kernel_len: usize,
+    normal_len: usize,
+    control_id: [u8; 16],
+    control_key: u32,
+}
+
+const LINEAR_FE_PROFILES: &[LinearFeProfile] = &[LinearFeProfile {
+    model: "BDR-UD04",
+    hardware: "SAT 8A10",
+    kernel_len: 0x11200,
+    normal_len: 0x1d7700,
+    control_id: *b"PIONEER BDR-US04",
+    control_key: 0x6123_789A,
+}];
+
+/// Validate and plan an established linear-FE envelope pair from its contents.
 /// Source and advertised revision do not select this path. Receiver acceptance
 /// remains a separate, untested hardware question.
 pub fn offline_linear_fe_data_out<'a>(
@@ -589,14 +610,18 @@ pub fn offline_linear_fe_data_out<'a>(
     normal: &'a [u8],
 ) -> Result<Vec<OemTransfer<'a>>> {
     use pioneer_codec::signature::{verify_normal_signature, SignatureCheck};
-    if kernel.len() != 0x11200 || normal.len() != 0x1d7700 {
-        bail!("UD04 linear-FE envelope geometry mismatch");
-    }
     let kh = pioneer_codec::header_info(kernel).ok_or_else(|| anyhow!("Kernel header missing"))?;
     let nh = pioneer_codec::header_info(normal).ok_or_else(|| anyhow!("Normal header missing"))?;
-    if kh.model != "BDR-UD04"
-        || nh.model != kh.model
-        || kh.hardware_version != "SAT 8A10"
+    let profile = LINEAR_FE_PROFILES
+        .iter()
+        .find(|profile| {
+            kh.model == profile.model
+                && kh.hardware_version == profile.hardware
+                && kernel.len() == profile.kernel_len
+                && normal.len() == profile.normal_len
+        })
+        .ok_or_else(|| anyhow!("no established linear-FE profile matches the envelopes"))?;
+    if nh.model != kh.model
         || nh.hardware_version != kh.hardware_version
         || kh.destination != "GENERAL"
         || nh.destination != kh.destination
@@ -605,24 +630,27 @@ pub fn offline_linear_fe_data_out<'a>(
         || kh.kernel_version != nh.kernel_version
         || kh.kernel_version2 != nh.kernel_version2
     {
-        bail!("UD04 linear-FE envelope identities disagree");
+        bail!("linear-FE envelope identities disagree");
     }
     if verify_normal_signature(normal) != SignatureCheck::ValidKeyAndCiphertext {
-        bail!("UD04 Normal signature is invalid or unsupported");
+        bail!("Normal signature is invalid or unsupported for this profile");
     }
-    let decoded_kernel = pioneer_codec::decode_envelope(kernel)
-        .ok_or_else(|| anyhow!("UD04 Kernel decode failed"))?;
+    let decoded_kernel =
+        pioneer_codec::decode_envelope(kernel).ok_or_else(|| anyhow!("Kernel decode failed"))?;
     let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
-        .ok_or_else(|| anyhow!("UD04 Normal receiver decode failed"))?;
+        .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
     if decoded_kernel.info.layout != "kernel-front"
         || decoded_normal.info.layout != "normal"
         || !zero_word_sum(&decoded_kernel.image)
         || !zero_word_sum(&decoded_normal.image)
     {
-        bail!("UD04 decoded image integrity or layout mismatch");
+        bail!("decoded image integrity or layout mismatch");
     }
+    let mut control = [0u8; CONTROL_LEN];
+    control[..16].copy_from_slice(&profile.control_id);
+    control[16..20].copy_from_slice(&profile.control_key.to_le_bytes());
     transfer::data_out(
-        &ud04_autoflasher_control_payload(),
+        &control,
         normal,
         Some(transfer::KernelTransfer::LinearFe(kernel)),
     )
