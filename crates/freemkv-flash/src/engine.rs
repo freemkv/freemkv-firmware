@@ -410,7 +410,7 @@ pub fn backup_with_template(
     Ok(())
 }
 
-/// Capture a template-free UD04 encrypted package through the bounded live
+/// Capture a template-free H8/SAT encrypted package through the bounded live
 /// read transaction. The generated signature verifies offline, but hardware
 /// key trust and physical restoration have not been tested.
 pub fn pioneer_signed_candidate(
@@ -435,7 +435,7 @@ pub fn pioneer_signed_candidate(
         style::green("wrote"),
         style::dim(&format!("{} ({}).", out.display(), human_size(saved_len)))
     );
-    println!("{}", style::amber("UNVERIFIED RESTORE: encrypted envelopes decode and self-signature verifies offline; the drive's trust of the generated public key and physical rollback remain untested."));
+    println!("{}", style::amber("UNVERIFIED RESTORE: envelopes pass offline codec and authentication checks; physical rollback and trust of generated signing keys remain untested."));
     Ok(())
 }
 

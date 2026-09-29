@@ -17,11 +17,11 @@ pub fn construct_signed_candidate(
     revision: &str,
 ) -> Result<Vec<u8>> {
     let date = unique_embedded_date(normal).unwrap_or("BACKUP");
-    let mut seeds = [0u8; 6];
-    getrandom::fill(&mut seeds)
-        .map_err(|e| anyhow::anyhow!("generating fresh Pioneer encoding tables: {e}"))?;
-    let kernel_seed = u32::from_be_bytes([0, seeds[0], seeds[1], seeds[2]]);
-    let normal_seed = u32::from_be_bytes([0, seeds[3], seeds[4], seeds[5]]);
+    // Canonical generated tables use seeds observed in OEM envelopes. They
+    // are format defaults, not a claim to recover the original drive's seeds.
+    // Keep signing entropy independent: encoding seeds are not signing keys.
+    let kernel_seed = 1;
+    let normal_seed = 0x47d001;
     let signer = pioneer_codec::signature::SigningKey::random().map_err(|e| anyhow::anyhow!(e))?;
     let input = pioneer_codec::builder::BuildInputs {
         kernel_image: kernel,
@@ -84,6 +84,58 @@ fn unique_embedded_date(image: &[u8]) -> Option<&str> {
     found
 }
 
+/// Recover the OEM-spaced envelope ID from captured firmware, using INQUIRY
+/// only to identify its vendor, media class and model tokens. The fixed-width
+/// INQUIRY product may have different spacing from the envelope header.
+fn embedded_envelope_id(inquiry: &[u8], kernel: &[u8], normal: &[u8]) -> Result<String> {
+    let vendor = std::str::from_utf8(inquiry.get(8..16).context("short INQUIRY vendor")?)?.trim();
+    let product = std::str::from_utf8(inquiry.get(16..32).context("short INQUIRY product")?)?;
+    let tokens: Vec<_> = product.split_whitespace().collect();
+    let (Some(model), media) = (tokens.last(), &tokens[..tokens.len().saturating_sub(1)]) else {
+        bail!("INQUIRY product has no model");
+    };
+    if vendor.is_empty() || media.is_empty() {
+        bail!("INQUIRY identity is incomplete");
+    }
+    let media = media.join(" ");
+    for image in [kernel, normal] {
+        let mut found = None;
+        for spaces in 1..=8 {
+            let candidate = format!("{vendor} {media}{}{model}", " ".repeat(spaces));
+            if candidate.len() > 24 {
+                continue;
+            }
+            if image
+                .windows(candidate.len())
+                .enumerate()
+                .any(|(offset, window)| {
+                    window == candidate.as_bytes()
+                        && image.get(offset + candidate.len()).is_none_or(|next| {
+                            (!next.is_ascii_alphanumeric() && !matches!(*next, b'-' | b'_'))
+                                || image
+                                    .get(offset + candidate.len()..offset + candidate.len() + 5)
+                                    .is_some_and(|tail| {
+                                        tail[0].is_ascii_digit()
+                                            && (tail[1].is_ascii_digit() || tail[1] == b'.')
+                                            && tail[2..4].iter().all(u8::is_ascii_digit)
+                                            && tail[4] == b' '
+                                    })
+                        })
+                })
+            {
+                if found.is_some() {
+                    bail!("multiple firmware envelope identities match INQUIRY");
+                }
+                found = Some(candidate);
+            }
+        }
+        if let Some(id) = found {
+            return Ok(id);
+        }
+    }
+    bail!("captured firmware has no envelope identity matching INQUIRY")
+}
+
 /// Structural, codec and signature checks for a Pioneer envelope pair,
 /// regardless of whether it came from an updater or a live capture.
 pub fn validate_envelope_package(bytes: &[u8], product: &str) -> Result<()> {
@@ -111,14 +163,25 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
     if !product.split_whitespace().any(|part| part == kh.model)
         || nh.model != kh.model
         || nh.hardware_version != kh.hardware_version
+        || kh.file_type != "Kernel"
+        || nh.file_type != "Normal"
+        || kh.kernel_version != nh.kernel_version
+        || kh.kernel_version2 != nh.kernel_version2
+        || kh.destination != nh.destination
     {
         bail!("Pioneer envelope identity does not match the drive");
     }
-    crate::drive::pioneer::offline_linear_fe_data_out(kernel, normal)?;
     let decoded_kernel =
         pioneer_codec::decode_envelope(kernel).context("Kernel cannot be decoded")?;
     let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
         .context("Normal cannot be receiver-decoded")?;
+    if !pioneer_codec::builder::normal_authentication_valid(normal, &decoded_kernel.image)
+        || decoded_normal.info.layout != "normal"
+        || !zero_be32_sum(&decoded_kernel.image)
+        || !zero_be32_sum(&decoded_normal.image)
+    {
+        bail!("Pioneer signature, image integrity or layout mismatch");
+    }
     if decoded_kernel.repack(&decoded_kernel.image).as_deref() != Some(kernel)
         || decoded_normal.repack(&decoded_normal.image).as_deref() != Some(normal)
     {
@@ -344,7 +407,7 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
     {
         bail!("firmware reads changed between passes; no backup produced");
     }
-    let envelope_id = std::str::from_utf8(&inquiry[8..32])?.trim_end().to_owned();
+    let envelope_id = embedded_envelope_id(&inquiry, &kernel, &normal)?;
     let revision = std::str::from_utf8(&inquiry[32..36])?.to_owned();
     Ok((kernel, normal, revision, envelope_id))
 }
@@ -461,6 +524,18 @@ pub fn reconstruct_candidate(
 mod tests {
     use super::*;
 
+    #[test]
+    fn embedded_identity_preserves_spacing_and_rejects_model_prefixes() {
+        let mut inquiry = [b' '; 36];
+        inquiry[8..15].copy_from_slice(b"PIONEER");
+        inquiry[16..30].copy_from_slice(b"BD-RW  BDR-212");
+        assert!(embedded_envelope_id(&inquiry, b"PIONEER BD-RW   BDR-212M\0", b"").is_err());
+        assert_eq!(
+            embedded_envelope_id(&inquiry, b"PIONEER BD-RW   BDR-212\0", b"").unwrap(),
+            "PIONEER BD-RW   BDR-212"
+        );
+    }
+
     /// Replay captured address-space bytes without opening a device. Reject
     /// every command outside the bounded reference backup transaction.
     struct CaptureReplay {
@@ -473,6 +548,10 @@ mod tests {
     impl ScsiDevice for CaptureReplay {
         fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
             if cdb == [0x12, 0, 0, 0, len as u8, 0] && matches!(len, 36 | 96) {
+                if let Ok(path) = std::env::var("PIONEER_INQUIRY_FIXTURE") {
+                    let bytes = std::fs::read(path).unwrap();
+                    return Ok(bytes[..len].to_vec());
+                }
                 let mut data = vec![0; len];
                 data[8..16].copy_from_slice(b"PIONEER ");
                 data[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
@@ -550,6 +629,7 @@ mod tests {
         let n = pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &k).unwrap();
         let h = pioneer_codec::header_info(&normal.bytes).unwrap();
         let output = construct_signed_candidate(&k.image, &n.image, &h.id, &h.revision).unwrap();
+        validate_envelope_package(&output, &h.model).unwrap();
         let rebuilt = Bundle::from_tar_bytes(&output).unwrap();
         let rk = rebuilt
             .components
@@ -571,10 +651,76 @@ mod tests {
         let dn = pioneer_codec::decode_envelope_with_kernel(&rn.bytes, &dk).unwrap();
         assert_eq!(dk.image, k.image);
         assert_eq!(dn.image, n.image);
+        let mut damaged = rn.bytes.clone();
+        let last = damaged.len() - 1;
+        damaged[last] ^= 1;
+        assert!(validate_envelope_pair(&rk.bytes, &damaged, &h.model).is_err());
         assert_eq!(
             unique_embedded_date(&n.image),
             Some(h.generated_date.as_str())
         );
+    }
+
+    #[test]
+    fn corpus_encoding_seeds_when_configured() {
+        let Ok(root) = std::env::var("PIONEER_INSTALLER_CORPUS_KAT_ROOT") else {
+            return;
+        };
+        let mut dirs = vec![std::path::PathBuf::from(root)];
+        let mut seen = std::collections::HashSet::new();
+        let mut groups =
+            std::collections::BTreeMap::<String, std::collections::BTreeSet<u32>>::new();
+        let mut seeds = std::collections::BTreeMap::<u32, usize>::new();
+        let mut unknown = std::collections::BTreeMap::<String, usize>::new();
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+                if !path.to_string_lossy().ends_with(".installer.tar") {
+                    continue;
+                }
+                let Ok(bundle) = Bundle::from_tar_bytes(&std::fs::read(path).unwrap()) else {
+                    continue;
+                };
+                for component in bundle.components {
+                    if !seen.insert(Sha256::digest(&component.bytes).to_vec()) {
+                        continue;
+                    }
+                    let Some(decoded) = pioneer_codec::decode_envelope(&component.bytes) else {
+                        continue;
+                    };
+                    let h = pioneer_codec::header_info(&component.bytes).unwrap();
+                    let group = format!(
+                        "{}/{}/{}/{}/{}",
+                        h.model,
+                        h.hardware_version,
+                        h.destination,
+                        h.file_type,
+                        decoded.info.layout
+                    );
+                    if let Some(seed) = decoded.encoding_seed() {
+                        *seeds.entry(seed).or_default() += 1;
+                        groups.entry(group).or_default().insert(seed);
+                    } else {
+                        *unknown.entry(group).or_default() += 1;
+                    }
+                }
+            }
+        }
+        eprintln!("Encoding seeds (hex, distinct envelopes): {seeds:x?}");
+        eprintln!("Non-LCG decoded key tables: {unknown:?}");
+        eprintln!(
+            "Seed groups: {}; varying groups: {}",
+            groups.len(),
+            groups.values().filter(|s| s.len() > 1).count()
+        );
+        for (group, values) in groups.iter().filter(|(_, s)| s.len() > 1) {
+            eprintln!("varying seeds: {group}: {values:x?}");
+        }
+        assert!(!groups.is_empty());
     }
 
     #[test]
@@ -586,7 +732,15 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         let mut front = 0;
         let mut derived = 0;
+        let mut literal_id_in_kernel = 0;
+        let mut missing_literal_ids = Vec::new();
         let mut unrecognized = Vec::new();
+        let mut unsupported_kernels = std::collections::BTreeMap::<String, usize>::new();
+        let mut unsupported_normals = std::collections::BTreeMap::<String, usize>::new();
+        let mut raw_metadata =
+            std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
+        let mut kernel_revision_literals = 0;
+        let mut kernel_date_literals = 0;
         while let Some(dir) = dirs.pop() {
             for entry in std::fs::read_dir(dir).unwrap() {
                 let path = entry.unwrap().path();
@@ -609,8 +763,52 @@ mod tests {
                     continue;
                 }
                 let Some(decoded) = pioneer_codec::decode_envelope(&component.bytes) else {
+                    let hardware = pioneer_codec::header_info(&component.bytes)
+                        .map(|h| h.hardware_version)
+                        .unwrap_or_else(|| "invalid header".into());
+                    *unsupported_kernels.entry(hardware).or_default() += 1;
                     continue;
                 };
+                if let Some(h) = pioneer_codec::header_info(&component.bytes) {
+                    kernel_revision_literals += usize::from(
+                        !h.revision.is_empty()
+                            && decoded
+                                .image
+                                .windows(h.revision.len())
+                                .any(|w| w == h.revision.as_bytes()),
+                    );
+                    kernel_date_literals += usize::from(
+                        !h.generated_date.is_empty()
+                            && decoded
+                                .image
+                                .windows(h.generated_date.len())
+                                .any(|w| w == h.generated_date.as_bytes()),
+                    );
+                    raw_metadata
+                        .entry(format!("{:x}", Sha256::digest(&decoded.image)))
+                        .or_default()
+                        .insert(format!("{} {} {}", h.model, h.revision, h.generated_date));
+                }
+                if let Some(normal) = bundle.components.iter().find(|c| c.role == Role::Main) {
+                    if pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &decoded).is_none()
+                    {
+                        let hardware = pioneer_codec::header_info(&normal.bytes)
+                            .map(|h| h.hardware_version)
+                            .unwrap_or_else(|| "invalid header".into());
+                        *unsupported_normals.entry(hardware).or_default() += 1;
+                    }
+                    if let Some(header) = pioneer_codec::header_info(&normal.bytes) {
+                        if decoded
+                            .image
+                            .windows(header.id.len())
+                            .any(|w| w == header.id.as_bytes())
+                        {
+                            literal_id_in_kernel += 1;
+                        } else {
+                            missing_literal_ids.push(path.display().to_string());
+                        }
+                    }
+                }
                 let expected = match decoded.info.layout.as_str() {
                     "kernel-front" => {
                         front += 1;
@@ -636,7 +834,20 @@ mod tests {
             }
         }
         assert!(front > 0 && derived > 0);
+        eprintln!("Undecodable unique Kernels by hardware: {unsupported_kernels:?}");
+        eprintln!("Undecodable receiver Normal per unique Kernel: {unsupported_normals:?}");
+        eprintln!("Kernel header revision/date literals in decoded image: {kernel_revision_literals}/{kernel_date_literals}");
+        for (hash, labels) in raw_metadata.iter().filter(|(_, labels)| labels.len() > 1) {
+            eprintln!("identical raw Kernel {hash}, envelope labels: {labels:?}");
+        }
         eprintln!("Kernel dispatcher corpus: {front} front, {derived} derived unique envelopes; {} unrecognized", unrecognized.len());
+        eprintln!(
+            "OEM ID literal in Kernel: {literal_id_in_kernel}; missing in {} cases",
+            missing_literal_ids.len()
+        );
+        for path in missing_literal_ids.iter().take(12) {
+            eprintln!("missing ID: {path}");
+        }
         for path in &unrecognized {
             eprintln!("unrecognized: {path}");
         }
@@ -695,8 +906,32 @@ mod tests {
                 if !seen_hardware.insert(identity) {
                     continue;
                 }
-                match construct_signed_candidate(&k.image, &n.image, &h.id, &h.revision) {
+                let words: Vec<_> = h.id.split_whitespace().collect();
+                if words.len() < 3 {
+                    failures.push(format!(
+                        "{}: OEM ID has no vendor/media/model",
+                        h.hardware_version
+                    ));
+                    continue;
+                }
+                let vendor = words[0];
+                let product = words[1..].join(" ");
+                if vendor.len() > 8 || product.len() > 16 {
+                    failures.push(format!(
+                        "{}: OEM ID cannot form a SCSI INQUIRY",
+                        h.hardware_version
+                    ));
+                    continue;
+                }
+                let mut inquiry = [b' '; 36];
+                inquiry[8..8 + vendor.len()].copy_from_slice(vendor.as_bytes());
+                inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
+                let id = embedded_envelope_id(&inquiry, &k.image, &n.image)
+                    .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                assert_eq!(id, h.id);
+                match construct_signed_candidate(&k.image, &n.image, &id, &h.revision) {
                     Ok(output) => {
+                        validate_envelope_package(&output, &product).unwrap();
                         let rebuilt = Bundle::from_tar_bytes(&output).unwrap();
                         let rebuilt_normal = rebuilt
                             .components
@@ -778,6 +1013,19 @@ mod tests {
                 .find(|c| c.role == Role::Main)
                 .unwrap();
             assert_eq!(&normal.bytes[..0x160], &original_normal.bytes[..0x160]);
+            assert_eq!(
+                &normal.bytes[0x160..0x170],
+                &original_normal.bytes[0x160..0x170]
+            );
+            assert_eq!(
+                &normal.bytes[0x1c0..0x200],
+                &original_normal.bytes[0x1c0..0x200]
+            );
+            assert_eq!(
+                &normal.bytes[0x200..],
+                &original_normal.bytes[0x200..],
+                "canonical encoding reproduces the supplied UD04 Normal body"
+            );
             assert_eq!(
                 &normal.bytes[0x1f0..0x200],
                 &original_normal.bytes[0x1f0..0x200]
