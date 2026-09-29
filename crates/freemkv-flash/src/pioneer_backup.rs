@@ -7,6 +7,10 @@ use crate::platform::ScsiDevice;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
+// Canonical encoding choices, independent of drive model and signing keys.
+const KERNEL_SEED: u32 = 1;
+const NORMAL_SEED: u32 = 0x47d001;
+
 /// Build an encrypted package directly from two captured images. The
 /// public point in its Normal header belongs to a fresh caller-owned key;
 /// drive-side trust and restore are not established by this constructor.
@@ -20,8 +24,6 @@ pub fn construct_signed_candidate(
     // Canonical generated tables use seeds observed in OEM envelopes. They
     // are format defaults, not a claim to recover the original drive's seeds.
     // Keep signing entropy independent: encoding seeds are not signing keys.
-    let kernel_seed = 1;
-    let normal_seed = 0x47d001;
     let signer = pioneer_codec::signature::SigningKey::random().map_err(|e| anyhow::anyhow!(e))?;
     let input = pioneer_codec::builder::BuildInputs {
         kernel_image: kernel,
@@ -29,8 +31,8 @@ pub fn construct_signed_candidate(
         envelope_id,
         normal_revision: revision,
         normal_date: date,
-        kernel_key_seed: kernel_seed,
-        normal_key_seed: normal_seed,
+        kernel_key_seed: KERNEL_SEED,
+        normal_key_seed: NORMAL_SEED,
     };
     let pair = pioneer_codec::builder::encode_encrypted_pair(&input, &signer)
         .map_err(|e| anyhow::anyhow!(e))?;
@@ -386,20 +388,23 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
         .filter(|len| *len > 0 && *len <= 0x100000)
         .context("invalid Kernel/Normal address span")?;
     dev.command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])?;
+    let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len)?;
+    if kernel.get(0x1000..0x1008) != Some(&f1[16..24]) {
+        bail!("captured Kernel hardware differs from drive identity");
+    }
     let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24)?;
     if !normal_head.starts_with(b"PIONEER ") {
         bail!("Normal image header is missing at the discovered base");
     }
-    let normal_len = u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize;
+    let normal_len = match pioneer_codec::builder::scaled_normal_geometry_from_kernel(&kernel) {
+        Some(geometry) => geometry.image_len,
+        None => u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize,
+    };
     if !(0x2000..=0x800000).contains(&normal_len)
         || !normal_len.is_multiple_of(0x100)
         || NORMAL_IMAGE_BASE + normal_len > 0x1000000
     {
         bail!("Normal image declares an invalid length");
-    }
-    let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len)?;
-    if kernel.get(0x1000..0x1008) != Some(&f1[16..24]) {
-        bail!("captured Kernel hardware differs from drive identity");
     }
     let normal = read_region(dev, NORMAL_IMAGE_BASE, normal_len)?;
     if read_region(dev, KERNEL_IMAGE_BASE, kernel_len)? != kernel
@@ -721,6 +726,135 @@ mod tests {
             eprintln!("varying seeds: {group}: {values:x?}");
         }
         assert!(!groups.is_empty());
+    }
+
+    #[test]
+    fn scaled_image_capture_uses_receiver_length_when_configured() {
+        let Ok(path) = std::env::var("PIONEER_SCALED_KERNEL_FIXTURE") else {
+            return;
+        };
+        let kernel = pioneer_codec::decode_envelope(&std::fs::read(path).unwrap()).unwrap();
+        let normal_bytes =
+            std::fs::read(std::env::var("PIONEER_SCALED_NORMAL_FIXTURE").unwrap()).unwrap();
+        let normal = pioneer_codec::decode_envelope_with_kernel(&normal_bytes, &kernel).unwrap();
+        let h = pioneer_codec::header_info(&normal_bytes).unwrap();
+        let (vendor, product) = h.id.split_once(' ').unwrap();
+        let product = product.trim();
+        assert!(vendor.len() <= 8 && product.len() <= 16 && h.revision.len() == 4);
+        let mut inquiry = vec![b' '; 36];
+        inquiry[8..8 + vendor.len()].copy_from_slice(vendor.as_bytes());
+        inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
+        inquiry[32..36].copy_from_slice(h.revision.as_bytes());
+        let mut dump = vec![0; 0x600000];
+        dump[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE].copy_from_slice(&kernel.image);
+        dump[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + normal.image.len()]
+            .copy_from_slice(&normal.image);
+        struct Replay {
+            inner: CaptureReplay,
+            inquiry: Vec<u8>,
+            hardware: Vec<u8>,
+        }
+        impl ScsiDevice for Replay {
+            fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+                if cdb == [0x12, 0, 0, 0, 36, 0] {
+                    return Ok(self.inquiry.clone());
+                }
+                if cdb == [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0] {
+                    let mut out = vec![0; 48];
+                    out[16..24].copy_from_slice(&self.hardware);
+                    return Ok(out);
+                }
+                self.inner.command_in(cdb, len)
+            }
+            fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+                self.inner.command_out(cdb, data)
+            }
+            fn describe(&self) -> String {
+                "saved older image replay; no hardware".into()
+            }
+        }
+        let mut replay = Replay {
+            inner: CaptureReplay {
+                dump,
+                reads: 0,
+                knocks: 0,
+                corrupt_second_pass: false,
+            },
+            inquiry,
+            hardware: kernel.image[0x1000..0x1008].to_vec(),
+        };
+        // The modern length field is executable code here, not the image size.
+        assert_ne!(
+            u32::from_be_bytes(normal.image[20..24].try_into().unwrap()) as usize,
+            normal.image.len()
+        );
+        let (captured_kernel, captured_normal, revision, _) =
+            read_h8_image_pair(&mut replay).unwrap();
+        assert_eq!(captured_kernel, kernel.image);
+        assert_eq!(captured_normal, normal.image);
+        assert_eq!(revision, h.revision);
+    }
+
+    #[test]
+    fn corpus_kernel_sharing_by_catalog_model_when_configured() {
+        let Ok(root) = std::env::var("PIONEER_KERNEL_SHARING_ROOT") else {
+            return;
+        };
+        let mut dirs = vec![std::path::PathBuf::from(root)];
+        let mut cache = std::collections::HashMap::<Vec<u8>, Option<String>>::new();
+        let mut groups =
+            std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
+        let mut undecodable = std::collections::BTreeSet::new();
+        let mut invalid_packages = 0;
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+                if !path.to_string_lossy().ends_with(".installer.tar") {
+                    continue;
+                }
+                let Ok(bundle) = Bundle::from_tar_bytes(&std::fs::read(&path).unwrap()) else {
+                    invalid_packages += 1;
+                    continue;
+                };
+                let Some(component) = bundle.components.iter().find(|c| c.role == Role::Kernel)
+                else {
+                    continue;
+                };
+                let envelope_hash = Sha256::digest(&component.bytes).to_vec();
+                let raw_hash = cache.entry(envelope_hash.clone()).or_insert_with(|| {
+                    pioneer_codec::decode_envelope(&component.bytes)
+                        .map(|d| format!("{:x}", Sha256::digest(&d.image)))
+                });
+                let Some(raw_hash) = raw_hash else {
+                    undecodable.insert(envelope_hash);
+                    continue;
+                };
+                // Keep catalog models even when they use identical envelope bytes.
+                let model = path
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                groups.entry(raw_hash.clone()).or_default().insert(model);
+            }
+        }
+        assert!(!groups.is_empty(), "no decoded Kernels in corpus");
+        let shared = groups.values().filter(|models| models.len() > 1).count();
+        let models: std::collections::BTreeSet<_> = groups.values().flatten().collect();
+        eprintln!("Kernel sharing: {} decoded image hashes, {} catalog models, {shared} cross-model groups, {} undecodable envelope hashes, {invalid_packages} invalid packages", groups.len(), models.len(), undecodable.len());
+        for (hash, models) in groups.iter().filter(|(_, m)| m.len() > 1) {
+            eprintln!("shared Kernel {hash}: {models:?}");
+        }
     }
 
     #[test]
