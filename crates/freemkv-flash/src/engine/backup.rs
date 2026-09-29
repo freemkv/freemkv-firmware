@@ -186,9 +186,23 @@ pub(super) fn save_backup(
     drive: &dyn DriveFamily,
     target_model: &str,
 ) -> Result<usize> {
-    drive
-        .validate_backup(bytes, target_model)
-        .context("validating rollback archive")?;
+    save_validated(path, bytes, |candidate| {
+        drive
+            .validate_backup(candidate, target_model)
+            .map(|_| ())
+            .context("validating rollback archive")
+    })
+}
+
+/// Atomically publish bytes only after both in-memory and saved-file checks.
+/// The validator determines whether the artifact is a proven rollback or a
+/// clearly labeled research candidate; this function claims neither.
+pub(super) fn save_validated(
+    path: &Path,
+    bytes: &[u8],
+    validate: impl Fn(&[u8]) -> Result<()>,
+) -> Result<usize> {
+    validate(bytes)?;
     if path.exists() {
         bail!(
             "backup {} already exists (existing backups are never overwritten)",
@@ -216,9 +230,7 @@ pub(super) fn save_backup(
         file.sync_all()?;
         drop(file);
         let saved = std::fs::read(&temp)?;
-        drive
-            .validate_backup(&saved, target_model)
-            .context("saved backup failed read-back validation")?;
+        validate(&saved).context("saved artifact failed read-back validation")?;
         // Same-directory hard link atomically publishes a complete file and
         // refuses to replace an existing backup at the destination.
         std::fs::hard_link(&temp, path).with_context(|| {

@@ -7,6 +7,118 @@ use crate::platform::ScsiDevice;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
+/// Build an encrypted UD04 package directly from two captured images. The
+/// public point in its Normal header belongs to a fresh caller-owned key;
+/// drive-side trust and restore are not established by this constructor.
+pub fn construct_ud04_signed_candidate(
+    kernel: &[u8],
+    normal: &[u8],
+    envelope_id: &str,
+    revision: &str,
+) -> Result<Vec<u8>> {
+    let date = std::str::from_utf8(
+        normal
+            .get(0x18bb6b..0x18bb73)
+            .context("captured Normal date is missing")?,
+    )?;
+    let mut seeds = [0u8; 6];
+    getrandom::fill(&mut seeds)
+        .map_err(|e| anyhow::anyhow!("generating fresh Pioneer encoding tables: {e}"))?;
+    let kernel_seed = u32::from_be_bytes([0, seeds[0], seeds[1], seeds[2]]);
+    let normal_seed = u32::from_be_bytes([0, seeds[3], seeds[4], seeds[5]]);
+    let signer = pioneer_codec::signature::SigningKey::random().map_err(|e| anyhow::anyhow!(e))?;
+    let input = pioneer_codec::builder::Ud04BuildInputs {
+        kernel_image: kernel,
+        normal_image: normal,
+        envelope_id,
+        normal_revision: revision,
+        normal_date: date,
+        kernel_key_seed: kernel_seed,
+        normal_key_seed: normal_seed,
+    };
+    let pair = pioneer_codec::builder::encode_ud04_encrypted_pair(&input, &signer)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let mut tar = tar::Builder::new(Vec::new());
+    for (path, bytes) in [
+        ("components/S8A10000.BKP.enc", &pair.kernel),
+        ("components/S8A10001.114.enc", &pair.normal),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_cksum();
+        tar.append_data(&mut header, path, bytes.as_slice())?;
+    }
+    let out = tar.into_inner()?;
+    validate_signed_candidate(&out, "BDR-UD04")?;
+    Ok(out)
+}
+
+/// Structural, codec and signature checks for a generated encrypted pair.
+/// This intentionally does not claim that a physical drive trusts its key.
+pub fn validate_signed_candidate(bytes: &[u8], product: &str) -> Result<()> {
+    let bundle = Bundle::from_tar_bytes(bytes)?;
+    if bundle.components.len() != 2 {
+        bail!("UD04 signed candidate requires Kernel and Normal");
+    }
+    let kernel = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .context("signed candidate Kernel is missing")?;
+    let normal = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .context("signed candidate Normal is missing")?;
+    validate_signed_pair(&kernel.bytes, &normal.bytes, product)
+}
+
+/// Validate the two envelope members of a UD04 candidate without a tar wrapper.
+pub fn validate_signed_pair(kernel: &[u8], normal: &[u8], product: &str) -> Result<()> {
+    if !product.split_whitespace().any(|s| s == "BDR-UD04") {
+        bail!("signed candidate is only established for BDR-UD04");
+    }
+    let kh = pioneer_codec::header_info(kernel).context("invalid Kernel header")?;
+    let nh = pioneer_codec::header_info(normal).context("invalid Normal header")?;
+    if kh.model != "BDR-UD04"
+        || nh.model != kh.model
+        || kh.hardware_version != "SAT 8A10"
+        || nh.hardware_version != kh.hardware_version
+        || kh.revision != "BKP"
+        || nh.revision != "1.14"
+        || kh.destination != "GENERAL"
+        || nh.destination != "GENERAL"
+    {
+        bail!("signed candidate identity does not match the UD04 capture profile");
+    }
+    let decoded_kernel = pioneer_codec::decode_envelope(kernel)
+        .context("signed candidate Kernel cannot be decoded")?;
+    let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
+        .context("signed candidate Normal cannot be receiver-decoded")?;
+    pioneer_codec::builder::validate_ud04_encrypted_pair(
+        &pioneer_codec::builder::Ud04EncryptedPair {
+            kernel: kernel.to_vec(),
+            normal: normal.to_vec(),
+        },
+        &decoded_kernel.image,
+        &decoded_normal.image,
+    )
+    .map_err(|e| anyhow::anyhow!(e))?;
+    if !zero_be32_sum(&decoded_kernel.image) || !zero_be32_sum(&decoded_normal.image) {
+        bail!("signed candidate decoded checksum is invalid");
+    }
+    Ok(())
+}
+
+/// Read bounded live UD04 regions twice and save a self-signed encrypted
+/// package candidate. This issues no flash commands.
+pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    let (kernel, normal, revision, envelope_id) = read_ud04_pair(dev)?;
+    construct_ud04_signed_candidate(&kernel, &normal, &envelope_id, &revision)
+}
+
 fn zero_be32_sum(image: &[u8]) -> bool {
     image.len() % 4 == 0
         && image.chunks_exact(4).fold(0u32, |sum, word| {
@@ -175,7 +287,7 @@ fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec
 /// as framing templates. Reads only Kernel and Normal, twice for consistency.
 /// Issues the documented zero-payload service knock, but no flash writes.
 /// Unsupported templates/identity and mismatches fail without returning a backup.
-fn read_ud04_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String)> {
+fn read_ud04_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String, String)> {
     let inquiry = dev.command_in(&[0x12, 0, 0, 0, 36, 0], 36)?;
     if inquiry.len() != 36
         || &inquiry[8..16] != b"PIONEER "
@@ -198,19 +310,20 @@ fn read_ud04_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String)
     {
         bail!("firmware reads changed between passes; no backup produced");
     }
-    Ok((kernel, normal, "1.14".into()))
+    let envelope_id = std::str::from_utf8(&inquiry[8..32])?.trim_end().to_owned();
+    Ok((kernel, normal, "1.14".into(), envelope_id))
 }
 
 /// Read the bounded UD04 firmware regions and construct a raw-path backup.
 pub fn capture_plain_backup(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let (kernel, normal, revision) = read_ud04_pair(dev)?;
+    let (kernel, normal, revision, _) = read_ud04_pair(dev)?;
     construct_ud04_plain_candidate(&kernel, &normal, &revision)
 }
 
 /// Read the same UD04 regions and reproduce a supplied reference envelope pair.
 pub fn capture_reference_backup(dev: &mut dyn ScsiDevice, template: &[u8]) -> Result<Vec<u8>> {
     reference_pair(template)?; // Reject unsupported profiles before any command.
-    let (kernel, normal, _) = read_ud04_pair(dev)?;
+    let (kernel, normal, _, _) = read_ud04_pair(dev)?;
     let bytes = reconstruct_candidate(template, &kernel, &normal)?;
     // Current bounded profile promises exact equivalence to the known pair.
     reference_pair(&bytes).context("captured firmware differs from established reference pair")?;
@@ -327,7 +440,7 @@ mod tests {
             if cdb == [0x12, 0, 0, 0, len as u8, 0] && matches!(len, 36 | 96) {
                 let mut data = vec![0; len];
                 data[8..16].copy_from_slice(b"PIONEER ");
-                data[16..32].copy_from_slice(b"BD-RW BDR-UD04  ");
+                data[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
                 data[32..36].copy_from_slice(b"1.14");
                 return Ok(data);
             }
@@ -373,6 +486,68 @@ mod tests {
     #[test]
     fn malformed_template_is_rejected() {
         assert!(reconstruct_candidate(b"not a tar", &[], &[]).is_err());
+    }
+
+    #[test]
+    fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
+        let Ok(path) = std::env::var("PIONEER_LIVE_DUMP_FIXTURE") else {
+            return;
+        };
+        let dump = std::fs::read(path).unwrap();
+        assert_eq!(dump.len(), 0x600000);
+        let mut replay = CaptureReplay {
+            dump: dump.clone(),
+            reads: 0,
+            knocks: 0,
+            corrupt_second_pass: false,
+        };
+        let candidate = capture_signed_candidate(&mut replay).unwrap();
+        if let Ok(path) = std::env::var("PIONEER_SIGNED_BACKUP_KAT_OUTPUT") {
+            std::fs::write(path, &candidate).unwrap();
+        }
+        assert_eq!(replay.knocks, 1);
+        validate_signed_candidate(&candidate, "BD-RW BDR-UD04").unwrap();
+        assert!(validate_reference_backup(&candidate, "BD-RW BDR-UD04").is_err());
+        let bundle = Bundle::from_tar_bytes(&candidate).unwrap();
+        let kernel = bundle
+            .components
+            .iter()
+            .find(|c| c.role == Role::Kernel)
+            .unwrap();
+        let normal = bundle
+            .components
+            .iter()
+            .find(|c| c.role == Role::Main)
+            .unwrap();
+        let decoded_kernel = pioneer_codec::decode_envelope(&kernel.bytes).unwrap();
+        let decoded_normal =
+            pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &decoded_kernel).unwrap();
+        assert_eq!(decoded_kernel.image, dump[0x400000..0x410000]);
+        assert_eq!(decoded_normal.image, dump[0x410000..0x5d7500]);
+        let output =
+            std::env::temp_dir().join(format!("ud04-signed-candidate-{}.tar", std::process::id()));
+        let _ = std::fs::remove_file(&output);
+        let drive = crate::drive::pioneer::Pioneer::new();
+        crate::engine::plan_pioneer_offline(
+            &candidate,
+            crate::drive::InputKind::PioneerBundle,
+            "BD-RW BDR-UD04",
+            false,
+            false,
+            false,
+            &drive,
+        )
+        .unwrap();
+        replay.knocks = 0;
+        replay.reads = 0;
+        crate::engine::pioneer_signed_candidate(&mut replay, &drive, &output).unwrap();
+        let saved = std::fs::read(&output).unwrap();
+        validate_signed_candidate(&saved, "BD-RW BDR-UD04").unwrap();
+        std::fs::remove_file(&output).unwrap();
+        replay.knocks = 0;
+        replay.reads = 0;
+        replay.corrupt_second_pass = true;
+        assert!(capture_signed_candidate(&mut replay).is_err());
     }
 
     /// Optional external KAT; explicitly set both paths when validating delivery.

@@ -1328,6 +1328,7 @@ dependencies = [
  "cmac",
  "crc32fast",
  "freemkv-chipset",
+ "getrandom 0.3.4",
  "libfreemkv",
  "pioneer-codec",
  "serde",
@@ -2699,6 +2700,7 @@ name = "pioneer-codec"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "getrandom 0.3.4",
  "num-bigint",
  "num-traits",
  "serde",

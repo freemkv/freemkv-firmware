@@ -15,14 +15,14 @@ use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
 use crate::cmac;
-use crate::drive::{DriveFamily, FlashRequest, InputKind};
+use crate::drive::{DriveFamily, Family, FlashRequest, InputKind};
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 pub(crate) mod backup;
-use backup::save_backup;
 #[cfg(test)]
 use backup::BackupArtifact;
+use backup::{save_backup, save_validated};
 
 /// Run the `info` command: identify + classify (read-only).
 pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
@@ -410,6 +410,35 @@ pub fn backup_with_template(
     Ok(())
 }
 
+/// Capture a template-free UD04 encrypted package through the bounded live
+/// read transaction. The generated signature verifies offline, but hardware
+/// key trust and physical restoration have not been tested.
+pub fn pioneer_signed_candidate(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn DriveFamily,
+    out: &Path,
+) -> Result<()> {
+    if drive.family() != Family::Pioneer {
+        bail!("self-signed backup candidate is Pioneer-only");
+    }
+    let target_model = drive.identity(dev).product;
+    let bytes = crate::pioneer_backup::capture_signed_candidate(dev)?;
+    let saved_len = save_validated(out, &bytes, |candidate| {
+        crate::pioneer_backup::validate_signed_candidate(candidate, &target_model)
+    })?;
+    println!(
+        "{}",
+        style::kv("candidate sha256", &format!("{:x}", Sha256::digest(&bytes)))
+    );
+    println!(
+        "{} {}",
+        style::green("wrote"),
+        style::dim(&format!("{} ({}).", out.display(), human_size(saved_len)))
+    );
+    println!("{}", style::amber("UNVERIFIED RESTORE: encrypted envelopes decode and self-signature verifies offline; the drive's trust of the generated public key and physical rollback remain untested."));
+    Ok(())
+}
+
 /// Run the `flash` command: `.bin` = full image, `.tar` = firmware rollback archive.
 pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
     if let Some(plan) = drive.offline_plan(req) {
@@ -642,6 +671,43 @@ fn plan_pioneer_bounded_bundle(
                 );
                 println!("Data-out shape: 04/FF entry; three 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
                 println!("OFFLINE ONLY: alternate entry-state branch, preflight, status/completion, drive acceptance, and restorable backup are unverified; no device I/O or live writes.");
+                if verbose {
+                    for step in &steps {
+                        println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
+                    }
+                }
+                return Ok(());
+            }
+            if crate::drive::pioneer::parse_banner(&kernel.bytes)
+                .is_some_and(|banner| banner.revision == "BKP")
+            {
+                crate::pioneer_backup::validate_signed_pair(&kernel.bytes, &normal.bytes, model)?;
+                if !stated_matches("BDR-UD04") {
+                    bail!("stated drive model {model:?} does not match UD04 backup candidate");
+                }
+                let steps = crate::drive::pioneer::transfer::data_out(
+                    &crate::drive::pioneer::ud04_autoflasher_control_payload(),
+                    &normal.bytes,
+                    Some(crate::drive::pioneer::transfer::KernelTransfer::LinearFe(
+                        &kernel.bytes,
+                    )),
+                )?;
+                println!(
+                    "{}",
+                    style::header("== Pioneer UD04 signed backup candidate plan ==")
+                );
+                println!("{}", style::kv("stated model", model));
+                println!("{}", style::kv("Kernel SHA-256", &kernel_hash));
+                println!("{}", style::kv("Normal SHA-256", &normal_hash));
+                println!(
+                    "{}",
+                    style::kv(
+                        "self-signature",
+                        "mathematically valid; drive public-key trust untested"
+                    )
+                );
+                println!("Data-out shape: 04/FF entry; three 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
+                println!("OFFLINE ONLY: receiver acceptance, persistent restore, and completion handling are unverified; no device I/O or live writes.");
                 if verbose {
                     for step in &steps {
                         println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());

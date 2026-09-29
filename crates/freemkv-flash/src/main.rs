@@ -59,14 +59,14 @@ enum Command {
         /// SCSI device path (e.g. /dev/sg0) or a firmware image file (.bin).
         device: String,
     },
-    /// Save a firmware backup; current Pioneer profile is BDR-UD04 1.14.
+    /// Capture firmware; template-free Pioneer output is an unverified restore candidate.
     Backup {
         /// SCSI device path (e.g. /dev/sg0).
         device: String,
-        /// Output .tar path (default: `<product>_<rev>.backup.tar`).
+        /// Output .tar path (Pioneer without --template defaults to `.candidate.tar`).
         #[arg(short, long)]
         out: Option<PathBuf>,
-        /// Matching signed OEM Kernel+Normal tar (currently UD04 1.14 only).
+        /// Reproduce a matching signed OEM Kernel+Normal tar (currently UD04 1.14 only).
         #[arg(long)]
         template: Option<PathBuf>,
     },
@@ -233,6 +233,7 @@ fn cmd_backup(device: &str, out: Option<PathBuf>, template: Option<PathBuf>) -> 
     let mut dev = platform::open(device, false)?;
     let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
+    let pioneer_candidate = family == Family::Pioneer && template.is_none();
     let out = match out {
         Some(o) => o,
         None => {
@@ -250,10 +251,18 @@ fn cmd_backup(device: &str, out: Option<PathBuf>, template: Option<PathBuf>) -> 
             let extension = handler
                 .backup_extension()
                 .context("backend has no restorable backup format")?;
-            PathBuf::from(format!("{s}.backup.{extension}"))
+            if pioneer_candidate {
+                PathBuf::from(format!("{s}.candidate.{extension}"))
+            } else {
+                PathBuf::from(format!("{s}.backup.{extension}"))
+            }
         }
     };
-    engine::backup_with_template(dev.as_mut(), handler.as_ref(), &out, template.as_deref())
+    if pioneer_candidate {
+        engine::pioneer_signed_candidate(dev.as_mut(), handler.as_ref(), &out)
+    } else {
+        engine::backup_with_template(dev.as_mut(), handler.as_ref(), &out, template.as_deref())
+    }
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {
