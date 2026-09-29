@@ -68,11 +68,9 @@ fn supplied_ud04_kernel_and_normal_plan_matches_autoflasher_path() {
         .iter()
         .find(|c| c.role == Role::Main)
         .unwrap();
-    let steps = freemkv_flash::drive::pioneer::offline_ud04_autoflasher_data_out(
-        &kernel.bytes,
-        &normal.bytes,
-    )
-    .unwrap();
+    let steps =
+        freemkv_flash::drive::pioneer::offline_linear_fe_data_out(&kernel.bytes, &normal.bytes)
+            .unwrap();
     assert_eq!(steps.len(), 64);
     let mut digest = Sha256::new();
     for step in &steps {

@@ -581,40 +581,58 @@ pub fn offline_bdr212_v105_data_out<'a>(
     offline_bounded_oem_data_out(profile, kernel, normal, seed)
 }
 
-/// Data-out portion of the supplied UD03/UD04 Autoflasher's main update
-/// branch, for the exact two resources supplied with that program. Its x86
-/// transfer loop sends Kernel on 07/FE in 0x8000-byte chunks and Normal on
-/// 07/F0. This omits setup, the alternate entry-state branch, status and
-/// completion handling; it performs no device I/O.
-pub fn offline_ud04_autoflasher_data_out<'a>(
+/// Validate and plan the established UD04 linear-FE format from its contents.
+/// Source and advertised revision do not select this path. Receiver acceptance
+/// remains a separate, untested hardware question.
+pub fn offline_linear_fe_data_out<'a>(
     kernel: &'a [u8],
     normal: &'a [u8],
 ) -> Result<Vec<OemTransfer<'a>>> {
-    const KERNEL_SHA256: &str = "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83";
-    const NORMAL_SHA256: &str = "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141";
-    if kernel.len() != 0x11200
-        || format!("{:x}", Sha256::digest(kernel)) != KERNEL_SHA256
-        || normal.len() != 0x1d7700
-        || format!("{:x}", Sha256::digest(normal)) != NORMAL_SHA256
+    use pioneer_codec::signature::{verify_normal_signature, SignatureCheck};
+    if kernel.len() != 0x11200 || normal.len() != 0x1d7700 {
+        bail!("UD04 linear-FE envelope geometry mismatch");
+    }
+    let kh = pioneer_codec::header_info(kernel).ok_or_else(|| anyhow!("Kernel header missing"))?;
+    let nh = pioneer_codec::header_info(normal).ok_or_else(|| anyhow!("Normal header missing"))?;
+    if kh.model != "BDR-UD04"
+        || nh.model != kh.model
+        || kh.hardware_version != "SAT 8A10"
+        || nh.hardware_version != kh.hardware_version
+        || kh.destination != "GENERAL"
+        || nh.destination != kh.destination
+        || kh.file_type != "Kernel"
+        || nh.file_type != "Normal"
+        || kh.kernel_version != nh.kernel_version
+        || kh.kernel_version2 != nh.kernel_version2
     {
-        bail!("resources do not match the supplied UD04 Autoflasher package");
+        bail!("UD04 linear-FE envelope identities disagree");
     }
-    for (role, image) in [("Kernel", kernel), ("Normal", normal)] {
-        let banner = parse_banner(image).ok_or_else(|| anyhow!("{role} banner missing"))?;
-        if !banner.model.eq_ignore_ascii_case("BDR-UD04")
-            || !banner.hardware.eq_ignore_ascii_case("SAT 8A10")
-            || !banner.destination.eq_ignore_ascii_case("GENERAL")
-            || !banner.file_type.eq_ignore_ascii_case(role)
-        {
-            bail!("{role} banner does not match the supplied UD04 resources");
-        }
+    if verify_normal_signature(normal) != SignatureCheck::ValidKeyAndCiphertext {
+        bail!("UD04 Normal signature is invalid or unsupported");
     }
-    let control = ud04_autoflasher_control_payload();
+    let decoded_kernel = pioneer_codec::decode_envelope(kernel)
+        .ok_or_else(|| anyhow!("UD04 Kernel decode failed"))?;
+    let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
+        .ok_or_else(|| anyhow!("UD04 Normal receiver decode failed"))?;
+    if decoded_kernel.info.layout != "kernel-front"
+        || decoded_normal.info.layout != "normal"
+        || !zero_word_sum(&decoded_kernel.image)
+        || !zero_word_sum(&decoded_normal.image)
+    {
+        bail!("UD04 decoded image integrity or layout mismatch");
+    }
     transfer::data_out(
-        &control,
+        &ud04_autoflasher_control_payload(),
         normal,
         Some(transfer::KernelTransfer::LinearFe(kernel)),
     )
+}
+
+fn zero_word_sum(bytes: &[u8]) -> bool {
+    bytes.len().is_multiple_of(4)
+        && bytes.chunks_exact(4).fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(word.try_into().unwrap()))
+        }) == 0
 }
 
 /// Materialize the shared bounded-flow data-out path for an exact, pinned

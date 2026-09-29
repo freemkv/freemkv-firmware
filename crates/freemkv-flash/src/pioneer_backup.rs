@@ -519,6 +519,33 @@ mod tests {
             .iter()
             .find(|c| c.role == Role::Main)
             .unwrap();
+        let candidate_steps =
+            crate::drive::pioneer::offline_linear_fe_data_out(&kernel.bytes, &normal.bytes)
+                .unwrap();
+        if let Ok(path) = std::env::var("PIONEER_UD04_AUTOFLASHER_BUNDLE_FIXTURE") {
+            let original = Bundle::from_tar_bytes(&std::fs::read(path).unwrap()).unwrap();
+            let original_kernel = original
+                .components
+                .iter()
+                .find(|c| c.role == Role::Kernel)
+                .unwrap();
+            let original_normal = original
+                .components
+                .iter()
+                .find(|c| c.role == Role::Main)
+                .unwrap();
+            let original_steps = crate::drive::pioneer::offline_linear_fe_data_out(
+                &original_kernel.bytes,
+                &original_normal.bytes,
+            )
+            .unwrap();
+            assert_eq!(candidate_steps.len(), original_steps.len());
+            for (candidate, original) in candidate_steps.iter().zip(&original_steps) {
+                assert_eq!(candidate.stage, original.stage);
+                assert_eq!(candidate.cdb, original.cdb);
+                assert_eq!(candidate.data.len(), original.data.len());
+            }
+        }
         let decoded_kernel = pioneer_codec::decode_envelope(&kernel.bytes).unwrap();
         let decoded_normal =
             pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &decoded_kernel).unwrap();

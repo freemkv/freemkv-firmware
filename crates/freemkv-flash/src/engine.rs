@@ -640,21 +640,17 @@ fn plan_pioneer_bounded_bundle(
         if let Some((kernel, normal)) = pair {
             let kernel_hash = format!("{:x}", Sha256::digest(&kernel.bytes));
             let normal_hash = format!("{:x}", Sha256::digest(&normal.bytes));
-            if kernel_hash == "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83"
-                && normal_hash == "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141"
+            if let Ok(steps) =
+                crate::drive::pioneer::offline_linear_fe_data_out(&kernel.bytes, &normal.bytes)
             {
                 if !stated_matches("BDR-UD04")
                     && !bundle.public_model.as_deref().is_some_and(stated_matches)
                 {
-                    bail!("stated drive model {model:?} matches neither the listed model nor the supplied UD04 resource");
+                    bail!("stated drive model {model:?} matches neither the listed model nor the UD04 resource");
                 }
-                let steps = crate::drive::pioneer::offline_ud04_autoflasher_data_out(
-                    &kernel.bytes,
-                    &normal.bytes,
-                )?;
                 println!(
                     "{}",
-                    style::header("== Pioneer UD04 Autoflasher offline data-out ==")
+                    style::header("== Pioneer linear-FE offline data-out ==")
                 );
                 if !bundle.source_name.is_empty() {
                     println!("{}", style::kv("bundle source", &bundle.source_name));
@@ -666,48 +662,11 @@ fn plan_pioneer_bounded_bundle(
                     "{}",
                     style::kv(
                         "entry/finish control",
-                        "PIONEER BDR-US04 + FD236642 + 236 zero bytes"
+                        "PIONEER BDR-US04 + 6123789A + 236 zero bytes"
                     )
                 );
                 println!("Data-out shape: 04/FF entry; three 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
-                println!("OFFLINE ONLY: alternate entry-state branch, preflight, status/completion, drive acceptance, and restorable backup are unverified; no device I/O or live writes.");
-                if verbose {
-                    for step in &steps {
-                        println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
-                    }
-                }
-                return Ok(());
-            }
-            if crate::drive::pioneer::parse_banner(&kernel.bytes)
-                .is_some_and(|banner| banner.revision == "BKP")
-            {
-                crate::pioneer_backup::validate_signed_pair(&kernel.bytes, &normal.bytes, model)?;
-                if !stated_matches("BDR-UD04") {
-                    bail!("stated drive model {model:?} does not match UD04 backup candidate");
-                }
-                let steps = crate::drive::pioneer::transfer::data_out(
-                    &crate::drive::pioneer::ud04_autoflasher_control_payload(),
-                    &normal.bytes,
-                    Some(crate::drive::pioneer::transfer::KernelTransfer::LinearFe(
-                        &kernel.bytes,
-                    )),
-                )?;
-                println!(
-                    "{}",
-                    style::header("== Pioneer UD04 signed backup candidate plan ==")
-                );
-                println!("{}", style::kv("stated model", model));
-                println!("{}", style::kv("Kernel SHA-256", &kernel_hash));
-                println!("{}", style::kv("Normal SHA-256", &normal_hash));
-                println!(
-                    "{}",
-                    style::kv(
-                        "self-signature",
-                        "mathematically valid; drive public-key trust untested"
-                    )
-                );
-                println!("Data-out shape: 04/FF entry; three 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
-                println!("OFFLINE ONLY: receiver acceptance, persistent restore, and completion handling are unverified; no device I/O or live writes.");
+                println!("OFFLINE ONLY: entry-state branch, preflight, status/completion, drive acceptance, and restoration are unverified; no device I/O or live writes.");
                 if verbose {
                     for step in &steps {
                         println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
