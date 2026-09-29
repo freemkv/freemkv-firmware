@@ -59,13 +59,16 @@ enum Command {
         /// SCSI device path (e.g. /dev/sg0) or a firmware image file (.bin).
         device: String,
     },
-    /// Save one restorable firmware backup file (Pioneer is refused).
+    /// Save a firmware backup (Pioneer UD04 1.14 requires --template).
     Backup {
         /// SCSI device path (e.g. /dev/sg0).
         device: String,
         /// Output .tar path (default: `<product>_<rev>.backup.tar`).
         #[arg(short, long)]
         out: Option<PathBuf>,
+        /// Matching Kernel + Normal tar for the established Pioneer backup profile.
+        #[arg(long)]
+        template: Option<PathBuf>,
     },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
@@ -149,7 +152,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
         Some(Command::Info { device }) => cmd_info(&device),
-        Some(Command::Backup { device, out }) => cmd_backup(&device, out),
+        Some(Command::Backup { device, out, template }) => cmd_backup(&device, out, template),
         Some(Command::Flash(args)) => cmd_flash(args),
         None => match cli.device {
             Some(device) => cmd_info(&device),
@@ -211,11 +214,11 @@ fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
 
 /// Classify and gate the restorable backup path. Pioneer is refused
 /// because their known read channel exposes a mapped view, not an update image.
-fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
+fn classify_for_backup(dev: &mut dyn platform::ScsiDevice, has_template: bool) -> Result<Family> {
     let family = resolved_family(dev)?;
-    if family == Family::Pioneer {
+    if family == Family::Pioneer && !has_template {
         anyhow::bail!(
-            "Pioneer backup is blocked: no proven restorable firmware backup format or read path"
+            "Pioneer backup requires --template with the established UD04 1.14 Kernel + Normal pair"
         );
     }
     if drive::for_family(family).backup_extension().is_none() {
@@ -224,9 +227,10 @@ fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     Ok(family)
 }
 
-fn cmd_backup(device: &str, out: Option<PathBuf>) -> Result<()> {
+fn cmd_backup(device: &str, out: Option<PathBuf>, template: Option<PathBuf>) -> Result<()> {
+    let template = template.map(std::fs::read).transpose().context("reading backup template")?;
     let mut dev = platform::open(device, false)?;
-    let family = classify_for_backup(dev.as_mut())?;
+    let family = classify_for_backup(dev.as_mut(), template.is_some())?;
     let handler = drive::for_family(family);
     let out = match out {
         Some(o) => o,
@@ -248,7 +252,7 @@ fn cmd_backup(device: &str, out: Option<PathBuf>) -> Result<()> {
             PathBuf::from(format!("{s}.backup.{extension}"))
         }
     };
-    engine::backup(dev.as_mut(), handler.as_ref(), &out)
+    engine::backup_with_template(dev.as_mut(), handler.as_ref(), &out, template.as_deref())
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {

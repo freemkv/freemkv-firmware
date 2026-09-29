@@ -81,7 +81,7 @@ fn supplied_ud04_kernel_and_normal_plan_matches_autoflasher_path() {
     }
     assert_eq!(
         format!("{:x}", digest.finalize()),
-        "b7d0d1d955711050b6ea6d38d66218669476e06e98e2d3dd46c8dcccbaa33815"
+        "f2b8a9bf9e0366c60267ad2b51b163b0f2af6262d731b79b98ff7aae34b16039"
     );
 }
 

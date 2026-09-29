@@ -105,6 +105,21 @@ fn ud04_oem_control_payload_matches_full_static_construction() {
 }
 
 #[test]
+fn ud04_autoflasher_gui_control_matches_selected_x86_branch() {
+    use sha2::{Digest, Sha256};
+
+    let payload = ud04_autoflasher_control_payload();
+    assert_eq!(&payload[..16], b"PIONEER BDR-US04");
+    assert_eq!(&payload[16..20], &[0x9A, 0x78, 0x23, 0x61]);
+    assert!(payload[20..].iter().all(|&b| b == 0));
+    assert_eq!(
+        format!("{:x}", Sha256::digest(payload)),
+        "3e74c9e08362f509603b4fa8e5d8f88d47be9f3ee64ce215c6f9e1f25614e204"
+    );
+    assert_ne!(payload, ud04_oem_control_payload());
+}
+
+#[test]
 fn s09_v130_control_payload_has_updater_descriptor_not_envelope_model() {
     use sha2::{Digest, Sha256};
     let payload = s09_v130_oem_control_payload();

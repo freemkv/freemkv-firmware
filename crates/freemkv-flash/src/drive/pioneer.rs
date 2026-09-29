@@ -29,6 +29,9 @@ use crate::platform::ScsiDevice;
 mod bounded_profiles;
 pub use bounded_profiles::BOUNDED_PROFILES;
 
+#[path = "pioneer/transfer.rs"]
+pub mod transfer;
+
 // ---- Protocol constants -----------------------------------------------------
 
 // ============================================================================
@@ -239,6 +242,18 @@ pub fn s09_v130_oem_control_payload() -> [u8; CONTROL_LEN] {
     let mut payload = [0u8; CONTROL_LEN];
     payload[..16].copy_from_slice(b"PIONEER  BDR-209");
     payload[16..20].copy_from_slice(&0xCE1F_2B98u32.to_le_bytes());
+    payload
+}
+
+/// Supplied third-party Autoflasher GUI's selected UD04 control payload.
+/// The GUI passes arg5=1 at 0x401F52 into 0x41425C. Entry/finish helpers
+/// bypass the model-key dispatcher for that flag and serialize 0x6123789A
+/// little-endian. This is not the OEM UD04 model-specific control word,
+/// nor evidence of a downgrade-enable effect in the receiver.
+pub fn ud04_autoflasher_control_payload() -> [u8; CONTROL_LEN] {
+    let mut payload = [0u8; CONTROL_LEN];
+    payload[..16].copy_from_slice(b"PIONEER BDR-US04");
+    payload[16..20].copy_from_slice(&0x6123_789Au32.to_le_bytes());
     payload
 }
 
@@ -458,26 +473,7 @@ pub fn offline_oem_transcript<'a>(
             bail!("S09 1.30 OEM transcript requires a BDR-S09 1.30 SAT 8600 ID43 Normal envelope")
         }
     };
-    let mut out = Vec::with_capacity(envelope.len().div_ceil(FLASH_CHUNK) + 2);
-    out.push(OemTransfer {
-        stage: TransferStage::Entry,
-        cdb: cdb_wb_flash_entry(),
-        data: Cow::Owned(control.to_vec()),
-    });
-    for (index, data) in envelope.chunks(FLASH_CHUNK).enumerate() {
-        let offset = index * FLASH_CHUNK;
-        out.push(OemTransfer {
-            stage: TransferStage::Normal,
-            cdb: cdb_wb_flash_chunk(offset as u32, data.len() as u32),
-            data: Cow::Borrowed(data),
-        });
-    }
-    out.push(OemTransfer {
-        stage: TransferStage::Finish,
-        cdb: cdb_wb_flash_finish(),
-        data: Cow::Owned(control.to_vec()),
-    });
-    Ok(out)
+    transfer::data_out(&control, envelope, None)
 }
 
 /// A code-backed BDR-212 1.05 stage outline. It intentionally does not
@@ -613,40 +609,12 @@ pub fn offline_ud04_autoflasher_data_out<'a>(
             bail!("{role} banner does not match the supplied UD04 resources");
         }
     }
-    let control = ud04_oem_control_payload();
-    let mut out = Vec::with_capacity(
-        2 + kernel.len().div_ceil(FLASH_CHUNK) + normal.len().div_ceil(FLASH_CHUNK),
-    );
-    out.push(OemTransfer {
-        stage: TransferStage::Entry,
-        cdb: cdb_wb_flash_entry(),
-        data: Cow::Owned(control.to_vec()),
-    });
-    for (index, data) in kernel.chunks(FLASH_CHUNK).enumerate() {
-        out.push(OemTransfer {
-            stage: TransferStage::KernelFe,
-            cdb: cdb_write_buffer(
-                TRANSFER_MODE,
-                0xFE,
-                (index * FLASH_CHUNK) as u32,
-                data.len() as u32,
-            ),
-            data: Cow::Borrowed(data),
-        });
-    }
-    for (index, data) in normal.chunks(FLASH_CHUNK).enumerate() {
-        out.push(OemTransfer {
-            stage: TransferStage::Normal,
-            cdb: cdb_wb_flash_chunk((index * FLASH_CHUNK) as u32, data.len() as u32),
-            data: Cow::Borrowed(data),
-        });
-    }
-    out.push(OemTransfer {
-        stage: TransferStage::Finish,
-        cdb: cdb_wb_flash_finish(),
-        data: Cow::Owned(control.to_vec()),
-    });
-    Ok(out)
+    let control = ud04_autoflasher_control_payload();
+    transfer::data_out(
+        &control,
+        normal,
+        Some(transfer::KernelTransfer::LinearFe(kernel)),
+    )
 }
 
 /// Materialize the shared bounded-flow data-out path for an exact, pinned
@@ -675,47 +643,14 @@ pub fn offline_bounded_oem_data_out<'a>(
     if format!("{:x}", Sha256::digest(control)) != profile.control_sha256 {
         bail!("control buffer differs from pinned updater construction");
     }
-    let mut out = Vec::with_capacity(normal.len().div_ceil(FLASH_CHUNK) + 8);
-    out.push(OemTransfer {
-        stage: TransferStage::Entry,
-        cdb: cdb_wb_flash_entry(),
-        data: Cow::Owned(control.to_vec()),
-    });
-    out.push(OemTransfer {
-        stage: TransferStage::KernelPrefix,
-        cdb: cdb_wb_flash_chunk(0, 0x1200),
-        data: Cow::Borrowed(&kernel[..0x1200]),
-    });
-    let generated = bdr212_generated_kernel_block(seed);
-    out.push(OemTransfer {
-        stage: TransferStage::KernelFe,
-        cdb: cdb_write_buffer(TRANSFER_MODE, 0xFE, 0, 0x200),
-        data: Cow::Owned(generated.to_vec()),
-    });
-    for (cdb_offset, source_offset, length) in [
-        (0x1200, 0x200, 0x8000),
-        (0x9200, 0x8200, 0x8000),
-        (0x11200, 0x10200, 0x1000),
-    ] {
-        out.push(OemTransfer {
-            stage: TransferStage::KernelFe,
-            cdb: cdb_write_buffer(TRANSFER_MODE, 0xFE, cdb_offset, length),
-            data: Cow::Borrowed(&kernel[source_offset as usize..(source_offset + length) as usize]),
-        });
-    }
-    for (index, data) in normal.chunks(FLASH_CHUNK).enumerate() {
-        out.push(OemTransfer {
-            stage: TransferStage::Normal,
-            cdb: cdb_wb_flash_chunk((index * FLASH_CHUNK) as u32, data.len() as u32),
-            data: Cow::Borrowed(data),
-        });
-    }
-    out.push(OemTransfer {
-        stage: TransferStage::Finish,
-        cdb: cdb_wb_flash_finish(),
-        data: Cow::Owned(control.to_vec()),
-    });
-    Ok(out)
+    transfer::data_out(
+        &control,
+        normal,
+        Some(transfer::KernelTransfer::PrefixF0GeneratedFe {
+            bytes: kernel,
+            seed,
+        }),
+    )
 }
 
 // ---- Preflight (safety belt) -----------------------------------------------
@@ -827,6 +762,16 @@ impl DriveFamily for Pioneer {
     }
     fn family(&self) -> Family {
         Family::Pioneer
+    }
+    fn backup_extension(&self) -> Option<&'static str> { Some("tar") }
+    fn validate_backup_template(&self, template: Option<&[u8]>) -> Result<()> {
+        crate::pioneer_backup::validate_template(template.ok_or_else(|| anyhow!("Pioneer backup requires --template with the established UD04 1.14 pair"))?)
+    }
+    fn capture_backup_with_template(&self, dev: &mut dyn ScsiDevice, template: Option<&[u8]>) -> Result<Vec<u8>> {
+        crate::pioneer_backup::capture_reference_backup(dev, template.ok_or_else(|| anyhow!("Pioneer backup requires --template with the established UD04 1.14 pair"))?)
+    }
+    fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
+        crate::pioneer_backup::validate_reference_backup(bytes, target_model)
     }
     fn is_supported(&self) -> bool {
         false

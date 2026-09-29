@@ -378,6 +378,12 @@ fn info_file_other(id: &crate::imageid::ImageIdentity) -> Result<()> {
 /// Capture a complete firmware and per-unit rollback artifact. Any unreadable
 /// firmware range makes the command fail without writing an archive.
 pub fn backup(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path) -> Result<()> {
+    backup_with_template(dev, drive, out, None)
+}
+
+/// Save a firmware backup using optional backend-specific envelope templates.
+pub fn backup_with_template(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path, template: Option<&[u8]>) -> Result<()> {
+    drive.validate_backup_template(template)?;
     if drive.backup_extension().is_none() {
         bail!(
             "no proven restorable firmware backup for {}",
@@ -385,7 +391,7 @@ pub fn backup(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path) -> 
         );
     }
     let target_model = drive.identity(dev).product;
-    let bytes = drive.capture_backup(dev)?;
+    let bytes = drive.capture_backup_with_template(dev, template)?;
     let saved_len = save_backup(out, &bytes, drive, &target_model)?;
     println!(
         "{}",

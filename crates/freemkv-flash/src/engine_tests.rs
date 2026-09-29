@@ -204,7 +204,7 @@ fn pioneer_backup_command_refuses_before_capture_or_write() {
     let err = backup(&mut dev, &*for_family(Family::Pioneer), &out).unwrap_err();
     assert!(err
         .to_string()
-        .contains("no proven restorable firmware backup"));
+        .contains("Pioneer backup requires --template"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
     assert!(!out.exists());
