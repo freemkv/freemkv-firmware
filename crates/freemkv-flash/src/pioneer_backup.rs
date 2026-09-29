@@ -39,10 +39,20 @@ pub fn construct_ud04_signed_candidate(
     let pair = pioneer_codec::builder::encode_ud04_encrypted_pair(&input, &signer)
         .map_err(|e| anyhow::anyhow!(e))?;
     let mut tar = tar::Builder::new(Vec::new());
-    for (path, bytes) in [
-        ("components/S8A10000.BKP.enc", &pair.kernel),
-        ("components/S8A10001.114.enc", &pair.normal),
-    ] {
+    for bytes in [&pair.kernel, &pair.normal] {
+        let embedded = bytes[0x1f0..0x200]
+            .split(|byte| *byte == 0)
+            .next()
+            .context("generated envelope filename missing")?;
+        let embedded = std::str::from_utf8(embedded)?;
+        if embedded.is_empty()
+            || !embedded
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.')
+        {
+            bail!("generated envelope filename is invalid");
+        }
+        let path = format!("components/{embedded}.enc");
         let mut header = tar::Header::new_gnu();
         header.set_size(bytes.len() as u64);
         header.set_mode(0o644);
@@ -311,7 +321,8 @@ fn read_ud04_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String,
         bail!("firmware reads changed between passes; no backup produced");
     }
     let envelope_id = std::str::from_utf8(&inquiry[8..32])?.trim_end().to_owned();
-    Ok((kernel, normal, "1.14".into(), envelope_id))
+    let revision = std::str::from_utf8(&inquiry[32..36])?.to_owned();
+    Ok((kernel, normal, revision, envelope_id))
 }
 
 /// Read the bounded UD04 firmware regions and construct a raw-path backup.
