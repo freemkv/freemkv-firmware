@@ -7,27 +7,23 @@ use crate::platform::ScsiDevice;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-/// Build an encrypted UD04 package directly from two captured images. The
+/// Build an encrypted package directly from two captured images. The
 /// public point in its Normal header belongs to a fresh caller-owned key;
 /// drive-side trust and restore are not established by this constructor.
-pub fn construct_ud04_signed_candidate(
+pub fn construct_signed_candidate(
     kernel: &[u8],
     normal: &[u8],
     envelope_id: &str,
     revision: &str,
 ) -> Result<Vec<u8>> {
-    let date = std::str::from_utf8(
-        normal
-            .get(0x18bb6b..0x18bb73)
-            .context("captured Normal date is missing")?,
-    )?;
+    let date = unique_embedded_date(normal).unwrap_or("BACKUP");
     let mut seeds = [0u8; 6];
     getrandom::fill(&mut seeds)
         .map_err(|e| anyhow::anyhow!("generating fresh Pioneer encoding tables: {e}"))?;
     let kernel_seed = u32::from_be_bytes([0, seeds[0], seeds[1], seeds[2]]);
     let normal_seed = u32::from_be_bytes([0, seeds[3], seeds[4], seeds[5]]);
     let signer = pioneer_codec::signature::SigningKey::random().map_err(|e| anyhow::anyhow!(e))?;
-    let input = pioneer_codec::builder::Ud04BuildInputs {
+    let input = pioneer_codec::builder::BuildInputs {
         kernel_image: kernel,
         normal_image: normal,
         envelope_id,
@@ -36,7 +32,7 @@ pub fn construct_ud04_signed_candidate(
         kernel_key_seed: kernel_seed,
         normal_key_seed: normal_seed,
     };
-    let pair = pioneer_codec::builder::encode_ud04_encrypted_pair(&input, &signer)
+    let pair = pioneer_codec::builder::encode_encrypted_pair(&input, &signer)
         .map_err(|e| anyhow::anyhow!(e))?;
     let mut tar = tar::Builder::new(Vec::new());
     for bytes in [&pair.kernel, &pair.normal] {
@@ -61,8 +57,31 @@ pub fn construct_ud04_signed_candidate(
         tar.append_data(&mut header, path, bytes.as_slice())?;
     }
     let out = tar.into_inner()?;
-    validate_envelope_package(&out, "BDR-UD04")?;
+    let parsed = Bundle::from_tar_bytes(&out)?;
+    if parsed.components.len() != 2 {
+        bail!("generated package did not contain Kernel and Normal");
+    }
     Ok(out)
+}
+
+/// Firmware build dates, when present as a unique YY/MM/DD literal in the
+/// captured Normal image, are recoverable without a model or offset table.
+fn unique_embedded_date(image: &[u8]) -> Option<&str> {
+    let mut found = None;
+    for field in image.windows(8) {
+        if field[2] == b'/'
+            && field[5] == b'/'
+            && [0, 1, 3, 4, 6, 7]
+                .iter()
+                .all(|&i| field[i].is_ascii_digit())
+        {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(std::str::from_utf8(field).ok()?);
+        }
+    }
+    found
 }
 
 /// Structural, codec and signature checks for a Pioneer envelope pair,
@@ -108,11 +127,11 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
     Ok(())
 }
 
-/// Read bounded live UD04 regions twice and save a self-signed encrypted
+/// Read the shared H8/SAT image regions twice and save a self-signed encrypted
 /// package candidate. This issues no flash commands.
 pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let (kernel, normal, revision, envelope_id) = read_profile_pair(dev)?;
-    construct_ud04_signed_candidate(&kernel, &normal, &envelope_id, &revision)
+    let (kernel, normal, revision, envelope_id) = read_h8_image_pair(dev)?;
+    construct_signed_candidate(&kernel, &normal, &envelope_id, &revision)
 }
 
 fn zero_be32_sum(image: &[u8]) -> bool {
@@ -279,65 +298,49 @@ fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec
     Ok(image)
 }
 
-/// Facts required to read a live firmware image. Each row needs independent
-/// receiver-side evidence; an envelope's geometry alone cannot prove where
-/// the installed image resides in READ BUFFER address space.
-struct CaptureProfile {
-    model: &'static str,
-    revision: &'static str,
-    hardware: &'static [u8; 8],
-    kernel_start: usize,
-    normal_start: usize,
-}
+/// Shared H8/SAT image map observed in decoded Kernels from 28 hardware
+/// groups. This is an address-space rule, not a per-model firmware record.
+const KERNEL_IMAGE_BASE: usize = 0x400000;
+const NORMAL_IMAGE_BASE: usize = 0x410000;
 
-const CAPTURE_PROFILES: &[CaptureProfile] = &[CaptureProfile {
-    model: "BDR-UD04",
-    revision: "1.14",
-    hardware: b"SAT 8A10",
-    kernel_start: 0x400000,
-    normal_start: 0x410000,
-}];
-
-/// Select an evidenced receiver profile, then capture each declared region
-/// twice. No OEM envelope or previously saved backup is read.
-fn read_profile_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String, String)> {
+/// Capture each structurally identified image region twice. No OEM envelope,
+/// previously saved backup, model, revision or hardware lookup is consulted.
+fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String, String)> {
     let inquiry = dev.command_in(&[0x12, 0, 0, 0, 36, 0], 36)?;
-    if inquiry.len() != 36 || &inquiry[8..16] != b"PIONEER " {
-        bail!("drive does not have a Pioneer INQUIRY identity");
+    if inquiry.len() != 36
+        || !inquiry[8..32].is_ascii()
+        || inquiry[8..32].iter().any(|&b| b < 0x20 || b == 0x7f)
+        || inquiry[8..32].iter().all(|&b| b == b' ')
+    {
+        bail!("drive does not have a usable H8/SAT INQUIRY identity");
     }
     let f1 = dev.command_in(&[0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0], 48)?;
-    let profile = CAPTURE_PROFILES
-        .iter()
-        .find(|profile| {
-            String::from_utf8_lossy(&inquiry[16..32])
-                .split_whitespace()
-                .any(|part| part == profile.model)
-                && inquiry[32..36] == *profile.revision.as_bytes()
-                && f1.len() == 48
-                && f1[16..24] == *profile.hardware
-        })
-        .context("no evidenced Pioneer live-capture profile matches this drive")?;
-    let kernel_len = profile
-        .normal_start
-        .checked_sub(profile.kernel_start)
+    if f1.len() != 48 || !f1[16..24].starts_with(b"SAT ") {
+        bail!("drive does not report an H8/SAT hardware identity");
+    }
+    let kernel_len = NORMAL_IMAGE_BASE
+        .checked_sub(KERNEL_IMAGE_BASE)
         .filter(|len| *len > 0 && *len <= 0x100000)
         .context("invalid Kernel/Normal address span")?;
     dev.command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])?;
-    let normal_head = read_region(dev, profile.normal_start, 24)?;
+    let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24)?;
     if !normal_head.starts_with(b"PIONEER ") {
         bail!("Normal image header is missing at the discovered base");
     }
     let normal_len = u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize;
     if !(0x2000..=0x800000).contains(&normal_len)
         || !normal_len.is_multiple_of(0x100)
-        || profile.normal_start + normal_len > 0x1000000
+        || NORMAL_IMAGE_BASE + normal_len > 0x1000000
     {
         bail!("Normal image declares an invalid length");
     }
-    let kernel = read_region(dev, profile.kernel_start, kernel_len)?;
-    let normal = read_region(dev, profile.normal_start, normal_len)?;
-    if read_region(dev, profile.kernel_start, kernel_len)? != kernel
-        || read_region(dev, profile.normal_start, normal_len)? != normal
+    let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len)?;
+    if kernel.get(0x1000..0x1008) != Some(&f1[16..24]) {
+        bail!("captured Kernel hardware differs from drive identity");
+    }
+    let normal = read_region(dev, NORMAL_IMAGE_BASE, normal_len)?;
+    if read_region(dev, KERNEL_IMAGE_BASE, kernel_len)? != kernel
+        || read_region(dev, NORMAL_IMAGE_BASE, normal_len)? != normal
     {
         bail!("firmware reads changed between passes; no backup produced");
     }
@@ -348,14 +351,14 @@ fn read_profile_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Stri
 
 /// Read the bounded UD04 firmware regions and construct a raw-path backup.
 pub fn capture_plain_backup(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let (kernel, normal, revision, _) = read_profile_pair(dev)?;
+    let (kernel, normal, revision, _) = read_h8_image_pair(dev)?;
     construct_ud04_plain_candidate(&kernel, &normal, &revision)
 }
 
 /// Read the same UD04 regions and reproduce a supplied reference envelope pair.
 pub fn capture_reference_backup(dev: &mut dyn ScsiDevice, template: &[u8]) -> Result<Vec<u8>> {
     reference_pair(template)?; // Reject unsupported profiles before any command.
-    let (kernel, normal, _, _) = read_profile_pair(dev)?;
+    let (kernel, normal, _, _) = read_h8_image_pair(dev)?;
     let bytes = reconstruct_candidate(template, &kernel, &normal)?;
     // Current bounded profile promises exact equivalence to the known pair.
     reference_pair(&bytes).context("captured firmware differs from established reference pair")?;
@@ -521,6 +524,212 @@ mod tests {
     }
 
     #[test]
+    fn oem_pair_rebuilds_from_decoded_images_when_configured() {
+        let Ok(path) = std::env::var("PIONEER_PAIR_KAT") else {
+            return;
+        };
+        let source = Bundle::from_tar_bytes(&std::fs::read(path).unwrap()).unwrap();
+        let kernel = source
+            .components
+            .iter()
+            .find(|c| c.role == Role::Kernel)
+            .unwrap();
+        let normal = source
+            .components
+            .iter()
+            .find(|c| c.role == Role::Main)
+            .unwrap();
+        let k = pioneer_codec::decode_envelope(&kernel.bytes).unwrap();
+        let detected = pioneer_codec::builder::kernel_layout_from_image(&k.image).unwrap();
+        let expected = match k.info.layout.as_str() {
+            "kernel-front" => pioneer_codec::builder::KernelLayout::FrontKey,
+            "kernel-derived" => pioneer_codec::builder::KernelLayout::DerivedKey,
+            other => panic!("unsupported Kernel layout: {other}"),
+        };
+        assert_eq!(detected, expected);
+        let n = pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &k).unwrap();
+        let h = pioneer_codec::header_info(&normal.bytes).unwrap();
+        let output = construct_signed_candidate(&k.image, &n.image, &h.id, &h.revision).unwrap();
+        let rebuilt = Bundle::from_tar_bytes(&output).unwrap();
+        let rk = rebuilt
+            .components
+            .iter()
+            .find(|c| c.role == Role::Kernel)
+            .unwrap();
+        let rn = rebuilt
+            .components
+            .iter()
+            .find(|c| c.role == Role::Main)
+            .unwrap();
+        assert_eq!(&rn.bytes[..0x160], &normal.bytes[..0x160]);
+        assert_eq!(&rn.bytes[0x1f0..0x200], &normal.bytes[0x1f0..0x200]);
+        assert_eq!(
+            pioneer_codec::signature::verify_normal_signature(&normal.bytes),
+            pioneer_codec::signature::verify_normal_signature(&rn.bytes)
+        );
+        let dk = pioneer_codec::decode_envelope(&rk.bytes).unwrap();
+        let dn = pioneer_codec::decode_envelope_with_kernel(&rn.bytes, &dk).unwrap();
+        assert_eq!(dk.image, k.image);
+        assert_eq!(dn.image, n.image);
+        assert_eq!(
+            unique_embedded_date(&n.image),
+            Some(h.generated_date.as_str())
+        );
+    }
+
+    #[test]
+    fn corpus_kernel_dispatcher_selects_recorded_wrapper_when_configured() {
+        let Ok(root) = std::env::var("PIONEER_INSTALLER_CORPUS_KAT_ROOT") else {
+            return;
+        };
+        let mut dirs = vec![std::path::PathBuf::from(root)];
+        let mut seen = std::collections::HashSet::new();
+        let mut front = 0;
+        let mut derived = 0;
+        let mut unrecognized = Vec::new();
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+                if !path.to_string_lossy().ends_with(".installer.tar") {
+                    continue;
+                }
+                let Ok(bundle) = Bundle::from_tar_bytes(&std::fs::read(&path).unwrap()) else {
+                    continue;
+                };
+                let Some(component) = bundle.components.iter().find(|c| c.role == Role::Kernel)
+                else {
+                    continue;
+                };
+                let digest = Sha256::digest(&component.bytes);
+                if !seen.insert(digest.to_vec()) {
+                    continue;
+                }
+                let Some(decoded) = pioneer_codec::decode_envelope(&component.bytes) else {
+                    continue;
+                };
+                let expected = match decoded.info.layout.as_str() {
+                    "kernel-front" => {
+                        front += 1;
+                        pioneer_codec::builder::KernelLayout::FrontKey
+                    }
+                    "kernel-derived" => {
+                        derived += 1;
+                        pioneer_codec::builder::KernelLayout::DerivedKey
+                    }
+                    _ => continue,
+                };
+                let detected = pioneer_codec::builder::kernel_layout_from_image(&decoded.image);
+                if detected.is_none() {
+                    let signature = bundle
+                        .components
+                        .iter()
+                        .find(|c| c.role == Role::Main)
+                        .map(|c| pioneer_codec::signature::verify_normal_signature(&c.bytes));
+                    unrecognized.push(format!("{} signature={signature:?}", path.display()));
+                } else {
+                    assert_eq!(detected, Some(expected), "{}", path.display());
+                }
+            }
+        }
+        assert!(front > 0 && derived > 0);
+        eprintln!("Kernel dispatcher corpus: {front} front, {derived} derived unique envelopes; {} unrecognized", unrecognized.len());
+        for path in &unrecognized {
+            eprintln!("unrecognized: {path}");
+        }
+    }
+
+    #[test]
+    fn corpus_builder_reports_hardware_coverage_when_configured() {
+        let Ok(root) = std::env::var("PIONEER_INSTALLER_CORPUS_KAT_ROOT") else {
+            return;
+        };
+        let mut dirs = vec![std::path::PathBuf::from(root)];
+        let mut seen_hardware = std::collections::HashSet::new();
+        let all_pairs = std::env::var_os("PIONEER_ALL_PAIRS_KAT").is_some();
+        let mut built = 0;
+        let mut exact_text = 0;
+        let mut exact_name = 0;
+        let mut signature_range_match = 0;
+        let mut failures = Vec::new();
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+                if !path.to_string_lossy().ends_with(".installer.tar") {
+                    continue;
+                }
+                let Ok(bundle) = Bundle::from_tar_bytes(&std::fs::read(&path).unwrap()) else {
+                    continue;
+                };
+                let (Some(kernel), Some(normal)) = (
+                    bundle.components.iter().find(|c| c.role == Role::Kernel),
+                    bundle.components.iter().find(|c| c.role == Role::Main),
+                ) else {
+                    continue;
+                };
+                let Some(k) = pioneer_codec::decode_envelope(&kernel.bytes) else {
+                    continue;
+                };
+                let Some(n) = pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &k) else {
+                    continue;
+                };
+                let Some(h) = pioneer_codec::header_info(&normal.bytes) else {
+                    continue;
+                };
+                let identity = if all_pairs {
+                    format!(
+                        "{:x}:{:x}",
+                        Sha256::digest(&kernel.bytes),
+                        Sha256::digest(&normal.bytes)
+                    )
+                } else {
+                    h.hardware_version.clone()
+                };
+                if !seen_hardware.insert(identity) {
+                    continue;
+                }
+                match construct_signed_candidate(&k.image, &n.image, &h.id, &h.revision) {
+                    Ok(output) => {
+                        let rebuilt = Bundle::from_tar_bytes(&output).unwrap();
+                        let rebuilt_normal = rebuilt
+                            .components
+                            .iter()
+                            .find(|c| c.role == Role::Main)
+                            .unwrap();
+                        built += 1;
+                        exact_text +=
+                            usize::from(rebuilt_normal.bytes[..0x160] == normal.bytes[..0x160]);
+                        exact_name += usize::from(
+                            rebuilt_normal.bytes[0x1f0..0x200] == normal.bytes[0x1f0..0x200],
+                        );
+                        signature_range_match += usize::from(
+                            pioneer_codec::signature::verify_normal_signature(
+                                &rebuilt_normal.bytes,
+                            ) == pioneer_codec::signature::verify_normal_signature(&normal.bytes),
+                        );
+                    }
+                    Err(error) => failures.push(format!("{}: {error:#}", h.hardware_version)),
+                }
+            }
+        }
+        eprintln!("builder corpus: {built} built, {} unsupported; {exact_text} exact textual headers, {exact_name} exact names, {signature_range_match} matching signature ranges", failures.len());
+        for failure in &failures {
+            eprintln!("unsupported: {failure}");
+        }
+        assert!(built > 0);
+        assert_eq!(exact_text, built, "OEM textual header drift");
+        assert_eq!(exact_name, built, "OEM embedded filename drift");
+        assert_eq!(signature_range_match, built, "OEM signature range drift");
+    }
+
+    #[test]
     fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
         let Ok(path) = std::env::var("PIONEER_LIVE_DUMP_FIXTURE") else {
             return;
@@ -568,6 +777,11 @@ mod tests {
                 .iter()
                 .find(|c| c.role == Role::Main)
                 .unwrap();
+            assert_eq!(&normal.bytes[..0x160], &original_normal.bytes[..0x160]);
+            assert_eq!(
+                &normal.bytes[0x1f0..0x200],
+                &original_normal.bytes[0x1f0..0x200]
+            );
             let original_steps = crate::drive::pioneer::offline_linear_fe_data_out(
                 &original_kernel.bytes,
                 &original_normal.bytes,
