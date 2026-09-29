@@ -22,6 +22,7 @@ enum Outcome {
 struct Rule {
     matcher: Matcher,
     outcome: Outcome,
+    after_stream: bool,
 }
 
 /// A mock SCSI device driven by a list of CDB-matching rules.
@@ -45,13 +46,8 @@ pub struct MockScsiDevice {
     echo: bool,
     /// Offset -> last-written bytes, populated only when `echo` is set.
     echo_store: HashMap<u32, Vec<u8>>,
-    /// When true, Pioneer raw reads (READ BUFFER mode-2 / buffer id 0xB0) return
-    /// deterministic offset-derived bytes (instead of zero-fill), except at any
-    /// offset covered by `pioneer_gaps`, which fail — to exercise the dump's
-    /// gap-fill. Opt-in via [`MockScsiDevice::pioneer`] / `..::renesas`.
-    pioneer_raw: bool,
-    /// `[start, end)` offset ranges where the Pioneer raw read FAILS (gaps).
-    pioneer_gaps: Vec<(u32, u32)>,
+    /// Optional complete mode-6 firmware read surface for backup-path tests.
+    firmware_image: Option<Vec<u8>>,
 }
 
 impl MockScsiDevice {
@@ -72,6 +68,12 @@ impl MockScsiDevice {
         }
     }
 
+    /// Expose a supplied byte-exact firmware image on mode-6 reads.
+    pub fn with_firmware_image(mut self, image: Vec<u8>) -> Self {
+        self.firmware_image = Some(image);
+        self
+    }
+
     /// Add a rule: when `matcher(cdb)` is true on a data-in command, return `data`.
     pub fn on<F>(mut self, matcher: F, data: Vec<u8>) -> Self
     where
@@ -80,6 +82,7 @@ impl MockScsiDevice {
         self.rules.push(Rule {
             matcher: Box::new(matcher),
             outcome: Outcome::Data(data),
+            after_stream: false,
         });
         self
     }
@@ -92,6 +95,33 @@ impl MockScsiDevice {
         self.rules.push(Rule {
             matcher: Box::new(matcher),
             outcome: Outcome::Fail(msg.to_string()),
+            after_stream: false,
+        });
+        self
+    }
+
+    /// Respond only after the first firmware-stream WRITE BUFFER command.
+    pub fn on_after_stream<F>(mut self, matcher: F, data: Vec<u8>) -> Self
+    where
+        F: Fn(&[u8]) -> bool + Send + Sync + 'static,
+    {
+        self.rules.push(Rule {
+            matcher: Box::new(matcher),
+            outcome: Outcome::Data(data),
+            after_stream: true,
+        });
+        self
+    }
+
+    /// Fail a read only after firmware streaming has begun.
+    pub fn on_fail_after_stream<F>(mut self, matcher: F, msg: &str) -> Self
+    where
+        F: Fn(&[u8]) -> bool + Send + Sync + 'static,
+    {
+        self.rules.push(Rule {
+            matcher: Box::new(matcher),
+            outcome: Outcome::Fail(msg.to_string()),
+            after_stream: true,
         });
         self
     }
@@ -146,42 +176,31 @@ impl MockScsiDevice {
     /// A mock that classifies as Pioneer/Renesas: READ BUFFER buffer-id 0xF1
     /// succeeds with non-zero data; GET CONFIGURATION 0x010C does not echo `01 0C`.
     ///
-    /// It also answers the Pioneer dump path offline: the enable knock
-    /// (WRITE BUFFER `3B 02 41 A5 AA AA`) succeeds and is recorded, and raw reads
-    /// (READ BUFFER mode-2 / buffer id 0xB0) return deterministic offset-derived
-    /// bytes so a test can assemble and check the full image.
     pub fn pioneer() -> Self {
-        Self {
-            pioneer_raw: true,
-            ..Self::new().on(
+        let mut inq = vec![0u8; 96];
+        inq[8..16].copy_from_slice(b"PIONEER ");
+        inq[16..24].copy_from_slice(b"BDR-UD04");
+        Self::new()
+            .on(
                 |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
                 vec![0xA5; 8],
             )
-        }
+            .on(|cdb| cdb.first() == Some(&0x12), inq)
     }
 
     /// Like [`Self::pioneer`] but with a `RENESAS` INQUIRY vendor, so it
-    /// classifies as [`crate::drive::Family::Renesas`].
+    /// retains a RENESAS identity but matches no registered flash protocol.
     pub fn renesas() -> Self {
         let mut inq = vec![0u8; 96];
         inq[8..15].copy_from_slice(b"RENESAS");
         inq[15] = b' ';
-        Self::pioneer().on(|cdb| cdb.first() == Some(&0x12), inq)
+        Self::new()
+            .on(
+                |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+                vec![0xA5; 8],
+            )
+            .on(|cdb| cdb.first() == Some(&0x12), inq)
     }
-
-    /// Mark `[start, end)` as an unreadable gap for the Pioneer raw-read path,
-    /// so the dump fills it with `0xFF` and records the gap.
-    pub fn with_pioneer_gap(mut self, start: u32, end: u32) -> Self {
-        self.pioneer_gaps.push((start, end));
-        self
-    }
-}
-
-/// Is this a Pioneer raw read — READ BUFFER (0x3C) mode 0x02 / buffer id 0xB0?
-fn is_pioneer_raw_read(cdb: &[u8]) -> bool {
-    cdb.first() == Some(&0x3C)
-        && cdb.get(1).map(|m| m & 0x1f) == Some(0x02)
-        && cdb.get(2) == Some(&0xB0)
 }
 
 /// Decode the big-endian 24-bit offset carried in `cdb[3..6]`, shared by the
@@ -203,12 +222,24 @@ impl ScsiDevice for MockScsiDevice {
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
         self.reads.push(cdb.to_vec());
         for rule in &self.rules {
+            if rule.after_stream && !self.writes.iter().any(|(cdb, _)| is_mode6(cdb, 0x3B)) {
+                continue;
+            }
             if (rule.matcher)(cdb) {
                 return match &rule.outcome {
                     Outcome::Data(d) => Ok(d.clone()),
                     Outcome::Fail(m) => bail!("{m}"),
                 };
             }
+        }
+        if self.firmware_image.is_some() && cdb.first() == Some(&0x12) {
+            let mut inquiry = vec![0u8; alloc_len];
+            if inquiry.len() >= 36 {
+                inquiry[8..16].copy_from_slice(b"HL-DT-ST");
+                inquiry[16..32].copy_from_slice(b"BD-RE BU40N     ");
+                inquiry[32..36].copy_from_slice(b"1.00");
+            }
+            return Ok(inquiry);
         }
         if self.echo && is_mode6(cdb, 0x3C) {
             if let Some(off) = offset24(cdb) {
@@ -219,15 +250,12 @@ impl ScsiDevice for MockScsiDevice {
                 }
             }
         }
-        if self.pioneer_raw && is_pioneer_raw_read(cdb) {
-            if let Some(off) = offset24(cdb) {
-                if self.pioneer_gaps.iter().any(|&(s, e)| off >= s && off < e) {
-                    bail!("pioneer raw read: offset 0x{off:06X} not exposed");
+        if is_mode6(cdb, 0x3C) {
+            if let (Some(image), Some(off)) = (&self.firmware_image, offset24(cdb)) {
+                let start = off as usize;
+                if let Some(slice) = image.get(start..start.saturating_add(alloc_len)) {
+                    return Ok(slice.to_vec());
                 }
-                // Deterministic, offset-derived bytes of exactly the requested
-                // length, so the dump loop treats the read as fully readable.
-                let out: Vec<u8> = (0..alloc_len).map(|i| (off as usize + i) as u8).collect();
-                return Ok(out);
             }
         }
         Ok(vec![0u8; alloc_len])

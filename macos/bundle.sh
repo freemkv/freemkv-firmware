@@ -13,7 +13,7 @@
 #
 # Ad-hoc signed only: firmware has no Developer ID secrets, so there is no
 # notarization. The Homebrew casks strip com.apple.quarantine on install,
-# exactly as the sibling freemkv-app cask does.
+# exactly as the sibling freemkv cask does.
 set -e
 cd "$(dirname "$0")/.."
 

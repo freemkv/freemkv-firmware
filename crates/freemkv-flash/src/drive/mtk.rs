@@ -854,6 +854,99 @@ fn describe_sequence(steps: &[FlashStep], verbose: bool) -> String {
 pub struct Mtk;
 
 impl DriveFamily for Mtk {
+    fn backend_name(&self) -> &'static str {
+        "mtk19xx"
+    }
+
+    fn probe(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        _identity: &super::Identity,
+    ) -> Result<Option<super::ProbeEvidence>> {
+        Ok(
+            (super::get_config_is_mtk(dev) && super::has_mt19_banner(dev)).then_some(
+                super::ProbeEvidence {
+                    family: Family::Mtk,
+                    backend_name: self.backend_name(),
+                    discriminator: "MMC 0x010C + MT19 boot ROM banner",
+                },
+            ),
+        )
+    }
+
+    fn backup_extension(&self) -> Option<&'static str> {
+        Some("tar")
+    }
+
+    fn classify_input(&self, path: &std::path::Path) -> super::InputKind {
+        super::sniff_input(path)
+    }
+
+    fn verification_ranges(&self, image: &[u8]) -> Result<Vec<(usize, usize)>> {
+        let Some(entries) = crate::cmac::parse_table(image).ok() else {
+            return Ok(Vec::new());
+        };
+        Ok(entries
+            .iter()
+            .filter(|entry| entry.is_active())
+            .filter_map(|entry| {
+                let start = (entry.start as usize).max(0x1000);
+                let end = entry.end as usize;
+                (start <= end).then_some((start, end))
+            })
+            .collect())
+    }
+
+    fn capture_backup(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+        crate::engine::backup::capture_mtk_backup(dev, self)
+    }
+
+    fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
+        crate::engine::backup::validate_mtk_backup(bytes, target_model, self.image_size())
+    }
+
+    fn validate_image(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        image: &[u8],
+        drive_product: &str,
+        allow_crossflash: bool,
+    ) -> Result<()> {
+        if image.len() != self.image_size() {
+            bail!(
+                "firmware .bin must be exactly {} bytes, got {}",
+                self.image_size(),
+                image.len()
+            );
+        }
+        if !crate::cmac::verify(image) {
+            bail!(
+                "firmware image fails its AES-CMAC integrity check — refusing to flash. \
+                 A mis-signed or corrupted image is rejected by the drive's boot \
+                 authenticator and can brick the drive."
+            );
+        }
+        let fine_family = if allow_crossflash {
+            let (bytes, _, _) = self.read_full_image(dev).with_context(|| {
+                "reading current firmware to confirm MT19xx controller variant for --allow-crossflash"
+            })?;
+            Some(
+                freemkv_chipset::detect_chip(&bytes)
+                    .context("identifying controller variant from current firmware")?
+                    .family,
+            )
+        } else {
+            None
+        };
+        crate::engine::ensure_image_matches_drive(
+            image,
+            drive_product,
+            Family::Mtk,
+            allow_crossflash,
+            fine_family,
+        )?;
+        Ok(())
+    }
     fn family(&self) -> Family {
         Family::Mtk
     }

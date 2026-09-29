@@ -5,9 +5,41 @@ use crate::drive::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
     ROM_1F0000_OFFSET,
 };
-use crate::drive::{for_family, Family, InputKind};
+use crate::drive::{for_family, Family, InputKind, UserDump};
 use crate::manifest::FlashMode;
-use crate::platform::MockScsiDevice;
+use crate::platform::{MockScsiDevice, ScsiDevice};
+
+/// Observe the very first data-out command and prove the rollback file is
+/// already present, readable, and accepted by the same backend's flash path.
+struct BackupBeforeWriteDevice {
+    inner: MockScsiDevice,
+    backup_path: std::path::PathBuf,
+    checked: bool,
+}
+
+impl ScsiDevice for BackupBeforeWriteDevice {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        self.inner.command_in(cdb, len)
+    }
+
+    fn command_out(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+        if !self.checked {
+            let archive = std::fs::read(&self.backup_path)
+                .context("first write preceded the durable rollback file")?;
+            Mtk.validate_backup(&archive, "BD-RE BU40N")?;
+            self.checked = true;
+        }
+        self.inner.command_out(cdb, bytes)
+    }
+
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
+    fn medium_status(&mut self) -> Result<MediumStatus> {
+        self.inner.medium_status()
+    }
+}
 
 /// A non-zero, byte-position-dependent pattern (distinguishable from an
 /// all-zero or all-constant image, and from its own AES-encrypted form).
@@ -60,26 +92,145 @@ fn sample_user_dump() -> UserDump {
     }
 }
 
+static BACKUP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn backup_firmware() -> Vec<u8> {
+    make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N")
+}
+
+fn coherent_backup() -> BackupArtifact {
+    let firmware = backup_firmware();
+    let mut per_unit = sample_user_dump();
+    let d = ROM_1EC000_OFFSET as usize;
+    let n = ROM_1F0000_OFFSET as usize;
+    per_unit
+        .rom_1ec000
+        .copy_from_slice(&firmware[d..d + ROM_1EC000_LEN as usize]);
+    per_unit
+        .rom_1f0000
+        .copy_from_slice(&firmware[n..n + ROM_1F0000_LEN as usize]);
+    BackupArtifact {
+        firmware,
+        per_unit,
+        drive_product: "BD-RE BU40N".into(),
+    }
+}
+
+fn fresh_backup_path() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "freemkv-backup-{}-{}.tar",
+        std::process::id(),
+        BACKUP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ^ std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64
+    ))
+}
+
 fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
     FlashRequest {
         input: image,
         input_kind: InputKind::Bin,
         mode: FlashMode::Full,
         execute,
-        rescue_no_dump: false,
         acknowledged_risk: execute,
         enc_override: None,
         drive_model: "BU40N".into(),
         verbose: false,
-        predump_out: None,
+        predump_out: execute.then(fresh_backup_path),
         allow_crossflash: false,
     }
 }
 
 #[test]
+fn pioneer_real_ud04_envelope_is_offline_only() {
+    let Ok(path) = std::env::var("PIONEER_UD04_ENC_FIXTURE") else {
+        return; // Local OEM fixture is not checked into the source repository.
+    };
+    let image = std::fs::read(path).unwrap();
+    assert_eq!(image.len(), 0x1d7000);
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&image)),
+        "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6"
+    );
+    let mut req = bin_req(image, false);
+    req.drive_model = "BDR-UD04".into();
+    let mut dev = MockScsiDevice::pioneer();
+    flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap();
+    assert!(dev.writes.is_empty());
+    assert!(dev.reads.is_empty());
+    req.execute = true;
+    assert!(flash(&mut dev, &*for_family(Family::Pioneer), &req).is_err());
+    assert!(dev.writes.is_empty());
+    assert!(dev.reads.is_empty());
+}
+
+#[test]
+fn pioneer_offline_plan_rejects_model_with_matching_prefix() {
+    let Ok(path) = std::env::var("PIONEER_UD04_ENC_FIXTURE") else {
+        return;
+    };
+    let image = std::fs::read(path).unwrap();
+    let mut req = bin_req(image, false);
+    req.drive_model = "BDR-UD040".into();
+    let mut dev = MockScsiDevice::pioneer();
+    let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("does not match stated drive model"));
+    assert!(dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn pioneer_offline_plan_rejects_untraced_model_without_device_io() {
+    let mut image = vec![0u8; crate::drive::pioneer::IMAGE_MIN];
+    let header = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nThis is microcode file.\r\nID : PIONEER BD-RW   BDR-212.\r\nRevision Level : 1.05 .\r\n";
+    image[..header.len()].copy_from_slice(header);
+    let mut req = bin_req(image, false);
+    req.drive_model = "BDR-212".into();
+    let mut dev = MockScsiDevice::pioneer();
+    let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
+    assert!(format!("{err:#}").contains("no audited Pioneer OEM writer profile"));
+    assert!(dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn pioneer_backup_command_refuses_before_capture_or_write() {
+    let mut dev = MockScsiDevice::pioneer();
+    let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
+    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out).unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("no proven restorable firmware backup"));
+    assert!(dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
+    assert!(!out.exists());
+}
+
+#[test]
+fn pioneer_valid_offline_candidate_still_cannot_execute_or_issue_writes() {
+    let mut image = vec![0u8; 0x1d7000];
+    let header = b"********  Copyright(c) 2000 Pioneer Corporation\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11.\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";
+    image[..header.len()].copy_from_slice(header);
+    let mut req = bin_req(image, true);
+    req.drive_model = "BD-RW   BDR-UD04".into();
+    let mut dev = MockScsiDevice::pioneer();
+    let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
+    assert!(err.to_string().contains("restorable backup"));
+    assert!(dev.writes.is_empty());
+    assert!(dev.reads.is_empty());
+}
+
+#[test]
 fn flash_dry_run_writes_nothing_but_reads_for_backup() {
-    let mut dev = MockScsiDevice::new();
-    let req = bin_req(vec![0x11u8; IMAGE_SIZE], false);
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let req = bin_req(
+        make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N"),
+        false,
+    );
     flash(&mut dev, &Mtk, &req).unwrap();
     assert!(dev.writes.is_empty(), "dry-run must not write");
     assert!(
@@ -89,8 +240,27 @@ fn flash_dry_run_writes_nothing_but_reads_for_backup() {
 }
 
 #[test]
+fn flash_dry_run_rejects_bad_cmac_without_writes() {
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let mut image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    image[0x11000] ^= 1; // inside the active authenticated range
+    let err = flash(&mut dev, &Mtk, &bin_req(image, false)).unwrap_err();
+    assert!(err.to_string().contains("AES-CMAC"), "got: {err}");
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn flash_dry_run_rejects_wrong_model_without_writes() {
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let image = make_flashable(vec![0u8; IMAGE_SIZE], "WH16NS60");
+    let err = flash(&mut dev, &Mtk, &bin_req(image, false)).unwrap_err();
+    assert!(err.to_string().contains("wrong-model"), "got: {err}");
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
 fn flash_rejects_wrong_size_bin() {
-    let mut dev = MockScsiDevice::new();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let req = bin_req(vec![0u8; 1024], false);
     assert!(flash(&mut dev, &Mtk, &req).is_err());
 }
@@ -99,7 +269,7 @@ fn flash_rejects_wrong_size_bin() {
 fn flash_execute_streams_verbatim_and_verifies() {
     // A signed, model-matching image (mostly zero); the mock's zero-fill
     // read-back matches inside the CMAC-protected range (also zero).
-    let mut dev = MockScsiDevice::new();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let req = bin_req(image.clone(), true);
     flash(&mut dev, &Mtk, &req).unwrap();
@@ -117,10 +287,63 @@ fn flash_execute_streams_verbatim_and_verifies() {
 }
 
 #[test]
+fn validated_rollback_file_exists_before_first_device_write() {
+    let mut req = bin_req(backup_firmware(), true);
+    let backup_path = fresh_backup_path();
+    req.predump_out = Some(backup_path.clone());
+    let mut dev = BackupBeforeWriteDevice {
+        inner: MockScsiDevice::echoing().with_firmware_image(backup_firmware()),
+        backup_path: backup_path.clone(),
+        checked: false,
+    };
+    flash(&mut dev, &Mtk, &req).unwrap();
+    assert!(dev.checked);
+    assert!(!dev.inner.writes.is_empty());
+    std::fs::remove_file(backup_path).unwrap();
+}
+
+#[test]
+fn failed_middle_stream_chunk_never_sends_commit_or_reports_success() {
+    let failing_offset = offset_bytes((2 * CHUNK) as u32);
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on_fail(
+            move |cdb| is_stream_write(cdb) && cdb.get(3..6) == Some(&failing_offset[..]),
+            "injected stream failure",
+        );
+    let req = bin_req(backup_firmware(), true);
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(format!("{err:#}").contains("injected stream failure"));
+    let stream_count = dev
+        .writes
+        .iter()
+        .filter(|(cdb, _)| is_stream_write(cdb))
+        .count();
+    assert_eq!(stream_count, 2);
+    assert_eq!(
+        dev.writes.len(),
+        3,
+        "prepare and two chunks only; no commit"
+    );
+}
+
+#[test]
+fn failed_backup_persistence_prevents_first_device_write() {
+    let mut req = bin_req(backup_firmware(), true);
+    let nonexistent_parent = fresh_backup_path();
+    req.predump_out = Some(nonexistent_parent.join("rollback.tar"));
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(format!("{err:#}").contains("creating temporary backup"));
+    assert!(dev.writes.is_empty());
+    assert!(!nonexistent_parent.exists());
+}
+
+#[test]
 fn flash_execute_requires_ack() {
     // A valid, model-matching image so the flow reaches the ACK gate (not the
     // CMAC/model gates) — the refusal here must be the missing acknowledgement.
-    let mut dev = MockScsiDevice::new();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let mut req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
     req.acknowledged_risk = false;
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
@@ -141,7 +364,7 @@ fn flash_execute_streams_patterned_image_verbatim() {
     // A non-zero, position-dependent image against an ECHOING mock: the
     // streamed bytes must equal the original image, not merely "whatever the
     // mock happens to read back."
-    let mut dev = MockScsiDevice::echoing();
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     let req = bin_req(image.clone(), true);
     flash(&mut dev, &Mtk, &req).unwrap();
@@ -175,10 +398,12 @@ fn flash_execute_fails_on_mismatch_inside_a_cmac_protected_range() {
     let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     assert!((0x11000..=0x1FFFF).contains(&bad_offset));
     let want = offset_bytes(bad_offset);
-    let mut dev = MockScsiDevice::echoing().on(
-        move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
-        vec![0xFFu8; CHUNK],
-    );
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on_after_stream(
+            move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+            vec![0xFFu8; CHUNK],
+        );
     let req = bin_req(image, true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
@@ -203,10 +428,12 @@ fn flash_execute_bails_on_unverified_read_back_of_protected_chunk() {
     // engine's match falls through to the `has_protected` arm, and
     // `unverified` increments. With protected ranges non-empty AND no
     // differing bytes AND unverified > 0, the new bail! must fire.
-    let mut dev = MockScsiDevice::echoing().on_fail(
-        move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
-        "simulated read-back transport error",
-    );
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on_fail_after_stream(
+            move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+            "simulated read-back transport error",
+        );
     let req = bin_req(image, true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     let msg = format!("{err:#}");
@@ -233,10 +460,12 @@ fn flash_execute_tolerates_readback_mismatch_outside_protected_ranges() {
         "mismatch must be outside the protected range"
     );
     let want = offset_bytes(bad_offset);
-    let mut dev = MockScsiDevice::echoing().on(
-        move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
-        vec![0xFFu8; CHUNK],
-    );
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on_after_stream(
+            move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+            vec![0xFFu8; CHUNK],
+        );
     let req = bin_req(image, true);
     flash(&mut dev, &Mtk, &req)
         .expect("mismatch outside every CMAC-protected range must pass verify");
@@ -247,7 +476,7 @@ fn flash_execute_streams_enc_payload_not_plaintext() {
     // enc_override=Some(true): the FIRST streamed chunk must be the
     // AES-transformed payload, not a slice of the plaintext image (proves the
     // enc transform actually ran end-to-end through the streaming loop).
-    let mut dev = MockScsiDevice::echoing();
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     let mut req = bin_req(image.clone(), true);
     req.enc_override = Some(true);
@@ -263,29 +492,25 @@ fn flash_execute_streams_enc_payload_not_plaintext() {
 }
 
 #[test]
-fn flash_restore_tar_writes_and_verifies_regions() {
-    let dump = sample_user_dump();
-    let tar = dump.to_tar_bytes().unwrap();
-    let mut dev = MockScsiDevice::echoing();
+fn flash_restore_tar_reflashes_complete_firmware_only() {
+    let tar = coherent_backup().to_tar_bytes().unwrap();
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let mut req = bin_req(vec![], true);
     req.input = tar;
     req.input_kind = InputKind::Tar;
+    req.drive_model = "BD-RE BU40N".into();
     flash(&mut dev, &Mtk, &req).unwrap();
 
-    let wrote_region = |offset: u32, expected: &[u8]| {
-        let want = offset_bytes(offset);
-        dev.writes.iter().any(|(cdb, data)| {
-            cdb.first() == Some(&0x3B) && cdb.get(3..6) == Some(&want[..]) && data == expected
-        })
-    };
-    assert!(
-        wrote_region(ROM_1EC000_OFFSET, &dump.rom_1ec000),
-        "rom_1EC000 region not written verbatim"
-    );
-    assert!(
-        wrote_region(ROM_1F0000_OFFSET, &dump.rom_1f0000),
-        "rom_1F0000 region not written verbatim"
-    );
+    let streamed: Vec<u8> = dev
+        .writes
+        .iter()
+        .filter(|(cdb, _)| is_stream_write(cdb))
+        .flat_map(|(_, bytes)| bytes.clone())
+        .collect();
+    assert_eq!(streamed, backup_firmware());
+    assert!(!dev.writes.iter().any(|(cdb, data)| cdb.get(3..6)
+        == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
+        && data.len() == ROM_1EC000_LEN as usize));
 }
 
 #[test]
@@ -294,7 +519,7 @@ fn non_mtk_family_reports_full_image_unsupported_not_panic() {
     // doesn't implement it (Unknown) returns "unsupported" rather than panicking —
     // dump degrades gracefully (omits fw.bin). (Pioneer/Renesas do implement it.)
     let drive = for_family(Family::Unknown);
-    let mut dev = MockScsiDevice::new();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let err = drive.read_full_image(&mut dev).unwrap_err();
     assert!(
         err.to_string().contains("not supported"),
@@ -321,7 +546,9 @@ fn fixed_sense(key: u8) -> Vec<u8> {
 fn flash_close_tolerates_benign_unit_attention() {
     // The near-certain state after a microcode program is UNIT ATTENTION (0x6);
     // a successful, already-burned flash must NOT be reported as a failure.
-    let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x06));
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x06));
     let req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
@@ -333,7 +560,9 @@ fn flash_close_tolerates_benign_unit_attention() {
 fn flash_close_tolerates_benign_not_ready() {
     // NOT READY (0x2) is a benign mid-transition state after a program; it must
     // not fail the flash either.
-    let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x02));
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x02));
     let req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
@@ -345,7 +574,9 @@ fn flash_close_tolerates_benign_not_ready() {
 fn flash_execute_refuses_when_disc_loaded() {
     // A disc in the tray must hard-abort a --execute flash BEFORE any write —
     // reprogramming while the drive services a medium can wedge the controller.
-    let mut dev = MockScsiDevice::echoing().with_medium_loaded();
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .with_medium_loaded();
     let req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
@@ -365,7 +596,9 @@ fn flash_execute_refuses_when_disc_loaded() {
 fn flash_dryrun_warns_but_proceeds_when_disc_loaded() {
     // A dry run only WARNS on a loaded disc (no writes happen anyway), so the
     // operator still sees the full plan before committing.
-    let mut dev = MockScsiDevice::echoing().with_medium_loaded();
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .with_medium_loaded();
     let req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         false,
@@ -378,7 +611,9 @@ fn flash_dryrun_warns_but_proceeds_when_disc_loaded() {
 fn flash_execute_refuses_when_tray_open() {
     // An OPEN tray is not a settled flash state — refuse a --execute flash with a
     // distinct "close the tray" message, before any write.
-    let mut dev = MockScsiDevice::echoing().with_tray_open();
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .with_tray_open();
     let req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
@@ -398,7 +633,7 @@ fn flash_execute_refuses_when_tray_open() {
 fn flash_execute_proceeds_when_closed_empty() {
     // The default mock is a closed, empty tray (the only flash-safe state): the
     // medium guard must NOT block it, and the flash streams to completion.
-    let mut dev = MockScsiDevice::echoing();
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
@@ -413,7 +648,9 @@ fn flash_execute_proceeds_when_closed_empty() {
 #[test]
 fn flash_close_fails_on_hardware_error_sense() {
     // A genuine HARDWARE ERROR (0x4) after the burn IS a real failure.
-    let mut dev = MockScsiDevice::echoing().on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));
     let req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
@@ -428,19 +665,21 @@ fn flash_close_fails_on_hardware_error_sense() {
 
 #[test]
 fn flash_restore_tar_detects_readback_mismatch() {
-    let dump = sample_user_dump();
-    let tar = dump.to_tar_bytes().unwrap();
-    let want = offset_bytes(ROM_1EC000_OFFSET);
-    let mut dev = MockScsiDevice::echoing().on(
-        move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
-        vec![0xFFu8; ROM_1EC000_LEN as usize],
-    );
+    let tar = coherent_backup().to_tar_bytes().unwrap();
+    let want = offset_bytes((CHUNK * 5) as u32);
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on_after_stream(
+            move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+            vec![0xFFu8; CHUNK],
+        );
     let mut req = bin_req(vec![], true);
     req.input = tar;
     req.input_kind = InputKind::Tar;
+    req.drive_model = "BD-RE BU40N".into();
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        err.to_string().contains("read-back verify failed"),
+        err.to_string().contains("read-back verify FAILED"),
         "unexpected error: {err}"
     );
 }
@@ -491,7 +730,7 @@ fn family_cross_gate_refuses_an_mt19xx_image_on_a_non_mtk_drive() {
         err.to_string().contains("across silicon families"),
         "got: {err}"
     );
-    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Renesas, false, None).is_err());
+    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Unknown, false, None).is_err());
 }
 
 // ---- crossflash gate (--allow-crossflash): waive model, never the family ------
@@ -591,7 +830,7 @@ fn crossflash_warns_when_the_drive_silicon_is_unconfirmed() {
 }
 
 #[test]
-fn crossflash_flag_refuses_when_drive_firmware_is_unreadable() {
+fn crossflash_requires_model_override_and_complete_backup() {
     // Two behaviours in one test:
     //
     // 1. Without `--allow-crossflash`, a wrong-model image is refused at the
@@ -611,31 +850,29 @@ fn crossflash_flag_refuses_when_drive_firmware_is_unreadable() {
     //    `engine.rs::flash` where `drive_fine_family` is now `?`-propagated.
     let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
 
-    let mut refused = bin_req(image.clone(), true);
+    let refused = bin_req(image.clone(), true);
     assert!(
-        flash(&mut MockScsiDevice::new(), &Mtk, &refused).is_err(),
+        flash(
+            &mut MockScsiDevice::new().with_firmware_image(backup_firmware()),
+            &Mtk,
+            &refused
+        )
+        .is_err(),
         "wrong-model flash must refuse without --allow-crossflash"
     );
 
-    refused.allow_crossflash = true;
-    let err = flash(&mut MockScsiDevice::new(), &Mtk, &refused).expect_err(
-        "crossflash MUST refuse when the drive's current firmware cannot be identified as an \
-         MT19xx image — an unidentifiable read is not 'family unknown, warn and proceed'",
-    );
-    let msg = format!("{err:#}");
-    assert!(
-        msg.contains("identifying the drive's silicon family")
-            || msg.contains("undetectable")
-            || msg.contains("MTEKMT19"),
-        "error must name the fine-family identification failure (got: {msg})"
-    );
+    let mut allowed = bin_req(image, true);
+    allowed.allow_crossflash = true;
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    flash(&mut dev, &Mtk, &allowed).expect("same-silicon crossflash with full saved backup");
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
 }
 
 #[test]
 fn flash_execute_refuses_an_unsigned_image_with_no_write() {
     // The brick guard: a model-matching image whose CMAC does NOT verify (empty
     // integrity table) must be refused before any firmware byte is streamed.
-    let mut dev = MockScsiDevice::new();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let mut img = vec![0u8; IMAGE_SIZE];
     stamp_descriptor(&mut img, "BD-RE BU40N");
     let err = flash(&mut dev, &Mtk, &bin_req(img, true)).unwrap_err();
@@ -648,14 +885,15 @@ fn flash_execute_refuses_an_unsigned_image_with_no_write() {
 
 #[test]
 fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
-    // A failed pre-flash per-unit backup must abort the flash unless the
-    // operator opts into --rescue-no-dump — never write firmware over a drive
-    // whose recovery image we could not capture.
-    let mut dev = MockScsiDevice::new().on_fail(is_mode6_read, "dump read refused");
-    let req = bin_req(vec![0u8; IMAGE_SIZE], true); // rescue_no_dump = false
+    // A failed pre-flash per-unit backup must abort the flash. A signed,
+    // model-matching input ensures this test reaches the backup gate.
+    let mut dev = MockScsiDevice::new()
+        .with_firmware_image(backup_firmware())
+        .on_fail(is_mode6_read, "dump read refused");
+    let req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        err.to_string().contains("pre-flash per-unit dump failed"),
+        format!("{err:#}").contains("reading required per-unit backup regions"),
         "got: {err}"
     );
     assert!(
@@ -665,9 +903,101 @@ fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
 }
 
 #[test]
+fn dump_refuses_unreadable_firmware_without_creating_archive() {
+    let gap = offset_bytes(0x100000);
+    let mut dev = MockScsiDevice::new()
+        .with_firmware_image(backup_firmware())
+        .on_fail(
+            move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&gap[..]),
+            "unreadable main",
+        );
+    let out = fresh_backup_path();
+    let err = backup(&mut dev, &Mtk, &out).unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("complete restorable backup unavailable"));
+    assert!(!out.exists());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn execute_refuses_unsaved_or_existing_backup_before_write() {
+    let mut req = bin_req(backup_firmware(), true);
+    req.predump_out = None;
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    assert!(flash(&mut dev, &Mtk, &req)
+        .unwrap_err()
+        .to_string()
+        .contains("no preflash backup path"));
+    assert!(dev.writes.is_empty());
+
+    let out = fresh_backup_path();
+    std::fs::write(&out, b"existing backup").unwrap();
+    req.predump_out = Some(out.clone());
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    assert!(format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err())
+        .contains("existing backups are never overwritten"));
+    assert!(dev.writes.is_empty());
+    assert_eq!(std::fs::read(&out).unwrap(), b"existing backup");
+    std::fs::remove_file(out).unwrap();
+}
+
+#[test]
+fn restore_refuses_partial_or_corrupt_archive_without_write() {
+    let complete = coherent_backup();
+    let mut tar = complete.to_tar_bytes().unwrap();
+    let needle = b"rom_1F0000.bin";
+    let pos = tar.windows(needle.len()).position(|w| w == needle).unwrap();
+    let body = pos + 512;
+    tar[body] ^= 0x01;
+    let mut req = bin_req(tar, true);
+    req.input_kind = InputKind::Tar;
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    assert!(format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err())
+        .contains("per-unit regions do not match"));
+    assert!(dev.writes.is_empty());
+
+    req.input = sample_user_dump().to_tar_bytes().unwrap();
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    assert!(
+        format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err()).contains("missing backup.toml")
+    );
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn restore_refuses_other_drive_backup_without_write() {
+    let tar = coherent_backup().to_tar_bytes().unwrap();
+    let mut req = bin_req(tar, true);
+    req.input_kind = InputKind::Tar;
+    req.drive_model = "WH16NS60".into();
+    req.allow_crossflash = true;
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    assert!(flash(&mut dev, &Mtk, &req)
+        .unwrap_err()
+        .to_string()
+        .contains("cross-device rollback"));
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn backup_refuses_image_per_unit_disagreement_without_write() {
+    let mut artifact = coherent_backup();
+    artifact.per_unit.rom_1f0000[0] ^= 1;
+    let tar = artifact.to_tar_bytes().unwrap();
+    let mut req = bin_req(tar, true);
+    req.input_kind = InputKind::Tar;
+    req.drive_model = "BD-RE BU40N".into();
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
+    assert!(format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err())
+        .contains("disagree with firmware image"));
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
 fn flash_execute_refuses_a_wrong_model_image_with_no_write() {
     // A correctly-signed image for a DIFFERENT model must never reach the write.
-    let mut dev = MockScsiDevice::new();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
     let err = flash(&mut dev, &Mtk, &bin_req(img, true)).unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");

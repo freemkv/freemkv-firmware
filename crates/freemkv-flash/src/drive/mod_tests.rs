@@ -8,6 +8,91 @@ use std::path::Path;
 fn classify_mtk_from_get_config_010c() {
     let mut dev = MockScsiDevice::mtk();
     assert_eq!(classify(&mut dev), Family::Mtk);
+    let matched = resolve_backend(&mut dev).unwrap().unwrap();
+    assert_eq!(matched.evidence.backend_name, "mtk19xx");
+    assert_eq!(matched.evidence.family, Family::Mtk);
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn registry_rejects_overlapping_protocol_matches() {
+    let mut inq = vec![0u8; 96];
+    inq[8..16].copy_from_slice(b"PIONEER ");
+    inq[16..24].copy_from_slice(b"BDR-UD04");
+    let mut dev = MockScsiDevice::mtk()
+        .on(
+            |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+            vec![0xA5; 8],
+        )
+        .on(|cdb| cdb.first() == Some(&0x12), inq);
+    let error = resolve_backend(&mut dev).unwrap_err().to_string();
+    assert!(error.contains("ambiguous firmware protocol"));
+    assert!(error.contains("mtk19xx"));
+    assert!(error.contains("pioneer-oem"));
+    assert_eq!(classify(&mut dev), Family::Unknown);
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn f1_without_positive_identity_does_not_select_pioneer() {
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+        vec![0xA5; 8],
+    );
+    assert_eq!(classify(&mut dev), Family::Unknown);
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn f1_with_failed_inquiry_does_not_select_pioneer() {
+    let mut dev = MockScsiDevice::new()
+        .on_fail(|cdb| cdb.first() == Some(&0x12), "INQUIRY transport failed")
+        .on(
+            |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+            vec![0xA5; 8],
+        );
+    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn f1_with_unrelated_vendor_does_not_select_pioneer() {
+    let mut inq = vec![0u8; 96];
+    inq[8..16].copy_from_slice(b"ACME    ");
+    inq[16..24].copy_from_slice(b"BDR-UD04");
+    let mut dev = MockScsiDevice::new()
+        .on(|cdb| cdb.first() == Some(&0x12), inq)
+        .on(
+            |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+            vec![0xA5; 8],
+        );
+    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn mt19_banner_without_mmc_feature_does_not_match() {
+    let mut boot_rom = vec![0u8; 32];
+    boot_rom[..15].copy_from_slice(b"MT1959 Boot BU5");
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| {
+            cdb.first() == Some(&0x3C)
+                && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
+                && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..])
+        },
+        boot_rom,
+    );
+    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn protocol_match_keeps_device_identity_separate() {
+    let mut dev = MockScsiDevice::renesas();
+    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    let identity = read_identity(&mut dev);
+    assert_eq!(identity.vendor, "RENESAS");
+    assert!(dev.writes.is_empty());
 }
 
 /// Regression guard: a drive that answers GET CONFIG 0x010C with the standard
@@ -54,17 +139,21 @@ fn classify_unknown_when_no_discriminator() {
 #[test]
 fn sniff_picks_tar_vs_bin() {
     assert_eq!(sniff_input(Path::new("dump.tar")), InputKind::Tar);
+    assert_eq!(
+        sniff_input(Path::new("UD04.firmware.tar")),
+        InputKind::PioneerBundle
+    );
     assert_eq!(sniff_input(Path::new("fw.bin")), InputKind::Bin);
     assert_eq!(sniff_input(Path::new("image")), InputKind::Bin);
 }
 
 #[test]
-fn mtk_gate_blocks_non_mtk_families() {
-    for fam in [Family::Pioneer, Family::Renesas, Family::Unknown] {
-        let handler = for_family(fam);
+fn dump_only_families_stay_read_only() {
+    // Unknown is inert. Pioneer is exercised by its own tests.
+    {
+        let handler = for_family(Family::Unknown);
         assert!(!handler.is_supported());
         let mut dev = MockScsiDevice::new();
-        // Every drive-touching primitive errors, and none issues a write CDB.
         assert!(handler.read_dump(&mut dev).is_err());
         assert!(handler
             .flash_open(&mut dev, crate::manifest::FlashMode::Full)
@@ -78,7 +167,6 @@ fn mtk_gate_blocks_non_mtk_families() {
 fn for_family_reports_the_expected_family() {
     assert_eq!(for_family(Family::Mtk).family(), Family::Mtk);
     assert_eq!(for_family(Family::Pioneer).family(), Family::Pioneer);
-    assert_eq!(for_family(Family::Renesas).family(), Family::Renesas);
     assert_eq!(for_family(Family::Unknown).family(), Family::Unknown);
 }
 

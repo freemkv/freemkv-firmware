@@ -141,10 +141,10 @@ fn genuinely_unknown_blob_is_unknown_not_a_panic() {
 }
 
 #[test]
-fn flash_summary_is_identify_only_and_wires_the_catalog() {
+fn flash_summary_distinguishes_pioneer_offline_plan_from_live_support() {
     let p = ImageFamily::Pioneer.flash_summary();
-    assert!(p.contains("identify-only"));
-    assert!(p.contains("Pioneer"), "catalog recipe surfaced: {p}");
+    assert!(p.contains("offline OEM plan"));
+    assert!(p.contains("live backup/flash blocked"));
     // A family with no catalog brand is a bare identify-only line.
     assert_eq!(
         ImageFamily::Renesas.flash_summary(),

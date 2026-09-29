@@ -1,4 +1,4 @@
-//! Interoperability proof for the `dump` subcommand's tar format: a full
+//! Interoperability proof for the `backup` subcommand's tar format: a full
 //! encode → decode round-trip over every member, asserting the bytes survive.
 
 use freemkv_flash::drive::mtk::UserDump;

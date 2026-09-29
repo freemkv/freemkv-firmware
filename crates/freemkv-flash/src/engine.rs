@@ -1,4 +1,4 @@
-//! Generic command engine: `info` / `dump` / `flash`.
+//! Generic command engine: `info` / `backup` / `flash`.
 //!
 //! This layer is **chip-agnostic**. It owns everything that does not depend on a
 //! particular silicon: reading the input file, the pre-flash backup, the dry-run
@@ -9,16 +9,20 @@
 //!
 //! Layering: `main` (CLI) → `engine` (this) → [`crate::drive`] (per-chip).
 
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
 use crate::cmac;
-use crate::drive::{DriveFamily, FlashRequest, InputKind, UserDump};
+use crate::drive::{DriveFamily, FlashRequest, InputKind};
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
+
+pub(crate) mod backup;
+use backup::save_backup;
+#[cfg(test)]
+use backup::BackupArtifact;
 
 /// Run the `info` command: identify + classify (read-only).
 pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
@@ -49,7 +53,7 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
                 if supported {
                     style::green("supported")
                 } else {
-                    style::amber("NOT supported (MediaTek MT19xx only)")
+                    style::amber("live flash/backup unavailable")
                 }
             )
         )
@@ -182,6 +186,49 @@ pub fn info_file(path: &Path) -> Result<()> {
         .collect();
     println!("{}", style::kv("sha256", &sha));
 
+    if let Ok(bundle) = crate::pioneer_bundle::Bundle::from_tar_bytes(&image) {
+        println!("{}", style::kv("family", "Pioneer"));
+        if !bundle.source_name.is_empty() {
+            println!("{}", style::kv("source", &bundle.source_name));
+        }
+        if let Some(model) = &bundle.public_model {
+            println!("{}", style::kv("listed model", model));
+        }
+        if let Some(model) = &bundle.embedded_model {
+            println!("{}", style::kv("firmware model", model));
+        }
+        if let Some(hardware) = bundle
+            .components
+            .first()
+            .and_then(|c| c.hardware.as_deref())
+        {
+            println!("{}", style::kv("hardware", hardware));
+        }
+        println!(
+            "{}",
+            style::kv("components", &bundle.components.len().to_string())
+        );
+        for component in &bundle.components {
+            println!(
+                "{}",
+                style::kv(
+                    "component",
+                    &format!(
+                        "{:?} {} ({} bytes)",
+                        component.role,
+                        component.path,
+                        component.bytes.len()
+                    )
+                )
+            );
+        }
+        println!(
+            "{}",
+            style::kv("flash", "offline dry-run only; live backup/flash blocked")
+        );
+        return Ok(());
+    }
+
     let fc = classify_file(&image);
     let Some(chip) = fc.chip.as_ref() else {
         // Not MT19xx: report whichever other family the signature layer found
@@ -288,7 +335,8 @@ pub fn info_file(path: &Path) -> Result<()> {
 /// Report a firmware FILE that is NOT MediaTek MT19xx: a non-MTK family found by
 /// the signature layer ([`crate::imageid`]), or an honest "unknown". Prints the
 /// family, any model/rev extracted from the image (never the filename), the
-/// honest flashability (identify-only for every non-MT19xx family), and states
+/// honest flashability (offline planning is available for selected Pioneer
+/// updater paths), and states
 /// that these families carry no MT19xx-style signed CMAC table — so `info` never
 /// prints INVALID for an image that simply has no integrity table.
 fn info_file_other(id: &crate::imageid::ImageIdentity) -> Result<()> {
@@ -327,174 +375,332 @@ fn info_file_other(id: &crate::imageid::ImageIdentity) -> Result<()> {
     Ok(())
 }
 
-/// Run the `dump` command: capture the per-unit regions to an interoperable tar.
-pub fn dump(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path) -> Result<()> {
-    println!("{}", style::kv("device", &dev.describe()));
-    println!("{}", style::kv("family", &drive.family().to_string()));
-    println!("{}", style::dim_line("dumping per-unit regions..."));
-    let dump = drive.read_dump(dev)?;
-    for (name, data) in dump.members() {
-        println!(
-            "{}",
-            style::dim_line(&format!("  {name:<16} {} bytes", data.len()))
+/// Capture a complete firmware and per-unit rollback artifact. Any unreadable
+/// firmware range makes the command fail without writing an archive.
+pub fn backup(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path) -> Result<()> {
+    if drive.backup_extension().is_none() {
+        bail!(
+            "no proven restorable firmware backup for {}",
+            drive.backend_name()
         );
     }
-    let tar = dump.to_tar_bytes()?;
-    std::fs::write(out, &tar).with_context(|| format!("writing {}", out.display()))?;
-    if let Some(sn) = dump.serial() {
-        println!("{}", style::kv("serial", &sn));
-    }
-    if let Some(fw) = dump.fw_date() {
-        println!("{}", style::kv("fw-date", &fw));
-    }
-    println!(
-        "{} {}",
-        style::green("wrote"),
-        style::dim(&format!(
-            "{} ({} bytes, 6 members).",
-            out.display(),
-            tar.len()
-        ))
-    );
-    Ok(())
-}
-
-/// Run `dump`: EVERYTHING readable — the full 2 MiB image (`firmware.bin`,
-/// graceful) + the 6 per-unit regions + the read-surface map (`map.json` +
-/// `map.md`) — bundled into one `.tar`. Read-only.
-pub fn dump_everything(
-    dev: &mut dyn ScsiDevice,
-    drive: &dyn DriveFamily,
-    out: &Path,
-) -> Result<()> {
-    println!("{}", style::kv("device", &dev.describe()));
-    println!("{}", style::kv("family", &drive.family().to_string()));
+    let target_model = drive.identity(dev).product;
+    let bytes = drive.capture_backup(dev)?;
+    let saved_len = save_backup(out, &bytes, drive, &target_model)?;
     println!(
         "{}",
-        style::dim_line("dumping everything (full image + per-unit regions + map)...")
+        style::kv("backup sha256", &format!("{:x}", Sha256::digest(&bytes)))
     );
-
-    // Per-unit regions, full image, and read-surface map are all FAMILY-OPTIONAL:
-    // MTK supplies all three, Pioneer/Renesas only the full image. A family that
-    // reports "unsupported" for a part still dumps the rest (engine omits it).
-    let dump = match drive.read_dump(dev) {
-        Ok(d) => Some(d),
-        Err(e) => {
-            println!(
-                "  per-unit regions {}",
-                style::amber(&format!("unavailable ({e})"))
-            );
-            None
-        }
-    };
-    let id = drive.identity(dev);
-
-    let full = match drive.read_full_image(dev) {
-        Ok(fi) => Some(fi),
-        Err(e) => {
-            println!(
-                "  firmware.bin     {}",
-                style::amber(&format!("unavailable ({e})"))
-            );
-            None
-        }
-    };
-    // The map is derived from the already-read image, so it is only attempted
-    // when the full image is available.
-    let map = match &full {
-        Some((image, _, gaps)) => drive.read_surface_map(dev, &id, image, gaps)?,
-        None => None,
-    };
-
-    let mut buf = Vec::new();
-    {
-        let mut b = tar::Builder::new(&mut buf);
-        if let Some((image, ..)) = &full {
-            tar_append(&mut b, "firmware.bin", image)?;
-        }
-        if let Some(dump) = &dump {
-            for (name, data) in dump.members() {
-                tar_append(&mut b, name, data)?;
-            }
-        }
-        if let Some((map_json, map_md)) = &map {
-            tar_append(&mut b, "map.json", map_json.as_bytes())?;
-            tar_append(&mut b, "map.md", map_md.as_bytes())?;
-        }
-        b.into_inner()?.flush()?;
-    }
-    std::fs::write(out, &buf).with_context(|| format!("writing {}", out.display()))?;
-
-    if let Some((image, readable, gaps)) = &full {
-        println!(
-            "  firmware.bin     {}",
-            style::dim(&format!(
-                "{} ({} readable{})",
-                human_size(image.len()),
-                human_size(*readable),
-                if gaps.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        ", {} not read-exposed → 0xFF",
-                        human_size(image.len() - readable)
-                    )
-                }
-            ))
-        );
-        for (s, e) in gaps {
-            println!(
-                "{}",
-                style::dim_line(&format!("      gap 0x{s:06X}..0x{e:06X}"))
-            );
-        }
-    }
-    if let Some(dump) = &dump {
-        for (name, data) in dump.members() {
-            println!(
-                "{}",
-                style::dim_line(&format!("  {name:<16} {} bytes", data.len()))
-            );
-        }
-    }
-    if map.is_some() {
-        println!(
-            "{}",
-            style::dim_line("  map.json / map.md  (read-surface map)")
-        );
-    }
-    if let Some((image, ..)) = &full {
-        println!(
-            "{}",
-            style::dim_line(&format!("  firmware sha256: {:x}", Sha256::digest(image)))
-        );
-    }
     println!(
         "{} {}",
         style::green("wrote"),
-        style::dim(&format!("{} ({}).", out.display(), human_size(buf.len())))
+        style::dim(&format!("{} ({}).", out.display(), human_size(saved_len)))
     );
     Ok(())
 }
 
-fn tar_append<W: Write>(b: &mut tar::Builder<W>, name: &str, data: &[u8]) -> Result<()> {
-    let mut h = tar::Header::new_gnu();
-    h.set_path(name)?;
-    h.set_size(data.len() as u64);
-    h.set_mode(0o644);
-    h.set_mtime(0);
-    h.set_cksum();
-    b.append(&h, data)?;
-    Ok(())
-}
-
-/// Run the `flash` command: `.bin` = full verbatim stream, `.tar` = per-unit restore.
+/// Run the `flash` command: `.bin` = full image, `.tar` = firmware rollback archive.
 pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
+    if let Some(plan) = drive.offline_plan(req) {
+        return plan;
+    }
     guard_no_medium(dev, req.execute)?;
     match req.input_kind {
         InputKind::Tar => flash_restore(dev, drive, req),
         InputKind::Bin => flash_bin(dev, drive, req),
+        InputKind::PioneerBundle => bail!("Pioneer firmware bundles cannot use the MTK flash path"),
     }
+}
+
+/// Pioneer accepts a variable-size OEM Normal envelope in the host updater.
+/// This path is deliberately offline: even `--execute` returns before touching
+/// the device, since a restorable backup, drive acceptance, and completion
+/// status behavior are not established.
+pub fn plan_pioneer_offline(
+    image: &[u8],
+    input_kind: InputKind,
+    model: &str,
+    allow_crossflash: bool,
+    verbose: bool,
+    execute: bool,
+    _drive: &dyn DriveFamily,
+) -> Result<()> {
+    if execute {
+        bail!("Pioneer flash execution is blocked: restorable backup, drive acceptance, and completion status rules are unverified; no SCSI writes issued");
+    }
+    let bundle = match input_kind {
+        InputKind::PioneerBundle => Some(crate::pioneer_bundle::Bundle::from_tar_bytes(image)?),
+        InputKind::Bin => None,
+        InputKind::Tar => bail!("Pioneer offline flash planning requires a Normal envelope or Pioneer envelope tar, not an MTK backup archive"),
+    };
+    if let Some(bundle) = &bundle {
+        if bundle.components.len() > 1 {
+            return plan_pioneer_bounded_bundle(bundle, model, verbose);
+        }
+    }
+    let image = match &bundle {
+        Some(bundle) => bundle.sole_normal_only()?.bytes.as_slice(),
+        None => image,
+    };
+    let banner = crate::drive::pioneer::parse_banner(image).ok_or_else(|| {
+        anyhow::anyhow!("Pioneer offline plan requires a Normal .enc envelope with a valid banner")
+    })?;
+    if image.len() < crate::drive::pioneer::IMAGE_MIN
+        || image.len() > crate::drive::pioneer::IMAGE_MAX
+        || !image.len().is_multiple_of(0x100)
+    {
+        bail!("Pioneer envelope length {} is outside the supported offline planning range or not 256-byte aligned", image.len());
+    }
+    if model.trim().is_empty() {
+        bail!("Pioneer offline plan requires a nonempty stated drive model");
+    }
+    let drive_model = model.to_ascii_uppercase();
+    if !allow_crossflash
+        && !drive_model
+            .split_whitespace()
+            .any(|part| part == banner.model.to_ascii_uppercase())
+    {
+        bail!(
+            "Pioneer envelope model {:?} does not match stated drive model {:?}",
+            banner.model,
+            model
+        );
+    }
+    use crate::drive::pioneer::{
+        offline_oem_transcript, select_oem_profile, EnvelopeEvidence, TransferStage,
+    };
+    let profile = select_oem_profile(model, image)?;
+    let transcript = offline_oem_transcript(profile, image)?;
+    let profile_name = match profile {
+        crate::drive::pioneer::OemUpdateProfile::Ud04V111Normal => "UD04 1.11",
+        crate::drive::pioneer::OemUpdateProfile::S09V130Normal => "S09 1.30",
+    };
+    println!(
+        "{}",
+        style::header("== Pioneer offline transfer plan (OEM host shape) ==")
+    );
+    if let Some(bundle) = &bundle {
+        println!("{}", style::kv("bundle source", &bundle.source_name));
+        println!(
+            "{}",
+            style::kv(
+                "bundle selection",
+                "unresolved; unique Normal-only profile selected by flasher"
+            )
+        );
+        println!(
+            "{}",
+            style::kv("bundle component", &bundle.components[0].path)
+        );
+    }
+    println!("{}", style::kv("stated model", ident_or_unknown(model)));
+    println!(
+        "{}",
+        style::kv(
+            "envelope",
+            &format!(
+                "{} bytes, banner model {}, banner revision {}",
+                image.len(),
+                banner.model,
+                banner.revision
+            )
+        )
+    );
+    println!(
+        "{}",
+        style::kv("SHA-256", &format!("{:x}", Sha256::digest(image)))
+    );
+    let evidence = profile.evidence();
+    println!("{}", style::kv("OEM host source", evidence.source));
+    println!("{}", style::kv("OEM components", "Normal envelope only"));
+    println!(
+        "{}",
+        style::kv("OEM updater SHA-256", evidence.updater_sha256)
+    );
+    if let Some(hash) = evidence.alternate_updater_sha256 {
+        println!("{}", style::kv("OEM alternate updater SHA-256", hash));
+    }
+    println!(
+        "{}",
+        style::kv("OEM envelope SHA-256", evidence.reference_envelope_sha256)
+    );
+    let status = match profile.envelope_evidence(image) {
+        EnvelopeEvidence::ExactOemReference => "exact audited OEM envelope",
+        EnvelopeEvidence::UncertifiedCandidate => {
+            "uncertified same-model offline candidate (OEM command shape only)"
+        }
+    };
+    println!("{}", style::kv("input evidence", status));
+    println!(
+        "{}",
+        style::kv(
+            &format!("{profile_name} host entry/finish control SHA-256"),
+            &format!("{:x}", Sha256::digest(&transcript[0].data))
+        )
+    );
+    println!(
+        "{profile_name} OEM offline transcript: {} raw-envelope chunks of at most {} B via 3B 07 F0, bracketed by 3B 04 FF entry and 3B 05 FF finish (256 B control each). Execution is blocked: restorable backup, full F1 identity/preflight, drive acceptance, and status handling are unverified.",
+        transcript.len() - 2,
+        crate::drive::pioneer::FLASH_CHUNK
+    );
+    if verbose {
+        for transfer in &transcript {
+            let label = match transfer.stage {
+                TransferStage::Entry => "entry",
+                TransferStage::KernelPrefix => "kernel",
+                TransferStage::KernelFe => "kernel FE",
+                TransferStage::Normal => "chunk",
+                TransferStage::Finish => "finish",
+            };
+            println!(
+                "  {label:6} {:02X?}  {} B",
+                transfer.cdb,
+                transfer.data.len()
+            );
+        }
+    }
+    println!(
+        "{}",
+        style::kv(
+            "decoded payload revision",
+            "unknown (payload not decoded by this planner)"
+        )
+    );
+    println!(
+        "{}",
+        style::amber(
+            "Banner may come from an older encoding template. Profile selection checks model, hardware, destination, and size; modified-envelope integrity and drive acceptance are not established."
+        )
+    );
+    println!(
+        "{}",
+        style::amber("OFFLINE ONLY: no SCSI commands issued; --execute remains blocked.")
+    );
+    Ok(())
+}
+
+fn plan_pioneer_bounded_bundle(
+    bundle: &crate::pioneer_bundle::Bundle,
+    model: &str,
+    verbose: bool,
+) -> Result<()> {
+    let stated_matches = |candidate: &str| {
+        model
+            .to_ascii_uppercase()
+            .split_whitespace()
+            .any(|part| part == candidate.to_ascii_uppercase())
+    };
+    if let [first, second] = bundle.components.as_slice() {
+        use crate::pioneer_bundle::Role;
+        let pair = match (first.role, second.role) {
+            (Role::Kernel, Role::Main) => Some((first, second)),
+            (Role::Main, Role::Kernel) => Some((second, first)),
+            _ => None,
+        };
+        if let Some((kernel, normal)) = pair {
+            let kernel_hash = format!("{:x}", Sha256::digest(&kernel.bytes));
+            let normal_hash = format!("{:x}", Sha256::digest(&normal.bytes));
+            if kernel_hash == "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83"
+                && normal_hash == "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141"
+            {
+                if !stated_matches("BDR-UD04")
+                    && !bundle.public_model.as_deref().is_some_and(stated_matches)
+                {
+                    bail!("stated drive model {model:?} matches neither the listed model nor the supplied UD04 resource");
+                }
+                let steps = crate::drive::pioneer::offline_ud04_autoflasher_data_out(
+                    &kernel.bytes,
+                    &normal.bytes,
+                )?;
+                println!(
+                    "{}",
+                    style::header("== Pioneer UD04 Autoflasher offline data-out ==")
+                );
+                if !bundle.source_name.is_empty() {
+                    println!("{}", style::kv("bundle source", &bundle.source_name));
+                }
+                println!("{}", style::kv("stated model", model));
+                println!("{}", style::kv("Kernel SHA-256", &kernel_hash));
+                println!("{}", style::kv("Normal SHA-256", &normal_hash));
+                println!(
+                    "{}",
+                    style::kv(
+                        "entry/finish control",
+                        "PIONEER BDR-US04 + FD236642 + 236 zero bytes"
+                    )
+                );
+                println!("Data-out shape: 04/FF entry; three 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
+                println!("OFFLINE ONLY: alternate entry-state branch, preflight, status/completion, drive acceptance, and restorable backup are unverified; no device I/O or live writes.");
+                if verbose {
+                    for step in &steps {
+                        println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
+                    }
+                }
+                return Ok(());
+            }
+        }
+    }
+    let (profile, kernel, normal) = bundle.select_bounded_profile()?;
+    let banner = crate::drive::pioneer::parse_banner(&normal.bytes)
+        .ok_or_else(|| anyhow::anyhow!("Normal component lacks Pioneer banner"))?;
+    if model.trim().is_empty()
+        || (!stated_matches(&banner.model)
+            && !bundle.public_model.as_deref().is_some_and(stated_matches))
+    {
+        bail!(
+            "stated drive model {:?} matches neither listed model nor resource banner model {:?}",
+            model,
+            banner.model
+        );
+    }
+    use crate::drive::pioneer::{offline_bounded_oem_data_out, TransferStage};
+    // A deterministic example seed checks every profile-specific control and
+    // resource invariant. The actual updater seed is runtime GetTickCount.
+    let sample = offline_bounded_oem_data_out(profile, &kernel.bytes, &normal.bytes, 0)?;
+    let normal_chunks = sample
+        .iter()
+        .filter(|step| step.stage == TransferStage::Normal)
+        .count();
+    println!(
+        "{}",
+        style::header("== Pioneer bounded OEM offline plan (parameterized) ==")
+    );
+    println!("{}", style::kv("bundle source", &bundle.source_name));
+    println!("{}", style::kv("stated model", model));
+    println!("{}", style::kv("resource model", &banner.model));
+    println!("{}", style::kv("resource revision", &banner.revision));
+    println!("{}", style::kv("resource hardware", &banner.hardware));
+    println!("{}", style::kv("updater member", profile.updater_member));
+    println!("{}", style::kv("updater SHA-256", profile.updater_sha256));
+    println!("{}", style::kv("Kernel SHA-256", profile.kernel_sha256));
+    println!("{}", style::kv("Normal SHA-256", profile.normal_sha256));
+    println!("{}", style::kv("control SHA-256", profile.control_sha256));
+    println!(
+        "{}",
+        style::kv(
+            "clock seed",
+            "GetTickCount at runtime; not present in bundle"
+        )
+    );
+    println!("Data-out shape: 04/FF entry; 07/F0 Kernel prefix 0x1200 B; generated 0x200 B from seeded CRT rand; four 07/FE Kernel slices; {normal_chunks} 07/F0 Normal chunks; 05/FF finish.");
+    println!("OFFLINE ONLY: data-out example validated with seed 0, but preflight, READ/WRITE BUFFER 02/A0 setup, polling, completion, restorable backup, and drive acceptance are not established; no device I/O or live writes.");
+    if verbose {
+        for (index, step) in sample.iter().enumerate() {
+            let stage = match step.stage {
+                TransferStage::Entry => "entry",
+                TransferStage::KernelPrefix => "kernel-prefix",
+                TransferStage::KernelFe => "kernel-FE",
+                TransferStage::Normal => "normal",
+                TransferStage::Finish => "finish",
+            };
+            println!(
+                "  {index:3} {stage:13} {:02X?} {} B",
+                step.cdb,
+                step.data.len()
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Refuse to flash while a disc is loaded. Reprogramming the flash while the
@@ -542,45 +748,24 @@ fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
 /// (even protected reads can hit the remapped boot page or a still-settling
 /// drive) — the identity read decides.
 fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
-    let image_size = drive.image_size();
-    if req.input.len() != image_size {
-        bail!(
-            "firmware .bin must be exactly {image_size} bytes, got {}",
-            req.input.len()
-        );
-    }
-
-    // ALWAYS attempt a pre-flash backup dump (never spliced into the image). On
-    // failure, abort unless --rescue-no-dump.
-    let mut backup_summary = String::from("skipped (--rescue-no-dump)");
-    match drive.read_dump(dev) {
-        Ok(dump) => {
-            if let Some(out) = &req.predump_out {
-                let tar = dump.to_tar_bytes()?;
-                std::fs::write(out, &tar)
-                    .with_context(|| format!("saving pre-flash dump to {}", out.display()))?;
-                backup_summary = format!("saved {} ({} bytes)", out.display(), tar.len());
-            } else {
-                backup_summary = "captured (not saved: no -o given)".to_string();
-            }
-        }
-        Err(e) => {
-            if !req.rescue_no_dump {
-                bail!(
-                    "pre-flash per-unit dump failed ({e}); aborting. \
-                     Use --rescue-no-dump ONLY to flash a drive that can no longer be read."
-                );
-            }
-            println!(
-                "{}",
-                style::amber(&format!(
-                    "WARNING: pre-flash dump failed ({e}); --rescue-no-dump: proceeding without a backup."
-                ))
-            );
-        }
-    }
-
+    // Image geometry, integrity, model, and any controller sub-family gate are
+    // protocol decisions. The engine only enforces the common workflow.
+    drive.validate_image(dev, &req.input, &req.drive_model, req.allow_crossflash)?;
     let (payload, enc) = drive.envelope(dev, &req.input, req.enc_override)?;
+
+    // A firmware write requires a saved, self-checking full rollback artifact.
+    // The mapped read often has holes; that condition fails before flash_open.
+    let mut backup_summary = String::from("not captured (dry run)");
+    if req.execute {
+        let out = req
+            .predump_out
+            .as_ref()
+            .context("no preflash backup path supplied")?;
+        let bytes = drive.capture_backup(dev)?;
+        let target_model = drive.identity(dev).product;
+        let saved_len = save_backup(out, &bytes, drive, &target_model)?;
+        backup_summary = format!("saved {} ({} bytes)", out.display(), saved_len);
+    }
 
     println!("{}", style::header("== flash plan =="));
     println!("{}", style::kv("device", &dev.describe()));
@@ -617,95 +802,28 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
                 "{}",
                 style::status_line(
                     "preflight",
-                    "OK — drive ready for flash (read-only handshake)",
+                    "transport ready; backup capture is checked only on execute",
                     style::Status::Ok
                 )
             ),
-            Err(e) => println!(
-                "{}",
-                style::status_line(
-                    "preflight",
-                    &format!("NOT READY — {e}"),
-                    style::Status::Fail
-                )
-            ),
+            Err(e) => bail!("read-only preflight failed: {e}"),
         }
         println!(
             "\n{}",
-            style::amber("DRY RUN: no SCSI writes issued. Re-run with --execute to flash.")
+            style::amber("DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.")
         );
         return Ok(());
     }
-
-    // Integrity gate (write path): the image's AES-CMAC must verify before any
-    // destructive write. A mis-signed image is rejected by the drive's boot
-    // authenticator and can brick it — refuse unconditionally, no override.
-    if !cmac::verify(&req.input) {
-        bail!(
-            "firmware image fails its AES-CMAC integrity check — refusing to flash. \
-             A mis-signed or corrupted image is rejected by the drive's boot \
-             authenticator and can brick the drive."
-        );
-    }
-
-    // Model gate (write path): every MT19xx image CMAC-verifies for its OWN
-    // model, so CMAC alone can't stop a wrong-model write. Require the image's
-    // drive-descriptor model to name this drive's INQUIRY product — unless
-    // --allow-crossflash was passed, which waives the MODEL match (but never the
-    // chipset-family gate). For crossflash we read the drive's CURRENT firmware to
-    // confirm its exact silicon (MT1959 vs MT1939) from real bytes.
-    //
-    // If `--allow-crossflash` is set, the fine-family read MUST succeed and
-    // detect_chip MUST identify a family — a read error here silently masks
-    // the "non-overridable" MT1959-vs-MT1939 gate that `decide_crossflash`
-    // enforces, letting an incompatible cross-family flash proceed with only
-    // a warning. That's the exact class of bug the gate exists to prevent
-    // (writing MT1959 CDBs at MT1939 silicon or vice versa → drive brick).
-    // On the normal (non-crossflash) path this read is skipped, so the model-
-    // name gate is authoritative and this stricter treatment doesn't affect
-    // the common case.
-    let drive_fine_family = if req.allow_crossflash {
-        let (bytes, _, _) = drive.read_full_image(dev).with_context(|| {
-            "reading the drive's current firmware to confirm silicon family for --allow-crossflash \
-             (the fine-family gate MUST succeed under --allow-crossflash; a read failure here \
-             cannot be treated as 'family unknown, warn and proceed' because that would let an \
-             MT1959→MT1939 (or vice-versa) cross-family flash slip past the non-overridable gate)"
-        })?;
-        let chip = freemkv_chipset::detect_chip(&bytes).with_context(|| {
-            "identifying the drive's silicon family from its current firmware (for the \
-             --allow-crossflash gate)"
-        })?;
-        Some(chip.family)
-    } else {
-        None
-    };
-    // `Ok(Some(..))` = an authorized crossflash (its banner + warnings were already
-    // printed in the plan above); `Ok(None)` = normal same-model flash; `Err` refuses.
-    let _crossflash = ensure_image_matches_drive(
-        &req.input,
-        &req.drive_model,
-        drive.family(),
-        req.allow_crossflash,
-        drive_fine_family,
-    )?;
 
     // Execution-tier gate: a real (destructive) write is allowed ONLY for a
     // hardware-proven, issuable instruction set. Today that is MT1959 (the MTK
     // family); catalog-only / transport-gated families are dry-run/plan only and
     // must never issue a write, even with --execute.
-    match crate::flashset::FlashInstructionSet::for_family(drive.family()) {
-        Some(set) if set.status.is_executable() => {}
-        other => {
-            let tier = other
-                .map(|s| s.status.label())
-                .unwrap_or("no executable flash recipe (catalog-only)");
-            bail!(
-                "refusing to flash: the {} family is {} — freemkv-flash executes real \
-                 writes only on the hardware-proven MT1959 path (dry-run/plan only here)",
-                drive.family(),
-                tier
-            );
-        }
+    if !drive.is_supported() || drive.backup_extension().is_none() {
+        bail!(
+            "refusing to flash: {} has no executable protocol and proven restorable backup",
+            drive.backend_name()
+        );
     }
 
     // Safety gate only on the write path.
@@ -747,19 +865,9 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     drive.wait_ready(dev)?;
     println!("verifying...");
 
-    // Post-flash verification (see the fn doc): the drive is the authority. Read
-    // back ONLY the image's CMAC-protected ranges as an informational cross-check;
-    // bytes outside them are drive-owned and not compared. Mismatch = warning.
-    const BOOT_SKIP: usize = 0x1000; // silicon-remapped; reads RAM, not flash
-    let protected: Vec<(usize, usize)> = cmac::parse_table(&payload)
-        .map(|entries| {
-            entries
-                .iter()
-                .filter(|e| e.is_active())
-                .map(|e| (e.start as usize, e.end as usize)) // inclusive end
-                .collect()
-        })
-        .unwrap_or_default();
+    // The backend defines which image bytes can be compared after programming.
+    // On MTK these are CMAC-covered ranges outside the remapped boot page.
+    let protected = drive.verification_ranges(&payload)?;
     let is_protected = |pos: usize| protected.iter().any(|&(s, e)| pos >= s && pos <= e);
 
     let mut checked = 0usize; // protected + readable bytes we compared
@@ -769,13 +877,12 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     let mut offset = 0usize;
     for piece in payload.chunks(chunk) {
         // Does this chunk cover any comparable (protected, past-boot) byte?
-        let has_protected =
-            (offset..offset + piece.len()).any(|pos| pos >= BOOT_SKIP && is_protected(pos));
+        let has_protected = (offset..offset + piece.len()).any(&is_protected);
         match drive.readback(dev, offset, piece.len()) {
             Ok(got) if got.len() == piece.len() => {
                 for (i, (a, b)) in got.iter().zip(piece).enumerate() {
                     let pos = offset + i;
-                    if pos < BOOT_SKIP || !is_protected(pos) {
+                    if !is_protected(pos) {
                         continue;
                     }
                     checked += 1;
@@ -1008,7 +1115,7 @@ fn decide_crossflash(
 /// Enforce the image↔drive match on the write path. Returns `Ok(Some(..))` when
 /// an authorized crossflash is in effect (for labeling), `Ok(None)` for a normal
 /// same-model flash, `Err` to refuse. See [`decide_crossflash`] for the gate.
-fn ensure_image_matches_drive(
+pub(crate) fn ensure_image_matches_drive(
     image: &[u8],
     drive_product: &str,
     drive_family: crate::drive::Family,
@@ -1085,47 +1192,18 @@ fn flash_restore(
     drive: &dyn DriveFamily,
     req: &FlashRequest,
 ) -> Result<()> {
-    let dump = UserDump::from_tar_bytes(&req.input).context("parsing .tar restore input")?;
-    let regions = drive.restore_regions(&dump);
-    println!("{}", style::header("== flash plan (restore from .tar) =="));
-    for r in &regions {
-        println!(
-            "{}",
-            style::dim_line(&format!(
-                "restore {}: 0x{:06X} ({} B)",
-                r.label,
-                r.offset,
-                r.bytes.len()
-            ))
-        );
-    }
-
-    if !req.execute {
-        println!(
-            "\n{}",
-            style::amber("DRY RUN: no SCSI writes issued. Re-run with --execute to restore.")
-        );
-        return Ok(());
-    }
-    if let Err(block) = check_safety(req.acknowledged_risk) {
-        bail!("SAFETY GATE: {}", block.0);
-    }
-
-    println!(
-        "\n{}",
-        style::bold("EXECUTING restore — do not power off or disconnect the drive...")
-    );
-    for r in &regions {
-        drive.write_region(dev, r.offset, r.bytes)?;
-        let got = drive.readback(dev, r.offset as usize, r.bytes.len())?;
-        if got != r.bytes {
-            bail!("read-back verify failed for region 0x{:06X}", r.offset);
-        }
-    }
+    let firmware = drive.validate_backup(&req.input, &req.drive_model)?;
     println!(
         "{}",
-        style::status_line("restore", "complete and verified", style::Status::Ok)
+        style::header("== reflash backup firmware (per-unit data retained as reference) ==")
     );
+    let mut firmware_req = req.clone();
+    firmware_req.input = firmware;
+    firmware_req.input_kind = InputKind::Bin;
+    firmware_req.allow_crossflash = false;
+    // The full image uses the same proven MTK update path. Per-unit members are
+    // coherence/reference data, not separate post-reboot writes.
+    flash_bin(dev, drive, &firmware_req)?;
     Ok(())
 }
 

@@ -1,4 +1,4 @@
-//! freemkv-flash: standalone, multi-OS optical-drive firmware flasher/dumper.
+//! freemkv-flash: standalone, multi-OS optical-drive firmware backup and flasher.
 //!
 //! Layers:
 //! * [`platform`] — OS SCSI pass-through transport ([`platform::ScsiDevice`])
@@ -7,7 +7,7 @@
 //! * [`drive`] — chip-family classification ([`drive::Family`],
 //!   [`drive::classify`]) and the per-family command trait
 //!   ([`drive::DriveFamily`]); [`drive::mtk`] is the only fully-implemented one.
-//! * [`engine`] — the generic, chip-agnostic `info`/`dump`/`flash` orchestration
+//! * [`engine`] — the generic, chip-agnostic `info`/`backup`/`flash` orchestration
 //!   that drives a [`drive::DriveFamily`] through its trait primitives.
 //!
 //! Supporting modules: [`cmac`] (MT1959 AES-CMAC verify/resign) and [`manifest`]
@@ -23,6 +23,8 @@ pub mod flashset;
 /// Signature-driven drive-family identification for a firmware IMAGE.
 pub mod imageid;
 pub mod manifest;
+/// Read-only validation of extractor-produced Pioneer firmware bundles.
+pub mod pioneer_bundle;
 pub mod platform;
 pub mod probe;
 pub mod style;

@@ -68,7 +68,6 @@ fn mt1959_recipe_shape_is_executable_and_verbatim() {
 fn for_family_only_mtk_has_an_executable_set() {
     assert!(FlashInstructionSet::for_family(Family::Mtk).is_some());
     assert!(FlashInstructionSet::for_family(Family::Pioneer).is_none());
-    assert!(FlashInstructionSet::for_family(Family::Renesas).is_none());
     assert!(FlashInstructionSet::for_family(Family::Unknown).is_none());
 }
 

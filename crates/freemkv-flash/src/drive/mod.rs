@@ -1,19 +1,19 @@
-//! Chip-family layer: classification + the per-family command trait.
+//! Firmware command-protocol backends and read-only device classification.
 //!
-//! This is one of the two independent plug-in layers (the other is
-//! [`crate::platform`]). [`classify`] identifies the silicon [`Family`] using
-//! only proven discriminators; [`for_family`] returns the matching
-//! [`DriveFamily`] implementation.
+//! Device identity (INQUIRY vendor/product/revision), controller architecture,
+//! and update command protocol are distinct. [`resolve_backend`] asks each
+//! explicitly registered [`FirmwareBackend`] for read-only probe evidence and
+//! rejects overlap; [`for_family`] keeps the older workflow API operational.
 //!
-//! A [`DriveFamily`] exposes **only chip primitives** — identity, per-unit dump
-//! capture, and the flash open/chunk/close/read-back steps. It does no file
+//! A [`FirmwareBackend`] exposes protocol capabilities — identity, backup
+//! capture, input validation, and flash open/chunk/close/read-back steps. It does no file
 //! I/O and prints nothing. The generic orchestration (reading the input file,
 //! the pre-flash backup, the dry-run plan, the streaming loop, verification, and
 //! the safety gate) lives once in [`crate::engine`] and drives any family
-//! through this trait. Only [`mtk`] is fully implemented; the others classify
-//! positive but return `Unsupported`.
+//! through this trait. Only [`mtk`] has a proven live backup-and-flash path;
+//! other candidates can classify but fail closed on writes.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
@@ -21,7 +21,6 @@ use crate::platform::ScsiDevice;
 pub mod fw_ident;
 pub mod mtk;
 pub mod pioneer;
-pub mod renesas;
 
 pub use mtk::UserDump;
 
@@ -31,15 +30,13 @@ pub use mtk::UserDump;
 /// (Aliased so the trait signature stays under clippy's complex-type lint.)
 pub type FullImage = (Vec<u8>, usize, Vec<(usize, usize)>);
 
-/// The silicon family of a connected optical drive.
+/// Compatibility identifier for a firmware command-protocol backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
     /// MediaTek MT19xx (MT1959 / MT1939). Supported.
     Mtk,
-    /// Pioneer silicon. Classified, not supported.
+    /// Pioneer OEM update protocol. Classified, not live-flash supported.
     Pioneer,
-    /// HL-DT-ST / Renesas silicon. Classified, not supported.
-    Renesas,
     /// Could not be classified. Fail-safe: never flashed.
     Unknown,
 }
@@ -49,7 +46,6 @@ impl std::fmt::Display for Family {
         f.write_str(match self {
             Family::Mtk => "MediaTek MT19xx",
             Family::Pioneer => "Pioneer",
-            Family::Renesas => "Renesas",
             Family::Unknown => "Unknown",
         })
     }
@@ -122,6 +118,28 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
     id
 }
 
+/// Evidence returned by a protocol backend's read-only probe.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProbeEvidence {
+    /// Backend family used by the existing engine API.
+    pub family: Family,
+    /// Stable protocol name independent of device branding.
+    pub backend_name: &'static str,
+    /// Read-only signature that justified the match.
+    pub discriminator: &'static str,
+}
+
+/// A unique backend match, with device identity kept separate from the
+/// controller protocol. Neither the vendor string nor the chip architecture
+/// alone proves that a device accepts a backend's update commands.
+#[derive(Debug, Clone)]
+pub struct BackendMatch {
+    /// Device-reported vendor, product, revision and optional banner.
+    pub identity: Identity,
+    /// Protocol signature independent of the device identity.
+    pub evidence: ProbeEvidence,
+}
+
 /// Classify a drive using only proven discriminators.
 ///
 /// * GET_CONFIG 0x46 feature 0x010C echoing `01 0C` **AND** the drive's
@@ -135,22 +153,63 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
 ///   unrelated drive would happen to echo. (The longer `MTEKMT19xx`
 ///   identity tag lives in a different flash region at `0x1EC000 + 0x34`
 ///   and is NOT what this gate checks — see `has_mt19_banner` for why.)
-/// * READ_BUFFER buffer-id 0xF1 succeeding ⇒ Pioneer / Renesas (an INQUIRY
-///   vendor of `RENESAS` picks Renesas; otherwise Pioneer).
+/// * READ BUFFER buffer-id 0xF1 plus positive `PIONEER` / `BDR-*` INQUIRY
+///   identity ⇒ Pioneer OEM candidate.
+/// * Multiple positive backend matches ⇒ ambiguous, mapped to Unknown here;
+///   use [`resolve_backend`] to receive the explicit error.
 /// * neither ⇒ [`Family::Unknown`].
 pub fn classify(dev: &mut dyn ScsiDevice) -> Family {
-    if get_config_is_mtk(dev) && has_mt19_banner(dev) {
-        return Family::Mtk;
-    }
-    if read_buffer_f1_ok(dev) {
-        if let Ok(data) = dev.command_in(&mtk::cdb_inquiry(96), 96) {
-            if data.len() >= 16 && trim_ascii(&data[8..16]).eq_ignore_ascii_case("RENESAS") {
-                return Family::Renesas;
+    resolve_backend(dev)
+        .ok()
+        .flatten()
+        .map_or(Family::Unknown, |m| m.evidence.family)
+}
+
+/// Explicit backend registry. Adding a controller protocol requires one entry
+/// here and an implementation of [`DriveFamily::probe`]. No source-file scan or
+/// vendor-name shortcut can make a new protocol flashable.
+static MTK_BACKEND: mtk::Mtk = mtk::Mtk;
+static PIONEER_BACKEND: pioneer::Pioneer = pioneer::Pioneer::new();
+struct BackendRegistration {
+    prototype: &'static dyn FirmwareBackend,
+    create: fn() -> Box<dyn FirmwareBackend>,
+}
+
+static BACKENDS: [BackendRegistration; 2] = [
+    BackendRegistration {
+        prototype: &MTK_BACKEND,
+        create: || Box::new(mtk::Mtk),
+    },
+    BackendRegistration {
+        prototype: &PIONEER_BACKEND,
+        create: || Box::new(pioneer::Pioneer::new()),
+    },
+];
+
+/// Run every registered, read-only protocol probe. Ambiguous matches fail
+/// closed rather than allowing registry order to select a writer.
+pub fn resolve_backend(dev: &mut dyn ScsiDevice) -> Result<Option<BackendMatch>> {
+    let identity = read_identity(dev);
+    let mut found: Option<ProbeEvidence> = None;
+    for registered in &BACKENDS {
+        let backend = registered.prototype;
+        if let Some(evidence) = backend.probe(dev, &identity)? {
+            if evidence.family != backend.family() {
+                bail!("backend probe returned an inconsistent family");
             }
+            if let Some(prior) = &found {
+                bail!(
+                    "ambiguous firmware protocol: {} ({}) and {} ({}) both matched",
+                    prior.backend_name,
+                    prior.discriminator,
+                    evidence.backend_name,
+                    evidence.discriminator
+                );
+            }
+            found = Some(evidence);
         }
-        return Family::Pioneer;
     }
-    Family::Unknown
+    Ok(found.map(|evidence| BackendMatch { identity, evidence }))
 }
 
 fn get_config_is_mtk(dev: &mut dyn ScsiDevice) -> bool {
@@ -196,10 +255,18 @@ pub enum InputKind {
     Bin,
     /// A per-unit dump tar (restore those regions).
     Tar,
+    /// Extractor-produced multi-component Pioneer firmware bundle.
+    PioneerBundle,
 }
 
 /// Sniff the flash input kind from a path's extension (`.tar` => tar, else bin).
 pub fn sniff_input(path: &std::path::Path) -> InputKind {
+    if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+        let n = n.to_ascii_lowercase();
+        n.ends_with(".firmware.tar") || n.ends_with(".installer.tar")
+    }) {
+        return InputKind::PioneerBundle;
+    }
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case("tar") => InputKind::Tar,
         _ => InputKind::Bin,
@@ -211,7 +278,7 @@ pub fn sniff_input(path: &std::path::Path) -> InputKind {
 pub struct FlashRequest {
     /// The raw input file bytes.
     pub input: Vec<u8>,
-    /// Whether the input is a full `.bin` or a per-unit `.tar`.
+    /// Whether the input is a full image, rollback archive, or Pioneer bundle.
     pub input_kind: InputKind,
     /// Streaming mode (`main` vs `full`). NOTE: on MTK (the only implemented
     /// family) this is currently informational only — the full 2 MiB image is
@@ -220,8 +287,6 @@ pub struct FlashRequest {
     pub mode: FlashMode,
     /// Actually issue writes (otherwise dry-run).
     pub execute: bool,
-    /// Allow flashing without a successful pre-flash backup dump.
-    pub rescue_no_dump: bool,
     /// User acknowledged the bricking risk.
     pub acknowledged_risk: bool,
     /// Hidden expert override for the enc envelope (`Some(true/false)` forces).
@@ -230,7 +295,7 @@ pub struct FlashRequest {
     pub drive_model: String,
     /// Show the raw SCSI CDB sequence in the plan (default: clean summary only).
     pub verbose: bool,
-    /// Where to save the pre-flash backup dump, if anywhere.
+    /// Where to save the required pre-flash backup, if supported.
     pub predump_out: Option<std::path::PathBuf>,
     /// EXPERIMENTAL crossflash: allow flashing a DIFFERENT same-chipset model's
     /// firmware (waives the model match; never the chipset-family gate).
@@ -248,23 +313,93 @@ pub struct RestoreRegion<'a> {
     pub bytes: &'a [u8],
 }
 
-/// A chip family's command primitives.
+/// A firmware command protocol's primitives.
 ///
-/// Every method is a pure chip operation — no file I/O, no printing. The
-/// generic [`crate::engine`] composes these into the `info` / `dump` / `flash`
+/// Every method is a protocol operation — no file I/O, no printing. The
+/// generic [`crate::engine`] composes these into the `info` / `backup` / `flash`
 /// commands. A new family only has to supply its own CDBs; the engine loop is
 /// unchanged.
-pub trait DriveFamily {
+pub trait FirmwareBackend: Sync {
     /// The family this implementation handles.
     fn family(&self) -> Family;
+
+    /// Stable command-protocol label, distinct from device vendor and chip ISA.
+    fn backend_name(&self) -> &'static str;
+
+    /// Recognize this command protocol using read-only evidence. `None` means
+    /// the protocol does not match; an error means the probe could not safely
+    /// decide. The registry rejects multiple positive matches.
+    fn probe(&self, dev: &mut dyn ScsiDevice, identity: &Identity)
+        -> Result<Option<ProbeEvidence>>;
+
+    /// Extension of a complete, immediately reflashable backup file. `None`
+    /// means this protocol has no proven backup path and cannot execute flash.
+    fn backup_extension(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// Capture one complete serialized backup file. The engine saves and
+    /// verifies these bytes before issuing any update command.
+    fn capture_backup(&self, _dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+        Err(anyhow::anyhow!(
+            "no proven restorable firmware backup for {}",
+            self.backend_name()
+        ))
+    }
+
+    /// Validate a backup file for this device and return the update image it
+    /// contains. Backends must check completeness, integrity and model.
+    fn validate_backup(&self, _bytes: &[u8], _target_model: &str) -> Result<Vec<u8>> {
+        Err(anyhow::anyhow!(
+            "no proven backup restore path for {}",
+            self.backend_name()
+        ))
+    }
+
+    /// Validate a direct image against this device before any write. A backend
+    /// may use read-only commands to verify its exact controller variant.
+    fn validate_image(
+        &self,
+        _dev: &mut dyn ScsiDevice,
+        _image: &[u8],
+        _drive_product: &str,
+        _allow_crossflash: bool,
+    ) -> Result<()> {
+        Err(anyhow::anyhow!(
+            "live flashing is not implemented for {}",
+            self.backend_name()
+        ))
+    }
+
+    /// Interpret an input path for this protocol. The default is a direct
+    /// firmware image; only backends that implement a backup codec recognize
+    /// their backup extension as a restorable input.
+    fn classify_input(&self, _path: &std::path::Path) -> InputKind {
+        InputKind::Bin
+    }
+
+    /// Inclusive byte ranges suitable for post-write read-back comparison.
+    /// These are protocol-defined; no generic CMAC or boot-map assumptions
+    /// belong in the engine.
+    fn verification_ranges(&self, _image: &[u8]) -> Result<Vec<(usize, usize)>> {
+        Err(anyhow::anyhow!(
+            "read-back verification map unavailable for {}",
+            self.backend_name()
+        ))
+    }
+
+    /// Backend-specific, file-only plan for a protocol whose live backup and
+    /// write path is still unproven. `None` uses the normal connected-device
+    /// workflow; `Some` is the complete plan result and must issue no I/O.
+    fn offline_plan(&self, _req: &FlashRequest) -> Option<Result<()>> {
+        None
+    }
 
     /// Whether the WRITE (flash) path is actually implemented (only MTK today).
     fn is_supported(&self) -> bool;
 
-    /// Whether the read-only DUMP path is implemented. Dump is a strict subset
-    /// of full support: Pioneer/Renesas can dump (read-only) without allowing
-    /// flash. Defaults to [`Self::is_supported`], so a fully-supported family
-    /// dumps and an unsupported stub does neither.
+    /// Legacy diagnostic per-unit read capability. This is distinct from a
+    /// complete rollback [`Self::capture_backup`] and never permits flash.
     fn dump_supported(&self) -> bool {
         self.is_supported()
     }
@@ -275,7 +410,7 @@ pub trait DriveFamily {
         read_identity(dev)
     }
 
-    /// Capture the per-unit backup regions (the `dump` primitive).
+    /// Legacy diagnostic per-unit read, retained for existing MTK callers.
     fn read_dump(&self, dev: &mut dyn ScsiDevice) -> Result<UserDump>;
 
     /// Read the entire firmware image (the `dump --everything` primitive):
@@ -364,14 +499,19 @@ pub trait DriveFamily {
     fn write_region(&self, dev: &mut dyn ScsiDevice, offset: u32, bytes: &[u8]) -> Result<()>;
 }
 
+/// Compatibility name while the remaining command workflow migrates to
+/// protocol-based terminology.
+pub use FirmwareBackend as DriveFamily;
+
 /// Return the [`DriveFamily`] implementation for a classified [`Family`].
 pub fn for_family(family: Family) -> Box<dyn DriveFamily> {
-    match family {
-        Family::Mtk => Box::new(mtk::Mtk),
-        Family::Pioneer => Box::new(pioneer::Pioneer),
-        Family::Renesas => Box::new(renesas::Renesas),
-        Family::Unknown => Box::new(UnknownFamily),
-    }
+    BACKENDS
+        .iter()
+        .find(|registered| registered.prototype.family() == family)
+        .map_or_else(
+            || Box::new(UnknownFamily) as Box<dyn FirmwareBackend>,
+            |registered| (registered.create)(),
+        )
 }
 
 /// The MTK-gate error message, shared by `dump` and `flash`.
@@ -384,13 +524,23 @@ pub fn unsupported_family_error(family: Family) -> anyhow::Error {
 
 /// Implement [`DriveFamily`] for a classified-but-unsupported family: every
 /// command that would touch the drive returns the MTK-gate error, so no dump or
-/// flash CDB is ever issued. Used by the Pioneer / Renesas / Unknown stubs.
+/// flash CDB is ever issued. Used by the Pioneer / Unknown stubs.
 #[macro_export]
 macro_rules! unsupported_drive_family {
     ($ty:ty, $family:expr) => {
         impl $crate::drive::DriveFamily for $ty {
             fn family(&self) -> $crate::drive::Family {
                 $family
+            }
+            fn backend_name(&self) -> &'static str {
+                "unsupported"
+            }
+            fn probe(
+                &self,
+                _dev: &mut dyn $crate::platform::ScsiDevice,
+                _identity: &$crate::drive::Identity,
+            ) -> ::anyhow::Result<::core::option::Option<$crate::drive::ProbeEvidence>> {
+                Ok(None)
             }
             fn is_supported(&self) -> bool {
                 false

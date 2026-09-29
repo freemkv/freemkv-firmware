@@ -1,11 +1,10 @@
 //! freemkv-flash command-line interface.
 //!
-//! Reading commands (read-only) + `flash` (write); `info` is the default:
+//! Firmware backup and flash commands; `info` is the default:
 //! * `freemkv-flash <dev|file>` / `info <dev|file>` — identify + classify a
 //!   live drive or a firmware image `.bin` (same family key the flash gate uses).
-//! * `freemkv-flash dump <dev> [-o fw.bin]` — full 2 MiB image (`--tar` = per-unit backup).
-//! * `freemkv-flash map  <dev>` — read-surface map → `<base>.map.{json,md}`.
-//! * `freemkv-flash flash <dev> -i <file> [flags]` — write, then read-back verify.
+//! * `freemkv-flash backup <dev> [-o backup.tar]` — supported restorable backup.
+//! * `freemkv-flash flash <dev> -i <file> [flags]` — backed-up write path.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -13,13 +12,13 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
-use freemkv_flash::drive::{self, Family, FlashRequest};
+use freemkv_flash::drive::{self, Family, FlashRequest, InputKind};
 use freemkv_flash::engine;
 use freemkv_flash::manifest::FlashMode;
 use freemkv_flash::platform;
 use freemkv_flash::style;
 
-/// freemkv standalone optical-drive firmware flasher / dumper.
+/// freemkv standalone optical-drive firmware backup and flasher.
 #[derive(Parser, Debug)]
 #[command(
     name = "freemkv-flash",
@@ -33,13 +32,13 @@ EXAMPLES:
   # Identify the drive (read-only, safe):
   freemkv-flash info /dev/sg0
 
-  # Back up the per-unit regions before flashing (read-only):
-  freemkv-flash dump /dev/sg0 -o backup.tar
+  # Save a supported backup before flashing:
+  freemkv-flash backup /dev/sg0 -o backup.tar
 
   # Dry-run a flash — prints the plan, issues NO writes:
   freemkv-flash flash /dev/sg0 -i firmware.bin
 
-  # Flash for real (IRREVERSIBLE). EJECT ANY DISC FIRST — an empty, closed
+  # Flash for real (risk of permanent failure). EJECT ANY DISC FIRST — an empty, closed
   # tray is required; flashing with a disc loaded can wedge the drive:
   freemkv-flash flash /dev/sg0 -i firmware.bin \\
       --backup backup-preflash.tar --execute --i-understand-risk
@@ -60,65 +59,24 @@ enum Command {
         /// SCSI device path (e.g. /dev/sg0) or a firmware image file (.bin).
         device: String,
     },
-    /// Dump EVERYTHING readable to one .tar: full image + per-unit regions + map (read-only).
-    Dump {
+    /// Save one restorable firmware backup file (Pioneer is refused).
+    Backup {
         /// SCSI device path (e.g. /dev/sg0).
         device: String,
-        /// Output .tar path (default: `<product>_<rev>.dump.tar`).
+        /// Output .tar path (default: `<product>_<rev>.backup.tar`).
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
-    /// Flash a firmware image or restore a per-unit .tar (WRITE).
+    /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
-    /// EXPERIMENTAL read-only probe: find which READ BUFFER channel dumps the
-    /// full 2 MiB flash (issues only 0x3C — never a write).
-    #[command(hide = true)]
-    ReadProbe {
-        /// SCSI device path (e.g. /dev/sg0).
-        device: String,
-        /// Save the full image here if the sweep succeeds.
-        #[arg(short, long)]
-        out: Option<PathBuf>,
-    },
-    /// EXPERIMENTAL read-only map: sweep the full READ BUFFER (mode x buf x
-    /// offset) surface and report what each reads (0x3C only — never a write).
-    #[command(hide = true)]
-    ReadMap {
-        /// SCSI device path (e.g. /dev/sg0).
-        device: String,
-        /// Save the map text here.
-        #[arg(short, long)]
-        out: Option<PathBuf>,
-    },
-    /// EXPERIMENTAL read-only raw READ BUFFER via explicit mode/buf/offset/len,
-    /// or --dump to sweep the whole 2 MiB via that channel (0x3C only).
-    #[command(hide = true)]
-    ReadRaw {
-        /// SCSI device path (e.g. /dev/sg0).
-        device: String,
-        /// READ BUFFER mode (e.g. 2, 6). Accepts 0x-prefixed hex.
-        #[arg(short = 'm', long)]
-        mode: String,
-        /// Buffer-ID (e.g. 0, 0x80). Accepts 0x-prefixed hex.
-        #[arg(short = 'b', long)]
-        buf: String,
-        /// Byte offset. Accepts 0x-prefixed hex.
-        #[arg(short = 'O', long, default_value = "0")]
-        offset: String,
-        /// Read length. Accepts 0x-prefixed hex.
-        #[arg(short = 'L', long, default_value = "0x40")]
-        len: String,
-        /// Sweep the whole 2 MiB via this channel and save here (uses --len as chunk).
-        #[arg(long)]
-        dump: Option<PathBuf>,
-    },
 }
 
-/// Flash a firmware image (.bin) or restore a per-unit .tar. WRITES to the drive.
+/// Flash a firmware image (.bin) or roll back firmware from a backup .tar.
+/// Per-unit data in the archive is retained as reference, not auto-written.
 ///
 /// Without `--execute` this is a DRY RUN: it prints the full plan and a read-only
 /// readiness handshake but issues no writes. Add `--execute --i-understand-risk`
-/// to actually program the flash — this is IRREVERSIBLE.
+/// to actually program the flash; a failed flash can permanently disable the drive.
 ///
 /// EJECT ANY DISC FIRST: the flash requires an empty, closed tray. Reprogramming
 /// while the drive is servicing a medium can wedge the controller mid-program.
@@ -126,7 +84,7 @@ enum Command {
 #[command(after_help = "\
 FLASH WORKFLOW:
   1. freemkv-flash info  /dev/sg0                      # confirm the drive + family
-  2. freemkv-flash dump  /dev/sg0 -o backup.tar        # keep a per-unit backup
+  2. freemkv-flash backup /dev/sg0 -o backup.tar       # save a restorable backup
   3. EJECT any disc so the tray is empty and closed
   4. freemkv-flash flash /dev/sg0 -i firmware.bin      # DRY RUN — review the plan
   5. freemkv-flash flash /dev/sg0 -i firmware.bin \\
@@ -136,10 +94,12 @@ Do not power off or disconnect the drive during step 5.")]
 struct FlashArgs {
     /// SCSI device path (e.g. /dev/sg0).
     device: String,
-    /// Input firmware image (.bin) or per-unit dump (.tar).
+    /// Input: MTK image (.bin), complete backup (.tar), Pioneer .enc, or a Pioneer envelope tar.
+    /// A backup .tar rolls back firmware; per-unit reference data is not auto-written.
+    /// Pioneer inputs can be dry-run; live writes remain blocked pending a restorable backup.
     #[arg(short, long)]
     input: PathBuf,
-    /// Where to save the mandatory pre-flash backup dump.
+    /// Where to save the mandatory pre-flash backup.
     #[arg(short, long)]
     backup: Option<PathBuf>,
     /// Streaming mode: `main` or `full`. NOTE: on the currently-supported
@@ -154,9 +114,6 @@ struct FlashArgs {
     /// Acknowledge that flashing can permanently brick the drive.
     #[arg(long)]
     i_understand_risk: bool,
-    /// Flash without a successful pre-flash backup (rescue a dead drive only).
-    #[arg(long)]
-    rescue_no_dump: bool,
     /// EXPERIMENTAL: crossflash a DIFFERENT same-chipset model's firmware (e.g. a
     /// UHD-friendly crossflash). Waives the model match but NEVER the chipset-family
     /// gate (MT1959->MT1959 only). Hardware-unvalidated — high brick risk.
@@ -192,18 +149,8 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
         Some(Command::Info { device }) => cmd_info(&device),
-        Some(Command::Dump { device, out }) => cmd_dump(&device, out),
+        Some(Command::Backup { device, out }) => cmd_backup(&device, out),
         Some(Command::Flash(args)) => cmd_flash(args),
-        Some(Command::ReadProbe { device, out }) => cmd_read_probe(&device, out.as_deref()),
-        Some(Command::ReadMap { device, out }) => cmd_read_map(&device, out.as_deref()),
-        Some(Command::ReadRaw {
-            device,
-            mode,
-            buf,
-            offset,
-            len,
-            dump,
-        }) => cmd_read_raw(&device, &mode, &buf, &offset, &len, dump.as_deref()),
         None => match cli.device {
             Some(device) => cmd_info(&device),
             None => {
@@ -231,7 +178,7 @@ fn cmd_info(target: &str) -> Result<()> {
         return engine::info_file(Path::new(target));
     }
     let mut dev = platform::open(target, false)?;
-    let family = drive::classify(dev.as_mut());
+    let family = resolved_family(dev.as_mut())?;
     let handler = drive::for_family(family);
     engine::info(dev.as_mut(), handler.as_ref())
 }
@@ -246,31 +193,40 @@ fn is_firmware_file(target: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Classify and enforce the flash/probe gate: only MediaTek drives may flash or
-/// run the (MTK-specific) read probes.
+/// Resolve the backend registry while preserving probe and ambiguity errors.
+fn resolved_family(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
+    Ok(drive::resolve_backend(dev)?
+        .map(|matched| matched.evidence.family)
+        .unwrap_or(Family::Unknown))
+}
+
+/// Resolve a protocol with an executable flash implementation.
 fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    let family = drive::classify(dev);
-    if family != Family::Mtk {
+    let family = resolved_family(dev)?;
+    if !drive::for_family(family).is_supported() {
         return Err(drive::unsupported_family_error(family));
     }
     Ok(family)
 }
 
-/// Classify and gate the read-only DUMP path: any family whose dump is
-/// implemented may proceed (MediaTek and Pioneer/Renesas today). Flash stays
-/// gated separately by [`classify_gated`], so a Pioneer/Renesas drive can be
-/// dumped but never flashed.
-fn classify_for_dump(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    let family = drive::classify(dev);
-    if !drive::for_family(family).dump_supported() {
+/// Classify and gate the restorable backup path. Pioneer is refused
+/// because their known read channel exposes a mapped view, not an update image.
+fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
+    let family = resolved_family(dev)?;
+    if family == Family::Pioneer {
+        anyhow::bail!(
+            "Pioneer backup is blocked: no proven restorable firmware backup format or read path"
+        );
+    }
+    if drive::for_family(family).backup_extension().is_none() {
         return Err(drive::unsupported_family_error(family));
     }
     Ok(family)
 }
 
-fn cmd_dump(device: &str, out: Option<PathBuf>) -> Result<()> {
+fn cmd_backup(device: &str, out: Option<PathBuf>) -> Result<()> {
     let mut dev = platform::open(device, false)?;
-    let family = classify_for_dump(dev.as_mut())?;
+    let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
     let out = match out {
         Some(o) => o,
@@ -286,61 +242,33 @@ fn cmd_dump(device: &str, out: Option<PathBuf>) -> Result<()> {
                     }
                 })
                 .collect();
-            PathBuf::from(format!("{s}.dump.tar"))
+            let extension = handler
+                .backup_extension()
+                .context("backend has no restorable backup format")?;
+            PathBuf::from(format!("{s}.backup.{extension}"))
         }
     };
-    engine::dump_everything(dev.as_mut(), handler.as_ref(), &out)
-}
-
-fn cmd_read_probe(device: &str, out: Option<&Path>) -> Result<()> {
-    let mut dev = platform::open(device, false)?;
-    let _family = classify_gated(dev.as_mut())?;
-    freemkv_flash::probe::read_probe(dev.as_mut(), out)
-}
-
-fn cmd_read_map(device: &str, out: Option<&Path>) -> Result<()> {
-    let mut dev = platform::open(device, false)?;
-    let _family = classify_gated(dev.as_mut())?;
-    freemkv_flash::probe::read_map(dev.as_mut(), out)
-}
-
-/// Parse a `u32` that may be decimal or `0x`-prefixed hex.
-fn parse_num(s: &str) -> Result<u32> {
-    let s = s.trim();
-    let v = if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        u32::from_str_radix(hex, 16)
-    } else {
-        s.parse::<u32>()
-    };
-    v.with_context(|| format!("invalid number '{s}'"))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn cmd_read_raw(
-    device: &str,
-    mode: &str,
-    buf: &str,
-    offset: &str,
-    len: &str,
-    dump: Option<&Path>,
-) -> Result<()> {
-    let mode = parse_num(mode)? as u8;
-    let buf = parse_num(buf)? as u8;
-    let offset = parse_num(offset)?;
-    let len = parse_num(len)?;
-    let mut dev = platform::open(device, false)?;
-    let _family = classify_gated(dev.as_mut())?;
-    freemkv_flash::probe::read_raw(dev.as_mut(), mode, buf, offset, len, dump)
+    engine::backup(dev.as_mut(), handler.as_ref(), &out)
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {
     let input = std::fs::read(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
-    let input_kind = drive::sniff_input(&args.input);
-
-    let mut dev = platform::open(&args.device, true)?;
+    let mut dev = platform::open(&args.device, args.execute)?;
     let family = classify_gated(dev.as_mut())?;
     let handler = drive::for_family(family);
+    let input_kind = if family == Family::Pioneer {
+        if freemkv_flash::pioneer_bundle::Bundle::from_tar_bytes(&input).is_ok() {
+            InputKind::PioneerBundle
+        } else if args.input.extension().is_some_and(|ext| ext == "tar") {
+            // Preserve the specific package-parse error in the Pioneer path.
+            InputKind::PioneerBundle
+        } else {
+            InputKind::Bin
+        }
+    } else {
+        handler.classify_input(&args.input)
+    };
 
     let drive_model = handler.identity(dev.as_mut()).product;
     let enc_override = if args.enc {
@@ -350,17 +278,17 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
     } else {
         None
     };
-    let predump_out = args
-        .backup
-        .clone()
-        .or_else(|| default_backup_path(&args.input));
+    let predump_out = args.backup.clone().or_else(|| {
+        handler
+            .backup_extension()
+            .and_then(|ext| default_backup_path(&args.input, ext))
+    });
 
     let req = FlashRequest {
         input,
         input_kind,
         mode: args.mode.into(),
         execute: args.execute,
-        rescue_no_dump: args.rescue_no_dump,
         acknowledged_risk: args.i_understand_risk,
         enc_override,
         drive_model,
@@ -371,15 +299,24 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
     engine::flash(dev.as_mut(), handler.as_ref(), &req)
 }
 
-/// Default pre-flash backup path: `<input>.predump.tar` next to the input.
-fn default_backup_path(input: &Path) -> Option<PathBuf> {
+/// Default pre-flash backup path: `<input>.preflash.backup.<backend-extension>`.
+fn default_backup_path(input: &Path, extension: &str) -> Option<PathBuf> {
     let name = input.file_name()?.to_string_lossy();
-    Some(input.with_file_name(format!("{name}.predump.tar")))
+    Some(input.with_file_name(format!("{name}.preflash.backup.{extension}")))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::is_firmware_file;
+    use super::{is_firmware_file, Cli, Command};
+    use clap::Parser;
+
+    #[test]
+    fn backup_is_the_only_public_backup_command() {
+        let parsed =
+            Cli::try_parse_from(["freemkv-flash", "backup", "/dev/sg0"]).expect("backup command");
+        assert!(matches!(parsed.command, Some(Command::Backup { .. })));
+        assert!(Cli::try_parse_from(["freemkv-flash", "dump", "/dev/sg0"]).is_err());
+    }
 
     #[test]
     fn regular_file_routes_to_file_info() {
