@@ -7,9 +7,9 @@ use crate::platform::ScsiDevice;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-// Canonical encoding choices, independent of drive model and signing keys.
-const KERNEL_SEED: u32 = 1;
-const NORMAL_SEED: u32 = 0x47d001;
+// Deliberately custom generator defaults, not recovered OEM seeds or signing keys.
+const KERNEL_SEED: u32 = 0x123456;
+const NORMAL_SEED: u32 = 0x654321;
 
 /// Build an encrypted package directly from two captured images. The
 /// public point in its Normal header belongs to a fresh caller-owned key;
@@ -21,8 +21,8 @@ pub fn construct_signed_candidate(
     revision: &str,
 ) -> Result<Vec<u8>> {
     let date = unique_embedded_date(normal).unwrap_or("BACKUP");
-    // Canonical generated tables use seeds observed in OEM envelopes. They
-    // are format defaults, not a claim to recover the original drive's seeds.
+    // Encoding tables are generated from our own explicit constants.
+    // Neither seed claims to reproduce the original OEM encoding table.
     // Keep signing entropy independent: encoding seeds are not signing keys.
     let signer = pioneer_codec::signature::SigningKey::random().map_err(|e| anyhow::anyhow!(e))?;
     let input = pioneer_codec::builder::BuildInputs {
@@ -1403,11 +1403,21 @@ mod tests {
                 &normal.bytes[0x1c0..0x200],
                 &original_normal.bytes[0x1c0..0x200]
             );
-            assert_eq!(
-                &normal.bytes[0x200..],
-                &original_normal.bytes[0x200..],
-                "canonical encoding reproduces the supplied UD04 Normal body"
-            );
+            assert_ne!(&normal.bytes[0x200..], &original_normal.bytes[0x200..]);
+            let generated_kernel = pioneer_codec::decode_envelope(&kernel.bytes).unwrap();
+            let supplied_kernel = pioneer_codec::decode_envelope(&original_kernel.bytes).unwrap();
+            let generated_normal =
+                pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &generated_kernel)
+                    .unwrap();
+            let supplied_normal = pioneer_codec::decode_envelope_with_kernel(
+                &original_normal.bytes,
+                &supplied_kernel,
+            )
+            .unwrap();
+            assert_eq!(generated_kernel.encoding_seed(), Some(KERNEL_SEED));
+            assert_eq!(generated_normal.encoding_seed(), Some(NORMAL_SEED));
+            assert_eq!(generated_kernel.image, supplied_kernel.image);
+            assert_eq!(generated_normal.image, supplied_normal.image);
             assert_eq!(
                 &normal.bytes[0x1f0..0x200],
                 &original_normal.bytes[0x1f0..0x200]
