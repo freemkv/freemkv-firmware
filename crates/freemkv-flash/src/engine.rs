@@ -388,6 +388,9 @@ pub fn backup_with_template(
     out: &Path,
     template: Option<&[u8]>,
 ) -> Result<()> {
+    if drive.family() == Family::Pioneer && template.is_none() {
+        return pioneer_signed_candidate(dev, drive, out);
+    }
     drive.validate_backup_template(template)?;
     if drive.backup_extension().is_none() {
         bail!(

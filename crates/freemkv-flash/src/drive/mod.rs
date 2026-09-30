@@ -86,7 +86,8 @@ pub(crate) fn sanitize_ascii(s: &str) -> String {
         .collect()
 }
 
-/// Read INQUIRY + boot banner for the `info` command (best-effort).
+/// Read standard INQUIRY identity. Vendor ROM reads belong to a matched
+/// protocol backend, never to the common identity path.
 pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
     let mut id = Identity::default();
     if let Ok(data) = dev.command_in(&mtk::cdb_inquiry(96), 96) {
@@ -96,6 +97,11 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
             id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
         }
     }
+    id
+}
+
+/// Read an MT19xx boot banner only from the MTK protocol probe/info path.
+pub(crate) fn read_mt19_banner(dev: &mut dyn ScsiDevice) -> Option<String> {
     // The 0x3000 ROM buffer is exactly ROM_003000_LEN (32 B); asking for more
     // makes the drive reject the read with ILLEGAL REQUEST (invalid field in
     // CDB), which is why the banner previously always came back empty.
@@ -105,17 +111,13 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
         mtk::ROM_003000_OFFSET,
         mtk::ROM_003000_LEN,
     );
-    if let Ok(data) = dev.command_in(&cdb, mtk::ROM_003000_LEN as usize) {
-        let end = data
-            .iter()
-            .position(|&b| b == 0 || !(0x20..0x7f).contains(&b))
-            .unwrap_or(data.len());
-        let banner = trim_ascii(&data[..end]);
-        if !banner.is_empty() {
-            id.banner = Some(banner);
-        }
-    }
-    id
+    let data = dev.command_in(&cdb, mtk::ROM_003000_LEN as usize).ok()?;
+    let end = data
+        .iter()
+        .position(|&b| b == 0 || !(0x20..0x7f).contains(&b))
+        .unwrap_or(data.len());
+    let banner = trim_ascii(&data[..end]);
+    (!banner.is_empty()).then_some(banner)
 }
 
 /// Evidence returned by a protocol backend's read-only probe.
@@ -153,8 +155,9 @@ pub struct BackendMatch {
 ///   unrelated drive would happen to echo. (The longer `MTEKMT19xx`
 ///   identity tag lives in a different flash region at `0x1EC000 + 0x34`
 ///   and is NOT what this gate checks — see `has_mt19_banner` for why.)
-/// * READ BUFFER buffer-id 0xF1 plus positive `PIONEER` / `BDR-*` INQUIRY
-///   identity ⇒ Pioneer OEM candidate.
+/// * READ BUFFER mode 2, buffer-id 0xF1 (48-byte hardware identity) plus
+///   positive `PIONEER` / BDR, BDC or DVR INQUIRY identity ⇒ Pioneer OEM
+///   candidate. Older ATA/SCSI hardware is classified but backup refuses it.
 /// * Multiple positive backend matches ⇒ ambiguous, mapped to Unknown here;
 ///   use [`resolve_backend`] to receive the explicit error.
 /// * neither ⇒ [`Family::Unknown`].
@@ -244,8 +247,15 @@ fn has_mt19_banner(dev: &mut dyn ScsiDevice) -> bool {
 }
 
 fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
-    let cdb = mtk::cdb_read_buffer(0x00, 0xF1, 0x0000, 8);
-    matches!(dev.command_in(&cdb, 8), Ok(d) if d.iter().any(|&b| b != 0))
+    // This is the firmware receiver's 48-byte identity response, not the
+    // unrelated READ BUFFER mode-0/F1 8-byte probe once used here.
+    let cdb = mtk::cdb_read_buffer(0x02, 0xF1, 0x0000, 48);
+    matches!(dev.command_in(&cdb, 48), Ok(d)
+        if d.len() == 48
+            && d[16..24].iter().all(|b| (0x20..=0x7e).contains(b))
+            && [b"SAT ".as_slice(), b"ATA ".as_slice(), b"SCSI".as_slice()]
+                .iter()
+                .any(|prefix| d[16..24].starts_with(prefix)))
 }
 
 /// How the flash input file was sniffed.
@@ -539,11 +549,12 @@ pub fn for_family(family: Family) -> Box<dyn DriveFamily> {
         )
 }
 
-/// The MTK-gate error message, shared by `dump` and `flash`.
+/// Unsupported-protocol error shared by backup and flash dispatch.
 pub fn unsupported_family_error(family: Family) -> anyhow::Error {
     anyhow::anyhow!(
-        "This is a {family} drive. freemkv-flash currently supports MediaTek MT19xx only. \
-         Aborting — no commands sent."
+        "No executable flash path or confirmed restorable backup is available for {family}. \
+         Identification probes may have been sent; no firmware write or backup file was produced. \
+         Run `freemkv-flash info DEVICE` to record the identity before adding a backend."
     )
 }
 

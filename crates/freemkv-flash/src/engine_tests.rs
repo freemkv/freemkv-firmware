@@ -198,11 +198,33 @@ fn pioneer_offline_plan_rejects_untraced_model_without_device_io() {
 }
 
 #[test]
-fn pioneer_backup_requires_signed_oem_template_before_device_io() {
-    let mut dev = MockScsiDevice::pioneer();
+fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_service_io() {
+    let mut inquiry = vec![b' '; 36];
+    inquiry[0] = 0x05;
+    inquiry[8..16].copy_from_slice(b"PIONEER ");
+    inquiry[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
+    let mut dev = MockScsiDevice::new()
+        .on(|cdb| cdb.first() == Some(&0x12), inquiry)
+        .on(
+            |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+            vec![0xA5; 8],
+        );
     let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
     let err = backup(&mut dev, &*for_family(Family::Pioneer), &out).unwrap_err();
-    assert!(format!("{err:#}").contains("requires a matching signed OEM template"));
+    assert!(format!("{err:#}").contains("incomplete hardware identity response"));
+    assert!(dev.reads.iter().all(|cdb| {
+        cdb.first() == Some(&0x12) || (cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1))
+    }));
+    assert!(dev.writes.is_empty());
+    assert!(!out.exists());
+}
+
+#[test]
+fn unknown_backend_backup_fails_without_reads_writes_or_file() {
+    let mut dev = MockScsiDevice::new();
+    let out = fresh_backup_path();
+    let err = backup(&mut dev, &*for_family(Family::Unknown), &out).unwrap_err();
+    assert!(format!("{err:#}").contains("no proven restorable firmware backup"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
     assert!(!out.exists());

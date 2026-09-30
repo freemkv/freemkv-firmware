@@ -861,8 +861,13 @@ impl DriveFamily for Mtk {
     fn probe(
         &self,
         dev: &mut dyn ScsiDevice,
-        _identity: &super::Identity,
+        identity: &super::Identity,
     ) -> Result<Option<super::ProbeEvidence>> {
+        // A Pioneer INQUIRY is enough to rule out MT19xx. Do not issue MTK
+        // vendor ROM reads at this unrelated controller.
+        if identity.vendor.eq_ignore_ascii_case("PIONEER") {
+            return Ok(None);
+        }
         Ok(
             (super::get_config_is_mtk(dev) && super::has_mt19_banner(dev)).then_some(
                 super::ProbeEvidence {
@@ -872,6 +877,12 @@ impl DriveFamily for Mtk {
                 },
             ),
         )
+    }
+
+    fn identity(&self, dev: &mut dyn ScsiDevice) -> super::Identity {
+        let mut identity = super::read_identity(dev);
+        identity.banner = super::read_mt19_banner(dev);
+        identity
     }
 
     fn backup_extension(&self) -> Option<&'static str> {

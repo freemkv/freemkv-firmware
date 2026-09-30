@@ -180,10 +180,12 @@ impl MockScsiDevice {
         let mut inq = vec![0u8; 96];
         inq[8..16].copy_from_slice(b"PIONEER ");
         inq[16..24].copy_from_slice(b"BDR-UD04");
+        let mut f1 = vec![0u8; 48];
+        f1[16..24].copy_from_slice(b"SAT 8A10");
         Self::new()
             .on(
                 |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-                vec![0xA5; 8],
+                f1,
             )
             .on(|cdb| cdb.first() == Some(&0x12), inq)
     }
@@ -194,10 +196,12 @@ impl MockScsiDevice {
         let mut inq = vec![0u8; 96];
         inq[8..15].copy_from_slice(b"RENESAS");
         inq[15] = b' ';
+        let mut f1 = vec![0u8; 48];
+        f1[16..24].copy_from_slice(b"SAT 8A10");
         Self::new()
             .on(
                 |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-                vec![0xA5; 8],
+                f1,
             )
             .on(|cdb| cdb.first() == Some(&0x12), inq)
     }

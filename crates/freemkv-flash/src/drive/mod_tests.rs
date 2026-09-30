@@ -4,6 +4,12 @@ use super::*;
 use crate::platform::MockScsiDevice;
 use std::path::Path;
 
+fn f1_sat() -> Vec<u8> {
+    let mut response = vec![0u8; 48];
+    response[16..24].copy_from_slice(b"SAT 8A10");
+    response
+}
+
 #[test]
 fn classify_mtk_from_get_config_010c() {
     let mut dev = MockScsiDevice::mtk();
@@ -15,21 +21,22 @@ fn classify_mtk_from_get_config_010c() {
 }
 
 #[test]
-fn registry_rejects_overlapping_protocol_matches() {
+fn pioneer_identity_prevents_mtk_vendor_probe_even_if_standard_feature_matches() {
     let mut inq = vec![0u8; 96];
     inq[8..16].copy_from_slice(b"PIONEER ");
     inq[16..24].copy_from_slice(b"BDR-UD04");
     let mut dev = MockScsiDevice::mtk()
         .on(
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-            vec![0xA5; 8],
+            f1_sat(),
         )
         .on(|cdb| cdb.first() == Some(&0x12), inq);
-    let error = resolve_backend(&mut dev).unwrap_err().to_string();
-    assert!(error.contains("ambiguous firmware protocol"));
-    assert!(error.contains("mtk19xx"));
-    assert!(error.contains("pioneer-oem"));
-    assert_eq!(classify(&mut dev), Family::Unknown);
+    let matched = resolve_backend(&mut dev).unwrap().unwrap();
+    assert_eq!(matched.evidence.family, Family::Pioneer);
+    assert!(!dev
+        .reads
+        .iter()
+        .any(|cdb| { cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0, 0x30, 0][..]) }));
     assert!(dev.writes.is_empty());
 }
 
@@ -37,7 +44,7 @@ fn registry_rejects_overlapping_protocol_matches() {
 fn f1_without_positive_identity_does_not_select_pioneer() {
     let mut dev = MockScsiDevice::new().on(
         |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-        vec![0xA5; 8],
+        f1_sat(),
     );
     assert_eq!(classify(&mut dev), Family::Unknown);
     assert!(dev.writes.is_empty());
@@ -49,7 +56,7 @@ fn f1_with_failed_inquiry_does_not_select_pioneer() {
         .on_fail(|cdb| cdb.first() == Some(&0x12), "INQUIRY transport failed")
         .on(
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-            vec![0xA5; 8],
+            f1_sat(),
         );
     assert!(resolve_backend(&mut dev).unwrap().is_none());
     assert!(dev.writes.is_empty());
@@ -64,7 +71,7 @@ fn f1_with_unrelated_vendor_does_not_select_pioneer() {
         .on(|cdb| cdb.first() == Some(&0x12), inq)
         .on(
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-            vec![0xA5; 8],
+            f1_sat(),
         );
     assert!(resolve_backend(&mut dev).unwrap().is_none());
     assert!(dev.writes.is_empty());
@@ -131,6 +138,66 @@ fn classify_pioneer_from_read_buffer_f1() {
 }
 
 #[test]
+fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
+    for product in ["BD-RW   BDR-UD04", "BD-ROM  BDC-S02", "DVD-RW  DVR-216"] {
+        let mut inq = vec![b' '; 96];
+        inq[0] = 0x05;
+        inq[8..16].copy_from_slice(b"PIONEER ");
+        inq[16..32].copy_from_slice(format!("{product:<16}").as_bytes());
+        let mut dev = MockScsiDevice::new()
+            .on(|cdb| cdb.first() == Some(&0x12), inq)
+            .on(
+                |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+                f1_sat(),
+            );
+        let matched = resolve_backend(&mut dev).unwrap().unwrap();
+        assert_eq!(matched.evidence.family, Family::Pioneer, "{product}");
+        assert!(dev.reads.iter().any(|cdb| {
+            cdb.first() == Some(&0x3C)
+                && cdb.get(1) == Some(&0x02)
+                && cdb.get(2) == Some(&0xF1)
+                && cdb.get(6..9) == Some(&[0, 0, 48][..])
+        }));
+        assert!(!dev
+            .reads
+            .iter()
+            .any(|cdb| { cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0, 0x30, 0][..]) }));
+        assert!(dev.writes.is_empty());
+    }
+}
+
+#[test]
+fn old_pioneer_hardware_is_classified_but_malformed_f1_is_not() {
+    let mut inq = vec![b' '; 96];
+    inq[0] = 0x05;
+    inq[8..16].copy_from_slice(b"PIONEER ");
+    inq[16..32].copy_from_slice(b"DVD-RW  DVR-216 ");
+    for hardware in [b"ATA 0009", b"SCSI0001"] {
+        let mut f1 = vec![0u8; 48];
+        f1[16..24].copy_from_slice(hardware);
+        let mut dev = MockScsiDevice::new()
+            .on(|cdb| cdb.first() == Some(&0x12), inq.clone())
+            .on(
+                |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+                f1,
+            );
+        assert_eq!(
+            resolve_backend(&mut dev).unwrap().unwrap().evidence.family,
+            Family::Pioneer
+        );
+        assert!(dev.writes.is_empty());
+    }
+    let mut dev = MockScsiDevice::new()
+        .on(|cdb| cdb.first() == Some(&0x12), inq)
+        .on(
+            |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+            vec![0xA5; 8],
+        );
+    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
 fn classify_unknown_when_no_discriminator() {
     let mut dev = MockScsiDevice::new();
     assert_eq!(classify(&mut dev), Family::Unknown);
@@ -171,7 +238,7 @@ fn for_family_reports_the_expected_family() {
 }
 
 #[test]
-fn read_identity_parses_boot_banner_from_32b_region() {
+fn mtk_identity_parses_boot_banner_from_32b_region() {
     // The banner read must ask for exactly the 32-byte region — a real drive
     // rejects a larger read (ILLEGAL REQUEST), which used to leave banner empty.
     let mut banner = b"MT1959 Boot BU5 ".to_vec();
@@ -181,8 +248,18 @@ fn read_identity_parses_boot_banner_from_32b_region() {
         |cdb| cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..]),
         banner,
     );
-    let id = read_identity(&mut dev);
+    let id = mtk::Mtk.identity(&mut dev);
     assert_eq!(id.banner.as_deref(), Some("MT1959 Boot BU5"));
+}
+
+#[test]
+fn unknown_identity_uses_only_standard_inquiry_before_protocol_probes() {
+    let mut dev = MockScsiDevice::new();
+    let id = read_identity(&mut dev);
+    assert!(id.banner.is_none());
+    assert_eq!(dev.reads.len(), 1);
+    assert_eq!(dev.reads[0][0], 0x12);
+    assert!(dev.writes.is_empty());
 }
 
 #[test]

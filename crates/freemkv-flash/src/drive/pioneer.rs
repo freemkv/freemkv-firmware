@@ -658,8 +658,8 @@ pub fn offline_linear_fe_data_out<'a>(
 
 fn zero_word_sum(bytes: &[u8]) -> bool {
     bytes.len().is_multiple_of(4)
-        && bytes.chunks_exact(4).fold(0u32, |sum, word| {
-            sum.wrapping_add(u32::from_be_bytes(word.try_into().unwrap()))
+        && bytes.as_chunks::<4>().0.iter().fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
         }) == 0
 }
 
@@ -786,13 +786,22 @@ impl DriveFamily for Pioneer {
         dev: &mut dyn ScsiDevice,
         identity: &super::Identity,
     ) -> Result<Option<super::ProbeEvidence>> {
+        let pioneer_model = identity
+            .product
+            .split_whitespace()
+            .last()
+            .is_some_and(|model| {
+                ["BDR-", "BDC-", "DVR-"]
+                    .iter()
+                    .any(|prefix| model.starts_with(prefix))
+            });
         Ok((identity.vendor.eq_ignore_ascii_case("PIONEER")
-            && identity.product.starts_with("BDR-")
+            && pioneer_model
             && super::read_buffer_f1_ok(dev))
         .then_some(super::ProbeEvidence {
             family: Family::Pioneer,
             backend_name: self.backend_name(),
-            discriminator: "PIONEER BDR INQUIRY + READ BUFFER F1",
+            discriminator: "PIONEER BDR/BDC/DVR INQUIRY + READ BUFFER 02/F1 hardware",
         }))
     }
     fn offline_plan(&self, req: &super::FlashRequest) -> Option<Result<()>> {

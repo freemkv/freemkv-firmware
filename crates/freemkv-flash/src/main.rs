@@ -258,11 +258,7 @@ fn cmd_backup(device: &str, out: Option<PathBuf>, template: Option<PathBuf>) -> 
             }
         }
     };
-    if pioneer_candidate {
-        engine::pioneer_signed_candidate(dev.as_mut(), handler.as_ref(), &out)
-    } else {
-        engine::backup_with_template(dev.as_mut(), handler.as_ref(), &out, template.as_deref())
-    }
+    engine::backup_with_template(dev.as_mut(), handler.as_ref(), &out, template.as_deref())
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {
