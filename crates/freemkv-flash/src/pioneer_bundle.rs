@@ -329,8 +329,8 @@ impl Bundle {
             {
                 bail!("invalid or duplicate Pioneer bundle component path/hash/size");
             }
-            if is_installer {
-                if !matches!(rec.role, Role::Main | Role::Kernel)
+            if is_installer
+                && (!matches!(rec.role, Role::Main | Role::Kernel)
                     || rec.model.as_deref() != embedded_model
                     || rec.hardware.as_deref() != manifest.hardware.as_deref()
                     || rec
@@ -354,10 +354,9 @@ impl Bundle {
                     || rec
                         .source_member
                         .as_deref()
-                        .is_none_or(|path| !valid_component_path(path))
-                {
-                    bail!("invalid Pioneer installer component provenance");
-                }
+                        .is_none_or(|path| !valid_component_path(path)))
+            {
+                bail!("invalid Pioneer installer component provenance");
             }
             let data = files
                 .remove(&rec.path)

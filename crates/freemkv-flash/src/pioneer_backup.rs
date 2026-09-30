@@ -237,9 +237,10 @@ pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
 }
 
 fn zero_be32_sum(image: &[u8]) -> bool {
-    image.len() % 4 == 0
-        && image.chunks_exact(4).fold(0u32, |sum, word| {
-            sum.wrapping_add(u32::from_be_bytes(word.try_into().unwrap()))
+    let (words, remainder) = image.as_chunks::<4>();
+    remainder.is_empty()
+        && words.iter().fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
         }) == 0
 }
 
@@ -285,7 +286,7 @@ pub fn construct_ud04_plain_candidate(
 ) -> Result<Vec<u8>> {
     if kernel.len() != 0x10000
         || normal.len() < 0x2000
-        || normal.len() % 0x100 != 0
+        || !normal.len().is_multiple_of(0x100)
         || !zero_be32_sum(kernel)
         || !zero_be32_sum(normal)
     {
@@ -430,8 +431,12 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
         bail!("drive does not have a usable H8/SAT INQUIRY identity");
     }
     let f1 = dev.command_in(&[0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0], 48)?;
-    if f1.len() != 48 || !f1[16..24].starts_with(b"SAT ") {
-        bail!("drive does not report an H8/SAT hardware identity");
+    if f1.len() != 48 {
+        bail!("Pioneer backup stopped: incomplete hardware identity response ({} bytes, expected 48); no firmware image read or backup created", f1.len());
+    }
+    if !f1[16..24].starts_with(b"SAT ") {
+        let hardware = String::from_utf8_lossy(&f1[16..24]);
+        bail!("Pioneer backup is not implemented for hardware {hardware:?}: H8/SAT hardware identity required; no firmware image read or backup created");
     }
     let kernel_len = NORMAL_IMAGE_BASE
         .checked_sub(KERNEL_IMAGE_BASE)
