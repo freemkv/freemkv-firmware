@@ -405,6 +405,19 @@ fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec
 const KERNEL_IMAGE_BASE: usize = 0x400000;
 const NORMAL_IMAGE_BASE: usize = 0x410000;
 
+/// Older receivers already allow B0 reads and need no service command. Only
+/// the observed invalid-field denial permits one attempt at the shared knock;
+/// transport failures, short data and other sense codes must stop capture.
+fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
+    match read_region(dev, KERNEL_IMAGE_BASE, 1) {
+        Ok(_) => Ok(()),
+        Err(error) if crate::platform::sense_triplet(&error) == Some((5, 0x24, 0)) => dev
+            .command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])
+            .context("entering Pioneer firmware read service"),
+        Err(error) => Err(error).context("probing Pioneer firmware read access"),
+    }
+}
+
 /// Capture each structurally identified image region twice. No OEM envelope,
 /// previously saved backup, model, revision or hardware lookup is consulted.
 fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String, String)> {
@@ -424,7 +437,7 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
         .checked_sub(KERNEL_IMAGE_BASE)
         .filter(|len| *len > 0 && *len <= 0x100000)
         .context("invalid Kernel/Normal address span")?;
-    dev.command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])?;
+    prepare_firmware_read(dev)?;
     let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len)?;
     if kernel.get(0x1000..0x1008) != Some(&f1[16..24]) {
         bail!("captured Kernel hardware differs from drive identity");
@@ -569,6 +582,48 @@ mod tests {
     use super::*;
 
     #[test]
+    fn read_access_probes_before_knock_and_never_retries_unrelated_failures() {
+        struct Access {
+            response: Option<Result<Vec<u8>>>,
+            knocks: usize,
+        }
+        impl ScsiDevice for Access {
+            fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+                assert_eq!(cdb, [0x3c, 2, 0xb0, 0x40, 0, 0, 0, 0, 1, 0]);
+                assert_eq!(len, 1);
+                self.response.take().expect("only one access probe")
+            }
+            fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+                assert_eq!(cdb, [0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0]);
+                assert!(data.is_empty());
+                self.knocks += 1;
+                Ok(())
+            }
+            fn describe(&self) -> String {
+                "read permission test".into()
+            }
+        }
+        let sense = |key, asc, ascq| {
+            Err(crate::platform::ScsiSenseError::new(key, asc, ascq, "test sense").into())
+        };
+        for (response, ok, knocks) in [
+            (Ok(vec![0]), true, 0), // ungated older receiver
+            (sense(5, 0x24, 0), true, 1),
+            (sense(5, 0x20, 0), false, 0), // unsupported opcode, not the read gate
+            (sense(4, 0x44, 0), false, 0),
+            (Err(anyhow::anyhow!("transport disconnected")), false, 0),
+            (Ok(vec![]), false, 0), // a short response is never access denial
+        ] {
+            let mut dev = Access {
+                response: Some(response),
+                knocks: 0,
+            };
+            assert_eq!(prepare_firmware_read(&mut dev).is_ok(), ok);
+            assert_eq!(dev.knocks, knocks);
+        }
+    }
+
+    #[test]
     fn unsupported_capture_identity_stops_before_service_entry_or_memory_reads() {
         struct IdentityOnly {
             f1: Vec<u8>,
@@ -662,6 +717,13 @@ mod tests {
             }
             if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
                 bail!("Pioneer does not implement the MTK identity buffer");
+            }
+            if self.knocks == 0 {
+                assert_eq!(cdb, [0x3c, 2, 0xb0, 0x40, 0, 0, 0, 0, 1, 0]);
+                assert_eq!(len, 1);
+                return Err(
+                    crate::platform::ScsiSenseError::new(5, 0x24, 0, "read access locked").into(),
+                );
             }
             assert_eq!(
                 self.knocks, 1,
@@ -905,6 +967,7 @@ mod tests {
             inner: CaptureReplay,
             inquiry: Vec<u8>,
             hardware: Vec<u8>,
+            ungated: bool,
         }
         impl ScsiDevice for Replay {
             fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
@@ -915,6 +978,13 @@ mod tests {
                     let mut out = vec![0; 48];
                     out[16..24].copy_from_slice(&self.hardware);
                     return Ok(out);
+                }
+                if self.ungated && cdb.get(..3) == Some(&[0x3c, 2, 0xb0]) {
+                    assert_eq!(self.inner.knocks, 0);
+                    assert!((1..=0xa4).contains(&len));
+                    assert_eq!(&cdb[6..], &[0, 0, len as u8, 0]);
+                    let at = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+                    return Ok(self.inner.dump[at..at + len].to_vec());
                 }
                 self.inner.command_in(cdb, len)
             }
@@ -934,6 +1004,7 @@ mod tests {
             },
             inquiry,
             hardware: kernel.image[0x1000..0x1008].to_vec(),
+            ungated: false,
         };
         // The modern length field is executable code here, not the image size.
         assert_ne!(
@@ -945,6 +1016,12 @@ mod tests {
         assert_eq!(captured_kernel, kernel.image);
         assert_eq!(captured_normal, normal.image);
         assert_eq!(revision, h.revision);
+        replay.ungated = true;
+        replay.inner.knocks = 0;
+        let (captured_kernel, captured_normal, _, _) = read_h8_image_pair(&mut replay).unwrap();
+        assert_eq!(captured_kernel, kernel.image);
+        assert_eq!(captured_normal, normal.image);
+        assert_eq!(replay.inner.knocks, 0);
     }
 
     #[test]

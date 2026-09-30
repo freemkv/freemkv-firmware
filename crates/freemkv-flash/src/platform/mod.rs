@@ -14,6 +14,46 @@
 
 use anyhow::Result;
 
+/// A command failure with structured sense data, independent of its display text.
+#[derive(Debug)]
+pub struct ScsiSenseError {
+    /// SCSI sense key identifying the error category.
+    pub sense_key: u8,
+    /// Additional sense code supplied by the device.
+    pub asc: u8,
+    /// Additional sense code qualifier supplied by the device.
+    pub ascq: u8,
+    detail: String,
+}
+
+impl ScsiSenseError {
+    /// Attach structured sense to the command's existing diagnostic text.
+    pub fn new(sense_key: u8, asc: u8, ascq: u8, detail: impl Into<String>) -> Self {
+        Self {
+            sense_key,
+            asc,
+            ascq,
+            detail: detail.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for ScsiSenseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.detail)
+    }
+}
+
+impl std::error::Error for ScsiSenseError {}
+
+/// Recover sense through anyhow contexts without interpreting human-readable errors.
+/// Transport failures without sense and malformed sense buffers return `None`.
+pub fn sense_triplet(error: &anyhow::Error) -> Option<(u8, u8, u8)> {
+    error
+        .downcast_ref::<ScsiSenseError>()
+        .map(|s| (s.sense_key, s.asc, s.ascq))
+}
+
 /// Direction of the data phase for a SCSI command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {

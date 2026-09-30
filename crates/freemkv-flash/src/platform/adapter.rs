@@ -10,7 +10,7 @@ use anyhow::{anyhow, bail, Result};
 
 use libfreemkv::scsi::{self, DataDirection, ScsiTransport};
 
-use super::{Direction, MediumStatus, ScsiDevice};
+use super::{Direction, MediumStatus, ScsiDevice, ScsiSenseError};
 
 /// Per-command timeout (matches the deleted SG_IO backend's `DEFAULT_TIMEOUT_MS`).
 const TIMEOUT_MS: u32 = 30_000;
@@ -72,7 +72,11 @@ impl TransportDevice {
                             continue;
                         }
                     }
-                    return Err(anyhow!("SCSI transport failure on {}: {e}", self.path));
+                    let detail = format!("SCSI transport failure on {}: {e}", self.path);
+                    return Err(match e.scsi_sense() {
+                        Some(s) => ScsiSenseError::new(s.sense_key, s.asc, s.ascq, detail).into(),
+                        None => anyhow!(detail),
+                    });
                 }
             };
             transferred = r.bytes_transferred;
@@ -100,13 +104,19 @@ impl TransportDevice {
                     || key == Some(0x1)
                     || (dir != Direction::FromDevice && key == Some(0x6)));
             if !tolerable {
-                bail!(
+                let detail = format!(
                     "SCSI command failed on {}: {} (status 0x{:02x}, raw sense {:02x?})",
                     self.path,
                     describe_sense(sense),
                     r.status,
                     r.sense
                 );
+                return Err(match (r.status, sense_kaa(sense)) {
+                    (CHECK_CONDITION, Some((key, asc, ascq))) => {
+                        ScsiSenseError::new(key, asc, ascq, detail).into()
+                    }
+                    _ => anyhow!(detail),
+                });
             }
             break;
         }
@@ -234,7 +244,7 @@ impl TransportDevice {
 /// Extract the SCSI sense key from a fixed- (0x70/0x71) or descriptor-format
 /// (0x72/0x73) sense buffer; `None` if too short or an unknown format.
 fn sense_key(sense: &[u8]) -> Option<u8> {
-    match *sense.first()? {
+    match *sense.first()? & 0x7f {
         0x70 | 0x71 => sense.get(2).map(|&b| b & 0x0F),
         0x72 | 0x73 => sense.get(1).map(|&b| b & 0x0F),
         _ => None,
@@ -243,7 +253,7 @@ fn sense_key(sense: &[u8]) -> Option<u8> {
 
 /// Extract (key, ASC, ASCQ) from a fixed- or descriptor-format sense buffer.
 fn sense_kaa(sense: &[u8]) -> Option<(u8, u8, u8)> {
-    match *sense.first()? {
+    match *sense.first()? & 0x7f {
         0x70 | 0x71 if sense.len() >= 14 => Some((sense[2] & 0x0F, sense[12], sense[13])),
         0x72 | 0x73 if sense.len() >= 4 => Some((sense[1] & 0x0F, sense[2], sense[3])),
         _ => None,
@@ -469,6 +479,100 @@ mod tests {
             inner: Box::new(StatusTransport { status, sense }),
             path: "test".to_string(),
         }
+    }
+
+    #[test]
+    fn transport_sense_survives_context_without_changing_display() {
+        let sense = ScsiSense {
+            sense_key: 0x5,
+            asc: 0x24,
+            ascq: 0,
+        };
+        let expected = format!(
+            "SCSI transport failure on test: {}",
+            FError::ScsiError {
+                opcode: 0,
+                status: CHECK_CONDITION,
+                sense: Some(sense),
+            }
+        );
+        let error = dev_with(sense).command_in(&[0x3c], 1).unwrap_err();
+        assert_eq!(error.to_string(), expected);
+        assert_eq!(super::super::sense_triplet(&error), Some((5, 0x24, 0)));
+        let error = error.context("reading Kernel").context("creating backup");
+        assert_eq!(super::super::sense_triplet(&error), Some((5, 0x24, 0)));
+    }
+
+    #[test]
+    fn check_condition_preserves_fixed_and_descriptor_sense() {
+        for format in [0x70, 0x71, 0xf0, 0xf1, 0x72, 0x73] {
+            let mut sense = fixed_sense(5, 0x24, 0);
+            sense[0] = format;
+            if format == 0x72 || format == 0x73 {
+                sense[1] = 5;
+                sense[2] = 0x24;
+                sense[3] = 0;
+            }
+            let expected = format!(
+                "SCSI command failed on test: {} (status 0x02, raw sense {:02x?})",
+                super::super::describe_sense(5, 0x24, 0),
+                sense
+            );
+            let mut dev = TransportDevice {
+                inner: Box::new(StatusTransport {
+                    status: CHECK_CONDITION,
+                    sense,
+                }),
+                path: "test".into(),
+            };
+            let error = dev.command_in(&[0x3c], 1).unwrap_err();
+            assert_eq!(error.to_string(), expected);
+            assert_eq!(super::super::sense_triplet(&error), Some((5, 0x24, 0)));
+        }
+    }
+
+    #[test]
+    fn unknown_or_non_check_condition_sense_is_not_classified() {
+        for (status, sense) in [(CHECK_CONDITION, [0; 32]), (8, fixed_sense(5, 0x24, 0))] {
+            let mut dev = TransportDevice {
+                inner: Box::new(StatusTransport { status, sense }),
+                path: "test".into(),
+            };
+            let error = dev.command_in(&[0x3c], 1).unwrap_err();
+            assert_eq!(super::super::sense_triplet(&error), None);
+        }
+        // Text which resembles sense data must not authorize a recovery command.
+        let error = anyhow!("SCSI transport failure 05/24/00").context("backup");
+        assert_eq!(super::super::sense_triplet(&error), None);
+    }
+
+    #[test]
+    fn senseless_transport_error_is_not_classified() {
+        struct FailedTransport;
+        impl ScsiTransport for FailedTransport {
+            fn execute(
+                &mut self,
+                _cdb: &[u8],
+                _dir: DataDirection,
+                _buf: &mut [u8],
+                _timeout_ms: u32,
+            ) -> libfreemkv::error::Result<ScsiResult> {
+                Err(FError::ScsiError {
+                    opcode: 0x3c,
+                    status: 0xff,
+                    sense: None,
+                })
+            }
+        }
+        let mut dev = TransportDevice {
+            inner: Box::new(FailedTransport),
+            path: "test".into(),
+        };
+        let error = dev.command_in(&[0x3c], 1).unwrap_err();
+        assert!(error
+            .to_string()
+            .starts_with("SCSI transport failure on test:"));
+        assert_eq!(super::super::sense_triplet(&error), None);
     }
 
     /// GOOD status to TEST UNIT READY => a disc is loaded => flash must be refused.
