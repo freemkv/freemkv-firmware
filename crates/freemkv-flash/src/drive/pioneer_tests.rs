@@ -432,6 +432,130 @@ fn ud04_local_oem_envelope_transcript_when_configured() {
     );
 }
 
+/// Golden KAT for the kernel-mode downgrade/crossflash wire output
+/// (`offline_linear_fe_data_out`): the exact Kernel+Normal linear-FE transcript
+/// that a UD03->UD04 crossflash — or a UD04 full-pair downgrade — streams after
+/// the vendor kernel-mode unlock. It uses the real autoflasher-sourced UD04 1.14
+/// Kernel+Normal from the hoard, so the bytes are OEM-exact. Auto-resolves the
+/// hoard; skips (never fails) when the corpus is absent.
+///
+/// NOTE: the Kernel and Normal are streamed UNMODIFIED (the trusted BDRFlash /
+/// Autoflasher mechanism), so this transcript is identical whether the plan is
+/// `KernelDowngrade` or `KernelCrossflash` — those differ only in the decision
+/// layer and the unlock precondition, not in the data-out bytes.
+const UD04_LINEAR_FE_GOLDEN: &str =
+    "112c6a26ceaf04144711f3409a608b28224e8e46fe6ae05288270756fa647cc8";
+
+#[test]
+fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
+    use sha2::{Digest, Sha256};
+
+    let tar = pioneer_corpus_root()
+        .join("pioneer/BDR-UD04/SAT-8A10/1.14/pioneer_autoflasher_UD03-UD04.zip.firmware.tar");
+    let Ok(bytes) = std::fs::read(&tar) else {
+        eprintln!(
+            "SKIP: autoflasher UD04 1.14 bundle not in hoard ({}) — cannot run KAT",
+            tar.display()
+        );
+        return;
+    };
+    // Read the two `.enc` members straight from the tar (the hoard manifest
+    // carries fields the strict Bundle parser rejects, and we only want bytes).
+    let member = |suffix: &str| -> Vec<u8> {
+        let mut archive = tar::Archive::new(std::io::Cursor::new(&bytes));
+        for entry in archive.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            let path = entry.path().unwrap().to_string_lossy().into_owned();
+            if path.ends_with(suffix) {
+                let mut buf = Vec::new();
+                std::io::Read::read_to_end(&mut entry, &mut buf).unwrap();
+                return buf;
+            }
+        }
+        panic!("tar member ending in {suffix} not found");
+    };
+    let kernel_bytes = member("S8A10000.100.enc");
+    let normal_bytes = member("S8A10001.114.enc");
+
+    // Anchor to the exact OEM component bytes.
+    assert_eq!(kernel_bytes.len(), 0x11200, "UD04 1.14 Kernel envelope length");
+    assert_eq!(normal_bytes.len(), 0x1d7700, "UD04 1.14 Normal envelope length");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&kernel_bytes)),
+        "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83",
+        "UD04 1.14 Kernel is the audited OEM resource"
+    );
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&normal_bytes)),
+        "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+        "UD04 1.14 Normal is the audited OEM resource"
+    );
+
+    let kernel = &kernel_bytes;
+    let normal = &normal_bytes;
+    let transfers = offline_linear_fe_data_out(kernel, normal).unwrap();
+
+    // Structure: Entry + 3 FE kernel slices + 59 F0 normal chunks + Finish.
+    assert_eq!(transfers.len(), 1 + 3 + 59 + 1, "transfer count");
+    assert_eq!(transfers.first().unwrap().stage, TransferStage::Entry);
+    assert_eq!(transfers.first().unwrap().cdb[..3], [0x3b, 0x04, 0xff]);
+    assert_eq!(transfers.last().unwrap().stage, TransferStage::Finish);
+    assert_eq!(transfers.last().unwrap().cdb[..3], [0x3b, 0x05, 0xff]);
+    let fe: Vec<&OemTransfer> = transfers
+        .iter()
+        .filter(|t| t.stage == TransferStage::KernelFe)
+        .collect();
+    let f0: Vec<&OemTransfer> = transfers
+        .iter()
+        .filter(|t| t.stage == TransferStage::Normal)
+        .collect();
+    assert_eq!(fe.len(), 3, "FE kernel slice count");
+    assert_eq!(f0.len(), 59, "F0 normal chunk count");
+    assert!(fe.iter().all(|t| t.cdb[..3] == [0x3b, 0x07, 0xfe]));
+    assert!(f0.iter().all(|t| t.cdb[..3] == [0x3b, 0x07, 0xf0]));
+
+    // Payloads are byte-exact: FE reproduces the whole Kernel, F0 the whole Normal.
+    let fe_bytes: Vec<u8> = fe.iter().flat_map(|t| t.data.iter().copied()).collect();
+    let f0_bytes: Vec<u8> = f0.iter().flat_map(|t| t.data.iter().copied()).collect();
+    assert_eq!(&fe_bytes, kernel, "FE payload reproduces the Kernel unmodified");
+    assert_eq!(&f0_bytes, normal, "F0 payload reproduces the Normal unmodified");
+
+    // Golden digest over the full transcript (stage tag + CDB + data) pins the
+    // exact wire output: control header, chunk offsets, and framing all included.
+    let mut h = Sha256::new();
+    for t in &transfers {
+        h.update([t.stage as u8]);
+        h.update(t.cdb);
+        h.update(t.data.as_ref());
+    }
+    assert_eq!(
+        format!("{:x}", h.finalize()),
+        UD04_LINEAR_FE_GOLDEN,
+        "crossflash/downgrade transcript wire bytes drifted"
+    );
+
+    // The decision layer routes the real controller ids to a kernel-mode path.
+    use crate::pioneer_flash_plan::{decide_flash_plan, FlashPlan, Installed, Target};
+    let ud03_installed = Installed {
+        controller_id: 0x8510, // BDR-UD03 v1
+        receiver_new_gen: true,
+        normal_date: None,
+    };
+    let ud04_target = Target {
+        controller_id: 0x8A10, // BDR-UD04
+        normal: Some(crate::pioneer_flash_plan::ComponentInfo { date: None }),
+        kernel: Some(crate::pioneer_flash_plan::KernelInfo {
+            date: None,
+            marker: 0x01,
+        }),
+    };
+    assert_eq!(
+        decide_flash_plan(&ud03_installed, &ud04_target, false),
+        FlashPlan::KernelCrossflash,
+        "UD03 (0x8510) -> UD04 (0x8A10) is a vetted kernel-mode crossflash"
+    );
+}
+
 #[test]
 fn flash_plan_states_execution_blockers() {
     let plan = Pioneer::new().flash_plan(0x1D7000, false).unwrap();
