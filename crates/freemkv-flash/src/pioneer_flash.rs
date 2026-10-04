@@ -37,6 +37,14 @@ const FINISH_SETTLE: Duration = Duration::from_secs(2);
 const POLL_TIMEOUT: Duration = Duration::from_secs(90);
 /// Delay between completion-poll attempts.
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
+/// Settle after the last `07/FE`, before any `07/F0`. That final Kernel chunk
+/// makes the drive program its Kernel with interrupts masked and restart it.
+/// OEM UD04 1.11 (`0x4020BB`) and BDR-212 1.05 (`0x402234`) wait 2000 ms here.
+const KERNEL_SETTLE: Duration = Duration::from_secs(2);
+/// TEST UNIT READY attempts after [`KERNEL_SETTLE`], [`POLL_INTERVAL`] apart.
+const KERNEL_READY_ATTEMPTS: u32 = 6;
+/// TEST UNIT READY CDB.
+const TEST_UNIT_READY: [u8; 6] = [0; 6];
 
 // ---------------------------------------------------------------------------
 // Vendor kernel-mode unlock (BDRFlash's F3/F2 challenge-response).
@@ -161,8 +169,9 @@ fn unlock_response_byte(seed: u16) -> u8 {
 /// Execute the OEM update against the drive imperatively, with the pre-built
 /// 256-byte `control` buffer (descriptor + key from the embedded key table).
 /// Straight-line: `04/FF` entry (control) → post-entry settle + identity gate →
-/// `07/FE` Kernel chunks (if any) → `07/F0` Normal chunks → `05/FF` finish
-/// (control) → finish settle + ready poll. Every write goes through the strict
+/// `07/FE` Kernel chunks and Kernel settle + ready poll (if any) → `07/F0`
+/// Normal chunks → `05/FF` finish (control) → finish settle + ready poll. Every
+/// write goes through the strict
 /// (abort-on-any-nonzero, no-retry) path, exactly as the OEM host loop does. The
 /// caller resolves the control key and components and guarantees gating, the
 /// tray guard, and a pre-flash backup.
@@ -178,6 +187,28 @@ pub(crate) fn execute_flash(
     normal: &[u8],
     kernel_mode: bool,
     recover: bool,
+) -> Result<()> {
+    execute_flash_paced(
+        dev,
+        control,
+        kernel,
+        normal,
+        kernel_mode,
+        recover,
+        &mut std::thread::sleep,
+    )
+}
+
+/// [`execute_flash`] with every settle and poll delay routed through `sleep`,
+/// so tests can record the pacing instead of waiting for it.
+fn execute_flash_paced(
+    dev: &mut dyn ScsiDevice,
+    control: &[u8; CONTROL_LEN],
+    kernel: Option<&[u8]>,
+    normal: &[u8],
+    kernel_mode: bool,
+    recover: bool,
+    sleep: &mut dyn FnMut(Duration),
 ) -> Result<()> {
     style::trace(&format!(
         "execute_flash: kernel_mode={kernel_mode}, kernel={} bytes, normal={} bytes",
@@ -205,7 +236,7 @@ pub(crate) fn execute_flash(
     // OEM update-mode entry (04/FF control write + settle + identity gate). In
     // recover mode the drive is degraded and may not report a trustworthy
     // identity, so the post-entry gate is skipped — we force the write.
-    enter_update_mode(dev, control, recover)?;
+    enter_update_mode(dev, control, recover, sleep)?;
 
     // 07/FE linear Kernel chunks (crossflash only), then 07/F0 Normal chunks —
     // each at most FLASH_CHUNK, 24-bit big-endian offset/len, byte-for-byte.
@@ -223,6 +254,7 @@ pub(crate) fn execute_flash(
             written += chunk.len();
             kernel_progress.set(written);
         }
+        await_kernel_restart(dev, sleep)?;
     }
     let mut written = 0usize;
     for (index, chunk) in normal.chunks(FLASH_CHUNK).enumerate() {
@@ -241,9 +273,31 @@ pub(crate) fn execute_flash(
     // 05/FF finish with the control buffer, then settle and poll for ready.
     dev.command_out_strict(&cdb_wb_flash_finish(), control)
         .with_context(|| format!("OEM Finish write failed{PARTIAL_HINT}"))?;
-    std::thread::sleep(FINISH_SETTLE);
-    poll_until_ready(dev)?;
+    sleep(FINISH_SETTLE);
+    poll_until_ready(dev, sleep)?;
     Ok(())
+}
+
+/// After the last `07/FE` the drive programs and restarts its Kernel. Wait
+/// [`KERNEL_SETTLE`] as the OEM updaters do, then require TEST UNIT READY
+/// within a bounded number of attempts before any `07/F0` is sent.
+fn await_kernel_restart(dev: &mut dyn ScsiDevice, sleep: &mut dyn FnMut(Duration)) -> Result<()> {
+    sleep(KERNEL_SETTLE);
+    let mut attempt = 1;
+    loop {
+        match dev.command_in(&TEST_UNIT_READY, 0) {
+            Ok(_) => return Ok(()),
+            Err(error) if attempt >= KERNEL_READY_ATTEMPTS => {
+                return Err(error).with_context(|| {
+                    format!("drive did not return ready after the Kernel write{PARTIAL_HINT}")
+                });
+            }
+            Err(_) => {
+                attempt += 1;
+                sleep(POLL_INTERVAL);
+            }
+        }
+    }
 }
 
 /// Enter the OEM update mode: `04/FF` control write, the documented ~1 s settle,
@@ -254,10 +308,11 @@ fn enter_update_mode(
     dev: &mut dyn ScsiDevice,
     control: &[u8; CONTROL_LEN],
     recover: bool,
+    sleep: &mut dyn FnMut(Duration),
 ) -> Result<()> {
     dev.command_out_strict(&cdb_wb_flash_entry(), control)
         .context("OEM Entry write failed")?;
-    std::thread::sleep(ENTRY_SETTLE);
+    sleep(ENTRY_SETTLE);
     if recover {
         // Degraded-drive recovery: do not trust (or require) the post-entry
         // identity report; proceed straight to the forced write.
@@ -291,20 +346,20 @@ fn entry_identity_gate(dev: &mut dyn ScsiDevice) -> Result<()> {
 /// After `05/FF` finish the OEM host waits ~2 s, then polls GET EVENT STATUS and
 /// TEST UNIT READY using status/sense to continue or stop. Poll until the drive
 /// returns ready (TEST UNIT READY good status) or the timeout elapses.
-fn poll_until_ready(dev: &mut dyn ScsiDevice) -> Result<()> {
+fn poll_until_ready(dev: &mut dyn ScsiDevice, sleep: &mut dyn FnMut(Duration)) -> Result<()> {
     let start = Instant::now();
     loop {
         // Supplementary event drain, as the OEM host issues; result ignored.
         let _ = dev.command_in(&[0x4A, 0, 0, 0, 0x10, 0, 0, 0, 0x08, 0], 0x08);
         // TEST UNIT READY: good status (Ok) means the drive is ready again.
-        match dev.command_in(&[0, 0, 0, 0, 0, 0], 0) {
+        match dev.command_in(&TEST_UNIT_READY, 0) {
             Ok(_) => return Ok(()),
             Err(error) => {
                 if start.elapsed() >= POLL_TIMEOUT {
                     return Err(error)
                         .context("drive did not return ready within the post-flash poll timeout");
                 }
-                std::thread::sleep(POLL_INTERVAL);
+                sleep(POLL_INTERVAL);
             }
         }
     }
@@ -551,7 +606,16 @@ mod tests {
         let kernel: Vec<u8> = (0..0x18000usize).map(|i| (i % 253) as u8).collect();
         let normal: Vec<u8> = (0..0x8100usize).map(|i| (i % 251) as u8).collect();
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false, false).unwrap();
+        execute_flash_paced(
+            &mut dev,
+            &[0xA5; 256],
+            Some(&kernel),
+            &normal,
+            false,
+            false,
+            &mut |_| {},
+        )
+        .unwrap();
 
         // entry + 3 kernel FE + 2 normal F0 + finish, all strict, nothing lenient.
         assert_eq!(dev.strict_writes, 7);
@@ -725,5 +789,144 @@ mod tests {
             lcg_step(&mut state);
         }
         assert_eq!(unlock_response_byte(seed), !((state >> 16) as u8));
+    }
+
+    /// One wire command or paced delay, in issue order.
+    #[derive(Debug, Clone, PartialEq)]
+    enum Ev {
+        /// A data-out `WRITE BUFFER`: (mode, buffer id).
+        Write(u8, u8),
+        TestUnitReady,
+        OtherIn,
+        Sleep(Duration),
+    }
+
+    /// Logs commands into a log shared with the test's `sleep` seam, so one
+    /// ordered timeline holds both. TEST UNIT READY fails `tur_failures` times.
+    struct Timeline {
+        log: std::rc::Rc<std::cell::RefCell<Vec<Ev>>>,
+        tur_failures: usize,
+    }
+    impl ScsiDevice for Timeline {
+        fn command_in(&mut self, cdb: &[u8], alloc: usize) -> Result<Vec<u8>> {
+            if cdb == TEST_UNIT_READY {
+                self.log.borrow_mut().push(Ev::TestUnitReady);
+                if self.tur_failures > 0 {
+                    self.tur_failures -= 1;
+                    anyhow::bail!("simulated NOT READY");
+                }
+                return Ok(Vec::new());
+            }
+            self.log.borrow_mut().push(Ev::OtherIn);
+            let mut r = vec![0u8; alloc.max(0x23)];
+            r[0x20..0x23].copy_from_slice(b"000");
+            Ok(r)
+        }
+        fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+            self.command_out_strict(cdb, data)
+        }
+        fn command_out_strict(&mut self, cdb: &[u8], _data: &[u8]) -> Result<()> {
+            self.log.borrow_mut().push(Ev::Write(cdb[1], cdb[2]));
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "timeline".into()
+        }
+    }
+
+    /// Run a flash against a [`Timeline`] with a recording `sleep` seam.
+    fn run_timeline(kernel: Option<&[u8]>, tur_failures: usize) -> (Result<()>, Vec<Ev>) {
+        let log = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut dev = Timeline {
+            log: log.clone(),
+            tur_failures,
+        };
+        let sleep_log = log.clone();
+        let mut sleep = move |d: Duration| sleep_log.borrow_mut().push(Ev::Sleep(d));
+        let normal = vec![0u8; 0x8100];
+        let result = execute_flash_paced(
+            &mut dev,
+            &[0xA5; CONTROL_LEN],
+            kernel,
+            &normal,
+            false,
+            false,
+            &mut sleep,
+        );
+        let events = log.borrow().clone();
+        (result, events)
+    }
+
+    #[test]
+    fn kernel_settle_and_ready_poll_sit_between_last_fe_and_first_f0_only() {
+        let kernel = vec![0u8; 0x11200]; // 3 FE slices, as the OEM sends
+        let (result, ev) = run_timeline(Some(&kernel), 2);
+        result.unwrap();
+
+        let last_fe = ev.iter().rposition(|e| *e == Ev::Write(7, 0xFE)).unwrap();
+        let first_f0 = ev.iter().position(|e| *e == Ev::Write(7, 0xF0)).unwrap();
+        assert_eq!(
+            ev[last_fe + 1..first_f0],
+            [
+                Ev::Sleep(KERNEL_SETTLE),
+                Ev::TestUnitReady,
+                Ev::Sleep(POLL_INTERVAL),
+                Ev::TestUnitReady,
+                Ev::Sleep(POLL_INTERVAL),
+                Ev::TestUnitReady,
+            ]
+        );
+        // No sleep or TUR anywhere among the FE or F0 chunks (no per-chunk pacing).
+        let first_fe = ev.iter().position(|e| *e == Ev::Write(7, 0xFE)).unwrap();
+        let finish = ev.iter().position(|e| *e == Ev::Write(5, 0xFF)).unwrap();
+        assert!(ev[first_fe..=last_fe]
+            .iter()
+            .all(|e| *e == Ev::Write(7, 0xFE)));
+        assert!(ev[first_f0..finish]
+            .iter()
+            .all(|e| *e == Ev::Write(7, 0xF0)));
+        // Outside that window the only delays are the entry and finish settles.
+        let sleeps = |r: &[Ev]| -> Vec<Ev> {
+            r.iter()
+                .filter(|e| matches!(e, Ev::Sleep(_)))
+                .cloned()
+                .collect()
+        };
+        assert_eq!(sleeps(&ev[..first_fe]), [Ev::Sleep(ENTRY_SETTLE)]);
+        assert_eq!(sleeps(&ev[finish..]), [Ev::Sleep(FINISH_SETTLE)]);
+    }
+
+    #[test]
+    fn normal_only_flash_has_no_kernel_settle_or_pre_finish_poll() {
+        let (result, ev) = run_timeline(None, 0);
+        result.unwrap();
+        let finish = ev.iter().position(|e| *e == Ev::Write(5, 0xFF)).unwrap();
+        assert!(!ev[..finish].contains(&Ev::TestUnitReady));
+        let sleeps: Vec<&Ev> = ev.iter().filter(|e| matches!(e, Ev::Sleep(_))).collect();
+        assert_eq!(
+            sleeps,
+            [&Ev::Sleep(ENTRY_SETTLE), &Ev::Sleep(FINISH_SETTLE)]
+        );
+    }
+
+    #[test]
+    fn kernel_ready_poll_is_bounded_and_aborts_before_any_normal_chunk() {
+        let kernel = vec![0u8; 0x11200];
+        let (result, ev) = run_timeline(Some(&kernel), usize::MAX);
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(msg.contains("after the Kernel write") && msg.contains("re-flash the captured"));
+        let turs = ev.iter().filter(|e| **e == Ev::TestUnitReady).count();
+        assert_eq!(turs, KERNEL_READY_ATTEMPTS as usize);
+        assert!(!ev.contains(&Ev::Write(7, 0xF0)));
+        assert!(!ev.contains(&Ev::Write(5, 0xFF)));
+        // Settle plus every retry gap stays within a few seconds.
+        let paced: Duration = ev
+            .iter()
+            .filter_map(|e| match e {
+                Ev::Sleep(d) => Some(*d),
+                _ => None,
+            })
+            .sum();
+        assert!(paced <= ENTRY_SETTLE + Duration::from_secs(5));
     }
 }

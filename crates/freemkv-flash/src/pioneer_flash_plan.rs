@@ -157,14 +157,14 @@ pub const SAFE_CROSSFLASH: &[(u16, u16)] = &[
     (0x8301, 0x8800), // BDR-208  → BDR-211 v1
     (0x8510, 0x8A10), // BDR-UD03 v1 → BDR-UD04
     (0x8511, 0x8A10), // BDR-UD03 v2 → BDR-UD04
-    (0x8590, 0x8691), // BDR-US03 → Asus SBC-06D2X-U
+    (0x8590, 0x8591), // BDR-US03 → Asus SBC-06D2X-U
     (0x8600, 0x8800), // BDR-209 v1 → BDR-211 v1
     (0x8601, 0x8801), // BDR-209 v2 → BDR-211 v2
     (0x8D30, 0x8D31), // BDR-XD07 → BDR-XD07U
     (0x8E20, 0x8E21), // BDR-XS07 → BDR-XS07U
     (0x8F00, 0x8F01), // BDR-212  → BDR-S12U
     (0x9000, 0x9001), // BDR-X12  → BDR-X12U
-    (0x9200, 0x9201), // BDR-XD08 → BDR-XD08U
+    (0x9200, 0x9201), // BDR-213M → BDR-213U/S13U
     (0x9400, 0x9401), // BDR-X13  → BDR-X13U
 ];
 
@@ -573,5 +573,49 @@ mod tests {
             decoded_kernel_marker(&encoded_kernel_with_marker(0xAB)).unwrap(),
             0xAB
         );
+    }
+
+    /// Codes of the backticked `before`/`after` cells in `crossflash_table.md`.
+    fn md_table_pairs() -> Vec<(u16, u16)> {
+        include_str!("../data/crossflash_table.md")
+            .lines()
+            .filter_map(|line| {
+                let codes: Vec<u16> = line
+                    .split('`')
+                    .skip(1)
+                    .step_by(2)
+                    .filter_map(|c| u16::from_str_radix(c, 16).ok())
+                    .collect();
+                (codes.len() == 2).then(|| (codes[0], codes[1]))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn safe_crossflash_agrees_with_families_json_and_md_table() {
+        let json: serde_json::Value =
+            serde_json::from_str(include_str!("../data/crossflash_families.json")).unwrap();
+        let families: Vec<Vec<u16>> = json["families"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| {
+                f["members"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|m| u16::from_str_radix(m["sat"].as_str().unwrap(), 16).unwrap())
+                    .collect()
+            })
+            .collect();
+        for &(from, to) in SAFE_CROSSFLASH {
+            assert!(
+                families
+                    .iter()
+                    .any(|f| f.contains(&from) && f.contains(&to)),
+                "{from:04X} -> {to:04X} is not one family in crossflash_families.json"
+            );
+        }
+        assert_eq!(md_table_pairs(), SAFE_CROSSFLASH);
     }
 }
