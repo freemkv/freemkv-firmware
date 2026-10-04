@@ -6,6 +6,7 @@ members = [
     "crates/freemkv-flash-gui",
     "crates/freemkv-fw",
     "crates/freemkv-fw-gui",
+    "crates/pioneer-codec",
 ]
 
 [workspace.package]
