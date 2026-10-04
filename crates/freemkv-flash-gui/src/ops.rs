@@ -82,7 +82,7 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
         Job::Dump { out } => {
             let mut dev = platform::open(device, false)?;
             let handler = classify_gated(dev.as_mut())?;
-            engine::dump_everything(dev.as_mut(), handler.as_ref(), out)
+            engine::backup(dev.as_mut(), handler.as_ref(), out, false)
         }
         Job::Flash { input } => {
             let bytes = std::fs::read(input)
@@ -98,7 +98,7 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
                 // The GUI's flash button IS the "do it for real" action; the
                 // dry-run lives in the CLI. The confirm checkbox is the gate.
                 execute: true,
-                rescue_no_dump: false,
+                skip_backup: false,
                 acknowledged_risk: true,
                 enc_override: None,
                 drive_model,

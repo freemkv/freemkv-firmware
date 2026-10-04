@@ -140,6 +140,7 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         verbose: false,
         predump_out: execute.then(fresh_backup_path),
         allow_crossflash: false,
+        skip_backup: false,
     }
 }
 
@@ -210,7 +211,7 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
             vec![0xA5; 8],
         );
     let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
-    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out).unwrap_err();
+    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out, false).unwrap_err();
     assert!(format!("{err:#}").contains("incomplete hardware identity response"));
     assert!(dev.reads.iter().all(|cdb| {
         cdb.first() == Some(&0x12) || (cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1))
@@ -223,23 +224,25 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
 fn unknown_backend_backup_fails_without_reads_writes_or_file() {
     let mut dev = MockScsiDevice::new();
     let out = fresh_backup_path();
-    let err = backup(&mut dev, &*for_family(Family::Unknown), &out).unwrap_err();
-    assert!(format!("{err:#}").contains("no proven restorable firmware backup"));
+    let err = backup(&mut dev, &*for_family(Family::Unknown), &out, false).unwrap_err();
+    assert!(format!("{err:#}").contains("no firmware backup capability"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
     assert!(!out.exists());
 }
 
 #[test]
-fn pioneer_valid_offline_candidate_still_cannot_execute_or_issue_writes() {
+fn pioneer_execute_without_risk_ack_is_safety_gated_and_issues_no_writes() {
     let mut image = vec![0u8; 0x1d7000];
     let header = b"********  Copyright(c) 2000 Pioneer Corporation\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11.\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";
     image[..header.len()].copy_from_slice(header);
     let mut req = bin_req(image, true);
+    req.acknowledged_risk = false;
     req.drive_model = "BD-RW   BDR-UD04".into();
     let mut dev = MockScsiDevice::pioneer();
     let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
-    assert!(err.to_string().contains("restorable backup"));
+    // The shared safety gate fires before any backup or write.
+    assert!(format!("{err:#}").contains("SAFETY GATE"));
     assert!(dev.writes.is_empty());
     assert!(dev.reads.is_empty());
 }
@@ -932,7 +935,7 @@ fn dump_refuses_unreadable_firmware_without_creating_archive() {
             "unreadable main",
         );
     let out = fresh_backup_path();
-    let err = backup(&mut dev, &Mtk, &out).unwrap_err();
+    let err = backup(&mut dev, &Mtk, &out, false).unwrap_err();
     assert!(err
         .to_string()
         .contains("complete restorable backup unavailable"));

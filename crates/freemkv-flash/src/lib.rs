@@ -27,6 +27,19 @@ pub mod manifest;
 pub mod pioneer_backup;
 /// Read-only validation of extractor-produced Pioneer firmware bundles.
 pub mod pioneer_bundle;
+/// Live Pioneer OEM flash executor — crate-private so the gate chain in `engine`
+/// (--execute/--i-understand-risk, tray guard, backup-first) cannot be bypassed.
+pub(crate) mod pioneer_flash;
+/// Pure flash-routing decision (plain / kernel-mode downgrade / crossflash /
+/// refuse). No device I/O; not yet wired to the executor (pending the Site-1
+/// bypass proof).
+pub mod pioneer_flash_plan;
+/// Embedded OEM kernel label/key table (pioneer_k.bin), loaded lazily for Pioneer.
+mod pioneer_k;
+/// Embedded OEM control-key table (pioneer_keys.bin), loaded lazily for Pioneer.
+mod pioneer_keys;
+/// Embedded OEM normal seed/signature table (pioneer_n.bin), loaded lazily for Pioneer.
+mod pioneer_n;
 pub mod platform;
 pub mod probe;
 pub mod style;

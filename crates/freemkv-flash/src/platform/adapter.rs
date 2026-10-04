@@ -27,12 +27,32 @@ pub struct TransportDevice {
     path: String,
 }
 
+/// Turn a raw libfreemkv open error (e.g. `E1005: ioreg:… 0xe00002c5`) into a
+/// friendly, actionable message, keeping the raw text dimmed for debugging.
+fn friendly_open_error(path: &str, raw: &str) -> anyhow::Error {
+    let low = raw.to_ascii_lowercase();
+    let hint = if raw.contains("0xe00002c5") || low.contains("exclusive") {
+        "the drive is already open by another process — close other freemkv commands or disc/eject utilities and retry"
+    } else if raw.contains("0xe00002bc") || low.contains("not found") || low.contains("no such") {
+        "no drive matches that selector — run `freemkv-flash list` to see connected drives"
+    } else if raw.contains("0xe00002c1")
+        || low.contains("not permitted")
+        || low.contains("permission")
+    {
+        "permission denied opening the drive — grant the terminal/app disk access and retry"
+    } else {
+        return anyhow!("could not open drive {path}: {raw}");
+    };
+    anyhow!("could not open drive {path}: {hint} ({raw})")
+}
+
 impl TransportDevice {
     /// Open the platform transport for `path` (libfreemkv opens O_RDWR, so the
     /// old `writable` distinction is moot — write access is always available,
     /// which the read-only `info`/`dump` paths simply never exercise).
     pub fn open(path: &str) -> Result<Self> {
-        let inner = scsi::open(std::path::Path::new(path)).map_err(|e| anyhow!("{e}"))?;
+        let inner = scsi::open(std::path::Path::new(path))
+            .map_err(|e| friendly_open_error(path, &e.to_string()))?;
         Ok(Self {
             inner,
             path: path.to_string(),
@@ -45,6 +65,20 @@ impl TransportDevice {
     /// UNIT ATTENTION on a non-read, and the benign "no medium present" state are
     /// tolerated; every other CHECK CONDITION fails. Returns the byte count.
     fn run(&mut self, cdb: &[u8], dir: Direction, buf: &mut [u8]) -> Result<usize> {
+        self.run_inner(cdb, dir, buf, false)
+    }
+
+    /// As [`Self::run`], but `strict == true` tolerates NO nonzero status at all
+    /// (not even RECOVERED / un-retried UNIT ATTENTION): any CHECK CONDITION is
+    /// fatal. Used by the OEM firmware-write path, where the host aborts on any
+    /// nonzero result.
+    fn run_inner(
+        &mut self,
+        cdb: &[u8],
+        dir: Direction,
+        buf: &mut [u8],
+        strict: bool,
+    ) -> Result<usize> {
         let ldir = match dir {
             Direction::None => DataDirection::None,
             Direction::FromDevice => DataDirection::FromDevice,
@@ -99,7 +133,10 @@ impl TransportDevice {
             // non-read, and benign no-medium. A data-IN read that still
             // CHECK-CONDITIONs is never tolerated — its data is invalid.
             let no_medium = sense_kaa(sense).is_some_and(|(k, a, _)| super::is_no_medium(k, a));
-            let tolerable = r.status == CHECK_CONDITION
+            // Strict mode (OEM firmware write) tolerates nothing: any nonzero
+            // status aborts, matching the OEM host's "abort on any result" rule.
+            let tolerable = !strict
+                && r.status == CHECK_CONDITION
                 && (no_medium
                     || key == Some(0x1)
                     || (dir != Direction::FromDevice && key == Some(0x6)));
@@ -122,6 +159,26 @@ impl TransportDevice {
         }
         Ok(transferred)
     }
+
+    /// Shared data-OUT send with a full-acceptance check; `strict` forbids any
+    /// nonzero-status tolerance (OEM firmware write).
+    fn data_out(&mut self, cdb: &[u8], data: &[u8], strict: bool) -> Result<()> {
+        let mut buf = data.to_vec();
+        let dir = if buf.is_empty() {
+            Direction::None
+        } else {
+            Direction::ToDevice
+        };
+        let n = self.run_inner(cdb, dir, &mut buf, strict)?;
+        if n != data.len() {
+            bail!(
+                "short WRITE_BUFFER: drive accepted {} of {} bytes",
+                n,
+                data.len()
+            );
+        }
+        Ok(())
+    }
 }
 
 impl ScsiDevice for TransportDevice {
@@ -133,21 +190,11 @@ impl ScsiDevice for TransportDevice {
     }
 
     fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        let mut buf = data.to_vec();
-        let dir = if buf.is_empty() {
-            Direction::None
-        } else {
-            Direction::ToDevice
-        };
-        let n = self.run(cdb, dir, &mut buf)?;
-        if n != data.len() {
-            bail!(
-                "short WRITE_BUFFER: drive accepted {} of {} bytes",
-                n,
-                data.len()
-            );
-        }
-        Ok(())
+        self.data_out(cdb, data, false)
+    }
+
+    fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        self.data_out(cdb, data, true)
     }
 
     fn describe(&self) -> String {

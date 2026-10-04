@@ -38,7 +38,7 @@ use aes::cipher::{BlockEncrypt, KeyInit};
 use aes::Aes128;
 use anyhow::{anyhow, bail, Context, Result};
 
-use super::{DriveFamily, Family, RestoreRegion};
+use super::{Capabilities, DriveFamily, Family, RestoreRegion};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
@@ -962,8 +962,8 @@ impl DriveFamily for Mtk {
         Family::Mtk
     }
 
-    fn is_supported(&self) -> bool {
-        true
+    fn capabilities(&self) -> Capabilities {
+        Capabilities::all()
     }
 
     fn read_dump(&self, dev: &mut dyn ScsiDevice) -> Result<UserDump> {

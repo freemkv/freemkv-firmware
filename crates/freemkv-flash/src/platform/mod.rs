@@ -87,6 +87,15 @@ pub trait ScsiDevice {
     /// Issue a data-out command, sending `data` to the device.
     fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()>;
 
+    /// Issue a data-out command that tolerates NO nonzero SCSI status — any
+    /// CHECK CONDITION is fatal (no RECOVERED / UNIT-ATTENTION leniency). Used by
+    /// the OEM firmware-write path, which must abort on any nonzero result. The
+    /// default delegates to [`Self::command_out`]; the real transport overrides
+    /// it with the strict policy.
+    fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        self.command_out(cdb, data)
+    }
+
     /// Human-readable identity of the underlying transport/device path.
     fn describe(&self) -> String;
 
@@ -210,6 +219,13 @@ pub use mock::MockScsiDevice;
 pub fn open(path: &str, writable: bool) -> Result<Box<dyn ScsiDevice>> {
     let _ = writable;
     Ok(Box::new(adapter::TransportDevice::open(path)?))
+}
+
+/// Enumerate optical drives via the platform (IOKit / sysfs / setupapi). This is
+/// media-independent: an empty macOS drive has no `/dev/diskN` node, so its
+/// selector comes back as an opaque `ioreg:<id>` that `open` still accepts.
+pub fn list_drives() -> Vec<libfreemkv::DriveInfo> {
+    libfreemkv::list_drives()
 }
 
 #[cfg(test)]

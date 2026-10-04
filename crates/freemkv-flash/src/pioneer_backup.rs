@@ -7,63 +7,138 @@ use crate::platform::ScsiDevice;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-// Deliberately custom generator defaults, not recovered OEM seeds or signing keys.
-const KERNEL_SEED: u32 = 0x123456;
-const NORMAL_SEED: u32 = 0x654321;
-
-/// Build an encrypted package directly from two captured images. The
-/// public point in its Normal header belongs to a fresh caller-owned key;
-/// drive-side trust and restore are not established by this constructor.
+/// Build an encrypted package directly from two captured images.
+///
+/// The KERNEL is reconstructed byte-for-byte OEM when its decoded image is one
+/// of our known OEM kernels ([`crate::pioneer_k`]): real revision/date and the
+/// OEM key table. An unrecognized kernel gets honest zero placeholders —
+/// revision `0000`, date `00/00/00`, seed `0` — so the output plainly reads as
+/// "not OEM". The NORMAL self-recovers its real revision/date from its own body
+/// and is signed with a fresh caller-owned key (seed `0`); it is intentionally
+/// not byte-exact and its drive-side acceptance is not established here.
 pub fn construct_signed_candidate(
     kernel: &[u8],
     normal: &[u8],
     envelope_id: &str,
     revision: &str,
 ) -> Result<Vec<u8>> {
-    let date = unique_embedded_date(normal).unwrap_or("BACKUP");
-    // Encoding tables are generated from our own explicit constants.
-    // Neither seed claims to reproduce the original OEM encoding table.
-    // Keep signing entropy independent: encoding seeds are not signing keys.
-    let signer = pioneer_codec::signature::SigningKey::random().map_err(|e| anyhow::anyhow!(e))?;
+    // Recognize the normal by its decoded-image hash. `normal` is already the
+    // decoded on-flash image, so hash it directly (do NOT re-decode it as an
+    // envelope). A match rebuilds a byte-exact OEM normal (true seed + verbatim
+    // OEM signature + OEM revision/date); a miss uses a zero seed and an all-zero
+    // signature region — the obvious "not OEM / unverified" sentinel.
+    let normal_oem = crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(normal)));
+    let (normal_seed, normal_signature, revision, date): (
+        u32,
+        pioneer_codec::builder::NormalSignature,
+        &str,
+        &str,
+    ) = match normal_oem {
+        Some(entry) => (
+            entry.seed,
+            pioneer_codec::builder::NormalSignature::Oem(&entry.signature),
+            &entry.revision,
+            &entry.date,
+        ),
+        None => (
+            0,
+            pioneer_codec::builder::NormalSignature::Zeroed,
+            revision,
+            unique_embedded_date(normal).unwrap_or("00/00/00"),
+        ),
+    };
+
+    // Recognize the kernel by its decoded-image hash and rebuild it exactly;
+    // otherwise stamp the kernel's own zero placeholders (seed 0 is obvious).
+    let kernel_build = oem_kernel_build(kernel);
+
     let input = pioneer_codec::builder::BuildInputs {
         kernel_image: kernel,
         normal_image: normal,
         envelope_id,
         normal_revision: revision,
         normal_date: date,
-        kernel_key_seed: KERNEL_SEED,
-        normal_key_seed: NORMAL_SEED,
+        kernel: kernel_build,
+        normal_key_seed: normal_seed,
     };
-    let pair = pioneer_codec::builder::encode_encrypted_pair(&input, &signer)
+    let pair = pioneer_codec::builder::encode_encrypted_pair(&input, normal_signature)
         .map_err(|e| anyhow::anyhow!(e))?;
-    let mut tar = tar::Builder::new(Vec::new());
-    for bytes in [&pair.kernel, &pair.normal] {
-        let embedded = bytes[0x1f0..0x200]
-            .split(|byte| *byte == 0)
-            .next()
-            .context("generated envelope filename missing")?;
-        let embedded = std::str::from_utf8(embedded)?;
-        if embedded.is_empty()
-            || !embedded
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.')
-        {
-            bail!("generated envelope filename is invalid");
-        }
-        let path = format!("components/{embedded}.enc");
-        let mut header = tar::Header::new_gnu();
-        header.set_size(bytes.len() as u64);
-        header.set_mode(0o644);
-        header.set_mtime(0);
-        header.set_cksum();
-        tar.append_data(&mut header, path, bytes.as_slice())?;
-    }
-    let out = tar.into_inner()?;
+    let out = assemble_tar(&[pair.kernel, pair.normal])?;
     let parsed = Bundle::from_tar_bytes(&out)?;
     if parsed.components.len() != 2 {
         bail!("generated package did not contain Kernel and Normal");
     }
     Ok(out)
+}
+
+/// Append one envelope to a tar under `components/<embedded-name>.enc`, deriving
+/// the archive name from the envelope's own embedded filename.
+fn append_envelope(tar: &mut tar::Builder<Vec<u8>>, bytes: &[u8]) -> Result<()> {
+    // The codec is expected to emit a full 0x200-byte header; guard the
+    // embedded-filename slice so a short return is an error, not a panic.
+    let embedded = bytes
+        .get(0x1f0..0x200)
+        .context("generated envelope is shorter than its header")?
+        .split(|byte| *byte == 0)
+        .next()
+        .context("generated envelope filename missing")?;
+    let embedded = std::str::from_utf8(embedded)?;
+    if embedded.is_empty()
+        || !embedded
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.')
+    {
+        bail!("generated envelope filename is invalid");
+    }
+    let path = format!("components/{embedded}.enc");
+    let mut header = tar::Header::new_gnu();
+    header.set_size(bytes.len() as u64);
+    header.set_mode(0o644);
+    header.set_mtime(0);
+    header.set_cksum();
+    tar.append_data(&mut header, path, bytes)?;
+    Ok(())
+}
+
+/// Assemble a backup `.tar` from one or more built component envelopes.
+fn assemble_tar(components: &[Vec<u8>]) -> Result<Vec<u8>> {
+    let mut tar = tar::Builder::new(Vec::new());
+    for bytes in components {
+        append_envelope(&mut tar, bytes)?;
+    }
+    Ok(tar.into_inner()?)
+}
+
+/// Build just the Kernel envelope from a captured Kernel image: byte-exact OEM
+/// when recognized in [`crate::pioneer_k`], otherwise zero placeholders. Used to
+/// still produce a Kernel-only archive when the Normal region could not be read.
+fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
+    pioneer_codec::builder::encode_kernel_envelope(kernel, envelope_id, &oem_kernel_build(kernel))
+        .map_err(|e| anyhow::anyhow!(e))
+}
+
+/// Resolve the Kernel build inputs from a captured Kernel image: the byte-exact
+/// OEM revision/date/key when its decoded-image hash is recognized in
+/// [`crate::pioneer_k`], otherwise the obvious zero placeholders (revision
+/// `0000`, date `00/00/00`, seed `0`). Single source of truth for both the
+/// full-pair and Kernel-only capture paths, so they cannot drift.
+fn oem_kernel_build(kernel: &[u8]) -> pioneer_codec::builder::KernelBuild<'static> {
+    use pioneer_codec::builder::{KernelBuild, KernelKeySource};
+    match crate::pioneer_k::lookup(&format!("{:x}", Sha256::digest(kernel))) {
+        Some(entry) => KernelBuild {
+            revision: &entry.revision,
+            date: &entry.date,
+            key: match &entry.key {
+                crate::pioneer_k::KeyMaterial::Seed(seed) => KernelKeySource::Seed(*seed),
+                crate::pioneer_k::KeyMaterial::Raw(bytes) => KernelKeySource::RawKey(bytes),
+            },
+        },
+        None => KernelBuild {
+            revision: "0000",
+            date: "00/00/00",
+            key: KernelKeySource::Seed(0),
+        },
+    }
 }
 
 /// Firmware build dates, when present as a unique YY/MM/DD or MmmDD,YYYY literal in the
@@ -172,20 +247,108 @@ fn embedded_envelope_id(inquiry: &[u8], kernel: &[u8], normal: &[u8]) -> Result<
 /// regardless of whether it came from an updater or a live capture.
 pub fn validate_envelope_package(bytes: &[u8], product: &str) -> Result<()> {
     let bundle = Bundle::from_tar_bytes(bytes)?;
-    if bundle.components.len() != 2 {
-        bail!("Pioneer package requires Kernel and Normal");
+    if bundle.components.is_empty() || bundle.components.len() > 2 {
+        bail!("Pioneer package must contain a Kernel and/or a Normal");
     }
-    let kernel = bundle
+    let kernel = bundle.components.iter().find(|c| c.role == Role::Kernel);
+    let normal = bundle.components.iter().find(|c| c.role == Role::Main);
+    match (kernel, normal) {
+        // Healthy capture: validate the full pair together.
+        (Some(k), Some(n)) => validate_envelope_pair(&k.bytes, &n.bytes, product),
+        // Partial capture: the Kernel is self-contained and validates alone.
+        (Some(k), None) => validate_kernel_only(&k.bytes, product),
+        // A Normal cannot be receiver-decoded without its Kernel, so a
+        // Normal-only archive is not a validatable restore artifact.
+        (None, Some(_)) => {
+            bail!("Normal-only archive cannot be validated without its Kernel")
+        }
+        (None, None) => bail!("Pioneer package has neither a Kernel nor a Normal"),
+    }
+}
+
+/// The role (`"kernel"` / `"main"`) and archive filename of each component in a
+/// captured package, for user-facing messaging.
+pub fn component_roles(bytes: &[u8]) -> Vec<(String, String)> {
+    let Ok(bundle) = Bundle::from_tar_bytes(bytes) else {
+        return Vec::new();
+    };
+    bundle
+        .components
+        .iter()
+        .map(|c| {
+            let role = match c.role {
+                Role::Kernel => "kernel",
+                Role::Main => "main",
+                _ => "other",
+            };
+            (role.to_string(), c.path.clone())
+        })
+        .collect()
+}
+
+/// Validate a Kernel envelope on its own: header model match, decode, image
+/// integrity and exact round-trip. Used for a partial (Kernel-only) capture.
+fn validate_kernel_only(kernel: &[u8], product: &str) -> Result<()> {
+    let kh = pioneer_codec::header_info(kernel).context("invalid Kernel header")?;
+    if !product.split_whitespace().any(|part| part == kh.model) || kh.file_type != "Kernel" {
+        bail!("Pioneer Kernel identity does not match the drive");
+    }
+    let decoded = pioneer_codec::decode_envelope(kernel).context("Kernel cannot be decoded")?;
+    if !zero_be32_sum(&decoded.image) {
+        bail!("Pioneer Kernel image integrity mismatch");
+    }
+    if decoded.repack(&decoded.image).as_deref() != Some(kernel) {
+        bail!("Pioneer Kernel envelope does not round-trip exactly");
+    }
+    Ok(())
+}
+
+/// Per-component OEM provenance of a captured package, decided from its bytes.
+/// A component is OEM only when it is byte-exact to what the OEM would ship: the
+/// kernel is recognized by its decoded-image hash in [`crate::pioneer_k`], and
+/// the normal by its decoded-image hash in [`crate::pioneer_n`] (which also
+/// supplies the verbatim OEM signature). An unrecognized component is a
+/// reconstruction (zero seed, zero signature) and is not OEM.
+pub struct Provenance {
+    /// Kernel is byte-exact OEM (recognized and rebuilt from the OEM key table).
+    pub kernel_oem: bool,
+    /// Normal is byte-exact OEM (recognized seed + verbatim OEM signature).
+    pub normal_oem: bool,
+}
+
+/// Decide [`Provenance`] from a captured `.tar`'s bytes. A package that cannot
+/// be re-parsed is treated as fully non-OEM.
+pub fn package_provenance(bytes: &[u8]) -> Provenance {
+    let Ok(bundle) = Bundle::from_tar_bytes(bytes) else {
+        return Provenance {
+            kernel_oem: false,
+            normal_oem: false,
+        };
+    };
+    let decoded_kernel = bundle
         .components
         .iter()
         .find(|c| c.role == Role::Kernel)
-        .context("signed candidate Kernel is missing")?;
-    let normal = bundle
-        .components
-        .iter()
-        .find(|c| c.role == Role::Main)
-        .context("signed candidate Normal is missing")?;
-    validate_envelope_pair(&kernel.bytes, &normal.bytes, product)
+        .and_then(|c| pioneer_codec::decode_envelope(&c.bytes));
+    let kernel_oem = decoded_kernel
+        .as_ref()
+        .map(|d| crate::pioneer_k::lookup(&format!("{:x}", Sha256::digest(&d.image))).is_some())
+        .unwrap_or(false);
+    // The normal is receiver-decoded with the package's own kernel, then matched
+    // by decoded-image hash against the OEM normal table.
+    let normal_oem = match (
+        &decoded_kernel,
+        bundle.components.iter().find(|c| c.role == Role::Main),
+    ) {
+        (Some(k), Some(n)) => pioneer_codec::decode_envelope_with_kernel(&n.bytes, k)
+            .map(|d| crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(&d.image))).is_some())
+            .unwrap_or(false),
+        _ => false,
+    };
+    Provenance {
+        kernel_oem,
+        normal_oem,
+    }
 }
 
 /// Validate a pair without interpreting its provenance or archival labels.
@@ -207,7 +370,14 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
         pioneer_codec::decode_envelope(kernel).context("Kernel cannot be decoded")?;
     let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
         .context("Normal cannot be receiver-decoded")?;
-    if !pioneer_codec::builder::normal_authentication_valid(normal, &decoded_kernel.image)
+    // A zeroed signature region is the deliberate "not OEM / unverified"
+    // sentinel (a table-miss normal): accept it structurally and skip only the
+    // ECDSA check. A nonzero signature must verify.
+    let sentinel_signature = normal
+        .get(pioneer_codec::builder::NORMAL_SIGNATURE_RANGE)
+        .is_some_and(|sig| sig.iter().all(|&b| b == 0));
+    if (!sentinel_signature
+        && !pioneer_codec::builder::normal_authentication_valid(normal, &decoded_kernel.image))
         || decoded_normal.info.layout
             != if pioneer_codec::builder::scaled_normal_geometry_from_kernel(&decoded_kernel.image)
                 .is_some()
@@ -229,203 +399,94 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
     Ok(())
 }
 
-/// Read the shared H8/SAT image regions twice and save a self-signed encrypted
-/// package candidate. This issues no flash commands.
+/// Normal backup: read each shared H8/SAT image region with a fast, strict read
+/// (stable double-read, fail-fast). Issues no flash commands.
 pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let (kernel, normal, revision, envelope_id) = read_h8_image_pair(dev)?;
-    construct_signed_candidate(&kernel, &normal, &envelope_id, &revision)
+    capture(dev, false)
 }
 
-fn zero_be32_sum(image: &[u8]) -> bool {
-    let (words, remainder) = image.as_chunks::<4>();
-    remainder.is_empty()
-        && words.iter().fold(0u32, |sum, word| {
-            sum.wrapping_add(u32::from_be_bytes(*word))
-        }) == 0
+/// Recover: same capture, but any region that the strict read cannot get is
+/// retried with a deeper, instability-tolerant salvage read. Issues no flash
+/// commands.
+pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    capture(dev, true)
 }
 
-fn backup_header(
-    id: &str,
-    revision: &str,
-    hardware: &str,
-    kernel_tag: &str,
-    role: &str,
-    kernel_version2: &str,
-) -> Result<Vec<u8>> {
-    let lines = format!(
-        "********  Copyright(c) 2000 Pioneer Corporation  ********\r\n\
-         This is microcode file.\r\n\
-         ID : {id}\r\n\
-         Revision Level : {revision}\r\n\
-         Hardware Version : {hardware}\r\n\
-         Kernel Version : {kernel_tag}\r\n\
-         Destination : BACKUP\r\n\
-         File Type : {role}\r\n\
-         Generated Date : BACKUP\r\n\
-         Kernel Version2 : {kernel_version2}\r\n"
-    );
-    if lines.len() > 0x160
-        || [id, revision, hardware, kernel_tag, role, kernel_version2]
-            .iter()
-            .any(|s| s.is_empty() || !s.is_ascii() || s.bytes().any(|b| b < 0x20 || b == 0x7f))
-    {
-        bail!("invalid synthetic Pioneer backup identity");
-    }
-    let mut header = vec![0; 0x200];
-    header[..lines.len()].copy_from_slice(lines.as_bytes());
-    Ok(header)
-}
+/// Capture the Kernel and Normal as INDEPENDENT components and archive whichever
+/// succeeded. The Kernel is read first (it establishes the Normal's geometry);
+/// the Normal is then attempted on its own. A region the read cannot get never
+/// discards the other: the archive holds 2 components on a healthy drive, or 1
+/// when a region failed (the caller tells the user to run `recover`). Fails only
+/// if nothing could be read. `deep` selects the salvage read for failed regions.
+fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
+    let (inquiry, hardware, kernel_len) = read_identity(dev)?;
+    prepare_firmware_read(dev)?;
 
-/// Construct a UD04 raw-path package from the two captured images alone.
-/// This matches the receiver's traced plaintext framing; it is an offline
-/// candidate until transfer and persistent restore have been exercised.
-pub fn construct_ud04_plain_candidate(
-    kernel: &[u8],
-    normal: &[u8],
-    inquiry_revision: &str,
-) -> Result<Vec<u8>> {
-    if kernel.len() != 0x10000
-        || normal.len() < 0x2000
-        || !normal.len().is_multiple_of(0x100)
-        || !zero_be32_sum(kernel)
-        || !zero_be32_sum(normal)
-    {
-        bail!("UD04 raw image length or checksum is invalid");
+    // The Kernel is required: it defines the Normal's receiver geometry, so a
+    // Kernel we cannot read leaves nothing buildable. Say so and point at recover.
+    let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len, deep).with_context(|| {
+        if deep {
+            "could not read the Kernel firmware region even with a deeper recover read"
+        } else {
+            "could not read the Kernel firmware region; run `recover` for a deeper read"
+        }
+    })?;
+    if kernel.get(0x1000..0x1008) != Some(hardware.as_slice()) {
+        bail!("captured Kernel hardware differs from drive identity");
     }
-    let hardware = std::str::from_utf8(&kernel[0x1000..0x1008])?.trim();
-    let kernel_tag = std::str::from_utf8(&kernel[0x1008..0x1010])?.trim();
-    let kernel_version2 = std::str::from_utf8(&kernel[0x1010..0x1014])?.trim();
-    let id = std::str::from_utf8(&normal[..16])?.trim();
-    if hardware != "SAT 8A10"
-        || id != "PIONEER BDR-US04"
-        || kernel_tag.is_empty()
-        || kernel_version2.is_empty()
-        || u32::from_be_bytes(normal[20..24].try_into().unwrap()) as usize != normal.len()
-    {
-        bail!("captured images do not satisfy the traced UD04 raw receiver identity");
-    }
-    let mut k = backup_header(
-        id,
-        "BACKUP",
-        hardware,
-        kernel_tag,
-        "Kernel",
-        kernel_version2,
-    )?;
-    k.resize(0x1200, 0);
-    k.extend_from_slice(kernel);
-    let mut n = backup_header(
-        id,
-        inquiry_revision,
-        hardware,
-        kernel_tag,
-        "Normal",
-        kernel_version2,
-    )?;
-    n.resize(0x10200, 0);
-    n.extend_from_slice(normal);
-    let mut tar = tar::Builder::new(Vec::new());
-    for (path, bytes) in [
-        ("components/backup-kernel.enc", &k),
-        ("components/backup-normal.enc", &n),
-    ] {
-        let mut header = tar::Header::new_gnu();
-        header.set_size(bytes.len() as u64);
-        header.set_mode(0o644);
-        header.set_mtime(0);
-        header.set_cksum();
-        tar.append_data(&mut header, path, bytes.as_slice())?;
-    }
-    let out = tar.into_inner()?;
-    Bundle::from_tar_bytes(&out).context("synthetic backup package failed intake")?;
-    Ok(out)
-}
+    pioneer_codec::builder::kernel_layout_from_image(&kernel)
+        .context("captured Kernel receiver layout is unsupported")?;
+    let revision = std::str::from_utf8(&inquiry[32..36])?.trim().to_owned();
 
-fn reference_pair(bytes: &[u8]) -> Result<Bundle> {
-    let bundle = Bundle::from_tar_bytes(bytes)?;
-    if bundle.components.len() != 2 {
-        bail!("UD04 backup template requires Kernel and Normal");
-    }
-    for (role, hash) in [
-        (
-            Role::Kernel,
-            "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83",
-        ),
-        (
-            Role::Main,
-            "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
-        ),
-    ] {
-        let c = bundle
-            .components
-            .iter()
-            .find(|c| c.role == role)
-            .context("missing component")?;
-        if format!("{:x}", Sha256::digest(&c.bytes)) != hash {
-            bail!("backup read profile is established only for the supplied UD04 1.14 pair");
+    // The Normal is attempted independently; its failure keeps the Kernel.
+    match read_normal_region(dev, &kernel, deep) {
+        Ok(normal) => {
+            let envelope_id = embedded_envelope_id(&inquiry, &kernel, &normal)?;
+            construct_signed_candidate(&kernel, &normal, &envelope_id, &revision)
+        }
+        Err(error) => {
+            eprintln!(
+                "  {}",
+                crate::style::amber(&format!(
+                    "Normal region not recovered ({error:#}); saving Kernel only"
+                ))
+            );
+            let envelope_id = embedded_envelope_id(&inquiry, &kernel, &[])?;
+            let kernel_env = build_kernel_envelope(&kernel, &envelope_id)?;
+            assemble_tar(&[kernel_env])
         }
     }
-    Ok(bundle)
 }
 
-/// Reject an unsupported template without issuing any device commands.
-pub fn validate_template(bytes: &[u8]) -> Result<()> {
-    reference_pair(bytes).map(|_| ())
-}
-
-fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec<u8>> {
-    let mut image = Vec::with_capacity(len);
-    while image.len() < len {
-        let off = start + image.len();
-        let n = (len - image.len()).min(0xa4);
-        let cdb = [
-            0x3c,
-            2,
-            0xb0,
-            (off >> 16) as u8,
-            (off >> 8) as u8,
-            off as u8,
-            0,
-            0,
-            n as u8,
-            0,
-        ];
-        let data = dev
-            .command_in(&cdb, n)
-            .with_context(|| format!("reading firmware at {off:#x}"))?;
-        if data.len() != n {
-            bail!("short firmware read at {off:#x}: {}/{n}", data.len());
-        }
-        image.extend(data);
-    }
-    Ok(image)
-}
-
-/// Shared H8/SAT image map observed in decoded Kernels from 28 hardware
-/// groups. This is an address-space rule, not a per-model firmware record.
-const KERNEL_IMAGE_BASE: usize = 0x400000;
-const NORMAL_IMAGE_BASE: usize = 0x410000;
-
-/// Older receivers already allow B0 reads and need no service command. Only
-/// the observed invalid-field denial permits one attempt at the shared knock;
-/// transport failures, short data and other sense codes must stop capture.
-fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
-    match read_region(dev, KERNEL_IMAGE_BASE, 1) {
-        Ok(_) => Ok(()),
-        Err(error) if crate::platform::sense_triplet(&error) == Some((5, 0x24, 0)) => dev
-            .command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])
-            .context("entering Pioneer firmware read service"),
-        Err(error) => Err(error).context("probing Pioneer firmware read access"),
-    }
-}
-
-/// Capture each structurally identified image region twice. No OEM envelope,
-/// previously saved backup, model, revision or hardware lookup is consulted.
+/// Strict capture of both image regions as raw images (test helper mirroring the
+/// healthy-drive path of [`capture`]). Production uses [`capture`], which is
+/// per-component resilient.
+#[cfg(test)]
 fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, String, String)> {
+    let (inquiry, hardware, kernel_len) = read_identity(dev)?;
+    prepare_firmware_read(dev)?;
+    let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len, false)?;
+    if kernel.get(0x1000..0x1008) != Some(hardware.as_slice()) {
+        bail!("captured Kernel hardware differs from drive identity");
+    }
+    pioneer_codec::builder::kernel_layout_from_image(&kernel)
+        .context("captured Kernel receiver layout is unsupported")?;
+    let normal = read_normal_region(dev, &kernel, false)?;
+    let envelope_id = embedded_envelope_id(&inquiry, &kernel, &normal)?;
+    let revision = std::str::from_utf8(&inquiry[32..36])?.trim().to_owned();
+    Ok((kernel, normal, revision, envelope_id))
+}
+
+/// Read and validate the drive identity, returning the raw INQUIRY, the 8-byte
+/// H8/SAT hardware tag, and the Kernel image length.
+fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> {
     let inquiry = dev.command_in(&[0x12, 0, 0, 0, 36, 0], 36)?;
+    // Vendor+product (8..32) AND the revision (32..36) must be printable ASCII:
+    // the revision flows verbatim into the generated envelope header, so a
+    // drive returning control bytes there must be rejected, not propagated.
     if inquiry.len() != 36
-        || !inquiry[8..32].is_ascii()
-        || inquiry[8..32].iter().any(|&b| b < 0x20 || b == 0x7f)
+        || !inquiry[8..36].is_ascii()
+        || inquiry[8..36].iter().any(|&b| b < 0x20 || b == 0x7f)
         || inquiry[8..32].iter().all(|&b| b == b' ')
     {
         bail!("drive does not have a usable H8/SAT INQUIRY identity");
@@ -442,18 +503,17 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
         .checked_sub(KERNEL_IMAGE_BASE)
         .filter(|len| *len > 0 && *len <= 0x100000)
         .context("invalid Kernel/Normal address span")?;
-    prepare_firmware_read(dev)?;
-    let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len)?;
-    if kernel.get(0x1000..0x1008) != Some(&f1[16..24]) {
-        bail!("captured Kernel hardware differs from drive identity");
-    }
-    pioneer_codec::builder::kernel_layout_from_image(&kernel)
-        .context("captured Kernel receiver layout is unsupported; Normal capture not attempted")?;
-    let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24)?;
+    Ok((inquiry, f1[16..24].to_vec(), kernel_len))
+}
+
+/// Read the Normal image region: locate its header, derive its length from the
+/// Kernel geometry, and capture it (`deep` selects the salvage read).
+fn read_normal_region(dev: &mut dyn ScsiDevice, kernel: &[u8], deep: bool) -> Result<Vec<u8>> {
+    let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24, deep)?;
     if !normal_head.starts_with(b"PIONEER ") {
         bail!("Normal image header is missing at the discovered base");
     }
-    let normal_len = match pioneer_codec::builder::scaled_normal_geometry_from_kernel(&kernel) {
+    let normal_len = match pioneer_codec::builder::scaled_normal_geometry_from_kernel(kernel) {
         Some(geometry) => geometry.image_len,
         None => u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize,
     };
@@ -463,123 +523,229 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
     {
         bail!("Normal image declares an invalid length");
     }
-    let normal = read_region(dev, NORMAL_IMAGE_BASE, normal_len)?;
-    if read_region(dev, KERNEL_IMAGE_BASE, kernel_len)? != kernel
-        || read_region(dev, NORMAL_IMAGE_BASE, normal_len)? != normal
-    {
-        bail!("firmware reads changed between passes; no backup produced");
+    read_region(dev, NORMAL_IMAGE_BASE, normal_len, deep)
+}
+
+fn zero_be32_sum(image: &[u8]) -> bool {
+    let (words, remainder) = image.as_chunks::<4>();
+    remainder.is_empty()
+        && words.iter().fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
+        }) == 0
+}
+
+/// Largest single vendor read: the length rides in one CDB byte, so 0xa4 is a
+/// safe sub-255 transfer observed in OEM reads.
+const READ_CHUNK: usize = 0xa4;
+/// Deep-read retry budget per failing span before it is subdivided / given up.
+const DEEP_RETRIES: usize = 6;
+/// Smallest span a deep read drops to while isolating a bad region.
+const DEEP_MIN_CHUNK: usize = 4;
+
+/// One vendor firmware read at `off` of exactly `n` bytes.
+fn read_chunk(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Result<Vec<u8>> {
+    let cdb = [
+        0x3c,
+        2,
+        0xb0,
+        (off >> 16) as u8,
+        (off >> 8) as u8,
+        off as u8,
+        0,
+        0,
+        n as u8,
+        0,
+    ];
+    let data = dev
+        .command_in(&cdb, n)
+        .with_context(|| format!("reading firmware at {off:#x}"))?;
+    if data.len() != n {
+        bail!("short firmware read at {off:#x}: {}/{n}", data.len());
     }
-    let envelope_id = embedded_envelope_id(&inquiry, &kernel, &normal)?;
-    let revision = std::str::from_utf8(&inquiry[32..36])?.to_owned();
-    Ok((kernel, normal, revision, envelope_id))
+    Ok(data)
 }
 
-/// Read the bounded UD04 firmware regions and construct a raw-path backup.
-pub fn capture_plain_backup(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let (kernel, normal, revision, _) = read_h8_image_pair(dev)?;
-    construct_ud04_plain_candidate(&kernel, &normal, &revision)
-}
-
-/// Read the same UD04 regions and reproduce a supplied reference envelope pair.
-pub fn capture_reference_backup(dev: &mut dyn ScsiDevice, template: &[u8]) -> Result<Vec<u8>> {
-    reference_pair(template)?; // Reject unsupported profiles before any command.
-    let (kernel, normal, _, _) = read_h8_image_pair(dev)?;
-    let bytes = reconstruct_candidate(template, &kernel, &normal)?;
-    // Current bounded profile promises exact equivalence to the known pair.
-    reference_pair(&bytes).context("captured firmware differs from established reference pair")?;
-    Ok(bytes)
-}
-
-/// Validate the bounded reference backup and return its Normal envelope.
-pub fn validate_reference_backup(bytes: &[u8], product: &str) -> Result<Vec<u8>> {
-    if !product.split_whitespace().any(|s| s == "BDR-UD04") {
-        bail!("UD04 backup target mismatch");
+/// Capture a firmware region. `deep == false` is the fast, strict read used by a
+/// normal backup (read twice, fail on the first error or any instability);
+/// `deep == true` is the recover salvage read (retry, subdivide, tolerate
+/// instability, zero-fill and report unreadable gaps). Progress for large
+/// regions is printed to stderr.
+fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize, deep: bool) -> Result<Vec<u8>> {
+    if deep {
+        read_region_deep(dev, start, len)
+    } else {
+        // Two labeled passes: read, then verify (the stability re-read must match
+        // or the capture is not trustworthy — per component, so one bad region
+        // never taints the other).
+        let first = read_region_strict(dev, start, len, "reading")?;
+        if read_region_strict(dev, start, len, "verifying")? != first {
+            bail!("firmware reads changed between passes at {start:#x}; no backup produced");
+        }
+        Ok(first)
     }
-    let reference = reference_pair(bytes)
-        .context("Pioneer restore accepts only the exact established OEM reference pair")?;
-    Ok(reference
-        .components
-        .into_iter()
-        .find(|c| c.role == Role::Main)
-        .unwrap()
-        .bytes)
 }
 
-/// Reconstruct a manifestless Kernel + Normal tar using original envelopes as
-/// templates and explicitly supplied decoded image slices.
-///
-/// The captured Kernel must equal the template's decoded Kernel: its receiver
-/// instructions determine the Normal codec. Unknown layouts, missing components,
-/// identity mismatches and size changes are refused. No device I/O is performed.
-/// Returned bytes are a reconstruction candidate, not a certified rollback image.
-pub fn reconstruct_candidate(
-    template: &[u8],
-    kernel_image: &[u8],
-    normal_image: &[u8],
+/// Human progress label for a region base.
+fn region_label(verb: &str, start: usize) -> String {
+    let region = if start == KERNEL_IMAGE_BASE {
+        "kernel"
+    } else if start == NORMAL_IMAGE_BASE {
+        "normal"
+    } else {
+        "firmware"
+    };
+    format!("{verb} {region}")
+}
+
+/// Strict single pass: `READ_CHUNK` reads, fail-fast on any error or short read.
+/// `verb` labels the phase (`reading` / `verifying`).
+fn read_region_strict(
+    dev: &mut dyn ScsiDevice,
+    start: usize,
+    len: usize,
+    verb: &str,
 ) -> Result<Vec<u8>> {
-    let bundle = Bundle::from_tar_bytes(template).context("invalid Pioneer template package")?;
-    if bundle.components.len() != 2 {
-        bail!("backup reconstruction requires exactly one Kernel and one Normal template");
+    let label = region_label(verb, start);
+    // Big regions get a live progress bar; a mid-size region (the 64 KiB kernel)
+    // is below the bar threshold, so announce it as a one-liner so every phase
+    // is visible.
+    if (0x8000..crate::style::Progress::MIN_BYTES).contains(&len) {
+        eprintln!("  {label}...");
     }
-    let kernel = bundle
-        .components
-        .iter()
-        .find(|c| c.role == Role::Kernel)
-        .context("missing Kernel template")?;
-    let normal = bundle
-        .components
-        .iter()
-        .find(|c| c.role == Role::Main)
-        .context("missing Normal template")?;
-    let kh = pioneer_codec::header_info(&kernel.bytes).context("invalid Kernel header")?;
-    let nh = pioneer_codec::header_info(&normal.bytes).context("invalid Normal header")?;
-    for (label, a, b) in [
-        ("model", &kh.model, &nh.model),
-        ("hardware", &kh.hardware_version, &nh.hardware_version),
-        ("Kernel Version", &kh.kernel_version, &nh.kernel_version),
-        ("Destination", &kh.destination, &nh.destination),
-    ] {
-        if a.is_empty() || a != b {
-            bail!("missing or mismatched template {label}");
+    let mut image = Vec::with_capacity(len);
+    let mut progress = crate::style::Progress::new(label, len);
+    while image.len() < len {
+        let off = start + image.len();
+        let n = (len - image.len()).min(READ_CHUNK);
+        image.extend(read_chunk(dev, off, n)?);
+        progress.set(image.len());
+    }
+    Ok(image)
+}
+
+/// Salvage pass: read `READ_CHUNK` at a time; on a failing chunk, retry, then
+/// subdivide down to `DEEP_MIN_CHUNK`, zero-filling spans that never read and
+/// recording them. Returns `len` bytes (with zero-filled gaps) as long as
+/// anything at all was read; errors only if the whole region is unreadable.
+fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec<u8>> {
+    let mut image = vec![0u8; len];
+    let mut pos = 0usize;
+    let mut gaps: Vec<(usize, usize)> = Vec::new();
+    let mut any = false;
+    let mut progress = crate::style::Progress::new(region_label("recovering", start), len);
+    while pos < len {
+        let off = start + pos;
+        let n = (len - pos).min(READ_CHUNK);
+        match read_chunk(dev, off, n) {
+            Ok(data) => {
+                image[pos..pos + n].copy_from_slice(&data);
+                any = true;
+                pos += n;
+            }
+            Err(_) => {
+                let got = salvage_span(dev, start, &mut image, pos, n, &mut gaps);
+                any |= got;
+                pos += n;
+            }
+        }
+        progress.set(pos);
+    }
+    if !any {
+        bail!(
+            "region {start:#x}..{:#x} was entirely unreadable",
+            start + len
+        );
+    }
+    if !gaps.is_empty() {
+        let total: usize = gaps.iter().map(|(_, l)| l).sum();
+        eprintln!(
+            "  {}",
+            crate::style::amber(&format!(
+                "recover: {total} byte(s) across {} gap(s) could not be read and were zero-filled",
+                gaps.len()
+            ))
+        );
+        for (off, l) in &gaps {
+            eprintln!("    gap {off:#x}..{:#x}", off + l);
         }
     }
-    let decoded_kernel = pioneer_codec::decode_envelope(&kernel.bytes)
-        .context("unsupported Kernel template codec")?;
-    if decoded_kernel.image != kernel_image {
-        bail!("captured Kernel differs from template; receiver policy is not established");
+    Ok(image)
+}
+
+/// Salvage one `READ_CHUNK` span that failed a bulk read. First retry the whole
+/// span (for a transient error); if it is hard-failing, re-read it in
+/// `DEEP_MIN_CHUNK` units so only the units that truly never read are
+/// zero-filled and recorded as gaps. Returns whether any byte was recovered.
+fn salvage_span(
+    dev: &mut dyn ScsiDevice,
+    start: usize,
+    image: &mut [u8],
+    pos: usize,
+    n: usize,
+    gaps: &mut Vec<(usize, usize)>,
+) -> bool {
+    if let Some(data) = retry_read(dev, start + pos, n) {
+        image[pos..pos + n].copy_from_slice(&data);
+        return true;
     }
-    let decoded_normal = pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &decoded_kernel)
-        .context("unsupported Normal receiver codec")?;
-    // Identity and geometry in the runtime Normal header must remain unchanged.
-    // This is deliberately narrower than a firmware modification interface.
-    if normal_image.len() != decoded_normal.image.len()
-        || normal_image.get(..0x20) != decoded_normal.image.get(..0x20)
-    {
-        bail!("captured Normal identity/geometry differs from template");
+    let mut any = false;
+    let mut p = pos;
+    while p < pos + n {
+        let m = DEEP_MIN_CHUNK.min(pos + n - p);
+        match retry_read(dev, start + p, m) {
+            Some(data) => {
+                image[p..p + m].copy_from_slice(&data);
+                any = true;
+            }
+            None => push_gap(gaps, start + p, m),
+        }
+        p += m;
     }
-    let kernel_enc = decoded_kernel
-        .repack(kernel_image)
-        .context("Kernel re-encode failed")?;
-    let normal_enc = decoded_normal
-        .repack(normal_image)
-        .context("Normal re-encode failed")?;
-    let check = pioneer_codec::decode_envelope_with_kernel(&normal_enc, &decoded_kernel)
-        .context("reconstructed Normal failed decode verification")?;
-    if check.image != normal_image {
-        bail!("Normal reconstruction verification mismatch");
+    any
+}
+
+/// Read `off..off+n` up to `DEEP_RETRIES` times, re-knocking between attempts in
+/// case the drive dropped out of read mode. `None` if every attempt failed.
+fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Option<Vec<u8>> {
+    for attempt in 0..DEEP_RETRIES {
+        if attempt > 0 {
+            let _ = prepare_firmware_read(dev);
+        }
+        if let Ok(data) = read_chunk(dev, off, n) {
+            return Some(data);
+        }
     }
-    let mut tar = tar::Builder::new(Vec::new());
-    for (name, bytes) in [(&kernel.path, &kernel_enc), (&normal.path, &normal_enc)] {
-        let mut header = tar::Header::new_gnu();
-        header.set_size(bytes.len() as u64);
-        header.set_mode(0o644);
-        header.set_mtime(0);
-        header.set_cksum();
-        tar.append_data(&mut header, name, bytes.as_slice())?;
+    None
+}
+
+/// Append an unreadable `[off, off+len)` gap, merging it with the previous gap
+/// when they are contiguous.
+fn push_gap(gaps: &mut Vec<(usize, usize)>, off: usize, len: usize) {
+    if let Some(last) = gaps.last_mut() {
+        if last.0 + last.1 == off {
+            last.1 += len;
+            return;
+        }
     }
-    let bytes = tar.into_inner()?;
-    Bundle::from_tar_bytes(&bytes).context("reconstructed package validation failed")?;
-    Ok(bytes)
+    gaps.push((off, len));
+}
+
+/// Shared H8/SAT image map observed in decoded Kernels from 28 hardware
+/// groups. This is an address-space rule, not a per-model firmware record.
+const KERNEL_IMAGE_BASE: usize = 0x400000;
+const NORMAL_IMAGE_BASE: usize = 0x410000;
+
+/// Older receivers already allow B0 reads and need no service command. Only
+/// the observed invalid-field denial permits one attempt at the shared knock;
+/// transport failures, short data and other sense codes must stop capture.
+fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
+    match read_chunk(dev, KERNEL_IMAGE_BASE, 1) {
+        Ok(_) => Ok(()),
+        Err(error) if crate::platform::sense_triplet(&error) == Some((5, 0x24, 0)) => dev
+            .command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])
+            .context("entering Pioneer firmware read service"),
+        Err(error) => Err(error).context("probing Pioneer firmware read access"),
+    }
 }
 
 #[cfg(test)]
@@ -626,6 +792,82 @@ mod tests {
             assert_eq!(prepare_firmware_read(&mut dev).is_ok(), ok);
             assert_eq!(dev.knocks, knocks);
         }
+    }
+
+    #[test]
+    fn deep_read_salvages_around_an_unreadable_span_and_reports_the_gap() {
+        // A device that serves byte `off & 0xff` everywhere except a bad window
+        // `[bad, bad+badlen)`, where every read intersecting it errors.
+        struct Spotty {
+            bad: usize,
+            badlen: usize,
+        }
+        impl ScsiDevice for Spotty {
+            fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+                let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+                if start < self.bad + self.badlen && start + len > self.bad {
+                    bail!("unreadable span");
+                }
+                Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
+            }
+            fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn describe(&self) -> String {
+                "spotty".into()
+            }
+        }
+        let len = 0x200usize;
+        let bad = 0x100usize;
+        let badlen = 0x10usize;
+        let mut dev = Spotty { bad, badlen };
+        let image = read_region_deep(&mut dev, 0, len).unwrap();
+        assert_eq!(image.len(), len);
+        // Readable bytes are their offset mod 256; the bad window is zero-filled.
+        for (i, b) in image.iter().enumerate() {
+            if (bad..bad + badlen).contains(&i) {
+                assert_eq!(*b, 0, "byte {i:#x} should be a zero-filled gap");
+            } else {
+                assert_eq!(*b, (i & 0xff) as u8, "byte {i:#x} should be recovered");
+            }
+        }
+        // A fully readable region salvages byte-for-byte with no gaps.
+        let mut clean = Spotty {
+            bad: len,
+            badlen: 0,
+        };
+        let whole = read_region_deep(&mut clean, 0, len).unwrap();
+        assert!(whole
+            .iter()
+            .enumerate()
+            .all(|(i, b)| *b == (i & 0xff) as u8));
+    }
+
+    #[test]
+    fn push_gap_merges_contiguous_runs_and_separates_disjoint_ones() {
+        let mut g = Vec::new();
+        push_gap(&mut g, 0x100, 4);
+        push_gap(&mut g, 0x104, 4); // contiguous with the previous → merged
+        push_gap(&mut g, 0x200, 8); // disjoint → new entry
+        assert_eq!(g, vec![(0x100, 8), (0x200, 8)]);
+    }
+
+    #[test]
+    fn deep_read_bails_when_the_whole_region_is_unreadable() {
+        struct Dead;
+        impl ScsiDevice for Dead {
+            fn command_in(&mut self, _c: &[u8], _a: usize) -> Result<Vec<u8>> {
+                bail!("dead drive")
+            }
+            fn command_out(&mut self, _c: &[u8], _d: &[u8]) -> Result<()> {
+                bail!("dead drive")
+            }
+            fn describe(&self) -> String {
+                "dead".into()
+            }
+        }
+        let err = read_region_deep(&mut Dead, 0, 0x200).unwrap_err();
+        assert!(format!("{err:#}").contains("entirely unreadable"));
     }
 
     #[test]
@@ -761,11 +1003,6 @@ mod tests {
     }
 
     #[test]
-    fn malformed_template_is_rejected() {
-        assert!(reconstruct_candidate(b"not a tar", &[], &[]).is_err());
-    }
-
-    #[test]
     fn unknown_sat_receiver_stops_after_kernel_capture() {
         let mut dump = vec![0; NORMAL_IMAGE_BASE];
         dump[KERNEL_IMAGE_BASE + 0x1000..KERNEL_IMAGE_BASE + 0x1008].copy_from_slice(b"SAT 8A10");
@@ -849,6 +1086,20 @@ mod tests {
         let dn = pioneer_codec::decode_envelope_with_kernel(&rn.bytes, &dk).unwrap();
         assert_eq!(dk.image, k.image);
         assert_eq!(dn.image, n.image);
+        // Provenance: an OEM-sourced pair rebuilds a byte-exact OEM kernel and,
+        // when its decoded normal is in the OEM normal table, a byte-exact OEM
+        // normal too. normal_oem must agree with the pioneer_n lookup.
+        let prov = package_provenance(&output);
+        assert!(
+            prov.kernel_oem,
+            "OEM kernel must be recognized as byte-exact"
+        );
+        let normal_in_table =
+            crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(&n.image))).is_some();
+        assert_eq!(
+            prov.normal_oem, normal_in_table,
+            "normal_oem must reflect the pioneer_n table"
+        );
         let mut damaged = rn.bytes.clone();
         let last = damaged.len() - 1;
         damaged[last] ^= 1;
@@ -857,6 +1108,12 @@ mod tests {
             unique_embedded_date(&n.image),
             Some(h.generated_date.as_str())
         );
+    }
+
+    #[test]
+    fn unparseable_package_has_no_oem_provenance() {
+        let p = package_provenance(b"not a tar at all");
+        assert!(!p.kernel_oem && !p.normal_oem);
     }
 
     #[test]
@@ -1370,7 +1627,6 @@ mod tests {
         }
         assert_eq!(replay.knocks, 1);
         validate_envelope_package(&candidate, "BD-RW BDR-UD04").unwrap();
-        assert!(validate_reference_backup(&candidate, "BD-RW BDR-UD04").is_err());
         let bundle = Bundle::from_tar_bytes(&candidate).unwrap();
         let kernel = bundle
             .components
@@ -1419,8 +1675,12 @@ mod tests {
                 &supplied_kernel,
             )
             .unwrap();
-            assert_eq!(generated_kernel.encoding_seed(), Some(KERNEL_SEED));
-            assert_eq!(generated_normal.encoding_seed(), Some(NORMAL_SEED));
+            // UD04 is a known OEM kernel in pioneer_k.bin, so the whole kernel
+            // envelope is reconstructed byte-for-byte (real revision/date + the
+            // OEM raw front key).
+            assert_eq!(kernel.bytes, original_kernel.bytes);
+            // The Normal is still self-made with the obvious placeholder seed 0.
+            assert_eq!(generated_normal.encoding_seed(), Some(0));
             assert_eq!(generated_kernel.image, supplied_kernel.image);
             assert_eq!(generated_normal.image, supplied_normal.image);
             assert_eq!(
@@ -1454,13 +1714,11 @@ mod tests {
             "BD-RW BDR-UD04",
             false,
             false,
-            false,
-            &drive,
         )
         .unwrap();
         replay.knocks = 0;
         replay.reads = 0;
-        crate::engine::pioneer_signed_candidate(&mut replay, &drive, &output).unwrap();
+        crate::engine::backup(&mut replay, &drive, &output, false).unwrap();
         let saved = std::fs::read(&output).unwrap();
         validate_envelope_package(&saved, "BD-RW BDR-UD04").unwrap();
         std::fs::remove_file(&output).unwrap();
@@ -1468,146 +1726,5 @@ mod tests {
         replay.reads = 0;
         replay.corrupt_second_pass = true;
         assert!(capture_signed_candidate(&mut replay).is_err());
-    }
-
-    /// Optional external KAT; explicitly set both paths when validating delivery.
-    #[test]
-    fn supplied_ud04_and_live_images_recreate_both_envelopes() {
-        let Ok(path) = std::env::var("PIONEER_UD04_AUTOFLASHER_BUNDLE_FIXTURE") else {
-            return;
-        };
-        let live = std::env::var("PIONEER_LIVE_DUMP_FIXTURE")
-            .expect("set PIONEER_LIVE_DUMP_FIXTURE with the package KAT");
-        let template = std::fs::read(path).unwrap();
-        let original = Bundle::from_tar_bytes(&template).unwrap();
-        let dump = std::fs::read(live).unwrap();
-        assert_eq!(dump.len(), 0x600000);
-        // Explicitly documented UD04 capture mapping, not generic read offsets.
-        let ki = dump[0x400000..0x410000].to_vec();
-        let ni = dump[0x410000..0x5d7500].to_vec();
-        let synthetic = construct_ud04_plain_candidate(&ki, &ni, "1.14").unwrap();
-        if let Ok(output) = std::env::var("PIONEER_PLAIN_BACKUP_KAT_OUTPUT") {
-            std::fs::write(output, &synthetic).unwrap();
-        }
-        assert!(validate_reference_backup(&synthetic, "BD-RW BDR-UD04").is_err());
-        let synthetic_bundle = Bundle::from_tar_bytes(&synthetic).unwrap();
-        let raw_kernel = synthetic_bundle
-            .components
-            .iter()
-            .find(|c| c.role == Role::Kernel)
-            .unwrap();
-        let raw_normal = synthetic_bundle
-            .components
-            .iter()
-            .find(|c| c.role == Role::Main)
-            .unwrap();
-        let decoded_kernel = pioneer_codec::decode_envelope(&raw_kernel.bytes).unwrap();
-        let decoded_normal =
-            pioneer_codec::decode_envelope_with_kernel(&raw_normal.bytes, &decoded_kernel).unwrap();
-        assert_eq!(decoded_kernel.image, ki);
-        assert_eq!(decoded_normal.image, ni);
-        assert_eq!(decoded_kernel.repack(&ki).unwrap(), raw_kernel.bytes);
-        assert_eq!(decoded_normal.repack(&ni).unwrap(), raw_normal.bytes);
-        assert_eq!(raw_kernel.bytes.len(), 0x11200);
-        assert_eq!(&raw_kernel.bytes[0x1200..], ki);
-        assert_eq!(&raw_normal.bytes[0x10200..], ni);
-        assert!(raw_kernel.bytes[0x200..0x1200].iter().all(|&b| b == 0));
-        assert!(raw_normal.bytes[0x200..0x10200].iter().all(|&b| b == 0));
-        assert_eq!(
-            pioneer_codec::header_info(&raw_kernel.bytes)
-                .unwrap()
-                .revision,
-            "BACKUP"
-        );
-        assert_eq!(
-            pioneer_codec::header_info(&raw_normal.bytes)
-                .unwrap()
-                .revision,
-            "1.14"
-        );
-        let mut tampered = ni.clone();
-        tampered[0x100] ^= 1;
-        assert!(construct_ud04_plain_candidate(&ki, &tampered, "1.14").is_err());
-        let rebuilt = reconstruct_candidate(&template, &ki, &ni).unwrap();
-        let mut replay = CaptureReplay {
-            dump: dump.clone(),
-            reads: 0,
-            knocks: 0,
-            corrupt_second_pass: false,
-        };
-        assert_eq!(
-            capture_reference_backup(&mut replay, &template).unwrap(),
-            rebuilt
-        );
-        assert_eq!(replay.knocks, 1);
-        replay.reads = 0;
-        replay.knocks = 0;
-        assert_eq!(capture_plain_backup(&mut replay).unwrap(), synthetic);
-        assert_eq!(replay.knocks, 1);
-        let mut engine_replay = CaptureReplay {
-            dump: dump.clone(),
-            reads: 0,
-            knocks: 0,
-            corrupt_second_pass: false,
-        };
-        let output =
-            std::env::temp_dir().join(format!("ud04-plain-backup-{}.tar", std::process::id()));
-        let _ = std::fs::remove_file(&output);
-        let error = crate::engine::backup(
-            &mut engine_replay,
-            &*crate::drive::for_family(crate::drive::Family::Pioneer),
-            &output,
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("matching signed OEM template"));
-        assert_eq!(engine_replay.reads, 0);
-        assert_eq!(engine_replay.knocks, 0);
-        assert!(!output.exists());
-        crate::engine::backup_with_template(
-            &mut engine_replay,
-            &*crate::drive::for_family(crate::drive::Family::Pioneer),
-            &output,
-            Some(&template),
-        )
-        .unwrap();
-        assert_eq!(std::fs::read(&output).unwrap(), template);
-        assert_eq!(engine_replay.knocks, 1);
-        std::fs::remove_file(&output).unwrap();
-        replay.reads = 0;
-        replay.knocks = 0;
-        replay.corrupt_second_pass = true;
-        assert!(capture_reference_backup(&mut replay, &template)
-            .unwrap_err()
-            .to_string()
-            .contains("changed between passes"));
-        let mut no_io = CaptureReplay {
-            dump: Vec::new(),
-            reads: 0,
-            knocks: 0,
-            corrupt_second_pass: false,
-        };
-        assert!(capture_reference_backup(&mut no_io, b"invalid").is_err());
-        assert_eq!((no_io.reads, no_io.knocks), (0, 0));
-        let actual = Bundle::from_tar_bytes(&rebuilt).unwrap();
-        assert_eq!(actual.components.len(), 2);
-        for expected in &original.components {
-            let found = actual
-                .components
-                .iter()
-                .find(|c| c.role == expected.role)
-                .unwrap();
-            assert_eq!(found.path, expected.path);
-            assert_eq!(found.bytes, expected.bytes);
-        }
-        if let Ok(output) = std::env::var("PIONEER_RECONSTRUCTION_KAT_OUTPUT") {
-            std::fs::write(output, &rebuilt).unwrap();
-        }
-        assert!(reconstruct_candidate(&template, &ki, &ni[..ni.len() - 1]).is_err());
-        let mut bad_kernel = ki.clone();
-        bad_kernel[0] ^= 1;
-        assert!(reconstruct_candidate(&template, &bad_kernel, &ni).is_err());
-        let mut bad_normal = ni.clone();
-        bad_normal[0] ^= 1;
-        assert!(reconstruct_candidate(&template, &ki, &bad_normal).is_err());
     }
 }

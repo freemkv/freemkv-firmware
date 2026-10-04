@@ -89,11 +89,26 @@ fn flash_cdbs_match_the_proven_bytes() {
     );
 }
 
+/// Build an OEM control buffer generically from the embedded key table, exactly
+/// as the flasher now does — descriptor + per-tag key, little-endian.
+fn table_control(controller_id: u16, tag: &str) -> [u8; 0x100] {
+    let row = crate::pioneer_keys::lookup(controller_id).expect("controller id in key table");
+    row.control_payload(row.key_for_tag(tag).expect("tag present"))
+}
+
+/// The UD04 crossflash/autoflasher control: descriptor + the model's unmatched-
+/// tag fallback key (the crossflash path bypasses the per-destination dispatcher).
+fn ud04_fallback_control() -> [u8; 0x100] {
+    let row = crate::pioneer_keys::lookup(0x8A10).expect("0x8A10 in key table");
+    row.control_payload(row.fallback)
+}
+
 #[test]
 fn ud04_oem_control_payload_matches_full_static_construction() {
     use sha2::{Digest, Sha256};
 
-    let payload = ud04_oem_control_payload();
+    // Generic table build (GENERAL tag) == the old hand-baked UD04 payload.
+    let payload = table_control(0x8A10, "GENERAL");
     assert_eq!(payload.len(), 256);
     assert_eq!(&payload[..16], b"PIONEER BDR-US04");
     assert_eq!(&payload[16..20], &[0x42, 0x66, 0x23, 0xFD]);
@@ -108,7 +123,8 @@ fn ud04_oem_control_payload_matches_full_static_construction() {
 fn ud04_autoflasher_gui_control_matches_selected_x86_branch() {
     use sha2::{Digest, Sha256};
 
-    let payload = ud04_autoflasher_control_payload();
+    // Generic table build (fallback key) == the old hand-baked autoflasher payload.
+    let payload = ud04_fallback_control();
     assert_eq!(&payload[..16], b"PIONEER BDR-US04");
     assert_eq!(&payload[16..20], &[0x9A, 0x78, 0x23, 0x61]);
     assert!(payload[20..].iter().all(|&b| b == 0));
@@ -116,13 +132,14 @@ fn ud04_autoflasher_gui_control_matches_selected_x86_branch() {
         format!("{:x}", Sha256::digest(payload)),
         "3e74c9e08362f509603b4fa8e5d8f88d47be9f3ee64ce215c6f9e1f25614e204"
     );
-    assert_ne!(payload, ud04_oem_control_payload());
+    assert_ne!(payload, table_control(0x8A10, "GENERAL"));
 }
 
 #[test]
 fn s09_v130_control_payload_has_updater_descriptor_not_envelope_model() {
     use sha2::{Digest, Sha256};
-    let payload = s09_v130_oem_control_payload();
+    // Generic table build (ID43 destination tag) == the old hand-baked S09 payload.
+    let payload = table_control(0x8600, "ID43");
     assert_eq!(&payload[..16], b"PIONEER  BDR-209");
     assert_eq!(&payload[16..20], &[0x98, 0x2B, 0x1F, 0xCE]);
     assert!(payload[20..].iter().all(|&b| b == 0));
@@ -174,7 +191,7 @@ fn s09_v130_real_oem_envelope_transcript() {
     );
     let transfers = offline_oem_transcript(OemUpdateProfile::S09V130Normal, &image).unwrap();
     assert_eq!(transfers.len(), 61);
-    assert_eq!(transfers[0].data.as_ref(), s09_v130_oem_control_payload());
+    assert_eq!(transfers[0].data.as_ref(), table_control(0x8600, "ID43"));
     assert_eq!(transfers[59].cdb, cdb_wb_flash_chunk(0x1D0000, 0x900));
     assert_eq!(transfers[59].data.as_ref(), &image[0x1D0000..]);
     let mut digest = Sha256::new();
@@ -319,7 +336,14 @@ fn bounded_profile_table_has_verified_shape_and_no_duplicate_resource_pairs() {
 
 #[test]
 fn ud04_offline_transcript_matches_oem_cdb_and_payload_shape() {
-    let image = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    // A real UD04 self-flash Normal is GENERAL-destination; the control key is
+    // looked up by that OEM tag. (The synthetic helper uses TEST to mark a
+    // not-OEM candidate; patch it to GENERAL so the key resolves.)
+    let mut image = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    let old = b"Destination : TEST.";
+    let new = b"Destination : GENERAL.\r\nFile Type : Normal.\r\n";
+    let i = image.windows(old.len()).position(|w| w == old).unwrap();
+    image[i..i + new.len()].copy_from_slice(new);
     assert_eq!(
         OemUpdateProfile::Ud04V111Normal.envelope_evidence(&image),
         EnvelopeEvidence::UncertifiedCandidate
@@ -328,7 +352,7 @@ fn ud04_offline_transcript_matches_oem_cdb_and_payload_shape() {
     assert_eq!(transfers.len(), 61); // entry + 59 chunks + finish
     assert_eq!(transfers[0].stage, TransferStage::Entry);
     assert_eq!(transfers[0].cdb, [0x3B, 0x04, 0xFF, 0, 0, 0, 0, 1, 0, 0]);
-    assert_eq!(transfers[0].data.as_ref(), ud04_oem_control_payload());
+    assert_eq!(transfers[0].data.as_ref(), table_control(0x8A10, "GENERAL"));
     assert_eq!(transfers[1].stage, TransferStage::Normal);
     assert_eq!(transfers[1].cdb, [0x3B, 0x07, 0xF0, 0, 0, 0, 0, 0x80, 0, 0]);
     assert_eq!(transfers[1].data.as_ref(), &image[..0x8000]);
@@ -339,7 +363,10 @@ fn ud04_offline_transcript_matches_oem_cdb_and_payload_shape() {
     assert_eq!(transfers[59].data.as_ref(), &image[0x1D0000..]);
     assert_eq!(transfers[60].stage, TransferStage::Finish);
     assert_eq!(transfers[60].cdb, [0x3B, 0x05, 0xFF, 0, 0, 0, 0, 1, 0, 0]);
-    assert_eq!(transfers[60].data.as_ref(), ud04_oem_control_payload());
+    assert_eq!(
+        transfers[60].data.as_ref(),
+        table_control(0x8A10, "GENERAL")
+    );
     let assembled: Vec<u8> = transfers[1..60]
         .iter()
         .flat_map(|transfer| transfer.data.iter().copied())
@@ -513,6 +540,71 @@ fn pioneer_with_inquiry(product: &str) -> MockScsiDevice {
     MockScsiDevice::pioneer().on(|cdb| cdb.first() == Some(&0x12), inq)
 }
 
+// ---- Generalized flash selection + confirm prompt --------------------------
+
+#[test]
+fn decide_flash_selects_path_and_refuses_kernel_only() {
+    assert_eq!(
+        decide_flash(true, true).unwrap(),
+        FlashSelection::KernelAndNormal
+    );
+    assert_eq!(
+        decide_flash(false, true).unwrap(),
+        FlashSelection::NormalOnly
+    );
+    let e = decide_flash(true, false).unwrap_err().to_string();
+    assert!(
+        e.contains("kernel-only flash is not yet supported"),
+        "actual: {e}"
+    );
+    assert!(decide_flash(false, false).is_err());
+}
+
+#[test]
+fn classify_bare_normal_enc_is_normal_only_and_junk_is_refused() {
+    let img = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    let (kernel, normal) = classify_flash_input(&img).unwrap();
+    assert!(kernel.is_none());
+    assert_eq!(normal.as_deref(), Some(img.as_slice()));
+    // Neither a Pioneer banner nor a valid bundle => refused, never
+    // reinterpreted as a raw envelope.
+    assert!(classify_flash_input(b"not a pioneer image or tar").is_err());
+}
+
+#[test]
+fn flash_summary_names_components_and_a_missing_kernel() {
+    let normal = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    assert_eq!(
+        flash_summary(None, Some(&normal)),
+        "This will flash: NORMAL only — no Kernel in the package"
+    );
+    let both = flash_summary(Some(&normal), Some(&normal));
+    assert!(
+        both.starts_with("This will flash: KERNEL (rev "),
+        "actual: {both}"
+    );
+    assert!(both.contains("+ NORMAL (rev "), "actual: {both}");
+}
+
+#[test]
+fn confirm_auto_proceeds_when_stdin_is_not_a_tty() {
+    // The consent carries from --execute/--i-understand-risk: no prompt is read.
+    let mut empty: &[u8] = b"";
+    super::confirm_with("This will flash: NORMAL only", false, &mut empty).unwrap();
+}
+
+#[test]
+fn confirm_on_a_tty_requires_an_explicit_yes() {
+    for input in ["y\n", "yes\n", "Y\n", "YES\n"] {
+        let mut bytes = input.as_bytes();
+        super::confirm_with("s", true, &mut bytes).unwrap();
+    }
+    for input in ["\n", "n\n", "no\n", "nope\n"] {
+        let mut bytes = input.as_bytes();
+        assert!(super::confirm_with("s", true, &mut bytes).is_err());
+    }
+}
+
 fn synthetic_pioneer_image(model: &str, len: usize) -> Vec<u8> {
     let mut img = vec![0u8; len];
     let header = format!(
@@ -527,4 +619,108 @@ fn synthetic_pioneer_image(model: &str, len: usize) -> Vec<u8> {
     let bytes = header.as_bytes();
     img[..bytes.len()].copy_from_slice(bytes);
     img
+}
+
+// ---------------------------------------------------------------------------
+// Flash-routing wiring (installed_facts / resolve_kernel_mode / gating)
+// ---------------------------------------------------------------------------
+
+/// A header-only Normal envelope (no body) whose banner + fields parse via both
+/// `parse_banner` and `pioneer_codec::header_info`. Good enough to route a plain
+/// flash; it carries no decodable body (so no Kernel marker).
+fn header_only_normal(sat: &str, date: &str) -> Vec<u8> {
+    let mut img = vec![0u8; 0x200];
+    let header = format!(
+        "********  Copyright(c) 2000 Pioneer Corporation  ********\r\n\
+         ID : PIONEER BD-RW   BDR-UD04\r\n\
+         Revision Level : 1.11\r\n\
+         Hardware Version : {sat}\r\n\
+         Destination : GENERAL\r\n\
+         Generated Date : {date}\r\n\
+         File Type : Normal\r\n"
+    );
+    let bytes = header.as_bytes();
+    img[..bytes.len()].copy_from_slice(bytes);
+    img
+}
+
+#[test]
+fn installed_facts_none_without_backup() {
+    assert!(installed_facts(None).is_none());
+}
+
+#[test]
+fn installed_facts_from_header_only_normal_backup() {
+    let backup = header_only_normal("SAT 8A10", "22/01/01");
+    let facts = installed_facts(Some(&backup)).expect("resolves controller id + date");
+    assert_eq!(facts.controller_id, 0x8A10);
+    assert!(facts.normal_date.is_some());
+    // No Kernel in the backup -> cannot prove new-gen receiver -> conservative false.
+    assert!(!facts.receiver_new_gen);
+}
+
+#[test]
+fn plan_to_kernel_mode_covers_every_variant() {
+    use crate::pioneer_flash_plan::FlashPlan;
+    assert!(!plan_to_kernel_mode(FlashPlan::Plain, false).unwrap());
+    assert!(!plan_to_kernel_mode(FlashPlan::Plain, true).unwrap());
+    assert!(!plan_to_kernel_mode(FlashPlan::Forced, false).unwrap());
+    // Kernel-mode plans are gated off unless live-enabled.
+    assert!(plan_to_kernel_mode(FlashPlan::KernelDowngrade, false).is_err());
+    assert!(plan_to_kernel_mode(FlashPlan::KernelCrossflash, false).is_err());
+    assert!(plan_to_kernel_mode(FlashPlan::KernelDowngrade, true).unwrap());
+    assert!(plan_to_kernel_mode(FlashPlan::KernelCrossflash, true).unwrap());
+    // A refusal always aborts, enabled or not.
+    assert!(plan_to_kernel_mode(FlashPlan::Refused("x".into()), true).is_err());
+}
+
+#[test]
+fn gated_kernel_mode_error_names_the_override() {
+    use crate::pioneer_flash_plan::FlashPlan;
+    let err = plan_to_kernel_mode(FlashPlan::KernelDowngrade, false).unwrap_err();
+    assert!(format!("{err:#}").contains("FREEMKV_ENABLE_KERNEL_MODE"));
+}
+
+#[test]
+fn resolve_kernel_mode_plain_for_same_model_newer_normal_only() {
+    let installed = header_only_normal("SAT 8A10", "22/01/01");
+    let target = header_only_normal("SAT 8A10", "22/06/01"); // newer
+    let km = resolve_kernel_mode(Some(&installed), None, Some(&target)).unwrap();
+    assert!(!km, "same-model newer normal-only is a plain flash");
+}
+
+#[test]
+fn resolve_kernel_mode_unknown_installed_defaults_plain() {
+    let target = header_only_normal("SAT 8A10", "22/06/01");
+    // No backup -> installed identity unknown -> Plain (no unlock).
+    let km = resolve_kernel_mode(None, None, Some(&target)).unwrap();
+    assert!(!km);
+}
+
+#[test]
+fn resolve_kernel_mode_refuses_same_model_older_without_pair() {
+    let installed = header_only_normal("SAT 8A10", "23/01/01");
+    let target = header_only_normal("SAT 8A10", "20/01/01"); // older, normal-only
+    let err = resolve_kernel_mode(Some(&installed), None, Some(&target)).unwrap_err();
+    assert!(format!("{err:#}").contains("pair"));
+}
+
+#[test]
+fn resolve_kernel_mode_refuses_offlist_crossflash() {
+    let installed = header_only_normal("SAT 8A10", "22/01/01");
+    // Different model, not on the safe list (8A10 -> 9401 is not a listed pair).
+    let target = header_only_normal("SAT 9401", "22/01/01");
+    let err = resolve_kernel_mode(Some(&installed), None, Some(&target)).unwrap_err();
+    assert!(format!("{err:#}").contains("not on the vetted safe list"));
+}
+
+#[test]
+fn kernel_mode_live_enabled_follows_the_env_flag() {
+    // Kills the "always true"/"always false" stubs of kernel_mode_live_enabled.
+    // SAFETY: this is the only test that touches FREEMKV_ENABLE_KERNEL_MODE.
+    std::env::remove_var("FREEMKV_ENABLE_KERNEL_MODE");
+    assert!(!kernel_mode_live_enabled(), "unset => disabled");
+    std::env::set_var("FREEMKV_ENABLE_KERNEL_MODE", "1");
+    assert!(kernel_mode_live_enabled(), "set => enabled");
+    std::env::remove_var("FREEMKV_ENABLE_KERNEL_MODE");
 }

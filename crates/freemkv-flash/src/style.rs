@@ -11,8 +11,63 @@
 //!   success/warn/fail, [`dim`]/[`bold`] for secondary/primary emphasis, and
 //!   [`status_line`] for the dotted-leader aligned "label ... status" rows.
 
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::sync::OnceLock;
+
+/// A reusable byte-count progress line for a long transfer (a firmware read or
+/// write), printed to stderr so it never pollutes parseable stdout. Shared by
+/// backup/recover reads and the flash write path.
+///
+/// Throttled to whole-percent advances, so a redirected/piped stderr gets at
+/// most ~100 lines while a TTY sees a single carriage-return-updated line.
+/// Silent for small transfers (below [`Progress::MIN_BYTES`]).
+pub struct Progress {
+    label: String,
+    len: usize,
+    last_pct: Option<usize>,
+    enabled: bool,
+}
+
+impl Progress {
+    /// Transfers smaller than this print nothing (probes, headers, tiny reads).
+    pub const MIN_BYTES: usize = 0x100000;
+
+    /// Start a progress line labeled `label` (e.g. `"reading normal"`) for a
+    /// transfer of `len` bytes.
+    pub fn new(label: impl Into<String>, len: usize) -> Self {
+        Self {
+            label: label.into(),
+            len,
+            last_pct: None,
+            enabled: len >= Self::MIN_BYTES,
+        }
+    }
+
+    /// Report `done` bytes transferred. Emits a line only when the whole-percent
+    /// figure advances (or at completion), and finishes the line at `done >=
+    /// len`.
+    pub fn set(&mut self, done: usize) {
+        if !self.enabled {
+            return;
+        }
+        let pct = done * 100 / self.len.max(1);
+        if self.last_pct == Some(pct) && done < self.len {
+            return;
+        }
+        self.last_pct = Some(pct);
+        let mib = |b: usize| b as f64 / (1024.0 * 1024.0);
+        eprint!(
+            "\r  {}: {:.2} / {:.2} MiB ({pct}%)   ",
+            self.label,
+            mib(done),
+            mib(self.len)
+        );
+        let _ = std::io::stderr().flush();
+        if done >= self.len {
+            eprintln!();
+        }
+    }
+}
 
 /// Whether ANSI color output is enabled for this process.
 ///
@@ -42,6 +97,19 @@ pub fn bold(s: &str) -> String {
 /// Dim/grey (secondary detail: sub-lines, hex offsets, byte counts).
 pub fn dim(s: &str) -> String {
     paint("2", s)
+}
+
+/// Whether debug tracing is on. Enabled by setting `FREEMKV_DEBUG` (any value).
+pub fn trace_enabled() -> bool {
+    std::env::var_os("FREEMKV_DEBUG").is_some()
+}
+
+/// Emit a debug trace to stderr when [`trace_enabled`] (the `FREEMKV_DEBUG`
+/// env var is set). No-op otherwise, so it is safe to sprinkle on hot paths.
+pub fn trace(msg: &str) {
+    if trace_enabled() {
+        eprintln!("{}", dim(&format!("[trace] {msg}")));
+    }
 }
 
 /// Bold green (success: `added`, `ok`, `on`).
@@ -125,6 +193,16 @@ pub fn kv(key: &str, value: &str) -> String {
 /// offsets, byte counts that aren't the headline fact of the line).
 pub fn dim_line(s: &str) -> String {
     dim(s)
+}
+
+/// Neutralize terminal control characters in a string that came from an
+/// untrusted source — a drive's INQUIRY/identity response or a firmware
+/// bundle's manifest/member names — before printing it, so a hostile device
+/// or file cannot emit escape sequences to the user's terminal.
+pub fn printable(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
+        .collect()
 }
 
 #[cfg(test)]

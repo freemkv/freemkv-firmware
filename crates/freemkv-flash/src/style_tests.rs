@@ -31,3 +31,18 @@ fn kv_contains_both_parts() {
     assert!(s.contains("vendor"));
     assert!(s.contains("HL-DT-ST"));
 }
+
+#[test]
+fn printable_neutralizes_control_characters() {
+    // A hostile drive/bundle string carrying an ANSI escape must not survive
+    // to the terminal: ESC, CR, and other C0/C1 controls become U+FFFD.
+    let hostile = "BDR-\x1b[2JUD04\r\x07";
+    let safe = printable(hostile);
+    assert!(!safe.contains('\x1b'));
+    assert!(!safe.chars().any(|c| c.is_control()));
+    // Ordinary text is untouched.
+    assert_eq!(
+        printable("PIONEER BD-RW BDR-UD04"),
+        "PIONEER BD-RW BDR-UD04"
+    );
+}

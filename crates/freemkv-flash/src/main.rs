@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
 use freemkv_flash::drive::{self, Family, FlashRequest, InputKind};
@@ -54,21 +54,35 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// List optical drives and the selector to pass to info/backup/flash. Works
+    /// with an empty tray (a disc-less macOS drive has no /dev/diskN node).
+    List,
     /// Identify + classify a drive OR a firmware image file (read-only; never aborts).
     Info {
-        /// SCSI device path (e.g. /dev/sg0) or a firmware image file (.bin).
-        device: String,
+        /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id) or a
+        /// firmware image file. Omit to auto-pick the only connected drive.
+        device: Option<String>,
     },
-    /// Capture firmware; template-free Pioneer output is an unverified restore candidate.
+    /// Capture firmware. Pioneer output is byte-exact OEM where recognized, else a
+    /// clearly-labeled non-OEM candidate (zeroed signature).
     Backup {
-        /// SCSI device path (e.g. /dev/sg0).
-        device: String,
-        /// Output .tar path (Pioneer without --template defaults to `.candidate.tar`).
+        /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
+        /// Omit to auto-pick the only connected drive.
+        device: Option<String>,
+        /// Output .tar path (Pioneer defaults to `<model>_<rev>.candidate.tar`).
         #[arg(short, long)]
         out: Option<PathBuf>,
-        /// Reproduce a matching signed OEM Kernel+Normal tar (currently UD04 1.14 only).
-        #[arg(long)]
-        template: Option<PathBuf>,
+    },
+    /// Backup using a deeper, retrying read to salvage a region a normal backup
+    /// could not read (e.g. a partially-damaged drive). Families without a
+    /// distinct recover (MTK) just run a normal backup.
+    Recover {
+        /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
+        /// Omit to auto-pick the only connected drive.
+        device: Option<String>,
+        /// Output .tar path (defaults to `<model>_<rev>.<infix>.<ext>`).
+        #[arg(short, long)]
+        out: Option<PathBuf>,
     },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
@@ -87,7 +101,7 @@ enum Command {
 #[command(after_help = "\
 FLASH WORKFLOW:
   1. freemkv-flash info  /dev/sg0                      # confirm the drive + family
-  2. freemkv-flash backup /dev/sg0 -o backup.tar       # save a restorable backup
+  2. freemkv-flash backup /dev/sg0 -o backup.tar       # save a backup first
   3. EJECT any disc so the tray is empty and closed
   4. freemkv-flash flash /dev/sg0 -i firmware.bin      # DRY RUN — review the plan
   5. freemkv-flash flash /dev/sg0 -i firmware.bin \\
@@ -95,8 +109,9 @@ FLASH WORKFLOW:
 
 Do not power off or disconnect the drive during step 5.")]
 struct FlashArgs {
-    /// SCSI device path (e.g. /dev/sg0).
-    device: String,
+    /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
+    /// Omit to auto-pick the only connected drive.
+    device: Option<String>,
     /// Input: MTK image (.bin), complete backup (.tar), Pioneer .enc, or a Pioneer envelope tar.
     /// A backup .tar rolls back firmware; per-unit reference data is not auto-written.
     /// Pioneer inputs can be dry-run; live writes remain blocked pending a restorable backup.
@@ -105,6 +120,10 @@ struct FlashArgs {
     /// Where to save the mandatory pre-flash backup.
     #[arg(short, long)]
     backup: Option<PathBuf>,
+    /// Skip the mandatory pre-flash backup. DANGEROUS: no rollback if the write
+    /// fails. Without this, a failed backup aborts the flash.
+    #[arg(long)]
+    skip_backup: bool,
     /// Streaming mode: `main` or `full`. NOTE: on the currently-supported
     /// MediaTek family this is informational only — the full 2 MiB image is
     /// always streamed and the commit handshake is always sent regardless of
@@ -151,23 +170,12 @@ impl From<ModeArg> for FlashMode {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
-        Some(Command::Info { device }) => cmd_info(&device),
-        Some(Command::Backup {
-            device,
-            out,
-            template,
-        }) => cmd_backup(&device, out, template),
+        Some(Command::List) => cmd_list(),
+        Some(Command::Info { device }) => cmd_info(device.as_deref()),
+        Some(Command::Backup { device, out }) => cmd_backup(device.as_deref(), out, false),
+        Some(Command::Recover { device, out }) => cmd_backup(device.as_deref(), out, true),
         Some(Command::Flash(args)) => cmd_flash(args),
-        None => match cli.device {
-            Some(device) => cmd_info(&device),
-            None => {
-                eprintln!(
-                    "{} a device is required (try `freemkv-flash info <dev>` or --help)",
-                    style::red("error:")
-                );
-                return ExitCode::FAILURE;
-            }
-        },
+        None => cmd_info(cli.device.as_deref()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -178,16 +186,56 @@ fn main() -> ExitCode {
     }
 }
 
-fn cmd_info(target: &str) -> Result<()> {
+fn cmd_info(target: Option<&str>) -> Result<()> {
     // A regular file is a firmware image → classify the FILE (no drive needed);
-    // anything else (a /dev/sg* node, or a nonexistent path) → probe the DRIVE.
-    if is_firmware_file(target) {
-        return engine::info_file(Path::new(target));
+    // anything else (a selector, a /dev node, or nothing) → probe the DRIVE.
+    if let Some(t) = target {
+        if is_firmware_file(t) {
+            return engine::info_file(Path::new(t));
+        }
     }
-    let mut dev = platform::open(target, false)?;
+    let selector = resolve_device(target)?;
+    let mut dev = platform::open(&selector, false)?;
     let family = resolved_family(dev.as_mut())?;
     let handler = drive::for_family(family);
     engine::info(dev.as_mut(), handler.as_ref())
+}
+
+/// Turn an optional user selector into a concrete device selector.
+/// - a bare integer `N` → the Nth drive from `list` (1-based)
+/// - any other string → used verbatim (a `/dev` path or an `ioreg:` id)
+/// - `None` → the only connected drive, or an error listing the choices
+fn resolve_device(arg: Option<&str>) -> Result<String> {
+    if let Some(a) = arg {
+        if let Ok(n) = a.parse::<usize>() {
+            let drives = platform::list_drives();
+            let d = n
+                .checked_sub(1)
+                .and_then(|i| drives.get(i))
+                .with_context(|| format!("no drive #{a}; run `freemkv-flash list`"))?;
+            return Ok(d.path.clone());
+        }
+        return Ok(a.to_string());
+    }
+    let drives = platform::list_drives();
+    match drives.as_slice() {
+        [] => bail!("no optical drive found (is one connected and powered on?)"),
+        [only] => Ok(only.path.clone()),
+        many => {
+            let mut msg =
+                String::from("multiple drives found — pass a number or path (or run `list`):\n");
+            for (i, d) in many.iter().enumerate() {
+                msg.push_str(&format!(
+                    "  {}  {}  {} {}\n",
+                    i + 1,
+                    d.path,
+                    style::printable(&d.vendor),
+                    style::printable(&d.model)
+                ));
+            }
+            bail!(msg)
+        }
+    }
 }
 
 /// Route the `info` argument: a path that exists as a **regular file** is a
@@ -210,30 +258,59 @@ fn resolved_family(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
 /// Resolve a protocol with an executable flash implementation.
 fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     let family = resolved_family(dev)?;
-    if !drive::for_family(family).is_supported() {
+    if !drive::for_family(family).capabilities().flash {
         return Err(drive::unsupported_family_error(family));
     }
     Ok(family)
 }
 
-/// Classify a drive for a backend's bounded backup path.
+/// Classify a drive for a backend's backup path.
 fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     let family = resolved_family(dev)?;
-    if drive::for_family(family).backup_extension().is_none() {
+    if !drive::for_family(family).capabilities().backup {
         return Err(drive::unsupported_family_error(family));
     }
     Ok(family)
 }
 
-fn cmd_backup(device: &str, out: Option<PathBuf>, template: Option<PathBuf>) -> Result<()> {
-    let template = template
-        .map(std::fs::read)
-        .transpose()
-        .context("reading backup template")?;
-    let mut dev = platform::open(device, false)?;
+fn cmd_list() -> Result<()> {
+    let drives = platform::list_drives();
+    if drives.is_empty() {
+        println!("{}", style::kv("drives", "none found"));
+        return Ok(());
+    }
+    // `path` is the selector to pass to info/backup/flash — a /dev node when a
+    // disc is present, or an `ioreg:<id>` for an empty macOS drive.
+    for d in &drives {
+        println!(
+            "{}",
+            style::kv(
+                &d.path,
+                &format!(
+                    "{} {} (rev {})",
+                    style::printable(&d.vendor),
+                    style::printable(&d.model),
+                    style::printable(&d.firmware)
+                )
+            )
+        );
+    }
+    Ok(())
+}
+
+fn cmd_backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Result<()> {
+    let selector = resolve_device(device)?;
+    let mut dev = platform::open(&selector, false)?;
     let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
-    let pioneer_candidate = family == Family::Pioneer && template.is_none();
+    if recover && !handler.capabilities().recover {
+        // No distinct deeper recover for this family: a normal backup already
+        // captures a complete image, so fall through and run one.
+        eprintln!(
+            "note: {} has no deeper recover; running a normal backup",
+            handler.backend_name()
+        );
+    }
     let out = match out {
         Some(o) => o,
         None => {
@@ -250,21 +327,20 @@ fn cmd_backup(device: &str, out: Option<PathBuf>, template: Option<PathBuf>) -> 
                 .collect();
             let extension = handler
                 .backup_extension()
-                .context("backend has no restorable backup format")?;
-            if pioneer_candidate {
-                PathBuf::from(format!("{s}.candidate.{extension}"))
-            } else {
-                PathBuf::from(format!("{s}.backup.{extension}"))
-            }
+                .context("backend has no backup format")?;
+            // Filename infix (`backup` / `candidate`) comes from the backend,
+            // so the CLI names no chipset.
+            PathBuf::from(format!("{s}.{}.{extension}", handler.backup_kind().infix))
         }
     };
-    engine::backup_with_template(dev.as_mut(), handler.as_ref(), &out, template.as_deref())
+    engine::backup(dev.as_mut(), handler.as_ref(), &out, recover)
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {
-    let input = std::fs::read(&args.input)
+    let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
-    let mut dev = platform::open(&args.device, args.execute)?;
+    let selector = resolve_device(args.device.as_deref())?;
+    let mut dev = platform::open(&selector, args.execute)?;
     let family = classify_gated(dev.as_mut())?;
     let handler = drive::for_family(family);
     let input_kind = if family == Family::Pioneer {
@@ -305,8 +381,29 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         verbose: args.verbose,
         predump_out,
         allow_crossflash: args.allow_crossflash,
+        skip_backup: args.skip_backup,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)
+}
+
+/// Read a firmware input file with a hard size cap, so a huge file or an endless
+/// source (e.g. `/dev/zero`, a FIFO) cannot exhaust memory before the per-family
+/// size validation runs. The cap is far above any real firmware/backup artifact
+/// (largest Pioneer envelope is ~4.5 MiB; an MTK image 2 MiB).
+fn read_capped(path: &Path) -> Result<Vec<u8>> {
+    use std::io::Read;
+    const MAX_INPUT: u64 = 64 * 1024 * 1024;
+    let file = std::fs::File::open(path)?;
+    let mut buf = Vec::new();
+    file.take(MAX_INPUT + 1).read_to_end(&mut buf)?;
+    if buf.len() as u64 > MAX_INPUT {
+        bail!(
+            "input {} exceeds the {} MiB cap for a firmware file; refusing to load",
+            path.display(),
+            MAX_INPUT / (1024 * 1024)
+        );
+    }
+    Ok(buf)
 }
 
 /// Default pre-flash backup path: `<input>.preflash.backup.<backend-extension>`.

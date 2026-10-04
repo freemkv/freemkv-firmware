@@ -15,14 +15,14 @@ use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
 use crate::cmac;
-use crate::drive::{DriveFamily, Family, FlashRequest, InputKind};
+use crate::drive::{BackupNotice, DriveFamily, FlashRequest, InputKind};
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 pub(crate) mod backup;
+use backup::save_backup;
 #[cfg(test)]
 use backup::BackupArtifact;
-use backup::{save_backup, save_validated};
 
 /// Run the `info` command: identify + classify (read-only).
 pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
@@ -34,39 +34,43 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
             "inquiry",
             &format!(
                 "vendor='{}' product='{}' rev='{}'",
-                id.vendor, id.product, id.revision
+                style::printable(&id.vendor),
+                style::printable(&id.product),
+                style::printable(&id.revision)
             )
         )
     );
-    println!(
-        "{}",
-        style::kv("banner", id.banner.as_deref().unwrap_or("<none>"))
-    );
-    let supported = drive.is_supported();
     println!(
         "{}",
         style::kv(
-            "family",
-            &format!(
-                "{} ({})",
-                drive.family(),
-                if supported {
-                    style::green("supported")
-                } else {
-                    style::amber("live flash/backup unavailable")
-                }
-            )
+            "banner",
+            &id.banner
+                .as_deref()
+                .map(style::printable)
+                .unwrap_or_else(|| "<none>".to_string())
         )
     );
-    // Flash recipe / execution tier for this family (from the declarative catalog).
-    let recipe = match crate::flashset::FlashInstructionSet::for_family(drive.family()) {
-        Some(set) => format!("{} — {}", set.name, set.status.label()),
-        None => format!(
-            "no executable recipe ({} brand recipes catalogued)",
-            crate::flashset::CATALOG.len()
-        ),
+    // The single source of truth for what this family can do (see
+    // drive::Capabilities). `info` is always on for a classified drive; the
+    // headline is which of backup/flash are live.
+    let caps = drive.capabilities();
+    let capability = match (caps.backup, caps.flash) {
+        (_, true) => style::green("live backup + flash supported"),
+        (true, false) => style::amber("live backup supported; live flash unavailable"),
+        (false, false) => style::amber("live backup/flash unavailable"),
     };
-    println!("{}", style::kv("flash", &recipe));
+    println!(
+        "{}",
+        style::kv("family", &format!("{} ({})", drive.family(), capability))
+    );
+    // Show the flash line only when a runnable recipe exists for this family;
+    // the capability label above already states flash availability otherwise.
+    if let Some(set) = crate::flashset::FlashInstructionSet::for_family(drive.family()) {
+        println!(
+            "{}",
+            style::kv("flash", &format!("{} — {}", set.name, set.status.label()))
+        );
+    }
     // Best-effort firmware identification (read-only). `info` never aborts, so a
     // read failure here is simply omitted.
     if let Ok(Some(r)) = drive.firmware_report(dev) {
@@ -86,7 +90,7 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
                     "firmware",
                     &format!(
                         "{} {}",
-                        r.descriptor.as_deref().unwrap_or("unknown"),
+                        style::printable(r.descriptor.as_deref().unwrap_or("unknown")),
                         style::amber("(unrecognized — not in the built-in catalog)")
                     )
                 )
@@ -189,20 +193,23 @@ pub fn info_file(path: &Path) -> Result<()> {
     if let Ok(bundle) = crate::pioneer_bundle::Bundle::from_tar_bytes(&image) {
         println!("{}", style::kv("family", "Pioneer"));
         if !bundle.source_name.is_empty() {
-            println!("{}", style::kv("source", &bundle.source_name));
+            println!(
+                "{}",
+                style::kv("source", &style::printable(&bundle.source_name))
+            );
         }
         if let Some(model) = &bundle.public_model {
-            println!("{}", style::kv("listed model", model));
+            println!("{}", style::kv("listed model", &style::printable(model)));
         }
         if let Some(model) = &bundle.embedded_model {
-            println!("{}", style::kv("firmware model", model));
+            println!("{}", style::kv("firmware model", &style::printable(model)));
         }
         if let Some(hardware) = bundle
             .components
             .first()
             .and_then(|c| c.hardware.as_deref())
         {
-            println!("{}", style::kv("hardware", hardware));
+            println!("{}", style::kv("hardware", &style::printable(hardware)));
         }
         println!(
             "{}",
@@ -216,7 +223,7 @@ pub fn info_file(path: &Path) -> Result<()> {
                     &format!(
                         "{:?} {} ({} bytes)",
                         component.role,
-                        component.path,
+                        style::printable(&component.path),
                         component.bytes.len()
                     )
                 )
@@ -224,7 +231,10 @@ pub fn info_file(path: &Path) -> Result<()> {
         }
         println!(
             "{}",
-            style::kv("flash", "offline dry-run only; live backup/flash blocked")
+            style::kv(
+                "flash",
+                "live OEM write (gated: --execute --i-understand-risk, backup-first)",
+            )
         );
         return Ok(());
     }
@@ -377,68 +387,61 @@ fn info_file_other(id: &crate::imageid::ImageIdentity) -> Result<()> {
 
 /// Capture a complete firmware and per-unit rollback artifact. Any unreadable
 /// firmware range makes the command fail without writing an archive.
-pub fn backup(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, out: &Path) -> Result<()> {
-    backup_with_template(dev, drive, out, None)
-}
-
-/// Save a firmware backup using optional backend-specific envelope templates.
-pub fn backup_with_template(
+pub fn backup(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
     out: &Path,
-    template: Option<&[u8]>,
+    recover: bool,
 ) -> Result<()> {
-    if drive.family() == Family::Pioneer && template.is_none() {
-        return pioneer_signed_candidate(dev, drive, out);
+    if !drive.capabilities().backup {
+        bail!("no firmware backup capability for {}", drive.backend_name());
     }
-    drive.validate_backup_template(template)?;
-    if drive.backup_extension().is_none() {
+    let kind = drive.backup_kind();
+    // Fail fast before the multi-minute capture if the output already exists.
+    if out.exists() {
         bail!(
-            "no proven restorable firmware backup for {}",
-            drive.backend_name()
+            "backup {} already exists (backups are never overwritten); choose another -o path or remove it",
+            out.display()
         );
     }
     let target_model = drive.identity(dev).product;
-    let bytes = drive.capture_backup_with_template(dev, template)?;
+    println!(
+        "{} {}",
+        style::bold("Backing up"),
+        style::dim(&format!(
+            "{} \u{2192} {}",
+            target_model.trim(),
+            out.display()
+        ))
+    );
+    // `recover` uses the family's deeper salvage read; families without a
+    // distinct recover capture it the same as a normal backup.
+    let bytes = if recover {
+        drive.capture_recover(dev)?
+    } else {
+        drive.capture_backup(dev)?
+    };
     let saved_len = save_backup(out, &bytes, drive, &target_model)?;
     println!(
         "{}",
-        style::kv("backup sha256", &format!("{:x}", Sha256::digest(&bytes)))
+        style::kv(
+            &format!("{} sha256", kind.infix),
+            &format!("{:x}", Sha256::digest(&bytes))
+        )
     );
     println!(
         "{} {}",
         style::green("wrote"),
         style::dim(&format!("{} ({}).", out.display(), human_size(saved_len)))
     );
-    Ok(())
-}
-
-/// Capture a template-free H8/SAT encrypted package through the bounded live
-/// read transaction. The generated signature verifies offline, but hardware
-/// key trust and physical restoration have not been tested.
-pub fn pioneer_signed_candidate(
-    dev: &mut dyn ScsiDevice,
-    drive: &dyn DriveFamily,
-    out: &Path,
-) -> Result<()> {
-    if drive.family() != Family::Pioneer {
-        bail!("self-signed backup candidate is Pioneer-only");
+    // Provenance line, computed from the produced bytes: a byte-exact OEM
+    // capture prints a green confirmation; anything reconstructed prints an
+    // amber "unverified" advisory naming what is not OEM.
+    match drive.backup_notice(&bytes) {
+        BackupNotice::VerifiedOem(msg) => println!("{}", style::green(&msg)),
+        BackupNotice::Unverified(msg) => println!("{}", style::amber(&msg)),
+        BackupNotice::None => {}
     }
-    let target_model = drive.identity(dev).product;
-    let bytes = crate::pioneer_backup::capture_signed_candidate(dev)?;
-    let saved_len = save_validated(out, &bytes, |candidate| {
-        crate::pioneer_backup::validate_envelope_package(candidate, &target_model)
-    })?;
-    println!(
-        "{}",
-        style::kv("candidate sha256", &format!("{:x}", Sha256::digest(&bytes)))
-    );
-    println!(
-        "{} {}",
-        style::green("wrote"),
-        style::dim(&format!("{} ({}).", out.display(), human_size(saved_len)))
-    );
-    println!("{}", style::amber("UNVERIFIED RESTORE: envelopes pass offline codec and authentication checks; physical rollback and trust of generated signing keys remain untested."));
     Ok(())
 }
 
@@ -448,6 +451,31 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         return plan;
     }
     guard_no_medium(dev, req.execute)?;
+    // Whole-package executors (e.g. a Pioneer OEM update session) own the
+    // execute flow, but only AFTER the shared safety gate and a captured
+    // pre-flash backup — the same invariants the image-chunk path enforces.
+    if req.execute && drive.flash_is_bundle() {
+        if let Err(block) = check_safety(req.acknowledged_risk) {
+            bail!("SAFETY GATE: {}", block.0);
+        }
+        let (backup_summary, backup_bytes) = capture_preflash_backup(dev, drive, req)?;
+        // Re-check the tray right before any write (the backup opened a
+        // multi-round-trip window; a disc/tray change is the same hazard class).
+        guard_no_medium(dev, req.execute)?;
+        println!("{}", style::kv("backup", &backup_summary));
+        println!(
+            "\n{}",
+            style::bold("EXECUTING flash — do not power off or disconnect the drive...")
+        );
+        return drive
+            .flash_bundle(dev, req, backup_bytes.as_deref())
+            .unwrap_or_else(|| {
+                bail!(
+                    "{} declares a bundle flash but provides none",
+                    drive.backend_name()
+                )
+            });
+    }
     match req.input_kind {
         InputKind::Tar => flash_restore(dev, drive, req),
         InputKind::Bin => flash_bin(dev, drive, req),
@@ -455,22 +483,68 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     }
 }
 
-/// Pioneer accepts a variable-size OEM Normal envelope in the host updater.
-/// This path is deliberately offline: even `--execute` returns before touching
-/// the device, since a restorable backup, drive acceptance, and completion
-/// status behavior are not established.
+/// Capture and save the mandatory pre-flash backup, or honor `--skip-backup`.
+/// A failed capture/save aborts before any write. Returns a one-line summary and
+/// the captured backup bytes (the installed firmware), so the bundle executor can
+/// route the flash. The bytes are `None` only when `--skip-backup` was set.
+fn capture_preflash_backup(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn DriveFamily,
+    req: &FlashRequest,
+) -> Result<(String, Option<Vec<u8>>)> {
+    if req.skip_backup {
+        eprintln!(
+            "{}",
+            style::amber(
+                "WARNING: --skip-backup set; flashing with NO pre-flash backup. A failed \
+                 write may be unrecoverable."
+            )
+        );
+        return Ok((
+            "SKIPPED (--skip-backup): no rollback artifact".to_string(),
+            None,
+        ));
+    }
+    let out = req
+        .predump_out
+        .as_ref()
+        .context("no preflash backup path supplied")?;
+    // Fail fast BEFORE the multi-minute capture read if the destination is taken
+    // (backups are never overwritten) — far better than discovering it after.
+    if out.exists() {
+        bail!(
+            "pre-flash backup path {} already exists (backups are never overwritten). \
+             Move/remove it, pass --backup <new-path>, or --skip-backup to proceed with no rollback.",
+            out.display()
+        );
+    }
+    let bytes = drive
+        .capture_backup(dev)
+        .context("pre-flash backup failed; aborting flash (use --skip-backup to override)")?;
+    // A partial capture (e.g. a Pioneer Kernel-only archive when the Normal read
+    // flaked) is NOT a valid rollback for the region the flash overwrites.
+    drive.verify_preflash_backup(&bytes, &req.input).context(
+        "pre-flash backup is not a usable rollback; aborting flash (use --skip-backup to override)",
+    )?;
+    let target_model = drive.identity(dev).product;
+    let saved_len = save_backup(out, &bytes, drive, &target_model)
+        .context("pre-flash backup failed; aborting flash (use --skip-backup to override)")?;
+    Ok((
+        format!("saved {} ({} bytes)", out.display(), saved_len),
+        Some(bytes),
+    ))
+}
+
+/// Render the Pioneer OEM flash plan WITHOUT touching the device (the dry run).
+/// The live write is handled separately by the backend's `flash_bundle`; this
+/// planner is only reached when `--execute` is NOT set.
 pub fn plan_pioneer_offline(
     image: &[u8],
     input_kind: InputKind,
     model: &str,
     allow_crossflash: bool,
     verbose: bool,
-    execute: bool,
-    _drive: &dyn DriveFamily,
 ) -> Result<()> {
-    if execute {
-        bail!("Pioneer flash execution is blocked: restorable backup, drive acceptance, and completion status rules are unverified; no SCSI writes issued");
-    }
     let bundle = match input_kind {
         InputKind::PioneerBundle => Some(crate::pioneer_bundle::Bundle::from_tar_bytes(image)?),
         InputKind::Bin => None,
@@ -582,7 +656,7 @@ pub fn plan_pioneer_offline(
         )
     );
     println!(
-        "{profile_name} OEM offline transcript: {} raw-envelope chunks of at most {} B via 3B 07 F0, bracketed by 3B 04 FF entry and 3B 05 FF finish (256 B control each). Execution is blocked: restorable backup, full F1 identity/preflight, drive acceptance, and status handling are unverified.",
+        "{profile_name} OEM transcript: {} raw-envelope chunks of at most {} B via 3B 07 F0, bracketed by 3B 04 FF entry and 3B 05 FF finish (256 B control each). This is a dry run (no writes); `--execute --i-understand-risk` performs the live write after a mandatory pre-flash backup.",
         transcript.len() - 2,
         crate::drive::pioneer::FLASH_CHUNK
     );
@@ -617,7 +691,7 @@ pub fn plan_pioneer_offline(
     );
     println!(
         "{}",
-        style::amber("OFFLINE ONLY: no SCSI commands issued; --execute remains blocked.")
+        style::amber("DRY RUN: no SCSI commands issued. `--execute --i-understand-risk` writes it for real (backup-first).")
     );
     Ok(())
 }
@@ -793,14 +867,31 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // The mapped read often has holes; that condition fails before flash_open.
     let mut backup_summary = String::from("not captured (dry run)");
     if req.execute {
-        let out = req
-            .predump_out
-            .as_ref()
-            .context("no preflash backup path supplied")?;
-        let bytes = drive.capture_backup(dev)?;
-        let target_model = drive.identity(dev).product;
-        let saved_len = save_backup(out, &bytes, drive, &target_model)?;
-        backup_summary = format!("saved {} ({} bytes)", out.display(), saved_len);
+        if req.skip_backup {
+            // Explicit operator override: proceed with no rollback artifact.
+            backup_summary = "SKIPPED (--skip-backup): no rollback artifact".to_string();
+            eprintln!(
+                "{}",
+                style::amber(
+                    "WARNING: --skip-backup set; flashing with NO pre-flash backup. A failed \
+                     write may be unrecoverable."
+                )
+            );
+        } else {
+            // A failed backup aborts the flash before any write is issued.
+            let out = req
+                .predump_out
+                .as_ref()
+                .context("no preflash backup path supplied")?;
+            let bytes = drive.capture_backup(dev).context(
+                "pre-flash backup failed; aborting flash (use --skip-backup to override)",
+            )?;
+            let target_model = drive.identity(dev).product;
+            let saved_len = save_backup(out, &bytes, drive, &target_model).context(
+                "pre-flash backup failed; aborting flash (use --skip-backup to override)",
+            )?;
+            backup_summary = format!("saved {} ({} bytes)", out.display(), saved_len);
+        }
     }
 
     println!("{}", style::header("== flash plan =="));
@@ -855,9 +946,9 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // hardware-proven, issuable instruction set. Today that is MT1959 (the MTK
     // family); catalog-only / transport-gated families are dry-run/plan only and
     // must never issue a write, even with --execute.
-    if !drive.is_supported() || drive.backup_extension().is_none() {
+    if !drive.capabilities().flash {
         bail!(
-            "refusing to flash: {} has no executable protocol and proven restorable backup",
+            "refusing to flash: {} has no executable flash capability",
             drive.backend_name()
         );
     }

@@ -1,27 +1,31 @@
-//! Pioneer OEM update protocol — offline flash planning, live writes gated.
+//! Pioneer OEM update protocol — byte-exact OEM backup capture + a live,
+//! heavily-gated OEM write (Normal-only profiles).
 //!
 //! The Pioneer OEM updater supplies the host command sequence. A Renesas
-//! controller identity alone does not prove this protocol applies. Live flash
-//! execution is currently blocked.
+//! controller identity alone does not prove this protocol applies. Backup
+//! capture is read-only; the live write ([`crate::pioneer_flash`], reached via
+//! [`DriveFamily::flash_bundle`]) runs only behind the engine's gates
+//! (`--execute` + `--i-understand-risk`, empty-tray guard, and a mandatory,
+//! completeness-verified pre-flash backup).
 //!
 //! ## FLASH
 //! The UD04 1.11 OEM updater uses 04/FF with a 256-byte entry buffer,
-//! 07/F0 with raw envelope chunks, and 05/FF with a 256-byte final buffer.
-//! The UD04 host control buffers are reconstructed, but drive acceptance,
-//! a restorable backup, and completion status remain unproven, so
-//! live flashing fails closed before issuing any write.
+//! 07/F0 with raw envelope chunks, and 05/FF with a 256-byte final buffer,
+//! then an INQUIRY `000` gate and a status poll. UD04 is Normal-only. Drive
+//! acceptance beyond a byte-exact OEM replay is still the drive's call, not
+//! the host's — hence the gates and the idempotent-self-flash-first rollout.
 //!
 //! ## Kernel-key table
 //! Kept intentionally minimal ([`KEYS`]). Grows deliberately per validated
 //! model — new entries land here only after a flash-mode entry has been
 //! empirically confirmed on that model.
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 
-use super::mtk::cdb_write_buffer;
-use super::{DriveFamily, Family, FullImage, Identity, RestoreRegion, UserDump};
+pub(crate) use super::mtk::cdb_write_buffer;
+use super::{Capabilities, DriveFamily, Family, FullImage, Identity, RestoreRegion, UserDump};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
@@ -224,37 +228,42 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
     cdb_write_buffer(FINISH_MODE, CONTROL_BUFFER_ID, 0, CONTROL_LEN as u32)
 }
 
-/// Construct the 256-byte entry/finish data-out used by the UD04 1.11 OEM
-/// updater. The shared buffer is zero-initialized; each command copies the
-/// 16-byte descriptor and four little-endian key bytes over that zero tail.
-/// This is an offline reference, not a drive-acceptance claim.
-pub fn ud04_oem_control_payload() -> [u8; CONTROL_LEN] {
-    let mut payload = [0u8; CONTROL_LEN];
-    payload[..16].copy_from_slice(b"PIONEER BDR-US04");
-    payload[16..20].copy_from_slice(&0xFD23_6642u32.to_le_bytes());
-    payload
+/// Resolve the controller id and OEM control row for a Pioneer envelope from its
+/// banner `Hardware Version : SAT xxxx` tag. The SAT value is the controller id
+/// in hex. Resolution is by controller id, never by INQUIRY/banner model string,
+/// so the model-string collisions in the key table cannot be silently resolved.
+fn control_row_for_envelope(envelope: &[u8]) -> Result<&'static crate::pioneer_keys::KeyEntry> {
+    let banner =
+        parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
+    let cid = crate::pioneer_keys::controller_id_from_sat(&banner.hardware).ok_or_else(|| {
+        anyhow!(
+            "envelope hardware {:?} is not a SAT controller id",
+            banner.hardware
+        )
+    })?;
+    crate::pioneer_keys::lookup(cid).ok_or_else(|| {
+        anyhow!("no OEM control key on file for controller id {cid:#06X}; cannot flash this model")
+    })
 }
 
-/// BDR-S09 1.30EU control payload. The updater's control descriptor is
-/// `PIONEER  BDR-209`; the resource banner and target product are BDR-S09.
-/// Those strings serve different fields and are not interchangeable aliases.
-pub fn s09_v130_oem_control_payload() -> [u8; CONTROL_LEN] {
-    let mut payload = [0u8; CONTROL_LEN];
-    payload[..16].copy_from_slice(b"PIONEER  BDR-209");
-    payload[16..20].copy_from_slice(&0xCE1F_2B98u32.to_le_bytes());
-    payload
-}
-
-/// Supplied third-party Autoflasher GUI's selected UD04 control payload.
-/// The GUI passes arg5=1 at 0x401F52 into 0x41425C. Entry/finish helpers
-/// bypass the model-key dispatcher for that flag and serialize 0x6123789A
-/// little-endian. This is not the OEM UD04 model-specific control word,
-/// nor evidence of a downgrade-enable effect in the receiver.
-pub fn ud04_autoflasher_control_payload() -> [u8; CONTROL_LEN] {
-    let mut payload = [0u8; CONTROL_LEN];
-    payload[..16].copy_from_slice(b"PIONEER BDR-US04");
-    payload[16..20].copy_from_slice(&0x6123_789Au32.to_le_bytes());
-    payload
+/// Build the 256-byte OEM control buffer generically for the self/OEM-update
+/// (Normal-only) path: the key is selected by the envelope's `Destination` OEM
+/// tag (e.g. `GENERAL` for UD04, `ID43` for S09), looked up in the embedded
+/// `pioneer_keys.bin` table. Byte-for-byte equivalent to the former hand-baked
+/// per-model payloads for every validated model. No drive-acceptance claim.
+fn oem_normal_control(envelope: &[u8]) -> Result<[u8; CONTROL_LEN]> {
+    let banner =
+        parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
+    let row = control_row_for_envelope(envelope)?;
+    let tag = if banner.destination.is_empty() {
+        crate::pioneer_keys::DEFAULT_TAG
+    } else {
+        banner.destination.as_str()
+    };
+    let key = row
+        .key_for_tag(tag)
+        .ok_or_else(|| anyhow!("no OEM key for destination tag {tag:?} on this controller id"))?;
+    Ok(row.control_payload(key))
 }
 
 /// OEM updater path whose command and control-buffer bytes were recovered.
@@ -450,13 +459,13 @@ pub fn offline_oem_transcript<'a>(
     if !envelope.len().is_multiple_of(0x100) || !(IMAGE_MIN..=IMAGE_MAX).contains(&envelope.len()) {
         bail!("Pioneer envelope size is outside the offline profile range or not 256-byte aligned");
     }
-    let control = match profile {
+    // Keep the per-profile envelope gating (identity/structure must match an
+    // audited Normal-only profile), then build the control buffer generically
+    // from the embedded key table rather than a hand-baked per-model constant.
+    match profile {
         OemUpdateProfile::Ud04V111Normal
             if banner.model.eq_ignore_ascii_case("BDR-UD04")
-                && banner.file_type.eq_ignore_ascii_case("Normal") =>
-        {
-            ud04_oem_control_payload()
-        }
+                && banner.file_type.eq_ignore_ascii_case("Normal") => {}
         OemUpdateProfile::Ud04V111Normal => {
             bail!("UD04 1.11 OEM transcript requires a BDR-UD04 Normal envelope")
         }
@@ -465,14 +474,12 @@ pub fn offline_oem_transcript<'a>(
                 && banner.revision == "1.30"
                 && banner.hardware.eq_ignore_ascii_case("SAT 8600")
                 && banner.destination.eq_ignore_ascii_case("ID43")
-                && banner.file_type.eq_ignore_ascii_case("Normal") =>
-        {
-            s09_v130_oem_control_payload()
-        }
+                && banner.file_type.eq_ignore_ascii_case("Normal") => {}
         OemUpdateProfile::S09V130Normal => {
             bail!("S09 1.30 OEM transcript requires a BDR-S09 1.30 SAT 8600 ID43 Normal envelope")
         }
-    };
+    }
+    let control = oem_normal_control(envelope)?;
     transfer::data_out(&control, envelope, None)
 }
 
@@ -589,8 +596,6 @@ struct LinearFeProfile {
     hardware: &'static str,
     kernel_len: usize,
     normal_len: usize,
-    control_id: [u8; 16],
-    control_key: u32,
 }
 
 const LINEAR_FE_PROFILES: &[LinearFeProfile] = &[LinearFeProfile {
@@ -598,17 +603,16 @@ const LINEAR_FE_PROFILES: &[LinearFeProfile] = &[LinearFeProfile {
     hardware: "SAT 8A10",
     kernel_len: 0x11200,
     normal_len: 0x1d7700,
-    control_id: *b"PIONEER BDR-US04",
-    control_key: 0x6123_789A,
 }];
 
-/// Validate and plan an established linear-FE envelope pair from its contents.
-/// Source and advertised revision do not select this path. Receiver acceptance
-/// remains a separate, untested hardware question.
-pub fn offline_linear_fe_data_out<'a>(
-    kernel: &'a [u8],
-    normal: &'a [u8],
-) -> Result<Vec<OemTransfer<'a>>> {
+/// Validate an established linear-FE Kernel+Normal pair and build its 256-byte
+/// OEM control buffer. The validated framing constraints (model, hardware,
+/// resource lengths, identity agreement, signature, decoded integrity) are
+/// preserved exactly; the control bytes are now sourced generically from the
+/// embedded key table — the descriptor plus the model's autoflasher fallback
+/// key (the crossflash path bypasses the per-destination dispatcher). Source and
+/// advertised revision do not select this path; receiver acceptance is untested.
+fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> {
     use pioneer_codec::signature::{verify_normal_signature, SignatureCheck};
     let kh = pioneer_codec::header_info(kernel).ok_or_else(|| anyhow!("Kernel header missing"))?;
     let nh = pioneer_codec::header_info(normal).ok_or_else(|| anyhow!("Normal header missing"))?;
@@ -646,9 +650,19 @@ pub fn offline_linear_fe_data_out<'a>(
     {
         bail!("decoded image integrity or layout mismatch");
     }
-    let mut control = [0u8; CONTROL_LEN];
-    control[..16].copy_from_slice(&profile.control_id);
-    control[16..20].copy_from_slice(&profile.control_key.to_le_bytes());
+    let _ = profile;
+    let row = control_row_for_envelope(normal)?;
+    Ok(row.control_payload(row.fallback))
+}
+
+/// Validate and plan an established linear-FE envelope pair from its contents.
+/// Offline-only transcript for dry-run/verification; the live write goes through
+/// the imperative executor. Receiver acceptance is a separate, untested question.
+pub fn offline_linear_fe_data_out<'a>(
+    kernel: &'a [u8],
+    normal: &'a [u8],
+) -> Result<Vec<OemTransfer<'a>>> {
+    let control = linear_fe_control(kernel, normal)?;
     transfer::data_out(
         &control,
         normal,
@@ -762,10 +776,217 @@ pub fn preflight(image: &[u8], drive_id: &Identity, allow_crossflash: bool) -> R
     })
 }
 
+// ---- Flash input classification + confirm prompt ---------------------------
+
+/// Writable components resolved from a flash input: `(kernel, normal)`, each
+/// present only when the input carries that envelope.
+pub(crate) type FlashComponents = (Option<Vec<u8>>, Option<Vec<u8>>);
+
+/// Resolve the flash input into its writable components: `(kernel, normal)`.
+/// A bare Normal `.enc` (recognizable Pioneer banner) is a Normal-only input;
+/// anything else MUST parse as a strict bundle — a malformed/hostile tar is
+/// refused, never silently reinterpreted as a raw envelope.
+pub(crate) fn classify_flash_input(input: &[u8]) -> Result<FlashComponents> {
+    if parse_banner(input).is_some() {
+        return Ok((None, Some(input.to_vec())));
+    }
+    let bundle = crate::pioneer_bundle::Bundle::from_tar_bytes(input)
+        .context("flash input is neither a valid Pioneer bundle nor a Normal .enc")?;
+    let find = |role| {
+        bundle
+            .components
+            .iter()
+            .find(|c| c.role == role)
+            .map(|c| c.bytes.clone())
+    };
+    Ok((
+        find(crate::pioneer_bundle::Role::Kernel),
+        find(crate::pioneer_bundle::Role::Main),
+    ))
+}
+
+/// Which components a flash will write, decided from the classified input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FlashSelection {
+    /// Write the Normal envelope only (bare `.enc` or a Normal-only bundle).
+    NormalOnly,
+    /// Write both the Kernel and the Normal (crossflash/downgrade package).
+    KernelAndNormal,
+}
+
+/// Decide the flash path from the presence of each component. Kernel-only has
+/// no validated transcript; neither present is a malformed selection.
+pub(crate) fn decide_flash(has_kernel: bool, has_normal: bool) -> Result<FlashSelection> {
+    match (has_kernel, has_normal) {
+        (true, true) => Ok(FlashSelection::KernelAndNormal),
+        (false, true) => Ok(FlashSelection::NormalOnly),
+        (true, false) => {
+            bail!("kernel-only flash is not yet supported (no validated kernel-only transcript)")
+        }
+        (false, false) => bail!("flash input has neither a Kernel nor a Normal component to write"),
+    }
+}
+
+/// One-line human summary of what the flash WILL write and what is MISSING.
+/// Revisions come from each envelope header; a missing/unreadable header shows
+/// `unknown` rather than failing.
+pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> String {
+    fn rev(bytes: &[u8]) -> String {
+        pioneer_codec::header_info(bytes)
+            .map(|h| h.revision)
+            .filter(|r| !r.is_empty())
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+    match (kernel, normal) {
+        (Some(k), Some(n)) => format!(
+            "This will flash: KERNEL (rev {}) + NORMAL (rev {})",
+            rev(k),
+            rev(n)
+        ),
+        (None, Some(_)) => "This will flash: NORMAL only — no Kernel in the package".to_string(),
+        (Some(_), None) => "This will flash: KERNEL only — no Normal in the package".to_string(),
+        (None, None) => "This will flash: (nothing selected)".to_string(),
+    }
+}
+
+/// Env override that lifts the live kernel-mode gate. Kernel mode
+/// (downgrade/crossflash) is implemented but refused for live use until the
+/// receiver's Site-1 generation gate is proven to be cleared by the unlock; set
+/// `FREEMKV_ENABLE_KERNEL_MODE` to override at your own risk (reversible via the
+/// mandatory pre-flash backup).
+fn kernel_mode_live_enabled() -> bool {
+    std::env::var_os("FREEMKV_ENABLE_KERNEL_MODE").is_some()
+}
+
+/// Derive installed-firmware routing facts from the pre-flash backup — the OEM
+/// package captured off this very drive moments earlier. Returns `None` when the
+/// backup is absent or its identity cannot be resolved (callers then treat the
+/// flash as plain; the backup + gates still protect the drive).
+pub(crate) fn installed_facts(
+    backup: Option<&[u8]>,
+) -> Option<crate::pioneer_flash_plan::Installed> {
+    use crate::pioneer_flash_plan::{FwDate, Generation, Installed};
+    let (installed_kernel, installed_normal) = classify_flash_input(backup?).ok()?;
+    let header = |b: &Option<Vec<u8>>| b.as_deref().and_then(pioneer_codec::header_info);
+    let kinfo = header(&installed_kernel);
+    let ninfo = header(&installed_normal);
+    // Controller id from the Normal (preferred) or Kernel header.
+    let controller_id = ninfo
+        .as_ref()
+        .or(kinfo.as_ref())
+        .and_then(|h| crate::pioneer_keys::controller_id_from_sat(&h.hardware_version))?;
+    let normal_date = ninfo.and_then(|h| FwDate::parse(&h.generated_date));
+    // Receiver-generation proxy: the new-gen Site-1 signatures co-occur with the
+    // installed Kernel's `0x01` marker (whitepaper §15.2), so marker `01` on the
+    // installed Kernel implies a new-generation (Site-1-bearing) receiver.
+    let receiver_new_gen = installed_kernel
+        .as_deref()
+        .and_then(pioneer_codec::decode_envelope)
+        .and_then(|d| d.image.get(0xFE).copied())
+        .map(|m| Generation::from_marker(m) == Generation::Newer)
+        .unwrap_or(false);
+    Some(Installed {
+        controller_id,
+        receiver_new_gen,
+        normal_date,
+    })
+}
+
+/// Decide whether this flash needs the vendor kernel-mode unlock, by routing the
+/// installed firmware against the target bundle ([`crate::pioneer_flash_plan`]).
+/// Plain same-model same/newer → no unlock. Downgrade/crossflash → unlock, and
+/// still gated behind [`kernel_mode_live_enabled`] until the Site-1 bypass is
+/// proven. A refused plan aborts here.
+pub(crate) fn resolve_kernel_mode(
+    installed_backup: Option<&[u8]>,
+    kernel: Option<&[u8]>,
+    normal: Option<&[u8]>,
+) -> Result<bool> {
+    use crate::pioneer_flash_plan::{decide_flash_plan, target_from_components, FlashPlan};
+
+    let target = target_from_components(kernel, normal)
+        .context("could not read target bundle identity for flash routing")?;
+    let installed = installed_facts(installed_backup);
+    crate::style::trace(&format!(
+        "flash routing: installed={installed:?}, target={target:?}"
+    ));
+
+    let plan = match &installed {
+        Some(inst) => decide_flash_plan(inst, &target, false),
+        None => {
+            crate::style::trace("installed identity unknown; defaulting to Plain");
+            FlashPlan::Plain
+        }
+    };
+    crate::style::trace(&format!("flash plan = {plan:?}"));
+    plan_to_kernel_mode(plan, kernel_mode_live_enabled())
+}
+
+/// Map a routing [`FlashPlan`] to whether the executor should enter kernel mode,
+/// applying the live-enablement gate. Split out so the gating is unit-testable
+/// without crafting real encrypted envelopes.
+fn plan_to_kernel_mode(
+    plan: crate::pioneer_flash_plan::FlashPlan,
+    live_enabled: bool,
+) -> Result<bool> {
+    use crate::pioneer_flash_plan::FlashPlan;
+    match plan {
+        FlashPlan::Plain | FlashPlan::Forced => Ok(false),
+        plan @ (FlashPlan::KernelDowngrade | FlashPlan::KernelCrossflash) => {
+            if !live_enabled {
+                bail!(
+                    "this flash needs vendor kernel mode ({plan:?}), which is implemented but \
+                     not yet enabled for live use pending Site-1 verification. Re-run with \
+                     FREEMKV_ENABLE_KERNEL_MODE=1 to override at your own risk (reversible via \
+                     the pre-flash backup)."
+                );
+            }
+            crate::style::trace("kernel mode ENABLED via FREEMKV_ENABLE_KERNEL_MODE");
+            Ok(true)
+        }
+        FlashPlan::Refused(reason) => bail!("refusing to flash: {reason}"),
+    }
+}
+
+/// Print the summary and get explicit consent. On a TTY, require `y`/`yes`;
+/// when stdin is not a TTY the `--execute`/`--i-understand-risk` flags already
+/// are the consent, so proceed automatically (and say so).
+pub(crate) fn confirm_proceed(summary: &str) -> Result<()> {
+    use std::io::IsTerminal;
+    let is_tty = std::io::stdin().is_terminal();
+    confirm_with(summary, is_tty, &mut std::io::stdin().lock())
+}
+
+/// Testable core of [`confirm_proceed`]: decoupled from the real stdin so the
+/// non-TTY auto-proceed and the explicit-yes TTY paths can be exercised offline.
+fn confirm_with(summary: &str, is_tty: bool, reader: &mut impl std::io::BufRead) -> Result<()> {
+    use std::io::Write;
+    println!("{}", crate::style::bold(summary));
+    if !is_tty {
+        println!(
+            "{}",
+            crate::style::dim(
+                "stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent."
+            )
+        );
+        return Ok(());
+    }
+    print!("Proceed? [y/N] ");
+    let _ = std::io::stdout().flush();
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    match line.trim().to_ascii_lowercase().as_str() {
+        "y" | "yes" => Ok(()),
+        _ => bail!("flash aborted at confirmation prompt"),
+    }
+}
+
 // ---- The Pioneer DriveFamily impl ------------------------------------------
 
-/// Pioneer OEM protocol backend: identity and offline planning are available;
-/// backup and live writes remain gated on restorable-backup evidence.
+/// Pioneer OEM protocol backend: identity, byte-exact OEM backup capture, and a
+/// gated live OEM write (Normal-only) via [`DriveFamily::flash_bundle`]. The
+/// image-chunk `flash_open/chunk/close` methods stay fail-closed and unused —
+/// Pioneer's live write goes through `flash_bundle`, not that path.
 #[derive(Default)]
 pub struct Pioneer;
 
@@ -805,15 +1026,106 @@ impl DriveFamily for Pioneer {
         }))
     }
     fn offline_plan(&self, req: &super::FlashRequest) -> Option<Result<()>> {
+        // On --execute the live bundle executor owns the flow (engine gates it);
+        // offline_plan only serves the dry run.
+        if req.execute {
+            return None;
+        }
         Some(crate::engine::plan_pioneer_offline(
             &req.input,
             req.input_kind,
             &req.drive_model,
             req.allow_crossflash,
             req.verbose,
-            req.execute,
-            self,
         ))
+    }
+    fn flash_is_bundle(&self) -> bool {
+        true
+    }
+    fn verify_preflash_backup(&self, backup: &[u8], input: &[u8]) -> Result<()> {
+        // The backup must hold a rollback for EVERY region this flash overwrites.
+        // Decide what will be written from the input; if it cannot be classified
+        // yet, fall back to the historical rule (a Normal is always written).
+        let (writes_kernel, writes_normal) = match classify_flash_input(input) {
+            Ok((kernel, normal)) => (kernel.is_some(), normal.is_some()),
+            Err(_) => (false, true),
+        };
+        let roles = crate::pioneer_backup::component_roles(backup);
+        let has = |role: &str| roles.iter().any(|(r, _)| r == role);
+        for (writes, role, label) in [
+            (writes_normal, "main", "Normal"),
+            (writes_kernel, "kernel", "Kernel"),
+        ] {
+            if writes && !has(role) {
+                bail!(
+                    "pre-flash backup is incomplete: the {label} region (which the flash \
+                     overwrites) could not be captured, so it has no rollback. Refusing to flash. \
+                     Run `recover` or resolve the read error first, or pass --skip-backup to \
+                     proceed with NO rollback."
+                );
+            }
+        }
+        Ok(())
+    }
+    fn flash_bundle(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        req: &super::FlashRequest,
+        installed_backup: Option<&[u8]>,
+    ) -> Option<Result<()>> {
+        if !req.execute {
+            return None;
+        }
+        Some((|| {
+            // Flash whatever components the input carries: a Kernel+Normal
+            // package crossflashes via the linear-FE path, a Normal-only input
+            // (bundle or bare `.enc`) via the OEM Normal path. A Kernel-only
+            // input has no validated path and is refused. The 256-byte control
+            // buffer is built here from the embedded key table (keyed by the
+            // envelope's controller id), then the executor issues the WRITE
+            // BUFFER CDBs imperatively — there is no pre-built replayed list.
+            let (kernel, normal) = classify_flash_input(&req.input)?;
+            let selection = decide_flash(kernel.is_some(), normal.is_some())?;
+            let normal = normal
+                .as_deref()
+                .expect("normal present for both selections");
+
+            // Routing: compare the installed firmware (from the just-captured
+            // pre-flash backup) against the target bundle to decide whether this
+            // is a plain flash, a kernel-mode downgrade/crossflash, or a refusal.
+            // `kernel_mode` is the only thing this adds to the write itself.
+            let kernel_mode =
+                resolve_kernel_mode(installed_backup, kernel.as_deref(), Some(normal))?;
+
+            let (control, kernel_to_write) = match selection {
+                FlashSelection::KernelAndNormal => {
+                    let kernel = kernel
+                        .as_deref()
+                        .expect("kernel present for KernelAndNormal");
+                    (linear_fe_control(kernel, normal)?, Some(kernel))
+                }
+                FlashSelection::NormalOnly => {
+                    // Keep the audited profile gate (identity/structure/ambiguity
+                    // refusal), then build the control generically from the table.
+                    let _profile = select_oem_profile(&req.drive_model, normal)?;
+                    (oem_normal_control(normal)?, None)
+                }
+            };
+            // Summarize what will be written and what is missing, then confirm.
+            confirm_proceed(&flash_summary(kernel.as_deref(), Some(normal)))?;
+            crate::pioneer_flash::execute_flash(
+                dev,
+                &control,
+                kernel_to_write,
+                normal,
+                kernel_mode,
+            )?;
+            println!(
+                "{}",
+                crate::style::green("flash complete; drive returned ready.")
+            );
+            Ok(())
+        })())
     }
     fn family(&self) -> Family {
         Family::Pioneer
@@ -821,27 +1133,90 @@ impl DriveFamily for Pioneer {
     fn backup_extension(&self) -> Option<&'static str> {
         Some("tar")
     }
-    fn validate_backup_template(&self, template: Option<&[u8]>) -> Result<()> {
-        let template = template.ok_or_else(|| {
-            anyhow::anyhow!("Pioneer encrypted backup requires a matching signed OEM template")
-        })?;
-        crate::pioneer_backup::validate_template(template)
+    fn backup_kind(&self) -> super::BackupKind {
+        // The advisory is decided per-capture in `backup_notice`, not statically:
+        // a byte-exact OEM capture gets no warning.
+        super::BackupKind {
+            infix: "candidate",
+            notice: None,
+        }
     }
-    fn capture_backup_with_template(
-        &self,
-        dev: &mut dyn ScsiDevice,
-        template: Option<&[u8]>,
-    ) -> Result<Vec<u8>> {
-        let template = template.ok_or_else(|| {
-            anyhow::anyhow!("Pioneer encrypted backup requires a matching signed OEM template")
-        })?;
-        crate::pioneer_backup::capture_reference_backup(dev, template)
+    fn backup_notice(&self, bytes: &[u8]) -> super::BackupNotice {
+        use super::BackupNotice;
+        let components = crate::pioneer_backup::component_roles(bytes);
+        let kernel = components.iter().find(|(role, _)| *role == "kernel");
+        let normal = components.iter().find(|(role, _)| *role == "main");
+        // Partial capture: one region could not be read. Name what was saved and
+        // point the user at `recover` for a deeper read of the missing region.
+        match (kernel, normal) {
+            (Some((_, kname)), None) => {
+                return BackupNotice::Unverified(format!(
+                    "PARTIAL BACKUP: saved the Kernel only (as {kname}). The Normal region could \
+                     not be read — run `freemkv-flash recover <device>` to attempt a deeper read."
+                ))
+            }
+            (None, Some((_, nname))) => {
+                return BackupNotice::Unverified(format!(
+                    "PARTIAL BACKUP: saved the Normal only (as {nname}). The Kernel region could \
+                     not be read — run `freemkv-flash recover <device>` to attempt a deeper read."
+                ))
+            }
+            _ => {}
+        }
+        let p = crate::pioneer_backup::package_provenance(bytes);
+        match (p.kernel_oem, p.normal_oem) {
+            (true, true) => BackupNotice::VerifiedOem(
+                "OEM-VERIFIED: kernel and normal are byte-exact OEM originals."
+                    .to_string(),
+            ),
+            (true, false) => BackupNotice::Unverified(
+                "PARTIAL OEM: kernel is a byte-exact OEM original; the normal is NOT recognized OEM \
+                 (zero seed + zeroed signature sentinel). Physical restore and drive acceptance are untested."
+                    .to_string(),
+            ),
+            (false, true) => BackupNotice::Unverified(
+                "PARTIAL OEM: normal is a byte-exact OEM original; the kernel is NOT recognized OEM \
+                 (zero placeholders). Physical restore and drive acceptance are untested."
+                    .to_string(),
+            ),
+            (false, false) => BackupNotice::Unverified(
+                "UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed \
+                 signature sentinel). Physical restore and drive acceptance are untested."
+                    .to_string(),
+            ),
+        }
+    }
+    fn capture_backup(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+        // Dump the live H8/SAT image regions and re-wrap them as byte-exact OEM
+        // envelopes where recognized, else zero-sentinel. Read-only: no write.
+        crate::pioneer_backup::capture_signed_candidate(dev)
+    }
+    fn capture_recover(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+        // Same capture, but a region the strict read cannot get is retried with a
+        // deeper, instability-tolerant salvage read. Read-only.
+        crate::pioneer_backup::capture_recover_candidate(dev)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
-        crate::pioneer_backup::validate_reference_backup(bytes, target_model)
+        // Per-component structural/codec/signature checks; accepts 1 or 2
+        // components (a partial capture still yields a valid single-component
+        // archive).
+        crate::pioneer_backup::validate_envelope_package(bytes, target_model)?;
+        Ok(bytes.to_vec())
     }
-    fn is_supported(&self) -> bool {
-        false
+    fn capabilities(&self) -> Capabilities {
+        // Identity, OEM backup, and a gated live OEM write (via flash_bundle)
+        // are implemented; the image-chunk flash_open/chunk/close stay off.
+        Capabilities {
+            info: true,
+            backup: true,
+            // Live write is the Normal-only OEM update session executed by
+            // `flash_bundle`; still gated by --execute/--i-understand-risk and a
+            // mandatory pre-flash backup in the engine.
+            flash: true,
+            // A per-component capture: if a region read fails, `recover` retries
+            // it with a deeper, instability-tolerant read.
+            recover: true,
+        }
     }
     fn dump_supported(&self) -> bool {
         false

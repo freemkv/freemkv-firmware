@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 # freemkv-firmware versions INDEPENDENTLY of the rest of the freemkv stack.
-version = "0.9.2"
+version = "0.10.0"
 edition = "2021"
 rust-version = "1.94"
 license = "MIT"
@@ -19,3 +19,12 @@ repository = "https://github.com/freemkv/freemkv-firmware"
 
 [workspace.lints.clippy]
 all = "warn"
+
+# Shipped-binary build flags. Applied to every release artifact (CLI + GUI,
+# all platforms) so they are consistently small and symbol-free, not just the
+# .deb (which also strips at package time). `strip` removes symbols; thin LTO +
+# one codegen unit trade build time for a smaller, faster binary.
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

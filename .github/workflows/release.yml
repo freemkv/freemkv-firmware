@@ -262,3 +262,410 @@ jobs:
             freemkv-firmware/*.tar.gz
             freemkv-firmware/*.zip
             freemkv-firmware/*.sha256
+
+  # ── Linux packages (.deb) ───────────────────────────────────────────────────
+  # Mirrors freemkv's deb.yml / packaging/deb/build.py conventions: amd64,
+  # Ubuntu 24.04 baseline, stable `<pkg>-amd64.deb` names with a `.sha256`
+  # sidecar, built with dpkg-deb --root-owner-group and linted with lintian.
+  #   freemkv-flash, freemkv-fw           static musl CLIs (the `build` leg's
+  #                                       binaries), no Depends -- like freemkv-cli
+  #   freemkv-flash-gui, freemkv-fw-gui   glibc eframe/egui desktop apps, built
+  #                                       here (the musl leg cannot link a GUI)
+  # Four distinct package names, so none Conflicts/Replaces another (freemkv's
+  # app/CLI pair share /usr/bin/freemkv; these do not share a path). Unsigned,
+  # like every other asset here. No AppImage/snap/flatpak: freemkv's GTK AppImage
+  # bundles GTK; eframe loads its windowing/GL libraries at runtime instead, so a
+  # plain .deb with those as dependencies is the matching, simplest shape.
+  linux-packages:
+    needs: [resolve-msrv, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: freemkv/.github/.github/actions/checkout-siblings@v1
+        with:
+          checkout: libfreemkv freemkv-unlock
+          ref: main
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+          shared-key: freemkv-firmware-release
+          key: x86_64-unknown-linux-gnu-gui
+      # eframe/egui/rfd have no -dev system deps (winit, GL and the portal
+      # backend are loaded at runtime), unlike freemkv's GTK4/libadwaita app.
+      - name: Install build and package tools
+        working-directory: .
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config dpkg-dev lintian xvfb desktop-file-utils
+      - name: Build the GUIs (glibc, release)
+        run: cargo build --release --locked --target x86_64-unknown-linux-gnu -p freemkv-flash-gui -p freemkv-fw-gui
+      - uses: actions/download-artifact@v4
+        with:
+          name: freemkv-linux-x86_64
+          path: freemkv-firmware/musl-cli
+      - name: Build the .deb packages
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          WS="$PWD"
+          ver="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          epoch="$(git log -1 --format=%ct)"
+          maint='Matthew Jackson <1085847+MattJackson@users.noreply.github.com>'
+          out="$WS/deb-package"; mkdir -p "$out"
+          tar xzf musl-cli/freemkv-flash-linux-x86_64.tar.gz -C musl-cli --one-top-level=flash
+          tar xzf musl-cli/freemkv-fw-linux-x86_64.tar.gz -C musl-cli --one-top-level=fw
+          # The CLI must be the static binary the deb advertises as dependency-free.
+          for b in musl-cli/flash/freemkv-flash musl-cli/fw/freemkv-fw; do
+            if readelf -lW "$b" | grep -Eq '^\s*INTERP\b'; then echo "::error::$b is not static"; exit 1; fi
+          done
+
+          # mkdeb <pkg> <binary> <depends> <recommends> <summary> <long description> <homepage-slug> [gui]
+          mkdeb() {
+            local pkg="$1" bin="$2" depends="$3" recommends="$4" summary="$5" long="$6" slug="$7" gui="${8:-}"
+            local root; root="$(mktemp -d)"; local doc="$root/usr/share/doc/$pkg"
+            install -d -m 755 "$root/usr/bin" "$doc" "$root/usr/share/man/man1" "$root/DEBIAN"
+            cp "$bin" "$root/usr/bin/$pkg"; strip --strip-unneeded "$root/usr/bin/$pkg"
+            chmod 755 "$root/usr/bin/$pkg"
+            { cat LICENSE; printf '\nUpstream: https://github.com/freemkv/freemkv-firmware\n'; } > "$doc/copyright"
+            printf '%s (%s) unstable; urgency=medium\n\n  * Package the upstream release for Ubuntu 24.04 amd64.\n\n -- %s  %s\n' \
+              "$pkg" "$ver" "$maint" "$(date -u -R -d "@$epoch")" | gzip -9n > "$doc/changelog.Debian.gz"
+            gzip -9n < CHANGELOG.md > "$doc/changelog.gz"
+            printf '.TH %s 1\n.SH NAME\n%s \\- %s\n.SH SEE ALSO\nhttps://freemkv.org/firmware/%s/\n' \
+              "$(echo "$pkg" | tr a-z A-Z)" "$pkg" "$summary" "$slug" | gzip -9n > "$root/usr/share/man/man1/$pkg.1.gz"
+            if [ -n "$gui" ]; then
+              install -d -m 755 "$root/usr/share/applications" "$root/usr/share/icons/hicolor/256x256/apps"
+              cp "crates/$pkg/assets/freemkv.png" "$root/usr/share/icons/hicolor/256x256/apps/org.freemkv.$pkg.png"
+              printf '[Desktop Entry]\nType=Application\nName=%s\nComment=%s\nExec=%s\nIcon=org.freemkv.%s\nTerminal=false\nCategories=AudioVideo;Utility;\n' \
+                "$gui" "$summary" "$pkg" "$pkg" > "$root/usr/share/applications/org.freemkv.$pkg.desktop"
+              desktop-file-validate "$root/usr/share/applications/org.freemkv.$pkg.desktop" 2>/dev/null || true
+            else
+              install -d -m 755 "$root/usr/share/lintian/overrides"
+              printf '%s: statically-linked-binary [usr/bin/%s]\n' "$pkg" "$pkg" > "$root/usr/share/lintian/overrides/$pkg"
+            fi
+            find "$root" -type d -exec chmod 755 {} +
+            find "$root" -type f ! -path "$root/usr/bin/*" -exec chmod 644 {} +
+            local size; size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
+            {
+              printf 'Package: %s\nVersion: %s\nArchitecture: amd64\nSection: utils\nPriority: optional\n' "$pkg" "$ver"
+              printf 'Maintainer: %s\nInstalled-Size: %s\n' "$maint" "$size"
+              [ -n "$depends" ] && printf 'Depends: %s\n' "$depends"
+              [ -n "$recommends" ] && printf 'Recommends: %s\n' "$recommends"
+              printf 'Homepage: https://freemkv.org/firmware/%s/\nDescription: %s\n%s\n' "$slug" "$summary" "$long"
+            } > "$root/DEBIAN/control"
+            (cd "$root" && find . -type f ! -path './DEBIAN/*' -printf '%P\n' | sort | xargs md5sum) > "$root/DEBIAN/md5sums"
+            SOURCE_DATE_EPOCH="$epoch" dpkg-deb --root-owner-group --build "$root" "$out/$pkg-amd64.deb"
+            sha256sum "$out/$pkg-amd64.deb" | sed "s#$out/##" > "$out/$pkg-amd64.deb.sha256"
+          }
+
+          flash_long=' Reads, backs up and flashes optical-drive firmware (MediaTek MT19xx and\n Renesas; Pioneer live writes gated). info and dump are read-only; flash\n writes and can brick a drive given the wrong image.\n'
+          fw_long=' Builds and verifies modified optical-drive firmware images offline\n (MediaTek MT19xx integrity tables). It does not touch a drive itself;\n pair it with freemkv-flash to write one.\n'
+          gui_flash_long=' Minimal desktop app for freemkv-flash: drive info, dump and flash.\n'
+          gui_fw_long=' Minimal desktop app for freemkv-fw: create, verify, sign and probe.\n'
+
+          mkdeb freemkv-flash musl-cli/flash/freemkv-flash '' '' \
+            'freemkv drive firmware flasher and dumper (command line)' "$(printf "$flash_long")" flash
+          mkdeb freemkv-fw musl-cli/fw/freemkv-fw '' '' \
+            'freemkv drive firmware modifier (command line)' "$(printf "$fw_long")" modify
+
+          # GUI runtime deps: dpkg-shlibdeps for what is linked, plus the
+          # libraries eframe/winit/glow dlopen at run time (invisible to it).
+          shlibs() {
+            local d; d="$(mktemp -d)"; mkdir "$d/debian"
+            printf 'Source: x\n\nPackage: x\nArchitecture: amd64\nDescription: x\n' > "$d/debian/control"
+            (cd "$d" && dpkg-shlibdeps -O "$1" | sed -n 's/^shlibs:Depends=//p')
+          }
+          dl='libgl1, libxkbcommon0, libwayland-client0, libx11-6'
+          rec='libxcursor1, libxi6, libxrandr2, libvulkan1, xdg-desktop-portal'
+          for g in flash:Flash:flash fw:Modify:modify; do
+            IFS=: read -r t label slug <<< "$g"
+            bin="target/x86_64-unknown-linux-gnu/release/freemkv-$t-gui"
+            long="$(printf "$([ "$t" = flash ] && echo "$gui_flash_long" || echo "$gui_fw_long")")"
+            mkdeb "freemkv-$t-gui" "$bin" "$(shlibs "$PWD/$bin"), $dl" "$rec" \
+              "freemkv $label desktop app" "$long" "$slug" "freemkv $label"
+          done
+          ls -l "$out"
+      - name: Lint and inspect the packages
+        run: |
+          set -euo pipefail
+          for deb in deb-package/*.deb; do
+            lintian --fail-on error "$deb"
+            dpkg-deb --info "$deb"; dpkg-deb --contents "$deb"
+          done
+      # Install into the runner (24.04, the baseline), run the CLIs, and make
+      # sure each GUI is still running after 10s under a virtual display
+      # (124 = timed out = alive), as freemkv's deb/AppImage jobs do.
+      - name: Install and smoke-test
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends ./deb-package/*.deb libgl1-mesa-dri
+          for t in flash fw; do
+            freemkv-$t --version | tee v.log
+            grep -Fq "$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')" v.log
+            ldd /usr/bin/freemkv-$t 2>&1 | grep -Eq 'statically linked|not a dynamic executable'
+            rc=0; xvfb-run -a timeout 10 /usr/bin/freemkv-$t-gui || rc=$?
+            [ "$rc" = 124 ] || { echo "::error::freemkv-$t-gui exited early (rc=$rc)"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: freemkv-firmware/deb-package/*
+          if-no-files-found: error
+      - name: Publish to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            freemkv-firmware/deb-package/*.deb
+            freemkv-firmware/deb-package/*.sha256
+
+  # ── Windows installer (Inno Setup) + portable zip ───────────────────────────
+  # Mirrors freemkv's build-windows job and packaging/windows/freemkv.iss:
+  # a per-user installer (PrivilegesRequired=lowest, %LOCALAPPDATA%\Programs),
+  # PATH added/removed on install/uninstall, UNSIGNED, plus a portable zip.
+  # One installer carries all four firmware binaries: the two CLIs (console)
+  # and the two GUIs (windowed). Assets, stable unversioned names:
+  #   freemkv-firmware-x86_64-windows.zip   (+ .sha256)
+  #   freemkv-firmware-x86_64-windows-setup.exe (+ .sha256)
+  # The per-binary freemkv-<bin>-windows-x86_64.zip archives from `build` stay.
+  # No winget manifest, by decision.
+  windows-installer:
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: freemkv-windows-x86_64
+          path: dl
+      - name: Stage the four binaries and zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force stage | Out-Null
+          foreach ($b in 'freemkv-flash','freemkv-fw','freemkv-flash-gui','freemkv-fw-gui') {
+            Expand-Archive -Path "dl/$b-windows-x86_64.zip" -DestinationPath stage -Force
+            if (-not (Test-Path "stage/$b.exe")) { throw "$b-windows-x86_64.zip did not contain $b.exe" }
+          }
+          Compress-Archive -Path stage/* -DestinationPath freemkv-firmware-x86_64-windows.zip -Force
+      - name: Write the installer script
+        shell: pwsh
+        run: |
+          @'
+          ; Per-user installer for the freemkv firmware tools. Built by release.yml:
+          ;   iscc /DAppVersion=X.Y.Z /DBinDir=<dir with the four .exe> /O<out> freemkv-firmware.iss
+          ; The CLIs are console programs on PATH; the GUIs get Start-menu shortcuts.
+          #ifndef AppVersion
+            #error AppVersion must be defined (/DAppVersion=X.Y.Z)
+          #endif
+          #ifndef BinDir
+            #error BinDir must be defined (/DBinDir=...)
+          #endif
+
+          [Setup]
+          ; Never change AppId: it is how upgrades and the uninstaller find this install.
+          AppId={{__GUID__}
+          AppName=freemkv firmware tools
+          AppVersion={#AppVersion}
+          AppVerName=freemkv firmware tools {#AppVersion}
+          AppPublisher=freemkv
+          AppPublisherURL=https://github.com/freemkv/freemkv-firmware
+          VersionInfoVersion={#AppVersion}
+          PrivilegesRequired=lowest
+          DefaultDirName={localappdata}\Programs\freemkv-firmware
+          DisableDirPage=yes
+          DisableProgramGroupPage=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          MinVersion=10.0
+          ChangesEnvironment=yes
+          SetupIconFile=crates\freemkv-flash-gui\assets\freemkv.ico
+          UninstallDisplayIcon={app}\freemkv-flash-gui.exe
+          UninstallDisplayName=freemkv firmware tools
+          OutputBaseFilename=freemkv-firmware-x86_64-windows-setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+
+          [Tasks]
+          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+          [Files]
+          Source: "{#BinDir}\freemkv-flash.exe"; DestDir: "{app}"; Flags: ignoreversion
+          Source: "{#BinDir}\freemkv-fw.exe"; DestDir: "{app}"; Flags: ignoreversion
+          Source: "{#BinDir}\freemkv-flash-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
+          Source: "{#BinDir}\freemkv-fw-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+          [Icons]
+          Name: "{autoprograms}\freemkv Flash"; Filename: "{app}\freemkv-flash-gui.exe"
+          Name: "{autoprograms}\freemkv Modify"; Filename: "{app}\freemkv-fw-gui.exe"
+          Name: "{autodesktop}\freemkv Flash"; Filename: "{app}\freemkv-flash-gui.exe"; Tasks: desktopicon
+          Name: "{autodesktop}\freemkv Modify"; Filename: "{app}\freemkv-fw-gui.exe"; Tasks: desktopicon
+
+          [Code]
+          const
+            EnvKey = 'Environment';
+
+          function PathIndex(Paths, Dir: string): Integer;
+          begin
+            Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Paths) + ';');
+          end;
+
+          procedure AddToPath(Dir: string);
+          var
+            Paths: string;
+          begin
+            if not RegQueryStringValue(HKCU, EnvKey, 'Path', Paths) then
+              Paths := '';
+            if PathIndex(Paths, Dir) > 0 then
+              exit;
+            if (Paths <> '') and (Copy(Paths, Length(Paths), 1) <> ';') then
+              Paths := Paths + ';';
+            if not RegWriteExpandStringValue(HKCU, EnvKey, 'Path', Paths + Dir) then
+              SuppressibleMsgBox('Could not add ' + Dir + ' to your PATH. Add it by hand to run freemkv-flash from a console.', mbError, MB_OK, IDOK);
+          end;
+
+          procedure RemoveFromPath(Dir: string);
+          var
+            Paths: string;
+            P: Integer;
+          begin
+            if not RegQueryStringValue(HKCU, EnvKey, 'Path', Paths) then
+              exit;
+            P := PathIndex(Paths, Dir);
+            if P = 0 then
+              exit;
+            Paths := ';' + Paths + ';';
+            Delete(Paths, P, Length(Dir) + 1);
+            Paths := Copy(Paths, 2, Length(Paths) - 2);
+            if not RegWriteExpandStringValue(HKCU, EnvKey, 'Path', Paths) then
+              SuppressibleMsgBox('Could not remove ' + Dir + ' from your PATH. Remove it by hand.', mbError, MB_OK, IDOK);
+          end;
+
+          procedure CurStepChanged(CurStep: TSetupStep);
+          begin
+            if CurStep = ssPostInstall then
+              AddToPath(ExpandConstant('{app}'));
+          end;
+
+          procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+          begin
+            if CurUninstallStep = usPostUninstall then
+              RemoveFromPath(ExpandConstant('{app}'));
+          end;
+          '@.Replace('__GUID__', 'B9F92368-31D9-48B8-8A1D-8BE48F476B1C') | Set-Content -Encoding utf8 freemkv-firmware.iss
+      - name: Build the installer
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --version 6.4.3 -y --no-progress
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          # A branch dispatch has no version tag; the installer only needs a numeric one.
+          $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:TAG.TrimStart('v') } else { '0.0.0' }
+          & $iscc "/DAppVersion=$ver" "/DBinDir=$((Resolve-Path stage).Path)" "/O$PWD" freemkv-firmware.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc exited $LASTEXITCODE" }
+      # Round-trip: files, shortcuts and PATH land; uninstall removes them and
+      # leaves the user's other PATH entries intact.
+      - name: Verify the installer
+        shell: pwsh
+        run: |
+          $dir = "$env:LOCALAPPDATA\Programs\freemkv-firmware"
+          $lnks = "freemkv Flash.lnk","freemkv Modify.lnk" | ForEach-Object { "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$_" }
+          $userPath = { [Environment]::GetEnvironmentVariable('Path', 'User') }
+          $keep = @("$env:RUNNER_TEMP\keep-a", "$env:RUNNER_TEMP\keep-b")
+          [Environment]::SetEnvironmentVariable('Path', ((@((& $userPath) -split ';') + $keep) | Where-Object { $_ }) -join ';', 'User')
+          $before = (& $userPath) -split ';'
+          Start-Process -Wait ./freemkv-firmware-x86_64-windows-setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+          foreach ($f in 'freemkv-flash.exe','freemkv-fw.exe','freemkv-flash-gui.exe','freemkv-fw-gui.exe','unins000.exe') {
+            if (-not (Test-Path "$dir\$f")) { throw "installer did not create $dir\$f" }
+          }
+          foreach ($l in $lnks) { if (-not (Test-Path $l)) { throw "installer did not create $l" } }
+          if ((& $userPath) -split ';' -notcontains $dir) { throw "installer did not add $dir to the user PATH" }
+          foreach ($t in 'freemkv-flash','freemkv-fw') {
+            & "$dir\$t.exe" --version
+            if ($LASTEXITCODE -ne 0) { throw "installed $t --version exited $LASTEXITCODE" }
+          }
+          Start-Process -Wait "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+          # The uninstaller relaunches itself from %TEMP%, so -Wait can return early.
+          $done = { -not (Test-Path "$dir\freemkv-flash.exe") -and ((& $userPath) -split ';' -notcontains $dir) }
+          for ($i = 0; $i -lt 60 -and -not (& $done); $i++) { Start-Sleep 1 }
+          if (Test-Path "$dir\freemkv-flash.exe") { throw "uninstaller left $dir\freemkv-flash.exe" }
+          if ((& $userPath) -split ';' -contains $dir) { throw "uninstaller left $dir on the user PATH" }
+          foreach ($l in $lnks) { if (Test-Path $l) { throw "uninstaller left $l" } }
+          $after = (& $userPath) -split ';'
+          if (Compare-Object $before $after -SyncWindow 0) { throw "uninstall changed other user PATH entries" }
+      - name: Checksums
+        shell: bash
+        run: |
+          A=freemkv-firmware-x86_64-windows
+          sha256sum "$A.zip" > "$A.zip.sha256"
+          sha256sum "$A-setup.exe" > "$A-setup.exe.sha256"
+      - name: Publish to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            freemkv-firmware-x86_64-windows.zip
+            freemkv-firmware-x86_64-windows.zip.sha256
+            freemkv-firmware-x86_64-windows-setup.exe
+            freemkv-firmware-x86_64-windows-setup.exe.sha256
+
+  # Refresh the Homebrew tap (freemkv/homebrew-tap) to this release: the
+  # freemkv-flash / freemkv-fw formulae and their -gui casks. update.sh reads the
+  # published release assets and hashes them itself. Tag pushes only -- a branch
+  # workflow_dispatch publishes no Release to point the tap at. Same auth and
+  # flow as the freemkv app's update-homebrew-tap job.
+  update-homebrew-tap:
+    needs: [build]
+    if: always() && needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update the tap to this release
+        env:
+          GH_TOKEN: ${{ secrets.ORG_DISPATCH_TOKEN }}
+          VER: ${{ github.ref_name }}
+          # Free-text actor passed via env, not interpolated into the run script.
+          ACTOR: ${{ github.actor }}
+          # update.sh downloads the release assets from this repo.
+          FMKV_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ -n "${GH_TOKEN:-}" ] || {
+            echo "::warning::ORG_DISPATCH_TOKEN is not set — the Homebrew tap was NOT updated"
+            echo "::warning::brew install will keep serving the previous release until it is"
+            exit 0
+          }
+          git clone --depth 1 \
+            "https://x-access-token:$GH_TOKEN@github.com/freemkv/homebrew-tap.git" tap
+          cd tap
+          ./update.sh "${VER#v}"
+          if git diff --quiet; then
+            echo "tap already at ${VER#v} — nothing to do"
+            exit 0
+          fi
+          git config user.name  "$ACTOR"
+          git config user.email "$ACTOR@users.noreply.github.com"
+          git commit -aqm "freemkv-firmware ${VER#v}"
+          # The app release job pushes to the same branch; rebase and retry if
+          # it landed first.
+          for i in 1 2 3; do
+            git push && break
+            git pull --rebase -q
+          done
+          echo "tap updated to ${VER#v}" >> "$GITHUB_STEP_SUMMARY"

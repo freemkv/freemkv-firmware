@@ -1,0 +1,37 @@
+{
+  "schema": "pioneer-crossflash-families-v1",
+  "purpose": "Backup/floor for the derived kernel<->Normal ABI compatibility check. A crossflash is allowed out-of-the-box iff the drive's SAT/controller_id and the candidate firmware's SAT belong to the same family here. The ABI check, when available, is primary; this table is the fallback when the ABI token cannot be read, and a cross-check otherwise.",
+  "match_key": "sat",
+  "match_key_notes": "Match on the 16-bit SAT/controller_id (hex, e.g. 8A10), NOT the model name. Model strings are display-only and collapse distinct families: BDR-US03 = 8510/8511 (F3) AND 8590/8591 (F4); BDR-213T = 9200/9201 (F11) AND 9400/9401 (F13); BDR-BDS7 = 8D30/8D31 (F7) AND 8E20/8E21 (F8); BDR-US02 = 8410 (F3) AND 8490 (F4). SAT is read from the firmware plaintext banner 'Hardware Version : SAT xxxx' (parse_banner) on both the on-drive/backup image and the candidate image; the drive also reports it live.",
+  "gate": {
+    "same_sat": "same-identity reflash -> allow out-of-the-box",
+    "same_family": "crossflash -> allow out-of-the-box",
+    "different_family": "deny unless --allow-crossflash (force) -> user's risk, explicitly not on us",
+    "downgrade_note": "A same-SAT lower-revision write is governed separately by the 0xFE kernel generation marker, not by this table."
+  },
+  "provenance": {
+    "families": "BDRFlash.exe symmetric family-membership gate (dispatch VA 0x40c8a2, helper 0x402ac1) — authoritative.",
+    "trev": "trev.bot flash 0.6.0-beta directional source->target routes (trevbot-drive-helper.exe PyInstaller catalogs).",
+    "autoflasher": "pioneer autoflasher UD03->UD04 (ships + performs F3 8510/8511 -> 8A10); supplies controller_id<->model-string names.",
+    "corrections": [
+      "DROPPED 8590->8691 from the prior crossflash_table.md: 8691 appears in none of the three tools; 8590 is family F4.",
+      "ADDED via families: 8410, 8490 (F3/F4 US02), 9330/9331 (F12 BDS8).",
+      "HOLD 8591->8A10: trev-only, contradicts BDRFlash's F4/F3 partition; NOT merged (left in F4)."
+    ]
+  },
+  "families": [
+    {"id": "F1",  "members": [{"sat": "8231", "model": "BDR-XD05"}, {"sat": "8232", "model": "BDR-XD05"}, {"sat": "8B30", "model": "BDR-XS06/XD06"}], "tools": ["bdrflash", "trev"]},
+    {"id": "F2",  "members": [{"sat": "8301", "model": "BDR-208"}, {"sat": "8600", "model": "BDR-209"}, {"sat": "8800", "model": "BDR-211"}], "tools": ["bdrflash", "trev"]},
+    {"id": "F3",  "members": [{"sat": "8410", "model": "BDR-US02"}, {"sat": "8510", "model": "BDR-US03"}, {"sat": "8511", "model": "BDR-US03"}, {"sat": "8A10", "model": "BDR-US04"}], "tools": ["bdrflash", "trev", "autoflasher"]},
+    {"id": "F4",  "members": [{"sat": "8490", "model": "BDR-US02"}, {"sat": "8590", "model": "BDR-US03"}, {"sat": "8591", "model": "BDR-US03"}], "tools": ["bdrflash"]},
+    {"id": "F5",  "members": [{"sat": "8601", "model": "BDR-209"}, {"sat": "8801", "model": "BDR-211"}], "tools": ["bdrflash", "trev"]},
+    {"id": "F6",  "members": [{"sat": "8721", "model": "BDR-XS06"}, {"sat": "8722", "model": "BDR-XS06"}], "tools": ["bdrflash"]},
+    {"id": "F7",  "members": [{"sat": "8D30", "model": "BDR-XD07/BDS7"}, {"sat": "8D31", "model": "BDR-XD07U/BDS7"}], "tools": ["bdrflash", "trev"]},
+    {"id": "F8",  "members": [{"sat": "8E20", "model": "BDR-XS07/BDS7"}, {"sat": "8E21", "model": "BDR-XS07U/BDS7"}], "tools": ["bdrflash"]},
+    {"id": "F9",  "members": [{"sat": "8F00", "model": "BDR-212/212T"}, {"sat": "8F01", "model": "BDR-S12U/212T"}], "tools": ["bdrflash", "trev"]},
+    {"id": "F10", "members": [{"sat": "9000", "model": "BDR-X12/X12T"}, {"sat": "9001", "model": "BDR-X12U/X12T"}], "tools": ["bdrflash"]},
+    {"id": "F11", "members": [{"sat": "9200", "model": "BDR-213/213T"}, {"sat": "9201", "model": "BDR-S13U/213T"}], "tools": ["bdrflash", "trev"]},
+    {"id": "F12", "members": [{"sat": "9330", "model": "BDR-XD08U/BDS8"}, {"sat": "9331", "model": "BDR-XD08U/BDS8"}], "tools": ["bdrflash", "trev"]},
+    {"id": "F13", "members": [{"sat": "9400", "model": "BDR-X13/213T"}, {"sat": "9401", "model": "BDR-X13U/213T"}], "tools": ["bdrflash", "trev"]}
+  ]
+}

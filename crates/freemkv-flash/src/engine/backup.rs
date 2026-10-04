@@ -232,13 +232,31 @@ pub(super) fn save_validated(
         let saved = std::fs::read(&temp)?;
         validate(&saved).context("saved artifact failed read-back validation")?;
         // Same-directory hard link atomically publishes a complete file and
-        // refuses to replace an existing backup at the destination.
-        std::fs::hard_link(&temp, path).with_context(|| {
-            format!(
-                "publishing backup {} (existing backups are never overwritten)",
-                path.display()
-            )
-        })?;
+        // refuses to replace an existing backup at the destination. Filesystems
+        // without hard links (FAT32/exFAT USB sticks, some SMB mounts) reject
+        // it; fall back to a rename so the captured backup is never silently
+        // discarded. The earlier `path.exists()` check still guards overwrite.
+        match std::fs::hard_link(&temp, path) {
+            Ok(()) => {}
+            Err(_) => {
+                // `rename` overwrites on unix, so re-check the destination first:
+                // if something created it since the earlier `exists()` check
+                // (a race, or the hard_link failed with AlreadyExists), refuse
+                // rather than clobber an existing backup.
+                if path.exists() {
+                    bail!(
+                        "backup {} already exists (existing backups are never overwritten)",
+                        path.display()
+                    );
+                }
+                std::fs::rename(&temp, path).with_context(|| {
+                    format!(
+                        "publishing backup {} (existing backups are never overwritten)",
+                        path.display()
+                    )
+                })?;
+            }
+        }
         #[cfg(unix)]
         {
             let parent = path

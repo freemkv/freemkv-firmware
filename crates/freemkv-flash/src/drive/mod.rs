@@ -310,6 +310,9 @@ pub struct FlashRequest {
     /// EXPERIMENTAL crossflash: allow flashing a DIFFERENT same-chipset model's
     /// firmware (waives the model match; never the chipset-family gate).
     pub allow_crossflash: bool,
+    /// Skip the mandatory pre-flash backup (dangerous: no rollback if the write
+    /// fails). Default `false`: a failed backup aborts the flash.
+    pub skip_backup: bool,
 }
 
 /// A per-unit region to restore from a `.tar` dump (targeted write).
@@ -329,9 +332,89 @@ pub struct RestoreRegion<'a> {
 /// generic [`crate::engine`] composes these into the `info` / `backup` / `flash`
 /// commands. A new family only has to supply its own CDBs; the engine loop is
 /// unchanged.
+/// The three user-facing capabilities a backend may offer, as one declarative
+/// record. The CLI derives the `info` capability line and the `backup`/`flash`
+/// gates from this single source of truth rather than a scatter of booleans.
+///
+/// `info` (read-only identify/classify) is safe for every classified family;
+/// `backup` is a complete or candidate backup capture; `flash` is the WRITE
+/// path; `recover` is a deeper salvage backup. Today: MTK info+backup+flash,
+/// Pioneer info+backup+flash+recover, Unknown info only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Capabilities {
+    /// Read-only identify/classify (`info`) is available. Safe for any
+    /// classified family; effectively always `true`.
+    pub info: bool,
+    /// A complete or candidate firmware backup can be captured (`backup`).
+    pub backup: bool,
+    /// The WRITE path (`flash`) is implemented and may execute.
+    pub flash: bool,
+    /// A distinct deeper-read `recover` capture exists (a slower, retrying,
+    /// instability-tolerant salvage read). Families without it treat `recover`
+    /// as an ordinary backup.
+    pub recover: bool,
+}
+
+impl Capabilities {
+    /// Every standard capability on (MTK's proven live backup-and-flash path).
+    /// MTK has no distinct deeper recover: its backup is already a complete,
+    /// verified image, so `recover` falls back to a normal backup.
+    pub const fn all() -> Self {
+        Self {
+            info: true,
+            backup: true,
+            flash: true,
+            recover: false,
+        }
+    }
+}
+
+/// How a captured backup is presented to the user, so the engine labels every
+/// family's artifact without naming any chipset. `infix` is the filename part
+/// in `<model>_<rev>.<infix>.<ext>`; `notice`, when set, is an advisory line
+/// printed after the file is written (for artifacts that are not a proven
+/// rollback).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackupKind {
+    /// Filename infix: `backup` for a proven rollback, `candidate` otherwise.
+    pub infix: &'static str,
+    /// Advisory printed after writing, when the artifact is not proven.
+    pub notice: Option<&'static str>,
+}
+
+impl BackupKind {
+    /// A complete, proven rollback archive.
+    pub const PROVEN: Self = Self {
+        infix: "backup",
+        notice: None,
+    };
+}
+
+/// Provenance of a just-written backup, decided from the artifact's own bytes.
+/// The engine prints it without naming any chipset: a family reports whether
+/// what it captured is byte-exact OEM or a reconstruction, and the engine colors
+/// the line accordingly.
+pub enum BackupNotice {
+    /// Every component is byte-exact OEM; the capture is a faithful original.
+    VerifiedOem(String),
+    /// At least one component is a reconstruction (made-up seed/signature), so
+    /// physical restore and drive acceptance are untested.
+    Unverified(String),
+    /// Nothing to say about provenance.
+    None,
+}
+
+/// A firmware command-protocol backend for one chipset family. The engine
+/// drives every family through this trait and names no specific chipset: all
+/// per-family behavior (capabilities, capture, validation, labeling, offline
+/// planning) is expressed here, so adding a family touches no orchestration.
 pub trait FirmwareBackend: Sync {
     /// The family this implementation handles.
     fn family(&self) -> Family;
+
+    /// The user-facing capabilities this backend offers. Single source of truth
+    /// for the `info` label and the `backup`/`flash` gates (see [`Capabilities`]).
+    fn capabilities(&self) -> Capabilities;
 
     /// Stable command-protocol label, distinct from device vendor and chip ISA.
     fn backend_name(&self) -> &'static str;
@@ -348,6 +431,25 @@ pub trait FirmwareBackend: Sync {
         None
     }
 
+    /// How this backend's captured backup is labeled (filename infix + optional
+    /// advisory). Defaults to a proven rollback; a backend whose backup is an
+    /// unverified candidate overrides this. Lets the engine present any family's
+    /// artifact without naming a chipset.
+    fn backup_kind(&self) -> BackupKind {
+        BackupKind::PROVEN
+    }
+
+    /// Provenance advisory for a just-written backup, decided from its bytes.
+    /// The default maps `backup_kind().notice` statically; a family that can
+    /// tell byte-exact OEM from a reconstruction overrides this to inspect the
+    /// artifact and only warn when a component is not OEM.
+    fn backup_notice(&self, _bytes: &[u8]) -> BackupNotice {
+        match self.backup_kind().notice {
+            Some(msg) => BackupNotice::Unverified(msg.to_string()),
+            None => BackupNotice::None,
+        }
+    }
+
     /// Capture one complete serialized backup file. The engine saves and
     /// verifies these bytes before issuing any update command.
     fn capture_backup(&self, _dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
@@ -357,29 +459,13 @@ pub trait FirmwareBackend: Sync {
         ))
     }
 
-    /// Capture with optional envelope templates. Backends must explicitly opt
-    /// into templates; unsupported options are never silently ignored.
-    fn capture_backup_with_template(
-        &self,
-        dev: &mut dyn ScsiDevice,
-        template: Option<&[u8]>,
-    ) -> Result<Vec<u8>> {
-        if template.is_some() {
-            return Err(anyhow::anyhow!(
-                "this backend does not accept backup templates"
-            ));
-        }
+    /// Capture a backup using a deeper, retrying, instability-tolerant read to
+    /// salvage a component that an ordinary [`Self::capture_backup`] could not
+    /// read off a struggling drive. The default is an ordinary backup, so a
+    /// family without a distinct recover (e.g. MTK) treats `recover` as
+    /// `backup`.
+    fn capture_recover(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         self.capture_backup(dev)
-    }
-
-    /// Validate backup inputs before querying or changing device state.
-    fn validate_backup_template(&self, template: Option<&[u8]>) -> Result<()> {
-        if template.is_some() {
-            return Err(anyhow::anyhow!(
-                "this backend does not accept backup templates"
-            ));
-        }
-        Ok(())
     }
 
     /// Validate a backup file for this device and return the update image it
@@ -430,8 +516,46 @@ pub trait FirmwareBackend: Sync {
         None
     }
 
-    /// Whether the WRITE (flash) path is actually implemented (only MTK today).
-    fn is_supported(&self) -> bool;
+    /// Whether this family's live flash is a whole-package OEM update session
+    /// ([`Self::flash_bundle`]) rather than the standard image-chunk loop. The
+    /// engine uses this to apply the shared safety gate + pre-flash backup and
+    /// then hand the execute flow to the bundle executor. Default `false`.
+    fn flash_is_bundle(&self) -> bool {
+        false
+    }
+
+    /// Whole-package (bundle) WRITE executor for families whose live flash is a
+    /// single OEM update session rather than the MTK image-chunk loop. Returns
+    /// `Some(result)` to own the execute flow (the engine has already run the
+    /// safety gate, tray guard, and pre-flash backup); `None` (default) lets the
+    /// engine use its standard image/restore flash path. `installed_backup` is the
+    /// pre-flash backup bytes (the installed firmware), when one was captured, so
+    /// the backend can route the flash (e.g. detect a downgrade/crossflash).
+    fn flash_bundle(
+        &self,
+        _dev: &mut dyn ScsiDevice,
+        _req: &FlashRequest,
+        _installed_backup: Option<&[u8]>,
+    ) -> Option<Result<()>> {
+        None
+    }
+
+    /// Verify a just-captured pre-flash backup actually covers the region(s) the
+    /// flash will overwrite, so it is a usable rollback. `input` is the flash
+    /// input (so the check can see which components will be written). The default
+    /// accepts any successful capture; a family whose capture can be PARTIAL
+    /// (e.g. Pioneer, which can return a Kernel-only archive when the Normal read
+    /// fails) must override this to reject a backup missing a to-be-written
+    /// component.
+    fn verify_preflash_backup(&self, _backup: &[u8], _input: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    /// Whether the WRITE (flash) path is implemented. Derived from
+    /// [`Self::capabilities`]; a convenience for existing call sites.
+    fn is_supported(&self) -> bool {
+        self.capabilities().flash
+    }
 
     /// Legacy diagnostic per-unit read capability. This is distinct from a
     /// complete rollback [`Self::capture_backup`] and never permits flash.
@@ -578,8 +702,14 @@ macro_rules! unsupported_drive_family {
             ) -> ::anyhow::Result<::core::option::Option<$crate::drive::ProbeEvidence>> {
                 Ok(None)
             }
-            fn is_supported(&self) -> bool {
-                false
+            fn capabilities(&self) -> $crate::drive::Capabilities {
+                // Classified-but-unsupported: identify only, never back up or write.
+                $crate::drive::Capabilities {
+                    info: true,
+                    backup: false,
+                    flash: false,
+                    recover: false,
+                }
             }
             fn read_dump(
                 &self,
