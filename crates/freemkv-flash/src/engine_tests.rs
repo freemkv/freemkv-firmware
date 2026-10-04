@@ -141,6 +141,7 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         predump_out: execute.then(fresh_backup_path),
         allow_crossflash: false,
         skip_backup: false,
+        recover: false,
     }
 }
 
@@ -211,7 +212,7 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
             vec![0xA5; 8],
         );
     let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
-    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out, false).unwrap_err();
+    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out, false, false).unwrap_err();
     assert!(format!("{err:#}").contains("incomplete hardware identity response"));
     assert!(dev.reads.iter().all(|cdb| {
         cdb.first() == Some(&0x12) || (cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1))
@@ -224,7 +225,7 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
 fn unknown_backend_backup_fails_without_reads_writes_or_file() {
     let mut dev = MockScsiDevice::new();
     let out = fresh_backup_path();
-    let err = backup(&mut dev, &*for_family(Family::Unknown), &out, false).unwrap_err();
+    let err = backup(&mut dev, &*for_family(Family::Unknown), &out, false, false).unwrap_err();
     assert!(format!("{err:#}").contains("no firmware backup capability"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
@@ -935,7 +936,7 @@ fn dump_refuses_unreadable_firmware_without_creating_archive() {
             "unreadable main",
         );
     let out = fresh_backup_path();
-    let err = backup(&mut dev, &Mtk, &out, false).unwrap_err();
+    let err = backup(&mut dev, &Mtk, &out, false, false).unwrap_err();
     assert!(err
         .to_string()
         .contains("complete restorable backup unavailable"));

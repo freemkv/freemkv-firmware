@@ -73,16 +73,21 @@ enum Command {
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
-    /// Backup using a deeper, retrying read to salvage a region a normal backup
-    /// could not read (e.g. a partially-damaged drive). Families without a
-    /// distinct recover (MTK) just run a normal backup.
-    Recover {
+    /// Salvage read: dump whatever firmware is on the drive, even if degraded.
+    /// A best-effort, unverified capture — NOT a validated backup. Use it to get
+    /// the firmware off a partially-damaged drive. `--force` stops trusting the
+    /// drive: it enters vendor kernel mode and reads everything it can.
+    Dump {
         /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
         /// Omit to auto-pick the only connected drive.
         device: Option<String>,
-        /// Output .tar path (defaults to `<model>_<rev>.<infix>.<ext>`).
+        /// Output path (defaults to `<model>_<rev>.<infix>.<ext>`).
         #[arg(short, long)]
         out: Option<PathBuf>,
+        /// Trust nothing: enter vendor kernel mode and read the full image no
+        /// matter what the drive reports (degraded/soft-bricked drives).
+        #[arg(long)]
+        force: bool,
     },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
@@ -141,6 +146,13 @@ struct FlashArgs {
     /// gate (MT1959->MT1959 only). Hardware-unvalidated — high brick risk.
     #[arg(long)]
     allow_crossflash: bool,
+    /// RECOVER a degraded/soft-bricked drive: stop trusting what the drive reports,
+    /// enter vendor kernel mode, and FORCE-WRITE the given firmware. Waives the
+    /// pre-flash backup and the identity/model/plan gates; only aborts if the drive
+    /// is unresponsive even to kernel mode. Still needs --execute --i-understand-risk.
+    /// EXPERIMENTAL, hardware-unvalidated — last-resort un-brick.
+    #[arg(long)]
+    recover: bool,
     /// Show the raw SCSI CDB sequence in the plan (default: clean summary).
     #[arg(short = 'v', long)]
     verbose: bool,
@@ -172,8 +184,10 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Some(Command::List) => cmd_list(),
         Some(Command::Info { device }) => cmd_info(device.as_deref()),
-        Some(Command::Backup { device, out }) => cmd_backup(device.as_deref(), out, false),
-        Some(Command::Recover { device, out }) => cmd_backup(device.as_deref(), out, true),
+        Some(Command::Backup { device, out }) => cmd_backup(device.as_deref(), out, false, false),
+        Some(Command::Dump { device, out, force }) => {
+            cmd_backup(device.as_deref(), out, true, force)
+        }
         Some(Command::Flash(args)) => cmd_flash(args),
         None => cmd_info(cli.device.as_deref()),
     };
@@ -298,9 +312,17 @@ fn cmd_list() -> Result<()> {
     Ok(())
 }
 
-fn cmd_backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Result<()> {
+fn cmd_backup(
+    device: Option<&str>,
+    out: Option<PathBuf>,
+    recover: bool,
+    force: bool,
+) -> Result<()> {
+    // `--force` (dump) enters vendor kernel mode, which is a write-capable
+    // session, so the device must be opened for writes even though the dump
+    // itself only reads.
     let selector = resolve_device(device)?;
-    let mut dev = platform::open(&selector, false)?;
+    let mut dev = platform::open(&selector, force)?;
     let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
     if recover && !handler.capabilities().recover {
@@ -333,7 +355,7 @@ fn cmd_backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Resu
             PathBuf::from(format!("{s}.{}.{extension}", handler.backup_kind().infix))
         }
     };
-    engine::backup(dev.as_mut(), handler.as_ref(), &out, recover)
+    engine::backup(dev.as_mut(), handler.as_ref(), &out, recover, force)
 }
 
 fn cmd_flash(args: FlashArgs) -> Result<()> {
@@ -364,11 +386,17 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
     } else {
         None
     };
-    let predump_out = args.backup.clone().or_else(|| {
-        handler
-            .backup_extension()
-            .and_then(|ext| default_backup_path(&args.input, ext))
-    });
+    // Recovery waives the mandatory pre-flash backup (a degraded drive may not be
+    // readable, and recovery is the last resort anyway).
+    let predump_out = if args.recover {
+        None
+    } else {
+        args.backup.clone().or_else(|| {
+            handler
+                .backup_extension()
+                .and_then(|ext| default_backup_path(&args.input, ext))
+        })
+    };
 
     let req = FlashRequest {
         input,
@@ -381,7 +409,8 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         verbose: args.verbose,
         predump_out,
         allow_crossflash: args.allow_crossflash,
-        skip_backup: args.skip_backup,
+        skip_backup: args.skip_backup || args.recover,
+        recover: args.recover,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)
 }
@@ -418,11 +447,44 @@ mod tests {
     use clap::Parser;
 
     #[test]
-    fn backup_is_the_only_public_backup_command() {
-        let parsed =
-            Cli::try_parse_from(["freemkv-flash", "backup", "/dev/sg0"]).expect("backup command");
-        assert!(matches!(parsed.command, Some(Command::Backup { .. })));
-        assert!(Cli::try_parse_from(["freemkv-flash", "dump", "/dev/sg0"]).is_err());
+    fn backup_dump_and_flash_recover_parse() {
+        // backup = the trusted capture.
+        assert!(matches!(
+            Cli::try_parse_from(["freemkv-flash", "backup", "/dev/sg0"])
+                .expect("backup")
+                .command,
+            Some(Command::Backup { .. })
+        ));
+        // dump = salvage read; --force engages kernel mode.
+        assert!(matches!(
+            Cli::try_parse_from(["freemkv-flash", "dump", "/dev/sg0"])
+                .expect("dump")
+                .command,
+            Some(Command::Dump { force: false, .. })
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["freemkv-flash", "dump", "/dev/sg0", "--force"])
+                .expect("dump --force")
+                .command,
+            Some(Command::Dump { force: true, .. })
+        ));
+        // The old `recover` command is gone (it moved onto `flash`).
+        assert!(Cli::try_parse_from(["freemkv-flash", "recover", "/dev/sg0"]).is_err());
+        // flash --recover parses and sets the recover flag.
+        match Cli::try_parse_from([
+            "freemkv-flash",
+            "flash",
+            "/dev/sg0",
+            "-i",
+            "fw.bin",
+            "--recover",
+        ])
+        .expect("flash --recover")
+        .command
+        {
+            Some(Command::Flash(a)) => assert!(a.recover),
+            other => panic!("expected flash, got {other:?}"),
+        }
     }
 
     #[test]

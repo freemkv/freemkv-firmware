@@ -82,7 +82,7 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
         Job::Dump { out } => {
             let mut dev = platform::open(device, false)?;
             let handler = classify_gated(dev.as_mut())?;
-            engine::backup(dev.as_mut(), handler.as_ref(), out, false)
+            engine::backup(dev.as_mut(), handler.as_ref(), out, false, false)
         }
         Job::Flash { input } => {
             let bytes = std::fs::read(input)
@@ -108,6 +108,9 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
                 allow_crossflash: false,
                 // Always keep a backup next to the input image.
                 predump_out: default_backup_path(input),
+                // The GUI never does the degraded-drive force-write; that is a
+                // deliberate CLI-only expert path.
+                recover: false,
             };
             engine::flash(dev.as_mut(), handler.as_ref(), &req)
         }

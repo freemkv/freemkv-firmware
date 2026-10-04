@@ -392,6 +392,7 @@ pub fn backup(
     drive: &dyn DriveFamily,
     out: &Path,
     recover: bool,
+    force: bool,
 ) -> Result<()> {
     if !drive.capabilities().backup {
         bail!("no firmware backup capability for {}", drive.backend_name());
@@ -414,10 +415,11 @@ pub fn backup(
             out.display()
         ))
     );
-    // `recover` uses the family's deeper salvage read; families without a
-    // distinct recover capture it the same as a normal backup.
+    // `recover` (the `dump` command) uses the family's deeper salvage read;
+    // `force` tells it to enter vendor kernel mode and read a degraded drive no
+    // matter what. Families without a distinct recover capture a normal backup.
     let bytes = if recover {
-        drive.capture_recover(dev)?
+        drive.capture_recover(dev, force)?
     } else {
         drive.capture_backup(dev)?
     };

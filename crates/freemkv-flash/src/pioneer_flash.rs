@@ -177,6 +177,7 @@ pub(crate) fn execute_flash(
     kernel: Option<&[u8]>,
     normal: &[u8],
     kernel_mode: bool,
+    recover: bool,
 ) -> Result<()> {
     style::trace(&format!(
         "execute_flash: kernel_mode={kernel_mode}, kernel={} bytes, normal={} bytes",
@@ -201,8 +202,10 @@ pub(crate) fn execute_flash(
         println!("{}", style::dim("  kernel mode unlocked"));
     }
 
-    // OEM update-mode entry (04/FF control write + settle + identity gate).
-    enter_update_mode(dev, control)?;
+    // OEM update-mode entry (04/FF control write + settle + identity gate). In
+    // recover mode the drive is degraded and may not report a trustworthy
+    // identity, so the post-entry gate is skipped — we force the write.
+    enter_update_mode(dev, control, recover)?;
 
     // 07/FE linear Kernel chunks (crossflash only), then 07/F0 Normal chunks —
     // each at most FLASH_CHUNK, 24-bit big-endian offset/len, byte-for-byte.
@@ -247,10 +250,23 @@ pub(crate) fn execute_flash(
 /// and the post-entry identity gate. A failed entry is before the update state,
 /// so it carries no partial-firmware hint. This is the *standard* OEM entry — it
 /// is distinct from [`enter_kernel_mode`], the vendor F3/F2 unlock.
-fn enter_update_mode(dev: &mut dyn ScsiDevice, control: &[u8; CONTROL_LEN]) -> Result<()> {
+fn enter_update_mode(
+    dev: &mut dyn ScsiDevice,
+    control: &[u8; CONTROL_LEN],
+    recover: bool,
+) -> Result<()> {
     dev.command_out_strict(&cdb_wb_flash_entry(), control)
         .context("OEM Entry write failed")?;
     std::thread::sleep(ENTRY_SETTLE);
+    if recover {
+        // Degraded-drive recovery: do not trust (or require) the post-entry
+        // identity report; proceed straight to the forced write.
+        println!(
+            "{}",
+            style::dim("  update mode entered (recover: identity gate skipped)")
+        );
+        return Ok(());
+    }
     entry_identity_gate(dev)?;
     println!("{}", style::dim("  update mode entered"));
     Ok(())
@@ -378,7 +394,7 @@ mod tests {
         let normal = ud04_normal(len);
         let control = ud04_control();
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &control, None, &normal, false).unwrap();
+        execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
 
         let chunks = len.div_ceil(0x8000);
         // EVERY write went through the strict (abort-on-any-nonzero) path — guards
@@ -409,7 +425,7 @@ mod tests {
         let normal = ud04_normal(0x0010_0000);
         let control = ud04_control();
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &control, None, &normal, true).unwrap();
+        execute_flash(&mut dev, &control, None, &normal, true, false).unwrap();
 
         let cdbs: Vec<&Vec<u8>> = dev.writes.iter().map(|(c, _)| c).collect();
         // First two writes are the F3 arm then the F2 response, BEFORE the 04/FF
@@ -437,7 +453,7 @@ mod tests {
     fn plain_flash_issues_no_kernel_mode_commands() {
         let normal = ud04_normal(0x0010_0000);
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &ud04_control(), None, &normal, false).unwrap();
+        execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap();
         // No F3/F2 buffer-id traffic at all on the plain path.
         assert!(!dev
             .writes
@@ -476,7 +492,8 @@ mod tests {
             }
         }
         let normal = ud04_normal(0x0010_0000);
-        let err = execute_flash(&mut NoSeed, &ud04_control(), None, &normal, true).unwrap_err();
+        let err =
+            execute_flash(&mut NoSeed, &ud04_control(), None, &normal, true, false).unwrap_err();
         assert!(format!("{err:#}").contains("kernel-mode"));
     }
 
@@ -503,7 +520,8 @@ mod tests {
         }
         let normal = ud04_normal(0x0010_0000 + 0x100);
         let mut dev = BadEntry { writes: Vec::new() };
-        let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false).unwrap_err();
+        let err =
+            execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
         assert!(format!("{err:#}").contains("post-entry update state"));
         // Only the entry write happened; NO Normal chunk or finish followed.
         assert_eq!(dev.writes.len(), 1);
@@ -519,7 +537,8 @@ mod tests {
             fail_strict_at: Some(1),
             ..Recorder::default()
         };
-        let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false).unwrap_err();
+        let err =
+            execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("Normal") && msg.contains("re-flash the captured"));
         // No finish (05/FF) was sent after the failed transfer.
@@ -532,7 +551,7 @@ mod tests {
         let kernel: Vec<u8> = (0..0x18000usize).map(|i| (i % 253) as u8).collect();
         let normal: Vec<u8> = (0..0x8100usize).map(|i| (i % 251) as u8).collect();
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false).unwrap();
+        execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false, false).unwrap();
 
         // entry + 3 kernel FE + 2 normal F0 + finish, all strict, nothing lenient.
         assert_eq!(dev.strict_writes, 7);
@@ -568,6 +587,60 @@ mod tests {
         assert!(dev.ins.iter().any(|c| c == &vec![0u8; 6]));
     }
 
+    #[test]
+    fn recover_skips_the_identity_gate_that_aborts_a_normal_flash() {
+        // A degraded drive that never reports the post-entry "000" identity but
+        // does answer the kernel-mode F2 challenge (so kernel mode works).
+        #[derive(Default)]
+        struct Degraded {
+            writes: usize,
+            finished: bool,
+        }
+        impl ScsiDevice for Degraded {
+            fn command_in(&mut self, cdb: &[u8], alloc: usize) -> Result<Vec<u8>> {
+                if cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF2) {
+                    let mut state = KERNEL_TEST_SEED as u32;
+                    let mut buf = vec![0u8; alloc];
+                    for slot in buf.iter_mut().take(KERNEL_SIGNATURE_LEN) {
+                        *slot = (lcg_step(&mut state) & 0xFF) as u8;
+                    }
+                    return Ok(buf);
+                }
+                // INQUIRY never reports the "000" update state; TEST UNIT READY ok.
+                Ok(vec![0u8; alloc.max(0x23)])
+            }
+            fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+                self.command_out_strict(cdb, data)
+            }
+            fn command_out_strict(&mut self, cdb: &[u8], _data: &[u8]) -> Result<()> {
+                self.writes += 1;
+                if cdb.first() == Some(&0x3b) && cdb.get(1) == Some(&0x05) {
+                    self.finished = true;
+                }
+                Ok(())
+            }
+            fn describe(&self) -> String {
+                "degraded".into()
+            }
+        }
+        let normal = ud04_normal(0x0010_0000);
+
+        // Without recover, the post-entry identity gate aborts before any transfer.
+        let mut normal_dev = Degraded::default();
+        let err = execute_flash(&mut normal_dev, &ud04_control(), None, &normal, true, false)
+            .unwrap_err();
+        assert!(format!("{err:#}").contains("post-entry update state"));
+        assert!(!normal_dev.finished, "a gated flash must not reach finish");
+
+        // With recover, the gate is skipped and the forced write runs to finish.
+        let mut recover_dev = Degraded::default();
+        execute_flash(&mut recover_dev, &ud04_control(), None, &normal, true, true).unwrap();
+        assert!(
+            recover_dev.finished,
+            "recover must force the write through finish"
+        );
+    }
+
     /// HARD INVARIANT: the generically-built 0x8A10 control buffer is byte-for-
     /// byte the old hand-baked UD04 payload ("PIONEER BDR-US04" + 0xFD236642 LE,
     /// zero tail), and the UD04 Normal-only self-flash CDB sequence AND every
@@ -589,7 +662,7 @@ mod tests {
         // 0x1D7000 => 59 full 07/F0 chunks; the canonical UD04 Normal size.
         let normal = ud04_normal(0x1D7000);
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &control, None, &normal, false).unwrap();
+        execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
 
         // Exact CDB sequence: 04/FF entry, 59x 07/F0 chunks, 05/FF finish.
         let cdbs: Vec<Vec<u8>> = dev.writes.iter().map(|(c, _)| c.clone()).collect();

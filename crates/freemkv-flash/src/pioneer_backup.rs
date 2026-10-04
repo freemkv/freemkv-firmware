@@ -1718,7 +1718,7 @@ mod tests {
         .unwrap();
         replay.knocks = 0;
         replay.reads = 0;
-        crate::engine::backup(&mut replay, &drive, &output, false).unwrap();
+        crate::engine::backup(&mut replay, &drive, &output, false, false).unwrap();
         let saved = std::fs::read(&output).unwrap();
         validate_envelope_package(&saved, "BD-RW BDR-UD04").unwrap();
         std::fs::remove_file(&output).unwrap();

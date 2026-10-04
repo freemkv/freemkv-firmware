@@ -313,6 +313,12 @@ pub struct FlashRequest {
     /// Skip the mandatory pre-flash backup (dangerous: no rollback if the write
     /// fails). Default `false`: a failed backup aborts the flash.
     pub skip_backup: bool,
+    /// Recovery write: the drive is degraded, so stop trusting what it reports —
+    /// enter vendor kernel mode and force-write the given image, waiving the
+    /// pre-flash backup and the identity/model/plan safety gates. Only aborts if
+    /// the drive is unresponsive even to kernel mode. Still gated by `--execute`
+    /// and `--i-understand-risk`.
+    pub recover: bool,
 }
 
 /// A per-unit region to restore from a `.tar` dump (targeted write).
@@ -461,10 +467,11 @@ pub trait FirmwareBackend: Sync {
 
     /// Capture a backup using a deeper, retrying, instability-tolerant read to
     /// salvage a component that an ordinary [`Self::capture_backup`] could not
-    /// read off a struggling drive. The default is an ordinary backup, so a
-    /// family without a distinct recover (e.g. MTK) treats `recover` as
-    /// `backup`.
-    fn capture_recover(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    /// read off a struggling drive (the `dump` command). When `force` is set the
+    /// backend should stop trusting the drive and read via the vendor kernel-mode
+    /// session. The default is an ordinary backup, so a family without a distinct
+    /// recover (e.g. MTK) treats `dump` as `backup`.
+    fn capture_recover(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
         self.capture_backup(dev)
     }
 

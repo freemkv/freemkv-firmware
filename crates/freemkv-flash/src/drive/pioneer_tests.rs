@@ -800,23 +800,15 @@ fn installed_facts_from_header_only_normal_backup() {
 #[test]
 fn plan_to_kernel_mode_covers_every_variant() {
     use crate::pioneer_flash_plan::FlashPlan;
-    assert!(!plan_to_kernel_mode(FlashPlan::Plain, false).unwrap());
-    assert!(!plan_to_kernel_mode(FlashPlan::Plain, true).unwrap());
-    assert!(!plan_to_kernel_mode(FlashPlan::Forced, false).unwrap());
-    // Kernel-mode plans are gated off unless live-enabled.
-    assert!(plan_to_kernel_mode(FlashPlan::KernelDowngrade, false).is_err());
-    assert!(plan_to_kernel_mode(FlashPlan::KernelCrossflash, false).is_err());
-    assert!(plan_to_kernel_mode(FlashPlan::KernelDowngrade, true).unwrap());
-    assert!(plan_to_kernel_mode(FlashPlan::KernelCrossflash, true).unwrap());
-    // A refusal always aborts, enabled or not.
-    assert!(plan_to_kernel_mode(FlashPlan::Refused("x".into()), true).is_err());
-}
-
-#[test]
-fn gated_kernel_mode_error_names_the_override() {
-    use crate::pioneer_flash_plan::FlashPlan;
-    let err = plan_to_kernel_mode(FlashPlan::KernelDowngrade, false).unwrap_err();
-    assert!(format!("{err:#}").contains("FREEMKV_ENABLE_KERNEL_MODE"));
+    // Plain/forced never need the vendor unlock.
+    assert!(!plan_to_kernel_mode(FlashPlan::Plain).unwrap());
+    assert!(!plan_to_kernel_mode(FlashPlan::Forced).unwrap());
+    // Downgrade/crossflash always enter kernel mode (no env gate — the command
+    // chosen is the consent).
+    assert!(plan_to_kernel_mode(FlashPlan::KernelDowngrade).unwrap());
+    assert!(plan_to_kernel_mode(FlashPlan::KernelCrossflash).unwrap());
+    // A refusal always aborts.
+    assert!(plan_to_kernel_mode(FlashPlan::Refused("x".into())).is_err());
 }
 
 #[test]
@@ -844,21 +836,37 @@ fn resolve_kernel_mode_refuses_same_model_older_without_pair() {
 }
 
 #[test]
+fn dump_force_fails_closed_when_kernel_mode_is_unreachable() {
+    use crate::platform::ScsiDevice;
+    // A drive that cannot complete the vendor kernel-mode F2 challenge: the F2
+    // read is too short for any seed to match, so the unlock fails.
+    #[derive(Default)]
+    struct NoKernel;
+    impl ScsiDevice for NoKernel {
+        fn command_in(&mut self, _cdb: &[u8], _alloc: usize) -> anyhow::Result<Vec<u8>> {
+            Ok(vec![0u8; 2])
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "no-kernel".into()
+        }
+    }
+    let err = Pioneer::new()
+        .capture_recover(&mut NoKernel, true)
+        .unwrap_err();
+    assert!(
+        format!("{err:#}").contains("not recoverable"),
+        "dump --force must report an unresponsive drive as not recoverable: {err:#}"
+    );
+}
+
+#[test]
 fn resolve_kernel_mode_refuses_offlist_crossflash() {
     let installed = header_only_normal("SAT 8A10", "22/01/01");
     // Different model, not on the safe list (8A10 -> 9401 is not a listed pair).
     let target = header_only_normal("SAT 9401", "22/01/01");
     let err = resolve_kernel_mode(Some(&installed), None, Some(&target)).unwrap_err();
     assert!(format!("{err:#}").contains("not on the vetted safe list"));
-}
-
-#[test]
-fn kernel_mode_live_enabled_follows_the_env_flag() {
-    // Kills the "always true"/"always false" stubs of kernel_mode_live_enabled.
-    // SAFETY: this is the only test that touches FREEMKV_ENABLE_KERNEL_MODE.
-    std::env::remove_var("FREEMKV_ENABLE_KERNEL_MODE");
-    assert!(!kernel_mode_live_enabled(), "unset => disabled");
-    std::env::set_var("FREEMKV_ENABLE_KERNEL_MODE", "1");
-    assert!(kernel_mode_live_enabled(), "set => enabled");
-    std::env::remove_var("FREEMKV_ENABLE_KERNEL_MODE");
 }

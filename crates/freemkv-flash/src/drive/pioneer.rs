@@ -849,15 +849,6 @@ pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Str
     }
 }
 
-/// Env override that lifts the live kernel-mode gate. Kernel mode
-/// (downgrade/crossflash) is implemented but refused for live use until the
-/// receiver's Site-1 generation gate is proven to be cleared by the unlock; set
-/// `FREEMKV_ENABLE_KERNEL_MODE` to override at your own risk (reversible via the
-/// mandatory pre-flash backup).
-fn kernel_mode_live_enabled() -> bool {
-    std::env::var_os("FREEMKV_ENABLE_KERNEL_MODE").is_some()
-}
-
 /// Derive installed-firmware routing facts from the pre-flash backup — the OEM
 /// package captured off this very drive moments earlier. Returns `None` when the
 /// backup is absent or its identity cannot be resolved (callers then treat the
@@ -894,9 +885,8 @@ pub(crate) fn installed_facts(
 
 /// Decide whether this flash needs the vendor kernel-mode unlock, by routing the
 /// installed firmware against the target bundle ([`crate::pioneer_flash_plan`]).
-/// Plain same-model same/newer → no unlock. Downgrade/crossflash → unlock, and
-/// still gated behind [`kernel_mode_live_enabled`] until the Site-1 bypass is
-/// proven. A refused plan aborts here.
+/// Plain same-model same/newer → no unlock. Downgrade/crossflash → unlock. A
+/// refused plan aborts here.
 pub(crate) fn resolve_kernel_mode(
     installed_backup: Option<&[u8]>,
     kernel: Option<&[u8]>,
@@ -919,31 +909,18 @@ pub(crate) fn resolve_kernel_mode(
         }
     };
     crate::style::trace(&format!("flash plan = {plan:?}"));
-    plan_to_kernel_mode(plan, kernel_mode_live_enabled())
+    plan_to_kernel_mode(plan)
 }
 
-/// Map a routing [`crate::pioneer_flash_plan::FlashPlan`] to whether the executor should enter kernel mode,
-/// applying the live-enablement gate. Split out so the gating is unit-testable
-/// without crafting real encrypted envelopes.
-fn plan_to_kernel_mode(
-    plan: crate::pioneer_flash_plan::FlashPlan,
-    live_enabled: bool,
-) -> Result<bool> {
+/// Map a routing [`crate::pioneer_flash_plan::FlashPlan`] to whether the executor
+/// should enter kernel mode. Downgrade/crossflash need the vendor unlock; plain
+/// and forced do not; a refusal aborts. Split out so it is unit-testable without
+/// crafting real encrypted envelopes.
+fn plan_to_kernel_mode(plan: crate::pioneer_flash_plan::FlashPlan) -> Result<bool> {
     use crate::pioneer_flash_plan::FlashPlan;
     match plan {
         FlashPlan::Plain | FlashPlan::Forced => Ok(false),
-        plan @ (FlashPlan::KernelDowngrade | FlashPlan::KernelCrossflash) => {
-            if !live_enabled {
-                bail!(
-                    "this flash needs vendor kernel mode ({plan:?}), which is implemented but \
-                     not yet enabled for live use pending Site-1 verification. Re-run with \
-                     FREEMKV_ENABLE_KERNEL_MODE=1 to override at your own risk (reversible via \
-                     the pre-flash backup)."
-                );
-            }
-            crate::style::trace("kernel mode ENABLED via FREEMKV_ENABLE_KERNEL_MODE");
-            Ok(true)
-        }
+        FlashPlan::KernelDowngrade | FlashPlan::KernelCrossflash => Ok(true),
         FlashPlan::Refused(reason) => bail!("refusing to flash: {reason}"),
     }
 }
@@ -1094,8 +1071,13 @@ impl DriveFamily for Pioneer {
             // pre-flash backup) against the target bundle to decide whether this
             // is a plain flash, a kernel-mode downgrade/crossflash, or a refusal.
             // `kernel_mode` is the only thing this adds to the write itself.
-            let kernel_mode =
-                resolve_kernel_mode(installed_backup, kernel.as_deref(), Some(normal))?;
+            // `--recover` short-circuits all routing: the drive is degraded, so we
+            // stop trusting it and force kernel mode unconditionally.
+            let kernel_mode = if req.recover {
+                true
+            } else {
+                resolve_kernel_mode(installed_backup, kernel.as_deref(), Some(normal))?
+            };
 
             let (control, kernel_to_write) = match selection {
                 FlashSelection::KernelAndNormal => {
@@ -1105,9 +1087,13 @@ impl DriveFamily for Pioneer {
                     (linear_fe_control(kernel, normal)?, Some(kernel))
                 }
                 FlashSelection::NormalOnly => {
-                    // Keep the audited profile gate (identity/structure/ambiguity
-                    // refusal), then build the control generically from the table.
-                    let _profile = select_oem_profile(&req.drive_model, normal)?;
+                    // Normally keep the audited profile gate (identity/structure/
+                    // ambiguity refusal); `--recover` waives it (a degraded drive
+                    // may not report a trustworthy identity). Then build the
+                    // control generically from the key table.
+                    if !req.recover {
+                        let _profile = select_oem_profile(&req.drive_model, normal)?;
+                    }
                     (oem_normal_control(normal)?, None)
                 }
             };
@@ -1119,6 +1105,7 @@ impl DriveFamily for Pioneer {
                 kernel_to_write,
                 normal,
                 kernel_mode,
+                req.recover,
             )?;
             println!(
                 "{}",
@@ -1191,9 +1178,19 @@ impl DriveFamily for Pioneer {
         // envelopes where recognized, else zero-sentinel. Read-only: no write.
         crate::pioneer_backup::capture_signed_candidate(dev)
     }
-    fn capture_recover(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-        // Same capture, but a region the strict read cannot get is retried with a
-        // deeper, instability-tolerant salvage read. Read-only.
+    fn capture_recover(&self, dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>> {
+        if force {
+            // `dump --force`: stop trusting normal reads on a degraded/soft-bricked
+            // drive and open the vendor kernel-mode session first. If even kernel
+            // mode is unresponsive, the drive is not recoverable by this tool.
+            crate::pioneer_flash::enter_kernel_mode(dev).context(
+                "drive is unresponsive to all commands (vendor kernel-mode unlock failed) \
+                 — not recoverable",
+            )?;
+            crate::style::trace("dump --force: kernel mode entered; reading degraded drive");
+        }
+        // A region the strict read cannot get is retried with a deeper,
+        // instability-tolerant salvage read. Read-only.
         crate::pioneer_backup::capture_recover_candidate(dev)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
