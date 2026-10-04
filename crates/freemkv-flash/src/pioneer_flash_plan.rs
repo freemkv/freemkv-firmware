@@ -4,7 +4,7 @@
 //! decides *which* flash path applies: a plain same-model flash, a kernel-mode
 //! downgrade, a kernel-mode crossflash, or a refusal. It is pure classification
 //! — no device I/O, no flashing, no state change. The live kernel-mode unlock
-//! ([`crate::pioneer_flash::enter_kernel_mode`]) and the executor wiring are
+//! (`crate::pioneer_flash::enter_kernel_mode`) and the executor wiring are
 //! deliberately NOT driven from here yet: whether the vendor kernel-mode state
 //! actually clears the receiver's Site-1 generation gate is still unproven, so
 //! downgrade/crossflash stay behind `--execute` + a mandatory OEM backup until
@@ -18,7 +18,7 @@
 //!   so a downgrade/crossflash MUST write a self-consistent Kernel+Normal pair —
 //!   never Normal-only onto a retained newer Kernel, nor Kernel-only.
 //! - Crossflash additionally needs the target to be a vetted same-chipset
-//!   sibling (the [`SAFE_CROSSFLASH`] table) and a full foreign pair.
+//!   sibling (the `SAFE_CROSSFLASH` table) and a full foreign pair.
 
 use anyhow::{anyhow, Context, Result};
 
@@ -519,8 +519,12 @@ mod tests {
             let mut sum = 0u32;
             let mut i = 0;
             while i + 4 <= buf.len() {
-                sum = sum
-                    .wrapping_add(u32::from_be_bytes([buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]));
+                sum = sum.wrapping_add(u32::from_be_bytes([
+                    buf[i],
+                    buf[i + 1],
+                    buf[i + 2],
+                    buf[i + 3],
+                ]));
                 i += 4;
             }
             buf[at..at + 4].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
@@ -557,8 +561,17 @@ mod tests {
     fn decoded_kernel_marker_reads_body_offset_0xfe() {
         // Round-trips a real encoded Kernel and reads its decoded 0xFE marker,
         // killing the "always Ok(0)/Ok(1)" stubs of decoded_kernel_marker.
-        assert_eq!(decoded_kernel_marker(&encoded_kernel_with_marker(0xFF)).unwrap(), 0xFF);
-        assert_eq!(decoded_kernel_marker(&encoded_kernel_with_marker(0x01)).unwrap(), 0x01);
-        assert_eq!(decoded_kernel_marker(&encoded_kernel_with_marker(0xAB)).unwrap(), 0xAB);
+        assert_eq!(
+            decoded_kernel_marker(&encoded_kernel_with_marker(0xFF)).unwrap(),
+            0xFF
+        );
+        assert_eq!(
+            decoded_kernel_marker(&encoded_kernel_with_marker(0x01)).unwrap(),
+            0x01
+        );
+        assert_eq!(
+            decoded_kernel_marker(&encoded_kernel_with_marker(0xAB)).unwrap(),
+            0xAB
+        );
     }
 }

@@ -12,7 +12,7 @@
 //! — the obvious "not OEM / unverified" sentinel.
 //!
 //! Loaded lazily and only when needed (a Pioneer backup), mirroring
-//! [`crate::pioneer_k`], so the MTK path and startup pay nothing.
+//! `crate::pioneer_k`, so the MTK path and startup pay nothing.
 
 use std::collections::HashMap;
 use std::io::Read;

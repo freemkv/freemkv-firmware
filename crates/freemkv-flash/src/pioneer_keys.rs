@@ -12,7 +12,7 @@
 //! to several controller ids with different keys) cannot be silently resolved.
 //!
 //! Loaded lazily and only when needed (a Pioneer flash), mirroring
-//! [`crate::pioneer_k`] / [`crate::pioneer_n`], so the MTK path and startup pay
+//! `crate::pioneer_k` / `crate::pioneer_n`, so the MTK path and startup pay
 //! nothing.
 
 use std::collections::HashMap;

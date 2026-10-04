@@ -3,7 +3,7 @@
 //!
 //! The Pioneer OEM updater supplies the host command sequence. A Renesas
 //! controller identity alone does not prove this protocol applies. Backup
-//! capture is read-only; the live write ([`crate::pioneer_flash`], reached via
+//! capture is read-only; the live write (`crate::pioneer_flash`, reached via
 //! [`DriveFamily::flash_bundle`]) runs only behind the engine's gates
 //! (`--execute` + `--i-understand-risk`, empty-tray guard, and a mandatory,
 //! completeness-verified pre-flash backup).
@@ -922,7 +922,7 @@ pub(crate) fn resolve_kernel_mode(
     plan_to_kernel_mode(plan, kernel_mode_live_enabled())
 }
 
-/// Map a routing [`FlashPlan`] to whether the executor should enter kernel mode,
+/// Map a routing [`crate::pioneer_flash_plan::FlashPlan`] to whether the executor should enter kernel mode,
 /// applying the live-enablement gate. Split out so the gating is unit-testable
 /// without crafting real encrypted envelopes.
 fn plan_to_kernel_mode(

@@ -478,8 +478,16 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
     let normal_bytes = member("S8A10001.114.enc");
 
     // Anchor to the exact OEM component bytes.
-    assert_eq!(kernel_bytes.len(), 0x11200, "UD04 1.14 Kernel envelope length");
-    assert_eq!(normal_bytes.len(), 0x1d7700, "UD04 1.14 Normal envelope length");
+    assert_eq!(
+        kernel_bytes.len(),
+        0x11200,
+        "UD04 1.14 Kernel envelope length"
+    );
+    assert_eq!(
+        normal_bytes.len(),
+        0x1d7700,
+        "UD04 1.14 Normal envelope length"
+    );
     assert_eq!(
         format!("{:x}", Sha256::digest(&kernel_bytes)),
         "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83",
@@ -517,8 +525,14 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
     // Payloads are byte-exact: FE reproduces the whole Kernel, F0 the whole Normal.
     let fe_bytes: Vec<u8> = fe.iter().flat_map(|t| t.data.iter().copied()).collect();
     let f0_bytes: Vec<u8> = f0.iter().flat_map(|t| t.data.iter().copied()).collect();
-    assert_eq!(&fe_bytes, kernel, "FE payload reproduces the Kernel unmodified");
-    assert_eq!(&f0_bytes, normal, "F0 payload reproduces the Normal unmodified");
+    assert_eq!(
+        &fe_bytes, kernel,
+        "FE payload reproduces the Kernel unmodified"
+    );
+    assert_eq!(
+        &f0_bytes, normal,
+        "F0 payload reproduces the Normal unmodified"
+    );
 
     // Golden digest over the full transcript (stage tag + CDB + data) pins the
     // exact wire output: control header, chunk offsets, and framing all included.

@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 /// Build an encrypted package directly from two captured images.
 ///
 /// The KERNEL is reconstructed byte-for-byte OEM when its decoded image is one
-/// of our known OEM kernels ([`crate::pioneer_k`]): real revision/date and the
+/// of our known OEM kernels (`crate::pioneer_k`): real revision/date and the
 /// OEM key table. An unrecognized kernel gets honest zero placeholders —
 /// revision `0000`, date `00/00/00`, seed `0` — so the output plainly reads as
 /// "not OEM". The NORMAL self-recovers its real revision/date from its own body
@@ -110,7 +110,7 @@ fn assemble_tar(components: &[Vec<u8>]) -> Result<Vec<u8>> {
 }
 
 /// Build just the Kernel envelope from a captured Kernel image: byte-exact OEM
-/// when recognized in [`crate::pioneer_k`], otherwise zero placeholders. Used to
+/// when recognized in `crate::pioneer_k`, otherwise zero placeholders. Used to
 /// still produce a Kernel-only archive when the Normal region could not be read.
 fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
     pioneer_codec::builder::encode_kernel_envelope(kernel, envelope_id, &oem_kernel_build(kernel))
@@ -119,7 +119,7 @@ fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
 
 /// Resolve the Kernel build inputs from a captured Kernel image: the byte-exact
 /// OEM revision/date/key when its decoded-image hash is recognized in
-/// [`crate::pioneer_k`], otherwise the obvious zero placeholders (revision
+/// `crate::pioneer_k`, otherwise the obvious zero placeholders (revision
 /// `0000`, date `00/00/00`, seed `0`). Single source of truth for both the
 /// full-pair and Kernel-only capture paths, so they cannot drift.
 fn oem_kernel_build(kernel: &[u8]) -> pioneer_codec::builder::KernelBuild<'static> {
@@ -305,8 +305,8 @@ fn validate_kernel_only(kernel: &[u8], product: &str) -> Result<()> {
 
 /// Per-component OEM provenance of a captured package, decided from its bytes.
 /// A component is OEM only when it is byte-exact to what the OEM would ship: the
-/// kernel is recognized by its decoded-image hash in [`crate::pioneer_k`], and
-/// the normal by its decoded-image hash in [`crate::pioneer_n`] (which also
+/// kernel is recognized by its decoded-image hash in `crate::pioneer_k`, and
+/// the normal by its decoded-image hash in `crate::pioneer_n` (which also
 /// supplies the verbatim OEM signature). An unrecognized component is a
 /// reconstruction (zero seed, zero signature) and is not OEM.
 pub struct Provenance {
