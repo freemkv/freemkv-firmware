@@ -671,6 +671,7 @@ pub(crate) fn read_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {
     let mut readable = 0usize;
     let mut gaps: Vec<(usize, usize)> = Vec::new();
     let mut off = 0usize;
+    let mut progress = crate::style::Progress::new("reading drive memory", IMAGE_SIZE);
     while off < IMAGE_SIZE {
         let l = chunk.min(IMAGE_SIZE - off);
         match rd(dev, 6, 0, off as u32, l as u32) {
@@ -687,6 +688,7 @@ pub(crate) fn read_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {
             }
         }
         off += l;
+        progress.set(off);
     }
     Ok((image, readable, gaps))
 }

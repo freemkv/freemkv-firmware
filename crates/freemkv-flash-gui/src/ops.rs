@@ -17,7 +17,7 @@ pub enum Job {
     Info,
     InfoFile { input: PathBuf },
     Backup { out: PathBuf },
-    Dump { out: PathBuf, force: bool },
+    Dump { out: PathBuf },
     Flash(freemkv_flash::workflow::FlashOptions),
 }
 
@@ -26,9 +26,9 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
     use freemkv_flash::workflow;
     match job {
         Job::Info => workflow::info(Some(device)),
-        Job::InfoFile { input } => freemkv_flash::engine::info_file(input),
-        Job::Backup { out } => workflow::backup(Some(device), Some(out.clone()), false, false),
-        Job::Dump { out, force } => workflow::backup(Some(device), Some(out.clone()), true, *force),
+        Job::InfoFile { input } => workflow::check_file(input),
+        Job::Backup { out } => workflow::backup(Some(device), Some(out.clone()), false),
+        Job::Dump { out } => workflow::backup(Some(device), Some(out.clone()), true),
         Job::Flash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());

@@ -811,7 +811,7 @@ fn model_mismatch_is_refused_without_the_flag() {
     )
     .unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
-    assert!(err.to_string().contains("--allow-crossflash"), "got: {err}");
+    assert!(err.to_string().contains("--force"), "got: {err}");
 }
 
 #[test]
@@ -1108,4 +1108,45 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
     let error = flash(&mut dev, &Mtk, &req)
         .expect_err("encrypted transport must not disable integrity verification");
     assert!(error.to_string().contains("read-back verify FAILED"));
+}
+
+#[test]
+fn forced_flash_attempts_backup_and_continues_only_after_failure() {
+    let mut req = bin_req(backup_firmware(), true);
+    req.force = true;
+    let mut good = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let (_, bytes) = capture_preflash_backup(&mut good, &Mtk, &req).unwrap();
+    assert!(bytes.is_some());
+    assert!(req.predump_out.as_ref().unwrap().exists());
+    std::fs::remove_file(req.predump_out.as_ref().unwrap()).unwrap();
+    let mut bad = MockScsiDevice::new();
+    let (warning, bytes) = capture_preflash_backup(&mut bad, &Mtk, &req).unwrap();
+    assert!(bytes.is_none());
+    assert!(warning.contains("without a validated backup"));
+    assert!(!bad.reads.is_empty());
+    assert!(bad.writes.is_empty());
+    req.force = false;
+    assert!(capture_preflash_backup(&mut bad, &Mtk, &req).is_err());
+}
+
+#[test]
+fn mediatek_dump_preserves_raw_unsigned_memory_without_requiring_backup_integrity() {
+    let raw = vec![0x5a; IMAGE_SIZE];
+    let mut dev = MockScsiDevice::new().with_firmware_image(raw.clone());
+    assert_eq!(Mtk.capture_dump(&mut dev, true).unwrap(), raw);
+    assert!(dev.writes.is_empty());
+    assert!(Mtk.capture_backup(&mut dev).is_err());
+}
+
+#[test]
+fn force_waives_model_identity_but_keeps_input_structure_checks() {
+    let mut dev = MockScsiDevice::new();
+    assert!(Mtk
+        .validate_forced_image(&mut dev, &backup_firmware())
+        .is_ok());
+    assert!(dev.reads.is_empty());
+    assert!(Mtk
+        .validate_forced_image(&mut dev, b"not a firmware image")
+        .is_err());
+    assert!(dev.writes.is_empty());
 }

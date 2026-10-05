@@ -289,6 +289,11 @@ pub(crate) fn capture_mtk_backup(
     BackupArtifact::capture(dev, drive)?.to_tar_bytes()
 }
 
+/// Decode a verified archive without imposing its captured model on the target.
+pub(crate) fn decode_mtk_backup(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+    Ok(BackupArtifact::from_tar_bytes(bytes, expected_size)?.firmware)
+}
+
 /// MTK's format-specific archive validation, called only by its backend.
 pub(crate) fn validate_mtk_backup(
     bytes: &[u8],

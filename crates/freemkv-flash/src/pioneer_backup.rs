@@ -488,7 +488,9 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
     }
     // The dump still succeeds with gaps (it is a best-effort salvage), but say so
     // loudly in the final summary.
+    crate::output::field("Dump size", format!("{} bytes", image.len()));
     if let Some(note) = gap_summary(&gaps) {
+        crate::output::field("Dump gaps", &note);
         amber(&note);
     }
     Ok(image)

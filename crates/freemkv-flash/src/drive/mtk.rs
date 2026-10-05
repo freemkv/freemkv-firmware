@@ -251,13 +251,11 @@ pub fn enc_transform(image: &mut [u8]) -> Result<()> {
     Ok(())
 }
 
-/// Decide whether this drive needs the `enc` transport envelope.
+/// Select the format for the implemented MTK update route.
 ///
-/// Whether a given drive *requires* the AES-128-ECB wrap (vs. accepting a
-/// plaintext image) is a KNOWN-OPEN question, not yet resolvable without a
-/// controlled hardware test against a matching base image. Until then this
-/// defaults to plaintext (`false`) and flash stays a dry-run planner: no real
-/// write ships on an unproven assumption.
+/// This route sends a validated plaintext image. There is no general-purpose
+/// encryption probe here; a different controller's protocol must provide its
+/// own transport policy rather than asking the user to guess.
 pub fn enc_needed(_dev: &mut dyn ScsiDevice) -> bool {
     false
 }
@@ -910,6 +908,41 @@ impl DriveFamily for Mtk {
 
     fn capture_backup(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         crate::engine::backup::capture_mtk_backup(dev, self)
+    }
+
+    fn dump_is_raw(&self) -> bool {
+        true
+    }
+
+    fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
+        let (image, readable, gaps) = self.read_full_image(dev)?;
+        if readable == 0 {
+            bail!("no MediaTek memory was readable; no dump saved");
+        }
+        crate::output::field(
+            "Memory captured",
+            format!("{readable} of {} bytes", image.len()),
+        );
+        if !gaps.is_empty() {
+            let message = format!("Unreadable ranges filled with FF: {gaps:#x?}");
+            crate::output::field("Dump gaps", &message);
+            eprintln!("{message}");
+        }
+        Ok(image)
+    }
+
+    fn validate_forced_image(&self, _dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<()> {
+        if image.len() != self.image_size() {
+            bail!("firmware must be exactly {} bytes", self.image_size());
+        }
+        if !crate::cmac::verify(image) {
+            bail!("firmware image fails its AES-CMAC integrity check");
+        }
+        Ok(())
+    }
+
+    fn validate_forced_backup(&self, bytes: &[u8], _target_model: &str) -> Result<Vec<u8>> {
+        crate::engine::backup::decode_mtk_backup(bytes, self.image_size())
     }
 
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {

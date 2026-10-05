@@ -25,7 +25,7 @@ fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("freemkv Firmware Utility")
         .with_inner_size([720.0, 610.0])
-        .with_min_inner_size([560.0, 420.0]);
+        .with_resizable(false);
     if let Some(icon) = load_icon() {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));
     }

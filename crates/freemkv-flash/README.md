@@ -8,16 +8,15 @@ For installation and the MediaTek workflow see the [top-level README](../../READ
 
 ## Desktop app
 
-`freemkv-flash-gui` offers Drive info, Backup, and Flash firmware on macOS,
+`freemkv-flash-gui` offers Drive info, Backup, Dump, and Flash firmware on macOS,
 Windows, and Linux. Its dropdown uses the same optical-drive discovery as
 `freemkv-flash list`, including drives with empty trays. Both front-ends call
 the same workflows and safety checks; `libfreemkv` owns OS transport through
 its `scsi` feature, with default features disabled.
 
-The desktop app shows labeled results and transfer progress bars. Advanced
-options include salvage dumps, recovery, crossflash, envelope selection, and
-backup overrides. Diagnostic output is available under Details. Flashing
-requires a separate confirmation of the selected drive and file.
+The desktop app uses a fixed-size window, labeled results, and transfer progress
+bars. Details open in a separate scrolling dialog. Flash has one override:
+**Force flash**. Check file inspects an input without accessing the drive.
 
 ## Commands
 
@@ -25,8 +24,9 @@ requires a separate confirmation of the selected drive and file.
 |---|---|---|
 | `list` | no | Lists optical drives and the selector to pass to other commands. |
 | `info` | no | Identifies a drive or a firmware file. |
+| `check FILE` | no | Inspects a firmware file without a drive. |
 | `backup` | no | Saves a flashable copy of the drive's firmware for rollback. |
-| `dump` | no | Raw read of the whole device, for diagnostics only. Not flashable. |
+| `dump` | no | Raw capture of accessible memory: Pioneer at least 6 MiB; MediaTek 2 MiB mapped window. Gaps are reported. |
 | `flash` | with `--execute` | Checks and plans a flash; writes only with every safety flag. |
 
 ```sh
@@ -41,27 +41,20 @@ freemkv-flash flash /dev/sg0 -i update.tar \
 The drive is a `list` number, a `/dev` path or an `ioreg:` id, and can be
 omitted when exactly one drive is connected.
 
-**Use `backup`, not `dump`, before any flash.** `backup` is what `flash -i`
-restores from. `dump` captures drive RAM that changes between runs and cannot
-be flashed back; `dump --force` reads a degraded drive and is still read-only.
+**Backup** produces restoration artifacts. **Dump** captures raw drive memory,
+including anything readable from a degraded drive, without requiring firmware
+integrity. Pioneer fills unreadable spans with zero; MediaTek uses FF. The dump
+reports gaps and is not automatically a flashable update image.
 
-## When a flash is refused
-
-- **Different hardware.** The firmware is for a different drive family.
-  `--force` overrides only this check.
-- **Kernel mismatch (Pioneer).** A Normal-only update needs the Kernel already
-  on the drive; use a Kernel+Normal package instead.
-- **Damaged or inconsistent package.** Always refused; `--force` does not
-  override it.
-
-`flash --recover` re-writes known-good firmware to a degraded drive. It skips
-the pre-flash backup and the date checks but keeps every other check, and is
-experimental.
+`flash --force` waives compatibility/recovery gates and allows proceeding after a
+failed backup attempt. The input must still pass structural/integrity checks and
+have a supported write protocol. There are no separate mode, encryption,
+crossflash, recovery, skip-backup, or dump-force switches.
 
 ## Safety
 
 - A write needs `--execute`, `--i-understand-risk` and a pre-flash backup
-  (`--backup FILE`). If the backup fails, nothing is written.
+  (`--backup FILE`). Without `--force`, backup failure stops the write.
 - Without `--execute`, `flash` is a dry run.
 - `info`, `backup` and `dump` never write to the drive.
 - There is no safe abort once a write has started.

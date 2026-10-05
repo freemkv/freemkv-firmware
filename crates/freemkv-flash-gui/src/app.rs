@@ -15,6 +15,7 @@ enum Msg {
 enum Task {
     Info,
     Backup,
+    Dump,
     Flash,
 }
 
@@ -28,8 +29,8 @@ struct PendingFlash {
 /// Platform-independent application state.
 pub struct FlashApp {
     task: Task,
+    result_task: Task,
     input: Option<std::path::PathBuf>,
-    raw_dump: bool,
     status: String,
     failure: Option<String>,
     action: String,
@@ -37,6 +38,7 @@ pub struct FlashApp {
     device: String,
     risk_ack: bool,
     pending_flash: Option<PendingFlash>,
+    details_open: bool,
     options: FlashOptions,
     log: Vec<String>,
     progress: Option<(String, usize, usize)>,
@@ -54,8 +56,8 @@ impl FlashApp {
         let device = devices.first().map(|d| d.path.clone()).unwrap_or_default();
         Self {
             task: Task::Info,
+            result_task: Task::Info,
             input: None,
-            raw_dump: false,
             status: "Ready".into(),
             failure: None,
             action: String::new(),
@@ -63,6 +65,7 @@ impl FlashApp {
             device,
             risk_ack: false,
             pending_flash: None,
+            details_open: false,
             options: FlashOptions::default(),
             log: vec!["Ready. Select an optical drive and choose an action.".into()],
             progress: None,
@@ -97,6 +100,7 @@ impl FlashApp {
             self.log.push("No optical drive selected.".into());
             return;
         }
+        self.result_task = self.task;
         self.running = true;
         self.action = label.to_string();
         self.status = format!("{label}…");
@@ -212,16 +216,14 @@ impl FlashApp {
                 ui.label(format!("Drive: {}", pending.label));
                 ui.label(format!("Image: {}", pending.options.input.display()));
                 ui.colored_label(egui::Color32::from_rgb(220, 80, 80), "Flashing can permanently disable the drive. Keep it connected and powered until completion.");
-                if pending.options.skip_backup || pending.options.recover {
-                    ui.colored_label(egui::Color32::YELLOW, "No pre-flash backup will be captured.");
+                if pending.options.force {
+                    ui.colored_label(egui::Color32::YELLOW, "A backup will be attempted, but this update can proceed without one.");
                 } else {
                     ui.label("A validated pre-flash backup will be saved before writing.");
                 }
-                for (enabled, text) in [
-                    (pending.options.allow_crossflash, "Crossflash enabled"),
-                    (pending.options.recover, "Recovery mode enabled"),
-                    (pending.options.force, "Firmware-family override enabled"),
-                ] { if enabled { ui.colored_label(egui::Color32::YELLOW, text); } }
+                if pending.options.force {
+                    ui.colored_label(egui::Color32::from_rgb(160, 70, 0), "Force: compatibility checks are overridden; backup failure will not stop the update.");
+                }
                 ui.add_space(12.0);
                 ui.checkbox(&mut self.risk_ack, "I understand and want to update this drive");
                 ui.horizontal(|ui| {
@@ -250,111 +252,40 @@ impl FlashApp {
 }
 
 impl FlashApp {
-    fn advanced(&mut self, ui: &mut egui::Ui) {
-        ui.collapsing("Advanced options", |ui| {
-            ui.checkbox(&mut self.options.verbose, "Detailed protocol output");
-            ui.checkbox(
-                &mut self.options.allow_crossflash,
-                "Allow compatible crossflash",
-            );
-            ui.checkbox(
-                &mut self.options.recover,
-                "Recover a degraded drive (no backup)",
-            );
-            ui.checkbox(
-                &mut self.options.force,
-                "Force: waive Pioneer family check / force salvage read",
-            );
-            ui.checkbox(&mut self.options.skip_backup, "Skip pre-flash backup");
-            ui.horizontal(|ui| {
-                ui.label("Transfer mode:");
-                ui.selectable_value(
-                    &mut self.options.mode,
-                    freemkv_flash::manifest::FlashMode::Full,
-                    "Full",
-                );
-                ui.selectable_value(
-                    &mut self.options.mode,
-                    freemkv_flash::manifest::FlashMode::Main,
-                    "Main",
-                );
-            });
-            ui.label("MediaTek currently streams the full image in either mode.");
-            ui.horizontal(|ui| {
-                ui.label("Envelope:");
-                let mut envelope = if self.options.enc {
-                    1
-                } else if self.options.no_enc {
-                    2
-                } else {
-                    0
-                };
-                ui.selectable_value(&mut envelope, 0, "Automatic");
-                ui.selectable_value(&mut envelope, 1, "Encrypted");
-                ui.selectable_value(&mut envelope, 2, "Plaintext");
-                self.options.enc = envelope == 1;
-                self.options.no_enc = envelope == 2;
-            });
-            ui.horizontal(|ui| {
-                if ui.button("Backup destination…").clicked() {
-                    if let Some(out) = rfd::FileDialog::new()
-                        .set_file_name("preflash.backup.tar")
-                        .save_file()
-                    {
-                        self.options.backup = Some(out);
-                    }
-                }
-                if ui.button("Use automatic destination").clicked() {
-                    self.options.backup = None;
-                }
-            });
-            ui.label(
-                self.options
-                    .backup
-                    .as_ref()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|| "Automatic: next to the input file".into()),
-            );
-        });
-    }
-
     fn task_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let selected = !self.device.is_empty();
         match self.task {
             Task::Info => {
-                ui.heading("Drive information");
-                ui.add_space(6.0);
-                ui.label("Check the connected drive and its installed firmware.");
-                ui.add_space(18.0);
-                if selected {
-                    ui.label(egui::RichText::new(self.device_label()).strong());
-                } else {
+                ui.horizontal(|ui| {
+                    if primary(ui, "Read drive information", selected).clicked() {
+                        self.start_job(ctx, "Drive information", self.device.clone(), Job::Info);
+                    }
+                    if ui.button("Check file…").clicked() {
+                        if let Some(input) = rfd::FileDialog::new().pick_file() {
+                            self.start_job(
+                                ctx,
+                                "Check file",
+                                String::new(),
+                                Job::InfoFile { input },
+                            );
+                        }
+                    }
+                });
+                if !selected {
                     ui.label("Connect an optical drive, then select Refresh.");
                 }
-                ui.add_space(18.0);
-                if primary(ui, "Read drive information", selected).clicked() {
-                    self.start_job(ctx, "Drive information", self.device.clone(), Job::Info);
-                }
-                ui.add_space(12.0);
-                if ui.link("Inspect a firmware file instead…").clicked() {
-                    if let Some(input) = rfd::FileDialog::new().pick_file() {
-                        self.start_job(
-                            ctx,
-                            "File inspection",
-                            String::new(),
-                            Job::InfoFile { input },
-                        );
-                    }
-                }
             }
-            Task::Backup => {
-                ui.heading("Back up your drive");
-                ui.add_space(6.0);
-                ui.label("Save a copy of the firmware before making changes.");
-                ui.add_space(18.0);
+            Task::Backup | Task::Dump => {
+                let dump = self.task == Task::Dump;
+                ui.label(if dump {
+                    "Capture all accessible drive memory into a raw file."
+                } else {
+                    "Save firmware backup files for restoration."
+                });
+                ui.add_space(8.0);
                 if primary(
                     ui,
-                    if self.raw_dump {
+                    if dump {
                         "Save raw dump…"
                     } else {
                         "Save backup…"
@@ -363,58 +294,47 @@ impl FlashApp {
                 )
                 .clicked()
                 {
-                    let filename = if self.raw_dump {
-                        "dump.bin"
-                    } else {
-                        "backup.tar"
-                    };
+                    let filename = if dump { "dump.bin" } else { "backup.tar" };
                     if let Some(out) = rfd::FileDialog::new().set_file_name(filename).save_file() {
-                        let job = if self.raw_dump {
-                            Job::Dump {
-                                out,
-                                force: self.options.force,
-                            }
+                        let job = if dump {
+                            Job::Dump { out }
                         } else {
                             Job::Backup { out }
                         };
                         self.start_job(
                             ctx,
-                            if self.raw_dump { "Raw dump" } else { "Backup" },
+                            if dump { "Raw dump" } else { "Backup" },
                             self.device.clone(),
                             job,
                         );
                     }
                 }
-                ui.add_space(18.0);
-                ui.collapsing("Advanced options", |ui| {
-                    ui.checkbox(&mut self.raw_dump, "Salvage dump (for troubleshooting)");
-                    if self.raw_dump {
-                        ui.label("Pioneer saves raw memory; it is not a flashable backup. MediaTek saves its normal backup.");
-                        ui.checkbox(&mut self.options.force, "Force read from a degraded drive");
-                    }
-                });
             }
             Task::Flash => {
-                ui.heading("Flash firmware");
-                ui.add_space(6.0);
-                ui.label(
-                    "Choose a firmware file. A backup is saved automatically before updating.",
-                );
-                ui.add_space(16.0);
+                ui.label(if self.options.force {
+                    "Choose a firmware file. Force can proceed if the backup fails."
+                } else {
+                    "Choose a firmware file. A backup is saved automatically before updating."
+                });
+                ui.add_space(8.0);
                 egui::Frame::group(ui.style())
                     .inner_margin(12.0)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.vertical(|ui| {
-                                ui.label(
-                                    egui::RichText::new(
-                                        self.input
-                                            .as_ref()
-                                            .and_then(|p| p.file_name())
-                                            .map(|p| p.to_string_lossy().into_owned())
-                                            .unwrap_or_else(|| "No firmware selected".into()),
+                                ui.set_max_width(420.0);
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(
+                                            self.input
+                                                .as_ref()
+                                                .and_then(|p| p.file_name())
+                                                .map(|p| p.to_string_lossy().into_owned())
+                                                .unwrap_or_else(|| "No firmware selected".into()),
+                                        )
+                                        .strong(),
                                     )
-                                    .strong(),
+                                    .truncate(),
                                 );
                                 ui.small("Firmware image or backup · .bin, .enc, .tar");
                             });
@@ -428,22 +348,32 @@ impl FlashApp {
                             }
                         });
                     });
-                ui.add_space(16.0);
+                ui.add_space(8.0);
                 let ready = selected && self.input.is_some();
                 ui.horizontal(|ui| {
                     if primary(ui, "Continue…", ready).clicked() {
                         self.choose_flash(ctx, true);
                     }
                     if ui
-                        .add_enabled(ready, egui::Button::new("Check without flashing"))
+                        .add_enabled(self.input.is_some(), egui::Button::new("Check file"))
                         .clicked()
                     {
-                        self.choose_flash(ctx, false);
+                        if let Some(input) = self.input.clone() {
+                            self.start_job(
+                                ctx,
+                                "Check file",
+                                String::new(),
+                                Job::InfoFile { input },
+                            );
+                        }
                     }
                 });
                 ui.small("Review the drive and file on the next screen. Nothing is written yet.");
-                ui.add_space(16.0);
-                self.advanced(ui);
+                ui.add_space(8.0);
+                ui.checkbox(
+                    &mut self.options.force,
+                    "Force flash (override compatibility and allow backup failure)",
+                );
             }
         }
     }
@@ -464,93 +394,127 @@ impl eframe::App for FlashApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.render(ui);
+    }
+}
+
+impl FlashApp {
+    fn render(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.pump();
         self.protect_running_job(&ctx);
         if self.running {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                egui::Frame::new().inner_margin(20.0).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.heading("freemkv");
-                        ui.label("Firmware Utility");
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.weak(env!("CARGO_PKG_VERSION"));
-                        });
-                    });
-                    ui.add_space(18.0);
-                    ui.add_enabled_ui(!self.running && self.pending_flash.is_none(), |ui| {
-                        egui::Frame::group(ui.style())
-                            .inner_margin(14.0)
-                            .show(ui, |ui| {
-                                ui.label(egui::RichText::new("Optical drive").strong());
-                                ui.horizontal(|ui| {
-                                    let previous = self.device.clone();
-                                    egui::ComboBox::from_id_salt("device_combo")
-                                        .selected_text(self.device_label())
-                                        .width((ui.available_width() - 88.0).max(180.0))
-                                        .show_ui(ui, |ui| {
-                                            for drive in &self.devices {
-                                                ui.selectable_value(
-                                                    &mut self.device,
-                                                    drive.path.clone(),
-                                                    &drive.label,
-                                                )
-                                                .on_hover_text(&drive.path);
-                                            }
-                                        });
-                                    if previous != self.device {
-                                        self.risk_ack = false;
-                                        self.fields.clear();
-                                        self.status = "Ready".into();
-                                        self.failure = None;
-                                    }
-                                    if ui.button("Refresh").clicked() {
-                                        self.refresh(ops::enumerate());
-                                    }
-                                });
+        egui::Frame::new().inner_margin(16.0).show(ui, |ui| {
+            ui.set_max_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.heading("freemkv");
+                ui.label("Firmware Utility");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.weak(env!("CARGO_PKG_VERSION"));
+                });
+            });
+            ui.add_space(18.0);
+            ui.add_enabled_ui(
+                !self.running && self.pending_flash.is_none() && !self.details_open,
+                |ui| {
+                    egui::Frame::group(ui.style())
+                        .inner_margin(14.0)
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("Optical drive").strong());
+                            ui.horizontal(|ui| {
+                                let previous = self.device.clone();
+                                egui::ComboBox::from_id_salt("device_combo")
+                                    .selected_text(self.device_label())
+                                    .width((ui.available_width() - 88.0).max(180.0))
+                                    .show_ui(ui, |ui| {
+                                        for drive in &self.devices {
+                                            ui.selectable_value(
+                                                &mut self.device,
+                                                drive.path.clone(),
+                                                &drive.label,
+                                            )
+                                            .on_hover_text(&drive.path);
+                                        }
+                                    });
+                                if previous != self.device {
+                                    self.risk_ack = false;
+                                    self.fields.clear();
+                                    self.status = "Ready".into();
+                                    self.failure = None;
+                                }
+                                if ui.button("Refresh").clicked() {
+                                    self.refresh(ops::enumerate());
+                                }
                             });
-                        ui.add_space(18.0);
-                        ui.horizontal(|ui| {
-                            ui.selectable_value(&mut self.task, Task::Info, "Drive info");
-                            ui.selectable_value(&mut self.task, Task::Backup, "Backup");
-                            ui.selectable_value(&mut self.task, Task::Flash, "Flash firmware");
                         });
-                        ui.separator();
-                        ui.add_space(18.0);
-                        self.task_content(ui, &ctx);
-                    });
-                    ui.add_space(22.0);
-                    ui.separator();
+                    ui.add_space(18.0);
                     ui.horizontal(|ui| {
-                        if self.running {
-                            ui.spinner();
-                        }
-                        ui.label(egui::RichText::new(&self.status).strong());
+                        ui.selectable_value(&mut self.task, Task::Info, "Drive info");
+                        ui.selectable_value(&mut self.task, Task::Backup, "Backup");
+                        ui.selectable_value(&mut self.task, Task::Dump, "Dump");
+                        ui.selectable_value(&mut self.task, Task::Flash, "Flash firmware");
                     });
-                    if self.running {
-                        if let Some((label, done, total)) = &self.progress {
-                            ui.label(label);
-                            ui.add(
-                                egui::ProgressBar::new(*done as f32 / (*total).max(1) as f32)
-                                    .show_percentage(),
-                            );
-                        } else {
-                            ui.add(egui::ProgressBar::new(0.0).animate(true).text("Preparing…"));
-                        }
-                        ui.small("Keep the drive connected and powered until this finishes.");
-                    }
+                    ui.separator();
+                    ui.add_space(18.0);
+                    egui::ScrollArea::vertical()
+                        .id_salt(("task_content", self.task as u8))
+                        .max_height(match self.task {
+                            Task::Info => 60.0,
+                            Task::Backup | Task::Dump => 110.0,
+                            Task::Flash => 200.0,
+                        })
+                        .min_scrolled_height(match self.task {
+                            Task::Info => 60.0,
+                            Task::Backup | Task::Dump => 110.0,
+                            Task::Flash => 200.0,
+                        })
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            self.task_content(ui, &ctx);
+                        });
+                },
+            );
+            if self.result_task != self.task {
+                return;
+            }
+            ui.add_space(8.0);
+            ui.separator();
+            ui.horizontal(|ui| {
+                if self.running {
+                    ui.spinner();
+                }
+                ui.label(egui::RichText::new(&self.status).strong());
+            });
+            if self.running {
+                if let Some((label, done, total)) = &self.progress {
+                    ui.label(label);
+                    ui.add(
+                        egui::ProgressBar::new(*done as f32 / (*total).max(1) as f32)
+                            .show_percentage(),
+                    );
+                } else {
+                    ui.add(egui::ProgressBar::new(0.0).animate(true).text("Preparing…"));
+                }
+                ui.small("Keep the drive connected and powered until this finishes.");
+            }
+            egui::ScrollArea::vertical()
+                .id_salt("result_panel")
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                .max_height(ui.available_height().max(1.0))
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
                     if !self.fields.is_empty() {
                         egui::Grid::new("operation_results")
                             .num_columns(2)
                             .spacing([24.0, 8.0])
+                            .max_col_width((ui.available_width() - 24.0) / 2.0)
                             .show(ui, |ui| {
                                 for (label, value) in &self.fields {
-                                    ui.weak(label);
-                                    ui.label(value);
+                                    ui.label(label);
+                                    ui.add(egui::Label::new(value).wrap());
                                     ui.end_row();
                                 }
                             });
@@ -559,29 +523,167 @@ impl eframe::App for FlashApp {
                         ui.colored_label(egui::Color32::from_rgb(160, 45, 35), error);
                     }
                     ui.add_space(6.0);
-                    ui.collapsing("Details", |ui| {
+                    if ui.button("View details…").clicked() {
+                        self.details_open = true;
+                    }
+                });
+        });
+        self.flash_confirm_dialog(&ctx);
+        if self.details_open {
+            let mut open = true;
+            let mut close = false;
+            egui::Window::new("Operation details")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .fixed_size(egui::vec2(620.0, 400.0))
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .show(&ctx, |ui| {
+                    ui.horizontal(|ui| {
                         if ui.button("Copy details").clicked() {
                             ctx.copy_text(self.log.join("\n"));
                         }
-                        egui::ScrollArea::vertical()
-                            .id_salt("details")
-                            .max_height(220.0)
-                            .stick_to_bottom(true)
-                            .show(ui, |ui| {
-                                for line in &self.log {
-                                    ui.label(egui::RichText::new(line).monospace().size(11.0));
-                                }
-                            });
+                        if ui.button("Close").clicked() {
+                            close = true;
+                        }
                     });
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .id_salt("diagnostic_text")
+                        .scroll_bar_visibility(
+                            egui::scroll_area::ScrollBarVisibility::AlwaysVisible,
+                        )
+                        .max_height(340.0)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            for line in &self.log {
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(line).monospace().size(12.0),
+                                    )
+                                    .wrap(),
+                                );
+                            }
+                        });
                 });
-            });
-        self.flash_confirm_dialog(&ctx);
+            self.details_open = open && !close;
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rendered_text(app: &mut FlashApp) -> Vec<(String, bool)> {
+        let ctx = egui::Context::default();
+        ctx.set_theme(egui::Theme::Light);
+        let mut text = Vec::new();
+        for _ in 0..4 {
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(720.0, 610.0),
+                    )),
+                    time: Some(10.0),
+                    ..Default::default()
+                },
+                |ui| app.render(ui),
+            );
+            text.clear();
+            for clipped in output.shapes {
+                if let egui::epaint::Shape::Text(shape) = clipped.shape {
+                    let rect = egui::Rect::from_min_size(shape.pos, shape.galley.size());
+                    text.push((
+                        shape.galley.job.text.clone(),
+                        clipped.clip_rect.contains_rect(rect),
+                    ));
+                }
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn backup_and_flash_controls_are_visible_and_do_not_show_info_results() {
+        let mut app = FlashApp::with_drives(vec![DriveChoice {
+            path: "test".into(),
+            label: "Optical drive".into(),
+        }]);
+        app.fields = vec![("Manufacturer".into(), "OLD INFO RESULT".into())];
+        app.status = "Drive information complete".into();
+        for (task, controls) in [
+            (Task::Backup, vec!["Save backup…"]),
+            (Task::Dump, vec!["Save raw dump…"]),
+            (
+                Task::Flash,
+                vec![
+                    "Choose file…",
+                    "Continue…",
+                    "Check file",
+                    "Force flash (override compatibility and allow backup failure)",
+                ],
+            ),
+        ] {
+            app.task = task;
+            let text = rendered_text(&mut app);
+            for control in controls {
+                assert!(
+                    text.iter()
+                        .any(|(label, visible)| label == control && *visible),
+                    "missing or clipped control {control}: {text:?}"
+                );
+            }
+            assert!(!text
+                .iter()
+                .any(|(label, _)| label == "OLD INFO RESULT"
+                    || label == "Drive information complete"));
+        }
+    }
+
+    #[test]
+    fn long_results_fit_the_original_window_without_resizing() {
+        let mut app = FlashApp::with_drives(vec![DriveChoice {
+            path: "ioreg:123".into(),
+            label: "PIONEER BDR-UD04".into(),
+        }]);
+        app.fields = (0..40)
+            .map(|n| {
+                (
+                    format!("Field {n}"),
+                    "long firmware information ".repeat(20),
+                )
+            })
+            .collect();
+        let ctx = egui::Context::default();
+        for task in [Task::Info, Task::Backup, Task::Dump, Task::Flash] {
+            app.task = task;
+            app.result_task = task;
+            for _ in 0..3 {
+                let input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(720.0, 610.0),
+                    )),
+                    ..Default::default()
+                };
+                let _ = ctx.run_ui(input, |ui| {
+                    app.render(ui);
+                    assert!(
+                        ui.min_rect().right() <= 720.0,
+                        "content exceeds window width: {:?}",
+                        ui.min_rect()
+                    );
+                    assert!(
+                        ui.min_rect().bottom() <= 610.0,
+                        "content exceeds window height: {:?}",
+                        ui.min_rect()
+                    );
+                });
+            }
+        }
+    }
 
     #[test]
     fn light_theme_has_an_opaque_light_window_background() {

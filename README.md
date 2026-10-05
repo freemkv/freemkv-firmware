@@ -66,12 +66,11 @@ validates integrity and model compatibility before writing. Its workflow is:
    same image from the backup archive and reflashes it.
 3. **Verify** — the backend performs its supported completion/read-back checks.
 
-### enc — auto-detected transport envelope
+### Transport format
 
-Whether the drive needs the AES-128-ECB `enc` envelope is **auto-detected on
-every flash** (`drive::mtk::enc_needed`); the user never decides. Detection is
-a known-open question and currently defaults to plaintext. `--enc` / `--no-enc`
-exist only as a hidden expert override for debugging.
+The backend chooses the transport format; there is no encryption selector.
+The implemented MTK route sends a validated plaintext image. This is a protocol
+choice, not a universal encryption-detection probe for every MediaTek drive.
 
 ## Usage
 
@@ -87,7 +86,7 @@ freemkv-flash backup /dev/sg0 -o backup.tar
 freemkv-flash flash /dev/sg0 -i firmware.bin
 
 # Actually flash (all gates must pass)
-freemkv-flash flash /dev/sg0 -i firmware.bin --mode full \
+freemkv-flash flash /dev/sg0 -i firmware.bin \
     --execute --i-understand-risk
 
 # Reflash the firmware image captured in that backup
@@ -114,8 +113,9 @@ refuses to write unless:
 - a fresh, complete, validated pre-flash backup has been saved,
 - the drive classified as a supported family (Unknown is refused).
 
-`flash --recover` (degraded drives) waives the pre-flash backup; `--force`
-bypasses only the Pioneer family gate, never bundle self-consistency.
+`flash --force` consolidates crossflash and degraded-drive recovery. It attempts
+a backup but permits proceeding if backup capture/validation fails. Input
+structure, integrity, and supported write-protocol requirements still apply.
 
 ## Two independent plug-in layers
 
@@ -123,7 +123,7 @@ bypasses only the Pioneer family gate, never bundle self-consistency.
 crates/freemkv-flash/
 ├── Cargo.toml
 └── src/
-    ├── main.rs            # clap CLI: list / info / backup / dump / flash
+    ├── main.rs            # clap CLI: list / info / check / backup / dump / flash
     ├── lib.rs
     ├── platform/          # OS transport — the ScsiDevice trait
     │   ├── mod.rs         #   trait + open() compile-time OS selection

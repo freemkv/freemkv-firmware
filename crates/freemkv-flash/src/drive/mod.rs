@@ -530,6 +530,16 @@ pub trait FirmwareBackend: Sync {
         ))
     }
 
+    /// Validate input structure for a forced write without relying on drive identity.
+    fn validate_forced_image(&self, dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<()> {
+        self.validate_image(dev, image, "", true)
+    }
+
+    /// Decode a structurally valid backup while waiving target-model compatibility.
+    fn validate_forced_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
+        self.validate_backup(bytes, target_model)
+    }
+
     /// Interpret an input path for this protocol. The default is a direct
     /// firmware image; only backends that implement a backup codec recognize
     /// their backup extension as a restorable input.

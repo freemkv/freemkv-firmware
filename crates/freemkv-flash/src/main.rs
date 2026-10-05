@@ -11,7 +11,6 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use freemkv_flash::manifest::FlashMode;
 use freemkv_flash::style;
 
 /// freemkv standalone optical-drive firmware backup and flasher.
@@ -69,22 +68,18 @@ enum Command {
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
-    /// Salvage read: dump the drive's ENTIRE flash (0x000000..0x600000) as ONE raw file, even
-    /// if degraded (Pioneer: a single contiguous verbatim `.bin`). A
-    /// best-effort, unverified capture — NOT a flashable backup. Read-only; never
-    /// uses vendor kernel mode. `--force` stops trusting what the drive reports.
+    /// Capture all accessible drive memory as a raw dump (read-only).
     Dump {
-        /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
-        /// Omit to auto-pick the only connected drive.
+        /// Drive selector; omitted when only one drive is connected.
         device: Option<String>,
-        /// Output path (defaults to `<model>_<rev>.<infix>.<ext>`).
+        /// Output raw .bin path.
         #[arg(short, long)]
         out: Option<PathBuf>,
-        /// Trust nothing the drive reports: identity/layout failures become
-        /// warnings and the read proceeds anyway (degraded/soft-bricked drives).
-        /// Still read-only; no kernel mode.
-        #[arg(long)]
-        force: bool,
+    },
+    /// Inspect a firmware file without opening a drive.
+    Check {
+        /// Firmware or backup file to inspect.
+        input: PathBuf,
     },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
@@ -122,64 +117,16 @@ struct FlashArgs {
     /// Where to save the mandatory pre-flash backup.
     #[arg(short, long)]
     backup: Option<PathBuf>,
-    /// Skip the mandatory pre-flash backup. DANGEROUS: no rollback if the write
-    /// fails. Without this, a failed backup aborts the flash.
-    #[arg(long)]
-    skip_backup: bool,
-    /// Streaming mode: `main` or `full`. NOTE: on the currently-supported
-    /// MediaTek family this is informational only — the full 2 MiB image is
-    /// always streamed and the commit handshake is always sent regardless of
-    /// which mode is selected.
-    #[arg(long, value_enum, default_value_t = ModeArg::Full)]
-    mode: ModeArg,
-    /// Actually issue SCSI writes (otherwise dry-run only).
+    /// Actually issue firmware writes (otherwise preview the plan).
     #[arg(long)]
     execute: bool,
-    /// Acknowledge that flashing can permanently brick the drive.
+    /// Acknowledge that flashing can permanently disable the drive.
     #[arg(long)]
     i_understand_risk: bool,
-    /// EXPERIMENTAL: crossflash a DIFFERENT same-chipset model's firmware (e.g. a
-    /// UHD-friendly crossflash). Waives the model match but NEVER the chipset-family
-    /// gate (MT1959->MT1959 only). Hardware-unvalidated — high brick risk.
-    #[arg(long)]
-    allow_crossflash: bool,
-    /// RECOVER a degraded/soft-bricked drive: re-push the given (same or
-    /// known-good) firmware through the ordinary OEM-update route. Waives the
-    /// pre-flash backup, the post-entry identity gate and the older/downgrade
-    /// refusals; the firmware-family match still applies unless --force. Needs
-    /// --execute --i-understand-risk. EXPERIMENTAL, hardware-unvalidated.
-    #[arg(long)]
-    recover: bool,
-    /// Ignore the firmware-family match (Pioneer). By default a flash proceeds
-    /// only when the installed and target firmware profile to the SAME family;
-    /// --force skips that check. DANGEROUS: flashing another family can brick the
-    /// drive.
+    /// Override compatibility/recovery checks and permit flashing without a backup.
+    /// The input must still have a valid format for the drive's write protocol.
     #[arg(long)]
     force: bool,
-    /// Show the raw SCSI CDB sequence in the plan (default: clean summary).
-    #[arg(short = 'v', long)]
-    verbose: bool,
-    /// Hidden expert override: force the enc envelope on.
-    #[arg(long, hide = true)]
-    enc: bool,
-    /// Hidden expert override: force the enc envelope off (plaintext).
-    #[arg(long, hide = true, conflicts_with = "enc")]
-    no_enc: bool,
-}
-
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
-enum ModeArg {
-    Main,
-    Full,
-}
-
-impl From<ModeArg> for FlashMode {
-    fn from(m: ModeArg) -> Self {
-        match m {
-            ModeArg::Main => FlashMode::Main,
-            ModeArg::Full => FlashMode::Full,
-        }
-    }
 }
 
 fn main() -> ExitCode {
@@ -188,11 +135,12 @@ fn main() -> ExitCode {
         Some(Command::List) => freemkv_flash::workflow::list(),
         Some(Command::Info { device }) => freemkv_flash::workflow::info(device.as_deref()),
         Some(Command::Backup { device, out }) => {
-            freemkv_flash::workflow::backup(device.as_deref(), out, false, false)
+            freemkv_flash::workflow::backup(device.as_deref(), out, false)
         }
-        Some(Command::Dump { device, out, force }) => {
-            freemkv_flash::workflow::backup(device.as_deref(), out, true, force)
+        Some(Command::Dump { device, out }) => {
+            freemkv_flash::workflow::backup(device.as_deref(), out, true)
         }
+        Some(Command::Check { input }) => freemkv_flash::workflow::check_file(&input),
         Some(Command::Flash(args)) => freemkv_flash::workflow::flash(args.into()),
         None => freemkv_flash::workflow::info(cli.device.as_deref()),
     };
@@ -211,78 +159,47 @@ impl From<FlashArgs> for freemkv_flash::workflow::FlashOptions {
             device: a.device,
             input: a.input,
             backup: a.backup,
-            skip_backup: a.skip_backup,
-            mode: a.mode.into(),
             execute: a.execute,
             acknowledged_risk: a.i_understand_risk,
-            allow_crossflash: a.allow_crossflash,
-            recover: a.recover,
             force: a.force,
-            verbose: a.verbose,
-            enc: a.enc,
-            no_enc: a.no_enc,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Command};
-    use clap::Parser;
-
+    use super::*;
     #[test]
-    fn backup_dump_and_flash_recover_parse() {
-        // backup = the trusted capture.
-        assert!(matches!(
-            Cli::try_parse_from(["freemkv-flash", "backup", "/dev/sg0"])
-                .expect("backup")
-                .command,
-            Some(Command::Backup { .. })
-        ));
-        // dump = salvage read; --force trusts nothing the drive reports.
-        assert!(matches!(
-            Cli::try_parse_from(["freemkv-flash", "dump", "/dev/sg0"])
-                .expect("dump")
-                .command,
-            Some(Command::Dump { force: false, .. })
-        ));
-        assert!(matches!(
-            Cli::try_parse_from(["freemkv-flash", "dump", "/dev/sg0", "--force"])
-                .expect("dump --force")
-                .command,
-            Some(Command::Dump { force: true, .. })
-        ));
-        // The old `recover` command is gone (it moved onto `flash`).
-        assert!(Cli::try_parse_from(["freemkv-flash", "recover", "/dev/sg0"]).is_err());
-        // flash --recover parses and sets the recover flag.
-        match Cli::try_parse_from([
-            "freemkv-flash",
-            "flash",
-            "/dev/sg0",
-            "-i",
-            "fw.bin",
+    fn obsolete_flash_switches_are_rejected() {
+        for flag in [
+            "--mode",
+            "--enc",
+            "--no-enc",
+            "--allow-crossflash",
             "--recover",
-        ])
-        .expect("flash --recover")
-        .command
-        {
-            Some(Command::Flash(a)) => assert!(a.recover && !a.force),
-            other => panic!("expected flash, got {other:?}"),
+            "--skip-backup",
+            "--verbose",
+        ] {
+            assert!(
+                Cli::try_parse_from(["freemkv-flash", "flash", "-i", "fw.bin", flag]).is_err(),
+                "obsolete flag accepted: {flag}"
+            );
         }
-        // flash --force parses and sets the family-bypass flag.
-        match Cli::try_parse_from([
-            "freemkv-flash",
-            "flash",
-            "/dev/sg0",
-            "-i",
-            "fw.bin",
-            "--force",
-        ])
-        .expect("flash --force")
-        .command
+        assert!(
+            Cli::try_parse_from(["freemkv-flash", "flash", "-i", "fw.bin", "--mode", "main"])
+                .is_err()
+        );
+        assert!(Cli::try_parse_from(["freemkv-flash", "dump", "--force"]).is_err());
+    }
+    #[test]
+    fn check_file_needs_no_drive_and_force_is_the_only_override() {
+        assert!(Cli::try_parse_from(["freemkv-flash", "check", "fw.bin"]).is_ok());
+        match Cli::try_parse_from(["freemkv-flash", "flash", "-i", "fw.bin", "--force"])
+            .unwrap()
+            .command
         {
-            Some(Command::Flash(a)) => assert!(a.force && !a.recover),
-            other => panic!("expected flash, got {other:?}"),
+            Some(Command::Flash(a)) => assert!(a.force),
+            _ => panic!("expected flash"),
         }
     }
 }

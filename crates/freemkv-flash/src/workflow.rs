@@ -40,26 +40,12 @@ pub struct FlashOptions {
     pub input: PathBuf,
     /// Explicit backup destination; otherwise derive one next to the input.
     pub backup: Option<PathBuf>,
-    /// Deliberate override of the required backup.
-    pub skip_backup: bool,
-    /// Transfer mode supported by the backend.
-    pub mode: FlashMode,
     /// Issue firmware writes instead of previewing the plan.
     pub execute: bool,
     /// Explicit acknowledgement of the flash risk.
     pub acknowledged_risk: bool,
-    /// Allow a deliberate compatible crossflash.
-    pub allow_crossflash: bool,
-    /// Recover a degraded drive.
-    pub recover: bool,
-    /// Waive the Pioneer family gate.
+    /// Override compatibility and recovery gates; backup failure is nonfatal.
     pub force: bool,
-    /// Print protocol detail.
-    pub verbose: bool,
-    /// Expert encrypted-envelope override.
-    pub enc: bool,
-    /// Expert plaintext-envelope override.
-    pub no_enc: bool,
 }
 
 impl Default for FlashOptions {
@@ -68,18 +54,16 @@ impl Default for FlashOptions {
             device: None,
             input: PathBuf::new(),
             backup: None,
-            skip_backup: false,
-            mode: FlashMode::Full,
             execute: false,
             acknowledged_risk: false,
-            allow_crossflash: false,
-            recover: false,
             force: false,
-            verbose: false,
-            enc: false,
-            no_enc: false,
         }
     }
+}
+
+/// Inspect a local firmware file without drive discovery or transport access.
+pub fn check_file(path: &Path) -> Result<()> {
+    engine::info_file(path)
 }
 
 /// Inspect a drive or a local firmware image.
@@ -182,26 +166,13 @@ pub fn list() -> Result<()> {
 }
 
 /// Capture a backend backup or a salvage dump.
-pub fn backup(
-    device: Option<&str>,
-    out: Option<PathBuf>,
-    recover: bool,
-    force: bool,
-) -> Result<()> {
+pub fn backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Result<()> {
     // backup/dump are read-only (no kernel mode), so the device is opened
     // read-only.
     let selector = resolve_device(device)?;
     let mut dev = platform::open(&selector, false)?;
     let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
-    if recover && !handler.capabilities().recover {
-        // No distinct deeper recover for this family: a normal backup already
-        // captures a complete image, so fall through and run one.
-        eprintln!(
-            "note: {} has no deeper recover; running a normal backup",
-            handler.backend_name()
-        );
-    }
     let out = match out {
         Some(o) => o,
         None => {
@@ -229,14 +200,11 @@ pub fn backup(
             }
         }
     };
-    engine::backup(dev.as_mut(), handler.as_ref(), &out, recover, force)
+    engine::backup(dev.as_mut(), handler.as_ref(), &out, recover, recover)
 }
 
 /// Validate and execute the shared flash workflow.
 pub fn flash(args: FlashOptions) -> Result<()> {
-    if args.enc && args.no_enc {
-        bail!("encrypted and plaintext envelope overrides conflict");
-    }
     if args.execute && !args.acknowledged_risk {
         bail!("refusing to flash without acknowledging the risk");
     }
@@ -265,38 +233,25 @@ pub fn flash(args: FlashOptions) -> Result<()> {
     };
 
     let drive_model = handler.identity(dev.as_mut()).product;
-    let enc_override = if args.enc {
-        Some(true)
-    } else if args.no_enc {
-        Some(false)
-    } else {
-        None
-    };
-    // Recovery waives the mandatory pre-flash backup (a degraded drive may not be
-    // readable, and recovery is the last resort anyway).
-    let predump_out = if args.recover {
-        None
-    } else {
-        args.backup.clone().or_else(|| {
-            handler
-                .backup_extension()
-                .and_then(|ext| default_backup_path(&args.input, ext))
-        })
-    };
+    let predump_out = args.backup.clone().or_else(|| {
+        handler
+            .backup_extension()
+            .and_then(|ext| default_backup_path(&args.input, ext))
+    });
 
     let req = FlashRequest {
         input,
         input_kind,
-        mode: args.mode,
+        mode: FlashMode::Full,
         execute: args.execute,
         acknowledged_risk: args.acknowledged_risk,
-        enc_override,
+        enc_override: None,
         drive_model,
-        verbose: args.verbose,
+        verbose: false,
         predump_out,
-        allow_crossflash: args.allow_crossflash,
-        skip_backup: args.skip_backup || args.recover,
-        recover: args.recover,
+        allow_crossflash: args.force,
+        skip_backup: false,
+        recover: args.force,
         force: args.force,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)

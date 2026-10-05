@@ -549,6 +549,23 @@ fn capture_preflash_backup(
     drive: &dyn DriveFamily,
     req: &FlashRequest,
 ) -> Result<(String, Option<Vec<u8>>)> {
+    match capture_required_backup(dev, drive, req) {
+        Ok(backup) => Ok(backup),
+        Err(error) if req.force => {
+            let warning = format!("Force flash: continuing without a validated backup: {error:#}");
+            crate::output::field("Backup warning", &warning);
+            eprintln!("{warning}");
+            Ok((warning, None))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn capture_required_backup(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn DriveFamily,
+    req: &FlashRequest,
+) -> Result<(String, Option<Vec<u8>>)> {
     if req.skip_backup {
         eprintln!(
             "{}",
@@ -571,21 +588,22 @@ fn capture_preflash_backup(
     if out.symlink_metadata().is_ok() {
         bail!(
             "pre-flash backup path {} already exists (existing backups are never overwritten). \
-             Move/remove it, pass --backup <new-path>, or --skip-backup to proceed with no rollback.",
+             Move/remove it, pass --backup <new-path>, or --force to proceed with no rollback.",
             out.display()
         );
     }
-    let bytes = drive
-        .capture_backup(dev)
-        .context("pre-flash backup failed; aborting flash (use --skip-backup to override)")?;
+    let bytes = drive.capture_backup(dev).context(
+        "pre-flash backup failed; aborting flash (use --force to proceed without a backup)",
+    )?;
     // A partial capture (e.g. a Pioneer Kernel-only archive when the Normal read
     // flaked) is NOT a valid rollback for the region the flash overwrites.
     drive.verify_preflash_backup(&bytes, &req.input).context(
-        "pre-flash backup is not a usable rollback; aborting flash (use --skip-backup to override)",
+        "pre-flash backup is not a usable rollback; aborting flash (use --force to proceed without a backup)",
     )?;
     let target_model = drive.identity(dev).product;
-    let saved_len = save_backup(out, &bytes, drive, &target_model)
-        .context("pre-flash backup failed; aborting flash (use --skip-backup to override)")?;
+    let saved_len = save_backup(out, &bytes, drive, &target_model).context(
+        "pre-flash backup failed; aborting flash (use --force to proceed without a backup)",
+    )?;
     Ok((
         format!("saved {} ({} bytes)", out.display(), saved_len),
         Some(bytes),
@@ -906,7 +924,11 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result
 fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
     // Image geometry, integrity, model, and any controller sub-family gate are
     // protocol decisions. The engine only enforces the common workflow.
-    drive.validate_image(dev, &req.input, &req.drive_model, req.allow_crossflash)?;
+    if req.force {
+        drive.validate_forced_image(dev, &req.input)?;
+    } else {
+        drive.validate_image(dev, &req.input, &req.drive_model, req.allow_crossflash)?;
+    }
     let (payload, enc) = drive.envelope(dev, &req.input, req.enc_override)?;
 
     // A firmware write requires a saved, self-checking full rollback artifact.
@@ -1159,7 +1181,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 /// (where the old fixed-offset `0x1EC034` read missed) are still recognized. The
 /// model-vs-drive cross-check is retained as a secondary guard.
 /// Details of an authorized CROSSFLASH (a deliberate flash of a DIFFERENT
-/// same-chipset model's firmware). Present only when `--allow-crossflash` waived
+/// same-chipset model's firmware). Present only when `--force` waived
 /// a model mismatch; carries the brick-risk warnings to surface prominently.
 #[derive(Debug)]
 pub(crate) struct CrossflashInfo {
@@ -1186,12 +1208,12 @@ fn decide_crossflash(
     allow_crossflash: bool,
 ) -> Result<Option<CrossflashInfo>> {
     // Non-overridable sub-family gate: MT1959 image onto MT1939 silicon (or vice
-    // versa) is an instant brick — refuse even with --allow-crossflash.
+    // versa) is an instant brick — refuse even with --force.
     if let Some(df) = drive_fine_family {
         if df != image_family {
             bail!(
                 "image is {} firmware but this drive is {} silicon — refusing to \
-                 flash across chip families (instant brick). --allow-crossflash does \
+                 flash across chip families (instant brick). --force does \
                  NOT override the chipset-family gate.",
                 image_family.label(),
                 df.label()
@@ -1218,7 +1240,7 @@ fn decide_crossflash(
         bail!(
             "image is built for model {image_model:?} but this drive reports \
              {product:?} — refusing to flash a wrong-model image (pass \
-             --allow-crossflash for a deliberate same-chipset crossflash)"
+             --force for a deliberate same-chipset crossflash)"
         );
     }
 
@@ -1347,7 +1369,11 @@ fn flash_restore(
     drive: &dyn DriveFamily,
     req: &FlashRequest,
 ) -> Result<()> {
-    let firmware = drive.validate_backup(&req.input, &req.drive_model)?;
+    let firmware = if req.force {
+        drive.validate_forced_backup(&req.input, &req.drive_model)?
+    } else {
+        drive.validate_backup(&req.input, &req.drive_model)?
+    };
     println!(
         "{}",
         style::header("== reflash backup firmware (per-unit data retained as reference) ==")
