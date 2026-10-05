@@ -414,15 +414,17 @@ jobs:
             freemkv-firmware/deb-package/*.deb
             freemkv-firmware/deb-package/*.sha256
 
-  # ── Windows installer (Inno Setup) + portable zip ───────────────────────────
-  # Mirrors freemkv's build-windows job and packaging/windows/freemkv.iss:
-  # a per-user installer (PrivilegesRequired=lowest, %LOCALAPPDATA%\Programs),
-  # PATH added/removed on install/uninstall, UNSIGNED, plus a portable zip.
-  # One installer carries all four firmware binaries: the two CLIs (console)
-  # and the two GUIs (windowed). Assets, stable unversioned names:
-  #   freemkv-firmware-x86_64-windows.zip   (+ .sha256)
-  #   freemkv-firmware-x86_64-windows-setup.exe (+ .sha256)
-  # The per-binary freemkv-<bin>-windows-x86_64.zip archives from `build` stay.
+  # ── Windows installers (Inno Setup) + portable zips ─────────────────────────
+  # Mirrors freemkv's build-windows job and packaging/windows/freemkv.iss: a
+  # per-user installer (PrivilegesRequired=lowest, %LOCALAPPDATA%\Programs),
+  # PATH added/removed on install/uninstall, Start-menu shortcut, UNSIGNED, plus
+  # a portable zip -- one of each PER TOOL, like freemkv's app, each holding the
+  # tool's GUI (windowed) and CLI (console):
+  #   freemkv-flash-x86_64-windows-setup.exe / .zip     freemkv-flash(.exe, -gui.exe)
+  #   freemkv-fw-x86_64-windows-setup.exe / .zip        freemkv-fw(.exe, -gui.exe)
+  #   freemkv-firmware-x86_64-windows-setup.exe / .zip  all four (the original bundle)
+  # each with a .sha256. The bare CLI .exe (freemkv-<tool>-cli-x86_64-windows.exe)
+  # and the per-binary freemkv-<bin>-windows-x86_64.zip archives come from `build`.
   # No winget manifest, by decision.
   windows-installer:
     needs: build
@@ -435,122 +437,23 @@ jobs:
         with:
           name: freemkv-windows-x86_64
           path: dl
-      - name: Stage the four binaries and zip
+      - name: Stage the binaries and zip
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force stage | Out-Null
-          foreach ($b in 'freemkv-flash','freemkv-fw','freemkv-flash-gui','freemkv-fw-gui') {
-            Expand-Archive -Path "dl/$b-windows-x86_64.zip" -DestinationPath stage -Force
-            if (-not (Test-Path "stage/$b.exe")) { throw "$b-windows-x86_64.zip did not contain $b.exe" }
+          $tools = @{
+            'freemkv-flash'    = @('freemkv-flash','freemkv-flash-gui')
+            'freemkv-fw'       = @('freemkv-fw','freemkv-fw-gui')
+            'freemkv-firmware' = @('freemkv-flash','freemkv-fw','freemkv-flash-gui','freemkv-fw-gui')
           }
-          Compress-Archive -Path stage/* -DestinationPath freemkv-firmware-x86_64-windows.zip -Force
-      - name: Write the installer script
-        shell: pwsh
-        run: |
-          @'
-          ; Per-user installer for the freemkv firmware tools. Built by release.yml:
-          ;   iscc /DAppVersion=X.Y.Z /DBinDir=<dir with the four .exe> /O<out> freemkv-firmware.iss
-          ; The CLIs are console programs on PATH; the GUIs get Start-menu shortcuts.
-          #ifndef AppVersion
-            #error AppVersion must be defined (/DAppVersion=X.Y.Z)
-          #endif
-          #ifndef BinDir
-            #error BinDir must be defined (/DBinDir=...)
-          #endif
-
-          [Setup]
-          ; Never change AppId: it is how upgrades and the uninstaller find this install.
-          AppId={{__GUID__}
-          AppName=freemkv firmware tools
-          AppVersion={#AppVersion}
-          AppVerName=freemkv firmware tools {#AppVersion}
-          AppPublisher=freemkv
-          AppPublisherURL=https://github.com/freemkv/freemkv-firmware
-          VersionInfoVersion={#AppVersion}
-          PrivilegesRequired=lowest
-          DefaultDirName={localappdata}\Programs\freemkv-firmware
-          DisableDirPage=yes
-          DisableProgramGroupPage=yes
-          ArchitecturesAllowed=x64compatible
-          ArchitecturesInstallIn64BitMode=x64compatible
-          MinVersion=10.0
-          ChangesEnvironment=yes
-          SetupIconFile=crates\freemkv-flash-gui\assets\freemkv.ico
-          UninstallDisplayIcon={app}\freemkv-flash-gui.exe
-          UninstallDisplayName=freemkv firmware tools
-          OutputBaseFilename=freemkv-firmware-x86_64-windows-setup
-          Compression=lzma2
-          SolidCompression=yes
-          WizardStyle=modern
-
-          [Tasks]
-          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-
-          [Files]
-          Source: "{#BinDir}\freemkv-flash.exe"; DestDir: "{app}"; Flags: ignoreversion
-          Source: "{#BinDir}\freemkv-fw.exe"; DestDir: "{app}"; Flags: ignoreversion
-          Source: "{#BinDir}\freemkv-flash-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
-          Source: "{#BinDir}\freemkv-fw-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
-
-          [Icons]
-          Name: "{autoprograms}\freemkv Flash"; Filename: "{app}\freemkv-flash-gui.exe"
-          Name: "{autoprograms}\freemkv Modify"; Filename: "{app}\freemkv-fw-gui.exe"
-          Name: "{autodesktop}\freemkv Flash"; Filename: "{app}\freemkv-flash-gui.exe"; Tasks: desktopicon
-          Name: "{autodesktop}\freemkv Modify"; Filename: "{app}\freemkv-fw-gui.exe"; Tasks: desktopicon
-
-          [Code]
-          const
-            EnvKey = 'Environment';
-
-          function PathIndex(Paths, Dir: string): Integer;
-          begin
-            Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Paths) + ';');
-          end;
-
-          procedure AddToPath(Dir: string);
-          var
-            Paths: string;
-          begin
-            if not RegQueryStringValue(HKCU, EnvKey, 'Path', Paths) then
-              Paths := '';
-            if PathIndex(Paths, Dir) > 0 then
-              exit;
-            if (Paths <> '') and (Copy(Paths, Length(Paths), 1) <> ';') then
-              Paths := Paths + ';';
-            if not RegWriteExpandStringValue(HKCU, EnvKey, 'Path', Paths + Dir) then
-              SuppressibleMsgBox('Could not add ' + Dir + ' to your PATH. Add it by hand to run freemkv-flash from a console.', mbError, MB_OK, IDOK);
-          end;
-
-          procedure RemoveFromPath(Dir: string);
-          var
-            Paths: string;
-            P: Integer;
-          begin
-            if not RegQueryStringValue(HKCU, EnvKey, 'Path', Paths) then
-              exit;
-            P := PathIndex(Paths, Dir);
-            if P = 0 then
-              exit;
-            Paths := ';' + Paths + ';';
-            Delete(Paths, P, Length(Dir) + 1);
-            Paths := Copy(Paths, 2, Length(Paths) - 2);
-            if not RegWriteExpandStringValue(HKCU, EnvKey, 'Path', Paths) then
-              SuppressibleMsgBox('Could not remove ' + Dir + ' from your PATH. Remove it by hand.', mbError, MB_OK, IDOK);
-          end;
-
-          procedure CurStepChanged(CurStep: TSetupStep);
-          begin
-            if CurStep = ssPostInstall then
-              AddToPath(ExpandConstant('{app}'));
-          end;
-
-          procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-          begin
-            if CurUninstallStep = usPostUninstall then
-              RemoveFromPath(ExpandConstant('{app}'));
-          end;
-          '@.Replace('__GUID__', 'B9F92368-31D9-48B8-8A1D-8BE48F476B1C') | Set-Content -Encoding utf8 freemkv-firmware.iss
-      - name: Build the installer
+          foreach ($t in $tools.Keys) {
+            New-Item -ItemType Directory -Force "stage/$t" | Out-Null
+            foreach ($b in $tools[$t]) {
+              Expand-Archive -Path "dl/$b-windows-x86_64.zip" -DestinationPath "stage/$t" -Force
+              if (-not (Test-Path "stage/$t/$b.exe")) { throw "$b-windows-x86_64.zip did not contain $b.exe" }
+            }
+            Compress-Archive -Path "stage/$t/*" -DestinationPath "$t-x86_64-windows.zip" -Force
+          }
+      - name: Build the installers
         shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
@@ -561,55 +464,75 @@ jobs:
             choco install innosetup --version 6.4.3 -y --no-progress
             $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           }
-          # A branch dispatch has no version tag; the installer only needs a numeric one.
+          # A branch build has no version tag; the installer only needs a numeric one.
           $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:TAG.TrimStart('v') } else { '0.0.0' }
-          & $iscc "/DAppVersion=$ver" "/DBinDir=$((Resolve-Path stage).Path)" "/O$PWD" freemkv-firmware.iss
-          if ($LASTEXITCODE -ne 0) { throw "iscc exited $LASTEXITCODE" }
-      # Round-trip: files, shortcuts and PATH land; uninstall removes them and
-      # leaves the user's other PATH entries intact.
-      - name: Verify the installer
+          foreach ($t in 'freemkv-flash','freemkv-fw','freemkv-firmware') {
+            & $iscc "/DTool=$t" "/DAppVersion=$ver" "/DBinDir=$((Resolve-Path "stage/$t").Path)" "/O$PWD" packaging/windows/freemkv-firmware.iss
+            if ($LASTEXITCODE -ne 0) { throw "iscc ($t) exited $LASTEXITCODE" }
+          }
+      # Round-trip each installer: files, shortcuts and PATH land; uninstall
+      # removes them and leaves the user's other PATH entries intact.
+      - name: Verify the installers
         shell: pwsh
         run: |
-          $dir = "$env:LOCALAPPDATA\Programs\freemkv-firmware"
-          $lnks = "freemkv Flash.lnk","freemkv Modify.lnk" | ForEach-Object { "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$_" }
           $userPath = { [Environment]::GetEnvironmentVariable('Path', 'User') }
           $keep = @("$env:RUNNER_TEMP\keep-a", "$env:RUNNER_TEMP\keep-b")
           [Environment]::SetEnvironmentVariable('Path', ((@((& $userPath) -split ';') + $keep) | Where-Object { $_ }) -join ';', 'User')
-          $before = (& $userPath) -split ';'
-          Start-Process -Wait ./freemkv-firmware-x86_64-windows-setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
-          foreach ($f in 'freemkv-flash.exe','freemkv-fw.exe','freemkv-flash-gui.exe','freemkv-fw-gui.exe','unins000.exe') {
-            if (-not (Test-Path "$dir\$f")) { throw "installer did not create $dir\$f" }
+          $cases = @(
+            @{ t = 'freemkv-flash';    clis = @('freemkv-flash'); guis = @('freemkv-flash-gui'); lnks = @('freemkv Flash') },
+            @{ t = 'freemkv-fw';       clis = @('freemkv-fw');    guis = @('freemkv-fw-gui');    lnks = @('freemkv Modify') },
+            @{ t = 'freemkv-firmware'; clis = @('freemkv-flash','freemkv-fw'); guis = @('freemkv-flash-gui','freemkv-fw-gui'); lnks = @('freemkv Flash','freemkv Modify') }
+          )
+          foreach ($c in $cases) {
+            $dir = "$env:LOCALAPPDATA\Programs\$($c.t)"
+            $lnks = $c.lnks | ForEach-Object { "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$_.lnk" }
+            $before = (& $userPath) -split ';'
+            Start-Process -Wait "./$($c.t)-x86_64-windows-setup.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+            foreach ($f in (@($c.clis + $c.guis) | ForEach-Object { "$_.exe" }) + 'unins000.exe') {
+              if (-not (Test-Path "$dir\$f")) { throw "$($c.t) installer did not create $dir\$f" }
+            }
+            foreach ($l in $lnks) { if (-not (Test-Path $l)) { throw "$($c.t) installer did not create $l" } }
+            if ((& $userPath) -split ';' -notcontains $dir) { throw "$($c.t) installer did not add $dir to the user PATH" }
+            foreach ($b in $c.clis) {
+              & "$dir\$b.exe" --version
+              if ($LASTEXITCODE -ne 0) { throw "installed $b --version exited $LASTEXITCODE" }
+            }
+            Start-Process -Wait "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+            # The uninstaller relaunches itself from %TEMP%, so -Wait can return early.
+            $probe = "$dir\$($c.clis[0]).exe"
+            $done = { -not (Test-Path $probe) -and ((& $userPath) -split ';' -notcontains $dir) }
+            for ($i = 0; $i -lt 60 -and -not (& $done); $i++) { Start-Sleep 1 }
+            if (Test-Path $probe) { throw "$($c.t) uninstaller left $probe" }
+            if ((& $userPath) -split ';' -contains $dir) { throw "$($c.t) uninstaller left $dir on the user PATH" }
+            foreach ($l in $lnks) { if (Test-Path $l) { throw "$($c.t) uninstaller left $l" } }
+            $after = (& $userPath) -split ';'
+            if (Compare-Object $before $after -SyncWindow 0) { throw "$($c.t) uninstall changed other user PATH entries" }
           }
-          foreach ($l in $lnks) { if (-not (Test-Path $l)) { throw "installer did not create $l" } }
-          if ((& $userPath) -split ';' -notcontains $dir) { throw "installer did not add $dir to the user PATH" }
-          foreach ($t in 'freemkv-flash','freemkv-fw') {
-            & "$dir\$t.exe" --version
-            if ($LASTEXITCODE -ne 0) { throw "installed $t --version exited $LASTEXITCODE" }
-          }
-          Start-Process -Wait "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
-          # The uninstaller relaunches itself from %TEMP%, so -Wait can return early.
-          $done = { -not (Test-Path "$dir\freemkv-flash.exe") -and ((& $userPath) -split ';' -notcontains $dir) }
-          for ($i = 0; $i -lt 60 -and -not (& $done); $i++) { Start-Sleep 1 }
-          if (Test-Path "$dir\freemkv-flash.exe") { throw "uninstaller left $dir\freemkv-flash.exe" }
-          if ((& $userPath) -split ';' -contains $dir) { throw "uninstaller left $dir on the user PATH" }
-          foreach ($l in $lnks) { if (Test-Path $l) { throw "uninstaller left $l" } }
-          $after = (& $userPath) -split ';'
-          if (Compare-Object $before $after -SyncWindow 0) { throw "uninstall changed other user PATH entries" }
       - name: Checksums
         shell: bash
         run: |
-          A=freemkv-firmware-x86_64-windows
-          sha256sum "$A.zip" > "$A.zip.sha256"
-          sha256sum "$A-setup.exe" > "$A-setup.exe.sha256"
+          set -euo pipefail
+          for t in freemkv-flash freemkv-fw freemkv-firmware; do
+            A="$t-x86_64-windows"
+            sha256sum "$A.zip" > "$A.zip.sha256"
+            sha256sum "$A-setup.exe" > "$A-setup.exe.sha256"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            *-x86_64-windows.zip*
+            *-x86_64-windows-setup.exe*
+          if-no-files-found: error
       - name: Publish to the release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            freemkv-firmware-x86_64-windows.zip
-            freemkv-firmware-x86_64-windows.zip.sha256
-            freemkv-firmware-x86_64-windows-setup.exe
-            freemkv-firmware-x86_64-windows-setup.exe.sha256
+            *-x86_64-windows.zip
+            *-x86_64-windows.zip.sha256
+            *-x86_64-windows-setup.exe
+            *-x86_64-windows-setup.exe.sha256
 
   # Refresh the Homebrew tap (freemkv/homebrew-tap) to this release: the
   # freemkv-flash / freemkv-fw formulae and their -gui casks. update.sh reads the
