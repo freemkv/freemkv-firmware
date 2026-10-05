@@ -19,20 +19,21 @@ name: release
 #            <t>-macos-<arch>.tar.gz         CLI (Homebrew formula)
 #            <t>-cli-<arch>-macos            bare CLI          (arch: aarch64, x86_64)
 #   Linux    <t>-gui-<amd64|arm64>.deb       GUI + CLI (Conflicts/Replaces <t>)
-#            <t>-<amd64|arm64>.deb           static CLI only, no dependencies
+#            <t>-<amd64|arm64|armhf>.deb     static CLI only, no dependencies
 #            <t>-<x86_64|aarch64>-linux.AppImage  GUI + CLI (any argument runs the CLI)
-#            <t>-cli-<x86_64|aarch64>-linux  bare static (musl) CLI
-#            <t>-linux-<x86_64|aarch64>.tar.gz    static CLI (Homebrew formula on Linux)
+#            <t>-cli-<x86_64|aarch64|armv7>-linux bare static (musl) CLI
+#            <t>-linux-<x86_64|aarch64|armv7>.tar.gz  static CLI (formula on Linux)
+#            armv7/armhf = 32-bit Raspberry Pi OS: CLI only (no armhf runner for the GUI)
 # Kept for existing links/the tap: the per-binary <bin>-<os>-<arch>.{tar.gz,zip}
 # archives (<bin> also <t>-gui, which holds the CLI too) and their versioned
 # <bin>-<tag>-<os>-<arch> copies. The tap's update.sh reads the macOS
 # tar.gz/zip and linux-x86_64 tar.gz names above -- do not rename them.
 #
 # ── How each is built ──────────────────────────────────────────────────────
-# `build`: CLIs on all six targets (the macOS IOKit / Windows SPTI / Linux SG_IO
+# `build`: CLIs on all seven targets (the macOS IOKit / Windows SPTI / Linux SG_IO
 # backends come from libfreemkv); GUIs (eframe/egui) on macOS and Windows
 # (Windows arm64 on the native windows-11-arm runner).
-# Linux CLIs are static musl (aarch64 cross-compiled with `cross`).
+# Linux CLIs are static musl (aarch64/armv7 cross-compiled with `cross`).
 # `linux-packages`: glibc GUIs on native amd64/arm64 runners, .deb + AppImage
 # (packaging/linux/). `windows-installer`: Inno Setup (packaging/windows/).
 #
@@ -145,6 +146,16 @@ jobs:
             archive: tar.gz
             binext: ''
             gui: false
+            cross_image: ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5@sha256:702154f52b2d8091671aa2c84d5582d849f949977228c735ff8462f93cc0e1e4
+          # Linux armv7 (32-bit Raspberry Pi OS): static CLIs, cross-compiled.
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            osname: linux
+            arch: armv7
+            archive: tar.gz
+            binext: ''
+            gui: false
+            cross_image: ghcr.io/cross-rs/armv7-unknown-linux-musleabihf:0.2.5@sha256:b4f481f30ceca34730a5723f717396d762d94f6eddd7e1cf7c7862d1377ff98c
           # macOS: ship both architectures as separate binaries, GUIs included.
           - os: macos-latest
             target: x86_64-apple-darwin
@@ -205,11 +216,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
         working-directory: .
 
-      # arm64 musl goes through `cross`, as freemkv's cli-binaries job does: a
-      # plain x86 `cargo build --target` has no aarch64 linker. Pinned +
-      # hash-checked, and the build image pinned by digest.
+      # arm64/armv7 musl go through `cross`, as freemkv's cli-binaries job
+      # does: a plain x86 `cargo build --target` has no ARM linker. Pinned +
+      # hash-checked, and each build image pinned by digest (matrix.cross_image).
       - name: Install cross
-        if: matrix.target == 'aarch64-unknown-linux-musl'
+        if: matrix.cross_image
         working-directory: .
         run: |
           set -euo pipefail
@@ -217,14 +228,15 @@ jobs:
           echo 'a486cefa6cb486971b97be321ea9dfc2e90c1979550295314a368f53fab6d588  cross.tar.gz' | sha256sum -c -
           tar xzf cross.tar.gz cross
           sudo mv cross /usr/local/bin/
-          echo 'CROSS_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_IMAGE=ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5@sha256:702154f52b2d8091671aa2c84d5582d849f949977228c735ff8462f93cc0e1e4' >> "$GITHUB_ENV"
+          var="CROSS_TARGET_$(echo '${{ matrix.target }}' | tr '[:lower:]-' '[:upper:]_')_IMAGE"
+          echo "$var=${{ matrix.cross_image }}" >> "$GITHUB_ENV"
 
       - name: Build the CLIs (release)
-        if: matrix.target != 'aarch64-unknown-linux-musl'
+        if: ${{ !matrix.cross_image }}
         run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
 
       - name: Build the CLIs (release, cross)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
+        if: matrix.cross_image
         run: cross build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
 
       # The Linux CLIs must be static (no NEEDED entries), on both arches.
@@ -498,6 +510,56 @@ jobs:
           files: |
             freemkv-firmware/linux-package/*.deb
             freemkv-firmware/linux-package/*.AppImage
+            freemkv-firmware/linux-package/*.sha256
+
+  # ── Linux armhf CLI .deb (32-bit Raspberry Pi OS) ──────────────────────────
+  # CLI only: freemkv-<tool>-armhf.deb from the static armv7 musl binaries,
+  # smoke-tested under qemu-user. No armhf GUI .deb/AppImage: there is no
+  # hosted armhf runner to build and smoke-test the glibc GUI natively (arm64
+  # covers 64-bit Pi OS, GUI included).
+  linux-cli-armhf:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - name: Install package tools
+        working-directory: .
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev lintian qemu-user-static
+      - uses: actions/download-artifact@v4
+        with:
+          name: freemkv-linux-armv7
+          path: freemkv-firmware/musl-cli
+      - name: Build the .deb packages
+        run: packaging/linux/build-debs.sh armhf musl-cli - linux-package
+      - name: Lint, inspect and run under qemu
+        run: |
+          set -euo pipefail
+          want="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          for t in freemkv-flash freemkv-fw; do
+            deb="linux-package/$t-armhf.deb"
+            lintian --fail-on error "$deb"
+            dpkg-deb --info "$deb"; dpkg-deb --contents "$deb"
+            d="$(mktemp -d)"; dpkg-deb -x "$deb" "$d"
+            qemu-arm-static "$d/usr/bin/$t" --version | tee v.log; grep -Fq "$want" v.log
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-package-armhf
+          path: freemkv-firmware/linux-package/*
+          if-no-files-found: error
+      - name: Publish to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            freemkv-firmware/linux-package/*.deb
             freemkv-firmware/linux-package/*.sha256
 
   # ── Windows installers (Inno Setup) + portable zips ─────────────────────────

@@ -14,16 +14,17 @@
 #
 # Run from the repository root, on a host of the package's architecture (the
 # GUI runtime deps come from dpkg-shlibdeps):
-#   packaging/linux/build-debs.sh <amd64|arm64> <cli-dir> <gui-dir> <out-dir>
+#   packaging/linux/build-debs.sh <amd64|arm64|armhf> <cli-dir> <gui-dir|-> <out-dir>
 # <cli-dir> holds the `build` job's bare static CLIs
-# (freemkv-{flash,fw}-cli-<x86_64|aarch64>-linux); <gui-dir> holds the glibc
-# freemkv-{flash,fw}-gui binaries.
+# (freemkv-{flash,fw}-cli-<x86_64|aarch64|armv7>-linux); <gui-dir> holds the
+# glibc freemkv-{flash,fw}-gui binaries, or is `-` to build the CLI packages only.
 set -euo pipefail
 
 arch="$1" cli_dir="$2" gui_dir="$3" out="$4"
 case "$arch" in
   amd64) triple=x86_64 ;;
   arm64) triple=aarch64 ;;
+  armhf) triple=armv7 ;;
   *) echo "unsupported architecture: $arch" >&2; exit 2 ;;
 esac
 
@@ -135,6 +136,8 @@ Run freemkv-fw --help for usage. Install freemkv-fw-gui instead for the
 desktop app; it includes this command too.
 
 $fw_note"
+
+if [ "$gui_dir" = - ]; then ls -l "$out"; exit 0; fi
 
 gui="$gui_dir/freemkv-flash-gui"
 mkdeb freemkv-flash "$cli_dir/freemkv-flash-cli-$triple-linux" "$gui" "$(shlibs "$gui"), $dl" "$rec" \
