@@ -275,3 +275,23 @@ fn sanitize_ascii_strips_control_and_escape_bytes() {
         "HL-DT-ST BD-RE BU40N"
     );
 }
+
+#[test]
+fn failed_inquiry_is_an_error_not_an_empty_identity() {
+    struct Broken;
+    impl ScsiDevice for Broken {
+        fn command_in(&mut self, _cdb: &[u8], _alloc: usize) -> anyhow::Result<Vec<u8>> {
+            anyhow::bail!("permission denied")
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "broken".into()
+        }
+    }
+    let err = try_read_identity(&mut Broken).unwrap_err();
+    assert!(format!("{err:#}").contains("permission denied"));
+    // The infallible wrapper still returns an empty identity.
+    assert!(read_identity(&mut Broken).product.is_empty());
+}

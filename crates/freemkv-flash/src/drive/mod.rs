@@ -13,7 +13,7 @@
 //! through this trait. Only [`mtk`] has a proven live backup-and-flash path;
 //! other candidates can classify but fail closed on writes.
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
@@ -88,18 +88,39 @@ pub(crate) fn sanitize_ascii(s: &str) -> String {
         .collect()
 }
 
-/// Read standard INQUIRY identity. Vendor ROM reads belong to a matched
-/// protocol backend, never to the common identity path.
-pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
+/// Read standard INQUIRY identity, surfacing a failed INQUIRY (permission or
+/// transport fault) as an error instead of an empty identity.
+pub fn try_read_identity(dev: &mut dyn ScsiDevice) -> Result<Identity> {
     let mut id = Identity::default();
-    if let Ok(data) = dev.command_in(&mtk::cdb_inquiry(96), 96) {
-        if data.len() >= 36 {
-            id.vendor = sanitize_ascii(&trim_ascii(&data[8..16]));
-            id.product = sanitize_ascii(&trim_ascii(&data[16..32]));
-            id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
+    let data = dev
+        .command_in(&mtk::cdb_inquiry(96), 96)
+        .context("INQUIRY failed")?;
+    if data.len() >= 36 {
+        id.vendor = sanitize_ascii(&trim_ascii(&data[8..16]));
+        id.product = sanitize_ascii(&trim_ascii(&data[16..32]));
+        id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
+    }
+    Ok(id)
+}
+
+/// Read standard INQUIRY identity. Vendor ROM reads belong to a matched
+/// protocol backend, never to the common identity path. A failed INQUIRY still
+/// yields an empty identity (callers keep classifying), but is reported loudly
+/// so a permission/transport fault is not mistaken for an unsupported drive.
+pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
+    match try_read_identity(dev) {
+        Ok(id) => id,
+        Err(error) => {
+            eprintln!(
+                "{}",
+                crate::style::amber(&format!(
+                    "warning: could not read the drive identity ({error:#}); check device \
+                     permissions/connection — the drive may be reported as unsupported"
+                ))
+            );
+            Identity::default()
         }
     }
-    id
 }
 
 /// Read an MT19xx boot banner only from the MTK protocol probe/info path.
