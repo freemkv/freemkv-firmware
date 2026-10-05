@@ -16,8 +16,8 @@ pub fn enumerate() -> Vec<freemkv_flash::workflow::DriveChoice> {
 pub enum Job {
     Info,
     InfoFile { input: PathBuf },
-    Backup { out: PathBuf },
-    Dump { out: PathBuf },
+    Backup { out: PathBuf, replace: bool },
+    Dump { out: PathBuf, replace: bool },
     Flash(freemkv_flash::workflow::FlashOptions),
 }
 
@@ -27,8 +27,12 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
     match job {
         Job::Info => workflow::info(Some(device)),
         Job::InfoFile { input } => workflow::check_file(input),
-        Job::Backup { out } => workflow::backup(Some(device), Some(out.clone()), false),
-        Job::Dump { out } => workflow::backup(Some(device), Some(out.clone()), true),
+        Job::Backup { out, replace } => {
+            workflow::backup_with_replace(Some(device), Some(out.clone()), false, *replace)
+        }
+        Job::Dump { out, replace } => {
+            workflow::backup_with_replace(Some(device), Some(out.clone()), true, *replace)
+        }
         Job::Flash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());

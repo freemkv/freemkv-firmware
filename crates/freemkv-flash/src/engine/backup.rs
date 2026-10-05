@@ -202,8 +202,17 @@ pub(super) fn save_validated(
     bytes: &[u8],
     validate: impl Fn(&[u8]) -> Result<()>,
 ) -> Result<usize> {
+    save_validated_with_replace(path, bytes, false, validate)
+}
+
+pub(super) fn save_validated_with_replace(
+    path: &Path,
+    bytes: &[u8],
+    replace: bool,
+    validate: impl Fn(&[u8]) -> Result<()>,
+) -> Result<usize> {
     validate(bytes)?;
-    if path.symlink_metadata().is_ok() {
+    if !replace && path.symlink_metadata().is_ok() {
         bail!(
             "backup {} already exists (existing backups are never overwritten)",
             path.display()
@@ -231,7 +240,11 @@ pub(super) fn save_validated(
         drop(file);
         let saved = std::fs::read(&temp)?;
         validate(&saved).context("saved artifact failed read-back validation")?;
-        publish_no_clobber(&temp, path, |a, b| std::fs::hard_link(a, b))?;
+        if replace {
+            std::fs::rename(&temp, path).context("replacing the confirmed destination")?;
+        } else {
+            publish_no_clobber(&temp, path, |a, b| std::fs::hard_link(a, b))?;
+        }
         #[cfg(unix)]
         {
             let parent = path
@@ -331,6 +344,33 @@ fn tar_append<W: Write>(b: &mut tar::Builder<W>, name: &str, data: &[u8]) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn confirmed_replace_preserves_old_backup_until_new_bytes_validate() {
+        let path = std::env::temp_dir().join(format!("fmkv-replace-{}", std::process::id()));
+        std::fs::write(&path, b"old rollback").unwrap();
+        assert!(save_validated(&path, b"new rollback", |_| Ok(())).is_err());
+        assert!(
+            save_validated_with_replace(&path, b"invalid", true, |_| anyhow::bail!("invalid"))
+                .is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"old rollback");
+        let count = std::cell::Cell::new(0);
+        assert!(
+            save_validated_with_replace(&path, b"new rollback", true, |_| {
+                count.set(count.get() + 1);
+                if count.get() == 2 {
+                    anyhow::bail!("read-back failure");
+                }
+                Ok(())
+            })
+            .is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"old rollback");
+        save_validated_with_replace(&path, b"new rollback", true, |_| Ok(())).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new rollback");
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn unsupported_hardlinks_copy_exclusively_and_preserve_existing_files() {

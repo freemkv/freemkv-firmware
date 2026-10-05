@@ -296,10 +296,12 @@ impl FlashApp {
                 {
                     let filename = if dump { "dump.bin" } else { "backup.tar" };
                     if let Some(out) = rfd::FileDialog::new().set_file_name(filename).save_file() {
+                        // The native save dialog already confirms replacement.
+                        let replace = out.symlink_metadata().is_ok();
                         let job = if dump {
-                            Job::Dump { out }
+                            Job::Dump { out, replace }
                         } else {
-                            Job::Backup { out }
+                            Job::Backup { out, replace }
                         };
                         self.start_job(
                             ctx,
@@ -311,54 +313,26 @@ impl FlashApp {
                 }
             }
             Task::Flash => {
-                ui.label(if self.options.force {
-                    "Choose a firmware file. Force can proceed if the backup fails."
-                } else {
-                    "Choose a firmware file. A backup is saved automatically before updating."
-                });
-                ui.add_space(8.0);
-                egui::Frame::group(ui.style())
-                    .inner_margin(12.0)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.vertical(|ui| {
-                                ui.set_max_width(420.0);
-                                ui.add(
-                                    egui::Label::new(
-                                        egui::RichText::new(
-                                            self.input
-                                                .as_ref()
-                                                .and_then(|p| p.file_name())
-                                                .map(|p| p.to_string_lossy().into_owned())
-                                                .unwrap_or_else(|| "No firmware selected".into()),
-                                        )
-                                        .strong(),
-                                    )
-                                    .truncate(),
-                                );
-                                ui.small("Firmware image or backup · .bin, .enc, .tar");
-                            });
-                            if ui.button("Choose file…").clicked() {
-                                if let Some(input) = rfd::FileDialog::new()
-                                    .add_filter("Firmware or backup", &["bin", "enc", "tar"])
-                                    .pick_file()
-                                {
-                                    self.input = Some(input);
-                                }
-                            }
-                        });
+                let mut choose_file = false;
+                if let Some(input) = self.input.clone() {
+                    ui.horizontal(|ui| {
+                        if ui.button("Change file…").clicked() {
+                            choose_file = true;
+                        }
+                        ui.add(
+                            egui::Label::new(
+                                input.file_name().unwrap_or_default().to_string_lossy(),
+                            )
+                            .truncate(),
+                        )
+                        .on_hover_text(input.display().to_string());
                     });
-                ui.add_space(8.0);
-                let ready = selected && self.input.is_some();
-                ui.horizontal(|ui| {
-                    if primary(ui, "Continue…", ready).clicked() {
-                        self.choose_flash(ctx, true);
-                    }
-                    if ui
-                        .add_enabled(self.input.is_some(), egui::Button::new("Check file"))
-                        .clicked()
-                    {
-                        if let Some(input) = self.input.clone() {
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        if primary(ui, "Review flash…", selected).clicked() {
+                            self.choose_flash(ctx, true);
+                        }
+                        if ui.link("Check file").clicked() {
                             self.start_job(
                                 ctx,
                                 "Check file",
@@ -366,14 +340,23 @@ impl FlashApp {
                                 Job::InfoFile { input },
                             );
                         }
+                    });
+                    ui.add_space(8.0);
+                    ui.checkbox(&mut self.options.force, "Force flash")
+                        .on_hover_text(
+                        "Override compatibility checks and proceed if a backup cannot be saved.",
+                    );
+                } else {
+                    choose_file = primary(ui, "Choose firmware…", true).clicked();
+                }
+                if choose_file {
+                    if let Some(input) = rfd::FileDialog::new()
+                        .add_filter("Firmware or backup", &["bin", "enc", "tar"])
+                        .pick_file()
+                    {
+                        self.input = Some(input);
                     }
-                });
-                ui.small("Review the drive and file on the next screen. Nothing is written yet.");
-                ui.add_space(8.0);
-                ui.checkbox(
-                    &mut self.options.force,
-                    "Force flash (override compatibility and allow backup failure)",
-                );
+                }
             }
         }
     }
@@ -611,6 +594,7 @@ mod tests {
             path: "test".into(),
             label: "Optical drive".into(),
         }]);
+        app.input = Some("firmware.bin".into());
         app.fields = vec![("Manufacturer".into(), "OLD INFO RESULT".into())];
         app.status = "Drive information complete".into();
         for (task, controls) in [
@@ -618,12 +602,7 @@ mod tests {
             (Task::Dump, vec!["Save raw dump…"]),
             (
                 Task::Flash,
-                vec![
-                    "Choose file…",
-                    "Continue…",
-                    "Check file",
-                    "Force flash (override compatibility and allow backup failure)",
-                ],
+                vec!["Change file…", "Review flash…", "Check file", "Force flash"],
             ),
         ] {
             app.task = task;

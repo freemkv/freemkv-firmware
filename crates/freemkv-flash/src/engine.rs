@@ -20,9 +20,9 @@ use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 pub(crate) mod backup;
+use backup::save_backup;
 #[cfg(test)]
 use backup::BackupArtifact;
-use backup::{save_backup, save_validated};
 
 /// Run the `info` command: identify + classify (read-only).
 pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
@@ -420,12 +420,25 @@ pub fn backup(
     recover: bool,
     force: bool,
 ) -> Result<()> {
+    backup_with_replace(dev, drive, out, recover, force, false)
+}
+
+/// Capture a backup/dump and optionally replace a destination confirmed by the caller.
+/// Replacement happens only after the new artifact is written and validated.
+pub fn backup_with_replace(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn DriveFamily,
+    out: &Path,
+    recover: bool,
+    force: bool,
+    replace: bool,
+) -> Result<()> {
     if !drive.capabilities().backup {
         bail!("no firmware backup capability for {}", drive.backend_name());
     }
     let kind = drive.backup_kind();
     // Fail fast before the multi-minute capture if the output already exists.
-    if out.symlink_metadata().is_ok() {
+    if !replace && out.symlink_metadata().is_ok() {
         bail!(
             "backup {} already exists (backups are never overwritten); choose another -o path or remove it",
             out.display()
@@ -453,14 +466,16 @@ pub fn backup(
     let saved_len = if raw_dump {
         // A raw memory image is saved verbatim as ONE file: it is not a backup
         // archive, so only require that something was read.
-        save_validated(out, &bytes, |b| {
+        backup::save_validated_with_replace(out, &bytes, replace, |b| {
             if b.is_empty() {
                 bail!("dump is empty");
             }
             Ok(())
         })?
     } else {
-        save_backup(out, &bytes, drive, &target_model)?
+        backup::save_validated_with_replace(out, &bytes, replace, |candidate| {
+            drive.validate_backup(candidate, &target_model).map(|_| ())
+        })?
     };
     println!(
         "{}",

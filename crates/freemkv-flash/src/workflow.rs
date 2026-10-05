@@ -167,6 +167,16 @@ pub fn list() -> Result<()> {
 
 /// Capture a backend backup or a salvage dump.
 pub fn backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Result<()> {
+    backup_with_replace(device, out, recover, false)
+}
+
+/// Capture to a save-dialog destination; replacement requires explicit caller consent.
+pub fn backup_with_replace(
+    device: Option<&str>,
+    out: Option<PathBuf>,
+    recover: bool,
+    replace: bool,
+) -> Result<()> {
     // backup/dump are read-only (no kernel mode), so the device is opened
     // read-only.
     let selector = resolve_device(device)?;
@@ -200,7 +210,14 @@ pub fn backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Resu
             }
         }
     };
-    engine::backup(dev.as_mut(), handler.as_ref(), &out, recover, recover)
+    engine::backup_with_replace(
+        dev.as_mut(),
+        handler.as_ref(),
+        &out,
+        recover,
+        recover,
+        replace,
+    )
 }
 
 /// Validate and execute the shared flash workflow.
