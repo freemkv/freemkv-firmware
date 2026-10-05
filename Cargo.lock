@@ -1311,14 +1311,14 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "freemkv-flash"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "aes",
  "anyhow",
@@ -1340,7 +1340,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1353,7 +1353,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1365,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1972,8 +1972,8 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "libfreemkv"
-version = "1.7.7"
-source = "git+https://github.com/freemkv/libfreemkv?tag=v1.7.7#c8e67f16b46687fb99a117d42ce4dc4a89001876"
+version = "1.8.0"
+source = "git+https://github.com/freemkv/libfreemkv?tag=v1.8.0#92847607b9de38dcc82bdcdc49ecb27d3849e88f"
 dependencies = [
  "libc",
  "tracing",

@@ -6,6 +6,27 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3]
+
+### Fixed
+
+- **macOS: `freemkv-flash list` found no drives on some Macs.** At attach,
+  macOS files each optical drive under `IOBDServices`, `IODVDServices` or
+  `IOCompactDiscServices`, chosen from the profile list the drive returns to
+  GET CONFIGURATION. Drive discovery only looked under `IOBDServices`, so a
+  Blu-ray drive that macOS had filed as DVD or CD (its profile list omitted
+  the BD profiles, or the command failed and macOS fell back to CD) printed
+  `drives: none found`, and its `ioreg:` selector could not be opened.
+  libfreemkv 1.8.0 searches all three classes.
+- **macOS 11 and older.** The macOS builds declare macOS 11 (Apple silicon)
+  and 10.12 (Intel) as their minimum, but the drive layer called
+  `IOMainPort`, which exists only from macOS 12. libfreemkv 1.8.0 no longer
+  calls it.
+
+### Changed
+
+- libfreemkv 1.7.7 → 1.8.0 (SCSI transport only).
+
 ## [0.10.2]
 
 ### Added
