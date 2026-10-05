@@ -134,7 +134,7 @@ crates/freemkv-flash/
     ├── drive/             # chipset/protocol backends — probe + backup/flash
     │   ├── mod.rs         #   Family, classify(), DriveFamily trait
     │   ├── mtk.rs         #   MediaTek MT19xx — fully implemented
-    │   ├── pioneer.rs     #   OEM transfer plan; live backup/flash blocked
+    │   ├── pioneer.rs     #   Pioneer OEM backup/flash (dry-run unless --execute)
     │   └── renesas.rs     #   classified; live backup/flash blocked
     ├── cmac.rs            # MT1959 AES-CMAC verify + resign
     └── manifest.rs        # TOML firmware-image manifest / flash mode

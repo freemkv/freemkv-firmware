@@ -581,7 +581,8 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
 fn flash_plan_states_execution_blockers() {
     let plan = Pioneer::new().flash_plan(0x1D7000, false).unwrap();
     assert!(plan.contains("59 raw-envelope chunks"));
-    assert!(plan.contains("Execution is blocked"));
+    assert!(plan.contains("dry run: no writes are issued"));
+    assert!(!plan.contains("blocked"));
 }
 
 #[test]

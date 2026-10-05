@@ -15,10 +15,12 @@
 //! acceptance beyond a byte-exact OEM replay is still the drive's call, not
 //! the host's — hence the gates and the idempotent-self-flash-first rollout.
 //!
-//! ## Kernel-key table
-//! Kept intentionally minimal ([`KEYS`]). Grows deliberately per validated
-//! model — new entries land here only after a flash-mode entry has been
-//! empirically confirmed on that model.
+//! ## Legacy kernel-key table and preflight
+//! [`KEYS`], [`key_for`] and [`preflight`] are a legacy, public-but-unused
+//! table/check: the live flash path does NOT consult them. Control buffers and
+//! keys come from `crate::pioneer_keys`, and the gates that actually guard a
+//! write are the family gate / flash plan, the bundle checks, the pre-flash
+//! backup and `--execute` + `--i-understand-risk`.
 
 use anyhow::{anyhow, bail, Context, Result};
 use pioneer_optical::Role;
@@ -83,7 +85,8 @@ pub struct KeyEntry {
     pub layout: KeyLayout,
 }
 
-/// The compiled-in kernel-key table.
+/// The compiled-in LEGACY kernel-key table (unused by the live flash path; see
+/// the module docs).
 ///
 /// **Grow this deliberately.** Each new row is added only after a real
 /// flash-mode entry has been observed on a physical drive of that family.
@@ -731,7 +734,8 @@ pub struct Preflight {
     pub key: KernelKey,
 }
 
-/// Run every hard-refuse check before any OEM update-entry write hits the wire.
+/// Legacy hard-refuse checks (NOT called by the live flash path, which is gated
+/// by the flash plan and `select_oem_profile`; kept as public API).
 ///
 /// * Image starts with the `********  Copyright(c) 2000 Pioneer` magic
 /// * Image size is plausible (`IMAGE_MIN..=IMAGE_MAX`)
@@ -971,7 +975,7 @@ fn plan_for(
     }
 }
 
-/// Loud notice that the family gate (and every safety classification) was waived.
+/// Loud notice that the family gate was waived (--force). Kernel-tag refusals still apply.
 const FORCED_WARNING: &str = "WARNING: the firmware-family match was bypassed (--force). \
     Flashing firmware from a different or unprofiled family can permanently brick this drive.";
 
@@ -1153,7 +1157,7 @@ impl DriveFamily for Pioneer {
                 bail!(
                     "pre-flash backup is incomplete: the {label} region (which the flash \
                      overwrites) could not be captured, so it has no rollback. Refusing to flash. \
-                     Run `recover` or resolve the read error first, or pass --skip-backup to \
+                     Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), or pass --skip-backup to \
                      proceed with NO rollback."
                 );
             }
@@ -1292,18 +1296,18 @@ impl DriveFamily for Pioneer {
         let kernel = components.iter().find(|(role, _)| *role == "kernel");
         let normal = components.iter().find(|(role, _)| *role == "main");
         // Partial capture: one region could not be read. Name what was saved and
-        // point the user at `recover` for a deeper read of the missing region.
+        // point the user at `dump` for a raw salvage read of the missing region.
         match (kernel, normal) {
             (Some((_, kname)), None) => {
                 return BackupNotice::Unverified(format!(
                     "PARTIAL BACKUP: saved the Kernel only (as {kname}). The Normal region could \
-                     not be read — run `freemkv-flash recover <device>` to attempt a deeper read."
+                     not be read — `freemkv-flash dump <device>` can save a best-effort raw salvage image (not a flashable backup)."
                 ))
             }
             (None, Some((_, nname))) => {
                 return BackupNotice::Unverified(format!(
                     "PARTIAL BACKUP: saved the Normal only (as {nname}). The Kernel region could \
-                     not be read — run `freemkv-flash recover <device>` to attempt a deeper read."
+                     not be read — `freemkv-flash dump <device>` can save a best-effort raw salvage image (not a flashable backup)."
                 ))
             }
             _ => {}
@@ -1364,7 +1368,7 @@ impl DriveFamily for Pioneer {
             // `flash_bundle`; still gated by --execute/--i-understand-risk and a
             // mandatory pre-flash backup in the engine.
             flash: true,
-            // A per-component capture: if a region read fails, `recover` retries
+            // A per-component capture: if a region read fails, `dump` can salvage
             // it with a deeper, instability-tolerant read.
             recover: true,
         }
@@ -1405,7 +1409,7 @@ impl DriveFamily for Pioneer {
             "UD04 OEM offline transcript: OEM update entry (256 B control), \
              then {} raw-envelope chunks of at most {} B via the OEM Normal transfer, \
              then OEM finish (256 B control) and status polling. \
-             Execution is blocked: restorable backup, drive acceptance, and status handling are unverified.\n",
+             This is a dry run: no writes are issued. Add --execute --i-understand-risk to flash (a fresh pre-flash backup is required; drive acceptance is not guaranteed).\n",
             image_len.div_ceil(FLASH_CHUNK),
             FLASH_CHUNK,
         );
@@ -1431,15 +1435,17 @@ impl DriveFamily for Pioneer {
     }
     fn flash_open(&self, _dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
         bail!(
-            "Pioneer OEM flash execution is blocked: restorable backup and drive acceptance are unverified"
+            "Pioneer does not use the generic image-chunk flash path; live flashing goes through the OEM update route (flash --execute --i-understand-risk)"
         )
     }
     fn flash_chunk(&self, _dev: &mut dyn ScsiDevice, _offset: usize, _bytes: &[u8]) -> Result<()> {
-        bail!("Pioneer OEM flash execution is blocked: flash_open cannot safely complete")
+        bail!(
+            "Pioneer does not use the generic image-chunk flash path (flash_open is never reached)"
+        )
     }
     fn flash_close(&self, _dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
         bail!(
-            "Pioneer OEM flash execution is blocked: restorable backup and status rules are unverified"
+            "Pioneer does not use the generic image-chunk flash path (flash_close is never reached)"
         )
     }
     fn readback(&self, _dev: &mut dyn ScsiDevice, _offset: usize, _len: usize) -> Result<Vec<u8>> {

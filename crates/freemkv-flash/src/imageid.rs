@@ -93,10 +93,10 @@ impl ImageFamily {
 
     /// Honest one-line flashability summary for the non-MT19xx families (the
     /// MT19xx arm keeps its own richer reporting). Selected Pioneer envelopes
-    /// have an offline plan; live Pioneer writes still require a restorable backup.
+    /// have an offline plan; live Pioneer writes require --execute, --i-understand-risk and a pre-flash backup.
     pub fn flash_summary(self) -> String {
         if self == ImageFamily::Pioneer {
-            return "offline OEM plan available for audited models; live backup/flash blocked"
+            return "offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup"
                 .to_string();
         }
         let base = "identify-only — not flashable by this tool";

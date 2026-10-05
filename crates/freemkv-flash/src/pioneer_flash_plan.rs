@@ -19,9 +19,10 @@
 //! phase 9, inert for flashing); a live BDR-UD04 flat-rejects a cold F3/F2 with
 //! sense 05/24/00. See [`kernel_mode_required`]. Every flash goes through the
 //! ordinary OEM-update route, whose real generation lever is the decoded-body
-//! `0xFE` marker (Site 1). Executing a cross-generation downgrade is NOT yet
-//! wired: the plan is still reported ([`FlashPlan::KernelDowngrade`]) but the
-//! executor refuses it (see `check_plan_executable` in `crate::drive::pioneer`).
+//! `0xFE` marker (Site 1). A cross-generation downgrade
+//! ([`FlashPlan::KernelDowngrade`]) is executable: the §15.3 marker patch is
+//! applied to the Kernel at write time (see `execute_flash` in
+//! `crate::pioneer_flash`).
 //!
 //! Gates recapped (whitepaper Ch.13/15):
 //! - **Site 1** (incoming-marker gate, newer receiver): rejects an incoming
@@ -167,8 +168,8 @@ pub enum FlashPlan {
     /// as present, no kernel-mode unlock.
     Plain,
     /// Older, crossing the `FF`/`00` generation barrier on a new-gen receiver, with
-    /// a full self-consistent Kernel+Normal pair. Reported only: executing a
-    /// cross-generation downgrade is not yet wired and the executor refuses it.
+    /// a full self-consistent Kernel+Normal pair. Executable: the §15.3 marker
+    /// patch is applied to the Kernel at write time.
     /// (Despite the name it needs no kernel mode; see [`kernel_mode_required`].)
     KernelDowngrade,
     /// Different model in the same family: a full self-consistent foreign

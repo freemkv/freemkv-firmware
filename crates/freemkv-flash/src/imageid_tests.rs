@@ -144,7 +144,7 @@ fn genuinely_unknown_blob_is_unknown_not_a_panic() {
 fn flash_summary_distinguishes_pioneer_offline_plan_from_live_support() {
     let p = ImageFamily::Pioneer.flash_summary();
     assert!(p.contains("offline OEM plan"));
-    assert!(p.contains("live backup/flash blocked"));
+    assert!(p.contains("live flash needs --execute"));
     // A family with no catalog brand is a bare identify-only line.
     assert_eq!(
         ImageFamily::Renesas.flash_summary(),

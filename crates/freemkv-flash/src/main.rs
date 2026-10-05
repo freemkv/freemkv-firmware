@@ -120,7 +120,7 @@ struct FlashArgs {
     device: Option<String>,
     /// Input: MTK image (.bin), complete backup (.tar), Pioneer .enc, or a Pioneer envelope tar.
     /// A backup .tar rolls back firmware; per-unit reference data is not auto-written.
-    /// Pioneer inputs can be dry-run; live writes remain blocked pending a restorable backup.
+    /// Pioneer inputs are dry-run by default; live writes need --execute --i-understand-risk and a pre-flash backup.
     #[arg(short, long)]
     input: PathBuf,
     /// Where to save the mandatory pre-flash backup.

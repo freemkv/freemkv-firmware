@@ -492,19 +492,19 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
 /// succeeded. The Kernel is read first (it establishes the Normal's geometry);
 /// the Normal is then attempted on its own. A region the read cannot get never
 /// discards the other: the archive holds 2 components on a healthy drive, or 1
-/// when a region failed (the caller tells the user to run `recover`). Fails only
+/// when a region failed (the caller points the user at `dump` for a raw salvage read). Fails only
 /// if nothing could be read. `deep` selects the salvage read for failed regions.
 fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
     let (inquiry, hardware, kernel_len) = read_identity(dev)?;
     prepare_firmware_read(dev)?;
 
     // The Kernel is required: it defines the Normal's receiver geometry, so a
-    // Kernel we cannot read leaves nothing buildable. Say so and point at recover.
+    // Kernel we cannot read leaves nothing buildable. Say so and point at dump.
     let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len, deep).with_context(|| {
         if deep {
-            "could not read the Kernel firmware region even with a deeper recover read"
+            "could not read the Kernel firmware region even with a deeper salvage read"
         } else {
-            "could not read the Kernel firmware region; run `recover` for a deeper read"
+            "could not read the Kernel firmware region; run `freemkv-flash dump <device>` for a raw salvage read"
         }
     })?;
     if kernel.get(0x1000..0x1008) != Some(hardware.as_slice()) {
