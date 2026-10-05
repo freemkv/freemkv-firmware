@@ -470,7 +470,8 @@ jobs:
             ./linux-package/freemkv-flash-gui-$a.deb ./linux-package/freemkv-fw-gui-$a.deb
           for t in flash fw; do
             freemkv-$t --version | tee v.log; grep -Fq "$want" v.log
-            ldd /usr/bin/freemkv-$t 2>&1 | grep -Eq 'statically linked|not a dynamic executable'
+            # Static = no ELF interpreter (ldd's wording differs on aarch64 static-pie).
+            ! readelf -lW /usr/bin/freemkv-$t | grep -Eq '^\s*INTERP\b'
             test -f /usr/share/applications/org.freemkv.freemkv-$t-gui.desktop
             rc=0; xvfb-run -a timeout 10 /usr/bin/freemkv-$t-gui || rc=$?
             [ "$rc" = 124 ] || { echo "::error::freemkv-$t-gui exited early (rc=$rc)"; exit 1; }
