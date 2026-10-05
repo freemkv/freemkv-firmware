@@ -100,10 +100,13 @@ mkdeb() {
 # eframe/winit/glow dlopen at run time (invisible to it): GL/EGL, X11 and
 # Wayland, xkbcommon.
 shlibs() {
-  local d; d="$(mktemp -d)"; mkdir "$d/debian"
+  # Absolute: dpkg-shlibdeps runs from a scratch dir. Empty output is an error.
+  local bin d deps; bin="$(realpath "$1")"; d="$(mktemp -d)"; mkdir "$d/debian"
   printf 'Source: x\n\nPackage: x\nArchitecture: %s\nDescription: x\n' "$arch" > "$d/debian/control"
-  (cd "$d" && dpkg-shlibdeps -O "$1" | sed -n 's/^shlibs:Depends=//p')
+  deps="$(cd "$d" && dpkg-shlibdeps -O "$bin" | sed -n 's/^shlibs:Depends=//p')"
   rm -rf "$d"
+  [ -n "$deps" ] || { echo "::error::dpkg-shlibdeps found no dependencies for $1" >&2; exit 1; }
+  printf '%s\n' "$deps"
 }
 dl='libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libwayland-egl1, libx11-6, libxcursor1, libxi6, libxrandr2'
 rec='libvulkan1, xdg-desktop-portal'
@@ -140,7 +143,8 @@ $fw_note"
 if [ "$gui_dir" = - ]; then ls -l "$out"; exit 0; fi
 
 gui="$gui_dir/freemkv-flash-gui"
-mkdeb freemkv-flash "$cli_dir/freemkv-flash-cli-$triple-linux" "$gui" "$(shlibs "$gui"), $dl" "$rec" \
+deps="$(shlibs "$gui")"  # a plain assignment, so set -e stops on failure
+mkdeb freemkv-flash "$cli_dir/freemkv-flash-cli-$triple-linux" "$gui" "$deps, $dl" "$rec" \
   'freemkv Flash desktop app' \
   ' Minimal desktop app for freemkv-flash: drive info, dump and flash. Also
  installs the freemkv-flash command-line tool.' flash \
@@ -154,7 +158,8 @@ $flash_note
 The desktop app runs as your user; if a flash is refused for lack of
 privilege, run the same flash with the freemkv-flash command under sudo."
 gui="$gui_dir/freemkv-fw-gui"
-mkdeb freemkv-fw "$cli_dir/freemkv-fw-cli-$triple-linux" "$gui" "$(shlibs "$gui"), $dl" "$rec" \
+deps="$(shlibs "$gui")"  # a plain assignment, so set -e stops on failure
+mkdeb freemkv-fw "$cli_dir/freemkv-fw-cli-$triple-linux" "$gui" "$deps, $dl" "$rec" \
   'freemkv Modify desktop app' \
   ' Minimal desktop app for freemkv-fw: create, verify, sign and probe. Also
  installs the freemkv-fw command-line tool.' modify \
