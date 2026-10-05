@@ -558,7 +558,7 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
         receiver_new_gen: true,
         normal_date: None,
         family: Some(FamilyKey::new("f1")),
-            kernel_tag: None,
+        kernel_tag: None,
     };
     let ud04_target = Target {
         controller_id: 0x8A10, // BDR-UD04
@@ -808,7 +808,7 @@ fn installed_facts_from_header_only_normal_backup() {
 fn check_plan_executable_covers_every_variant() {
     use crate::pioneer_flash_plan::FlashPlan;
     // All executable plans — including a cross-generation downgrade, which the
-    // executor now handles via the §15.3 marker patch at `write_kernel` time.
+    // executor now handles via the §15.3 marker patch when the Kernel is written.
     assert!(check_plan_executable(&FlashPlan::Plain).is_ok());
     assert!(check_plan_executable(&FlashPlan::Forced).is_ok());
     assert!(check_plan_executable(&FlashPlan::KernelCrossflash).is_ok());

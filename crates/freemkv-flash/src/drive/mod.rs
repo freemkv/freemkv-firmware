@@ -21,7 +21,7 @@ use crate::platform::ScsiDevice;
 pub mod fw_ident;
 pub mod mtk;
 pub mod pioneer;
-/// The single `Transport` adapter between `ScsiDevice` and `pioneer_optical::flash`.
+/// The single `Transport` adapter between `ScsiDevice` and `pioneer_optical::drive`.
 pub mod pioneer_transport;
 
 pub use mtk::UserDump;

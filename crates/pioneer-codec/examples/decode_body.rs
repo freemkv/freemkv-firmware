@@ -9,7 +9,12 @@ fn main() {
             fs::write(&a[1], &d.image).expect("write body");
             eprintln!(
                 "decoded {} -> {} ({} bytes) model={} rev={} type={}",
-                a[0], a[1], d.image.len(), d.info.model, d.info.revision, d.info.file_type
+                a[0],
+                a[1],
+                d.image.len(),
+                d.info.model,
+                d.info.revision,
+                d.info.file_type
             );
         }
         None => {

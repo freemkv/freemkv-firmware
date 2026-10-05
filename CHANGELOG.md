@@ -6,6 +6,45 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2]
+
+### Changed
+
+- **pioneer-optical 0.8.** The flasher passes the 256-byte control buffer to
+  `drive::enter_update` directly and writes through `Session::write(Role, …)`.
+  The control-buffer substitution and the abort latch in the transport adapter
+  are gone: the crate never sends a commit when a session is dropped, so a
+  failed flash cannot commit a partial image.
+
+### Fixed
+
+- **Linux GUI packages.** `freemkv-flash-gui` / `freemkv-fw-gui` `.deb`s now
+  depend on `libxkbcommon-x11-0`, `libxcursor1`, `libxi6` and `libxrandr2`,
+  which the windowing layer loads at run time under X11. Without them the GUI
+  exited at start-up.
+- Broken intra-doc links in the Pioneer flash-plan module.
+
+## [0.10.1]
+
+### Changed
+
+- Uses the published `pioneer-optical` from crates.io and `libfreemkv` from
+  its GitHub tag; builds no longer need sibling checkouts, and every
+  dependency resolves from the committed `Cargo.lock`.
+- Pioneer bundles carry only the two component envelopes (no manifest); the
+  flasher reads the drive identity back after a flash.
+
+## [0.10.0]
+
+### Added
+
+- **Pioneer flasher.** Backup-first flash of Pioneer BD drives through
+  `pioneer-optical`, gated on a hardware-family match between the installed
+  and target firmware and on the installed Kernel tag. Cross-flash between
+  editions of the same family; Kernel downgrade via the decoded-body marker
+  patch.
+- `dump` / `dump --force` and `flash --recover`.
+
 ## [0.9.2]
 
 Feature release: unifies UHD and BD acceptance under a single lever

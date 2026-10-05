@@ -2,7 +2,7 @@
 //!
 //! Every Pioneer vendor command (identity, read-unlock knock, memory reads, OEM
 //! update entry / transfer / finish, the DVR handshake) is issued by
-//! `pioneer_optical::flash::*`. The flasher's only contact with the wire is the
+//! `pioneer_optical::drive::*`. The flasher's only contact with the wire is the
 //! one `Transport` adapter, `src/drive/pioneer_transport.rs`, which forwards the
 //! crate's CDBs untouched and so itself carries no opcode literals.
 //!

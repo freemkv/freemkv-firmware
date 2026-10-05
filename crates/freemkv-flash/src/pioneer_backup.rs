@@ -417,7 +417,7 @@ const DUMP_BASE: usize = 0;
 /// Minimum `dump` span length: the whole flash, `0x000000..0x600000` (the range
 /// the read-map probe covers; the UD04 Normal ends at `0x5d7500`, inside it).
 /// Extended to the Normal's end if a drive's geometry reaches past it, and never
-/// past the unlocked read ceiling (`pioneer_optical::READ_CEILING`).
+/// past the unlocked read ceiling (`pioneer_optical::cdb::READ_CEILING`).
 const DUMP_MIN_LEN: usize = 0x60_0000;
 
 /// `dump`: ONE contiguous raw read of the entire device — `0x000000` up to
@@ -426,7 +426,7 @@ const DUMP_MIN_LEN: usize = 0x60_0000;
 /// wrapping, no tar. Uses the deep, instability-tolerant read (unreadable spans
 /// are zero-filled and reported; it errors only if nothing at all was readable).
 /// Never uses vendor kernel mode and issues no flash commands: every read goes
-/// through `pioneer_optical::flash::read_memory`, which handles the read unlock.
+/// through `pioneer_optical::drive::read_memory`, which handles the read unlock.
 ///
 /// Normally the drive identity and the Kernel receiver layout must validate.
 /// `force` trusts nothing the drive reports: identity, read-unlock and layout
@@ -466,7 +466,7 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
     // still holds the whole image; stay within the read ceiling.
     let normal_end = pioneer_codec::builder::scaled_normal_geometry_from_kernel(kernel)
         .map(|g| NORMAL_IMAGE_BASE + g.image_len)
-        .filter(|end| *end <= pioneer_optical::READ_CEILING as usize);
+        .filter(|end| *end <= pioneer_optical::cdb::READ_CEILING as usize);
     if let Some(end) = normal_end.filter(|end| *end > image.len()) {
         let extra = read_region(dev, image.len(), end - image.len(), true)
             .context("could not read the Normal past the standard dump span")?;
@@ -555,7 +555,7 @@ fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> 
     {
         bail!("drive does not have a usable H8/SAT INQUIRY identity");
     }
-    let f1 = identity.vendor_identity_bytes();
+    let f1 = identity.vendor_bytes();
     if !f1[16..24].starts_with(b"SAT ") {
         let hardware = String::from_utf8_lossy(&f1[16..24]);
         bail!("Pioneer backup is not implemented for hardware {hardware:?}: H8/SAT hardware identity required; no firmware image read or backup created");
@@ -608,7 +608,7 @@ const DEEP_RETRIES: usize = 6;
 const DEEP_MIN_CHUNK: usize = 4;
 
 /// One vendor firmware read at `off` of exactly `n` bytes, through
-/// `pioneer_optical::flash::read_memory` (which issues the read-unlock knock
+/// `pioneer_optical::drive::read_memory` (which issues the read-unlock knock
 /// itself, so no caller ever sequences it).
 fn read_chunk(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Result<Vec<u8>> {
     let data = crate::drive::pioneer_transport::read_memory_exact(dev, off as u32, n as u32)
@@ -788,7 +788,7 @@ const KERNEL_IMAGE_BASE: usize = 0x400000;
 const NORMAL_IMAGE_BASE: usize = 0x410000;
 
 /// Confirm firmware reads work before a capture: one 1-byte read at the Kernel
-/// base. The read-unlock knock is issued inside `pioneer_optical::flash::read_memory`,
+/// base. The read-unlock knock is issued inside `pioneer_optical::drive::read_memory`,
 /// so this is just a fail-fast probe; any failure (transport, short data, sense)
 /// stops the capture.
 fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {

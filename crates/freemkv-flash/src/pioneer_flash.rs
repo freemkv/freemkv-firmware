@@ -8,7 +8,7 @@
 //! and a captured pre-flash backup.
 //!
 //! No raw CDB is built here: every Pioneer vendor command goes through
-//! `pioneer_optical::flash` over the single adapter in
+//! `pioneer_optical::drive` over the single adapter in
 //! [`crate::drive::pioneer_transport`].
 //!
 //! The caller ([`crate::drive::pioneer`]) builds the 256-byte control buffer
@@ -21,12 +21,11 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 
-use pioneer_optical::flash::{enter_kernel_mode, DriveClass, Identity};
+use pioneer_optical::drive::enter_update;
+use pioneer_optical::{DriveClass, Identity, Role};
 
 use crate::drive::pioneer::{CONTROL_LEN, FLASH_CHUNK};
-use crate::drive::pioneer_transport::{
-    self as transport, flash_err, Latch, ScsiTransport, SharedDevice,
-};
+use crate::drive::pioneer_transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use crate::platform::ScsiDevice;
 use crate::style;
 
@@ -44,23 +43,18 @@ const POLL_TIMEOUT: Duration = Duration::from_secs(90);
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 /// The drive dialect an update session must speak. Taken from the drive's own
-/// identity (`Drive::identify` -> `Identity::class`) when that identity is
+/// identity (`drive::identify` -> `Identity::class`) when that identity is
 /// unambiguous: a `BD-*` product, or a `DVD-R*` product on a `DVR*` platform.
 ///
 /// FALLBACK: an identity that cannot be read (a degraded drive under `--recover`)
 /// or that is neither of those is ambiguous. If the target Normal profiles as a
-/// known family (`pioneer_optical::fw::get_family` on its decoded body) the
+/// known family (`pioneer_optical::image::family` on its decoded body) the
 /// flash is a BD-generation image, so assume [`DriveClass::Bd`] — the `04/FF`-only
 /// entry, which is the only flash route validated on hardware. With no family to
 /// lean on the class is unknowable and the flash is refused before any write.
 fn resolve_class(identity: Result<Identity>, normal: &[u8]) -> Result<DriveClass> {
-    if let Ok(identity) = &identity {
-        let product = identity.product();
-        if product.starts_with("BD-")
-            || (product.starts_with("DVD-R") && identity.platform().starts_with("DVR"))
-        {
-            return Ok(identity.class());
-        }
+    if let Some(class) = identity.as_ref().ok().and_then(Identity::class) {
+        return Ok(class);
     }
     if crate::pioneer_flash_plan::normal_family(normal).is_some() {
         println!(
@@ -84,17 +78,17 @@ fn resolve_class(identity: Result<Identity>, normal: &[u8]) -> Result<DriveClass
 /// Execute the OEM update against the drive with the pre-built 256-byte
 /// `control` buffer (descriptor + key from the embedded key table).
 ///
-/// Every Pioneer vendor command is issued by `pioneer_optical::flash`: identify
-/// -> [`enter_kernel_mode`] (OEM update entry; the crate adds the DVR handshake
+/// Every Pioneer vendor command is issued by `pioneer_optical::drive`: identify
+/// -> [`enter_update`] (OEM update entry; the crate adds the DVR handshake
 /// first when the class needs it) -> post-entry settle + identity gate ->
-/// `write_kernel` slices (if any) -> `write_normal` chunks -> `finish` ->
+/// Kernel slices (if any) -> Normal chunks -> `finish` ->
 /// finish settle + ready poll. Every write goes through the strict
 /// (abort-on-any-nonzero, no-retry) transport, exactly as the OEM host loop
 /// does. The caller resolves the control key and components and guarantees
 /// gating, the tray guard, and a pre-flash backup.
 ///
-/// A failure after entry never commits: the transport's abort latch suppresses
-/// the session's drop-time `finish`, so a partial image is not blessed.
+/// A failure after entry never commits: the session sends nothing when dropped,
+/// so a partial image is not blessed.
 pub(crate) fn execute_flash(
     dev: &mut dyn ScsiDevice,
     control: &[u8; CONTROL_LEN],
@@ -132,14 +126,13 @@ pub(crate) fn execute_flash(
 
     let shared = SharedDevice::new(dev);
     let class = resolve_class(transport::identify_on(&shared), normal)?;
-    let latch = Latch::new();
-    let mut port = ScsiTransport::flash(&shared, &latch).with_control(control);
+    let mut port = ScsiTransport::flash(&shared);
 
     // OEM update-mode entry, then settle and identity gate. In recover mode the
     // drive is degraded and may not report a trustworthy identity, so the
     // post-entry gate is skipped — we force the write. A failed entry is before
     // the update state, so it carries no partial-firmware hint.
-    let mut session = enter_kernel_mode(&mut port, class)
+    let mut session = enter_update(&mut port, class, control)
         .map_err(flash_err)
         .context("OEM Entry write failed")?;
     std::thread::sleep(ENTRY_SETTLE);
@@ -149,10 +142,7 @@ pub(crate) fn execute_flash(
             style::dim("  update mode entered (recover: identity gate skipped)")
         );
     } else {
-        if let Err(error) = entry_identity_gate(&shared) {
-            latch.trip();
-            return Err(error);
-        }
+        entry_identity_gate(&shared)?;
         println!("{}", style::dim("  update mode entered"));
     }
 
@@ -162,7 +152,7 @@ pub(crate) fn execute_flash(
         let mut written = 0usize;
         for (index, chunk) in kernel.chunks(FLASH_CHUNK).enumerate() {
             session
-                .write_kernel((index * FLASH_CHUNK) as u32, chunk)
+                .write(Role::Kernel, (index * FLASH_CHUNK) as u32, chunk)
                 .map_err(flash_err)
                 .with_context(|| format!("OEM Kernel write failed{PARTIAL_HINT}"))?;
             written += chunk.len();
@@ -172,7 +162,7 @@ pub(crate) fn execute_flash(
     let mut written = 0usize;
     for (index, chunk) in normal.chunks(FLASH_CHUNK).enumerate() {
         session
-            .write_normal((index * FLASH_CHUNK) as u32, chunk)
+            .write(Role::Normal, (index * FLASH_CHUNK) as u32, chunk)
             .map_err(flash_err)
             .with_context(|| format!("OEM Normal write failed{PARTIAL_HINT}"))?;
         written += chunk.len();

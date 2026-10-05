@@ -6,8 +6,8 @@
 //! I/O, no flashing, no state change.
 //!
 //! **Family gate.** Every non-forced flash is gated by a deterministic FAMILY
-//! MATCH: `get_family(installed Normal body)` and `get_family(target Normal body)`
-//! (`pioneer_optical::fw`) must both profile (`Some`) and be EQUAL — equal
+//! MATCH: `family(installed Normal body)` and `family(target Normal body)`
+//! (`pioneer_optical::image`) must both profile (`Some`) and be EQUAL — equal
 //! [`FamilyKey`] means the same silicon/optical platform, i.e. crossflash
 //! compatible. Anything else is [`FlashPlan::Refused`]. The planner stays pure:
 //! the caller computes the two keys (from the pre-flash backup it already holds
@@ -114,7 +114,7 @@ pub struct Installed {
     /// Installed Kernel-generation ID tag (e.g. `"ID58"`). From the installed
     /// Normal envelope header's `Kernel Version` field, or equivalently from the
     /// live drive's vendor identity `3C/02/F1` response at bytes `0x18..0x20`
-    /// (see [`pioneer_optical::flash::Identity::kernel_tag`]). This is the
+    /// (see [`pioneer_optical::Identity::kernel_tag`]). This is the
     /// value the OEM Normal-only tag gate compares against the incoming
     /// Normal's declared required-Kernel tag. `None` if the backup didn't
     /// carry a usable Normal header.
@@ -182,7 +182,7 @@ pub enum FlashPlan {
 }
 
 /// Opaque crossflash-family key: the lowercase-hex rendering of
-/// `pioneer_optical::fw::FamilyId`. Equal keys mean crossflash-compatible
+/// `pioneer_optical::image::Family`. Equal keys mean crossflash-compatible
 /// (same silicon/optical platform). Held as a string so the planner is pure and
 /// unit tests can inject families without any firmware.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -198,7 +198,7 @@ impl FamilyKey {
     /// `None` for a body that cannot be profiled (a Kernel component, a
     /// non-Pioneer blob, ...).
     pub fn from_body(body: &[u8]) -> Option<Self> {
-        pioneer_optical::fw::get_family(body).map(|id| FamilyKey(id.to_string()))
+        pioneer_optical::image::family(body).map(|id| FamilyKey(id.to_string()))
     }
 }
 
@@ -223,7 +223,7 @@ pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
 /// downgrade lever is the ordinary OEM-update route (`04/FF` entry, `07/FE`+`07/F0`
 /// transfers, `05/FF` finish) gated by the decoded-body `0xFE` generation marker
 /// (Site 1). `backup`/`dump` never use it either. The flasher issues the update
-/// session solely through `pioneer_optical::flash::enter_kernel_mode`, which adds
+/// session solely through `pioneer_optical::drive::enter_update`, which adds
 /// the DVR handshake only for a DVR-class drive; a BD drive never sees it.
 pub fn kernel_mode_required(_plan: &FlashPlan) -> bool {
     false
@@ -463,10 +463,9 @@ fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
 /// 5. Neither component has an unrecovered envelope tail (orthogonal, but we
 ///    package it here so a bundle's integrity is a single call-site).
 pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(), String> {
-    for (label, bytes, expected_type) in [
-        ("Kernel", kernel, "Kernel"),
-        ("Normal", normal, "Normal"),
-    ] {
+    for (label, bytes, expected_type) in
+        [("Kernel", kernel, "Kernel"), ("Normal", normal, "Normal")]
+    {
         let Some(bytes) = bytes else { continue };
         let header = pioneer_codec::header_info(bytes).ok_or_else(|| {
             format!("malformed bundle: {label} component has no readable envelope header")
@@ -482,7 +481,9 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
     if let (Some(k), Some(n)) = (kernel, normal) {
         let kh = pioneer_codec::header_info(k).expect("checked above");
         let nh = pioneer_codec::header_info(n).expect("checked above");
-        if !kh.hardware_version.eq_ignore_ascii_case(&nh.hardware_version)
+        if !kh
+            .hardware_version
+            .eq_ignore_ascii_case(&nh.hardware_version)
             && !kh.hardware_version.is_empty()
             && !nh.hardware_version.is_empty()
         {
@@ -503,8 +504,7 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
     }
     // Tail guard is reused from the executor path; bubble its reason up as a
     // bundle-sanity error if it fires here.
-    ensure_no_unrecovered_tail(kernel, normal)
-        .map_err(|e| format!("malformed bundle: {e}"))?;
+    ensure_no_unrecovered_tail(kernel, normal).map_err(|e| format!("malformed bundle: {e}"))?;
     Ok(())
 }
 

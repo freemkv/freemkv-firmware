@@ -12,7 +12,10 @@ fn main() {
             let head = &img[..img.len().min(0x1000)];
             let tail = &img[img.len().saturating_sub(0x1000)..];
             let mut h: u64 = 1469598103934665603;
-            for b in head.iter().chain(tail.iter()) { h ^= *b as u64; h = h.wrapping_mul(1099511628211); }
+            for b in head.iter().chain(tail.iter()) {
+                h ^= *b as u64;
+                h = h.wrapping_mul(1099511628211);
+            }
             println!(
                 "model={} rev={} type={} layout={} psize={} dsize={:?} w0x10={:?} len={} fp={:016x}",
                 i.model, i.revision, i.file_type, i.layout, i.payload_size,

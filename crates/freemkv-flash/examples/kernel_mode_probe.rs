@@ -27,14 +27,14 @@ fn recover_seed(sig: &[u8]) -> Option<u16> {
 
 fn response_byte(seed: u16) -> u8 {
     let mut s = seed as u32;
-    for _ in 0..po::KERNEL_CHALLENGE_LEN {
+    for _ in 0..po::cdb::DVR_CHALLENGE_LEN {
         lcg_step(&mut s);
     }
     !lcg_step(&mut s)
 }
 
 fn protected_read_ok(dev: &mut dyn ScsiDevice) -> bool {
-    matches!(dev.command_in(&po::read_memory(0x010000, 0x40), 0x40), Ok(d) if d.len() == 0x40)
+    matches!(dev.command_in(&po::cdb::read_memory(0x010000, 0x40), 0x40), Ok(d) if d.len() == 0x40)
 }
 
 fn main() -> Result<()> {
@@ -51,17 +51,17 @@ fn main() -> Result<()> {
     // Does the read-knock first enable F3/F2? (rule out kernel-mode-behind-read-unlock)
     let knock_first = std::env::args().any(|a| a == "--knock-first");
     if knock_first {
-        let k = dev.command_out(&po::knock(), &[]);
+        let k = dev.command_out(&po::cdb::knock(), &[]);
         println!("knock first: {}", if k.is_ok() { "ok" } else { "err" });
     }
 
     // F3 arm (zero-length), F2 challenge (0x400), recover seed, F2 response (0x100).
-    dev.command_out(&po::kernel_mode_arm(), &[])
+    dev.command_out(&po::cdb::dvr_arm(), &[])
         .map_err(|e| eprintln!("arm err: {e:#}"))
         .ok();
     let challenge = dev.command_in(
-        &po::kernel_mode_challenge(),
-        po::KERNEL_CHALLENGE_LEN as usize,
+        &po::cdb::dvr_challenge(),
+        po::cdb::DVR_CHALLENGE_LEN as usize,
     );
     match &challenge {
         Ok(c) if c.len() >= 4 => {
@@ -69,8 +69,8 @@ fn main() -> Result<()> {
             match recover_seed(&c[..4]) {
                 Some(seed) => {
                     println!("recovered seed: {seed:#06x}");
-                    let resp = vec![response_byte(seed); po::KERNEL_RESPONSE_LEN as usize];
-                    match dev.command_out(&po::kernel_mode_response(), &resp) {
+                    let resp = vec![response_byte(seed); po::cdb::DVR_RESPONSE_LEN as usize];
+                    match dev.command_out(&po::cdb::dvr_response(), &resp) {
                         Ok(()) => println!("kernel-mode handshake COMPLETED (response accepted)"),
                         Err(e) => println!("response rejected: {e:#}"),
                     }

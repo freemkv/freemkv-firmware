@@ -7,6 +7,7 @@ use super::{
     TransferStage, CONTROL_LEN, FLASH_CHUNK,
 };
 use anyhow::{bail, Result};
+use pioneer_optical::Role;
 use std::borrow::Cow;
 
 /// A Kernel and its explicitly selected transport framing.
@@ -56,12 +57,12 @@ pub fn data_out<'a>(
         Some(KernelTransfer::PrefixF0GeneratedFe { bytes, seed }) => {
             out.push(OemTransfer {
                 stage: TransferStage::KernelPrefix,
-                cdb: pioneer_optical::transfer_normal(0, 0x1200),
+                cdb: pioneer_optical::cdb::transfer(Role::Normal, 0, 0x1200),
                 data: Cow::Borrowed(&bytes[..0x1200]),
             });
             out.push(OemTransfer {
                 stage: TransferStage::KernelFe,
-                cdb: pioneer_optical::transfer_kernel(0, 0x200),
+                cdb: pioneer_optical::cdb::transfer(Role::Kernel, 0, 0x200),
                 data: Cow::Owned(bdr212_generated_kernel_block(seed).to_vec()),
             });
             for (destination, start, len) in [
@@ -71,7 +72,7 @@ pub fn data_out<'a>(
             ] {
                 out.push(OemTransfer {
                     stage: TransferStage::KernelFe,
-                    cdb: pioneer_optical::transfer_kernel(destination, len as u32),
+                    cdb: pioneer_optical::cdb::transfer(Role::Kernel, destination, len as u32),
                     data: Cow::Borrowed(&bytes[start..start + len]),
                 });
             }
@@ -95,14 +96,18 @@ fn check_span(bytes: &[u8]) -> Result<()> {
 
 /// Chunk `bytes` into `FLASH_CHUNK` transfers for `stage` (Kernel -> FE, Normal -> F0).
 fn chunks<'a>(out: &mut Vec<OemTransfer<'a>>, stage: TransferStage, bytes: &'a [u8]) {
-    let cdb_for = match stage {
-        TransferStage::KernelFe => pioneer_optical::transfer_kernel,
-        _ => pioneer_optical::transfer_normal,
+    let role = match stage {
+        TransferStage::KernelFe => Role::Kernel,
+        _ => Role::Normal,
     };
     for (index, data) in bytes.chunks(FLASH_CHUNK).enumerate() {
         out.push(OemTransfer {
             stage,
-            cdb: cdb_for((index * FLASH_CHUNK) as u32, data.len() as u32),
+            cdb: pioneer_optical::cdb::transfer(
+                role,
+                (index * FLASH_CHUNK) as u32,
+                data.len() as u32,
+            ),
             data: Cow::Borrowed(data),
         });
     }

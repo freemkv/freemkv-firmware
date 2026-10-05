@@ -28,9 +28,9 @@ fn main() -> Result<()> {
         .nth(1)
         .expect("usage: identity_probe <selector>");
     let mut dev = open(&sel, false)?;
-    let inq = dev.command_in(&po::inquiry(0x60), 0x60)?;
+    let inq = dev.command_in(&po::cdb::inquiry(0x60), 0x60)?;
     hexdump("INQUIRY", &inq);
-    let id = dev.command_in(&po::vendor_identity(), po::IDENTITY_LEN as usize)?;
+    let id = dev.command_in(&po::cdb::vendor_identity(), po::cdb::IDENTITY_LEN as usize)?;
     hexdump("VENDOR IDENTITY (3C 02 F1)", &id);
     Ok(())
 }

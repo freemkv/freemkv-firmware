@@ -370,8 +370,8 @@ jobs:
             printf 'Source: x\n\nPackage: x\nArchitecture: amd64\nDescription: x\n' > "$d/debian/control"
             (cd "$d" && dpkg-shlibdeps -O "$1" | sed -n 's/^shlibs:Depends=//p')
           }
-          dl='libgl1, libxkbcommon0, libwayland-client0, libx11-6'
-          rec='libxcursor1, libxi6, libxrandr2, libvulkan1, xdg-desktop-portal'
+          dl='libgl1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-6, libxcursor1, libxi6, libxrandr2'
+          rec='libvulkan1, xdg-desktop-portal'
           for g in flash:Flash:flash fw:Modify:modify; do
             IFS=: read -r t label slug <<< "$g"
             bin="target/x86_64-unknown-linux-gnu/release/freemkv-$t-gui"

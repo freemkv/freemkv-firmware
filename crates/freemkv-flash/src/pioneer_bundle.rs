@@ -256,12 +256,19 @@ mod tests {
         let normal = image();
         let mut kernel = image();
         let marker = b"File Type : Normal.";
-        let pos = kernel.windows(marker.len()).position(|w| w == marker).unwrap();
+        let pos = kernel
+            .windows(marker.len())
+            .position(|w| w == marker)
+            .unwrap();
         kernel[pos..pos + marker.len()].copy_from_slice(b"File Type : Kernel.");
         let mut out = Vec::new();
         {
             let mut tar = tar::Builder::new(&mut out);
-            tar_member(&mut tar, "components/kernel.enc", if duplicate_normal { &normal } else { &kernel });
+            tar_member(
+                &mut tar,
+                "components/kernel.enc",
+                if duplicate_normal { &normal } else { &kernel },
+            );
             tar_member(&mut tar, "components/normal.enc", &normal);
             tar.finish().unwrap();
         }

@@ -1376,9 +1376,13 @@ pub enum DowngradePatchError {
 /// `AlreadyNewer` is a *successful* no-op (not an error) so callers can run
 /// this unconditionally on a target Kernel before flashing. Caller must
 /// re-encode the envelope (via [`DecodedEnvelope::repack`]) after patching.
-pub fn downgrade_patch(decoded_body: &[u8]) -> Result<(Vec<u8>, DowngradePatchOutcome), DowngradePatchError> {
+pub fn downgrade_patch(
+    decoded_body: &[u8],
+) -> Result<(Vec<u8>, DowngradePatchOutcome), DowngradePatchError> {
     if decoded_body.len() != KERNEL_BODY_LEN {
-        return Err(DowngradePatchError::WrongSize { got: decoded_body.len() });
+        return Err(DowngradePatchError::WrongSize {
+            got: decoded_body.len(),
+        });
     }
     let marker = decoded_body[KERNEL_MARKER_OFFSET];
     if marker == 0x01 {
@@ -1399,11 +1403,14 @@ pub fn downgrade_patch(decoded_body: &[u8]) -> Result<(Vec<u8>, DowngradePatchOu
     let before = u32::from_be_bytes([out[o], out[o + 1], out[o + 2], out[o + 3]]);
     let after = before.wrapping_add(compensation);
     out[o..o + 4].copy_from_slice(&after.to_be_bytes());
-    Ok((out, DowngradePatchOutcome::Patched {
-        marker_before: marker,
-        checksum_word_before: before,
-        checksum_word_after: after,
-    }))
+    Ok((
+        out,
+        DowngradePatchOutcome::Patched {
+            marker_before: marker,
+            checksum_word_before: before,
+            checksum_word_after: after,
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -1443,12 +1450,23 @@ mod downgrade_patch_tests {
         let (patched, outcome) = downgrade_patch(&b).unwrap();
         assert_eq!(patched.len(), KERNEL_BODY_LEN);
         assert_eq!(patched[KERNEL_MARKER_OFFSET], 0x01);
-        assert_eq!(sum32_be(&patched), 0, "§8.1 zero-sum invariant must survive the patch");
+        assert_eq!(
+            sum32_be(&patched),
+            0,
+            "§8.1 zero-sum invariant must survive the patch"
+        );
         match outcome {
-            DowngradePatchOutcome::Patched { marker_before, checksum_word_before, checksum_word_after } => {
+            DowngradePatchOutcome::Patched {
+                marker_before,
+                checksum_word_before,
+                checksum_word_after,
+            } => {
                 assert_eq!(marker_before, 0xFF);
                 // Documented §15.3 FF→01 compensation is +0xFE00.
-                assert_eq!(checksum_word_after, checksum_word_before.wrapping_add(0xFE00));
+                assert_eq!(
+                    checksum_word_after,
+                    checksum_word_before.wrapping_add(0xFE00)
+                );
             }
             _ => panic!("expected Patched"),
         }
@@ -1456,7 +1474,9 @@ mod downgrade_patch_tests {
         for (i, (&a, &c)) in b.iter().zip(patched.iter()).enumerate() {
             if a != c {
                 assert!(
-                    i == KERNEL_MARKER_OFFSET || (KERNEL_CHECKSUM_WORD_OFFSET..KERNEL_CHECKSUM_WORD_OFFSET + 4).contains(&i),
+                    i == KERNEL_MARKER_OFFSET
+                        || (KERNEL_CHECKSUM_WORD_OFFSET..KERNEL_CHECKSUM_WORD_OFFSET + 4)
+                            .contains(&i),
                     "unexpected diff at {i:#x}"
                 );
             }
@@ -1469,7 +1489,13 @@ mod downgrade_patch_tests {
         let (patched, outcome) = downgrade_patch(&b).unwrap();
         assert_eq!(patched[KERNEL_MARKER_OFFSET], 0x01);
         assert_eq!(sum32_be(&patched), 0);
-        assert!(matches!(outcome, DowngradePatchOutcome::Patched { marker_before: 0x00, .. }));
+        assert!(matches!(
+            outcome,
+            DowngradePatchOutcome::Patched {
+                marker_before: 0x00,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -1495,7 +1521,9 @@ mod downgrade_patch_tests {
         let b = vec![0u8; KERNEL_BODY_LEN - 1];
         assert_eq!(
             downgrade_patch(&b),
-            Err(DowngradePatchError::WrongSize { got: KERNEL_BODY_LEN - 1 }),
+            Err(DowngradePatchError::WrongSize {
+                got: KERNEL_BODY_LEN - 1
+            }),
         );
     }
 }

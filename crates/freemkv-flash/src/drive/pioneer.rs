@@ -21,6 +21,7 @@
 //! empirically confirmed on that model.
 
 use anyhow::{anyhow, bail, Context, Result};
+use pioneer_optical::Role;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 
@@ -209,17 +210,17 @@ pub fn parse_banner(bytes: &[u8]) -> Option<PioneerBanner> {
 
 /// OEM entry CDB for the traced UD04 1.11 host path.
 pub fn cdb_wb_flash_entry() -> [u8; 10] {
-    pioneer_optical::enter_update()
+    pioneer_optical::cdb::enter_update()
 }
 
 /// OEM raw Normal-envelope transfer CDB. `len` excludes any control prefix.
 pub fn cdb_wb_flash_chunk(off: u32, len: u32) -> [u8; 10] {
-    pioneer_optical::transfer_normal(off, len)
+    pioneer_optical::cdb::transfer(Role::Normal, off, len)
 }
 
 /// OEM after-transfer CDB; this is not a zero-length commit.
 pub fn cdb_wb_flash_finish() -> [u8; 10] {
-    pioneer_optical::finish()
+    pioneer_optical::cdb::finish()
 }
 
 /// Resolve the controller id and OEM control row for a Pioneer envelope from its
@@ -860,7 +861,9 @@ pub(crate) fn installed_facts(
         .as_ref()
         .or(kinfo.as_ref())
         .and_then(|h| crate::pioneer_keys::controller_id_from_sat(&h.hardware_version))?;
-    let normal_date = ninfo.as_ref().and_then(|h| FwDate::parse(&h.generated_date));
+    let normal_date = ninfo
+        .as_ref()
+        .and_then(|h| FwDate::parse(&h.generated_date));
     // Receiver-generation proxy: the new-gen Site-1 signatures co-occur with the
     // installed Kernel's `0x01` marker (whitepaper §15.2), so marker `01` on the
     // installed Kernel implies a new-generation (Site-1-bearing) receiver.
@@ -972,7 +975,7 @@ const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware genera
 /// write. Same-generation and same/newer flashes execute via the ordinary OEM
 /// route. A cross-generation downgrade is now executable — the §15.3 patch is
 /// applied to the Kernel bytes inside [`crate::pioneer_flash::execute_flash`]
-/// just before `write_kernel`, so the receiver's Site-1 gate accepts the
+/// just before the Kernel write, so the receiver's Site-1 gate accepts the
 /// disguised marker. No plan requires kernel mode
 /// ([`crate::pioneer_flash_plan::kernel_mode_required`]).
 pub(crate) fn check_plan_executable(plan: &crate::pioneer_flash_plan::FlashPlan) -> Result<()> {
