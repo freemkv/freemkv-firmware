@@ -374,6 +374,15 @@ impl OemUpdateProfile {
     }
 }
 
+/// Size sanity for a Normal about to be written: within `IMAGE_MIN..=IMAGE_MAX`
+/// and 256-byte aligned (offsets are 24-bit; a bad size would fail mid-session).
+fn check_normal_size(envelope: &[u8]) -> Result<()> {
+    if !(IMAGE_MIN..=IMAGE_MAX).contains(&envelope.len()) || !envelope.len().is_multiple_of(0x100) {
+        bail!("Pioneer envelope length is outside the supported profile range or not 256-byte aligned");
+    }
+    Ok(())
+}
+
 /// Choose a registered host strategy using only live drive identity and the
 /// supplied envelope. No updater package or sidecar is a runtime input.
 /// Unknown and ambiguous structures fail closed; exact OEM hashes only
@@ -381,9 +390,7 @@ impl OemUpdateProfile {
 pub fn select_oem_profile(drive_product: &str, envelope: &[u8]) -> Result<OemUpdateProfile> {
     let banner =
         parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
-    if !(IMAGE_MIN..=IMAGE_MAX).contains(&envelope.len()) || !envelope.len().is_multiple_of(0x100) {
-        bail!("Pioneer envelope length is outside the supported profile range or not 256-byte aligned");
-    }
+    check_normal_size(envelope)?;
     let drive_model = normalize(drive_product);
     let ud04_model_match = drive_model
         .split_whitespace()
@@ -1186,6 +1193,10 @@ impl DriveFamily for Pioneer {
             check_plan_executable(&plan)?;
             debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
 
+            // `--recover` waives the profile gate but not the size sanity check.
+            if req.recover {
+                check_normal_size(normal)?;
+            }
             let (control, kernel_to_write) = match selection {
                 FlashSelection::KernelAndNormal => {
                     let kernel = kernel

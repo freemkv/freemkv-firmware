@@ -999,3 +999,41 @@ fn dump_force_writes_the_full_raw_span_even_when_identity_fails() {
         .capture_dump(&mut Mem::default(), false)
         .is_err());
 }
+
+fn recover_req(input: Vec<u8>) -> crate::drive::FlashRequest {
+    crate::drive::FlashRequest {
+        input,
+        input_kind: crate::drive::InputKind::Bin,
+        mode: FlashMode::Full,
+        execute: true,
+        acknowledged_risk: true,
+        enc_override: None,
+        drive_model: "BD-RW BDR-UD04".into(),
+        verbose: false,
+        predump_out: None,
+        allow_crossflash: false,
+        skip_backup: true,
+        recover: true,
+        force: true,
+    }
+}
+
+#[test]
+fn recover_refuses_bad_sized_normal_before_entering_update_mode() {
+    let drive = for_family(Family::Pioneer);
+    for len in [IMAGE_MAX + 0x100, IMAGE_MIN - 0x100, IMAGE_MIN + 1] {
+        let mut normal = header_only_normal("SAT 8A10", "22/01/01");
+        normal.resize(len, 0);
+        let mut dev = MockScsiDevice::pioneer();
+        dev.writes.clear();
+        let err = drive
+            .flash_bundle(&mut dev, &recover_req(normal), None)
+            .expect("execute path")
+            .unwrap_err();
+        assert!(
+            format!("{err:#}").contains("256-byte aligned"),
+            "len {len:#x}: {err:#}"
+        );
+        assert!(dev.writes.is_empty(), "len {len:#x}: update mode entered");
+    }
+}
