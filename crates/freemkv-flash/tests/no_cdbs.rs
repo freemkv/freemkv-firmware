@@ -42,9 +42,46 @@ fn pioneer_sources(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Production portion of a source file: everything before the first `#[cfg(test)]`.
-fn production(src: &str) -> &str {
-    src.find("#[cfg(test)]").map_or(src, |i| &src[..i])
+/// Production portion of a source file: the source with every `#[cfg(test)]`
+/// item (a test module, or a single test-only fn/impl/use) removed. Code after an
+/// early test-only item stays visible to the scan.
+fn production(src: &str) -> String {
+    let mut out = String::new();
+    let mut rest = src;
+    while let Some(i) = rest.find("#[cfg(test)]") {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + "#[cfg(test)]".len()..];
+        // The annotated item ends at its balanced `{...}` block, or at a `;`
+        // that comes before any `{` (e.g. `use ...;` / `mod tests;`).
+        let brace = after.find('{');
+        let semi = after.find(';');
+        let end = match (brace, semi) {
+            (Some(b), Some(s)) if s < b => s + 1,
+            (Some(b), _) => {
+                let mut depth = 0usize;
+                let mut end = after.len();
+                for (off, c) in after[b..].char_indices() {
+                    match c {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                end = b + off + 1;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                end
+            }
+            (None, Some(s)) => s + 1,
+            (None, None) => after.len(),
+        };
+        rest = &after[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn opcode_hits(src: &str) -> Vec<String> {
@@ -79,7 +116,7 @@ fn no_pioneer_source_contains_a_write_or_read_buffer_opcode() {
     let mut offenders = Vec::new();
     for file in files {
         let src = fs::read_to_string(&file).unwrap();
-        for hit in opcode_hits(production(&src)) {
+        for hit in opcode_hits(&production(&src)) {
             offenders.push(format!("{}: {hit}", file.display()));
         }
     }
@@ -110,4 +147,14 @@ fn exactly_one_transport_adapter_exists_in_the_flasher() {
     }
     assert_eq!(impls.len(), 1, "expected one Transport adapter: {impls:?}");
     assert!(impls[0].ends_with(ADAPTER));
+}
+
+#[test]
+fn production_keeps_code_after_an_early_test_only_item() {
+    let src = "fn a() {}\n#[cfg(test)]\nfn helper() { let _ = \"0x3b\"; }\nfn prod() { let _ = 0x3b; }\n\
+               #[cfg(test)]\nmod tests { fn t() { let _ = 0x3c; } }\n";
+    let prod = production(src);
+    assert!(!opcode_hits(&prod).is_empty(), "later production code was hidden");
+    assert!(!prod.contains("0x3c"), "test module must be excluded");
+    assert_eq!(opcode_hits(&prod).len(), 1);
 }
