@@ -738,3 +738,17 @@ jobs:
             git pull --rebase -q
           done
           echo "tap updated to ${VER#v}" >> "$GITHUB_STEP_SUMMARY"
+
+  # The APT repository at freemkv.org/apt indexes every .deb on the latest
+  # release; ask the website's apt.yml to rebuild it now instead of at its
+  # daily run. A failure here never turns the release red.
+  apt:
+    needs: [linux-packages, linux-cli-armhf]
+    if: always() && startsWith(github.ref, 'refs/tags/') && (needs.linux-packages.result == 'success' || needs.linux-cli-armhf.result == 'success')
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Refresh the freemkv.org APT repository
+        env:
+          GH_TOKEN: ${{ secrets.ORG_DISPATCH_TOKEN }}
+        run: gh api repos/freemkv/marketing/dispatches -f event_type=apt-refresh

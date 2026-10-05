@@ -1,0 +1,244 @@
+name: RPM and pacman packages
+
+# .rpm (Fedora, RHEL, openSUSE) and .pkg.tar.zst (Arch Linux) packages,
+# repackaged from the release's validated .debs (release.yml's linux-packages
+# and linux-cli-armhf jobs) by packaging/rpm/deb2rpm.py and
+# packaging/arch/deb2pkg.py (the same converters freemkv uses). Nothing is
+# compiled. freemkv.org/rpm and freemkv.org/arch index them; payloads stay here.
+#
+#   tag push        wait for the release's .debs, convert, install-test, sign,
+#                   attach, refresh freemkv.org/rpm and /arch
+#   dispatch + tag  the same for an existing release (backfill):
+#                     gh workflow run linux-repos.yml --ref dev -f tag=v0.11.0
+#   dev/PR          convert the LATEST release's .debs and install-test (skipped
+#                   while the latest release has none); publish nothing
+#
+# Signed with secret APT_SIGNING_KEY (the freemkv.org repository key).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: existing release tag to add .rpm/.pkg.tar.zst to; empty = test only
+        type: string
+        default: ''
+  push:
+    branches: [dev]
+    tags: ['v*', '!v*-rc*']
+    paths: ['packaging/rpm/**', 'packaging/arch/**', '.github/workflows/linux-repos.yml']
+  pull_request:
+    paths: ['packaging/rpm/**', 'packaging/arch/**', '.github/workflows/linux-repos.yml']
+
+concurrency:
+  group: linux-repos-${{ github.ref }}-${{ inputs.tag }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  packaging-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.12' }
+      - run: |
+          python -m unittest discover -s packaging/rpm -p 'test_*.py' -v
+          python -m unittest discover -s packaging/arch -p 'test_*.py' -v
+
+  debs:
+    needs: packaging-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      publish: ${{ steps.pick.outputs.publish }}
+      found: ${{ steps.wait.outputs.found }}
+    steps:
+      - name: Pick the release
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = tag ]; then tag=$GITHUB_REF_NAME; publish=true
+          elif [ -n "$INPUT_TAG" ]; then tag=$INPUT_TAG; publish=true
+          else tag=$(gh release view --json tagName -q .tagName); publish=false; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "release $tag, publish=$publish"
+      # A release attaches its .debs late (after building and installing them);
+      # wait until they are there and the asset list has settled. A test run
+      # against a release without .debs has nothing to convert.
+      - name: Wait for the release's .debs
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.pick.outputs.tag }}
+          PUBLISH: ${{ steps.pick.outputs.publish }}
+        run: |
+          set -euo pipefail
+          last=
+          for attempt in $(seq 1 340); do
+            debs=$(gh release view "$TAG" --json assets -q '[.assets[].name | select(endswith(".deb"))] | sort | join(" ")' 2>/dev/null || true)
+            if [ -z "$debs" ] && [ "$PUBLISH" != true ]; then
+              echo "::notice::$TAG has no .debs; nothing to convert"; echo "found=false" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            case " $debs " in *" freemkv-flash-gui-amd64.deb "*) case " $debs " in *" freemkv-fw-gui-amd64.deb "*)
+                if [ "$debs" = "$last" ]; then echo "debs: $debs"; echo "found=true" >> "$GITHUB_OUTPUT"; exit 0; fi ;;
+            esac ;; esac
+            last=$debs
+            echo "waiting for $TAG .debs ($attempt): ${debs:-none}"
+            sleep 30
+          done
+          echo "the .debs never appeared on $TAG"; exit 1
+      - name: Download
+        if: steps.wait.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.pick.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --pattern '*.deb' --pattern '*.deb.sha256' --dir debs
+          cd debs
+          for f in *.deb; do if [ -f "$f.sha256" ]; then sha256sum -c "$f.sha256"; fi; done
+          ls -l
+      - uses: actions/upload-artifact@v7
+        if: steps.wait.outputs.found == 'true'
+        with: { name: debs, path: debs/*.deb, if-no-files-found: error, retention-days: 7 }
+
+  rpm:
+    needs: debs
+    if: needs.debs.outputs.found == 'true'
+    runs-on: ubuntu-24.04
+    container: fedora:40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v8
+        with: { name: debs, path: debs }
+      - name: Convert
+        run: |
+          set -euo pipefail
+          dnf -y -q install rpm-build rpm-sign zstd python3 gnupg2
+          python3 packaging/rpm/deb2rpm.py --output out debs/*.deb
+          for r in out/*.rpm; do echo "== $r"; rpm -qp --info "$r" | sed -n '1,4p'; rpm -qp --requires "$r"; rpm -qpl "$r"; done
+      - name: Sign
+        env:
+          KEY: ${{ secrets.APT_SIGNING_KEY }}
+          PUBLISH: ${{ needs.debs.outputs.publish }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY" ]; then
+            [ "$PUBLISH" = true ] && { echo "APT_SIGNING_KEY is required to publish"; exit 1; }
+            echo "::notice::no APT_SIGNING_KEY here; packages left unsigned (test run)"; exit 0
+          fi
+          GNUPGHOME=$(mktemp -d); export GNUPGHOME
+          printf '%s\n' "$KEY" | gpg --batch --import
+          fpr=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}')
+          gpg --armor --export "$fpr" > out/freemkv.asc
+          rpmsign --addsign --define "_gpg_name $fpr" --define "_gpg_path $GNUPGHOME" \
+            --define '_gpg_sign_cmd_extra_args --pinentry-mode loopback' out/*.rpm
+          rpm --import out/freemkv.asc
+          res=$(rpm -K out/*.rpm)
+          echo "$res"
+          if grep -v ' signatures OK$' <<<"$res"; then echo "unsigned or bad signature"; exit 1; fi
+      - name: Install and run (x86_64)
+        run: |
+          set -euo pipefail
+          want=$(rpm -qp --qf '%{VERSION}' out/freemkv-flash-x86_64.rpm)
+          for t in flash fw; do
+            dnf -y -q install "./out/freemkv-$t-x86_64.rpm"
+            "freemkv-$t" --version | tee v.log; grep -Fq "$want" v.log
+            dnf -y -q install --allowerasing "./out/freemkv-$t-gui-x86_64.rpm"
+            if rpm -q "freemkv-$t"; then echo "freemkv-$t is still installed alongside freemkv-$t-gui"; exit 1; fi
+            "freemkv-$t" --version
+            test -x "/usr/bin/freemkv-$t-gui"
+            if ldd "/usr/bin/freemkv-$t-gui" | grep -F 'not found'; then exit 1; fi
+          done
+      - uses: actions/upload-artifact@v7
+        with: { name: rpm-package, path: out, if-no-files-found: error, retention-days: 90 }
+
+  arch:
+    needs: debs
+    if: needs.debs.outputs.found == 'true'
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v8
+        with: { name: debs, path: debs }
+      - name: Convert
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed base-devel python zstd
+          useradd --create-home builder
+          install -d -o builder out
+          chown -R builder debs
+          runuser -u builder -- python3 packaging/arch/deb2pkg.py --output out debs/*.deb
+          for p in out/*.pkg.tar.zst; do echo "== $p"; pacman -Qip "$p"; pacman -Qlp "$p"; done
+      - name: Sign
+        env:
+          KEY: ${{ secrets.APT_SIGNING_KEY }}
+          PUBLISH: ${{ needs.debs.outputs.publish }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY" ]; then
+            [ "$PUBLISH" = true ] && { echo "APT_SIGNING_KEY is required to publish"; exit 1; }
+            echo "::notice::no APT_SIGNING_KEY here; packages left unsigned (test run)"; exit 0
+          fi
+          GNUPGHOME=$(mktemp -d); export GNUPGHOME
+          printf '%s\n' "$KEY" | gpg --batch --import
+          fpr=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}')
+          for p in out/*.pkg.tar.zst; do
+            gpg --batch --pinentry-mode loopback --local-user "$fpr" --detach-sign --no-armor -o "$p.sig" "$p"
+            gpg --verify "$p.sig" "$p"
+          done
+      - name: Install and run (x86_64)
+        run: |
+          set -euo pipefail
+          want=$(pacman -Qip out/freemkv-flash-x86_64.pkg.tar.zst | awk '/^Version/{sub(/-[0-9]+$/, "", $3); print $3}')
+          for t in flash fw; do
+            pacman -U --noconfirm "./out/freemkv-$t-x86_64.pkg.tar.zst"
+            "freemkv-$t" --version | tee v.log; grep -Fq "$want" v.log
+            pacman -R --noconfirm "freemkv-$t"
+            pacman -U --noconfirm "./out/freemkv-$t-gui-x86_64.pkg.tar.zst"
+            "freemkv-$t" --version
+            test -x "/usr/bin/freemkv-$t-gui"
+            if ldd "/usr/bin/freemkv-$t-gui" | grep -F 'not found'; then exit 1; fi
+          done
+      - uses: actions/upload-artifact@v7
+        with: { name: arch-package, path: out, if-no-files-found: error, retention-days: 90 }
+
+  publish:
+    needs: [debs, rpm, arch]
+    if: needs.debs.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { pattern: '*-package', path: pkgs, merge-multiple: true }
+      - name: Attach the installed and validated packages to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.debs.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd pkgs
+          for f in freemkv-*.rpm freemkv-*.pkg.tar.zst; do sha256sum "$f" > "$f.sha256"; done
+          ls -l
+          gh release upload "$TAG" freemkv-*.rpm freemkv-*.rpm.sha256 \
+            freemkv-*.pkg.tar.zst freemkv-*.pkg.tar.zst.sig freemkv-*.pkg.tar.zst.sha256 --clobber
+      # A marketing outage must not turn the release red; both repos also rebuild daily.
+      - name: Refresh freemkv.org/rpm and /arch
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.ORG_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/freemkv/marketing/dispatches -f event_type=rpm-refresh
+          gh api repos/freemkv/marketing/dispatches -f event_type=arch-refresh
