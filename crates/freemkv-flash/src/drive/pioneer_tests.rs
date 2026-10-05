@@ -436,7 +436,7 @@ fn ud04_local_oem_envelope_transcript_when_configured() {
 }
 
 /// Golden KAT for the kernel-mode downgrade/crossflash wire output
-/// (`offline_linear_fe_data_out`): the exact Kernel+Normal linear-FE transcript
+/// (`offline_pair_data_out`): the exact Kernel+Normal linear-FE transcript
 /// that a UD03->UD04 crossflash — or a UD04 full-pair downgrade — streams after
 /// the vendor kernel-mode unlock. It uses the real autoflasher-sourced UD04 1.14
 /// Kernel+Normal from the hoard, so the bytes are OEM-exact. Auto-resolves the
@@ -504,7 +504,7 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
 
     let kernel = &kernel_bytes;
     let normal = &normal_bytes;
-    let transfers = offline_linear_fe_data_out(kernel, normal).unwrap();
+    let transfers = offline_pair_data_out(kernel, normal).unwrap();
 
     // Structure: Entry + 3 FE kernel slices + 59 F0 normal chunks + Finish.
     assert_eq!(transfers.len(), 1 + 3 + 59 + 1, "transfer count");
@@ -1147,12 +1147,12 @@ fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
     ] {
         let kernel = std::fs::read(root.join(kernel)).unwrap();
         let normal = std::fs::read(root.join(normal)).unwrap();
-        linear_fe_control(&kernel, &normal).unwrap();
+        validate_kernel_normal(&kernel, &normal).unwrap();
         validate_normal_envelope(&normal).unwrap();
         let mut damaged = normal.clone();
         let end = damaged.len() - 32;
         damaged[end] ^= 1;
-        assert!(linear_fe_control(&kernel, &damaged).is_err());
+        assert!(validate_kernel_normal(&kernel, &damaged).is_err());
     }
 }
 
@@ -1221,12 +1221,13 @@ fn generic_receiver_matrix_when_configured() {
             == pioneer_optical::envelope::signature::SignatureCheck::Invalid
         {
             assert!(
-                linear_fe_control(&kernel, &normal).is_err(),
+                validate_kernel_normal(&kernel, &normal).is_err(),
                 "invalid signature accepted"
             );
             continue;
         }
-        linear_fe_control(&kernel, &normal).unwrap_or_else(|e| panic!("{}: {e:#}", path.display()));
+        validate_kernel_normal(&kernel, &normal)
+            .unwrap_or_else(|e| panic!("{}: {e:#}", path.display()));
         validate_normal_envelope(&normal)
             .unwrap_or_else(|e| panic!("{} Normal-only: {e:#}", path.display()));
         let decoded_kernel = pioneer_optical::envelope::decode_envelope(&kernel).unwrap();
@@ -1301,8 +1302,8 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
     use pioneer_optical::envelope::signature::SigningKey;
     fn checksum(bytes: &mut [u8], at: usize) {
         bytes[at..at + 4].fill(0);
-        let sum = bytes.chunks_exact(4).fold(0u32, |sum, word| {
-            sum.wrapping_add(u32::from_be_bytes(word.try_into().unwrap()))
+        let sum = bytes.as_chunks::<4>().0.iter().fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
         });
         bytes[at..at + 4].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
     }
@@ -1339,7 +1340,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
             NormalSignature::Sign(&signer),
         )
         .unwrap();
-        linear_fe_control(&pair.kernel, &pair.normal).unwrap();
+        validate_kernel_normal(&pair.kernel, &pair.normal).unwrap();
         generic_normal_transcript(&pair.normal).unwrap();
         crate::engine::plan_pioneer_offline(
             &pair.normal,
@@ -1375,6 +1376,6 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
         let mut damaged = pair.normal;
         let last = damaged.len() - 4;
         damaged[last] ^= 1;
-        assert!(linear_fe_control(&pair.kernel, &damaged).is_err());
+        assert!(validate_kernel_normal(&pair.kernel, &damaged).is_err());
     }
 }

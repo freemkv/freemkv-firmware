@@ -655,7 +655,7 @@ pub fn plan_pioneer_offline(
     let (kernel, normal) = crate::drive::pioneer::classify_flash_input(image)?;
     let normal = normal.as_deref().context("Normal component missing")?;
     let transcript = match kernel.as_deref() {
-        Some(kernel) => crate::drive::pioneer::offline_linear_fe_data_out(kernel, normal)?,
+        Some(kernel) => crate::drive::pioneer::offline_pair_data_out(kernel, normal)?,
         None => crate::drive::pioneer::generic_normal_transcript(normal)?,
     };
     println!("{}", style::header("== Pioneer offline transfer plan =="));

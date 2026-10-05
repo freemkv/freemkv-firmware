@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pioneer flashing no longer uses model/revision allowlists or exact UD04 image
   sizes. CLI and GUI validate envelope framing, component pairing, receiver
   authentication, integrity and hardware-family compatibility.
+- Select the Kernel transfer schedule from its decoded layout: front-key images
+  use linear FE chunks, derived-key images use the generated-block schedule.
+  Wait for Kernel programming to settle before sending the Normal image.
 - Read the control descriptor from the connected drive and derive its control
   word from the freshly captured receiver, with the universal word as fallback.
   The static controller-key catalog is now compiled only for historical tests.

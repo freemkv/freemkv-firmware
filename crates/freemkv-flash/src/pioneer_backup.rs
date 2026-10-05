@@ -1890,8 +1890,7 @@ mod tests {
             .find(|c| c.role == Role::Main)
             .unwrap();
         let candidate_steps =
-            crate::drive::pioneer::offline_linear_fe_data_out(&kernel.bytes, &normal.bytes)
-                .unwrap();
+            crate::drive::pioneer::offline_pair_data_out(&kernel.bytes, &normal.bytes).unwrap();
         if let Ok(path) = std::env::var("PIONEER_UD04_AUTOFLASHER_BUNDLE_FIXTURE") {
             let original_bytes = std::fs::read(path).unwrap();
             validate_envelope_package(&original_bytes, "BD-RW BDR-UD04").unwrap();
@@ -1942,7 +1941,7 @@ mod tests {
                 &normal.bytes[0x1f0..0x200],
                 &original_normal.bytes[0x1f0..0x200]
             );
-            let original_steps = crate::drive::pioneer::offline_linear_fe_data_out(
+            let original_steps = crate::drive::pioneer::offline_pair_data_out(
                 &original_kernel.bytes,
                 &original_normal.bytes,
             )

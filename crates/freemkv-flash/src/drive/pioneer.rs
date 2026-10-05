@@ -323,6 +323,8 @@ pub enum TransferStage {
 pub struct OemTransfer<'a> {
     /// Stage of the observed host sequence.
     pub stage: TransferStage,
+    /// Destination offset supplied to the transport API.
+    pub offset: u32,
     /// Ten-byte WRITE BUFFER command descriptor block.
     pub cdb: [u8; 10],
     /// Data-out bytes; Normal chunks borrow the original envelope.
@@ -434,8 +436,8 @@ pub fn offline_bdr212_v105_data_out<'a>(
     offline_bounded_oem_data_out(profile, kernel, normal, seed)
 }
 
-/// Validate linear-FE framing and decoded integrity, independent of model and revision.
-fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> {
+/// Validate transfer layout and decoded integrity, independent of model and revision.
+fn validate_kernel_normal(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> {
     check_normal_size(kernel)?;
     check_normal_size(normal)?;
     crate::pioneer_flash_plan::validate_bundle(Some(kernel), Some(normal))
@@ -451,7 +453,7 @@ fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> 
         || kh.kernel_version != nh.kernel_version
         || kh.kernel_version2 != nh.kernel_version2
     {
-        bail!("linear-FE envelope identities disagree");
+        bail!("Kernel and Normal envelope identities disagree");
     }
     let decoded_kernel = pioneer_optical::envelope::decode_envelope(kernel)
         .ok_or_else(|| anyhow!("Kernel decode failed"))?;
@@ -485,19 +487,15 @@ fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> 
     receiver_control(decoded_normal.image.get(..16).unwrap_or_default())
 }
 
-/// Validate and plan an established linear-FE envelope pair from its contents.
+/// Validate and plan an envelope pair from its contents.
 /// Offline-only transcript for dry-run/verification; the live write goes through
 /// the imperative executor. Receiver acceptance is a separate, untested question.
-pub fn offline_linear_fe_data_out<'a>(
+pub fn offline_pair_data_out<'a>(
     kernel: &'a [u8],
     normal: &'a [u8],
 ) -> Result<Vec<OemTransfer<'a>>> {
-    let control = linear_fe_control(kernel, normal)?;
-    transfer::data_out(
-        &control,
-        normal,
-        Some(transfer::KernelTransfer::LinearFe(kernel)),
-    )
+    let control = validate_kernel_normal(kernel, normal)?;
+    transfer::data_out(&control, normal, Some(transfer::select_kernel(kernel, 0)?))
 }
 
 fn zero_word_sum(bytes: &[u8]) -> bool {
@@ -945,7 +943,7 @@ impl DriveFamily for Pioneer {
         }
         Some((|| {
             // Flash whatever components the input carries: a Kernel+Normal
-            // package crossflashes via the linear-FE path, a Normal-only input
+            // package selects its transfer schedule by decoded layout, a Normal-only input
             // (bundle or bare `.enc`) via the OEM Normal path. A Kernel-only
             // input has no validated path and is refused. The 256-byte control
             // buffer comes from the live receiver, then the executor issues the WRITE
@@ -988,7 +986,7 @@ impl DriveFamily for Pioneer {
             let kernel_to_write = match selection {
                 FlashSelection::KernelAndNormal => {
                     let kernel = kernel.as_deref().expect("selected Kernel");
-                    linear_fe_control(kernel, normal)?;
+                    validate_kernel_normal(kernel, normal)?;
                     Some(kernel)
                 }
                 FlashSelection::NormalOnly => {

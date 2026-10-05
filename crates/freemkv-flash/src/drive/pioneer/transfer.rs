@@ -24,6 +24,19 @@ pub enum KernelTransfer<'a> {
     },
 }
 
+/// Select framing from decoded Kernel layout, never model, revision or length alone.
+pub fn select_kernel(bytes: &[u8], seed: u32) -> Result<KernelTransfer<'_>> {
+    let decoded = pioneer_optical::envelope::decode_envelope(bytes)
+        .ok_or_else(|| anyhow::anyhow!("cannot determine Kernel transfer layout"))?;
+    match decoded.info().layout {
+        pioneer_optical::envelope::Layout::KernelFront => Ok(KernelTransfer::LinearFe(bytes)),
+        pioneer_optical::envelope::Layout::KernelDerived => {
+            Ok(KernelTransfer::PrefixF0GeneratedFe { bytes, seed })
+        }
+        other => bail!("unsupported Kernel transfer layout: {other:?}"),
+    }
+}
+
 /// Build the data-out portion of a session that requires entry. No device I/O,
 /// retry, polling, model lookup, or claim of drive acceptance occurs here.
 pub fn data_out<'a>(
@@ -46,6 +59,7 @@ pub fn data_out<'a>(
     }
     let mut out = vec![OemTransfer {
         stage: TransferStage::Entry,
+        offset: 0,
         cdb: cdb_wb_flash_entry(),
         data: Cow::Owned(control.to_vec()),
     }];
@@ -57,11 +71,13 @@ pub fn data_out<'a>(
         Some(KernelTransfer::PrefixF0GeneratedFe { bytes, seed }) => {
             out.push(OemTransfer {
                 stage: TransferStage::KernelPrefix,
+                offset: 0,
                 cdb: pioneer_optical::cdb::transfer(Role::Normal, 0, 0x1200),
                 data: Cow::Borrowed(&bytes[..0x1200]),
             });
             out.push(OemTransfer {
                 stage: TransferStage::KernelFe,
+                offset: 0,
                 cdb: pioneer_optical::cdb::transfer(Role::Kernel, 0, 0x200),
                 data: Cow::Owned(bdr212_generated_kernel_block(seed).to_vec()),
             });
@@ -72,6 +88,7 @@ pub fn data_out<'a>(
             ] {
                 out.push(OemTransfer {
                     stage: TransferStage::KernelFe,
+                    offset: destination,
                     cdb: pioneer_optical::cdb::transfer(Role::Kernel, destination, len as u32),
                     data: Cow::Borrowed(&bytes[start..start + len]),
                 });
@@ -81,6 +98,7 @@ pub fn data_out<'a>(
     chunks(&mut out, TransferStage::Normal, normal);
     out.push(OemTransfer {
         stage: TransferStage::Finish,
+        offset: 0,
         cdb: cdb_wb_flash_finish(),
         data: Cow::Owned(control.to_vec()),
     });
@@ -103,6 +121,7 @@ fn chunks<'a>(out: &mut Vec<OemTransfer<'a>>, stage: TransferStage, bytes: &'a [
     for (index, data) in bytes.chunks(FLASH_CHUNK).enumerate() {
         out.push(OemTransfer {
             stage,
+            offset: (index * FLASH_CHUNK) as u32,
             cdb: pioneer_optical::cdb::transfer(
                 role,
                 (index * FLASH_CHUNK) as u32,

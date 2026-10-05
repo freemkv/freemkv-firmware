@@ -2,8 +2,7 @@
 //!
 //! Issues the OEM `WRITE BUFFER` command sequence over the wire imperatively,
 //! with the documented result checks, post-entry identity gate, settle delays,
-//! and completion poll (see the BDR-UD04 1.11 host trace in the Pioneer firmware
-//! notes). It issues real writes and must only be reached behind the engine's
+//! and completion poll (see the Pioneer firmware protocol notes). It issues real writes and must only be reached behind the engine's
 //! `--execute`/`--i-understand-risk` safety gate, an empty/closed tray guard,
 //! and a captured pre-flash backup.
 //!
@@ -12,10 +11,10 @@
 //! [`crate::drive::pioneer_transport`].
 //!
 //! The caller ([`crate::drive::pioneer`]) builds the 256-byte control buffer
-//! (descriptor + key from the embedded key table) and selects the components
+//! (descriptor + key resolved from the live receiver) and selects the components
 //! from the flash input — a Kernel (`07/FE`), a Normal (`07/F0`), or both. This
 //! executor is straight-line: entry, the chunks, finish. There is no
-//! pre-built transcript list; the key is already resolved into `control`.
+//! model-specific schedule; validated layout selects the transfer framing.
 
 use std::time::{Duration, Instant};
 
@@ -24,7 +23,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use pioneer_optical::drive::enter_update;
 use pioneer_optical::{DriveClass, Identity, Role};
 
-use crate::drive::pioneer::{CONTROL_LEN, FLASH_CHUNK};
+#[cfg(test)]
+use crate::drive::pioneer::FLASH_CHUNK;
+use crate::drive::pioneer::{transfer, TransferStage, CONTROL_LEN};
 use crate::drive::pioneer_transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use crate::platform::ScsiDevice;
 use crate::style;
@@ -82,7 +83,7 @@ fn resolve_class(
 }
 
 /// Execute the OEM update against the drive with the pre-built 256-byte
-/// `control` buffer (descriptor + key from the embedded key table).
+/// `control` buffer (descriptor + key resolved from the live receiver).
 ///
 /// Every Pioneer vendor command is issued by `pioneer_optical::drive`: identify
 /// -> [`enter_update`] (OEM update entry; the crate adds the DVR handshake
@@ -128,6 +129,25 @@ pub(crate) fn execute_flash(
     };
     let kernel: Option<&[u8]> = patched_kernel.as_deref().or(kernel);
 
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u32;
+    let kernel_transfer = kernel
+        .map(|k| transfer::select_kernel(k, seed))
+        .transpose()?;
+    let steps = transfer::data_out(control, normal, kernel_transfer)?;
+    let kernel_total = steps
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.stage,
+                TransferStage::KernelPrefix | TransferStage::KernelFe
+            )
+        })
+        .map(|s| s.data.len())
+        .sum();
+
     style::trace(&format!(
         "execute_flash: kernel={} bytes, normal={} bytes",
         kernel.map_or(0, <[u8]>::len),
@@ -136,8 +156,7 @@ pub(crate) fn execute_flash(
 
     // Two independent progress bars: the Kernel phase and the Normal phase each
     // report against their own byte total.
-    let mut kernel_progress =
-        style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len));
+    let mut kernel_progress = style::Progress::new("flashing kernel", kernel_total);
     let mut normal_progress = style::Progress::new("flashing normal", normal.len());
 
     crate::engine::guard_no_medium(dev, true)?;
@@ -167,27 +186,31 @@ pub(crate) fn execute_flash(
         println!("{}", style::dim("  update mode entered"));
     }
 
-    // Kernel slices (crossflash only), then Normal chunks — each at most
-    // FLASH_CHUNK, byte-for-byte.
-    if let Some(kernel) = kernel {
-        let mut written = 0usize;
-        for (index, chunk) in kernel.chunks(FLASH_CHUNK).enumerate() {
-            session
-                .write(Role::Kernel, (index * FLASH_CHUNK) as u32, chunk)
-                .map_err(flash_err)
-                .with_context(|| format!("OEM Kernel write failed{PARTIAL_HINT}"))?;
-            written += chunk.len();
-            kernel_progress.set(written);
+    let mut kernel_written = 0;
+    let mut normal_written = 0;
+    let mut kernel_pending_settle = false;
+    for step in &steps {
+        let role = match step.stage {
+            TransferStage::Entry | TransferStage::Finish => continue,
+            TransferStage::KernelFe => Role::Kernel,
+            TransferStage::KernelPrefix | TransferStage::Normal => Role::Normal,
+        };
+        if step.stage == TransferStage::Normal && kernel_pending_settle {
+            std::thread::sleep(Duration::from_secs(2));
+            kernel_pending_settle = false;
         }
-    }
-    let mut written = 0usize;
-    for (index, chunk) in normal.chunks(FLASH_CHUNK).enumerate() {
         session
-            .write(Role::Normal, (index * FLASH_CHUNK) as u32, chunk)
+            .write(role, step.offset, &step.data)
             .map_err(flash_err)
-            .with_context(|| format!("OEM Normal write failed{PARTIAL_HINT}"))?;
-        written += chunk.len();
-        normal_progress.set(written);
+            .with_context(|| format!("OEM {:?} write failed{PARTIAL_HINT}", step.stage))?;
+        if step.stage == TransferStage::Normal {
+            normal_written += step.data.len();
+            normal_progress.set(normal_written);
+        } else {
+            kernel_written += step.data.len();
+            kernel_progress.set(kernel_written);
+            kernel_pending_settle = true;
+        }
     }
 
     // Commit with the control buffer, then settle and poll for ready.
@@ -458,13 +481,18 @@ mod tests {
 
     /// A structurally valid envelope-wrapped Kernel whose decoded `0xFE` marker is `marker`.
     fn marker_kernel(marker: u8) -> Vec<u8> {
+        layout_kernel(marker, false)
+    }
+
+    fn layout_kernel(marker: u8, derived: bool) -> Vec<u8> {
         let mut body = vec![0u8; 0x10000];
         body[0xFE] = marker;
         body[0x1000..0x1008].copy_from_slice(b"SAT 8A10");
         body[0x1008..0x1010].copy_from_slice(b"ID58    ");
         body[0x1010..0x1014].copy_from_slice(b"ID5 ");
         // FrontKey dispatcher signature: `ae fe .. .. .. .. ae f0`.
-        body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
+        let reg = if derived { 0xad } else { 0xae };
+        body[0x2000..0x2008].copy_from_slice(&[reg, 0xfe, 0, 0, 0, 0, reg, 0xf0]);
         let sum = body
             .chunks(4)
             .map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]]))
@@ -535,9 +563,40 @@ mod tests {
     }
 
     #[test]
+    fn derived_kernel_uses_generated_schedule_before_normal() {
+        let kernel = layout_kernel(1, true);
+        let normal = ud04_normal(0x8100);
+        let mut dev = Recorder::default();
+        execute_flash(&mut dev, &[0xa5; 256], Some(&kernel), &normal, false, false).unwrap();
+        assert_eq!(dev.strict_writes, 9);
+        assert_eq!(dev.lenient_writes, 0);
+        let expected = [
+            (0xf0, 0, 0x1200),
+            (0xfe, 0, 0x200),
+            (0xfe, 0x1200, 0x8000),
+            (0xfe, 0x9200, 0x8000),
+            (0xfe, 0x11200, 0x1000),
+        ];
+        for ((cdb, data), (role, offset, len)) in dev.writes[1..6].iter().zip(expected) {
+            assert_eq!(cdb[2], role);
+            let actual_offset =
+                ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            assert_eq!(actual_offset, offset);
+            assert_eq!(data.len(), len);
+        }
+        assert_eq!(dev.writes[1].1, kernel[..0x1200]);
+        assert_eq!(dev.writes[3].1, kernel[0x200..0x8200]);
+        assert_eq!(dev.writes[4].1, kernel[0x8200..0x10200]);
+        assert_eq!(dev.writes[5].1, kernel[0x10200..]);
+        assert_eq!(dev.writes[6].1, normal[..0x8000]);
+        assert_eq!(dev.writes[7].1, normal[0x8000..]);
+        assert_eq!(dev.writes[8].1, dev.writes[0].1);
+    }
+
+    #[test]
     fn executes_both_kernel_and_normal_via_strict_writes_in_order() {
-        // 0x18000 kernel => 3 full 07/FE slices; 0x8100 normal => 2 07/F0 chunks.
-        let kernel: Vec<u8> = (0..0x18000usize).map(|i| (i % 253) as u8).collect();
+        // A front-key Kernel has three FE slices; this Normal has two F0 chunks.
+        let kernel = marker_kernel(1);
         let normal: Vec<u8> = (0..0x8100usize).map(|i| (i % 251) as u8).collect();
         let mut dev = Recorder::default();
         execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false, false).unwrap();
