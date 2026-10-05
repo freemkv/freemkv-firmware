@@ -721,6 +721,9 @@ fn read_region_deep_gaps(
     let mut image = vec![0u8; len];
     let mut pos = 0usize;
     let mut dead_streak = 0usize;
+    // Offset of the last chunk that read cleanly: the liveness probe re-reads it,
+    // so it never depends on any one region (e.g. the Kernel base) being readable.
+    let mut last_good: Option<usize> = None;
     let mut gaps: Vec<(usize, usize)> = Vec::new();
     let mut any = false;
     let mut progress = crate::style::Progress::new(region_label("recovering", start), len);
@@ -731,6 +734,8 @@ fn read_region_deep_gaps(
             Ok(data) => {
                 image[pos..pos + n].copy_from_slice(&data);
                 any = true;
+                last_good = Some(off);
+                dead_streak = 0;
                 pos += n;
             }
             Err(_) => {
@@ -740,8 +745,10 @@ fn read_region_deep_gaps(
                 dead_streak = if got { 0 } else { dead_streak + 1 };
                 // A drive that dropped out would otherwise cost millions of
                 // retries: after a run of dead chunks, check the drive still
-                // answers a basic firmware read and give up if it does not.
-                if any && dead_streak >= DEAD_STREAK && prepare_firmware_read(dev).is_err() {
+                // re-reads the last offset that read cleanly and give up if it does not.
+                if dead_streak >= DEAD_STREAK
+                    && last_good.is_some_and(|good| read_chunk(dev, good, 1).is_err())
+                {
                     bail!(
                         "the drive stopped responding at {:#x} after {dead_streak} consecutive \
                          unreadable chunks; aborting the salvage read",
@@ -982,17 +989,16 @@ mod tests {
 
     #[test]
     fn deep_read_aborts_when_the_drive_drops_out_mid_region() {
-        // Serves the first chunk, then every read (including the liveness probe)
+        // Serves the first read, then every read (including the liveness probe)
         // fails: a dropped drive must not cost millions of retries.
         struct Dying {
-            good_below: usize,
             reads: usize,
         }
         impl ScsiDevice for Dying {
             fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
                 self.reads += 1;
-                let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-                if start >= self.good_below {
+                let _ = cdb;
+                if self.reads > 1 {
                     bail!("drive gone");
                 }
                 Ok(vec![0u8; len])
@@ -1004,13 +1010,39 @@ mod tests {
                 "dying".into()
             }
         }
-        let mut dev = Dying {
-            good_below: READ_CHUNK,
-            reads: 0,
-        };
+        let mut dev = Dying { reads: 0 };
         let err = read_region_deep(&mut dev, 0, READ_CHUNK * 24).unwrap_err();
         assert!(format!("{err:#}").contains("stopped responding"), "{err:#}");
         assert!(dev.reads < 400_000, "too many retries: {}", dev.reads);
+    }
+
+    #[test]
+    fn force_dump_with_unreadable_kernel_base_still_saves_a_zero_filled_image() {
+        // Alive drive; only 0x400000..0x440000 (the Kernel base) is unreadable.
+        struct BadKernelBase;
+        impl ScsiDevice for BadKernelBase {
+            fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+                if cdb[2] != 0xb0 {
+                    bail!("no identity");
+                }
+                let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+                if start < 0x44_0000 && start + len > 0x40_0000 {
+                    bail!("unreadable kernel base");
+                }
+                Ok(vec![0xAA; len])
+            }
+            fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn describe(&self) -> String {
+                "bad kernel base".into()
+            }
+        }
+        let image = capture_raw_dump(&mut BadKernelBase, true).expect("dump must complete");
+        assert_eq!(image.len(), DUMP_MIN_LEN);
+        assert!(image[0x40_0000..0x44_0000].iter().all(|b| *b == 0));
+        assert!(image[..0x40_0000].iter().all(|b| *b == 0xAA));
+        assert!(image[0x44_0000..].iter().all(|b| *b == 0xAA));
     }
 
     #[test]
