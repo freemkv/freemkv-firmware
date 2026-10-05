@@ -111,6 +111,9 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
                 // The GUI never does the degraded-drive force-write; that is a
                 // deliberate CLI-only expert path.
                 recover: false,
+                // The GUI never waives the firmware-family match. --force is a
+                // deliberate CLI-only expert path.
+                force: false,
             };
             engine::flash(dev.as_mut(), handler.as_ref(), &req)
         }
