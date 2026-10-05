@@ -37,7 +37,31 @@ on:
       # GitHub Release.
       - 'v*'
       - '!v*-rc*'
+    # Dry runs: build, package and smoke-test every asset WITHOUT publishing
+    # (every publish step and the tap update are tag-only), like freemkv's
+    # deb.yml/appimage.yml. Branch pushes are path-filtered so CI proves the
+    # packaging whenever it (or the version/lock) changes, without running the
+    # full three-OS release build on every dev commit. GitHub does not apply
+    # `paths` to tag pushes, so releases are unaffected.
+    branches: [dev, qa]
+    paths:
+      - '.github/workflows/release.yml'
+      - 'packaging/**'
+      - 'macos/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'packaging/**'
+      - 'macos/**'
   workflow_dispatch:
+
+# A newer dry run supersedes an older one on the same ref; a tag run is never
+# cancelled.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: write
@@ -98,6 +122,14 @@ jobs:
             archive: tar.gz
             binext: ''
             gui: false
+          # Linux arm64: the same static musl CLIs, cross-compiled (below).
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            osname: linux
+            arch: aarch64
+            archive: tar.gz
+            binext: ''
+            gui: false
           # macOS: ship both architectures as separate binaries, GUIs included.
           - os: macos-latest
             target: x86_64-apple-darwin
@@ -150,8 +182,39 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
         working-directory: .
 
+      # arm64 musl goes through `cross`, as freemkv's cli-binaries job does: a
+      # plain x86 `cargo build --target` has no aarch64 linker. Pinned +
+      # hash-checked, and the build image pinned by digest.
+      - name: Install cross
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          curl -fsSLo cross.tar.gz https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-musl.tar.gz
+          echo 'a486cefa6cb486971b97be321ea9dfc2e90c1979550295314a368f53fab6d588  cross.tar.gz' | sha256sum -c -
+          tar xzf cross.tar.gz cross
+          sudo mv cross /usr/local/bin/
+          echo 'CROSS_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_IMAGE=ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5@sha256:702154f52b2d8091671aa2c84d5582d849f949977228c735ff8462f93cc0e1e4' >> "$GITHUB_ENV"
+
       - name: Build the CLIs (release)
+        if: matrix.target != 'aarch64-unknown-linux-musl'
         run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
+
+      - name: Build the CLIs (release, cross)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: cross build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
+
+      # The Linux CLIs must be static (no NEEDED entries), on both arches.
+      - name: Verify the Linux CLIs are static
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          for b in freemkv-flash freemkv-fw; do
+            bin="target/${{ matrix.target }}/release/$b"
+            if readelf -d "$bin" | grep -q NEEDED; then
+              readelf -d "$bin"; echo "::error::$bin is not static"; exit 1
+            fi
+          done
 
       - name: Build the GUIs (release)
         if: matrix.gui
@@ -225,6 +288,14 @@ jobs:
             sha "$stable.$fmt"
             sha "$versioned.$fmt"
             rm -f "$staged"
+            # The CLIs also ship as bare binaries, freemkv's cli-binaries
+            # naming: freemkv-flash-cli-x86_64-linux, ...-aarch64-macos,
+            # ...-x86_64-windows.exe.
+            case "$bin" in *-gui) ;; *)
+              bare="$bin-cli-$arch-$osname$ext"
+              cp "$src" "$bare"
+              sha "$bare" ;;
+            esac
           done
 
       # Manual runs (and branch dispatch, which cannot publish a Release) still
@@ -238,6 +309,9 @@ jobs:
             freemkv-firmware/*.tar.gz
             freemkv-firmware/*.zip
             freemkv-firmware/*.sha256
+            freemkv-firmware/*-cli-*-linux
+            freemkv-firmware/*-cli-*-macos
+            freemkv-firmware/*-cli-*-windows.exe
           if-no-files-found: error
 
       # Publish to the GitHub Release only for real version tags. softprops
@@ -251,6 +325,9 @@ jobs:
             freemkv-firmware/*.tar.gz
             freemkv-firmware/*.zip
             freemkv-firmware/*.sha256
+            freemkv-firmware/*-cli-*-linux
+            freemkv-firmware/*-cli-*-macos
+            freemkv-firmware/*-cli-*-windows.exe
 
   # ── Linux packages (.deb) ───────────────────────────────────────────────────
   # Mirrors freemkv's deb.yml / packaging/deb/build.py conventions: amd64,
