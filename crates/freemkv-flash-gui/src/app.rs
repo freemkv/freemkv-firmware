@@ -42,6 +42,9 @@ pub struct FlashApp {
     options: FlashOptions,
     log: Vec<String>,
     diagnostic_log: Option<std::path::PathBuf>,
+    diagnostic_lines: Vec<String>,
+    diagnostic_checked: Option<std::time::Instant>,
+    diagnostic_notice: Option<String>,
     progress: Option<(String, usize, usize)>,
     fields: Vec<(String, String)>,
     running: bool,
@@ -52,7 +55,33 @@ impl FlashApp {
     fn diagnostic_text(&self) -> std::io::Result<String> {
         match &self.diagnostic_log {
             Some(path) => std::fs::read_to_string(path),
-            None => Ok(self.log.join("\n")),
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "No diagnostic log is available for this operation.",
+            )),
+        }
+    }
+
+    fn refresh_diagnostic_view(&mut self) {
+        self.diagnostic_lines = match self.diagnostic_text() {
+            Ok(text) => text.lines().map(str::to_owned).collect(),
+            Err(error) => vec![format!("Could not read diagnostic log: {error}")],
+        };
+        self.diagnostic_checked = Some(std::time::Instant::now());
+    }
+
+    fn save_diagnostic_log(&mut self) {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_file_name("freemkv-flash-diagnostic.log")
+            .save_file()
+        {
+            let result = self
+                .diagnostic_text()
+                .and_then(|text| std::fs::write(&path, text));
+            self.diagnostic_notice = Some(match result {
+                Ok(()) => format!("Diagnostic log exported: {}", path.display()),
+                Err(error) => format!("Could not export diagnostic log: {error}"),
+            });
         }
     }
 
@@ -100,6 +129,9 @@ impl FlashApp {
             options: FlashOptions::default(),
             log: vec!["Ready. Select an optical drive and choose an action.".into()],
             diagnostic_log: None,
+            diagnostic_lines: Vec::new(),
+            diagnostic_checked: None,
+            diagnostic_notice: None,
             progress: None,
             fields: Vec::new(),
             running: false,
@@ -139,6 +171,8 @@ impl FlashApp {
         self.failure = None;
         self.log.clear();
         self.diagnostic_log = None;
+        self.diagnostic_checked = None;
+        self.diagnostic_notice = None;
         self.progress = None;
         self.fields.clear();
         self.log.push(format!("{label}: {device}"));
@@ -212,6 +246,7 @@ impl FlashApp {
         if finished {
             self.running = false;
             self.rx = None;
+            self.diagnostic_checked = None;
         }
     }
 
@@ -540,18 +575,36 @@ impl FlashApp {
                     }
                     if let Some(error) = &self.failure {
                         ui.colored_label(egui::Color32::from_rgb(160, 45, 35), error);
+                        if ui.button("Save diagnostic log…").clicked() {
+                            self.save_diagnostic_log();
+                        }
+                    }
+                    if let Some(notice) = &self.diagnostic_notice {
+                        ui.label(notice);
                     }
                     ui.add_space(6.0);
-                    if ui.button("View details…").clicked() {
+                    if ui.button("View diagnostic log…").clicked() {
                         self.details_open = true;
+                        self.diagnostic_checked = None;
+                        self.diagnostic_notice = None;
                     }
                 });
         });
         self.flash_confirm_dialog(&ctx);
         if self.details_open {
+            let refresh_interval = std::time::Duration::from_millis(500);
+            if self
+                .diagnostic_checked
+                .is_none_or(|checked| self.running && checked.elapsed() >= refresh_interval)
+            {
+                self.refresh_diagnostic_view();
+            }
+            if self.running {
+                ctx.request_repaint_after(refresh_interval);
+            }
             let mut open = true;
             let mut close = false;
-            egui::Window::new("Operation details")
+            egui::Window::new("Diagnostic log")
                 .open(&mut open)
                 .collapsible(false)
                 .resizable(false)
@@ -562,49 +615,38 @@ impl FlashApp {
                         if ui.button("Copy diagnostic log").clicked() {
                             match self.diagnostic_text() {
                                 Ok(text) => ctx.copy_text(text),
-                                Err(error) => self
-                                    .log
-                                    .push(format!("Could not read diagnostic log: {error}")),
+                                Err(error) => {
+                                    self.diagnostic_notice =
+                                        Some(format!("Could not read diagnostic log: {error}"))
+                                }
                             }
                         }
                         if ui.button("Save diagnostic log…").clicked() {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .set_file_name("freemkv-flash-diagnostic.log")
-                                .save_file()
-                            {
-                                let result = self
-                                    .diagnostic_text()
-                                    .and_then(|text| std::fs::write(&path, text));
-                                match result {
-                                    Ok(()) => self.log.push(format!(
-                                        "Diagnostic log exported: {}",
-                                        path.display()
-                                    )),
-                                    Err(error) => self
-                                        .log
-                                        .push(format!("Could not export diagnostic log: {error}")),
-                                }
-                            }
+                            self.save_diagnostic_log();
                         }
                         if ui.button("Close").clicked() {
                             close = true;
                         }
                     });
+                    ui.label("Attach this log to your bug report.");
+                    if let Some(notice) = &self.diagnostic_notice {
+                        ui.label(notice);
+                    }
                     ui.separator();
-                    egui::ScrollArea::vertical()
+                    egui::ScrollArea::both()
                         .id_salt("diagnostic_text")
                         .scroll_bar_visibility(
                             egui::scroll_area::ScrollBarVisibility::AlwaysVisible,
                         )
-                        .max_height(340.0)
+                        .max_height(310.0)
                         .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            for line in &self.log {
+                        .show_rows(ui, 14.0, self.diagnostic_lines.len(), |ui, rows| {
+                            for line in &self.diagnostic_lines[rows] {
                                 ui.add(
                                     egui::Label::new(
                                         egui::RichText::new(line).monospace().size(12.0),
                                     )
-                                    .wrap(),
+                                    .extend(),
                                 );
                             }
                         });
@@ -619,7 +661,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exported_diagnostics_include_transport_details_absent_from_the_ui() {
+    fn diagnostic_viewer_and_export_show_the_same_full_log() {
         let path =
             std::env::temp_dir().join(format!("freemkv-gui-diagnostic-{}.log", std::process::id()));
         std::fs::write(
@@ -634,11 +676,47 @@ mod tests {
             .diagnostic_text()
             .unwrap()
             .contains("status=0x00 transferred=0"));
+        app.details_open = true;
+        let visible = rendered_text(&mut app);
+        assert!(
+            visible
+                .iter()
+                .any(|(text, _)| text.contains("SCSI result: status=0x00 transferred=0")),
+            "{visible:?}"
+        );
+        assert!(visible
+            .iter()
+            .any(|(text, _)| text.contains("Attach this log to your bug report.")));
+        assert!(!app
+            .diagnostic_lines
+            .iter()
+            .any(|line| line == "backup failed"));
+        std::fs::write(&path, "RESULT: updated log\n").unwrap();
+        app.refresh_diagnostic_view();
+        assert_eq!(app.diagnostic_lines, ["RESULT: updated log"]);
         std::fs::remove_file(&path).unwrap();
         assert!(
             app.diagnostic_text().is_err(),
             "missing full log must not silently export only the summary"
         );
+        app.refresh_diagnostic_view();
+        assert!(app.diagnostic_lines[0].contains("Could not read diagnostic log"));
+    }
+
+    #[test]
+    fn failed_operation_offers_log_export_next_to_the_error() {
+        let mut app = FlashApp::with_drives(Vec::new());
+        app.failure = Some("Backup failed".into());
+        let visible = rendered_text(&mut app);
+        assert!(
+            visible
+                .iter()
+                .any(|(text, _)| text == "Save diagnostic log…"),
+            "{visible:?}"
+        );
+        assert!(visible
+            .iter()
+            .any(|(text, _)| text == "View diagnostic log…"));
     }
 
     fn rendered_text(app: &mut FlashApp) -> Vec<(String, bool)> {

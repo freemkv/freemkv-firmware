@@ -22,8 +22,9 @@ bars. Details open in a separate scrolling dialog. Flash has one override:
 
 Version 0.10.5 saves a diagnostic log automatically for each CLI or desktop
 operation. To report a failure, repeat the operation once and attach that log.
-The CLI prints its location; in the desktop app, open **Details** and choose
-**Save diagnostic log…** or **Copy diagnostic log**.
+The CLI prints its location; in the desktop app, open **View diagnostic log…**
+to see the full log and choose **Save diagnostic log…** or **Copy diagnostic log**.
+Failed operations also offer **Save diagnostic log…** beside the error.
 
 Logs include the app and OS versions, drive identity, command bytes, transfer
 counts, status/sense, timing, retry decisions, native transport warnings, and

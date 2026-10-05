@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic diagnostic logs for CLI and desktop flasher operations, including
   platform/version, drive identity, SCSI commands, status/sense, transfer counts,
   timings, retries, native transport warnings and complete error chains.
-  The desktop details dialog can copy or save the full log. No debug flag is needed.
+  The desktop diagnostic viewer displays, copies and saves the same full log;
+  failed operations also offer log export beside the error. No debug flag is needed.
 - Logs are limited to 8 MiB per operation, retaining the initial context and recent
   events on rollover. Firmware transfer payloads are not logged.
 
