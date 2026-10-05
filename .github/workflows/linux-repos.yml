@@ -21,9 +21,15 @@ on:
         description: existing release tag to add .rpm/.pkg.tar.zst to; empty = test only
         type: string
         default: ''
+  # A release tag runs this through release.yml (a tag push has no changed
+  # paths, so a paths-filtered tag trigger never fires).
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        default: ''
   push:
     branches: [dev]
-    tags: ['v*', '!v*-rc*']
     paths: ['packaging/rpm/**', 'packaging/arch/**', '.github/workflows/linux-repos.yml']
   pull_request:
     paths: ['packaging/rpm/**', 'packaging/arch/**', '.github/workflows/linux-repos.yml']

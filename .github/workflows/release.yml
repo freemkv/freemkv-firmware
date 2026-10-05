@@ -743,6 +743,15 @@ jobs:
   # The APT repository at freemkv.org/apt indexes every .deb on the latest
   # release; ask the website's apt.yml to rebuild it now instead of at its
   # daily run. A failure here never turns the release red.
+  # Signed .rpm and pacman packages from this release's .debs (freemkv.org/rpm, /arch).
+  linux-repos:
+    needs: [linux-packages, linux-cli-armhf]
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/linux-repos.yml
+    secrets: inherit
+
   apt:
     needs: [linux-packages, linux-cli-armhf]
     if: always() && startsWith(github.ref, 'refs/tags/') && (needs.linux-packages.result == 'success' || needs.linux-cli-armhf.result == 'success')
