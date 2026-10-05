@@ -1361,6 +1361,7 @@ dependencies = [
  "freemkv-chipset",
  "freemkv-flash",
  "sha2",
+ "tempfile",
  "thumb-asm",
 ]
 
@@ -1370,6 +1371,7 @@ version = "0.10.5"
 dependencies = [
  "anyhow",
  "eframe",
+ "freemkv-flash",
  "freemkv-fw",
  "image",
  "rfd",

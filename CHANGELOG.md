@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Firmware modifier CLI and GUI operations now create automatic detailed logs,
+  including image fingerprints, integrity verdicts, modification reports, output
+  publication and full error chains. The modifier desktop UI now matches the
+  flasher’s layout, styling, background operations and diagnostic viewer/export.
+- Modifier output is staged, synced and byte-verified before atomic publication,
+  then checked again at the final path.
 - Automatic diagnostic logs for CLI and desktop flasher operations, including
   platform/version, drive identity, SCSI commands, status/sense, transfer counts,
   timings, retries, native transport warnings and complete error chains.

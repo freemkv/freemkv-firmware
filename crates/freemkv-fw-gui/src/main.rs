@@ -12,6 +12,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod ops;
 
 use eframe::egui;
 
@@ -29,9 +30,9 @@ fn load_icon() -> Option<egui::IconData> {
 
 fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("freemkv-fw")
-        .with_inner_size([760.0, 600.0])
-        .with_min_inner_size([560.0, 420.0]);
+        .with_title("freemkv Firmware Modifier")
+        .with_inner_size([720.0, 610.0])
+        .with_resizable(false);
     if let Some(icon) = load_icon() {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));
     }
@@ -44,6 +45,23 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "freemkv-fw",
         native_options,
-        Box::new(|_cc| Ok(Box::new(app::FwApp::new()))),
+        Box::new(|cc| {
+            configure_style(&cc.egui_ctx);
+            Ok(Box::new(app::FwApp::new()))
+        }),
     )
+}
+
+fn configure_style(ctx: &egui::Context) {
+    ctx.set_theme(egui::Theme::Light);
+    ctx.style_mut_of(egui::Theme::Light, |style| {
+        style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+        style.spacing.button_padding = egui::vec2(12.0, 7.0);
+        style
+            .text_styles
+            .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+    });
 }

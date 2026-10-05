@@ -38,6 +38,15 @@ scope** and will land later as a separate `freemkv-fw` binary.
   archive containing the firmware image. Without `--execute`, it is a dry run.
 - `verify` does not exist as a command. `flash` verifies as its protocol allows.
 
+## Automatic diagnostics
+
+The flasher and firmware modifier save detailed diagnostic logs by default on
+Windows, macOS and Linux, in both CLI and desktop apps. If an operation fails,
+attach its existing log to the bug report. No debug flag or second run is needed.
+The CLI prints the path; desktop apps provide **View diagnostic log…**, **Copy
+diagnostic log** and **Save diagnostic log…**, with export beside failures.
+See [log contents and locations](crates/freemkv-flash/README.md#diagnostic-logs).
+
 ## MTK-gate (MediaTek-only for now)
 
 Every command classifies the drive first, using only proven discriminators:

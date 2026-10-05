@@ -86,7 +86,8 @@ pub fn field(label: impl Into<String>, value: impl Into<String>) {
     });
 }
 
-pub(crate) fn emit(args: fmt::Arguments<'_>, newline: bool, error: bool) {
+/// Emit text to the active diagnostic log and GUI sink or terminal stream.
+pub fn emit(args: fmt::Arguments<'_>, newline: bool, error: bool) {
     let text = args.to_string();
     crate::diagnostics::record(&text);
     let captured = SINK.with(|s| {

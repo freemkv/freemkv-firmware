@@ -65,7 +65,7 @@ thread_local! {
 }
 
 /// Append a diagnostic without cluttering the UI. A failed log never interrupts a burn.
-pub(crate) fn record(text: impl AsRef<str>) {
+pub fn record(text: impl AsRef<str>) {
     let error = LOG.with(|slot| {
         let mut slot = slot.borrow_mut();
         let error = slot.as_mut().and_then(|log| log.write(text.as_ref()).err());
@@ -128,7 +128,7 @@ fn system_details() -> String {
         .unwrap_or_else(|error| format!("system version unavailable: {error}"));
 }
 
-fn create_log(directory: &Path) -> io::Result<(PathBuf, Log)> {
+fn create_log(directory: &Path, application: &str) -> io::Result<(PathBuf, Log)> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     std::fs::create_dir_all(directory)?;
@@ -137,7 +137,7 @@ fn create_log(directory: &Path) -> io::Result<(PathBuf, Log)> {
         .unwrap_or_default()
         .as_millis();
     let path = directory.join(format!(
-        "freemkv-flash-{stamp}-{}-{}.log",
+        "{application}-{stamp}-{}-{}.log",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
@@ -165,15 +165,43 @@ fn create_log(directory: &Path) -> io::Result<(PathBuf, Log)> {
 /// Nested workflows reuse the current log. Native transport warnings are forwarded
 /// into the same output stream, including Windows DeviceIoControl error codes.
 pub fn run<T>(operation: &str, work: impl FnOnce() -> Result<T>) -> Result<T> {
-    run_at(&log_directory(), operation, work)
+    run_named("freemkv-flash", operation, work)
 }
 
+/// Run a sibling application's operation with the same automatic diagnostic policy.
+/// The application name is a filename component and must contain only ASCII letters,
+/// digits or hyphens. Nested operations share the existing file.
+pub fn run_named<T>(
+    application: &str,
+    operation: &str,
+    work: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    anyhow::ensure!(
+        !application.is_empty()
+            && application
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-'),
+        "invalid diagnostic application name"
+    );
+    run_at_named(&log_directory(), application, operation, work)
+}
+
+#[cfg(test)]
 fn run_at<T>(directory: &Path, operation: &str, work: impl FnOnce() -> Result<T>) -> Result<T> {
+    run_at_named(directory, "freemkv-flash", operation, work)
+}
+
+fn run_at_named<T>(
+    directory: &Path,
+    application: &str,
+    operation: &str,
+    work: impl FnOnce() -> Result<T>,
+) -> Result<T> {
     if LOG.with(|slot| slot.borrow().is_some()) {
         return work();
     }
-    let created =
-        create_log(directory).or_else(|_| create_log(&std::env::temp_dir().join("freemkv-logs")));
+    let created = create_log(directory, application)
+        .or_else(|_| create_log(&std::env::temp_dir().join("freemkv-logs"), application));
     let path = match created {
         Ok((path, log)) => {
             LOG.with(|slot| *slot.borrow_mut() = Some(log));
@@ -197,7 +225,7 @@ fn run_at<T>(directory: &Path, operation: &str, work: impl FnOnce() -> Result<T>
     }
     let _finish = Finish;
     record(format!(
-        "freemkv-flash={} os={} arch={} operation={operation:?} unix_time={:?}",
+        "{application}={} os={} arch={} operation={operation:?} unix_time={:?}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -374,7 +402,7 @@ mod tests {
     #[test]
     fn rollover_keeps_initial_context_and_final_result_bounded() {
         let directory = std::env::temp_dir().join("freemkv-diagnostics-rollover-test");
-        let (path, mut log) = create_log(&directory).unwrap();
+        let (path, mut log) = create_log(&directory, "freemkv-flash").unwrap();
         log.write("\x1b[32minitial drive identity\x1b[0m").unwrap();
         let row = "command ".repeat(128);
         for _ in 0..(MAX_LOG / row.len() + 20) {
@@ -395,7 +423,7 @@ mod tests {
     #[test]
     fn logging_failure_disables_logging_without_failing_the_operation() {
         let directory = std::env::temp_dir().join("freemkv-diagnostics-failure-test");
-        let (path, mut log) = create_log(&directory).unwrap();
+        let (path, mut log) = create_log(&directory, "freemkv-flash").unwrap();
         log.file = File::open(&path).unwrap(); // read-only handle makes the write fail
         LOG.with(|slot| *slot.borrow_mut() = Some(log));
         crate::output::capture(|_| {}, || record("cannot write this"));

@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 freemkv-fw = { path = "../freemkv-fw" }
+freemkv-flash = { path = "../freemkv-flash" }
 anyhow = "1"
 
 # eframe/egui: pure-Rust, immediate-mode GUI. Cross-platform (macOS + Windows +

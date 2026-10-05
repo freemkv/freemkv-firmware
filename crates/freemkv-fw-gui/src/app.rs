@@ -1,319 +1,649 @@
-//! The egui front-end for freemkv-fw: create / verify / sign / probe.
-//!
-//! Every action calls a `freemkv_fw::api` wrapper and renders the typed outcome
-//! into the log pane. The file operations are fast (CMAC over a ~2 MiB image),
-//! so they run inline on the UI thread; the device probe opens read-only.
+//! Firmware authoring sibling of the flasher, sharing its visual and diagnostic conventions.
 
-use std::path::{Path, PathBuf};
-
+use crate::ops::{self, Job};
 use eframe::egui;
-use freemkv_fw::api;
+use freemkv_flash::workflow::DriveChoice;
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 
-/// Application state.
+enum Msg {
+    Event(freemkv_flash::output::Event),
+    Done(Result<(), String>),
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Task {
+    Verify,
+    Create,
+    Sign,
+    Probe,
+}
+
 pub struct FwApp {
-    /// The firmware image the file operations act on.
-    image_path: Option<PathBuf>,
-    /// The device path the probe acts on.
+    task: Task,
+    result_task: Task,
+    input: Option<PathBuf>,
+    status: String,
+    failure: Option<String>,
+    action: String,
+    devices: Vec<DriveChoice>,
     device: String,
-    /// Rolling log pane contents.
+    details_open: bool,
     log: Vec<String>,
-}
-
-/// Short hex preview of a digest (first 4 bytes) for compact tables.
-fn short_hex(d: &[u8; 16]) -> String {
-    format!("{:02x}{:02x}{:02x}{:02x}", d[0], d[1], d[2], d[3])
-}
-
-/// `<stem>.<suffix>.bin` next to `input`.
-fn default_out(input: &Path, suffix: &str) -> PathBuf {
-    let stem = input
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "image".to_string());
-    input.with_file_name(format!("{stem}.{suffix}.bin"))
+    diagnostic_log: Option<PathBuf>,
+    diagnostic_lines: Vec<String>,
+    diagnostic_checked: Option<std::time::Instant>,
+    diagnostic_notice: Option<String>,
+    progress: Option<(String, usize, usize)>,
+    fields: Vec<(String, String)>,
+    running: bool,
+    rx: Option<Receiver<Msg>>,
 }
 
 impl FwApp {
-    /// Build the app with an empty log.
+    fn diagnostic_text(&self) -> std::io::Result<String> {
+        match &self.diagnostic_log {
+            Some(path) => std::fs::read_to_string(path),
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "No diagnostic log is available for this operation.",
+            )),
+        }
+    }
+
+    fn refresh_diagnostic_view(&mut self) {
+        self.diagnostic_lines = match self.diagnostic_text() {
+            Ok(text) => text.lines().map(str::to_owned).collect(),
+            Err(error) => vec![format!("Could not read diagnostic log: {error}")],
+        };
+        self.diagnostic_checked = Some(std::time::Instant::now());
+    }
+
+    fn save_diagnostic_log(&mut self) {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_file_name("freemkv-fw-diagnostic.log")
+            .save_file()
+        {
+            let result = self
+                .diagnostic_text()
+                .and_then(|text| std::fs::write(&path, text));
+            self.diagnostic_notice = Some(match result {
+                Ok(()) => format!("Diagnostic log exported: {}", path.display()),
+                Err(error) => format!("Could not export diagnostic log: {error}"),
+            });
+        }
+    }
+
     pub fn new() -> Self {
         Self {
-            image_path: None,
-            device: default_device(),
-            log: vec!["Ready. Open a firmware image to create / verify / sign.".to_string()],
+            task: Task::Verify,
+            result_task: Task::Verify,
+            input: None,
+            status: "Ready".into(),
+            failure: None,
+            action: String::new(),
+            devices: Vec::new(),
+            device: String::new(),
+            details_open: false,
+            log: Vec::new(),
+            diagnostic_log: None,
+            diagnostic_lines: Vec::new(),
+            diagnostic_checked: None,
+            diagnostic_notice: None,
+            progress: None,
+            fields: Vec::new(),
+            running: false,
+            rx: None,
         }
     }
 
-    /// Append a line to the log pane.
-    fn push(&mut self, line: impl Into<String>) {
-        self.log.push(line.into());
-    }
-
-    fn do_verify(&mut self) {
-        let Some(path) = self.image_path.clone() else {
-            return;
-        };
-        self.push(format!("── verify: {} ──", path.display()));
-        let image = match std::fs::read(&path) {
-            Ok(b) => b,
-            Err(e) => {
-                self.push(format!("✗ error: reading {}: {e}", path.display()));
-                return;
-            }
-        };
-        match api::verify(&image, None) {
-            Ok(out) => {
-                self.push(format!("scheme: {}", out.scheme));
-                self.push(format!(
-                    "{:>3}  {:<21}  {:>9}  {:<8}  {:<8}  {:<8}",
-                    "idx", "range", "size", "status", "stored", "computed"
-                ));
-                for v in &out.verdicts {
-                    let size = (v.end as u64).saturating_sub(v.start as u64) + 1;
-                    self.log.push(format!(
-                        "{:>3}  {:<21}  {:>9}  {:<8}  {:<8}  {:<8}",
-                        v.index,
-                        format!("0x{:x}-0x{:x}", v.start, v.end),
-                        format!("0x{size:x}"),
-                        if v.ok { "MATCH" } else { "MISMATCH" },
-                        short_hex(&v.stored),
-                        short_hex(&v.computed),
-                    ));
-                }
-                if out.verdicts.is_empty() {
-                    self.push("summary: no active regions");
-                } else if out.ok {
-                    self.push(format!("✓ summary: {} region(s) OK", out.verdicts.len()));
-                } else {
-                    let bad = out.verdicts.iter().filter(|v| !v.ok).count();
-                    self.push(format!(
-                        "✗ summary: {bad} of {} region(s) MISMATCH",
-                        out.verdicts.len()
-                    ));
+    fn discover(&mut self) {
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = events.clone();
+        self.devices = freemkv_flash::output::capture_events(
+            move |event| captured.lock().unwrap().push(event),
+            || {
+                freemkv_fw::diagnostics::run("GUI discovery", || {
+                    Ok(freemkv_flash::workflow::drives())
+                })
+                .unwrap_or_default()
+            },
+        );
+        if !self.devices.iter().any(|drive| drive.path == self.device) {
+            self.device = self
+                .devices
+                .first()
+                .map(|drive| drive.path.clone())
+                .unwrap_or_default();
+        }
+        for event in events.lock().unwrap().drain(..) {
+            if let freemkv_flash::output::Event::Field { label, value } = event {
+                if label == "Diagnostic log" {
+                    self.diagnostic_log = Some(value.into());
                 }
             }
-            Err(e) => self.push(format!("✗ error: {e:#}")),
         }
     }
 
-    fn do_sign(&mut self) {
-        let Some(path) = self.image_path.clone() else {
+    fn choose_image(&mut self) {
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("Firmware image", &["bin"])
+            .pick_file()
+        {
+            self.input = Some(path);
+            self.fields.clear();
+            self.failure = None;
+            self.status = "Ready".into();
+        }
+    }
+
+    fn start_job(&mut self, ctx: &egui::Context, label: &str, job: Job) {
+        if self.running {
             return;
-        };
-        let Some(out_path) = rfd::FileDialog::new()
-            .set_file_name(
-                default_out(&path, "signed")
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("image.signed.bin"),
-            )
-            .add_filter("firmware image", &["bin"])
-            .save_file()
-        else {
-            return;
-        };
-        self.push(format!("── sign: {} ──", path.display()));
-        let image = match std::fs::read(&path) {
-            Ok(b) => b,
-            Err(e) => {
-                self.push(format!("✗ error: reading {}: {e}", path.display()));
-                return;
-            }
-        };
-        match api::sign(&image, None) {
-            Ok(out) => {
-                self.push(format!("scheme: {}", out.scheme));
-                if out.changes.is_empty() {
-                    self.push("image already valid — 0 regions re-signed");
-                } else {
-                    self.push(format!("re-signed {} region(s):", out.changes.len()));
-                    for c in &out.changes {
-                        self.log.push(format!(
-                            "  [{:>2}] 0x{:x}-0x{:x}  {} -> {}",
-                            c.index,
-                            c.start,
-                            c.end,
-                            short_hex(&c.before),
-                            short_hex(&c.after),
-                        ));
+        }
+        self.result_task = self.task;
+        self.running = true;
+        self.action = label.to_string();
+        self.status = format!("{label}…");
+        self.failure = None;
+        self.log.clear();
+        self.diagnostic_log = None;
+        self.diagnostic_checked = None;
+        self.diagnostic_notice = None;
+        self.progress = None;
+        self.fields.clear();
+        self.log.push(label.to_owned());
+        let (tx, rx) = mpsc::channel();
+        self.rx = Some(rx);
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let line_tx = tx.clone();
+            let line_ctx = ctx.clone();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                freemkv_flash::output::capture_events(
+                    move |event| {
+                        let _ = line_tx.send(Msg::Event(event));
+                        line_ctx.request_repaint();
+                    },
+                    || ops::execute(&job),
+                )
+            }));
+            let result = match result {
+                Ok(result) => result.map_err(|e| format!("{e:#}")),
+                Err(_) => Err(
+                    "Operation worker failed unexpectedly. Inspect the output before using it."
+                        .into(),
+                ),
+            };
+            let _ = tx.send(Msg::Done(result));
+            ctx.request_repaint();
+        });
+    }
+
+    fn pump(&mut self) {
+        let mut finished = false;
+        if let Some(rx) = &self.rx {
+            loop {
+                match rx.try_recv() {
+                    Ok(Msg::Event(event)) => match event {
+                        freemkv_flash::output::Event::Message(line) => self.log.push(line),
+                        freemkv_flash::output::Event::Progress { label, done, total } => {
+                            self.progress = Some((label, done, total))
+                        }
+                        freemkv_flash::output::Event::Field { label, value } => {
+                            if label == "Diagnostic log" {
+                                self.diagnostic_log = Some(value.clone().into());
+                            }
+                            self.fields.push((label, value))
+                        }
+                    },
+                    Ok(Msg::Done(result)) => {
+                        match &result {
+                            Ok(()) => self.status = format!("{} complete", self.action),
+                            Err(error) => {
+                                self.status = format!("{} could not finish", self.action);
+                                self.failure = Some(error.clone());
+                            }
+                        }
+                        self.log.push(match result {
+                            Ok(()) => "✓ done.".into(),
+                            Err(e) => format!("✗ error: {e}"),
+                        });
+                        finished = true;
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        self.status = "Operation interrupted".into();
+                        self.failure = Some("The worker stopped before reporting a result. Inspect the output before using it.".into());
+                        self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
+                        finished = true;
+                        break;
                     }
                 }
-                match std::fs::write(&out_path, &out.image) {
-                    Ok(()) => self.push(format!(
-                        "✓ wrote {} ({} bytes)",
-                        out_path.display(),
-                        out.image.len()
-                    )),
-                    Err(e) => self.push(format!("✗ error: writing {}: {e}", out_path.display())),
-                }
             }
-            Err(e) => self.push(format!("✗ error: {e:#}")),
+        }
+        if finished {
+            self.running = false;
+            self.rx = None;
+            self.diagnostic_checked = None;
         }
     }
 
-    fn do_create(&mut self) {
-        let Some(path) = self.image_path.clone() else {
-            return;
-        };
-        let Some(out_path) = rfd::FileDialog::new()
-            .set_file_name(
-                default_out(&path, "freemkv")
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("image.freemkv.bin"),
-            )
-            .add_filter("firmware image", &["bin"])
-            .save_file()
-        else {
-            return;
-        };
-        self.push(format!("── create: {} ──", path.display()));
-        let image = match std::fs::read(&path) {
-            Ok(b) => b,
-            Err(e) => {
-                self.push(format!("✗ error: reading {}: {e}", path.display()));
-                return;
-            }
-        };
-        match api::create(&image) {
-            Ok(out) => {
-                self.push(format!("engine: {}", out.engine));
-                if let Some(c) = &out.chip {
-                    self.push(format!("chip: {} {} · rev {}", c.vendor, c.model, c.rev));
-                }
-                self.push(format!(
-                    "re-signed {} CMAC region(s) OK",
-                    out.verdicts.len()
-                ));
-                match std::fs::write(&out_path, out.image()) {
-                    Ok(()) => self.push(format!(
-                        "✓ wrote {} ({} bytes)",
-                        out_path.display(),
-                        out.image().len()
-                    )),
-                    Err(e) => self.push(format!("✗ error: writing {}: {e}", out_path.display())),
+    fn task_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        match self.task {
+            Task::Probe => {
+                ui.label("Check whether the selected drive runs freemkv firmware.");
+                if primary(ui, "Read drive information", !self.device.is_empty()).clicked() {
+                    self.start_job(ctx, "Drive information", Job::Probe(self.device.clone()));
                 }
             }
-            Err(e) => self.push(format!("✗ error: {e:#}")),
-        }
-    }
-
-    fn do_probe(&mut self) {
-        if self.device.trim().is_empty() {
-            self.push("No device specified.");
-            return;
-        }
-        let device = self.device.clone();
-        self.push(format!("── probe: {device} ──"));
-        match api::probe_device(&device) {
-            Ok(out) => {
-                let mark = if out.detected { "✓" } else { "•" };
-                self.push(format!("{mark} freemkv firmware: {}", out.detail));
+            Task::Verify => {
+                ui.label("Check the firmware image’s integrity before using it.");
+                if primary(ui, "Verify firmware", self.input.is_some()).clicked() {
+                    self.start_job(
+                        ctx,
+                        "Firmware verification",
+                        Job::Verify(self.input.clone().unwrap()),
+                    );
+                }
             }
-            Err(e) => self.push(format!("✗ error: {e:#}")),
+            Task::Create | Task::Sign => {
+                let create = self.task == Task::Create;
+                ui.label(if create {
+                    "Build freemkv firmware from an OEM image, then sign and verify it."
+                } else {
+                    "Recompute the firmware image’s integrity signatures."
+                });
+                ui.add_space(8.0);
+                if primary(
+                    ui,
+                    if create {
+                        "Create firmware…"
+                    } else {
+                        "Save signed firmware…"
+                    },
+                    self.input.is_some(),
+                )
+                .clicked()
+                {
+                    let input = self.input.clone().unwrap();
+                    let stem = input.file_stem().unwrap_or_default().to_string_lossy();
+                    let suffix = if create { "freemkv" } else { "signed" };
+                    if let Some(output) = rfd::FileDialog::new()
+                        .set_file_name(format!("{stem}.{suffix}.bin"))
+                        .add_filter("Firmware image", &["bin"])
+                        .save_file()
+                    {
+                        let job = if create {
+                            Job::Create { input, output }
+                        } else {
+                            Job::Sign { input, output }
+                        };
+                        self.start_job(
+                            ctx,
+                            if create {
+                                "Firmware creation"
+                            } else {
+                                "Firmware signing"
+                            },
+                            job,
+                        );
+                    }
+                }
+            }
         }
     }
 }
 
-/// A conventional default device path per OS (the user can edit it).
-fn default_device() -> String {
-    #[cfg(target_os = "linux")]
-    {
-        "/dev/sg1".to_string()
-    }
-    #[cfg(target_os = "macos")]
-    {
-        "/dev/rdisk0".to_string()
-    }
-    #[cfg(target_os = "windows")]
-    {
-        "\\\\.\\CdRom0".to_string()
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    {
-        String::new()
-    }
+fn primary(ui: &mut egui::Ui, text: &str, enabled: bool) -> egui::Response {
+    ui.add_enabled(
+        enabled,
+        egui::Button::new(egui::RichText::new(text).color(egui::Color32::WHITE))
+            .fill(egui::Color32::from_rgb(30, 95, 165))
+            .min_size(egui::vec2(170.0, 34.0)),
+    )
 }
 
 impl eframe::App for FwApp {
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        visuals.panel_fill.to_normalized_gamma_f32()
+    }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        ui.add_space(4.0);
-        ui.heading("freemkv-fw");
-        ui.label("Firmware authoring: create · verify · sign · probe");
-        ui.add_space(8.0);
+        self.render(ui);
+    }
+}
 
-        // ── file operations ────────────────────────────────────────────────
-        ui.horizontal(|ui| {
-            if ui.button("Open image…").clicked() {
-                if let Some(p) = rfd::FileDialog::new()
-                    .add_filter("firmware image", &["bin"])
-                    .pick_file()
-                {
-                    self.image_path = Some(p);
-                }
+impl FwApp {
+    fn render(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        self.pump();
+        if self.running {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            if ctx.input(|i| i.viewport().close_requested()) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             }
-            match &self.image_path {
-                Some(p) => ui.label(egui::RichText::new(p.display().to_string()).monospace()),
-                None => ui.label(egui::RichText::new("<no image>").italics()),
-            };
-        });
-
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            let has = self.image_path.is_some();
-            if ui
-                .add_enabled(has, egui::Button::new("Create"))
-                .on_hover_text("Build freemkv firmware from this OEM image")
-                .clicked()
-            {
-                self.do_create();
-            }
-            if ui
-                .add_enabled(has, egui::Button::new("Verify"))
-                .on_hover_text("Check the integrity table(s) (read-only)")
-                .clicked()
-            {
-                self.do_verify();
-            }
-            if ui
-                .add_enabled(has, egui::Button::new("Sign"))
-                .on_hover_text("Recompute and write back every region's digest")
-                .clicked()
-            {
-                self.do_sign();
-            }
-        });
-
-        ui.add_space(12.0);
-        ui.separator();
-
-        // ── device probe ───────────────────────────────────────────────────
-        ui.horizontal(|ui| {
-            ui.label("Drive:");
-            ui.add(egui::TextEdit::singleline(&mut self.device).desired_width(240.0));
-            if ui
-                .button("Probe")
-                .on_hover_text("Ask a live drive whether it runs freemkv firmware (read-only)")
-                .clicked()
-            {
-                self.do_probe();
-            }
-        });
-
-        ui.add_space(8.0);
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.label("Log");
-            if ui.button("Clear").clicked() {
-                self.log.clear();
-            }
-        });
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .stick_to_bottom(true)
-            .show(ui, |ui| {
-                for line in &self.log {
-                    ui.label(egui::RichText::new(line).monospace());
-                }
+        }
+        egui::Frame::new().inner_margin(16.0).show(ui, |ui| {
+            ui.set_max_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.heading("freemkv");
+                ui.label("Firmware Modifier");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.weak(env!("CARGO_PKG_VERSION"));
+                });
             });
+            ui.add_space(18.0);
+            ui.add_enabled_ui(!self.running && !self.details_open, |ui| {
+                egui::Frame::group(ui.style())
+                    .inner_margin(14.0)
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        if self.task == Task::Probe {
+                            ui.label(egui::RichText::new("Optical drive").strong());
+                            ui.horizontal(|ui| {
+                                let label = self
+                                    .devices
+                                    .iter()
+                                    .find(|d| d.path == self.device)
+                                    .map(|d| d.label.clone())
+                                    .unwrap_or_else(|| {
+                                        "Select Refresh to find optical drives".into()
+                                    });
+                                egui::ComboBox::from_id_salt("device_combo")
+                                    .selected_text(label)
+                                    .width((ui.available_width() - 88.0).max(180.0))
+                                    .show_ui(ui, |ui| {
+                                        for drive in &self.devices {
+                                            ui.selectable_value(
+                                                &mut self.device,
+                                                drive.path.clone(),
+                                                &drive.label,
+                                            )
+                                            .on_hover_text(&drive.path);
+                                        }
+                                    });
+                                if ui.button("Refresh").clicked() {
+                                    self.discover();
+                                }
+                            });
+                        } else {
+                            ui.label(egui::RichText::new("Firmware image").strong());
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .button(if self.input.is_some() {
+                                        "Change file…"
+                                    } else {
+                                        "Choose firmware…"
+                                    })
+                                    .clicked()
+                                {
+                                    self.choose_image();
+                                }
+                                if let Some(input) = &self.input {
+                                    ui.add(
+                                        egui::Label::new(
+                                            input.file_name().unwrap_or_default().to_string_lossy(),
+                                        )
+                                        .truncate(),
+                                    )
+                                    .on_hover_text(input.display().to_string());
+                                } else {
+                                    ui.weak("No firmware image selected");
+                                }
+                            });
+                        }
+                    });
+                ui.add_space(18.0);
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.task, Task::Verify, "Verify firmware");
+                    ui.selectable_value(&mut self.task, Task::Create, "Create firmware");
+                    ui.selectable_value(&mut self.task, Task::Probe, "Drive info");
+                    ui.menu_button(if self.task == Task::Sign { "Advanced: Sign" } else { "Advanced" }, |ui| {
+                        if ui.selectable_label(self.task == Task::Sign, "Sign firmware").on_hover_text("Re-sign a manually edited image. Create already signs and verifies automatically.").clicked() {
+                            self.task = Task::Sign;
+                            ui.close();
+                        }
+                    });
+                });
+                ui.separator();
+                ui.add_space(18.0);
+                egui::ScrollArea::vertical()
+                    .id_salt(("task_content", self.task as u8))
+                    .max_height(110.0)
+                    .min_scrolled_height(110.0)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        self.task_content(ui, &ctx);
+                    });
+            });
+            if self.result_task != self.task {
+                return;
+            }
+            ui.add_space(8.0);
+            ui.separator();
+            ui.horizontal(|ui| {
+                if self.running {
+                    ui.spinner();
+                }
+                ui.label(egui::RichText::new(&self.status).strong());
+            });
+            if self.running {
+                if let Some((label, done, total)) = &self.progress {
+                    ui.label(label);
+                    ui.add(
+                        egui::ProgressBar::new(*done as f32 / (*total).max(1) as f32)
+                            .show_percentage(),
+                    );
+                } else {
+                    ui.add(egui::ProgressBar::new(0.0).animate(true).text("Preparing…"));
+                }
+                ui.small("The operation is running. Keep this window open until it finishes.");
+            }
+            egui::ScrollArea::vertical()
+                .id_salt("result_panel")
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                .max_height(ui.available_height().max(1.0))
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    if !self.fields.is_empty() {
+                        egui::Grid::new("operation_results")
+                            .num_columns(2)
+                            .spacing([24.0, 8.0])
+                            .max_col_width((ui.available_width() - 24.0) / 2.0)
+                            .show(ui, |ui| {
+                                for (label, value) in &self.fields {
+                                    ui.label(label);
+                                    ui.add(egui::Label::new(value).wrap());
+                                    ui.end_row();
+                                }
+                            });
+                    }
+                    if let Some(error) = &self.failure {
+                        ui.colored_label(egui::Color32::from_rgb(160, 45, 35), error);
+                        if ui.button("Save diagnostic log…").clicked() {
+                            self.save_diagnostic_log();
+                        }
+                    }
+                    if let Some(notice) = &self.diagnostic_notice {
+                        ui.label(notice);
+                    }
+                    ui.add_space(6.0);
+                    if ui.button("View diagnostic log…").clicked() {
+                        self.details_open = true;
+                        self.diagnostic_checked = None;
+                        self.diagnostic_notice = None;
+                    }
+                });
+        });
+        if self.details_open {
+            let refresh_interval = std::time::Duration::from_millis(500);
+            if self
+                .diagnostic_checked
+                .is_none_or(|checked| self.running && checked.elapsed() >= refresh_interval)
+            {
+                self.refresh_diagnostic_view();
+            }
+            if self.running {
+                ctx.request_repaint_after(refresh_interval);
+            }
+            let mut open = true;
+            let mut close = false;
+            egui::Window::new("Diagnostic log")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .fixed_size(egui::vec2(620.0, 400.0))
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .show(&ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.button("Copy diagnostic log").clicked() {
+                            match self.diagnostic_text() {
+                                Ok(text) => ctx.copy_text(text),
+                                Err(error) => {
+                                    self.diagnostic_notice =
+                                        Some(format!("Could not read diagnostic log: {error}"))
+                                }
+                            }
+                        }
+                        if ui.button("Save diagnostic log…").clicked() {
+                            self.save_diagnostic_log();
+                        }
+                        if ui.button("Close").clicked() {
+                            close = true;
+                        }
+                    });
+                    ui.label("Attach this log to your bug report.");
+                    if let Some(notice) = &self.diagnostic_notice {
+                        ui.label(notice);
+                    }
+                    ui.separator();
+                    egui::ScrollArea::both()
+                        .id_salt("diagnostic_text")
+                        .scroll_bar_visibility(
+                            egui::scroll_area::ScrollBarVisibility::AlwaysVisible,
+                        )
+                        .max_height(310.0)
+                        .auto_shrink([false, false])
+                        .show_rows(ui, 14.0, self.diagnostic_lines.len(), |ui, rows| {
+                            for line in &self.diagnostic_lines[rows] {
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(line).monospace().size(12.0),
+                                    )
+                                    .extend(),
+                                );
+                            }
+                        });
+                });
+            self.details_open = open && !close;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn rendered_text(app: &mut FwApp) -> Vec<(String, bool)> {
+        let ctx = egui::Context::default();
+        crate::configure_style(&ctx);
+        let mut text = Vec::new();
+        for _ in 0..4 {
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(720.0, 610.0),
+                    )),
+                    time: Some(10.0),
+                    ..Default::default()
+                },
+                |ui| app.render(ui),
+            );
+            text.clear();
+            for clipped in output.shapes {
+                if let egui::epaint::Shape::Text(shape) = clipped.shape {
+                    let rect = egui::Rect::from_min_size(shape.pos, shape.galley.size());
+                    text.push((
+                        shape.galley.job.text.clone(),
+                        clipped.clip_rect.contains_rect(rect),
+                    ));
+                }
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn sibling_actions_and_diagnostic_controls_fit_the_same_window() {
+        let mut app = FwApp::new();
+        app.input = Some("firmware.bin".into());
+        app.device = "test-drive".into();
+        app.devices.push(DriveChoice {
+            path: "test-drive".into(),
+            label: "Optical drive".into(),
+        });
+        for (task, action) in [
+            (Task::Verify, "Verify firmware"),
+            (Task::Create, "Create firmware…"),
+            (Task::Sign, "Save signed firmware…"),
+            (Task::Probe, "Read drive information"),
+        ] {
+            app.task = task;
+            app.result_task = task;
+            let text = rendered_text(&mut app);
+            for expected in [
+                "freemkv",
+                "Firmware Modifier",
+                action,
+                "View diagnostic log…",
+            ] {
+                assert!(
+                    text.iter()
+                        .any(|(line, visible)| line == expected && *visible),
+                    "missing visible {expected}: {text:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn failed_worker_releases_controls_and_offers_log_export() {
+        let mut app = FwApp::new();
+        let (tx, rx) = mpsc::channel();
+        app.running = true;
+        app.rx = Some(rx);
+        tx.send(Msg::Done(Err("Cannot parse firmware".into())))
+            .unwrap();
+        app.pump();
+        assert!(!app.running);
+        assert!(app
+            .failure
+            .as_deref()
+            .unwrap()
+            .contains("Cannot parse firmware"));
+        assert!(rendered_text(&mut app)
+            .iter()
+            .any(|(line, visible)| line == "Save diagnostic log…" && *visible));
+    }
+
+    #[test]
+    fn diagnostic_viewer_reads_the_file_not_the_activity_summary() {
+        let directory = std::env::temp_dir();
+        let path = directory.join(format!("fw-viewer-test-{}.log", std::process::id()));
+        std::fs::write(&path, "full metadata header and transfer evidence").unwrap();
+        let mut app = FwApp::new();
+        app.log.push("short summary only".into());
+        app.diagnostic_log = Some(path.clone());
+        app.details_open = true;
+        let text = rendered_text(&mut app);
+        assert!(text
+            .iter()
+            .any(|(line, _)| line == "full metadata header and transfer evidence"));
+        assert_eq!(
+            app.diagnostic_text().unwrap(),
+            "full metadata header and transfer evidence"
+        );
+        std::fs::remove_file(path).unwrap();
     }
 }

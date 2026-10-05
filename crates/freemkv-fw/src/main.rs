@@ -18,6 +18,14 @@
 //! image (or accepts `--family` to force one). Only the MediaTek MT19xx AES-CMAC
 //! scheme is implemented today; the CLI layer hardcodes no chipset.
 
+macro_rules! println {
+    () => { freemkv_flash::output::emit(format_args!(""), true, false) };
+    ($($arg:tt)*) => { freemkv_flash::output::emit(format_args!($($arg)*), true, false) };
+}
+macro_rules! eprintln {
+    ($($arg:tt)*) => { freemkv_flash::output::emit(format_args!($($arg)*), true, true) };
+}
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -31,7 +39,7 @@ use freemkv_flash::{platform, style};
 use freemkv_fw::scheme::{
     select_scheme, Family, IntegrityScheme, MtkCmac, RegionChange, RegionVerdict,
 };
-use freemkv_fw::{abi, api, engine, family};
+use freemkv_fw::{abi, api, diagnostics, engine, family};
 
 /// freemkv firmware authoring tool (create / verify / re-sign).
 #[derive(Parser, Debug)]
@@ -128,36 +136,49 @@ enum Command {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let result = match cli.command {
-        Command::Create {
-            input,
-            output,
-            in_place,
-            json,
-            base,
-            audit,
-        } => cmd_create(&input, output, in_place, json, base, audit),
-        Command::Verify { path, family } => cmd_verify(&path, family),
-        Command::Info {
-            device,
-            dump,
-            len,
-            full,
-            out,
-        } => cmd_info(
-            &device,
-            dump.as_deref(),
-            len.as_deref(),
-            full,
-            out.as_deref(),
-        ),
-        Command::Sign {
-            image,
-            out,
-            in_place,
-            family,
-        } => cmd_sign(&image, out, in_place, family),
+    let operation = match &cli.command {
+        Command::Create { .. } => "create",
+        Command::Verify { .. } => "verify",
+        Command::Info { .. } => "info",
+        Command::Sign { .. } => "sign",
     };
+    let result = diagnostics::run(operation, || {
+        let code = match cli.command {
+            Command::Create {
+                input,
+                output,
+                in_place,
+                json,
+                base,
+                audit,
+            } => cmd_create(&input, output, in_place, json, base, audit),
+            Command::Verify { path, family } => cmd_verify(&path, family),
+            Command::Info {
+                device,
+                dump,
+                len,
+                full,
+                out,
+            } => cmd_info(
+                &device,
+                dump.as_deref(),
+                len.as_deref(),
+                full,
+                out.as_deref(),
+            ),
+            Command::Sign {
+                image,
+                out,
+                in_place,
+                family,
+            } => cmd_sign(&image, out, in_place, family),
+        }?;
+        diagnostics::record(format!("CLI exit: {code:?}"));
+        if code != ExitCode::SUCCESS {
+            anyhow::bail!("{operation} reported failure; see diagnostic details");
+        }
+        Ok(code)
+    });
     match result {
         Ok(code) => code,
         Err(e) => {
@@ -182,7 +203,14 @@ fn verify_image(
     family: Option<Family>,
 ) -> Result<(&'static str, Vec<RegionVerdict>)> {
     let scheme = select_scheme(image, family)?;
+    diagnostics::record(format!(
+        "verify: scheme={} forced={family:?}",
+        scheme.name()
+    ));
     let verdicts = scheme.verify(image)?;
+    for verdict in &verdicts {
+        diagnostics::record(format!("integrity verdict: {verdict:?}"));
+    }
     Ok((scheme.name(), verdicts))
 }
 
@@ -228,7 +256,7 @@ fn cmd_verify(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 }
 
 fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
-    let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
     let (scheme_name, verdicts) = verify_image(&image, family)?;
 
     println!("{}", style::kv("scheme", scheme_name));
@@ -417,7 +445,8 @@ fn cmd_info(
                     .and_then(|s| s.to_str())
                     .unwrap_or("dump")
             ));
-            std::fs::write(&file, &data).with_context(|| format!("writing {}", file.display()))?;
+            diagnostics::write(&file, &data)
+                .with_context(|| format!("writing {}", file.display()))?;
             println!(
                 "{}",
                 style::status_line(
@@ -444,7 +473,7 @@ fn cmd_info(
         let data = mem_read(dev.as_mut(), start, length, false);
         match out {
             Some(o) => {
-                std::fs::write(o, &data).with_context(|| format!("writing {}", o.display()))?;
+                diagnostics::write(o, &data).with_context(|| format!("writing {}", o.display()))?;
                 println!(
                     "{}",
                     style::status_line(
@@ -520,7 +549,11 @@ fn sign_image(
     let (signed, changes) = scheme.sign(image)?;
 
     // Refuse to hand back an image that does not verify under its own scheme.
+    diagnostics::record(format!("sign: scheme={} forced={family:?}", scheme.name()));
     let verdicts = scheme.verify(&signed)?;
+    for verdict in &verdicts {
+        diagnostics::record(format!("post-sign integrity: {verdict:?}"));
+    }
     if verdicts.is_empty() || verdicts.iter().any(|v| !v.ok) {
         bail!("internal error: re-signed image does not self-verify");
     }
@@ -533,7 +566,7 @@ fn cmd_sign(
     in_place: bool,
     family: Option<Family>,
 ) -> Result<ExitCode> {
-    let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
 
     // Resolve the output path before doing work so we fail fast on conflicts.
     let out_path = if in_place {
@@ -553,6 +586,9 @@ fn cmd_sign(
     };
 
     let (scheme_name, signed, changes) = sign_image(&image, family)?;
+    for change in &changes {
+        diagnostics::record(format!("integrity change: {change:?}"));
+    }
 
     println!("scheme: {scheme_name}");
     if changes.is_empty() {
@@ -571,7 +607,7 @@ fn cmd_sign(
         }
     }
 
-    std::fs::write(&out_path, &signed)
+    diagnostics::write(&out_path, &signed)
         .with_context(|| format!("writing {}", out_path.display()))?;
     println!("wrote {} ({} bytes)", out_path.display(), signed.len());
     Ok(ExitCode::SUCCESS)
@@ -607,7 +643,7 @@ fn cmd_create(
     base: bool,
     audit: bool,
 ) -> Result<ExitCode> {
-    let image = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
 
     // Resolve the output path up front so we fail fast on conflicts.
     let out_path = if in_place {
@@ -632,7 +668,8 @@ fn cmd_create(
     // gates actually resolved for THIS image.
     if base {
         let outcome = api::create(&image).context("building freemkv BASE firmware")?;
-        std::fs::write(&out_path, outcome.image())
+        diagnostics::record(base_report_json(&outcome));
+        diagnostics::write(&out_path, outcome.image())
             .with_context(|| format!("writing {}", out_path.display()))?;
         if json {
             println!("{}", base_report_json(&outcome));
@@ -646,10 +683,18 @@ fn cmd_create(
     // image), then MODIFY: apply every lever this image supports and report each
     // one. A missing signature skips that lever, it does not abort the build.
     let engine = engine::detect(&image).context("selecting a platform engine for this image")?;
+    diagnostics::record(format!(
+        "modify: engine={} audit={audit} base={base} json={json} output={out_path:?}",
+        engine.name()
+    ));
     let report = engine.modify(&image).context("building freemkv firmware")?;
+    diagnostics::record(report.to_json());
 
     // Never write an image that does not re-verify.
     let verdicts = MtkCmac.verify(&report.image)?;
+    for verdict in &verdicts {
+        diagnostics::record(format!("post-modify integrity: {verdict:?}"));
+    }
     if verdicts.is_empty() || verdicts.iter().any(|v| !v.ok) {
         bail!("internal error: modified image does not re-verify");
     }
@@ -657,6 +702,12 @@ fn cmd_create(
     // Structural detour audit: prove every Applied lever actually landed.
     if audit {
         let result = engine::audit::audit_image(&image, &report);
+        for check in &result.checks {
+            diagnostics::record(format!(
+                "structural audit: lever={} what={} ok={} detail={}",
+                check.lever, check.what, check.ok, check.detail
+            ));
+        }
         if !json {
             println!("structural audit:");
             for c in &result.checks {
@@ -672,7 +723,7 @@ fn cmd_create(
         }
     }
 
-    std::fs::write(&out_path, &report.image)
+    diagnostics::write(&out_path, &report.image)
         .with_context(|| format!("writing {}", out_path.display()))?;
 
     if json {

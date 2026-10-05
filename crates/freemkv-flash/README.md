@@ -21,14 +21,16 @@ bars. Details open in a separate scrolling dialog. Flash has one override:
 ## Diagnostic logs
 
 Version 0.10.5 saves a diagnostic log automatically for each CLI or desktop
-operation. To report a failure, repeat the operation once and attach that log.
+operation. To report a failure, attach the log from that operation; no debug
+flag or diagnostic rerun is needed. The firmware modifier uses the same policy.
 The CLI prints its location; in the desktop app, open **View diagnostic log…**
 to see the full log and choose **Save diagnostic log…** or **Copy diagnostic log**.
 Failed operations also offer **Save diagnostic log…** beside the error.
 
 Logs include the app and OS versions, drive identity, command bytes, transfer
-counts, status/sense, timing, retry decisions, native transport warnings, and
-the final error chain. Firmware transfer payloads are excluded. Paths and drive
+counts, status/sense, timing, retry decisions, native transport traces, bounded
+metadata bytes and decoded header lengths, data fingerprints, and the final error
+chain. Modifier logs also include integrity verdicts and output publication. Firmware transfer payloads are excluded. Paths and drive
 identifiers can appear in the log.
 
 Locations are `%LOCALAPPDATA%\freemkv\logs` on Windows,

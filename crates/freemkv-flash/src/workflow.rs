@@ -312,7 +312,7 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
 /// source (e.g. `/dev/zero`, a FIFO) cannot exhaust memory before the per-family
 /// size validation runs. The cap is far above any real firmware/backup artifact
 /// (largest Pioneer envelope is ~4.5 MiB; an MTK image 2 MiB).
-pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>> {
+pub fn read_capped(path: &Path) -> Result<Vec<u8>> {
     use std::io::Read;
     const MAX_INPUT: u64 = 64 * 1024 * 1024;
     crate::diagnostics::record(format!(

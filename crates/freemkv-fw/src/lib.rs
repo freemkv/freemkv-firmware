@@ -17,3 +17,6 @@ pub mod scheme;
 pub mod install_guard;
 
 pub mod api;
+
+/// Shared automatic diagnostics for firmware authoring operations.
+pub mod diagnostics;
