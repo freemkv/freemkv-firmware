@@ -87,6 +87,10 @@ fn resolve_class(identity: Result<Identity>, normal: &[u8]) -> Result<DriveClass
 /// does. The caller resolves the control key and components and guarantees
 /// gating, the tray guard, and a pre-flash backup.
 ///
+/// `patch_kernel` requests the §15.3 Site-1 marker patch on an `FF`/`00` Kernel
+/// (the caller sets it only when writing onto a new-generation or unknown
+/// receiver); when `false` the Kernel is written unmodified.
+///
 /// A failure after entry never commits: the session sends nothing when dropped,
 /// so a partial image is not blessed.
 pub(crate) fn execute_flash(
@@ -95,6 +99,7 @@ pub(crate) fn execute_flash(
     kernel: Option<&[u8]>,
     normal: &[u8],
     recover: bool,
+    patch_kernel: bool,
 ) -> Result<()> {
     // §15.3 Site-1 downgrade patch: if the incoming Kernel's decoded marker
     // byte is `FF`/`00` (older generation), the receiver's Site-1 gate at
@@ -104,12 +109,17 @@ pub(crate) fn execute_flash(
     // differ in ciphertext; the LCG keystream is unchanged. On an older-than-
     // Site-1 drive the patch is a no-op (marker is already `01`-equivalent in
     // all paths that reach here with a `FF` body because gate 1/2 already
-    // ran — but we check idempotently). Caller doesn't need to know whether
-    // this was a downgrade; the patch is safe to attempt unconditionally.
-    let patched_kernel: Option<Vec<u8>> = kernel
-        .map(apply_downgrade_patch_if_needed)
-        .transpose()?
-        .flatten();
+    // ran — but we check idempotently). Applied ONLY when the caller asks for it
+    // (`patch_kernel`): writing onto an installed-`01` drive. Otherwise the
+    // Kernel is written byte-identical.
+    let patched_kernel: Option<Vec<u8>> = if patch_kernel {
+        kernel
+            .map(apply_downgrade_patch_if_needed)
+            .transpose()?
+            .flatten()
+    } else {
+        None
+    };
     let kernel: Option<&[u8]> = patched_kernel.as_deref().or(kernel);
 
     style::trace(&format!(
@@ -325,7 +335,7 @@ mod tests {
         let normal = ud04_normal(len);
         let control = ud04_control();
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &control, None, &normal, false).unwrap();
+        execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
 
         let chunks = len.div_ceil(0x8000);
         // EVERY write went through the strict (abort-on-any-nonzero) path — guards
@@ -355,7 +365,7 @@ mod tests {
     fn plain_flash_issues_no_kernel_mode_commands() {
         let normal = ud04_normal(0x0010_0000);
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &ud04_control(), None, &normal, false).unwrap();
+        execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap();
         // No F3/F2 buffer-id traffic at all on the plain path.
         assert!(!dev
             .writes
@@ -390,7 +400,8 @@ mod tests {
         }
         let normal = ud04_normal(0x0010_0000 + 0x100);
         let mut dev = BadEntry { writes: Vec::new() };
-        let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false).unwrap_err();
+        let err =
+            execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
         assert!(format!("{err:#}").contains("post-entry update state"));
         // Only the entry write happened; NO Normal chunk or finish followed.
         assert_eq!(dev.writes.len(), 1);
@@ -406,11 +417,90 @@ mod tests {
             fail_strict_at: Some(1),
             ..Recorder::default()
         };
-        let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false).unwrap_err();
+        let err =
+            execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("Normal") && msg.contains("re-flash the captured"));
         // No finish (05/FF) was sent after the failed transfer.
         assert!(!dev.writes.iter().any(|(c, _)| c[..3] == [0x3b, 0x05, 0xff]));
+    }
+
+    /// A structurally valid envelope-wrapped Kernel whose decoded `0xFE` marker is `marker`.
+    fn marker_kernel(marker: u8) -> Vec<u8> {
+        let mut body = vec![0u8; 0x10000];
+        body[0xFE] = marker;
+        body[0x1000..0x1008].copy_from_slice(b"SAT 8A10");
+        body[0x1008..0x1010].copy_from_slice(b"ID58    ");
+        body[0x1010..0x1014].copy_from_slice(b"ID5 ");
+        // FrontKey dispatcher signature: `ae fe .. .. .. .. ae f0`.
+        body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
+        let sum = body
+            .chunks_exact(4)
+            .map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]]))
+            .fold(0u32, |a, w| a.wrapping_add(w));
+        let fix = 0u32.wrapping_sub(sum);
+        body[0x1020..0x1024].copy_from_slice(&fix.to_be_bytes());
+        pioneer_optical::envelope::builder::encode_kernel_envelope(
+            &body,
+            "PIONEER BD-RW   BDR-UD04",
+            &pioneer_optical::envelope::builder::KernelBuild::from_seed(0x123456),
+        )
+        .expect("test kernel envelope")
+    }
+
+    #[test]
+    fn ff_marker_kernel_is_written_unpatched_when_patch_kernel_is_false() {
+        let kernel = marker_kernel(0xFF);
+        let normal = ud04_normal(0x8100);
+        let mut dev = Recorder::default();
+        execute_flash(
+            &mut dev,
+            &ud04_control(),
+            Some(&kernel),
+            &normal,
+            false,
+            false,
+        )
+        .unwrap();
+        let sent: Vec<u8> = dev
+            .writes
+            .iter()
+            .filter(|(c, _)| c[..3] == [0x3b, 0x07, 0xfe])
+            .flat_map(|(_, d)| d.iter().copied())
+            .collect();
+        assert!(sent == kernel, "Kernel must be written byte-identical");
+
+        // With patch_kernel=true the FF marker IS patched (downgrade path).
+        let mut dev = Recorder::default();
+        execute_flash(
+            &mut dev,
+            &ud04_control(),
+            Some(&kernel),
+            &normal,
+            false,
+            true,
+        )
+        .unwrap();
+        let sent: Vec<u8> = dev
+            .writes
+            .iter()
+            .filter(|(c, _)| c[..3] == [0x3b, 0x07, 0xfe])
+            .flat_map(|(_, d)| d.iter().copied())
+            .collect();
+        assert_ne!(sent, kernel);
+    }
+
+    #[test]
+    fn will_patch_only_for_ff_or_00_marker_on_known_new_or_unknown_receiver() {
+        use crate::drive::pioneer::will_patch_kernel;
+        let ff = marker_kernel(0xFF);
+        let zero = marker_kernel(0x00);
+        let one = marker_kernel(0x01);
+        assert!(will_patch_kernel(Some(&ff), Some(true)));
+        assert!(will_patch_kernel(Some(&zero), None));
+        assert!(!will_patch_kernel(Some(&ff), Some(false)));
+        assert!(!will_patch_kernel(Some(&one), Some(true)));
+        assert!(!will_patch_kernel(None, Some(true)));
     }
 
     #[test]
@@ -419,7 +509,7 @@ mod tests {
         let kernel: Vec<u8> = (0..0x18000usize).map(|i| (i % 253) as u8).collect();
         let normal: Vec<u8> = (0..0x8100usize).map(|i| (i % 251) as u8).collect();
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false).unwrap();
+        execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false, false).unwrap();
 
         // entry + 3 kernel FE + 2 normal F0 + finish, all strict, nothing lenient.
         assert_eq!(dev.strict_writes, 7);
@@ -489,14 +579,29 @@ mod tests {
 
         // Without recover, the post-entry identity gate aborts before any transfer.
         let mut normal_dev = Degraded::default();
-        let err =
-            execute_flash(&mut normal_dev, &ud04_control(), None, &normal, false).unwrap_err();
+        let err = execute_flash(
+            &mut normal_dev,
+            &ud04_control(),
+            None,
+            &normal,
+            false,
+            false,
+        )
+        .unwrap_err();
         assert!(format!("{err:#}").contains("post-entry update state"));
         assert!(!normal_dev.finished, "a gated flash must not reach finish");
 
         // With recover, the gate is skipped and the forced write runs to finish.
         let mut recover_dev = Degraded::default();
-        execute_flash(&mut recover_dev, &ud04_control(), None, &normal, true).unwrap();
+        execute_flash(
+            &mut recover_dev,
+            &ud04_control(),
+            None,
+            &normal,
+            true,
+            false,
+        )
+        .unwrap();
         assert!(
             recover_dev.finished,
             "recover must force the write through finish"
@@ -524,7 +629,7 @@ mod tests {
         // 0x1D7000 => 59 full 07/F0 chunks; the canonical UD04 Normal size.
         let normal = ud04_normal(0x1D7000);
         let mut dev = Recorder::default();
-        execute_flash(&mut dev, &control, None, &normal, false).unwrap();
+        execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
 
         // Exact CDB sequence: 04/FF entry, 59x 07/F0 chunks, 05/FF finish.
         let cdbs: Vec<Vec<u8>> = dev.writes.iter().map(|(c, _)| c.clone()).collect();

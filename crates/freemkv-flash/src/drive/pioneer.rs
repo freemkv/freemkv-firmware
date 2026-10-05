@@ -976,6 +976,26 @@ const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware genera
     will run the older firmware with a disguised newer-era marker. Pre-flash backup+dump \
     are mandatory; keep them.";
 
+/// Whether the §15.3 Site-1 marker patch will be applied to the Kernel written:
+/// a Kernel is written, its decoded `0xFE` marker is `FF`/`00`, and the receiver
+/// is not KNOWN to be old-generation (`None` = unknown, patched as before).
+pub(crate) fn will_patch_kernel(kernel: Option<&[u8]>, receiver_new_gen: Option<bool>) -> bool {
+    let Some(kernel) = kernel else { return false };
+    let marker =
+        pioneer_optical::envelope::decode_envelope(kernel).and_then(|d| d.image.get(0xFE).copied());
+    matches!(marker, Some(0xFF | 0x00)) && receiver_new_gen != Some(false)
+}
+
+/// Whether the plan (or a `Forced` plan's inner plan) is `KernelDowngrade`.
+fn plan_is_downgrade(plan: &crate::pioneer_flash_plan::FlashPlan) -> bool {
+    use crate::pioneer_flash_plan::FlashPlan;
+    match plan {
+        FlashPlan::KernelDowngrade => true,
+        FlashPlan::Forced(inner) => plan_is_downgrade(inner),
+        _ => false,
+    }
+}
+
 /// Decide whether the executor may act on a plan. `Refused` aborts before any
 /// write. Same-generation and same/newer flashes execute via the ordinary OEM
 /// route. A cross-generation downgrade is now executable — the §15.3 patch is
@@ -1184,6 +1204,17 @@ impl DriveFamily for Pioneer {
                     (oem_normal_control(normal)?, None)
                 }
             };
+            // The §15.3 marker patch is applied only when it will really happen:
+            // known new-gen (or unknown, e.g. --recover/--skip-backup) receiver and
+            // an FF/00-marker Kernel. Warn once; KernelDowngrade already warned in
+            // check_plan_executable.
+            let will_patch = will_patch_kernel(
+                kernel_to_write,
+                installed_facts(installed_backup).and_then(|i| i.receiver_new_gen),
+            );
+            if will_patch && !plan_is_downgrade(&plan) {
+                eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
+            }
             // Summarize what will be written and what is missing, then confirm.
             confirm_proceed(&flash_summary(kernel.as_deref(), Some(normal)))?;
             crate::pioneer_flash::execute_flash(
@@ -1192,6 +1223,7 @@ impl DriveFamily for Pioneer {
                 kernel_to_write,
                 normal,
                 req.recover,
+                will_patch,
             )?;
             println!(
                 "{}",
