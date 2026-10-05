@@ -24,7 +24,6 @@ use anyhow::{anyhow, bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 
-pub(crate) use super::mtk::cdb_write_buffer;
 use super::{Capabilities, DriveFamily, Family, FullImage, Identity, RestoreRegion, UserDump};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
@@ -42,11 +41,6 @@ pub mod transfer;
 // FLASH — UD04 1.11 OEM host-side transcript (offline only)
 // ============================================================================
 
-pub(crate) const ENTRY_MODE: u8 = 0x04;
-pub(crate) const FINISH_MODE: u8 = 0x05;
-pub(crate) const CONTROL_BUFFER_ID: u8 = 0xFF;
-pub(crate) const TRANSFER_MODE: u8 = 0x07;
-pub(crate) const NORMAL_BUFFER_ID: u8 = 0xF0;
 pub(crate) const CONTROL_LEN: usize = 0x100;
 /// OEM Normal transfer chunk limit.
 pub(crate) const FLASH_CHUNK: usize = 0x8000;
@@ -215,17 +209,17 @@ pub fn parse_banner(bytes: &[u8]) -> Option<PioneerBanner> {
 
 /// OEM entry CDB for the traced UD04 1.11 host path.
 pub fn cdb_wb_flash_entry() -> [u8; 10] {
-    cdb_write_buffer(ENTRY_MODE, CONTROL_BUFFER_ID, 0, CONTROL_LEN as u32)
+    pioneer_optical::enter_update()
 }
 
 /// OEM raw Normal-envelope transfer CDB. `len` excludes any control prefix.
 pub fn cdb_wb_flash_chunk(off: u32, len: u32) -> [u8; 10] {
-    cdb_write_buffer(TRANSFER_MODE, NORMAL_BUFFER_ID, off, len)
+    pioneer_optical::transfer_normal(off, len)
 }
 
 /// OEM after-transfer CDB; this is not a zero-length commit.
 pub fn cdb_wb_flash_finish() -> [u8; 10] {
-    cdb_write_buffer(FINISH_MODE, CONTROL_BUFFER_ID, 0, CONTROL_LEN as u32)
+    pioneer_optical::finish()
 }
 
 /// Resolve the controller id and OEM control row for a Pioneer envelope from its
@@ -726,7 +720,7 @@ pub struct Preflight {
     pub key: KernelKey,
 }
 
-/// Run every hard-refuse check before any 3B 04 FF write hits the wire.
+/// Run every hard-refuse check before any OEM update-entry write hits the wire.
 ///
 /// * Image starts with the `********  Copyright(c) 2000 Pioneer` magic
 /// * Image size is plausible (`IMAGE_MIN..=IMAGE_MAX`)
@@ -866,7 +860,7 @@ pub(crate) fn installed_facts(
         .as_ref()
         .or(kinfo.as_ref())
         .and_then(|h| crate::pioneer_keys::controller_id_from_sat(&h.hardware_version))?;
-    let normal_date = ninfo.and_then(|h| FwDate::parse(&h.generated_date));
+    let normal_date = ninfo.as_ref().and_then(|h| FwDate::parse(&h.generated_date));
     // Receiver-generation proxy: the new-gen Site-1 signatures co-occur with the
     // installed Kernel's `0x01` marker (whitepaper §15.2), so marker `01` on the
     // installed Kernel implies a new-generation (Site-1-bearing) receiver.
@@ -876,51 +870,123 @@ pub(crate) fn installed_facts(
         .and_then(|d| d.image.get(0xFE).copied())
         .map(|m| Generation::from_marker(m) == Generation::Newer)
         .unwrap_or(false);
+    // Installed family: profile the decoded installed Normal body (the same
+    // decode used for the target, so the two keys are directly comparable).
+    let family = installed_normal
+        .as_deref()
+        .and_then(crate::pioneer_flash_plan::normal_family);
+    // Installed Kernel ID tag: use the installed Normal envelope header's
+    // declared required-Kernel tag. On a drive that was shipped as a paired
+    // Kernel+Normal release this is exactly the drive's live `3C/02/F1`
+    // kernel-tag byte-for-byte (OEM Pioneer updaters compare the two). If a
+    // live Identity is also available we would prefer it (handles the
+    // paired-mismatch edge case), but the backup header is a reliable source.
+    let kernel_tag = ninfo
+        .as_ref()
+        .map(|h| h.kernel_version.trim().to_string())
+        .filter(|s| !s.is_empty());
     Some(Installed {
         controller_id,
         receiver_new_gen,
         normal_date,
+        family,
+        kernel_tag,
     })
 }
 
-/// Decide whether this flash needs the vendor kernel-mode unlock, by routing the
-/// installed firmware against the target bundle ([`crate::pioneer_flash_plan`]).
-/// Plain same-model same/newer → no unlock. Downgrade/crossflash → unlock. A
-/// refused plan aborts here.
-pub(crate) fn resolve_kernel_mode(
+/// Route the installed firmware against the target ([`crate::pioneer_flash_plan`])
+/// and return the plan. The installed facts come from the just-captured pre-flash
+/// backup (the planner stays pure; the family keys are computed here, where the
+/// backup bytes are in hand). `recover` uses the recover plan (family gate only);
+/// `force` ignores the family match. Without installed facts (no backup) the
+/// family cannot be proven, so the flash is refused unless `force`.
+pub(crate) fn resolve_flash_plan(
     installed_backup: Option<&[u8]>,
     kernel: Option<&[u8]>,
     normal: Option<&[u8]>,
-) -> Result<bool> {
-    use crate::pioneer_flash_plan::{decide_flash_plan, target_from_components, FlashPlan};
+    recover: bool,
+    force: bool,
+) -> Result<crate::pioneer_flash_plan::FlashPlan> {
+    use crate::pioneer_flash_plan::{decide_recover_plan, normal_family, target_from_components};
 
+    let installed = installed_facts(installed_backup);
+    if recover {
+        let target_family = normal.and_then(normal_family);
+        let plan = decide_recover_plan(
+            installed.as_ref().and_then(|i| i.family.as_ref()),
+            target_family.as_ref(),
+            force,
+        );
+        crate::style::trace(&format!("recover plan = {plan:?}"));
+        return Ok(plan);
+    }
     let target = target_from_components(kernel, normal)
         .context("could not read target bundle identity for flash routing")?;
-    let installed = installed_facts(installed_backup);
     crate::style::trace(&format!(
         "flash routing: installed={installed:?}, target={target:?}"
     ));
-
-    let plan = match &installed {
-        Some(inst) => decide_flash_plan(inst, &target, false),
-        None => {
-            crate::style::trace("installed identity unknown; defaulting to Plain");
-            FlashPlan::Plain
-        }
-    };
+    let plan = plan_for(installed.as_ref(), &target, force);
     crate::style::trace(&format!("flash plan = {plan:?}"));
-    plan_to_kernel_mode(plan)
+    Ok(plan)
 }
 
-/// Map a routing [`crate::pioneer_flash_plan::FlashPlan`] to whether the executor
-/// should enter kernel mode. Downgrade/crossflash need the vendor unlock; plain
-/// and forced do not; a refusal aborts. Split out so it is unit-testable without
-/// crafting real encrypted envelopes.
-fn plan_to_kernel_mode(plan: crate::pioneer_flash_plan::FlashPlan) -> Result<bool> {
+/// Pure routing core of [`resolve_flash_plan`]: no installed facts means the
+/// installed family is unknown, so the family gate refuses (or `force` overrides).
+fn plan_for(
+    installed: Option<&crate::pioneer_flash_plan::Installed>,
+    target: &crate::pioneer_flash_plan::Target,
+    force: bool,
+) -> crate::pioneer_flash_plan::FlashPlan {
+    use crate::pioneer_flash_plan::{decide_flash_plan, Installed};
+    match installed {
+        Some(inst) => decide_flash_plan(inst, target, force),
+        None => {
+            // Nothing known about the installed firmware: only the family gate's
+            // "unknown installed" refusal applies, which `force` waives.
+            let unknown = Installed {
+                controller_id: target.controller_id,
+                receiver_new_gen: false,
+                normal_date: None,
+                family: None,
+                kernel_tag: None,
+            };
+            decide_flash_plan(&unknown, target, force)
+        }
+    }
+}
+
+/// Loud notice that the family gate (and every safety classification) was waived.
+const FORCED_WARNING: &str = "WARNING: the firmware-family match was bypassed (--force). \
+    Flashing firmware from a different or unprofiled family can permanently brick this drive.";
+
+/// Loud notice shown for a cross-generation downgrade — the §15.3 Site-1
+/// marker patch WILL be applied to the incoming Kernel so it crosses the gate.
+/// The write succeeds, but the drive ends up advertising a disguised marker.
+const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware generation barrier. \
+    The incoming Kernel's generation marker will be patched (§15.3: body[0xFE] FF/00→01, \
+    checksum word @0x1020 compensated) so the receiver's Site-1 gate accepts it. The drive \
+    will run the older firmware with a disguised newer-era marker. Pre-flash backup+dump \
+    are mandatory; keep them.";
+
+/// Decide whether the executor may act on a plan. `Refused` aborts before any
+/// write. Same-generation and same/newer flashes execute via the ordinary OEM
+/// route. A cross-generation downgrade is now executable — the §15.3 patch is
+/// applied to the Kernel bytes inside [`crate::pioneer_flash::execute_flash`]
+/// just before `write_kernel`, so the receiver's Site-1 gate accepts the
+/// disguised marker. No plan requires kernel mode
+/// ([`crate::pioneer_flash_plan::kernel_mode_required`]).
+pub(crate) fn check_plan_executable(plan: &crate::pioneer_flash_plan::FlashPlan) -> Result<()> {
     use crate::pioneer_flash_plan::FlashPlan;
     match plan {
-        FlashPlan::Plain | FlashPlan::Forced => Ok(false),
-        FlashPlan::KernelDowngrade | FlashPlan::KernelCrossflash => Ok(true),
+        FlashPlan::Plain | FlashPlan::KernelCrossflash => Ok(()),
+        FlashPlan::Forced => {
+            eprintln!("{}", crate::style::amber(FORCED_WARNING));
+            Ok(())
+        }
+        FlashPlan::KernelDowngrade => {
+            eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
+            Ok(())
+        }
         FlashPlan::Refused(reason) => bail!("refusing to flash: {reason}"),
     }
 }
@@ -1067,17 +1133,30 @@ impl DriveFamily for Pioneer {
                 .as_deref()
                 .expect("normal present for both selections");
 
-            // Routing: compare the installed firmware (from the just-captured
-            // pre-flash backup) against the target bundle to decide whether this
-            // is a plain flash, a kernel-mode downgrade/crossflash, or a refusal.
-            // `kernel_mode` is the only thing this adds to the write itself.
-            // `--recover` short-circuits all routing: the drive is degraded, so we
-            // stop trusting it and force kernel mode unconditionally.
-            let kernel_mode = if req.recover {
-                true
-            } else {
-                resolve_kernel_mode(installed_backup, kernel.as_deref(), Some(normal))?
-            };
+            // An image with an unrecoverable envelope tail is never flashed — not
+            // even with --force or --recover.
+            crate::pioneer_flash_plan::ensure_no_unrecovered_tail(kernel.as_deref(), Some(normal))?;
+
+            // Routing: the family-match gate (installed vs target Normal family,
+            // computed from the just-captured pre-flash backup and the target).
+            // `--recover` skips the downgrade/pair refusals but keeps the family
+            // gate; `--force` ignores the family match. No path uses kernel mode.
+            // Bundle self-consistency gate: refuse malformed bundles (bad
+            // headers, SAT mismatch between Kernel/Normal, Kernel ID tag ≠
+            // Normal's required-Kernel tag, unrecovered envelope tail) BEFORE
+            // any planning or writes. Even `--force` would still be flashing
+            // garbage; a broken bundle never has a legitimate path.
+            crate::pioneer_flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
+                .map_err(|e| anyhow!("{e}"))?;
+            let plan = resolve_flash_plan(
+                installed_backup,
+                kernel.as_deref(),
+                Some(normal),
+                req.recover,
+                req.force,
+            )?;
+            check_plan_executable(&plan)?;
+            debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
 
             let (control, kernel_to_write) = match selection {
                 FlashSelection::KernelAndNormal => {
@@ -1104,7 +1183,6 @@ impl DriveFamily for Pioneer {
                 &control,
                 kernel_to_write,
                 normal,
-                kernel_mode,
                 req.recover,
             )?;
             println!(
@@ -1178,20 +1256,16 @@ impl DriveFamily for Pioneer {
         // envelopes where recognized, else zero-sentinel. Read-only: no write.
         crate::pioneer_backup::capture_signed_candidate(dev)
     }
-    fn capture_recover(&self, dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>> {
-        if force {
-            // `dump --force`: stop trusting normal reads on a degraded/soft-bricked
-            // drive and open the vendor kernel-mode session first. If even kernel
-            // mode is unresponsive, the drive is not recoverable by this tool.
-            crate::pioneer_flash::enter_kernel_mode(dev).context(
-                "drive is unresponsive to all commands (vendor kernel-mode unlock failed) \
-                 — not recoverable",
-            )?;
-            crate::style::trace("dump --force: kernel mode entered; reading degraded drive");
-        }
-        // A region the strict read cannot get is retried with a deeper,
-        // instability-tolerant salvage read. Read-only.
-        crate::pioneer_backup::capture_recover_candidate(dev)
+    fn dump_is_raw(&self) -> bool {
+        true
+    }
+    fn capture_dump(&self, dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>> {
+        // One contiguous raw read of the whole firmware window. Never uses vendor
+        // kernel mode (not cold-reachable on BD firmware; see
+        // `pioneer_flash_plan::kernel_mode_required`). `force` tolerates a
+        // degraded drive: unreadable spans are zero-filled and reported instead
+        // of aborting. Read-only.
+        crate::pioneer_backup::capture_raw_dump(dev, force)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
         // Per-component structural/codec/signature checks; accepts 1 or 2
@@ -1248,9 +1322,9 @@ impl DriveFamily for Pioneer {
     fn flash_plan(&self, image_len: usize, verbose: bool) -> Result<String> {
         use std::fmt::Write;
         let mut plan = format!(
-            "UD04 OEM offline transcript: 3B 04 FF entry (256 B control), \
-             then {} raw-envelope chunks of at most {} B via 3B 07 F0, \
-             then 3B 05 FF finish (256 B control) and status polling. \
+            "UD04 OEM offline transcript: OEM update entry (256 B control), \
+             then {} raw-envelope chunks of at most {} B via the OEM Normal transfer, \
+             then OEM finish (256 B control) and status polling. \
              Execution is blocked: restorable backup, drive acceptance, and status handling are unverified.\n",
             image_len.div_ceil(FLASH_CHUNK),
             FLASH_CHUNK,

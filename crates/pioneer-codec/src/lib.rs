@@ -28,6 +28,18 @@ const C: u32 = 2531011;
 const MASK: u32 = 0x00ff_ffff;
 const INV: u32 = 0x00b3_3155; // 214013^-1 mod 2^24
 
+// The transformed-Plane generation (DVR-217 / DVR-XD09 / DVR-XD10 class) keeps
+// the literal banner and the 0x160..0x200 header, then whitens the direct-copy
+// Plane body from 0x200 with a full-period 32-bit LCG keystream, XORed over
+// little-endian words. The LCG constants and seed are fixed across this family;
+// XOR is self-inverse, so the same pass encodes and decodes. Detection still
+// requires the decoded body to be a recognizable direct-copy Plane image, so a
+// bare banner can never be mistaken for this layout.
+const PLANE_LCG_A: u32 = 0x7d2b_89dd;
+const PLANE_LCG_C: u32 = 1;
+const PLANE_LCG_SEED: u32 = 0xc3c7_91c2;
+const PLANE_XOR_OFFSET: usize = 0x200;
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PioneerInfo {
     pub model: String,
@@ -375,6 +387,7 @@ pub struct DecodedEnvelope {
     suffix: Vec<u8>,
     key: Vec<u8>,
     xor_exceptions: Vec<u32>,
+    splices: Vec<SplicedBlock>,
 }
 
 type SelectedLayout = (String, usize, usize, Vec<u8>, Vec<u8>);
@@ -448,20 +461,331 @@ fn transform_with_policy(
     {
         let k = words[i % words.len()];
         let v = u32::from_le_bytes(src.try_into().unwrap());
-        let xor = if exceptions.contains(&((i * 4) as u32)) {
-            0
-        } else {
-            k
-        };
-        let result = match (encode, reverse) {
-            (true, false) => v.rotate_left(k & 31) ^ xor,
-            (false, false) => (v ^ xor).rotate_right(k & 31),
-            (true, true) => v.rotate_right(k & 31) ^ xor,
-            (false, true) => (v ^ xor).rotate_left(k & 31),
-        };
-        dst.copy_from_slice(&result.to_le_bytes());
+        let skip = exceptions.contains(&((i * 4) as u32));
+        dst.copy_from_slice(&keyed_word(v, k, encode, reverse, skip).to_le_bytes());
     }
     Some(out)
+}
+
+fn keyed_word(v: u32, k: u32, encode: bool, reverse: bool, skip_xor: bool) -> u32 {
+    let xor = if skip_xor { 0 } else { k };
+    match (encode, reverse) {
+        (true, false) => v.rotate_left(k & 31) ^ xor,
+        (false, false) => (v ^ xor).rotate_right(k & 31),
+        (true, true) => v.rotate_right(k & 31) ^ xor,
+        (false, true) => (v ^ xor).rotate_left(k & 31),
+    }
+}
+
+// Spliced Normal envelopes. Six OEM Normal releases in the hoard (SAT 8211
+// 1.01 and 2.02, 8291 1.01, 8510 1.03, 1040 1.01, 1041 1.01) carry three
+// foreign 16-byte blocks in the ciphertext. Each sits where the *unspliced*
+// stream would cross a 64 KiB file boundary, i.e. at image offset `c` with
+// `(payload_offset + c) % 0x10000 == 0`; the key index does not advance over
+// the block, and the file keeps its declared length, so the image's final
+// 16*n bytes are absent from the envelope. Removing the blocks restores
+// contiguous code and a COMP directory whose streams inflate exactly. The
+// lost tail is erased padding for 8510, padding plus a recomputable Adler-32
+// trailer for 8291, but final COMP deflate bytes (8211) or trailing
+// signature-like data (1040/1041) elsewhere; `unrecovered_tail` reports those.
+// The blocks' content and the rule choosing which boundaries carry one are not
+// established (they are not FF/00 or the lost tail under any key index, nor
+// digests of nearby ranges), and neither is the receiver's handling: detection
+// is therefore by decoded statistics and the result is accepted only when it
+// validates.
+const SPLICE_LEN: usize = 16;
+const SPLICE_ALIGN: usize = 0x10000;
+const SPLICE_WINDOW: usize = 0x1000;
+
+/// A foreign ciphertext block removed from a spliced Normal envelope. The block
+/// preceded image byte `image_offset`; `bytes` are kept verbatim for repack.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SplicedBlock {
+    pub image_offset: usize,
+    pub bytes: [u8; SPLICE_LEN],
+}
+
+fn byte_entropy(data: &[u8]) -> f64 {
+    let mut counts = [0usize; 256];
+    for &byte in data {
+        counts[byte as usize] += 1;
+    }
+    let n = data.len() as f64;
+    counts
+        .iter()
+        .filter(|&&c| c > 0)
+        .map(|&c| {
+            let p = c as f64 / n;
+            -p * p.log2()
+        })
+        .sum()
+}
+
+fn key_words(key: &[u8]) -> Option<Vec<u32>> {
+    if key.len() % 4 != 0 || key.is_empty() {
+        return None;
+    }
+    Some(
+        key.chunks_exact(4)
+            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+            .collect(),
+    )
+}
+
+// Decode `len` bytes of ciphertext at `pos` as image bytes starting at `image_off`.
+fn decode_window(
+    cipher: &[u8],
+    pos: usize,
+    image_off: usize,
+    words: &[u32],
+    reverse: bool,
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(SPLICE_WINDOW);
+    for (w, src) in cipher[pos..pos + SPLICE_WINDOW].chunks_exact(4).enumerate() {
+        let k = words[(image_off / 4 + w) % words.len()];
+        let v = u32::from_le_bytes(src.try_into().unwrap());
+        out.extend_from_slice(&keyed_word(v, k, false, reverse, false).to_le_bytes());
+    }
+    out
+}
+
+// At each candidate boundary, keep the stream unless the next window decodes
+// to noise as-is but to structured data once a 16-byte block is skipped. A
+// mis-keyed window is uniformly random (~7.95 bits/byte over 4 KiB); code and
+// tables sit well below 7.5. Ties (e.g. inside compressed data) keep the stream.
+fn find_splices(cipher: &[u8], payload_off: usize, key: &[u8], reverse: bool) -> Vec<SplicedBlock> {
+    let Some(words) = key_words(key) else {
+        return Vec::new();
+    };
+    let mut splices = Vec::new();
+    let mut candidate = (SPLICE_ALIGN - payload_off % SPLICE_ALIGN) % SPLICE_ALIGN;
+    if candidate % 4 != 0 {
+        return splices;
+    }
+    loop {
+        let pos = candidate + SPLICE_LEN * splices.len();
+        if pos + SPLICE_LEN + SPLICE_WINDOW > cipher.len() {
+            break;
+        }
+        let kept = byte_entropy(&decode_window(cipher, pos, candidate, &words, reverse));
+        // The stream must also be clean right up to the boundary, so a block
+        // off the grid can never be "repaired" at a later boundary.
+        let clean_before = candidate >= SPLICE_WINDOW
+            && byte_entropy(&decode_window(
+                cipher,
+                pos - SPLICE_WINDOW,
+                candidate - SPLICE_WINDOW,
+                &words,
+                reverse,
+            )) <= 7.5;
+        if kept >= 7.8 && clean_before {
+            let skipped = decode_window(cipher, pos + SPLICE_LEN, candidate, &words, reverse);
+            if byte_entropy(&skipped) <= 7.5 {
+                splices.push(SplicedBlock {
+                    image_offset: candidate,
+                    bytes: cipher[pos..pos + SPLICE_LEN].try_into().unwrap(),
+                });
+            }
+        }
+        candidate += SPLICE_ALIGN;
+    }
+    splices
+}
+
+// Decode a spliced payload to the image bytes it actually carries
+// (`cipher.len() - 16 * splices.len()`). Exceptions are image offsets.
+fn decode_spliced(
+    cipher: &[u8],
+    key: &[u8],
+    reverse: bool,
+    exceptions: &[u32],
+    splices: &[SplicedBlock],
+) -> Option<Vec<u8>> {
+    let words = key_words(key)?;
+    let kept_len = cipher.len().checked_sub(SPLICE_LEN * splices.len())?;
+    if cipher.len() % 4 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(kept_len);
+    let mut pos = 0;
+    let mut next = splices.iter().peekable();
+    for j in (0..kept_len).step_by(4) {
+        if next.peek().is_some_and(|s| s.image_offset == j) {
+            next.next();
+            pos += SPLICE_LEN;
+        }
+        let v = u32::from_le_bytes(cipher[pos..pos + 4].try_into().unwrap());
+        let skip = exceptions.contains(&(j as u32));
+        out.extend_from_slice(
+            &keyed_word(v, words[(j / 4) % words.len()], false, reverse, skip).to_le_bytes(),
+        );
+        pos += 4;
+    }
+    next.next().is_none().then_some(out)
+}
+
+// Inverse of `decode_spliced`: encrypt the carried image bytes and reinsert the blocks.
+fn encode_spliced(
+    kept: &[u8],
+    key: &[u8],
+    reverse: bool,
+    exceptions: &[u32],
+    splices: &[SplicedBlock],
+) -> Option<Vec<u8>> {
+    let words = key_words(key)?;
+    if kept.len() % 4 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(kept.len() + SPLICE_LEN * splices.len());
+    let mut next = splices.iter().peekable();
+    for (i, src) in kept.chunks_exact(4).enumerate() {
+        let j = i * 4;
+        if let Some(s) = next.next_if(|s| s.image_offset == j) {
+            out.extend_from_slice(&s.bytes);
+        }
+        let v = u32::from_le_bytes(src.try_into().unwrap());
+        let skip = exceptions.contains(&(j as u32));
+        out.extend_from_slice(
+            &keyed_word(v, words[i % words.len()], true, reverse, skip).to_le_bytes(),
+        );
+    }
+    next.next().is_none().then_some(out)
+}
+
+fn adler32(data: &[u8]) -> u32 {
+    let (mut a, mut b) = (1u32, 0u32);
+    for chunk in data.chunks(5552) {
+        for &byte in chunk {
+            a += u32::from(byte);
+            b += a;
+        }
+        a %= 65521;
+        b %= 65521;
+    }
+    (b << 16) | a
+}
+
+// Rebuild the image tail the envelope does not carry: erased (0xFF) padding,
+// except that a COMP stream's zlib Adler-32 trailer cut by the truncation is
+// recomputed from its (fully carried) deflate data. Returns the full image.
+fn splice_tail(kept: &[u8], total: usize) -> Option<Vec<u8>> {
+    let mut image = kept.to_vec();
+    image.resize(total, 0xff);
+    if image.get(0x1000..0x1004) != Some(b"COMP".as_slice()) {
+        return Some(image);
+    }
+    let mut addresses = Vec::new();
+    for chunk in image.get(0x1004..0x1100)?.chunks_exact(4) {
+        let value = u32::from_be_bytes(chunk.try_into().ok()?);
+        if value == u32::MAX {
+            break;
+        }
+        addresses.push(value);
+    }
+    if addresses.len() < 2 || addresses.len() % 2 != 0 {
+        return Some(image);
+    }
+    let (first, start, end) = (
+        addresses[0],
+        addresses[addresses.len() - 2],
+        addresses[addresses.len() - 1],
+    );
+    let min_base = first.saturating_sub(u32::try_from(total).ok()?);
+    for base in (min_base & !0xfff..=first & !0xfff).step_by(0x1000) {
+        let (Some(offset), Some(end_offset)) = (
+            start.checked_sub(base).map(|v| v as usize),
+            end.checked_sub(base).map(|v| v as usize),
+        ) else {
+            continue;
+        };
+        if end_offset <= offset + 6
+            || end_offset > kept.len()
+            || end_offset + 4 <= kept.len()
+            || end_offset + 4 > total
+        {
+            continue;
+        }
+        let expanded_size = u32::from_be_bytes(image[offset..offset + 4].try_into().ok()?) as usize;
+        if image[offset + 4] != 0x78 || expanded_size == 0 || expanded_size > 64 * 1024 * 1024 {
+            continue;
+        }
+        let mut inflater = flate2::Decompress::new(false);
+        let mut expanded = vec![0u8; expanded_size + 1];
+        let deflate = &image[offset + 6..end_offset];
+        let ok = matches!(
+            inflater.decompress(deflate, &mut expanded, flate2::FlushDecompress::Finish),
+            Ok(flate2::Status::StreamEnd)
+        );
+        if !ok
+            || inflater.total_out() as usize != expanded_size
+            || inflater.total_in() as usize != deflate.len()
+        {
+            continue;
+        }
+        let trailer = adler32(&expanded[..expanded_size]).to_be_bytes();
+        // Bytes the envelope does carry must already agree with the trailer.
+        let carried = kept.len() - end_offset;
+        if image[end_offset..kept.len()] != trailer[..carried] {
+            continue;
+        }
+        image[kept.len()..end_offset + 4].copy_from_slice(&trailer[carried..]);
+        return Some(image);
+    }
+    Some(image)
+}
+
+// Detect and validate a spliced Normal payload. None means "not spliced" (or
+// unprovable), leaving the ordinary decode untouched.
+fn spliced_normal(
+    cipher: &[u8],
+    payload_off: usize,
+    key: &[u8],
+    reverse: bool,
+) -> Option<(Vec<u8>, Vec<SplicedBlock>)> {
+    let splices = find_splices(cipher, payload_off, key, reverse);
+    if splices.is_empty() {
+        return None;
+    }
+    let kept = decode_spliced(cipher, key, reverse, &[], &splices)?;
+    let image = splice_tail(&kept, cipher.len())?;
+    let declared = u32::from_be_bytes(image.get(20..24)?.try_into().ok()?) as usize;
+    if !image.starts_with(b"PIONEER ") || declared != image.len() {
+        return None;
+    }
+    if image.get(0x1000..0x1004) == Some(b"COMP".as_slice())
+        && comp_streams(&image).is_none()
+        && !comp_valid_except_truncated_last(&image, kept.len())
+    {
+        return None;
+    }
+    Some((image, splices))
+}
+
+// Some spliced envelopes (SAT 8211 1.01/2.02) lose deflate bytes of the final
+// COMP stream to the truncation, which no envelope-only decode can restore.
+// Accept those only if the final stream really extends into the lost tail and
+// every other stream inflates exactly at one unique base.
+fn comp_valid_except_truncated_last(image: &[u8], kept_len: usize) -> bool {
+    let Some(directory) = image.get(0x1004..0x1100) else {
+        return false;
+    };
+    let count = directory
+        .chunks_exact(4)
+        .take_while(|w| *w != [0xff; 4])
+        .count();
+    if count < 4 || count % 2 != 0 {
+        return false;
+    }
+    let mut trimmed = image.to_vec();
+    let last = 0x1004 + (count - 2) * 4;
+    trimmed[last..last + 8].fill(0xff);
+    let Some((base, _)) = comp_streams(&trimmed) else {
+        return false;
+    };
+    let end = u32::from_be_bytes(directory[(count - 1) * 4..count * 4].try_into().unwrap());
+    end.checked_sub(base).is_some_and(|end_offset| {
+        end_offset as usize > kept_len && (end_offset as usize) < image.len()
+    })
 }
 
 fn recover_seed(bytes: &[u8]) -> Option<u32> {
@@ -527,6 +851,46 @@ fn has_plain_image_layout(data: &[u8]) -> bool {
         && data
             .get(0x8004..0x10000)
             .is_some_and(|gap| gap.iter().all(|&byte| byte == 0xff))
+}
+
+// Whiten or recover the transformed-Plane body with the fixed 32-bit LCG
+// keystream. XOR is self-inverse, so one function serves both directions. The
+// input must be word-aligned; any trailing sub-word bytes are copied verbatim.
+fn plane_lcg_xor(data: &[u8]) -> Vec<u8> {
+    let mut out = data.to_vec();
+    let mut state = PLANE_LCG_SEED;
+    for word in out.chunks_exact_mut(4) {
+        let keyed = u32::from_le_bytes(word.try_into().unwrap()) ^ state;
+        word.copy_from_slice(&keyed.to_le_bytes());
+        state = state.wrapping_mul(PLANE_LCG_A).wrapping_add(PLANE_LCG_C);
+    }
+    out
+}
+
+// Decode a transformed-Plane body and accept it only when it is a recognizable
+// direct-copy Plane image. The header (0..0x200) is literal; the keystream
+// starts at 0x200. Rebuilding the full buffer lets `has_plain_image_layout`
+// apply the same erased-gap and firmware-identifier checks it uses for plain.
+fn transformed_plane_layout(data: &[u8], file_type: &str) -> Option<SelectedLayout> {
+    if file_type != "Plane"
+        || data.len() <= PLANE_XOR_OFFSET
+        || data.len() % 4 != 0
+        || has_plain_image_layout(data)
+    {
+        return None;
+    }
+    let mut rebuilt = data[..PLANE_XOR_OFFSET].to_vec();
+    rebuilt.extend(plane_lcg_xor(&data[PLANE_XOR_OFFSET..]));
+    if !has_plain_image_layout(&rebuilt) {
+        return None;
+    }
+    Some((
+        "transformed-plane".into(),
+        HEADER_LEN,
+        data.len(),
+        Vec::new(),
+        Vec::new(),
+    ))
 }
 
 fn be32_sum_zero(image: &[u8]) -> bool {
@@ -756,8 +1120,15 @@ fn decode_envelope_impl(data: &[u8]) -> Option<DecodedEnvelope> {
             Vec::new(),
         ));
     }
+    if chosen.is_none() {
+        chosen = transformed_plane_layout(data, &file_type);
+    }
     let (layout, payload_off, payload_end, key, suffix) = chosen?;
-    let image = if matches!(layout.as_str(), "plain" | "raw-kernel" | "raw-normal") {
+    let image = if layout == "transformed-plane" {
+        let mut decoded = data[HEADER_LEN..PLANE_XOR_OFFSET].to_vec();
+        decoded.extend(plane_lcg_xor(&data[PLANE_XOR_OFFSET..payload_end]));
+        decoded
+    } else if matches!(layout.as_str(), "plain" | "raw-kernel" | "raw-normal") {
         if layout == "plain" {
             body.to_vec()
         } else {
@@ -770,6 +1141,20 @@ fn decode_envelope_impl(data: &[u8]) -> Option<DecodedEnvelope> {
             false,
             layout == "normal-reverse",
         )?
+    };
+    let (image, splices) = match matches!(layout.as_str(), "normal" | "normal-reverse")
+        .then(|| {
+            spliced_normal(
+                &data[payload_off..payload_end],
+                payload_off,
+                &key,
+                layout == "normal-reverse",
+            )
+        })
+        .flatten()
+    {
+        Some((spliced, splices)) => (spliced, splices),
+        None => (image, Vec::new()),
     };
     let declared_size =
         if matches!(layout.as_str(), "normal" | "normal-reverse") && image.len() >= 24 {
@@ -804,6 +1189,7 @@ fn decode_envelope_impl(data: &[u8]) -> Option<DecodedEnvelope> {
         suffix,
         key,
         xor_exceptions: Vec::new(),
+        splices,
     })
 }
 
@@ -822,6 +1208,33 @@ impl DecodedEnvelope {
         }
         let mut out = self.header.clone();
         out.extend_from_slice(&self.prefix);
+        if self.info.layout == "transformed-plane" {
+            let split = PLANE_XOR_OFFSET - HEADER_LEN;
+            if image.len() < split || image.len() % 4 != split % 4 {
+                return None;
+            }
+            out.extend_from_slice(&image[..split]);
+            out.extend_from_slice(&plane_lcg_xor(&image[split..]));
+            out.extend_from_slice(&self.suffix);
+            return Some(out);
+        }
+        if !self.splices.is_empty() {
+            // The envelope cannot carry the image's final 16*n bytes; accept
+            // only an image whose tail is exactly what decoding reconstructs.
+            let kept_len = image.len().checked_sub(SPLICE_LEN * self.splices.len())?;
+            if splice_tail(&image[..kept_len], image.len())?.as_slice() != image {
+                return None;
+            }
+            out.extend_from_slice(&encode_spliced(
+                &image[..kept_len],
+                &self.key,
+                self.info.layout == "normal-reverse",
+                &self.xor_exceptions,
+                &self.splices,
+            )?);
+            out.extend_from_slice(&self.suffix);
+            return Some(out);
+        }
         if matches!(
             self.info.layout.as_str(),
             "plain" | "raw-kernel" | "raw-normal"
@@ -853,6 +1266,7 @@ impl DecodedEnvelope {
     /// establish internal checksums, signatures, or drive acceptance.
     pub fn repack_resized_normal(&self, image: &[u8]) -> Option<Vec<u8>> {
         if !matches!(self.info.layout.as_str(), "normal" | "normal-reverse")
+            || !self.splices.is_empty()
             || self.info.file_type != "Normal"
             || image.len() < 0x2000
             || image.len() % 0x100 != 0
@@ -885,6 +1299,205 @@ impl DecodedEnvelope {
 /// True for a Pioneer ASCII envelope header, including unsupported generations.
 pub fn is_envelope(data: &[u8]) -> bool {
     data.starts_with(BANNER)
+}
+
+/// Decoded-body length of a Pioneer BD Kernel component (64 KiB).
+pub const KERNEL_BODY_LEN: usize = 0x10000;
+
+/// Decoded-body offset of the generation marker byte (§15.1 — runtime
+/// `0x4000FE`).
+pub const KERNEL_MARKER_OFFSET: usize = 0xFE;
+
+/// Decoded-body offset of the 32-bit BE word that absorbs the marker edit's
+/// contribution to the body's additive checksum (§15.3).
+pub const KERNEL_CHECKSUM_WORD_OFFSET: usize = 0x1020;
+
+/// Fixed delta added to the checksum word for the §15.3-documented `FF → 01`
+/// transform: byte `0xFE` is the second-from-top byte of its enclosing BE
+/// u32 word, so flipping it from `0xFF` to `0x01` subtracts `0xFE00` from the
+/// additive body sum; adding the same `0xFE00` to the word at `0x1020`
+/// restores the §8.1 zero sum. For a `00 → 01` transform the compensation
+/// is `-0x0100` (= `0xFFFF_FF00`); [`downgrade_patch`] computes the right
+/// delta for either case. Validated byte-exact on the 33 corpus Kernels
+/// (2026-10-04).
+pub const KERNEL_CHECKSUM_COMPENSATION: u32 = 0xFE00;
+
+/// Outcome of applying [`downgrade_patch`] — the two-byte-level §15.3 Site-1
+/// bypass for an older Kernel going onto a newer-generation receiver.
+///
+/// Marker codes seen in the hoard:
+/// - `0xFF` / `0x00` — older generation (Site-1 reject on a newer receiver)
+/// - `0x01` — newer generation (Site-1 accept)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DowngradePatchOutcome {
+    /// Marker was already `0x01` — nothing to patch; returned body is byte-
+    /// identical to the input. Not an error.
+    AlreadyNewer,
+    /// Marker was `0xFF` or `0x00` — flipped to `0x01` and the checksum word
+    /// at [`KERNEL_CHECKSUM_WORD_OFFSET`] was incremented by
+    /// [`KERNEL_CHECKSUM_COMPENSATION`] (mod 2³²). The §8.1 additive body sum
+    /// is preserved. Carries the before/after word values for a dry-run diff.
+    Patched {
+        /// The pre-patch marker value (`0xFF` or `0x00`).
+        marker_before: u8,
+        /// The pre-patch checksum word (big-endian u32 at `0x1020`).
+        checksum_word_before: u32,
+        /// The post-patch checksum word (`before + 0xFE00`, wrapping).
+        checksum_word_after: u32,
+    },
+}
+
+/// Why [`downgrade_patch`] refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DowngradePatchError {
+    /// Body wasn't the expected 64 KiB Kernel size.
+    WrongSize {
+        /// Actual length received.
+        got: usize,
+    },
+    /// Marker byte wasn't one of the three recognised values (`0x00`, `0x01`,
+    /// `0xFF`). Hoard scan found none outside that set; a different value is
+    /// almost certainly a corrupt body — refuse rather than patch blindly.
+    UnknownMarker {
+        /// The actual marker byte at offset `0xFE`.
+        marker: u8,
+    },
+}
+
+/// The §15.3 Site-1 downgrade transform (pure byte edit, no I/O).
+///
+/// Applied to a **decoded Kernel body** (not an envelope). Flips the generation
+/// marker at offset `0xFE` from `FF`/`00` to `01` and compensates the §8.1
+/// additive body-sum invariant by adding `0xFE00` (mod 2³²) to the big-endian
+/// u32 word at offset `0x1020`. The resulting body passes a Site-1 receiver's
+/// `FF`/`00` reject at runtime `0x405266`. The only bytes that change are
+/// `body[0xFE]` and `body[0x1020..0x1024]`.
+///
+/// `AlreadyNewer` is a *successful* no-op (not an error) so callers can run
+/// this unconditionally on a target Kernel before flashing. Caller must
+/// re-encode the envelope (via [`DecodedEnvelope::repack`]) after patching.
+pub fn downgrade_patch(decoded_body: &[u8]) -> Result<(Vec<u8>, DowngradePatchOutcome), DowngradePatchError> {
+    if decoded_body.len() != KERNEL_BODY_LEN {
+        return Err(DowngradePatchError::WrongSize { got: decoded_body.len() });
+    }
+    let marker = decoded_body[KERNEL_MARKER_OFFSET];
+    if marker == 0x01 {
+        return Ok((decoded_body.to_vec(), DowngradePatchOutcome::AlreadyNewer));
+    }
+    if marker != 0xFF && marker != 0x00 {
+        return Err(DowngradePatchError::UnknownMarker { marker });
+    }
+    let mut out = decoded_body.to_vec();
+    out[KERNEL_MARKER_OFFSET] = 0x01;
+    // Marker byte `0xFE` sits in the second-from-top byte position of its
+    // enclosing BE u32 word, so flipping it from `marker` to `0x01` shifts
+    // the 32-bit additive body sum by `(0x01 - marker) * 0x100`. Add the
+    // negation to the §8.1 balance word at `0x1020` to cancel it.
+    let marker_delta = (0x01u32).wrapping_sub(marker as u32).wrapping_mul(0x100);
+    let compensation = marker_delta.wrapping_neg();
+    let o = KERNEL_CHECKSUM_WORD_OFFSET;
+    let before = u32::from_be_bytes([out[o], out[o + 1], out[o + 2], out[o + 3]]);
+    let after = before.wrapping_add(compensation);
+    out[o..o + 4].copy_from_slice(&after.to_be_bytes());
+    Ok((out, DowngradePatchOutcome::Patched {
+        marker_before: marker,
+        checksum_word_before: before,
+        checksum_word_after: after,
+    }))
+}
+
+#[cfg(test)]
+mod downgrade_patch_tests {
+    use super::*;
+
+    fn sum32_be(body: &[u8]) -> u32 {
+        body.chunks_exact(4)
+            .map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]]))
+            .fold(0u32, |acc, w| acc.wrapping_add(w))
+    }
+
+    /// Build a 64 KiB body with a given marker and a word at 0x1020 that
+    /// zero-balances the sum. The transform must preserve that zero sum.
+    fn body_with_marker(marker: u8) -> Vec<u8> {
+        let mut b = vec![0u8; KERNEL_BODY_LEN];
+        b[KERNEL_MARKER_OFFSET] = marker;
+        // Compensate: pre-populate the checksum word so the full-body
+        // additive sum is zero (matches §8.1 invariant on real Kernels).
+        let marker_word_offset = KERNEL_MARKER_OFFSET & !3;
+        let mw = u32::from_be_bytes([
+            b[marker_word_offset],
+            b[marker_word_offset + 1],
+            b[marker_word_offset + 2],
+            b[marker_word_offset + 3],
+        ]);
+        let correction = mw.wrapping_neg();
+        b[KERNEL_CHECKSUM_WORD_OFFSET..KERNEL_CHECKSUM_WORD_OFFSET + 4]
+            .copy_from_slice(&correction.to_be_bytes());
+        debug_assert_eq!(sum32_be(&b), 0);
+        b
+    }
+
+    #[test]
+    fn ff_marker_is_patched_and_sum_preserved() {
+        let b = body_with_marker(0xFF);
+        let (patched, outcome) = downgrade_patch(&b).unwrap();
+        assert_eq!(patched.len(), KERNEL_BODY_LEN);
+        assert_eq!(patched[KERNEL_MARKER_OFFSET], 0x01);
+        assert_eq!(sum32_be(&patched), 0, "§8.1 zero-sum invariant must survive the patch");
+        match outcome {
+            DowngradePatchOutcome::Patched { marker_before, checksum_word_before, checksum_word_after } => {
+                assert_eq!(marker_before, 0xFF);
+                // Documented §15.3 FF→01 compensation is +0xFE00.
+                assert_eq!(checksum_word_after, checksum_word_before.wrapping_add(0xFE00));
+            }
+            _ => panic!("expected Patched"),
+        }
+        // Only the two expected regions differ.
+        for (i, (&a, &c)) in b.iter().zip(patched.iter()).enumerate() {
+            if a != c {
+                assert!(
+                    i == KERNEL_MARKER_OFFSET || (KERNEL_CHECKSUM_WORD_OFFSET..KERNEL_CHECKSUM_WORD_OFFSET + 4).contains(&i),
+                    "unexpected diff at {i:#x}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn zero_marker_is_patched_like_ff() {
+        let b = body_with_marker(0x00);
+        let (patched, outcome) = downgrade_patch(&b).unwrap();
+        assert_eq!(patched[KERNEL_MARKER_OFFSET], 0x01);
+        assert_eq!(sum32_be(&patched), 0);
+        assert!(matches!(outcome, DowngradePatchOutcome::Patched { marker_before: 0x00, .. }));
+    }
+
+    #[test]
+    fn already_newer_is_noop_not_error() {
+        let b = body_with_marker(0x01);
+        let (patched, outcome) = downgrade_patch(&b).unwrap();
+        assert_eq!(patched, b, "AlreadyNewer must return a byte-identical body");
+        assert_eq!(outcome, DowngradePatchOutcome::AlreadyNewer);
+    }
+
+    #[test]
+    fn unknown_marker_refused() {
+        let mut b = body_with_marker(0xFF);
+        b[KERNEL_MARKER_OFFSET] = 0x55; // not FF/00/01
+        assert_eq!(
+            downgrade_patch(&b),
+            Err(DowngradePatchError::UnknownMarker { marker: 0x55 }),
+        );
+    }
+
+    #[test]
+    fn wrong_size_refused() {
+        let b = vec![0u8; KERNEL_BODY_LEN - 1];
+        assert_eq!(
+            downgrade_patch(&b),
+            Err(DowngradePatchError::WrongSize { got: KERNEL_BODY_LEN - 1 }),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1081,6 +1694,7 @@ mod tests {
             suffix: vec![],
             key: make_key(0x123456, 0x10000),
             xor_exceptions: Vec::new(),
+            splices: Vec::new(),
         };
         let mut resized = original.clone();
         resized.extend([0xff; 0x100]);
@@ -1126,6 +1740,171 @@ mod tests {
         transformed = envelope;
         transformed[0x9000] = 0;
         assert!(decode_envelope(&transformed).is_none());
+    }
+
+    #[test]
+    fn transformed_plane_recovers_a_whitened_direct_copy_plane() {
+        // Build the direct-copy Plane image the DVR-217 family carries, then
+        // whiten the body from 0x200 with the fixed LCG keystream as the OEM
+        // packer does. XOR is self-inverse, so the same pass produces the file.
+        let mut plain = vec![0xffu8; 0x10010];
+        let banner = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER DVD-RW DVR-217\r\nRevision Level : 1.07\r\nFile Type : Plane\r\n";
+        plain[..banner.len()].copy_from_slice(banner);
+        plain[0x8000..0x8004].copy_from_slice(&[0x00, 0x55, 0x09, 0xfd]);
+        plain[0x10000..0x10010].copy_from_slice(b"PIONEER  DVR-117");
+
+        let mut envelope = plain[..PLANE_XOR_OFFSET].to_vec();
+        envelope.extend(plane_lcg_xor(&plain[PLANE_XOR_OFFSET..]));
+        // The whitened body must not look like a bare direct-copy Plane.
+        assert!(!has_plain_image_layout(&envelope));
+
+        let decoded = decode_envelope(&envelope).unwrap();
+        assert_eq!(decoded.info.layout, "transformed-plane");
+        assert_eq!(decoded.info.file_type, "Plane");
+        assert_eq!(decoded.info.model, "DVR-217");
+        // The decoded image is the recovered direct-copy Plane body from 0x160.
+        assert_eq!(decoded.image, plain[HEADER_LEN..]);
+        assert_eq!(&decoded.image[0xfea0..0xfeb0], b"PIONEER  DVR-117");
+        assert_eq!(decoded.repack(&decoded.image).unwrap(), envelope);
+
+        // A single corrupted body word breaks the erased-gap check: the layout
+        // is rejected rather than silently emitting a mis-whitened image.
+        let mut broken = envelope.clone();
+        broken[0x400] ^= 1;
+        assert!(decode_envelope(&broken).is_none());
+    }
+}
+
+#[cfg(test)]
+mod splice_tests {
+    use super::*;
+
+    const PAYLOAD: usize = 0x10200;
+    const LEN: usize = 0x50000;
+
+    // A synthetic Normal image: low-entropy "code", a COMP directory, and two
+    // zlib streams at the end placed so the last Adler-32 trailer straddles the
+    // 48 bytes a three-block splice pushes out of the envelope (as in 8291).
+    fn image() -> Vec<u8> {
+        let mut image = vec![0u8; LEN];
+        let mut state = 0x1234_5678u32;
+        for byte in image.iter_mut() {
+            state = state.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            *byte = [0x00, 0x01, 0x6a, 0x79, 0x0f, 0x5e, 0xff, 0x18][(state >> 28) as usize & 7];
+        }
+        image[..16].copy_from_slice(b"PIONEER BDR-TEST");
+        image[20..24].copy_from_slice(&(LEN as u32).to_be_bytes());
+        let base = 0x0041_0000u32;
+        let zlib = |data: &[u8]| {
+            let mut e = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::new(6));
+            e.write_all(data).unwrap();
+            e.finish().unwrap()
+        };
+        let first: Vec<u8> = (0..0x3000u32).map(|i| (i % 251) as u8).collect();
+        let second: Vec<u8> = (0..0x2000u32).map(|i| (i * 7 % 13) as u8).collect();
+        let (z1, z2) = (zlib(&first), zlib(&second));
+        let kept_len = LEN - 3 * SPLICE_LEN;
+        let end2 = kept_len - 1; // Adler-32 at end2..end2+4: 1 carried, 3 lost
+        let start2 = end2 - z2.len();
+        let start1 = (start2 - 0x40 - 4 - z1.len()) & !3;
+        let end1 = start1 + z1.len();
+        image[end2 + 4..].fill(0xff);
+        image[end1 + 4..start2].fill(0xff);
+        image[start1..start1 + 4].copy_from_slice(&(first.len() as u32).to_be_bytes());
+        image[start1 + 4..end1 + 4].copy_from_slice(&z1);
+        image[start2..start2 + 4].copy_from_slice(&(second.len() as u32).to_be_bytes());
+        image[start2 + 4..end2 + 4].copy_from_slice(&z2);
+        image[0x1000..0x1100].fill(0xff);
+        image[0x1000..0x1004].copy_from_slice(b"COMP");
+        for (i, v) in [start1, end1, start2, end2].into_iter().enumerate() {
+            image[0x1004 + 4 * i..0x1008 + 4 * i].copy_from_slice(&(base + v as u32).to_be_bytes());
+        }
+        assert!(comp_streams(&image).is_some());
+        image
+    }
+
+    // Encrypt as the OEM envelope does, then splice blocks at three of the four
+    // 64 KiB file boundaries and keep the declared file length.
+    fn envelope(image: &[u8], at: &[usize]) -> Vec<u8> {
+        let banner = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   BDR-TEST\r\nRevision Level : 1.00\r\nFile Type : Normal\r\n";
+        let mut out = vec![0u8; 0x200];
+        out[..banner.len()].copy_from_slice(banner);
+        let key = make_key(0x9272c0, 0x10000);
+        out.extend_from_slice(&key);
+        let cipher = transform(image, &key, true).unwrap();
+        let mut payload = Vec::new();
+        for (i, word) in cipher.chunks_exact(4).enumerate() {
+            if at.contains(&(i * 4)) {
+                payload.extend((0..16u8).map(|b| b.wrapping_mul(37) ^ (i as u8)));
+            }
+            payload.extend_from_slice(word);
+        }
+        payload.truncate(image.len());
+        out.extend_from_slice(&payload);
+        out
+    }
+
+    #[test]
+    fn spliced_normal_decodes_and_repacks_exactly() {
+        let image = image();
+        let at = [0xfe00, 0x2fe00, 0x3fe00];
+        for &c in &at {
+            assert_eq!((PAYLOAD + c) % SPLICE_ALIGN, 0);
+        }
+        let envelope = envelope(&image, &at);
+        let decoded = decode_envelope(&envelope).unwrap();
+        assert_eq!(decoded.info.layout, "normal");
+        let found: Vec<usize> = decoded
+            .spliced_blocks()
+            .iter()
+            .map(|s| s.image_offset)
+            .collect();
+        assert_eq!(found, at);
+        // The three lost Adler-32 bytes are recomputed; padding is erased.
+        assert_eq!(decoded.image, image);
+        assert!(decoded.unrecovered_tail().is_none());
+        assert_eq!(decoded.repack(&decoded.image).unwrap(), envelope);
+        // A carried-byte edit re-encrypts in place around the blocks.
+        let mut edited = decoded.image.clone();
+        edited[0x30000] ^= 0x5a;
+        let repacked = decoded.repack(&edited).unwrap();
+        assert_eq!(decode_envelope(&repacked).unwrap().image, edited);
+        // The envelope cannot carry the tail, so a tail edit is refused.
+        let mut tail = decoded.image.clone();
+        *tail.last_mut().unwrap() = 0;
+        assert!(decoded.repack(&tail).is_none());
+        assert!(decoded.repack_resized_normal(&decoded.image).is_none());
+    }
+
+    #[test]
+    fn unspliced_normal_is_untouched_and_bad_splices_fall_back() {
+        let image = image();
+        let plain = envelope(&image, &[]);
+        let decoded = decode_envelope(&plain).unwrap();
+        assert!(decoded.spliced_blocks().is_empty());
+        assert_eq!(decoded.image, image);
+        // A block off the 64 KiB grid is not a recognized splice: the ordinary
+        // decode stands (garbage after the block), never a spliced guess.
+        let off_grid = envelope(&image, &[0x20000]);
+        let decoded = decode_envelope(&off_grid).unwrap();
+        assert!(decoded.spliced_blocks().is_empty());
+        assert_eq!(decoded.image[..0x20000], image[..0x20000]);
+        assert_ne!(decoded.image[0x20010..], image[0x20000..LEN - 16]);
+    }
+
+    // Env-gated OEM fixture: e.g. PIONEER_SPLICED_NORMAL_FIXTURE=S8510191.103.enc
+    #[test]
+    fn spliced_normal_fixture_when_configured() {
+        let Ok(path) = std::env::var("PIONEER_SPLICED_NORMAL_FIXTURE") else {
+            return;
+        };
+        let data = std::fs::read(path).unwrap();
+        let decoded = decode_envelope(&data).unwrap();
+        assert_eq!(decoded.spliced_blocks().len(), 3);
+        assert_eq!(decoded.repack(&decoded.image).unwrap(), data);
+        if decoded.unrecovered_tail().is_none() {
+            assert!(comp_streams(&decoded.image).is_some());
+        }
     }
 }
 
@@ -1244,13 +2023,26 @@ pub fn decode_envelope_with_kernel(
     ) {
         return None;
     }
-    decoded.image = transform_with_policy(
-        &data[decoded.info.payload_offset..decoded.info.payload_offset + decoded.info.payload_size],
-        &decoded.key,
-        false,
-        decoded.info.layout == "normal-reverse",
-        &policy.offsets,
-    )?;
+    let payload =
+        &data[decoded.info.payload_offset..decoded.info.payload_offset + decoded.info.payload_size];
+    decoded.image = if decoded.splices.is_empty() {
+        transform_with_policy(
+            payload,
+            &decoded.key,
+            false,
+            decoded.info.layout == "normal-reverse",
+            &policy.offsets,
+        )?
+    } else {
+        let kept = decode_spliced(
+            payload,
+            &decoded.key,
+            decoded.info.layout == "normal-reverse",
+            &policy.offsets,
+            &decoded.splices,
+        )?;
+        splice_tail(&kept, payload.len())?
+    };
     decoded.info.uniform_ranges = uniform_ranges(&decoded.image, 256);
     decoded.xor_exceptions = policy.offsets.to_vec();
     decoded.info.receiver_xor_policy = Some(policy);
@@ -1263,6 +2055,26 @@ impl DecodedEnvelope {
     /// None means Normal receiver behavior has not been established.
     pub fn receiver_xor_exceptions(&self) -> Option<&[u32]> {
         (!self.xor_exceptions.is_empty()).then_some(self.xor_exceptions.as_slice())
+    }
+
+    /// Foreign 16-byte ciphertext blocks removed while decoding a spliced
+    /// Normal envelope (empty for every other envelope). See `SplicedBlock`.
+    pub fn spliced_blocks(&self) -> &[SplicedBlock] {
+        &self.splices
+    }
+
+    /// Image bytes a spliced envelope does not carry and decoding could not
+    /// prove (they are filled with 0xFF). None when every byte is carried or
+    /// verified: a COMP image whose streams, including any recomputed Adler-32
+    /// trailer, all inflate exactly, with only erased padding after them.
+    pub fn unrecovered_tail(&self) -> Option<std::ops::Range<usize>> {
+        if self.splices.is_empty() {
+            return None;
+        }
+        let kept_len = self.image.len() - SPLICE_LEN * self.splices.len();
+        let verified = self.image.get(0x1000..0x1004) == Some(b"COMP".as_slice())
+            && comp_streams(&self.image).is_some();
+        (!verified).then_some(kept_len..self.image.len())
     }
 }
 
@@ -1369,6 +2181,7 @@ mod receiver_tests {
             suffix: vec![],
             key: vec![],
             xor_exceptions: vec![],
+            splices: vec![],
         };
         assert_eq!(
             KernelXorPolicy::from_kernel(&kernel).unwrap().offsets,
@@ -2380,6 +3193,7 @@ mod synthetic_roundtrip_tests {
             suffix: vec![],
             key: make_key(0x123456, 0x10000),
             xor_exceptions: vec![],
+            splices: vec![],
         };
         let base = tmpl(valid.clone(), "Normal");
         // Exact resize to length 0x2000 is valid (isolates `< 0x2000` vs `==`/`<=`).
@@ -2446,6 +3260,7 @@ mod synthetic_roundtrip_tests {
             suffix: vec![],
             key: vec![],
             xor_exceptions: vec![],
+            splices: vec![],
         };
         // A `|| -> &&` on the layout guard would compute a policy from the branch.
         assert!(KernelXorPolicy::from_kernel(&env).is_none());

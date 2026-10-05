@@ -3,8 +3,8 @@
 //! not infer a protocol from an image's size, revision, or filename.
 
 use super::{
-    bdr212_generated_kernel_block, cdb_wb_flash_entry, cdb_wb_flash_finish, cdb_write_buffer,
-    OemTransfer, TransferStage, CONTROL_LEN, FLASH_CHUNK, NORMAL_BUFFER_ID, TRANSFER_MODE,
+    bdr212_generated_kernel_block, cdb_wb_flash_entry, cdb_wb_flash_finish, OemTransfer,
+    TransferStage, CONTROL_LEN, FLASH_CHUNK,
 };
 use anyhow::{bail, Result};
 use std::borrow::Cow;
@@ -51,17 +51,17 @@ pub fn data_out<'a>(
     match kernel {
         None => {}
         Some(KernelTransfer::LinearFe(bytes)) => {
-            chunks(&mut out, TransferStage::KernelFe, 0xFE, bytes);
+            chunks(&mut out, TransferStage::KernelFe, bytes);
         }
         Some(KernelTransfer::PrefixF0GeneratedFe { bytes, seed }) => {
             out.push(OemTransfer {
                 stage: TransferStage::KernelPrefix,
-                cdb: cdb_write_buffer(TRANSFER_MODE, NORMAL_BUFFER_ID, 0, 0x1200),
+                cdb: pioneer_optical::transfer_normal(0, 0x1200),
                 data: Cow::Borrowed(&bytes[..0x1200]),
             });
             out.push(OemTransfer {
                 stage: TransferStage::KernelFe,
-                cdb: cdb_write_buffer(TRANSFER_MODE, 0xFE, 0, 0x200),
+                cdb: pioneer_optical::transfer_kernel(0, 0x200),
                 data: Cow::Owned(bdr212_generated_kernel_block(seed).to_vec()),
             });
             for (destination, start, len) in [
@@ -71,13 +71,13 @@ pub fn data_out<'a>(
             ] {
                 out.push(OemTransfer {
                     stage: TransferStage::KernelFe,
-                    cdb: cdb_write_buffer(TRANSFER_MODE, 0xFE, destination, len as u32),
+                    cdb: pioneer_optical::transfer_kernel(destination, len as u32),
                     data: Cow::Borrowed(&bytes[start..start + len]),
                 });
             }
         }
     }
-    chunks(&mut out, TransferStage::Normal, NORMAL_BUFFER_ID, normal);
+    chunks(&mut out, TransferStage::Normal, normal);
     out.push(OemTransfer {
         stage: TransferStage::Finish,
         cdb: cdb_wb_flash_finish(),
@@ -93,16 +93,16 @@ fn check_span(bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn chunks<'a>(out: &mut Vec<OemTransfer<'a>>, stage: TransferStage, id: u8, bytes: &'a [u8]) {
+/// Chunk `bytes` into `FLASH_CHUNK` transfers for `stage` (Kernel -> FE, Normal -> F0).
+fn chunks<'a>(out: &mut Vec<OemTransfer<'a>>, stage: TransferStage, bytes: &'a [u8]) {
+    let cdb_for = match stage {
+        TransferStage::KernelFe => pioneer_optical::transfer_kernel,
+        _ => pioneer_optical::transfer_normal,
+    };
     for (index, data) in bytes.chunks(FLASH_CHUNK).enumerate() {
         out.push(OemTransfer {
             stage,
-            cdb: cdb_write_buffer(
-                TRANSFER_MODE,
-                id,
-                (index * FLASH_CHUNK) as u32,
-                data.len() as u32,
-            ),
+            cdb: cdb_for((index * FLASH_CHUNK) as u32, data.len() as u32),
             data: Cow::Borrowed(data),
         });
     }

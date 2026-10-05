@@ -73,10 +73,10 @@ enum Command {
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
-    /// Salvage read: dump whatever firmware is on the drive, even if degraded.
-    /// A best-effort, unverified capture — NOT a validated backup. Use it to get
-    /// the firmware off a partially-damaged drive. `--force` stops trusting the
-    /// drive: it enters vendor kernel mode and reads everything it can.
+    /// Salvage read: dump the drive's ENTIRE flash (0x000000..0x600000) as ONE raw file, even
+    /// if degraded (Pioneer: a single contiguous verbatim `.bin`). A
+    /// best-effort, unverified capture — NOT a flashable backup. Read-only; never
+    /// uses vendor kernel mode. `--force` stops trusting what the drive reports.
     Dump {
         /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
         /// Omit to auto-pick the only connected drive.
@@ -84,8 +84,9 @@ enum Command {
         /// Output path (defaults to `<model>_<rev>.<infix>.<ext>`).
         #[arg(short, long)]
         out: Option<PathBuf>,
-        /// Trust nothing: enter vendor kernel mode and read the full image no
-        /// matter what the drive reports (degraded/soft-bricked drives).
+        /// Trust nothing the drive reports: identity/layout failures become
+        /// warnings and the read proceeds anyway (degraded/soft-bricked drives).
+        /// Still read-only; no kernel mode.
         #[arg(long)]
         force: bool,
     },
@@ -146,13 +147,19 @@ struct FlashArgs {
     /// gate (MT1959->MT1959 only). Hardware-unvalidated — high brick risk.
     #[arg(long)]
     allow_crossflash: bool,
-    /// RECOVER a degraded/soft-bricked drive: stop trusting what the drive reports,
-    /// enter vendor kernel mode, and FORCE-WRITE the given firmware. Waives the
-    /// pre-flash backup and the identity/model/plan gates; only aborts if the drive
-    /// is unresponsive even to kernel mode. Still needs --execute --i-understand-risk.
-    /// EXPERIMENTAL, hardware-unvalidated — last-resort un-brick.
+    /// RECOVER a degraded/soft-bricked drive: re-push the given (same or
+    /// known-good) firmware through the ordinary OEM-update route. Waives the
+    /// pre-flash backup, the post-entry identity gate and the older/downgrade
+    /// refusals; the firmware-family match still applies unless --force. Needs
+    /// --execute --i-understand-risk. EXPERIMENTAL, hardware-unvalidated.
     #[arg(long)]
     recover: bool,
+    /// Ignore the firmware-family match (Pioneer). By default a flash proceeds
+    /// only when the installed and target firmware profile to the SAME family;
+    /// --force skips that check. DANGEROUS: flashing another family can brick the
+    /// drive.
+    #[arg(long)]
+    force: bool,
     /// Show the raw SCSI CDB sequence in the plan (default: clean summary).
     #[arg(short = 'v', long)]
     verbose: bool,
@@ -318,11 +325,10 @@ fn cmd_backup(
     recover: bool,
     force: bool,
 ) -> Result<()> {
-    // `--force` (dump) enters vendor kernel mode, which is a write-capable
-    // session, so the device must be opened for writes even though the dump
-    // itself only reads.
+    // backup/dump are read-only (no kernel mode), so the device is opened
+    // read-only.
     let selector = resolve_device(device)?;
-    let mut dev = platform::open(&selector, force)?;
+    let mut dev = platform::open(&selector, false)?;
     let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
     if recover && !handler.capabilities().recover {
@@ -350,9 +356,14 @@ fn cmd_backup(
             let extension = handler
                 .backup_extension()
                 .context("backend has no backup format")?;
-            // Filename infix (`backup` / `candidate`) comes from the backend,
-            // so the CLI names no chipset.
-            PathBuf::from(format!("{s}.{}.{extension}", handler.backup_kind().infix))
+            if recover && handler.dump_is_raw() {
+                // A raw dump is a single flat memory image, not a backup archive.
+                PathBuf::from(format!("{s}.dump.bin"))
+            } else {
+                // Filename infix (`backup` / `candidate`) comes from the backend,
+                // so the CLI names no chipset.
+                PathBuf::from(format!("{s}.{}.{extension}", handler.backup_kind().infix))
+            }
         }
     };
     engine::backup(dev.as_mut(), handler.as_ref(), &out, recover, force)
@@ -411,6 +422,7 @@ fn cmd_flash(args: FlashArgs) -> Result<()> {
         allow_crossflash: args.allow_crossflash,
         skip_backup: args.skip_backup || args.recover,
         recover: args.recover,
+        force: args.force,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)
 }
@@ -455,7 +467,7 @@ mod tests {
                 .command,
             Some(Command::Backup { .. })
         ));
-        // dump = salvage read; --force engages kernel mode.
+        // dump = salvage read; --force trusts nothing the drive reports.
         assert!(matches!(
             Cli::try_parse_from(["freemkv-flash", "dump", "/dev/sg0"])
                 .expect("dump")
@@ -482,7 +494,22 @@ mod tests {
         .expect("flash --recover")
         .command
         {
-            Some(Command::Flash(a)) => assert!(a.recover),
+            Some(Command::Flash(a)) => assert!(a.recover && !a.force),
+            other => panic!("expected flash, got {other:?}"),
+        }
+        // flash --force parses and sets the family-bypass flag.
+        match Cli::try_parse_from([
+            "freemkv-flash",
+            "flash",
+            "/dev/sg0",
+            "-i",
+            "fw.bin",
+            "--force",
+        ])
+        .expect("flash --force")
+        .command
+        {
+            Some(Command::Flash(a)) => assert!(a.force && !a.recover),
             other => panic!("expected flash, got {other:?}"),
         }
     }

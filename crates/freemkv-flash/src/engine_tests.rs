@@ -142,6 +142,7 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         allow_crossflash: false,
         skip_backup: false,
         recover: false,
+        force: false,
     }
 }
 
@@ -213,7 +214,7 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
         );
     let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
     let err = backup(&mut dev, &*for_family(Family::Pioneer), &out, false, false).unwrap_err();
-    assert!(format!("{err:#}").contains("incomplete hardware identity response"));
+    assert!(format!("{err:#}").contains("complete hardware identity"));
     assert!(dev.reads.iter().all(|cdb| {
         cdb.first() == Some(&0x12) || (cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1))
     }));

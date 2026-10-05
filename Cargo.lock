@@ -1332,6 +1332,7 @@ dependencies = [
  "getrandom 0.3.4",
  "libfreemkv",
  "pioneer-codec",
+ "pioneer-optical",
  "serde",
  "serde_json",
  "sha2",
@@ -2707,6 +2708,13 @@ dependencies = [
  "serde",
  "sha1",
  "sha2",
+]
+
+[[package]]
+name = "pioneer-optical"
+version = "0.7.2"
+dependencies = [
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -4913,6 +4921,10 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "freemkv-unlock"
+version = "1.7.7"
+
+[[patch.unused]]
 name = "freemkv-engine"
 version = "1.7.7"
 
@@ -4922,8 +4934,4 @@ version = "1.7.7"
 
 [[patch.unused]]
 name = "freemkv-keysources"
-version = "1.7.7"
-
-[[patch.unused]]
-name = "freemkv-unlock"
 version = "1.7.7"

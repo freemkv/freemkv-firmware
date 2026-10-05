@@ -21,6 +21,8 @@ use crate::platform::ScsiDevice;
 pub mod fw_ident;
 pub mod mtk;
 pub mod pioneer;
+/// The single `Transport` adapter between `ScsiDevice` and `pioneer_optical::flash`.
+pub mod pioneer_transport;
 
 pub use mtk::UserDump;
 
@@ -313,12 +315,15 @@ pub struct FlashRequest {
     /// Skip the mandatory pre-flash backup (dangerous: no rollback if the write
     /// fails). Default `false`: a failed backup aborts the flash.
     pub skip_backup: bool,
-    /// Recovery write: the drive is degraded, so stop trusting what it reports —
-    /// enter vendor kernel mode and force-write the given image, waiving the
-    /// pre-flash backup and the identity/model/plan safety gates. Only aborts if
-    /// the drive is unresponsive even to kernel mode. Still gated by `--execute`
-    /// and `--i-understand-risk`.
+    /// Recovery write: the drive is degraded, so re-push the given image through
+    /// the ordinary OEM-update route, waiving the pre-flash backup, the post-entry
+    /// identity gate and the downgrade/pair refusals (the family match still
+    /// applies unless `force`). No kernel mode. Still gated by `--execute` and
+    /// `--i-understand-risk`.
     pub recover: bool,
+    /// `--force`: ignore the firmware-family match (Pioneer). Loud warning; the
+    /// user takes on the brick risk. Does not waive the unrecoverable-tail refusal.
+    pub force: bool,
 }
 
 /// A per-unit region to restore from a `.tar` dump (targeted write).
@@ -465,14 +470,19 @@ pub trait FirmwareBackend: Sync {
         ))
     }
 
-    /// Capture a backup using a deeper, retrying, instability-tolerant read to
-    /// salvage a component that an ordinary [`Self::capture_backup`] could not
-    /// read off a struggling drive (the `dump` command). When `force` is set the
-    /// backend should stop trusting the drive and read via the vendor kernel-mode
-    /// session. The default is an ordinary backup, so a family without a distinct
-    /// recover (e.g. MTK) treats `dump` as `backup`.
-    fn capture_recover(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
+    /// The `dump` command: a best-effort salvage capture of the drive's firmware.
+    /// `force` stops trusting what the drive reports. Never uses vendor kernel
+    /// mode. The default is an ordinary backup, so a family without a distinct
+    /// dump (e.g. MTK) treats `dump` as `backup`.
+    fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
         self.capture_backup(dev)
+    }
+
+    /// Whether [`Self::capture_dump`] yields a single raw memory image (saved
+    /// as-is to one `.bin`, not validated as a backup archive) rather than a
+    /// backup archive.
+    fn dump_is_raw(&self) -> bool {
+        false
     }
 
     /// Validate a backup file for this device and return the update image it

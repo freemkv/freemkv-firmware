@@ -2,6 +2,9 @@
 //! backup and live flash gated off).
 
 use super::*;
+// Independent byte-level oracle for the transcript KATs (the code under test
+// builds its CDBs with the pioneer-optical builders).
+use crate::drive::mtk::cdb_write_buffer;
 use crate::drive::{for_family, Family};
 use crate::manifest::FlashMode;
 use crate::platform::MockScsiDevice;
@@ -549,11 +552,13 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
     );
 
     // The decision layer routes the real controller ids to a kernel-mode path.
-    use crate::pioneer_flash_plan::{decide_flash_plan, FlashPlan, Installed, Target};
+    use crate::pioneer_flash_plan::{decide_flash_plan, FamilyKey, FlashPlan, Installed, Target};
     let ud03_installed = Installed {
         controller_id: 0x8510, // BDR-UD03 v1
         receiver_new_gen: true,
         normal_date: None,
+        family: Some(FamilyKey::new("f1")),
+            kernel_tag: None,
     };
     let ud04_target = Target {
         controller_id: 0x8A10, // BDR-UD04
@@ -562,11 +567,13 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
             date: None,
             marker: 0x01,
         }),
+        family: Some(FamilyKey::new("f1")),
+        required_kernel_tag: None,
     };
     assert_eq!(
         decide_flash_plan(&ud03_installed, &ud04_target, false),
         FlashPlan::KernelCrossflash,
-        "UD03 (0x8510) -> UD04 (0x8A10) is a vetted kernel-mode crossflash"
+        "UD03 (0x8510) -> UD04 (0x8A10) in the same family is a crossflash"
     );
 }
 
@@ -798,75 +805,183 @@ fn installed_facts_from_header_only_normal_backup() {
 }
 
 #[test]
-fn plan_to_kernel_mode_covers_every_variant() {
+fn check_plan_executable_covers_every_variant() {
     use crate::pioneer_flash_plan::FlashPlan;
-    // Plain/forced never need the vendor unlock.
-    assert!(!plan_to_kernel_mode(FlashPlan::Plain).unwrap());
-    assert!(!plan_to_kernel_mode(FlashPlan::Forced).unwrap());
-    // Downgrade/crossflash always enter kernel mode (no env gate — the command
-    // chosen is the consent).
-    assert!(plan_to_kernel_mode(FlashPlan::KernelDowngrade).unwrap());
-    assert!(plan_to_kernel_mode(FlashPlan::KernelCrossflash).unwrap());
+    // All executable plans — including a cross-generation downgrade, which the
+    // executor now handles via the §15.3 marker patch at `write_kernel` time.
+    assert!(check_plan_executable(&FlashPlan::Plain).is_ok());
+    assert!(check_plan_executable(&FlashPlan::Forced).is_ok());
+    assert!(check_plan_executable(&FlashPlan::KernelCrossflash).is_ok());
+    assert!(check_plan_executable(&FlashPlan::KernelDowngrade).is_ok());
     // A refusal always aborts.
-    assert!(plan_to_kernel_mode(FlashPlan::Refused("x".into())).is_err());
+    assert!(check_plan_executable(&FlashPlan::Refused("x".into())).is_err());
+}
+
+/// Injected installed/target facts for the family-match routing tests.
+fn facts(
+    family: Option<&str>,
+    date: &str,
+) -> (
+    crate::pioneer_flash_plan::Installed,
+    crate::pioneer_flash_plan::Target,
+) {
+    use crate::pioneer_flash_plan::{ComponentInfo, FamilyKey, FwDate, Installed, Target};
+    let fam = family.map(FamilyKey::new);
+    (
+        Installed {
+            controller_id: 0x8A10,
+            receiver_new_gen: true,
+            normal_date: FwDate::parse("22/01/01"),
+            family: fam.clone(),
+            // Shared tag so the gate-2 Normal-only tag check lands on Plain
+            // in the happy-path routing fixture; override to None/different
+            // on tests that specifically exercise tag refusal.
+            kernel_tag: Some("ID58".to_string()),
+        },
+        Target {
+            controller_id: 0x8A10,
+            normal: Some(ComponentInfo {
+                date: FwDate::parse(date),
+            }),
+            kernel: None,
+            family: fam,
+            required_kernel_tag: Some("ID58".to_string()),
+        },
+    )
 }
 
 #[test]
-fn resolve_kernel_mode_plain_for_same_model_newer_normal_only() {
+fn plan_for_same_family_newer_normal_only_is_plain() {
+    use crate::pioneer_flash_plan::FlashPlan;
+    let (inst, tgt) = facts(Some("f1"), "22/06/01");
+    assert_eq!(plan_for(Some(&inst), &tgt, false), FlashPlan::Plain);
+}
+
+#[test]
+fn plan_for_family_mismatch_is_refused_then_forced() {
+    use crate::pioneer_flash_plan::{FamilyKey, FlashPlan};
+    let (inst, mut tgt) = facts(Some("f1"), "22/06/01");
+    tgt.family = Some(FamilyKey::new("f2"));
+    assert!(matches!(
+        plan_for(Some(&inst), &tgt, false),
+        FlashPlan::Refused(r) if r.contains("family mismatch")
+    ));
+    assert_eq!(plan_for(Some(&inst), &tgt, true), FlashPlan::Forced);
+}
+
+#[test]
+fn plan_for_unknown_installed_is_refused_unless_forced() {
+    use crate::pioneer_flash_plan::FlashPlan;
+    // No backup -> installed family unknown -> fail closed (not "plain").
+    let (_, tgt) = facts(Some("f1"), "22/06/01");
+    assert!(matches!(plan_for(None, &tgt, false), FlashPlan::Refused(_)));
+    assert_eq!(plan_for(None, &tgt, true), FlashPlan::Forced);
+}
+
+#[test]
+fn plan_for_same_model_normal_only_tag_mismatch_is_refused() {
+    use crate::pioneer_flash_plan::FlashPlan;
+    // Normal-only target whose required-Kernel tag differs from the drive's
+    // installed Kernel tag — gate 2 refuses (date direction is irrelevant).
+    let (inst, mut tgt) = facts(Some("f1"), "20/01/01");
+    tgt.required_kernel_tag = Some("ID81".to_string());
+    assert!(matches!(
+        plan_for(Some(&inst), &tgt, false),
+        FlashPlan::Refused(r) if r.contains("ID81") && r.contains("ID58")
+    ));
+}
+
+#[test]
+fn resolve_flash_plan_unprofilable_header_only_normal_is_refused_unless_forced() {
+    use crate::pioneer_flash_plan::FlashPlan;
+    // A header-only Normal does not decode to a profilable body: both families
+    // are None, so the gate refuses; --force overrides; --recover refuses too
+    // unless forced.
     let installed = header_only_normal("SAT 8A10", "22/01/01");
-    let target = header_only_normal("SAT 8A10", "22/06/01"); // newer
-    let km = resolve_kernel_mode(Some(&installed), None, Some(&target)).unwrap();
-    assert!(!km, "same-model newer normal-only is a plain flash");
-}
-
-#[test]
-fn resolve_kernel_mode_unknown_installed_defaults_plain() {
     let target = header_only_normal("SAT 8A10", "22/06/01");
-    // No backup -> installed identity unknown -> Plain (no unlock).
-    let km = resolve_kernel_mode(None, None, Some(&target)).unwrap();
-    assert!(!km);
+    let refused = resolve_flash_plan(Some(&installed), None, Some(&target), false, false).unwrap();
+    assert!(matches!(refused, FlashPlan::Refused(_)));
+    let forced = resolve_flash_plan(Some(&installed), None, Some(&target), false, true).unwrap();
+    assert_eq!(forced, FlashPlan::Forced);
+    let recover = resolve_flash_plan(Some(&installed), None, Some(&target), true, false).unwrap();
+    assert!(matches!(recover, FlashPlan::Refused(_)));
+    let recover_forced =
+        resolve_flash_plan(Some(&installed), None, Some(&target), true, true).unwrap();
+    assert_eq!(recover_forced, FlashPlan::Forced);
 }
 
 #[test]
-fn resolve_kernel_mode_refuses_same_model_older_without_pair() {
-    let installed = header_only_normal("SAT 8A10", "23/01/01");
-    let target = header_only_normal("SAT 8A10", "20/01/01"); // older, normal-only
-    let err = resolve_kernel_mode(Some(&installed), None, Some(&target)).unwrap_err();
-    assert!(format!("{err:#}").contains("pair"));
-}
-
-#[test]
-fn dump_force_fails_closed_when_kernel_mode_is_unreachable() {
+fn dump_is_raw_and_never_issues_kernel_mode_commands() {
     use crate::platform::ScsiDevice;
-    // A drive that cannot complete the vendor kernel-mode F2 challenge: the F2
-    // read is too short for any seed to match, so the unlock fails.
+    // A drive that answers nothing useful: the dump must fail on its own terms
+    // (identity) without ever sending the F3/F2 kernel-mode CDBs.
     #[derive(Default)]
-    struct NoKernel;
-    impl ScsiDevice for NoKernel {
-        fn command_in(&mut self, _cdb: &[u8], _alloc: usize) -> anyhow::Result<Vec<u8>> {
+    struct Probe {
+        cdbs: Vec<Vec<u8>>,
+    }
+    impl ScsiDevice for Probe {
+        fn command_in(&mut self, cdb: &[u8], _alloc: usize) -> anyhow::Result<Vec<u8>> {
+            self.cdbs.push(cdb.to_vec());
             Ok(vec![0u8; 2])
         }
-        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+        fn command_out(&mut self, cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            self.cdbs.push(cdb.to_vec());
             Ok(())
         }
         fn describe(&self) -> String {
-            "no-kernel".into()
+            "probe".into()
         }
     }
-    let err = Pioneer::new()
-        .capture_recover(&mut NoKernel, true)
-        .unwrap_err();
-    assert!(
-        format!("{err:#}").contains("not recoverable"),
-        "dump --force must report an unresponsive drive as not recoverable: {err:#}"
-    );
+    assert!(Pioneer::new().dump_is_raw());
+    for force in [false, true] {
+        let mut dev = Probe::default();
+        let _ = Pioneer::new().capture_dump(&mut dev, force);
+        assert!(!dev
+            .cdbs
+            .iter()
+            .any(|c| c.get(2) == Some(&0xF3) || c.get(2) == Some(&0xF2)));
+    }
 }
 
 #[test]
-fn resolve_kernel_mode_refuses_offlist_crossflash() {
-    let installed = header_only_normal("SAT 8A10", "22/01/01");
-    // Different model, not on the safe list (8A10 -> 9401 is not a listed pair).
-    let target = header_only_normal("SAT 9401", "22/01/01");
-    let err = resolve_kernel_mode(Some(&installed), None, Some(&target)).unwrap_err();
-    assert!(format!("{err:#}").contains("not on the vetted safe list"));
+fn dump_force_writes_the_full_raw_span_even_when_identity_fails() {
+    use crate::platform::ScsiDevice;
+    // Memory-backed drive: B0 reads return an address-derived pattern; INQUIRY and
+    // the F1 identity are zeros, so identity validation FAILS. `--force` must still
+    // yield the entire 0x600000 span, and no kernel-mode CDB may ever be sent.
+    #[derive(Default)]
+    struct Mem {
+        kernel_mode_cdbs: usize,
+    }
+    impl ScsiDevice for Mem {
+        fn command_in(&mut self, cdb: &[u8], alloc: usize) -> anyhow::Result<Vec<u8>> {
+            if cdb.get(2) == Some(&0xF3) || cdb.get(2) == Some(&0xF2) {
+                self.kernel_mode_cdbs += 1;
+            }
+            if cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xB0) {
+                let off = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+                return Ok((0..alloc).map(|i| ((off + i) % 251) as u8).collect());
+            }
+            Ok(vec![0u8; alloc])
+        }
+        fn command_out(&mut self, cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            if cdb.get(2) == Some(&0xF3) || cdb.get(2) == Some(&0xF2) {
+                self.kernel_mode_cdbs += 1;
+            }
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "mem".into()
+        }
+    }
+    let mut dev = Mem::default();
+    let dump = Pioneer::new().capture_dump(&mut dev, true).unwrap();
+    assert_eq!(dump.len(), 0x60_0000);
+    assert_eq!(dump[0x1234], (0x1234 % 251) as u8);
+    assert_eq!(dump[0x5F_FFFF], (0x5F_FFFF % 251) as u8);
+    assert_eq!(dev.kernel_mode_cdbs, 0);
+    // Without --force the same untrusted identity is refused.
+    assert!(Pioneer::new()
+        .capture_dump(&mut Mem::default(), false)
+        .is_err());
 }

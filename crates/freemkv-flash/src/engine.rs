@@ -20,9 +20,9 @@ use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 pub(crate) mod backup;
-use backup::save_backup;
 #[cfg(test)]
 use backup::BackupArtifact;
+use backup::{save_backup, save_validated};
 
 /// Run the `info` command: identify + classify (read-only).
 pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
@@ -415,15 +415,27 @@ pub fn backup(
             out.display()
         ))
     );
-    // `recover` (the `dump` command) uses the family's deeper salvage read;
-    // `force` tells it to enter vendor kernel mode and read a degraded drive no
-    // matter what. Families without a distinct recover capture a normal backup.
+    // `recover` (the `dump` command) uses the family's salvage capture; `force`
+    // tells it to stop trusting what the drive reports (never kernel mode).
+    // Families without a distinct dump capture a normal backup.
     let bytes = if recover {
-        drive.capture_recover(dev, force)?
+        drive.capture_dump(dev, force)?
     } else {
         drive.capture_backup(dev)?
     };
-    let saved_len = save_backup(out, &bytes, drive, &target_model)?;
+    let raw_dump = recover && drive.dump_is_raw();
+    let saved_len = if raw_dump {
+        // A raw memory image is saved verbatim as ONE file: it is not a backup
+        // archive, so only require that something was read.
+        save_validated(out, &bytes, |b| {
+            if b.is_empty() {
+                bail!("dump is empty");
+            }
+            Ok(())
+        })?
+    } else {
+        save_backup(out, &bytes, drive, &target_model)?
+    };
     println!(
         "{}",
         style::kv(
@@ -439,6 +451,15 @@ pub fn backup(
     // Provenance line, computed from the produced bytes: a byte-exact OEM
     // capture prints a green confirmation; anything reconstructed prints an
     // amber "unverified" advisory naming what is not OEM.
+    if raw_dump {
+        println!(
+            "{}",
+            style::amber(
+                "RAW DUMP: one contiguous image of device memory; NOT a flashable backup."
+            )
+        );
+        return Ok(());
+    }
     match drive.backup_notice(&bytes) {
         BackupNotice::VerifiedOem(msg) => println!("{}", style::green(&msg)),
         BackupNotice::Unverified(msg) => println!("{}", style::amber(&msg)),
@@ -658,7 +679,7 @@ pub fn plan_pioneer_offline(
         )
     );
     println!(
-        "{profile_name} OEM transcript: {} raw-envelope chunks of at most {} B via 3B 07 F0, bracketed by 3B 04 FF entry and 3B 05 FF finish (256 B control each). This is a dry run (no writes); `--execute --i-understand-risk` performs the live write after a mandatory pre-flash backup.",
+        "{profile_name} OEM transcript: {} raw-envelope chunks of at most {} B via the OEM Normal transfer, bracketed by the OEM update entry and finish (256 B control each). This is a dry run (no writes); `--execute --i-understand-risk` performs the live write after a mandatory pre-flash backup.",
         transcript.len() - 2,
         crate::drive::pioneer::FLASH_CHUNK
     );

@@ -412,6 +412,69 @@ pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     capture(dev, true)
 }
 
+/// First address of the `dump` span: the device base.
+const DUMP_BASE: usize = 0;
+/// Minimum `dump` span length: the whole flash, `0x000000..0x600000` (the range
+/// the read-map probe covers; the UD04 Normal ends at `0x5d7500`, inside it).
+/// Extended to the Normal's end if a drive's geometry reaches past it, and never
+/// past the unlocked read ceiling (`pioneer_optical::READ_CEILING`).
+const DUMP_MIN_LEN: usize = 0x60_0000;
+
+/// `dump`: ONE contiguous raw read of the entire device — `0x000000` up to
+/// `0x600000` (or the end of the Normal if the drive's geometry reaches further,
+/// capped at the read ceiling) — as a single verbatim byte image. No envelope
+/// wrapping, no tar. Uses the deep, instability-tolerant read (unreadable spans
+/// are zero-filled and reported; it errors only if nothing at all was readable).
+/// Never uses vendor kernel mode and issues no flash commands: every read goes
+/// through `pioneer_optical::flash::read_memory`, which handles the read unlock.
+///
+/// Normally the drive identity and the Kernel receiver layout must validate.
+/// `force` trusts nothing the drive reports: identity, read-unlock and layout
+/// failures become warnings and the FULL span is still read and written.
+pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>> {
+    let amber = |msg: &str| eprintln!("  {}", crate::style::amber(msg));
+    if let Err(error) = read_identity(dev) {
+        if !force {
+            return Err(error);
+        }
+        amber(&format!(
+            "identity not trusted ({error:#}); reading the full device span anyway (--force)"
+        ));
+    }
+    if let Err(error) = prepare_firmware_read(dev) {
+        if !force {
+            return Err(error);
+        }
+        amber(&format!(
+            "read unlock not confirmed ({error:#}); attempting the read anyway (--force)"
+        ));
+    }
+    let mut image = read_region(dev, DUMP_BASE, DUMP_MIN_LEN, true)
+        .context("could not read the device firmware span")?;
+
+    // Kernel receiver layout (inside the dump) gives the Normal geometry.
+    let kernel = &image[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE];
+    if let Err(error) = pioneer_codec::builder::kernel_layout_from_image(kernel)
+        .context("captured Kernel receiver layout is unsupported")
+    {
+        if !force {
+            return Err(error);
+        }
+        amber(&format!("{error:#} (continuing: --force)"));
+    }
+    // If the Normal extends past the minimum span, read the remainder so the dump
+    // still holds the whole image; stay within the read ceiling.
+    let normal_end = pioneer_codec::builder::scaled_normal_geometry_from_kernel(kernel)
+        .map(|g| NORMAL_IMAGE_BASE + g.image_len)
+        .filter(|end| *end <= pioneer_optical::READ_CEILING as usize);
+    if let Some(end) = normal_end.filter(|end| *end > image.len()) {
+        let extra = read_region(dev, image.len(), end - image.len(), true)
+            .context("could not read the Normal past the standard dump span")?;
+        image.extend_from_slice(&extra);
+    }
+    Ok(image)
+}
+
 /// Capture the Kernel and Normal as INDEPENDENT components and archive whichever
 /// succeeded. The Kernel is read first (it establishes the Normal's geometry);
 /// the Normal is then attempted on its own. A region the read cannot get never
@@ -480,21 +543,19 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
 /// Read and validate the drive identity, returning the raw INQUIRY, the 8-byte
 /// H8/SAT hardware tag, and the Kernel image length.
 fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> {
-    let inquiry = dev.command_in(&[0x12, 0, 0, 0, 36, 0], 36)?;
+    let identity = crate::drive::pioneer_transport::identify(dev)
+        .context("Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created")?;
+    let inquiry = identity.inquiry_bytes().to_vec();
     // Vendor+product (8..32) AND the revision (32..36) must be printable ASCII:
     // the revision flows verbatim into the generated envelope header, so a
     // drive returning control bytes there must be rejected, not propagated.
-    if inquiry.len() != 36
-        || !inquiry[8..36].is_ascii()
+    if !inquiry[8..36].is_ascii()
         || inquiry[8..36].iter().any(|&b| b < 0x20 || b == 0x7f)
         || inquiry[8..32].iter().all(|&b| b == b' ')
     {
         bail!("drive does not have a usable H8/SAT INQUIRY identity");
     }
-    let f1 = dev.command_in(&[0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0], 48)?;
-    if f1.len() != 48 {
-        bail!("Pioneer backup stopped: incomplete hardware identity response ({} bytes, expected 48); no firmware image read or backup created", f1.len());
-    }
+    let f1 = identity.vendor_identity_bytes();
     if !f1[16..24].starts_with(b"SAT ") {
         let hardware = String::from_utf8_lossy(&f1[16..24]);
         bail!("Pioneer backup is not implemented for hardware {hardware:?}: H8/SAT hardware identity required; no firmware image read or backup created");
@@ -534,30 +595,23 @@ fn zero_be32_sum(image: &[u8]) -> bool {
         }) == 0
 }
 
-/// Largest single vendor read: the length rides in one CDB byte, so 0xa4 is a
-/// safe sub-255 transfer observed in OEM reads.
-const READ_CHUNK: usize = 0xa4;
+/// Largest single vendor read. The `3C/02/B0` CDB carries a 24-bit length
+/// field, so the ceiling is `0xFFFFFF`, but the drive's receive buffer caps
+/// transfers in practice. `0x8000` (32 KiB) is well below any observed buffer
+/// limit and is ~200x the historical `0xA4` OEM read, which turns a full ~6
+/// MiB dump from ~10 min into seconds. If a chunk fails the deep-read salvage
+/// path subdivides down to `DEEP_MIN_CHUNK = 4` automatically.
+const READ_CHUNK: usize = 0x8000;
 /// Deep-read retry budget per failing span before it is subdivided / given up.
 const DEEP_RETRIES: usize = 6;
 /// Smallest span a deep read drops to while isolating a bad region.
 const DEEP_MIN_CHUNK: usize = 4;
 
-/// One vendor firmware read at `off` of exactly `n` bytes.
+/// One vendor firmware read at `off` of exactly `n` bytes, through
+/// `pioneer_optical::flash::read_memory` (which issues the read-unlock knock
+/// itself, so no caller ever sequences it).
 fn read_chunk(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Result<Vec<u8>> {
-    let cdb = [
-        0x3c,
-        2,
-        0xb0,
-        (off >> 16) as u8,
-        (off >> 8) as u8,
-        off as u8,
-        0,
-        0,
-        n as u8,
-        0,
-    ];
-    let data = dev
-        .command_in(&cdb, n)
+    let data = crate::drive::pioneer_transport::read_memory_exact(dev, off as u32, n as u32)
         .with_context(|| format!("reading firmware at {off:#x}"))?;
     if data.len() != n {
         bail!("short firmware read at {off:#x}: {}/{n}", data.len());
@@ -704,13 +758,11 @@ fn salvage_span(
     any
 }
 
-/// Read `off..off+n` up to `DEEP_RETRIES` times, re-knocking between attempts in
-/// case the drive dropped out of read mode. `None` if every attempt failed.
+/// Read `off..off+n` up to `DEEP_RETRIES` times. Every attempt re-knocks (the
+/// crate's `read_memory` unlocks before each read), covering a drive that
+/// dropped out of read mode. `None` if every attempt failed.
 fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Option<Vec<u8>> {
-    for attempt in 0..DEEP_RETRIES {
-        if attempt > 0 {
-            let _ = prepare_firmware_read(dev);
-        }
+    for _ in 0..DEEP_RETRIES {
         if let Ok(data) = read_chunk(dev, off, n) {
             return Some(data);
         }
@@ -735,17 +787,14 @@ fn push_gap(gaps: &mut Vec<(usize, usize)>, off: usize, len: usize) {
 const KERNEL_IMAGE_BASE: usize = 0x400000;
 const NORMAL_IMAGE_BASE: usize = 0x410000;
 
-/// Older receivers already allow B0 reads and need no service command. Only
-/// the observed invalid-field denial permits one attempt at the shared knock;
-/// transport failures, short data and other sense codes must stop capture.
+/// Confirm firmware reads work before a capture: one 1-byte read at the Kernel
+/// base. The read-unlock knock is issued inside `pioneer_optical::flash::read_memory`,
+/// so this is just a fail-fast probe; any failure (transport, short data, sense)
+/// stops the capture.
 fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
-    match read_chunk(dev, KERNEL_IMAGE_BASE, 1) {
-        Ok(_) => Ok(()),
-        Err(error) if crate::platform::sense_triplet(&error) == Some((5, 0x24, 0)) => dev
-            .command_out(&[0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0], &[])
-            .context("entering Pioneer firmware read service"),
-        Err(error) => Err(error).context("probing Pioneer firmware read access"),
-    }
+    read_chunk(dev, KERNEL_IMAGE_BASE, 1)
+        .map(|_| ())
+        .context("probing Pioneer firmware read access")
 }
 
 #[cfg(test)]
@@ -753,21 +802,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn read_access_probes_before_knock_and_never_retries_unrelated_failures() {
+    fn read_access_probe_knocks_then_reads_and_stops_on_any_failure() {
         struct Access {
             response: Option<Result<Vec<u8>>>,
-            knocks: usize,
+            order: Vec<&'static str>,
         }
         impl ScsiDevice for Access {
             fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
                 assert_eq!(cdb, [0x3c, 2, 0xb0, 0x40, 0, 0, 0, 0, 1, 0]);
                 assert_eq!(len, 1);
+                self.order.push("read");
                 self.response.take().expect("only one access probe")
             }
             fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
                 assert_eq!(cdb, [0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0]);
                 assert!(data.is_empty());
-                self.knocks += 1;
+                self.order.push("knock");
                 Ok(())
             }
             fn describe(&self) -> String {
@@ -777,20 +827,21 @@ mod tests {
         let sense = |key, asc, ascq| {
             Err(crate::platform::ScsiSenseError::new(key, asc, ascq, "test sense").into())
         };
-        for (response, ok, knocks) in [
-            (Ok(vec![0]), true, 0), // ungated older receiver
-            (sense(5, 0x24, 0), true, 1),
-            (sense(5, 0x20, 0), false, 0), // unsupported opcode, not the read gate
-            (sense(4, 0x44, 0), false, 0),
-            (Err(anyhow::anyhow!("transport disconnected")), false, 0),
-            (Ok(vec![]), false, 0), // a short response is never access denial
+        for (response, ok) in [
+            (Ok(vec![0]), true),
+            (sense(5, 0x24, 0), false), // still locked after the knock
+            (sense(5, 0x20, 0), false),
+            (sense(4, 0x44, 0), false),
+            (Err(anyhow::anyhow!("transport disconnected")), false),
+            (Ok(vec![]), false), // a short response is never success
         ] {
             let mut dev = Access {
                 response: Some(response),
-                knocks: 0,
+                order: Vec::new(),
             };
             assert_eq!(prepare_firmware_read(&mut dev).is_ok(), ok);
-            assert_eq!(dev.knocks, knocks);
+            // The knock is issued by the crate, exactly once, before the read.
+            assert_eq!(dev.order, ["knock", "read"]);
         }
     }
 
@@ -965,21 +1016,20 @@ mod tests {
             if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
                 bail!("Pioneer does not implement the MTK identity buffer");
             }
+            // Firmware reads are gated until the read-unlock knock; the crate
+            // issues the knock itself before every read.
             if self.knocks == 0 {
-                assert_eq!(cdb, [0x3c, 2, 0xb0, 0x40, 0, 0, 0, 0, 1, 0]);
-                assert_eq!(len, 1);
                 return Err(
                     crate::platform::ScsiSenseError::new(5, 0x24, 0, "read access locked").into(),
                 );
             }
-            assert_eq!(
-                self.knocks, 1,
-                "unexpected pre-knock CDB: {cdb:02x?}, len={len}"
-            );
             assert_eq!(cdb.len(), 10);
             assert_eq!(&cdb[..3], &[0x3c, 2, 0xb0]);
-            assert_eq!(&cdb[6..], &[0, 0, len as u8, 0]);
-            assert!((1..=0xa4).contains(&len));
+            // 24-bit length field: top byte is 0 for anything under 16 MiB; low two bytes carry the length.
+            let cdb_len = ((cdb[6] as usize) << 16) | ((cdb[7] as usize) << 8) | cdb[8] as usize;
+            assert_eq!(cdb_len, len);
+            assert_eq!(cdb[9], 0);
+            assert!((1..=READ_CHUNK).contains(&len));
             let offset = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
             assert!(offset >= 0x400000 && offset + len <= 0x5d7500);
             let mut data = self.dump[offset..offset + len].to_vec();
@@ -1016,7 +1066,7 @@ mod tests {
         };
         let error = read_h8_image_pair(&mut replay).unwrap_err();
         assert!(error.to_string().contains("receiver layout is unsupported"));
-        assert_eq!(replay.knocks, 1);
+        assert!(replay.knocks >= 1, "the crate knocks before reading");
         assert!(replay.reads > 0);
     }
 
@@ -1229,7 +1279,6 @@ mod tests {
             inner: CaptureReplay,
             inquiry: Vec<u8>,
             hardware: Vec<u8>,
-            ungated: bool,
         }
         impl ScsiDevice for Replay {
             fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
@@ -1240,13 +1289,6 @@ mod tests {
                     let mut out = vec![0; 48];
                     out[16..24].copy_from_slice(&self.hardware);
                     return Ok(out);
-                }
-                if self.ungated && cdb.get(..3) == Some(&[0x3c, 2, 0xb0]) {
-                    assert_eq!(self.inner.knocks, 0);
-                    assert!((1..=0xa4).contains(&len));
-                    assert_eq!(&cdb[6..], &[0, 0, len as u8, 0]);
-                    let at = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-                    return Ok(self.inner.dump[at..at + len].to_vec());
                 }
                 self.inner.command_in(cdb, len)
             }
@@ -1266,7 +1308,6 @@ mod tests {
             },
             inquiry,
             hardware: kernel.image[0x1000..0x1008].to_vec(),
-            ungated: false,
         };
         // The modern length field is executable code here, not the image size.
         assert_ne!(
@@ -1278,12 +1319,6 @@ mod tests {
         assert_eq!(captured_kernel, kernel.image);
         assert_eq!(captured_normal, normal.image);
         assert_eq!(revision, h.revision);
-        replay.ungated = true;
-        replay.inner.knocks = 0;
-        let (captured_kernel, captured_normal, _, _) = read_h8_image_pair(&mut replay).unwrap();
-        assert_eq!(captured_kernel, kernel.image);
-        assert_eq!(captured_normal, normal.image);
-        assert_eq!(replay.inner.knocks, 0);
     }
 
     #[test]
@@ -1625,7 +1660,7 @@ mod tests {
         if let Ok(path) = std::env::var("PIONEER_SIGNED_BACKUP_KAT_OUTPUT") {
             std::fs::write(path, &candidate).unwrap();
         }
-        assert_eq!(replay.knocks, 1);
+        assert!(replay.knocks >= 1, "the crate knocks before reading");
         validate_envelope_package(&candidate, "BD-RW BDR-UD04").unwrap();
         let bundle = Bundle::from_tar_bytes(&candidate).unwrap();
         let kernel = bundle
