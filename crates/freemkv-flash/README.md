@@ -18,6 +18,25 @@ The desktop app uses a fixed-size window, labeled results, and transfer progress
 bars. Details open in a separate scrolling dialog. Flash has one override:
 **Force flash**. Check file inspects an input without accessing the drive.
 
+## Diagnostic logs
+
+Version 0.10.5 saves a diagnostic log automatically for each CLI or desktop
+operation. To report a failure, repeat the operation once and attach that log.
+The CLI prints its location; in the desktop app, open **Details** and choose
+**Save diagnostic log…** or **Copy diagnostic log**.
+
+Logs include the app and OS versions, drive identity, command bytes, transfer
+counts, status/sense, timing, retry decisions, native transport warnings, and
+the final error chain. Firmware transfer payloads are excluded. Paths and drive
+identifiers can appear in the log.
+
+Locations are `%LOCALAPPDATA%\freemkv\logs` on Windows,
+`~/Library/Logs/freemkv` on macOS, and `$XDG_STATE_HOME/freemkv/logs` (or
+`~/.local/state/freemkv/logs`) on Linux. If unavailable, the app tries
+`freemkv-logs` under the system temporary directory. Each log is capped at 8 MiB;
+rollover preserves its opening context and newest events. A logging failure is
+reported but does not interrupt firmware programming.
+
 ## Commands
 
 | Command | Writes? | What it does |

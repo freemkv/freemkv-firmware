@@ -205,6 +205,7 @@ pub fn describe_sense(key: u8, asc: u8, ascq: u8) -> String {
 }
 
 mod adapter;
+pub(crate) use adapter::trace_commands;
 
 mod mock;
 pub use mock::MockScsiDevice;
@@ -225,7 +226,15 @@ pub fn open(path: &str, writable: bool) -> Result<Box<dyn ScsiDevice>> {
 /// media-independent: an empty macOS drive has no `/dev/diskN` node, so its
 /// selector comes back as an opaque `ioreg:<id>` that `open` still accepts.
 pub fn list_drives() -> Vec<libfreemkv::DriveInfo> {
-    libfreemkv::list_drives()
+    let drives = libfreemkv::list_drives();
+    crate::diagnostics::record(format!("discovery: {} drive(s)", drives.len()));
+    for drive in &drives {
+        crate::diagnostics::record(format!(
+            "discovery: path={:?} vendor={:?} model={:?} firmware={:?}",
+            drive.path, drive.vendor, drive.model, drive.firmware
+        ));
+    }
+    drives
 }
 
 #[cfg(test)]

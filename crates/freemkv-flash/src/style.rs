@@ -128,6 +128,8 @@ pub fn trace_enabled() -> bool {
 pub fn trace(msg: &str) {
     if trace_enabled() {
         eprintln!("{}", dim(&format!("[trace] {msg}")));
+    } else {
+        crate::diagnostics::record(format!("[trace] {msg}"));
     }
 }
 

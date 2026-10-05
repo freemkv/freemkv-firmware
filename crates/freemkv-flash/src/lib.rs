@@ -18,6 +18,8 @@
 #[macro_use]
 pub mod output;
 
+pub mod diagnostics;
+
 pub mod cmac;
 pub mod drive;
 pub mod engine;

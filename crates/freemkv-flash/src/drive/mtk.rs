@@ -1062,15 +1062,17 @@ impl DriveFamily for Mtk {
         // caller MUST NOT continue as if it were.
         let deadline = Instant::now() + Duration::from_secs(45);
         loop {
-            if dev.command_in(&cdb_test_unit_ready(), 0).is_ok() {
-                break;
-            }
+            let error = match dev.command_in(&cdb_test_unit_ready(), 0) {
+                Ok(_) => break,
+                Err(error) => error,
+            };
+            crate::diagnostics::record(format!("MediaTek post-flash readiness: {error:#}"));
             if Instant::now() >= deadline {
                 bail!(
                     "drive did not settle after the flash burn within 45 s — TEST UNIT READY \
                      never came back Ok. The flash may have FAILED, or the drive is hung; do \
                      NOT trust the exit code as success. Physically power-cycle the drive and \
-                     re-verify its firmware identity before shipping."
+                    re-verify its firmware identity before shipping. Last error: {error:#}"
                 );
             }
             std::thread::sleep(Duration::from_millis(500));
@@ -1156,11 +1158,11 @@ impl DriveFamily for Mtk {
     fn flash_open(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
         self.preflight(dev)?;
         // PREPARE is the one data-out that must land (strict).
-        dev.command_out(&cdb_wb_prepare(), &[])
+        dev.command_out_strict(&cdb_wb_prepare(), &[])
     }
 
     fn flash_chunk(&self, dev: &mut dyn ScsiDevice, offset: usize, bytes: &[u8]) -> Result<()> {
-        dev.command_out(&cdb_wb_data(offset as u32, bytes.len() as u16), bytes)
+        dev.command_out_strict(&cdb_wb_data(offset as u32, bytes.len() as u16), bytes)
     }
 
     /// `_mode` is currently informational only: on MTK the commit handshake
@@ -1171,11 +1173,19 @@ impl DriveFamily for Mtk {
         // The burn completed on the final chunk; COMMIT + READY + REQUEST SENSE are
         // trailers the reinit-ing drive may answer with a transient CHECK CONDITION,
         // so all are best-effort. Only a real fault in the parsed sense below fails.
-        let _ = dev.command_out(&cdb_wb_commit(), &[]);
-        let _ = dev.command_in(&cdb_test_unit_ready(), 0);
-        let sense = dev
-            .command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC)
-            .unwrap_or_default();
+        if let Err(error) = dev.command_out_strict(&cdb_wb_commit(), &[]) {
+            eprintln!("MediaTek commit trailer returned an error: {error:#}; checking completion and read-back");
+        }
+        if let Err(error) = dev.command_in(&cdb_test_unit_ready(), 0) {
+            crate::diagnostics::record(format!("MediaTek post-commit readiness: {error:#}"));
+        }
+        let sense = match dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC) {
+            Ok(data) => data,
+            Err(error) => {
+                eprintln!("warning: post-flash REQUEST SENSE failed: {error:#}");
+                Vec::new()
+            }
+        };
         match parse_sense(&sense) {
             // Hard-fail ONLY on an unambiguous programming failure (see
             // `sense_key_is_fatal`). Every other key is non-fatal here — the
@@ -1225,7 +1235,7 @@ impl DriveFamily for Mtk {
 
     fn write_region(&self, dev: &mut dyn ScsiDevice, offset: u32, bytes: &[u8]) -> Result<()> {
         let cdb = cdb_write_buffer(MODE_6, FLASH_BUFFER_ID, offset, bytes.len() as u32);
-        dev.command_out(&cdb, bytes)
+        dev.command_out_strict(&cdb, bytes)
     }
 }
 

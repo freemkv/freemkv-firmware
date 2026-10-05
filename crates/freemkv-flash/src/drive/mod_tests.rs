@@ -295,3 +295,23 @@ fn failed_inquiry_is_an_error_not_an_empty_identity() {
     // The infallible wrapper still returns an empty identity.
     assert!(read_identity(&mut Broken).product.is_empty());
 }
+
+#[test]
+fn short_inquiry_is_an_error_not_an_unknown_model() {
+    struct Short;
+    impl ScsiDevice for Short {
+        fn command_in(&mut self, _cdb: &[u8], _alloc: usize) -> anyhow::Result<Vec<u8>> {
+            Ok(vec![0; 35])
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            panic!("identity must not write")
+        }
+        fn describe(&self) -> String {
+            "short inquiry".into()
+        }
+    }
+    assert!(try_read_identity(&mut Short)
+        .unwrap_err()
+        .to_string()
+        .contains("short INQUIRY identity: 35"));
+}

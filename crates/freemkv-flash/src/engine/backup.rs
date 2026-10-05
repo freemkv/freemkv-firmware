@@ -235,16 +235,39 @@ pub(super) fn save_validated_with_replace(
         .open(&temp)
         .with_context(|| format!("creating temporary backup {}", temp.display()))?;
     let result = (|| -> Result<usize> {
+        crate::diagnostics::record(format!(
+            "artifact: writing {} bytes to temporary file {:?}",
+            bytes.len(),
+            temp
+        ));
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
         let saved = std::fs::read(&temp)?;
+        if saved != bytes {
+            bail!(
+                "saved artifact {} differs from the captured bytes",
+                temp.display()
+            );
+        }
         validate(&saved).context("saved artifact failed read-back validation")?;
         if replace {
             std::fs::rename(&temp, path).context("replacing the confirmed destination")?;
         } else {
             publish_no_clobber(&temp, path, |a, b| std::fs::hard_link(a, b))?;
         }
+        let published = std::fs::read(path).context("reading back the published artifact")?;
+        if published != bytes {
+            bail!(
+                "published artifact {} differs from the captured bytes; do not use this file",
+                path.display()
+            );
+        }
+        crate::diagnostics::record(format!(
+            "artifact: published and read-back verified {} bytes at {:?}",
+            published.len(),
+            path
+        ));
         #[cfg(unix)]
         {
             let parent = path

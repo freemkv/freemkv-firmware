@@ -584,6 +584,12 @@ fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> 
         bail!("drive does not have a usable H8/SAT INQUIRY identity");
     }
     let f1 = identity.vendor_bytes();
+    eprintln!(
+        "Pioneer backup identity: drive={:?} revision={:?} hardware={:?}",
+        String::from_utf8_lossy(&inquiry[8..32]),
+        String::from_utf8_lossy(&inquiry[32..36]),
+        String::from_utf8_lossy(&f1[16..24])
+    );
     if !f1[16..24].starts_with(b"SAT ") {
         let hardware = String::from_utf8_lossy(&f1[16..24]);
         bail!("Pioneer backup is not implemented for hardware {hardware:?}: H8/SAT hardware identity required; no firmware image read or backup created");
@@ -717,10 +723,6 @@ fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Resul
 /// Zero-filled unreadable spans, `(offset, len)`.
 type Gaps = Vec<(usize, usize)>;
 
-/// Consecutive wholly-unreadable `READ_CHUNK`s (after something had read) that
-/// trigger a liveness probe; a failed probe aborts the salvage.
-const DEAD_STREAK: usize = 4;
-
 /// [`read_region_deep`], also returning the zero-filled gaps `(offset, len)`.
 fn read_region_deep_gaps(
     dev: &mut dyn ScsiDevice,
@@ -729,10 +731,9 @@ fn read_region_deep_gaps(
 ) -> Result<(Vec<u8>, Gaps)> {
     let mut image = vec![0u8; len];
     let mut pos = 0usize;
-    let mut dead_streak = 0usize;
     // Offset of the last chunk that read cleanly: the liveness probe re-reads it,
     // so it never depends on any one region (e.g. the Kernel base) being readable.
-    let mut last_good: Option<usize> = None;
+    let mut last_good: Option<(usize, usize)> = None;
     let mut gaps: Vec<(usize, usize)> = Vec::new();
     let mut any = false;
     let mut progress = crate::style::Progress::new(region_label("recovering", start), len);
@@ -743,27 +744,17 @@ fn read_region_deep_gaps(
             Ok(data) => {
                 image[pos..pos + n].copy_from_slice(&data);
                 any = true;
-                last_good = Some(off);
-                dead_streak = 0;
+                last_good = Some((off, n.min(DEEP_MIN_CHUNK)));
                 pos += n;
             }
-            Err(_) => {
-                let got = salvage_span(dev, start, &mut image, pos, n, &mut gaps);
-                any |= got;
+            Err(error) => {
+                crate::diagnostics::record(format!(
+                    "salvage bulk failure: offset={off:#x} length={n} error={error:#}"
+                ));
+                let good = salvage_span(dev, start, &mut image, (pos, n), &mut gaps, last_good)?;
+                any |= good.is_some();
+                last_good = good.or(last_good);
                 pos += n;
-                dead_streak = if got { 0 } else { dead_streak + 1 };
-                // A drive that dropped out would otherwise cost millions of
-                // retries: after a run of dead chunks, check the drive still
-                // re-reads the last offset that read cleanly and give up if it does not.
-                if dead_streak >= DEAD_STREAK
-                    && last_good.is_some_and(|good| read_chunk(dev, good, 1).is_err())
-                {
-                    bail!(
-                        "the drive stopped responding at {:#x} after {dead_streak} consecutive \
-                         unreadable chunks; aborting the salvage read",
-                        start + pos
-                    );
-                }
             }
         }
         progress.set(pos);
@@ -806,42 +797,49 @@ fn gap_summary(gaps: &[(usize, usize)]) -> Option<String> {
 /// Salvage one `READ_CHUNK` span that failed a bulk read. First retry the whole
 /// span (for a transient error); if it is hard-failing, re-read it in
 /// `DEEP_MIN_CHUNK` units so only the units that truly never read are
-/// zero-filled and recorded as gaps. Returns whether any byte was recovered.
+/// zero-filled and recorded as gaps. Check a known-readable location before
+/// expensive subdivision, so a disconnect does not trigger thousands of reads.
 fn salvage_span(
     dev: &mut dyn ScsiDevice,
     start: usize,
     image: &mut [u8],
-    pos: usize,
-    n: usize,
+    span: (usize, usize),
     gaps: &mut Vec<(usize, usize)>,
-) -> bool {
+    last_good: Option<(usize, usize)>,
+) -> Result<Option<(usize, usize)>> {
+    let (pos, n) = span;
     if let Some(data) = retry_read(dev, start + pos, n) {
         image[pos..pos + n].copy_from_slice(&data);
-        return true;
+        return Ok(Some((start + pos, n.min(DEEP_MIN_CHUNK))));
     }
-    let mut any = false;
+    if let Some((off, len)) = last_good {
+        crate::platform::trace_commands(|| read_chunk(dev, off, len))
+            .with_context(|| format!("the drive stopped responding at {:#x}; known-readable location {off:#x} also failed; aborting salvage", start + pos))?;
+    }
+    let mut good = None;
     let mut p = pos;
     while p < pos + n {
         let m = DEEP_MIN_CHUNK.min(pos + n - p);
         match retry_read(dev, start + p, m) {
             Some(data) => {
                 image[p..p + m].copy_from_slice(&data);
-                any = true;
+                good = Some((start + p, m));
             }
             None => push_gap(gaps, start + p, m),
         }
         p += m;
     }
-    any
+    Ok(good)
 }
 
 /// Read `off..off+n` up to `DEEP_RETRIES` times. Every attempt re-knocks (the
 /// crate's `read_memory` unlocks before each read), covering a drive that
 /// dropped out of read mode. `None` if every attempt failed.
 fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Option<Vec<u8>> {
-    for _ in 0..DEEP_RETRIES {
-        if let Ok(data) = read_chunk(dev, off, n) {
-            return Some(data);
+    for attempt in 1..=DEEP_RETRIES {
+        match read_chunk(dev, off, n) {
+            Ok(data) => return Some(data),
+            Err(error) => crate::diagnostics::record(format!("salvage read failed: address={off:#x} length={n} attempt={attempt}/{DEEP_RETRIES} error={error:#}")),
         }
     }
     None
@@ -864,14 +862,36 @@ fn push_gap(gaps: &mut Vec<(usize, usize)>, off: usize, len: usize) {
 const KERNEL_IMAGE_BASE: usize = 0x400000;
 const NORMAL_IMAGE_BASE: usize = 0x410000;
 
-/// Confirm firmware reads work before a capture: one 1-byte read at the Kernel
-/// base. The read-unlock knock is issued inside `pioneer_optical::drive::read_memory`,
-/// so this is just a fail-fast probe; any failure (transport, short data, sense)
-/// stops the capture.
+/// Probe a complete word at the Kernel base, avoiding a sub-word transfer.
+/// Retry short responses at most twice, re-unlocking each time. Explicit errors
+/// still stop immediately; successful access requires a complete response.
 fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
-    read_chunk(dev, KERNEL_IMAGE_BASE, 1)
-        .map(|_| ())
-        .context("probing Pioneer firmware read access")
+    crate::platform::trace_commands(|| {
+        eprintln!(
+            "Pioneer firmware read probe: freemkv-flash={} os={} arch={} device={}",
+            env!("CARGO_PKG_VERSION"), std::env::consts::OS,
+            std::env::consts::ARCH, dev.describe()
+        );
+        for attempt in 1..=3 {
+            let data = crate::drive::pioneer_transport::read_memory_exact(
+                dev, KERNEL_IMAGE_BASE as u32, 4,
+            )?;
+            eprintln!(
+                "Pioneer firmware read probe: attempt={attempt}/3 address={KERNEL_IMAGE_BASE:#x} requested=4 returned={}",
+                data.len()
+            );
+            if data.len() == 4 {
+                return Ok(());
+            }
+            if attempt == 3 {
+                bail!("short firmware read at {KERNEL_IMAGE_BASE:#x}: {}/4 after {attempt} attempts", data.len());
+            }
+            eprintln!("Pioneer firmware read probe: retrying short response after 100 ms");
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        unreachable!()
+    })
+    .context("probing Pioneer firmware read access")
 }
 
 #[cfg(test)]
@@ -929,17 +949,17 @@ mod tests {
     }
 
     #[test]
-    fn read_access_probe_knocks_then_reads_and_stops_on_any_failure() {
+    fn read_access_probe_retries_only_short_reads_and_reknocks() {
         struct Access {
-            response: Option<Result<Vec<u8>>>,
+            responses: std::collections::VecDeque<Result<Vec<u8>>>,
             order: Vec<&'static str>,
         }
         impl ScsiDevice for Access {
             fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-                assert_eq!(cdb, [0x3c, 2, 0xb0, 0x40, 0, 0, 0, 0, 1, 0]);
-                assert_eq!(len, 1);
+                assert_eq!(cdb, [0x3c, 2, 0xb0, 0x40, 0, 0, 0, 0, 4, 0]);
+                assert_eq!(len, 4);
                 self.order.push("read");
-                self.response.take().expect("only one access probe")
+                self.responses.pop_front().expect("unexpected probe retry")
             }
             fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
                 assert_eq!(cdb, [0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0]);
@@ -954,21 +974,24 @@ mod tests {
         let sense = |key, asc, ascq| {
             Err(crate::platform::ScsiSenseError::new(key, asc, ascq, "test sense").into())
         };
-        for (response, ok) in [
-            (Ok(vec![0]), true),
-            (sense(5, 0x24, 0), false), // still locked after the knock
-            (sense(5, 0x20, 0), false),
-            (sense(4, 0x44, 0), false),
-            (Err(anyhow::anyhow!("transport disconnected")), false),
-            (Ok(vec![]), false), // a short response is never success
+        for (responses, ok) in [
+            (vec![Ok(vec![0; 4])], true),
+            (vec![sense(5, 0x24, 0)], false), // still locked after the knock
+            (vec![sense(5, 0x20, 0)], false),
+            (vec![sense(4, 0x44, 0)], false),
+            (vec![Err(anyhow::anyhow!("transport disconnected"))], false),
+            (vec![Ok(vec![]), Ok(vec![0; 2]), Ok(vec![0; 4])], true),
+            (vec![Ok(vec![]), Ok(vec![]), Ok(vec![])], false),
+            (vec![Ok(vec![0; 3]), sense(5, 0x24, 0)], false),
         ] {
+            let attempts = responses.len();
             let mut dev = Access {
-                response: Some(response),
+                responses: responses.into(),
                 order: Vec::new(),
             };
             assert_eq!(prepare_firmware_read(&mut dev).is_ok(), ok);
-            // The knock is issued by the crate, exactly once, before the read.
-            assert_eq!(dev.order, ["knock", "read"]);
+            assert!(dev.responses.is_empty());
+            assert_eq!(dev.order, ["knock", "read"].repeat(attempts));
         }
     }
 
@@ -1047,7 +1070,11 @@ mod tests {
         let mut dev = Dying { reads: 0 };
         let err = read_region_deep(&mut dev, 0, READ_CHUNK * 24).unwrap_err();
         assert!(format!("{err:#}").contains("stopped responding"), "{err:#}");
-        assert!(dev.reads < 400_000, "too many retries: {}", dev.reads);
+        assert!(
+            dev.reads <= DEEP_RETRIES + 3,
+            "too many retries: {}",
+            dev.reads
+        );
     }
 
     #[test]

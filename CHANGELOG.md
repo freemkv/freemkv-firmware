@@ -6,6 +6,30 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5]
+
+### Added
+
+- Automatic diagnostic logs for CLI and desktop flasher operations, including
+  platform/version, drive identity, SCSI commands, status/sense, transfer counts,
+  timings, retries, native transport warnings and complete error chains.
+  The desktop details dialog can copy or save the full log. No debug flag is needed.
+- Logs are limited to 8 MiB per operation, retaining the initial context and recent
+  events on rollover. Firmware transfer payloads are not logged.
+
+### Fixed
+
+- Pioneer firmware access uses a four-byte probe and retries short responses up
+  to twice, unlocking before each attempt. Explicit errors still stop the probe.
+- Preserve no-medium sense errors on data transfers instead of reporting them as
+  successful empty reads. Keep no-data readiness checks tolerant of an empty drive.
+- Detect a disconnected Pioneer drive before subdividing failed recovery reads;
+  record recovery errors and use a complete word for the liveness check.
+- MediaTek firmware writes use strict status checks without automatic retries.
+  Preserve completion errors and report failing write offsets and read-back gaps.
+- Reject truncated drive identities and impossible transfer counts. Verify saved
+  artifacts against captured bytes, including after publication to the final path.
+
 ## [0.10.4]
 
 ### Fixed

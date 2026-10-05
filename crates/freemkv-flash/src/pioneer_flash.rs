@@ -202,7 +202,14 @@ pub(crate) fn execute_flash(
         session
             .write(role, step.offset, &step.data)
             .map_err(flash_err)
-            .with_context(|| format!("OEM {:?} write failed{PARTIAL_HINT}", step.stage))?;
+            .with_context(|| {
+                format!(
+                    "OEM {:?} write failed at offset {:#x}, length {}{PARTIAL_HINT}",
+                    step.stage,
+                    step.offset,
+                    step.data.len()
+                )
+            })?;
         if step.stage == TransferStage::Normal {
             normal_written += step.data.len();
             normal_progress.set(normal_written);
@@ -272,7 +279,8 @@ fn entry_identity_gate(shared: &SharedDevice<'_>) -> Result<()> {
     if inquiry.get(0x20..0x23) != Some(b"000".as_slice()) {
         bail!(
             "drive did not report the expected post-entry update state \
-             (INQUIRY[0x20..0x23] != \"000\"); aborting before any transfer"
+             (INQUIRY[0x20..0x23] != \"000\", returned {} bytes, revision bytes {:02x?}); aborting before any transfer",
+             inquiry.len(), inquiry.get(0x20..0x24).unwrap_or_default()
         );
     }
     Ok(())
@@ -287,6 +295,10 @@ fn poll_until_ready(shared: &SharedDevice<'_>) -> Result<()> {
         match shared.poll_ready_once() {
             Ok(()) => return Ok(()),
             Err(error) => {
+                crate::diagnostics::record(format!(
+                    "Pioneer post-flash readiness: elapsed_ms={} error={error:#}",
+                    start.elapsed().as_millis()
+                ));
                 if start.elapsed() >= POLL_TIMEOUT {
                     return Err(error)
                         .context("drive did not return ready within the post-flash poll timeout");

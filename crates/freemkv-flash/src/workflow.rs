@@ -63,11 +63,19 @@ impl Default for FlashOptions {
 
 /// Inspect a local firmware file without drive discovery or transport access.
 pub fn check_file(path: &Path) -> Result<()> {
+    crate::diagnostics::run("check-file", || check_file_inner(path))
+}
+
+fn check_file_inner(path: &Path) -> Result<()> {
     engine::info_file(path)
 }
 
 /// Inspect a drive or a local firmware image.
 pub fn info(target: Option<&str>) -> Result<()> {
+    crate::diagnostics::run("info", || info_inner(target))
+}
+
+fn info_inner(target: Option<&str>) -> Result<()> {
     // A regular file is a firmware image → classify the FILE (no drive needed);
     // anything else (a selector, a /dev node, or nothing) → probe the DRIVE.
     if let Some(t) = target {
@@ -155,6 +163,10 @@ fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
 
 /// Print the numbered optical-drive choices accepted by every operation.
 pub fn list() -> Result<()> {
+    crate::diagnostics::run("list", list_inner)
+}
+
+fn list_inner() -> Result<()> {
     let drives = drives();
     if drives.is_empty() {
         println!("drives: none found");
@@ -177,6 +189,20 @@ pub fn backup_with_replace(
     recover: bool,
     replace: bool,
 ) -> Result<()> {
+    crate::diagnostics::run("backup/dump", || {
+        backup_with_replace_inner(device, out, recover, replace)
+    })
+}
+
+fn backup_with_replace_inner(
+    device: Option<&str>,
+    out: Option<PathBuf>,
+    recover: bool,
+    replace: bool,
+) -> Result<()> {
+    crate::diagnostics::record(format!(
+        "backup options: device={device:?} output={out:?} recover={recover} replace={replace}"
+    ));
     // backup/dump are read-only (no kernel mode), so the device is opened
     // read-only.
     let selector = resolve_device(device)?;
@@ -222,6 +248,14 @@ pub fn backup_with_replace(
 
 /// Validate and execute the shared flash workflow.
 pub fn flash(args: FlashOptions) -> Result<()> {
+    crate::diagnostics::run("flash", || flash_inner(args))
+}
+
+fn flash_inner(args: FlashOptions) -> Result<()> {
+    crate::diagnostics::record(format!(
+        "flash options: input={:?} backup={:?} execute={} acknowledged_risk={} force={}",
+        args.input, args.backup, args.execute, args.acknowledged_risk, args.force
+    ));
     if args.execute && !args.acknowledged_risk {
         bail!("refusing to flash without acknowledging the risk");
     }

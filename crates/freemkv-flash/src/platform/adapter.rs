@@ -21,6 +21,30 @@ const SPINUP_TIMEOUT_MS: u32 = 60_000;
 /// SCSI status byte: CHECK CONDITION (sense data available).
 const CHECK_CONDITION: u8 = 0x02;
 
+thread_local! {
+    static TRACE_COMMANDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Trace a diagnostic operation without flooding subsequent firmware transfers.
+pub(crate) fn trace_commands<T>(operation: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TRACE_COMMANDS.set(self.0);
+        }
+    }
+    let _restore = Restore(TRACE_COMMANDS.replace(true));
+    operation()
+}
+
+fn diagnostic(visible: bool, text: &str) {
+    if visible || crate::style::trace_enabled() {
+        eprintln!("{text}");
+    } else {
+        crate::diagnostics::record(text);
+    }
+}
+
 /// A [`ScsiDevice`] backed by a libfreemkv platform transport.
 pub struct TransportDevice {
     inner: Box<dyn ScsiTransport>,
@@ -51,8 +75,13 @@ impl TransportDevice {
     /// old `writable` distinction is moot — write access is always available,
     /// which the read-only `info`/`dump` paths simply never exercise).
     pub fn open(path: &str) -> Result<Self> {
+        crate::diagnostics::record(format!("SCSI open: device={path:?}"));
         let inner = scsi::open(std::path::Path::new(path))
             .map_err(|e| friendly_open_error(path, &e.to_string()))?;
+        crate::diagnostics::record(format!(
+            "SCSI opened: max_transfer_bytes={}",
+            inner.max_transfer_bytes()
+        ));
         Ok(Self {
             inner,
             path: path.to_string(),
@@ -86,17 +115,28 @@ impl TransportDevice {
         };
         let mut transferred = 0usize;
         for attempt in 0..2 {
-            let r = match self.inner.execute(cdb, ldir, buf, TIMEOUT_MS) {
+            let trace = TRACE_COMMANDS.get();
+            let request = format!(
+                    "SCSI request: device={} cdb={cdb:02x?} direction={dir:?} requested={} attempt={} strict={strict} timeout_ms={TIMEOUT_MS}",
+                    self.path, buf.len(), attempt + 1
+                );
+            diagnostic(trace, &request);
+            let result = self.execute_logged(cdb, ldir, buf, TIMEOUT_MS);
+            let r = match result {
                 Ok(r) => r,
                 // libfreemkv transports surface CHECK CONDITION as `Err`. Preserve
                 // the old backend's tolerance of benign "no medium" (flashed with
                 // no disc) and its one UNIT-ATTENTION retry on reads; else fatal.
                 Err(e) => {
                     if let Some(s) = e.scsi_sense() {
-                        // Benign no-disc (key 0x2 / ASC 0x3A): tolerate as 0 bytes.
-                        // A read needing medium yields 0 bytes, caught by the
-                        // caller's length check — no garbage smuggled upward.
-                        if !strict && super::is_no_medium(s.sense_key, s.asc) {
+                        // No-disc is benign only for a no-data command. Keep
+                        // the real sense for reads/writes instead of masking
+                        // it as a short successful transfer.
+                        if !strict && buf.is_empty() && super::is_no_medium(s.sense_key, s.asc) {
+                            diagnostic(
+                                trace,
+                                "SCSI policy: no-medium sense tolerated for a no-data command",
+                            );
                             return Ok(0);
                         }
                         // Self-clearing UNIT ATTENTION (key 0x6): retry once, but
@@ -107,16 +147,25 @@ impl TransportDevice {
                             && attempt == 0
                             && dir != Direction::ToDevice
                         {
+                            diagnostic(trace, "SCSI policy: retrying UNIT ATTENTION");
                             continue;
                         }
                     }
-                    let detail = format!("SCSI transport failure on {}: {e}", self.path);
+                    let detail = format!("SCSI transport failure on {}: {e} (cdb={cdb:02x?}, direction={dir:?}, requested={}, attempt={})", self.path, buf.len(), attempt + 1);
                     return Err(match e.scsi_sense() {
                         Some(s) => ScsiSenseError::new(s.sense_key, s.asc, s.ascq, detail).into(),
                         None => anyhow!(detail),
                     });
                 }
             };
+            if r.bytes_transferred > buf.len() {
+                bail!(
+                    "invalid SCSI transfer count on {}: cdb={cdb:02x?} reported={} requested={}",
+                    self.path,
+                    r.bytes_transferred,
+                    buf.len()
+                );
+            }
             transferred = r.bytes_transferred;
             if r.status == 0 {
                 break;
@@ -132,6 +181,7 @@ impl TransportDevice {
                 && attempt == 0
                 && dir != Direction::ToDevice
             {
+                diagnostic(trace, "SCSI policy: retrying UNIT ATTENTION");
                 continue;
             }
             // Tolerate only RECOVERED (0x1), an un-retried UNIT ATTENTION on a
@@ -142,7 +192,7 @@ impl TransportDevice {
             // status aborts, matching the OEM host's "abort on any result" rule.
             let tolerable = !strict
                 && r.status == CHECK_CONDITION
-                && (no_medium
+                && ((no_medium && buf.is_empty())
                     || key == Some(0x1)
                     || (dir != Direction::FromDevice && key == Some(0x6)));
             if !tolerable {
@@ -160,9 +210,35 @@ impl TransportDevice {
                     _ => anyhow!(detail),
                 });
             }
+            diagnostic(trace, "SCSI policy: nonzero status tolerated");
             break;
         }
         Ok(transferred)
+    }
+
+    /// Log every native execution, including readiness and spin-up paths.
+    fn execute_logged(
+        &mut self,
+        cdb: &[u8],
+        dir: DataDirection,
+        buf: &mut [u8],
+        timeout_ms: u32,
+    ) -> libfreemkv::error::Result<scsi::ScsiResult> {
+        let start = std::time::Instant::now();
+        crate::diagnostics::record(format!("SCSI execute: device={:?} cdb={cdb:02x?} direction={dir:?} requested={} timeout_ms={timeout_ms}", self.path, buf.len()));
+        let result = self.inner.execute(cdb, dir, buf, timeout_ms);
+        let text = match &result {
+            Ok(r) => format!(
+                "SCSI result: status=0x{:02x} transferred={} sense={:02x?}",
+                r.status, r.bytes_transferred, r.sense
+            ),
+            Err(e) => format!("SCSI result: error={e:?}"),
+        };
+        diagnostic(
+            TRACE_COMMANDS.get(),
+            &format!("{text} elapsed_ms={}", start.elapsed().as_millis()),
+        );
+        result
     }
 
     /// Shared data-OUT send with a full-acceptance check; `strict` forbids any
@@ -244,9 +320,7 @@ impl TransportDevice {
         let cdb = [0u8; 6];
         for attempt in 0..2 {
             let mut none: [u8; 0] = [];
-            let sense = match self
-                .inner
-                .execute(&cdb, DataDirection::None, &mut none, TIMEOUT_MS)
+            let sense = match self.execute_logged(&cdb, DataDirection::None, &mut none, TIMEOUT_MS)
             {
                 Ok(r) if r.status == 0 => return Ok(Tur::Present),
                 Ok(r) => sense_kaa(&r.sense),
@@ -287,9 +361,7 @@ impl TransportDevice {
         // [0]=0x1B opcode, [1]=0 (IMMED off, block until ready), [4]=0x01 START.
         let cdb = [0x1B, 0x00, 0x00, 0x00, 0x01, 0x00];
         let mut none: [u8; 0] = [];
-        let _ = self
-            .inner
-            .execute(&cdb, DataDirection::None, &mut none, SPINUP_TIMEOUT_MS);
+        let _ = self.execute_logged(&cdb, DataDirection::None, &mut none, SPINUP_TIMEOUT_MS);
     }
 }
 
@@ -492,6 +564,129 @@ mod tests {
         assert!(out.is_empty(), "no-medium yields 0 bytes");
     }
 
+    #[test]
+    fn no_medium_data_transfers_preserve_the_real_error() {
+        for mut dev in [
+            dev_with(ScsiSense {
+                sense_key: 2,
+                asc: 0x3a,
+                ascq: 0,
+            }),
+            dev_status(CHECK_CONDITION, (2, 0x3a, 0)),
+        ] {
+            for error in [
+                dev.command_in(&[0x3c], 4).unwrap_err(),
+                dev.command_out(&[0x3b], &[1; 4]).unwrap_err(),
+            ] {
+                assert_eq!(super::super::sense_triplet(&error), Some((2, 0x3a, 0)));
+            }
+        }
+    }
+
+    #[test]
+    fn strict_writes_never_retry_unit_attention_even_without_payload() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        struct Attention(Arc<AtomicUsize>);
+        impl ScsiTransport for Attention {
+            fn execute(
+                &mut self,
+                _cdb: &[u8],
+                _dir: DataDirection,
+                _buf: &mut [u8],
+                _timeout: u32,
+            ) -> libfreemkv::error::Result<ScsiResult> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Err(FError::ScsiError {
+                    opcode: 0x3b,
+                    status: CHECK_CONDITION,
+                    sense: Some(ScsiSense {
+                        sense_key: 6,
+                        asc: 0x29,
+                        ascq: 0,
+                    }),
+                })
+            }
+        }
+        for payload in [&[][..], &[1, 2, 3, 4][..]] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let mut dev = TransportDevice {
+                inner: Box::new(Attention(calls.clone())),
+                path: "test".into(),
+            };
+            assert!(dev.command_out_strict(&[0x3b], payload).is_err());
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+        }
+    }
+
+    #[test]
+    fn read_unit_attention_retries_once_then_returns_data() {
+        struct AttentionOnce(bool);
+        impl ScsiTransport for AttentionOnce {
+            fn execute(
+                &mut self,
+                _cdb: &[u8],
+                _dir: DataDirection,
+                buf: &mut [u8],
+                _timeout: u32,
+            ) -> libfreemkv::error::Result<ScsiResult> {
+                if !std::mem::replace(&mut self.0, true) {
+                    return Err(FError::ScsiError {
+                        opcode: 0x3c,
+                        status: CHECK_CONDITION,
+                        sense: Some(ScsiSense {
+                            sense_key: 6,
+                            asc: 0x29,
+                            ascq: 0,
+                        }),
+                    });
+                }
+                buf.fill(0x5a);
+                Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: buf.len(),
+                    sense: [0; 32],
+                })
+            }
+        }
+        let mut dev = TransportDevice {
+            inner: Box::new(AttentionOnce(false)),
+            path: "test".into(),
+        };
+        assert_eq!(dev.command_in(&[0x3c], 4).unwrap(), [0x5a; 4]);
+    }
+
+    #[test]
+    fn impossible_transfer_count_is_rejected_instead_of_truncated() {
+        struct Overrun;
+        impl ScsiTransport for Overrun {
+            fn execute(
+                &mut self,
+                _cdb: &[u8],
+                _dir: DataDirection,
+                buf: &mut [u8],
+                _timeout: u32,
+            ) -> libfreemkv::error::Result<ScsiResult> {
+                Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: buf.len() + 1,
+                    sense: [0; 32],
+                })
+            }
+        }
+        let mut dev = TransportDevice {
+            inner: Box::new(Overrun),
+            path: "test".into(),
+        };
+        assert!(dev
+            .command_in(&[0x3c], 4)
+            .unwrap_err()
+            .to_string()
+            .contains("invalid SCSI transfer count"));
+    }
+
     /// A genuine fault (HARDWARE ERROR) surfaced as `Err` must STILL be fatal —
     /// the no-medium tolerance must not swallow real errors.
     #[test]
@@ -551,7 +746,7 @@ mod tests {
             ascq: 0,
         };
         let expected = format!(
-            "SCSI transport failure on test: {}",
+            "SCSI transport failure on test: {} (cdb=[3c], direction=FromDevice, requested=1, attempt=1)",
             FError::ScsiError {
                 opcode: 0,
                 status: CHECK_CONDITION,

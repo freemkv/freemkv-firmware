@@ -354,3 +354,26 @@ fn flash_open_aborts_without_writing_when_preflight_fails() {
         "a not-ready drive must never reach PREPARE"
     );
 }
+
+#[test]
+fn firmware_writes_reject_status_that_a_lenient_transport_would_tolerate() {
+    struct Rejected;
+    impl crate::platform::ScsiDevice for Rejected {
+        fn command_in(&mut self, _cdb: &[u8], alloc: usize) -> anyhow::Result<Vec<u8>> {
+            Ok(vec![0; alloc])
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            panic!("firmware write used lenient status handling")
+        }
+        fn command_out_strict(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            Err(crate::platform::ScsiSenseError::new(6, 0x29, 0, "UNIT ATTENTION").into())
+        }
+        fn describe(&self) -> String {
+            "rejected write".into()
+        }
+    }
+    assert!(Mtk
+        .flash_open(&mut Rejected, crate::manifest::FlashMode::Full)
+        .is_err());
+    assert!(Mtk.flash_chunk(&mut Rejected, 0, &[0; 4]).is_err());
+}

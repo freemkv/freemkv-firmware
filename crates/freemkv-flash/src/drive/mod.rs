@@ -95,11 +95,19 @@ pub fn try_read_identity(dev: &mut dyn ScsiDevice) -> Result<Identity> {
     let data = dev
         .command_in(&mtk::cdb_inquiry(96), 96)
         .context("INQUIRY failed")?;
-    if data.len() >= 36 {
-        id.vendor = sanitize_ascii(&trim_ascii(&data[8..16]));
-        id.product = sanitize_ascii(&trim_ascii(&data[16..32]));
-        id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
+    if data.len() < 36 {
+        anyhow::bail!(
+            "short INQUIRY identity: {} bytes returned, at least 36 required",
+            data.len()
+        );
     }
+    id.vendor = sanitize_ascii(&trim_ascii(&data[8..16]));
+    id.product = sanitize_ascii(&trim_ascii(&data[16..32]));
+    id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
+    crate::diagnostics::record(format!(
+        "drive identity: vendor={:?} product={:?} revision={:?}",
+        id.vendor, id.product, id.revision
+    ));
     Ok(id)
 }
 

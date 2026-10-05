@@ -67,6 +67,7 @@ pub fn captured() -> bool {
 
 /// Publish a structured update; returns whether a front-end received it.
 pub fn publish(event: Event) -> bool {
+    crate::diagnostics::record(format!("{event:?}"));
     SINK.with(|s| {
         if let Some(sink) = s.borrow_mut().as_mut() {
             sink(event);
@@ -87,6 +88,7 @@ pub fn field(label: impl Into<String>, value: impl Into<String>) {
 
 pub(crate) fn emit(args: fmt::Arguments<'_>, newline: bool, error: bool) {
     let text = args.to_string();
+    crate::diagnostics::record(&text);
     let captured = SINK.with(|s| {
         if let Some(sink) = s.borrow_mut().as_mut() {
             for line in text.lines() {

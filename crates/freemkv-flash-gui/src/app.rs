@@ -41,6 +41,7 @@ pub struct FlashApp {
     details_open: bool,
     options: FlashOptions,
     log: Vec<String>,
+    diagnostic_log: Option<std::path::PathBuf>,
     progress: Option<(String, usize, usize)>,
     fields: Vec<(String, String)>,
     running: bool,
@@ -48,8 +49,38 @@ pub struct FlashApp {
 }
 
 impl FlashApp {
+    fn diagnostic_text(&self) -> std::io::Result<String> {
+        match &self.diagnostic_log {
+            Some(path) => std::fs::read_to_string(path),
+            None => Ok(self.log.join("\n")),
+        }
+    }
+
     pub fn new() -> Self {
-        Self::with_drives(ops::enumerate())
+        let mut app = Self::with_drives(Vec::new());
+        app.discover();
+        app
+    }
+
+    fn discover(&mut self) {
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let received = events.clone();
+        let drives = freemkv_flash::output::capture_events(
+            move |event| received.lock().unwrap().push(event),
+            ops::enumerate,
+        );
+        self.refresh(drives);
+        for event in events.lock().unwrap().drain(..) {
+            match event {
+                freemkv_flash::output::Event::Field { label, value }
+                    if label == "Diagnostic log" =>
+                {
+                    self.diagnostic_log = Some(value.into());
+                }
+                freemkv_flash::output::Event::Message(line) => self.log.push(line),
+                _ => {}
+            }
+        }
     }
 
     fn with_drives(devices: Vec<DriveChoice>) -> Self {
@@ -68,6 +99,7 @@ impl FlashApp {
             details_open: false,
             options: FlashOptions::default(),
             log: vec!["Ready. Select an optical drive and choose an action.".into()],
+            diagnostic_log: None,
             progress: None,
             fields: Vec::new(),
             running: false,
@@ -106,6 +138,7 @@ impl FlashApp {
         self.status = format!("{label}…");
         self.failure = None;
         self.log.clear();
+        self.diagnostic_log = None;
         self.progress = None;
         self.fields.clear();
         self.log.push(format!("{label}: {device}"));
@@ -144,6 +177,9 @@ impl FlashApp {
                             self.progress = Some((label, done, total))
                         }
                         freemkv_flash::output::Event::Field { label, value } => {
+                            if label == "Diagnostic log" {
+                                self.diagnostic_log = Some(value.clone().into());
+                            }
                             self.fields.push((label, value))
                         }
                     },
@@ -428,7 +464,7 @@ impl FlashApp {
                                     self.failure = None;
                                 }
                                 if ui.button("Refresh").clicked() {
-                                    self.refresh(ops::enumerate());
+                                    self.discover();
                                 }
                             });
                         });
@@ -523,8 +559,32 @@ impl FlashApp {
                 .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
                 .show(&ctx, |ui| {
                     ui.horizontal(|ui| {
-                        if ui.button("Copy details").clicked() {
-                            ctx.copy_text(self.log.join("\n"));
+                        if ui.button("Copy diagnostic log").clicked() {
+                            match self.diagnostic_text() {
+                                Ok(text) => ctx.copy_text(text),
+                                Err(error) => self
+                                    .log
+                                    .push(format!("Could not read diagnostic log: {error}")),
+                            }
+                        }
+                        if ui.button("Save diagnostic log…").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .set_file_name("freemkv-flash-diagnostic.log")
+                                .save_file()
+                            {
+                                let result = self
+                                    .diagnostic_text()
+                                    .and_then(|text| std::fs::write(&path, text));
+                                match result {
+                                    Ok(()) => self.log.push(format!(
+                                        "Diagnostic log exported: {}",
+                                        path.display()
+                                    )),
+                                    Err(error) => self
+                                        .log
+                                        .push(format!("Could not export diagnostic log: {error}")),
+                                }
+                            }
                         }
                         if ui.button("Close").clicked() {
                             close = true;
@@ -557,6 +617,29 @@ impl FlashApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exported_diagnostics_include_transport_details_absent_from_the_ui() {
+        let path =
+            std::env::temp_dir().join(format!("freemkv-gui-diagnostic-{}.log", std::process::id()));
+        std::fs::write(
+            &path,
+            "SCSI result: status=0x00 transferred=0\nRESULT: error\n",
+        )
+        .unwrap();
+        let mut app = FlashApp::with_drives(Vec::new());
+        app.log = vec!["backup failed".into()];
+        app.diagnostic_log = Some(path.clone());
+        assert!(app
+            .diagnostic_text()
+            .unwrap()
+            .contains("status=0x00 transferred=0"));
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            app.diagnostic_text().is_err(),
+            "missing full log must not silently export only the summary"
+        );
+    }
 
     fn rendered_text(app: &mut FlashApp) -> Vec<(String, bool)> {
         let ctx = egui::Context::default();

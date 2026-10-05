@@ -822,7 +822,8 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     let mut offset = 0usize;
     let mut progress = style::Progress::new("flashing firmware", payload.len());
     for piece in payload.chunks(chunk) {
-        drive.flash_chunk(dev, offset, piece)?;
+        drive.flash_chunk(dev, offset, piece)
+            .with_context(|| format!("firmware write failed at offset {offset:#x}, length {}; drive may contain partial firmware", piece.len()))?;
         offset += piece.len();
         progress.set(offset);
     }
@@ -869,7 +870,17 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
             }
             // Errored or short read-back of a protected chunk: it stays
             // unverified, so the success message below must not claim it.
-            _ if has_protected => unverified += 1,
+            result if has_protected => {
+                unverified += 1;
+                let reason = match result {
+                    Ok(data) => format!("short read: {}/{}", data.len(), piece.len()),
+                    Err(error) => format!("{error:#}"),
+                };
+                crate::diagnostics::record(format!(
+                    "read-back incomplete: offset={offset:#x} length={} reason={reason}",
+                    piece.len()
+                ));
+            }
             _ => {}
         }
         offset += piece.len();
