@@ -11,6 +11,11 @@
 # Info.plist are looked up from the binary name, so adding a third GUI needs no
 # change here — only its own macos/<bin>.plist and crate assets/freemkv.icns.
 #
+# Like freemkv's freemkv.app, the bundle also carries the matching CLI (the GUI
+# name without -gui) at <gui-bin>.app/Contents/MacOS/<cli>, so one download
+# gives both and the cask can link it with a `binary` stanza, e.g.
+#   binary "#{appdir}/freemkv-flash-gui.app/Contents/MacOS/freemkv-flash"
+#
 # Ad-hoc signed only: firmware has no Developer ID secrets, so there is no
 # notarization. The Homebrew casks strip com.apple.quarantine on install,
 # exactly as the sibling freemkv cask does.
@@ -18,6 +23,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 BIN_NAME=${1:?usage: bundle.sh <gui-bin> [release] [rust-target]}
+CLI_NAME=${BIN_NAME%-gui}
 PROFILE=${2:-debug}
 TARGET=${3:-}
 
@@ -34,23 +40,26 @@ cp "$PLIST" "$APP/Contents/Info.plist"
 cp "$ICNS" "$APP/Contents/Resources/freemkv.icns"
 
 # Build first so the bundle can never ship a stale binary.
-BUILD=(cargo build -p "$BIN_NAME")
+BUILD=(cargo build --bin "$BIN_NAME" --bin "$CLI_NAME")
 [ "$PROFILE" = release ] && BUILD+=(--release)
 [ -n "$TARGET" ] && BUILD+=(--target "$TARGET")
 "${BUILD[@]}"
 
 if [ -n "$TARGET" ]; then
-  BIN="target/$TARGET/$PROFILE/$BIN_NAME"
+  OUT="target/$TARGET/$PROFILE"
 else
-  BIN="target/$PROFILE/$BIN_NAME"
+  OUT="target/$PROFILE"
 fi
-[ -f "$BIN" ] || { echo "missing $BIN — build failed?" >&2; exit 1; }
-cp "$BIN" "$APP/Contents/MacOS/$BIN_NAME"
+for b in "$BIN_NAME" "$CLI_NAME"; do
+  [ -f "$OUT/$b" ] || { echo "missing $OUT/$b — build failed?" >&2; exit 1; }
+  cp "$OUT/$b" "$APP/Contents/MacOS/$b"
+done
 
 # Ad-hoc signature. An unsigned arm64 bundle will not load at all (Gatekeeper
 # reports "app is damaged"); the ad-hoc sign fixes that. It is NOT a
 # distributable signature — that is what the cask's quarantine strip is for.
 # Signed inner-out, no --deep (deprecated, and it re-signs nested code wrong).
+codesign --force --sign - "$APP/Contents/MacOS/$CLI_NAME"
 codesign --force --sign - "$APP/Contents/MacOS/$BIN_NAME"
 codesign --force --sign - "$APP"
 echo "built $APP ($(lipo -archs "$APP/Contents/MacOS/$BIN_NAME")) — ad-hoc signed"
