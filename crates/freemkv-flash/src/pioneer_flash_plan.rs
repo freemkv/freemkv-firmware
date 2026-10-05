@@ -542,7 +542,13 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
         }
         let k_tag = kh.kernel_version.trim();
         let n_tag = nh.kernel_version.trim();
-        if !k_tag.is_empty() && !n_tag.is_empty() && k_tag != n_tag {
+        if k_tag.is_empty() || n_tag.is_empty() {
+            return Err(format!(
+                "malformed bundle: the Kernel's own tag ({k_tag:?}) or the Normal's required-Kernel \
+                 tag ({n_tag:?}) is empty, so the pair cannot be proven consistent"
+            ));
+        }
+        if k_tag != n_tag {
             return Err(format!(
                 "malformed bundle: Normal declares required-Kernel tag {n_tag:?} but the \
                  bundled Kernel's own tag is {k_tag:?}. These must be equal; a Normal paired \
@@ -621,6 +627,38 @@ mod tests {
             family: fam(),
             required_kernel_tag: tag(),
         }
+    }
+
+    fn header_only(file_type: &str, tag: Option<&str>) -> Vec<u8> {
+        let mut img = vec![0u8; 0x200];
+        let kv = tag.map_or(String::new(), |t| format!("Kernel Version : {t}\r\n"));
+        let header = format!(
+            "********  Copyright(c) 2000 Pioneer Corporation  ********\r\n\
+             ID : PIONEER BD-RW   BDR-UD04\r\n\
+             Revision Level : 1.11\r\n\
+             Hardware Version : SAT 8A10\r\n\
+             Destination : GENERAL\r\n\
+             Generated Date : 22/01/01\r\n\
+             {kv}File Type : {file_type}\r\n"
+        );
+        img[..header.len()].copy_from_slice(header.as_bytes());
+        img
+    }
+
+    #[test]
+    fn validate_bundle_pair_requires_both_kernel_tags() {
+        let k = header_only("Kernel", Some("ID58"));
+        let n = header_only("Normal", Some("ID58"));
+        assert!(validate_bundle(Some(&k), Some(&n)).is_ok());
+        let bad = header_only("Normal", Some("ID81"));
+        assert!(validate_bundle(Some(&k), Some(&bad)).is_err());
+        // An empty tag on either side cannot prove the pair is consistent.
+        let empty_n = header_only("Normal", None);
+        let empty_k = header_only("Kernel", None);
+        assert!(validate_bundle(Some(&k), Some(&empty_n)).is_err());
+        assert!(validate_bundle(Some(&empty_k), Some(&n)).is_err());
+        // A Normal-only bundle is not subject to the pair check.
+        assert!(validate_bundle(None, Some(&empty_n)).is_ok());
     }
 
     #[test]
