@@ -200,8 +200,8 @@ pub(crate) fn execute_flash(
 }
 
 /// Try the §15.3 downgrade patch on an incoming Kernel envelope. Returns
-/// `Ok(None)` when no patch is needed (marker is already `01`, or the body
-/// doesn't look like a Kernel at all), `Ok(Some(new_envelope))` when the
+/// `Ok(None)` when no patch is needed (marker is already `01`, or the envelope
+/// does not decode); a wrong-sized body is an error, `Ok(Some(new_envelope))` when the
 /// decoded body's marker was `FF`/`00` and we flipped it to `01` + rebalanced
 /// the checksum and re-encoded. Logs the exact two-word diff on patch.
 fn apply_downgrade_patch_if_needed(kernel_enc: &[u8]) -> Result<Option<Vec<u8>>> {
@@ -210,7 +210,13 @@ fn apply_downgrade_patch_if_needed(kernel_enc: &[u8]) -> Result<Option<Vec<u8>>>
         None => return Ok(None), // not a decodable envelope; nothing to patch
     };
     if decoded.image.len() != pioneer_optical::envelope::KERNEL_BODY_LEN {
-        return Ok(None); // not a Kernel-sized body (likely a Normal passed as kernel)
+        // The caller only asks for the patch (and warns about it) for an FF/00
+        // marker, so a wrong-sized body must be refused, never skipped silently.
+        bail!(
+            "cannot apply the downgrade patch: the Kernel body is {:#x} bytes, expected {:#x}",
+            decoded.image.len(),
+            pioneer_optical::envelope::KERNEL_BODY_LEN
+        );
     }
     let (patched_body, outcome) = pioneer_optical::envelope::downgrade_patch(&decoded.image)
         .map_err(|e| anyhow!("downgrade patch refused the Kernel body: {e:?}"))?;
