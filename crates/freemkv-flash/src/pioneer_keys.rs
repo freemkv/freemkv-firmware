@@ -121,18 +121,7 @@ pub fn lookup(controller_id: u16) -> Option<&'static KeyEntry> {
     table().get(&controller_id)
 }
 
-/// Parse a controller id from a `SAT xxxx` hardware tag (as it appears in a
-/// Pioneer banner's `Hardware Version :` field) or a bare hex string. The SAT
-/// value is the controller id in hex, e.g. `"SAT 8A10"` / `"8A10"` -> `0x8A10`.
-pub fn controller_id_from_sat(hardware: &str) -> Option<u16> {
-    let token = hardware
-        .trim()
-        .strip_prefix("SAT")
-        .or_else(|| hardware.trim().strip_prefix("sat"))
-        .unwrap_or(hardware)
-        .trim();
-    u16::from_str_radix(token, 16).ok()
-}
+pub use crate::pioneer_flash_plan::controller_id_from_sat;
 
 #[cfg(test)]
 mod tests {

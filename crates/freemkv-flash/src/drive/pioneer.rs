@@ -1,33 +1,17 @@
-//! Pioneer OEM update protocol — byte-exact OEM backup capture + a live,
-//! heavily-gated OEM write (Normal-only profiles).
+//! Generic Pioneer envelope validation and live receiver-controlled flashing.
 //!
-//! The Pioneer OEM updater supplies the host command sequence. A Renesas
-//! controller identity alone does not prove this protocol applies. Backup
-//! capture is read-only; the live write (`crate::pioneer_flash`, reached via
-//! [`DriveFamily::flash_bundle`]) runs only behind the engine's gates
-//! (`--execute` + `--i-understand-risk`, empty-tray guard, and a mandatory,
-//! completeness-verified pre-flash backup).
-//!
-//! ## FLASH
-//! The UD04 1.11 OEM updater uses 04/FF with a 256-byte entry buffer,
-//! 07/F0 with raw envelope chunks, and 05/FF with a 256-byte final buffer,
-//! then an INQUIRY `000` gate and a status poll. UD04 is Normal-only. Drive
-//! acceptance beyond a byte-exact OEM replay is still the drive's call, not
-//! the host's — hence the gates and the idempotent-self-flash-first rollout.
-//!
-//! ## Legacy kernel-key table and preflight
-//! [`KEYS`], [`key_for`] and [`preflight`] are a legacy, public-but-unused
-//! table/check: the live flash path does NOT consult them. Control buffers and
-//! keys come from `crate::pioneer_keys`, and the gates that actually guard a
-//! write are the family gate / flash plan, the bundle checks, the pre-flash
-//! backup and `--execute` + `--i-understand-risk`.
+//! The engine enforces backup, empty tray and acknowledgement. This backend
+//! validates component integrity and compatibility, reads the receiver control
+//! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
 use pioneer_optical::Role;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 
-use super::{Capabilities, DriveFamily, Family, FullImage, Identity, RestoreRegion, UserDump};
+#[cfg(test)]
+use super::Identity;
+use super::{Capabilities, DriveFamily, Family, FullImage, RestoreRegion, UserDump};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
@@ -41,105 +25,23 @@ pub mod transfer;
 // ---- Protocol constants -----------------------------------------------------
 
 // ============================================================================
-// FLASH — UD04 1.11 OEM host-side transcript (offline only)
+// Pioneer transfer framing
 // ============================================================================
 
 pub(crate) const CONTROL_LEN: usize = 0x100;
 /// OEM Normal transfer chunk limit.
 pub(crate) const FLASH_CHUNK: usize = 0x8000;
 /// Minimum/maximum plausible Pioneer image sizes for the size safety-belt.
-pub(crate) const IMAGE_MIN: usize = 0x0010_0000; // 1.0 MiB
-pub(crate) const IMAGE_MAX: usize = 0x0048_0000; // 4.5 MiB
+pub(crate) const IMAGE_MIN: usize = 0x200; // envelope header
+pub(crate) const IMAGE_MAX: usize = 0x00ff_ff00; // aligned 24-bit transfer address limit
 /// The ASCII magic every genuine Pioneer image starts with.
 pub(crate) const PIONEER_MAGIC: &[u8] = b"********  Copyright(c) 2000 Pioneer";
-
-// ---- Kernel-key table (intentionally minimal) ------------------------------
-
-/// On-wire layout of the 32-bit kernel key inside `payload[0x10..0x14]`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KeyLayout {
-    /// Big-endian 4-byte word in legacy catalog metadata; not proven on wire.
-    Struct,
-    /// Little-endian 4-byte word, as copied by the UD04 OEM updater.
-    Array,
-}
-
-/// A resolved kernel key for a drive: the 32-bit value and its wire layout.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct KernelKey {
-    /// The 32-bit kernel key value.
-    pub key: u32,
-    /// How it's laid out in the 4 bytes at `payload[0x10..0x14]`.
-    pub layout: KeyLayout,
-}
-
-/// One catalog entry. Match `prefix` (case-insensitive, whitespace-collapsed)
-/// against the INQUIRY product string; longest match wins.
-#[derive(Debug, Clone, Copy)]
-pub struct KeyEntry {
-    /// INQUIRY-product substring that selects this key (e.g. `"BDR-UD04"`).
-    pub prefix: &'static str,
-    /// The 32-bit kernel key value.
-    pub key: u32,
-    /// How to lay it out at `payload[0x10..0x14]`.
-    pub layout: KeyLayout,
-}
-
-/// The compiled-in LEGACY kernel-key table (unused by the live flash path; see
-/// the module docs).
-///
-/// **Grow this deliberately.** Each new row is added only after a real
-/// flash-mode entry has been observed on a physical drive of that family.
-/// Do not import the full hoard catalog wholesale.
-pub const KEYS: &[KeyEntry] = &[KeyEntry {
-    prefix: "BDR-UD04",
-    key: 0xFD23_6642,
-    layout: KeyLayout::Array,
-}];
-
-/// Case-insensitive whitespace-collapsed key lookup by INQUIRY product string.
-/// Longest matching prefix wins.
-pub fn key_for(inquiry_product: &str) -> Option<KernelKey> {
-    let needle = normalize(inquiry_product);
-    let mut best: Option<(&KeyEntry, usize)> = None;
-    for e in KEYS {
-        let p = normalize(e.prefix);
-        if needle.contains(&p) {
-            let len = p.len();
-            if best.map(|(_, bl)| len > bl).unwrap_or(true) {
-                best = Some((e, len));
-            }
-        }
-    }
-    best.map(|(e, _)| KernelKey {
-        key: e.key,
-        layout: e.layout,
-    })
-}
-
-fn normalize(s: &str) -> String {
-    let upper = s.to_ascii_uppercase();
-    let mut out = String::with_capacity(upper.len());
-    let mut last_space = false;
-    for ch in upper.chars() {
-        if ch.is_whitespace() {
-            if !last_space {
-                out.push(' ');
-                last_space = true;
-            }
-        } else {
-            out.push(ch);
-            last_space = false;
-        }
-    }
-    out.trim().to_string()
-}
 
 /// Extracted fields from the Pioneer plaintext banner (first ~0x160 bytes of
 /// any genuine `.fw.bin`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PioneerBanner {
-    /// Model tag from the banner's `ID :` line, e.g. `BDR-UD04`.
+    /// Model tag from the banner's `ID :` line, as reported by its envelope.
     pub model: String,
     /// `Revision Level :` value, e.g. `1.11`.
     pub revision: String,
@@ -211,7 +113,7 @@ pub fn parse_banner(bytes: &[u8]) -> Option<PioneerBanner> {
 
 // ---- CDB builders ----------------------------------------------------------
 
-/// OEM entry CDB for the traced UD04 1.11 host path.
+/// OEM update entry CDB.
 pub fn cdb_wb_flash_entry() -> [u8; 10] {
     pioneer_optical::cdb::enter_update()
 }
@@ -226,69 +128,139 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
     pioneer_optical::cdb::finish()
 }
 
-/// Resolve the controller id and OEM control row for a Pioneer envelope from its
-/// banner `Hardware Version : SAT xxxx` tag. The SAT value is the controller id
-/// in hex. Resolution is by controller id, never by INQUIRY/banner model string,
-/// so the model-string collisions in the key table cannot be silently resolved.
-fn control_row_for_envelope(envelope: &[u8]) -> Result<&'static crate::pioneer_keys::KeyEntry> {
-    let banner =
-        parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
-    let cid = crate::pioneer_keys::controller_id_from_sat(&banner.hardware).ok_or_else(|| {
-        anyhow!(
-            "envelope hardware {:?} is not a SAT controller id",
-            banner.hardware
-        )
-    })?;
-    crate::pioneer_keys::lookup(cid).ok_or_else(|| {
-        anyhow!("no OEM control key on file for controller id {cid:#06X}; cannot flash this model")
-    })
+/// Construct entry/finish control from the resident Normal descriptor.
+fn receiver_control(descriptor: &[u8]) -> Result<[u8; CONTROL_LEN]> {
+    if descriptor.len() != 16
+        || !descriptor.starts_with(b"PIONEER ")
+        || !descriptor
+            .iter()
+            .all(|b| *b == 0 || b.is_ascii_graphic() || *b == b' ')
+    {
+        bail!("invalid resident Pioneer control descriptor");
+    }
+    let mut control = [0; CONTROL_LEN];
+    control[..16].copy_from_slice(descriptor);
+    control[16..20].copy_from_slice(&[0x9a, 0x78, 0x23, 0x61]);
+    Ok(control)
 }
 
-/// Build the 256-byte OEM control buffer generically for the self/OEM-update
-/// (Normal-only) path: the key is selected by the envelope's `Destination` OEM
-/// tag (e.g. `GENERAL` for UD04, `ID43` for S09), looked up in the embedded
-/// `pioneer_keys.bin` table. Byte-for-byte equivalent to the former hand-baked
-/// per-model payloads for every validated model. No drive-acceptance claim.
-fn oem_normal_control(envelope: &[u8]) -> Result<[u8; CONTROL_LEN]> {
-    let banner =
-        parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
-    let row = control_row_for_envelope(envelope)?;
-    let tag = if banner.destination.is_empty() {
-        crate::pioneer_keys::DEFAULT_TAG
-    } else {
-        banner.destination.as_str()
+/// Extract the receiver's own key from its paired CMP/accept and CMP/reject arms.
+/// Unknown or ambiguous instruction sequences fall back to the universal word.
+fn receiver_word(body: &[u8]) -> Option<[u8; 4]> {
+    let mut found = None;
+    for (i, w) in body.windows(8).enumerate() {
+        if w[..7] != [0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47] {
+            continue;
+        }
+        let accept = i.checked_add(8)?.checked_add(w[7] as usize)?;
+        if accept > body.len() {
+            continue;
+        }
+        let end = accept;
+        for j in i + 8..end.saturating_sub(7) {
+            let x = &body[j..];
+            if x[..2] == [0x7a, 0x20] && x[6..8] == [0x58, 0x60] && j + 10 == accept {
+                let key = x[2..6].try_into().ok()?;
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(key);
+            }
+        }
+    }
+    found
+}
+
+fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; CONTROL_LEN]> {
+    let descriptor = super::pioneer_transport::read_memory_exact(dev, 0x410000, 16)?;
+    let again = super::pioneer_transport::read_memory_exact(dev, 0x410000, 16)?;
+    if descriptor != again {
+        bail!("resident descriptor changed between reads");
+    }
+    let mut control = receiver_control(&descriptor)?;
+    let body = backup.and_then(|b| {
+        let (kernel, normal) = classify_flash_input(b).ok()?;
+        let normal = normal?;
+        match kernel {
+            Some(kernel) => {
+                let kernel = pioneer_optical::envelope::decode_envelope(&kernel)?;
+                pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &kernel)
+            }
+            None => pioneer_optical::envelope::decode_envelope(&normal),
+        }
+    });
+    if let Some(body) = body.filter(|b| b.image.get(..16) == Some(descriptor.as_slice())) {
+        if let Some(word) = receiver_word(&body.image) {
+            control[16..20].copy_from_slice(&word);
+        }
+    }
+    Ok(control)
+}
+
+/// Validate a Normal envelope without marketing-model or revision restrictions.
+pub fn validate_normal_envelope(envelope: &[u8]) -> Result<()> {
+    check_normal_size(envelope)?;
+    crate::pioneer_flash_plan::validate_bundle(None, Some(envelope)).map_err(anyhow::Error::msg)?;
+    use pioneer_optical::envelope::signature::{verify_normal_signature, SignatureCheck};
+    match verify_normal_signature(envelope) {
+        SignatureCheck::ValidKeyAndCiphertext | SignatureCheck::ValidCiphertextOnly => Ok(()),
+        SignatureCheck::Invalid => bail!("Normal signature mismatch"),
+        _ => bail!("Normal authentication requires a matching Kernel component"),
+    }
+}
+
+/// Resolve and check the effective pair before any payload decoding.
+fn validate_header_chain(
+    kernel: Option<&[u8]>,
+    normal: &[u8],
+    backup: Option<&[u8]>,
+    force: bool,
+) -> Result<()> {
+    use crate::pioneer_flash_plan::validate_component_headers;
+    validate_component_headers(kernel, Some(normal)).map_err(anyhow::Error::msg)?;
+    if kernel.is_some() {
+        return Ok(());
+    }
+    let captured = backup.map(classify_flash_input).transpose()?;
+    let installed_kernel = captured.as_ref().and_then(|(k, _)| k.as_deref());
+    match installed_kernel {
+        Some(k) => validate_component_headers(Some(k), Some(normal)).map_err(anyhow::Error::msg),
+        None if force => Ok(()),
+        None => {
+            bail!("Normal-only flash needs the installed Kernel; supply a Kernel+Normal package")
+        }
+    }
+}
+
+fn validate_normal_receiver(normal: &[u8], backup: Option<&[u8]>) -> Result<()> {
+    validate_normal_envelope(normal)?;
+    let Some(backup) = backup else {
+        return Ok(());
     };
-    let key = row
-        .key_for_tag(tag)
-        .ok_or_else(|| anyhow!("no OEM key for destination tag {tag:?} on this controller id"))?;
-    Ok(row.control_payload(key))
+    let (kernel, _) = classify_flash_input(backup)?;
+    let Some(kernel) = kernel else {
+        bail!("installed Kernel is required to validate Normal decoding");
+    };
+    let decoded_kernel = pioneer_optical::envelope::decode_envelope(&kernel)
+        .ok_or_else(|| anyhow!("installed Kernel decode failed"))?;
+    if !pioneer_optical::envelope::builder::normal_authentication_valid(
+        normal,
+        &decoded_kernel.image,
+    ) {
+        bail!("Normal authentication does not satisfy installed Kernel");
+    }
+    let decoded = pioneer_optical::envelope::decode_envelope_with_kernel(normal, &decoded_kernel)
+        .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
+    if !zero_word_sum(&decoded.image) || decoded.repack(&decoded.image).as_deref() != Some(normal) {
+        bail!("Normal receiver integrity check failed");
+    }
+    Ok(())
 }
 
-/// OEM updater path whose command and control-buffer bytes were recovered.
-/// Profiles are intentionally explicit: other Pioneer variants can use a
-/// separate Kernel transfer or different control buffers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OemUpdateProfile {
-    /// BDR-UD04 1.11EU updater, Normal envelope only.
-    Ud04V111Normal,
-    /// BDR-S09 1.30EU updater, SAT 8600 Normal envelope only.
-    S09V130Normal,
-}
-
-/// Audited local sources for one host-side update protocol. Hashes identify
-/// the exact files, not a signature or authorization of modified firmware.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProfileEvidence {
-    /// Human-readable source package and transfer variant.
-    pub source: &'static str,
-    /// SHA-256 of the nested OEM updater executable whose host path was traced.
-    pub updater_sha256: &'static str,
-    /// Additional updater PE with the same selected host data-out path, if audited.
-    pub alternate_updater_sha256: Option<&'static str>,
-    /// SHA-256 of the exact OEM Normal envelope extracted from that updater.
-    pub reference_envelope_sha256: &'static str,
-    /// Required update components established for this host path.
-    pub components: UpdateComponents,
+/// Offline framing with an unresolved control placeholder; live control comes from the drive.
+pub fn generic_normal_transcript(envelope: &[u8]) -> Result<Vec<OemTransfer<'_>>> {
+    validate_normal_envelope(envelope)?;
+    transfer::data_out(&[0; CONTROL_LEN], envelope, None)
 }
 
 /// One exact-resource host profile from the bounded BDR-212-style updater
@@ -322,61 +294,6 @@ pub struct BoundedOemProfile {
     pub normal_len: usize,
 }
 
-/// Whether the observed updater transfers a separate Kernel resource.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UpdateComponents {
-    /// The audited host path transfers only the supplied Normal envelope.
-    NormalOnly,
-    /// A separate exact Kernel resource would be needed; unsupported here.
-    KernelAndNormal,
-}
-
-/// Relationship of an envelope to the audited host transcript.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnvelopeEvidence {
-    /// Byte-identical to the audited OEM envelope.
-    ExactOemReference,
-    /// Same-model, structurally eligible offline candidate; not drive-certified.
-    UncertifiedCandidate,
-}
-
-impl OemUpdateProfile {
-    /// Exact source hashes anchoring this profile's command sequence.
-    pub const fn evidence(self) -> ProfileEvidence {
-        match self {
-            Self::Ud04V111Normal => ProfileEvidence {
-                source: "BDR-UD04 1.11EU nested Updater.exe, Normal-only path",
-                updater_sha256: "af5a2969686e3295fc540e27939342578d533ace57652cb1ae650b7f0cfde072",
-                alternate_updater_sha256: None,
-                reference_envelope_sha256:
-                    "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
-                components: UpdateComponents::NormalOnly,
-            },
-            Self::S09V130Normal => ProfileEvidence {
-                source: "BDR-S09 1.30EU/1.30AEU updaters, SAT 8600 Normal-only path",
-                updater_sha256: "eabd55640323a0f9dfbf80668531d2202d1ad3079045625cf55d62821040836d",
-                alternate_updater_sha256: Some(
-                    "2869613b666f20c6c404e2fbabc98a525888c3676da106154e20476d934bdea6",
-                ),
-                reference_envelope_sha256:
-                    "7f391cf35bc727bbefc97b3b27786283a6e8e5ca1d82f71dc57c78633843c59f",
-                components: UpdateComponents::NormalOnly,
-            },
-        }
-    }
-
-    /// Classify an input only against the exact OEM envelope hash. A matching
-    /// model/banner is never promoted to reference evidence by itself.
-    pub fn envelope_evidence(self, image: &[u8]) -> EnvelopeEvidence {
-        let hash = format!("{:x}", Sha256::digest(image));
-        if hash == self.evidence().reference_envelope_sha256 {
-            EnvelopeEvidence::ExactOemReference
-        } else {
-            EnvelopeEvidence::UncertifiedCandidate
-        }
-    }
-}
-
 /// Size sanity for a Normal about to be written: within `IMAGE_MIN..=IMAGE_MAX`
 /// and 256-byte aligned (offsets are 24-bit; a bad size would fail mid-session).
 fn check_normal_size(envelope: &[u8]) -> Result<()> {
@@ -384,46 +301,6 @@ fn check_normal_size(envelope: &[u8]) -> Result<()> {
         bail!("Pioneer envelope length is outside the supported profile range or not 256-byte aligned");
     }
     Ok(())
-}
-
-/// Choose a registered host strategy using only live drive identity and the
-/// supplied envelope. No updater package or sidecar is a runtime input.
-/// Unknown and ambiguous structures fail closed; exact OEM hashes only
-/// upgrade evidence status, not command selection.
-pub fn select_oem_profile(drive_product: &str, envelope: &[u8]) -> Result<OemUpdateProfile> {
-    let banner =
-        parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
-    check_normal_size(envelope)?;
-    let drive_model = normalize(drive_product);
-    let ud04_model_match = drive_model
-        .split_whitespace()
-        .any(|part| part == "BDR-UD04");
-    let mut matches = Vec::new();
-    if ud04_model_match
-        && banner.model.eq_ignore_ascii_case("BDR-UD04")
-        && banner.hardware.eq_ignore_ascii_case("SAT 8A10")
-        && banner.destination.eq_ignore_ascii_case("GENERAL")
-        && banner.file_type.eq_ignore_ascii_case("Normal")
-    {
-        matches.push(OemUpdateProfile::Ud04V111Normal);
-    }
-    let s09_model_match = drive_model.split_whitespace().any(|part| part == "BDR-S09");
-    if s09_model_match
-        && banner.model.eq_ignore_ascii_case("BDR-S09")
-        && banner.revision == "1.30"
-        && banner.hardware.eq_ignore_ascii_case("SAT 8600")
-        && banner.destination.eq_ignore_ascii_case("ID43")
-        && banner.file_type.eq_ignore_ascii_case("Normal")
-    {
-        matches.push(OemUpdateProfile::S09V130Normal);
-    }
-    match matches.as_slice() {
-        [profile] => Ok(*profile),
-        [] => bail!(
-            "no audited Pioneer OEM writer profile matches drive identity and envelope structure"
-        ),
-        _ => bail!("ambiguous Pioneer OEM writer profiles; refusing offline plan"),
-    }
 }
 
 /// One data-out command in an offline OEM transfer transcript.
@@ -450,42 +327,6 @@ pub struct OemTransfer<'a> {
     pub cdb: [u8; 10],
     /// Data-out bytes; Normal chunks borrow the original envelope.
     pub data: Cow<'a, [u8]>,
-}
-
-/// Build only the observed WRITE BUFFER portion of a Normal-only OEM update.
-/// This function performs no SCSI I/O. Polling and drive acceptance are not
-/// sufficiently established to make this transcript executable.
-pub fn offline_oem_transcript<'a>(
-    profile: OemUpdateProfile,
-    envelope: &'a [u8],
-) -> Result<Vec<OemTransfer<'a>>> {
-    let banner =
-        parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
-    if !envelope.len().is_multiple_of(0x100) || !(IMAGE_MIN..=IMAGE_MAX).contains(&envelope.len()) {
-        bail!("Pioneer envelope size is outside the offline profile range or not 256-byte aligned");
-    }
-    // Keep the per-profile envelope gating (identity/structure must match an
-    // audited Normal-only profile), then build the control buffer generically
-    // from the embedded key table rather than a hand-baked per-model constant.
-    match profile {
-        OemUpdateProfile::Ud04V111Normal
-            if banner.model.eq_ignore_ascii_case("BDR-UD04")
-                && banner.file_type.eq_ignore_ascii_case("Normal") => {}
-        OemUpdateProfile::Ud04V111Normal => {
-            bail!("UD04 1.11 OEM transcript requires a BDR-UD04 Normal envelope")
-        }
-        OemUpdateProfile::S09V130Normal
-            if banner.model.eq_ignore_ascii_case("BDR-S09")
-                && banner.revision == "1.30"
-                && banner.hardware.eq_ignore_ascii_case("SAT 8600")
-                && banner.destination.eq_ignore_ascii_case("ID43")
-                && banner.file_type.eq_ignore_ascii_case("Normal") => {}
-        OemUpdateProfile::S09V130Normal => {
-            bail!("S09 1.30 OEM transcript requires a BDR-S09 1.30 SAT 8600 ID43 Normal envelope")
-        }
-    }
-    let control = oem_normal_control(envelope)?;
-    transfer::data_out(&control, envelope, None)
 }
 
 /// A code-backed BDR-212 1.05 stage outline. It intentionally does not
@@ -593,48 +434,17 @@ pub fn offline_bdr212_v105_data_out<'a>(
     offline_bounded_oem_data_out(profile, kernel, normal, seed)
 }
 
-/// A receiver/transfer profile is selected from envelope facts. Adding a
-/// model requires independent updater evidence for its control word and wire
-/// framing; no release filename or OEM hash belongs in this registry.
-struct LinearFeProfile {
-    model: &'static str,
-    hardware: &'static str,
-    kernel_len: usize,
-    normal_len: usize,
-}
-
-const LINEAR_FE_PROFILES: &[LinearFeProfile] = &[LinearFeProfile {
-    model: "BDR-UD04",
-    hardware: "SAT 8A10",
-    kernel_len: 0x11200,
-    normal_len: 0x1d7700,
-}];
-
-/// Validate an established linear-FE Kernel+Normal pair and build its 256-byte
-/// OEM control buffer. The validated framing constraints (model, hardware,
-/// resource lengths, identity agreement, signature, decoded integrity) are
-/// preserved exactly; the control bytes are now sourced generically from the
-/// embedded key table — the descriptor plus the model's autoflasher fallback
-/// key (the crossflash path bypasses the per-destination dispatcher). Source and
-/// advertised revision do not select this path; receiver acceptance is untested.
+/// Validate linear-FE framing and decoded integrity, independent of model and revision.
 fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> {
-    use pioneer_optical::envelope::signature::{verify_normal_signature, SignatureCheck};
+    check_normal_size(kernel)?;
+    check_normal_size(normal)?;
+    crate::pioneer_flash_plan::validate_bundle(Some(kernel), Some(normal))
+        .map_err(anyhow::Error::msg)?;
     let kh = pioneer_optical::envelope::header_info(kernel)
         .ok_or_else(|| anyhow!("Kernel header missing"))?;
     let nh = pioneer_optical::envelope::header_info(normal)
         .ok_or_else(|| anyhow!("Normal header missing"))?;
-    let profile = LINEAR_FE_PROFILES
-        .iter()
-        .find(|profile| {
-            kh.model == profile.model
-                && kh.hardware_version == profile.hardware
-                && kernel.len() == profile.kernel_len
-                && normal.len() == profile.normal_len
-        })
-        .ok_or_else(|| anyhow!("no established linear-FE profile matches the envelopes"))?;
-    if nh.model != kh.model
-        || nh.hardware_version != kh.hardware_version
-        || kh.destination != "GENERAL"
+    if nh.hardware_version != kh.hardware_version
         || nh.destination != kh.destination
         || kh.kind != Some(pioneer_optical::ComponentKind::Kernel)
         || nh.kind != Some(pioneer_optical::ComponentKind::Normal)
@@ -643,24 +453,36 @@ fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> 
     {
         bail!("linear-FE envelope identities disagree");
     }
-    if verify_normal_signature(normal) != SignatureCheck::ValidKeyAndCiphertext {
-        bail!("Normal signature is invalid or unsupported for this profile");
-    }
     let decoded_kernel = pioneer_optical::envelope::decode_envelope(kernel)
         .ok_or_else(|| anyhow!("Kernel decode failed"))?;
+    if !pioneer_optical::envelope::builder::normal_authentication_valid(
+        normal,
+        &decoded_kernel.image,
+    ) {
+        bail!("Normal authentication does not satisfy the supplied Kernel");
+    }
     let decoded_normal =
         pioneer_optical::envelope::decode_envelope_with_kernel(normal, &decoded_kernel)
             .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
-    if decoded_kernel.info().layout != pioneer_optical::envelope::Layout::KernelFront
-        || decoded_normal.info().layout != pioneer_optical::envelope::Layout::Normal
-        || !zero_word_sum(&decoded_kernel.image)
+    if !matches!(
+        decoded_kernel.info().layout,
+        pioneer_optical::envelope::Layout::KernelFront
+            | pioneer_optical::envelope::Layout::KernelDerived
+    ) || !matches!(
+        decoded_normal.info().layout,
+        pioneer_optical::envelope::Layout::Normal
+            | pioneer_optical::envelope::Layout::NormalScaledKey
+    ) || !zero_word_sum(&decoded_kernel.image)
         || !zero_word_sum(&decoded_normal.image)
     {
         bail!("decoded image integrity or layout mismatch");
     }
-    let _ = profile;
-    let row = control_row_for_envelope(normal)?;
-    Ok(row.control_payload(row.fallback))
+    if decoded_kernel.repack(&decoded_kernel.image).as_deref() != Some(kernel)
+        || decoded_normal.repack(&decoded_normal.image).as_deref() != Some(normal)
+    {
+        bail!("Pioneer envelope does not round-trip exactly");
+    }
+    receiver_control(decoded_normal.image.get(..16).unwrap_or_default())
 }
 
 /// Validate and plan an established linear-FE envelope pair from its contents.
@@ -719,70 +541,6 @@ pub fn offline_bounded_oem_data_out<'a>(
             seed,
         }),
     )
-}
-
-// ---- Preflight (safety belt) -----------------------------------------------
-
-/// Verified pre-flash state: image + drive both look genuine and compatible.
-#[derive(Debug, Clone)]
-pub struct Preflight {
-    /// Parsed banner from the image (`ID :` / `Hardware Version :` etc).
-    pub image_banner: PioneerBanner,
-    /// The drive's live INQUIRY product string.
-    pub drive_product: String,
-    /// The kernel key resolved for the drive's INQUIRY product.
-    pub key: KernelKey,
-}
-
-/// Legacy hard-refuse checks (NOT called by the live flash path, which is gated
-/// by the flash plan and `select_oem_profile`; kept as public API).
-///
-/// * Image starts with the `********  Copyright(c) 2000 Pioneer` magic
-/// * Image size is plausible (`IMAGE_MIN..=IMAGE_MAX`)
-/// * Image banner parses and its model equals the drive's INQUIRY product
-///   (case-insensitive; `--allow-crossflash` waives this check on identical
-///   silicon — the caller performs that override)
-/// * A kernel key exists in [`KEYS`] for the drive's INQUIRY product
-pub fn preflight(image: &[u8], drive_id: &Identity, allow_crossflash: bool) -> Result<Preflight> {
-    if image.len() < IMAGE_MIN || image.len() > IMAGE_MAX {
-        bail!(
-            "image size {} bytes is outside the plausible Pioneer range ({}..={})",
-            image.len(),
-            IMAGE_MIN,
-            IMAGE_MAX
-        );
-    }
-    let banner = parse_banner(image).ok_or_else(|| {
-        anyhow!(
-            "image does not begin with the Pioneer magic \"********  Copyright(c) 2000 Pioneer\" \
-             — refusing to flash arbitrary bytes"
-        )
-    })?;
-    let drive_product = drive_id.product.trim().to_string();
-    if !allow_crossflash {
-        let banner_n = normalize(&banner.model);
-        let drive_n = normalize(&drive_product);
-        if !drive_n.contains(&banner_n) && !banner_n.contains(&drive_n) {
-            bail!(
-                "image model {:?} does not match drive INQUIRY product {:?}; \
-                 pass --allow-crossflash to override (same silicon required)",
-                banner.model,
-                drive_product
-            );
-        }
-    }
-    let key = key_for(&drive_product).ok_or_else(|| {
-        anyhow!(
-            "no kernel key on file for drive INQUIRY product {:?}; \
-             cannot flash this model",
-            drive_product
-        )
-    })?;
-    Ok(Preflight {
-        image_banner: banner,
-        drive_product,
-        key,
-    })
 }
 
 // ---- Flash input classification + confirm prompt ---------------------------
@@ -878,7 +636,7 @@ pub(crate) fn installed_facts(
     let controller_id = ninfo
         .as_ref()
         .or(kinfo.as_ref())
-        .and_then(|h| crate::pioneer_keys::controller_id_from_sat(&h.hardware_version))?;
+        .and_then(|h| crate::pioneer_flash_plan::controller_id_from_sat(&h.hardware_version))?;
     let normal_date = ninfo
         .as_ref()
         .and_then(|h| FwDate::parse(&h.generated_date));
@@ -890,9 +648,9 @@ pub(crate) fn installed_facts(
         .and_then(|d| crate::pioneer_k::receiver_generation(&d.image));
     // Installed family: profile the decoded installed Normal body (the same
     // decode used for the target, so the two keys are directly comparable).
-    let family = installed_normal
-        .as_deref()
-        .and_then(crate::pioneer_flash_plan::normal_family);
+    let family = installed_normal.as_deref().and_then(|n| {
+        crate::pioneer_flash_plan::normal_family_with_kernel(n, installed_kernel.as_deref()?)
+    });
     // Installed Kernel ID tag: use the installed Normal envelope header's
     // declared required-Kernel tag. On a drive that was shipped as a paired
     // Kernel+Normal release this is exactly the drive's live `3C/02/F1`
@@ -925,11 +683,17 @@ pub(crate) fn resolve_flash_plan(
     recover: bool,
     force: bool,
 ) -> Result<crate::pioneer_flash_plan::FlashPlan> {
-    use crate::pioneer_flash_plan::{decide_recover_plan, normal_family, target_from_components};
+    use crate::pioneer_flash_plan::{
+        decide_recover_plan, normal_family_with_kernel, target_from_components,
+    };
 
     let installed = installed_facts(installed_backup);
+    let captured_kernel = installed_backup
+        .and_then(|b| classify_flash_input(b).ok())
+        .and_then(|(k, _)| k);
+    let receiver_kernel = kernel.or(captured_kernel.as_deref());
+    let target_family = normal.and_then(|n| normal_family_with_kernel(n, receiver_kernel?));
     if recover {
-        let target_family = normal.and_then(normal_family);
         let plan = decide_recover_plan(
             installed.as_ref().and_then(|i| i.family.as_ref()),
             target_family.as_ref(),
@@ -938,8 +702,9 @@ pub(crate) fn resolve_flash_plan(
         crate::style::trace(&format!("recover plan = {plan:?}"));
         return Ok(plan);
     }
-    let target = target_from_components(kernel, normal)
+    let mut target = target_from_components(kernel, normal)
         .context("could not read target bundle identity for flash routing")?;
+    target.family = target_family;
     crate::style::trace(&format!(
         "flash routing: installed={installed:?}, target={target:?}"
     ));
@@ -1183,14 +948,17 @@ impl DriveFamily for Pioneer {
             // package crossflashes via the linear-FE path, a Normal-only input
             // (bundle or bare `.enc`) via the OEM Normal path. A Kernel-only
             // input has no validated path and is refused. The 256-byte control
-            // buffer is built here from the embedded key table (keyed by the
-            // envelope's controller id), then the executor issues the WRITE
+            // buffer comes from the live receiver, then the executor issues the WRITE
             // BUFFER CDBs imperatively — there is no pre-built replayed list.
             let (kernel, normal) = classify_flash_input(&req.input)?;
             let selection = decide_flash(kernel.is_some(), normal.is_some())?;
             let normal = normal
                 .as_deref()
                 .expect("normal present for both selections");
+
+            check_normal_size(normal)?;
+
+            validate_header_chain(kernel.as_deref(), normal, installed_backup, req.force)?;
 
             // An image with an unrecoverable envelope tail is never flashed — not
             // even with --force or --recover.
@@ -1217,28 +985,18 @@ impl DriveFamily for Pioneer {
             check_plan_executable(&plan)?;
             debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
 
-            // `--recover` waives the profile gate but not the size sanity check.
-            if req.recover {
-                check_normal_size(normal)?;
-            }
-            let (control, kernel_to_write) = match selection {
+            let kernel_to_write = match selection {
                 FlashSelection::KernelAndNormal => {
-                    let kernel = kernel
-                        .as_deref()
-                        .expect("kernel present for KernelAndNormal");
-                    (linear_fe_control(kernel, normal)?, Some(kernel))
+                    let kernel = kernel.as_deref().expect("selected Kernel");
+                    linear_fe_control(kernel, normal)?;
+                    Some(kernel)
                 }
                 FlashSelection::NormalOnly => {
-                    // Normally keep the audited profile gate (identity/structure/
-                    // ambiguity refusal); `--recover` waives it (a degraded drive
-                    // may not report a trustworthy identity). Then build the
-                    // control generically from the key table.
-                    if !req.recover {
-                        let _profile = select_oem_profile(&req.drive_model, normal)?;
-                    }
-                    (oem_normal_control(normal)?, None)
+                    validate_normal_receiver(normal, installed_backup)?;
+                    None
                 }
             };
+            let control = live_control(dev, installed_backup)?;
             // The §15.3 marker patch is applied only when it will really happen:
             // known new-gen (or unknown, e.g. --recover/--skip-backup) receiver and
             // an FF/00-marker Kernel. Warn once; KernelDowngrade already warned in
@@ -1422,7 +1180,7 @@ impl DriveFamily for Pioneer {
     fn flash_plan(&self, image_len: usize, verbose: bool) -> Result<String> {
         use std::fmt::Write;
         let mut plan = format!(
-            "UD04 OEM offline transcript: OEM update entry (256 B control), \
+            "Pioneer offline transcript: OEM update entry (256 B control), \
              then {} raw-envelope chunks of at most {} B via the OEM Normal transfer, \
              then OEM finish (256 B control) and status polling. \
              This is a dry run: no writes are issued. Add --execute --i-understand-risk to flash (a fresh pre-flash backup is required; drive acceptance is not guaranteed).\n",
@@ -1430,10 +1188,7 @@ impl DriveFamily for Pioneer {
             FLASH_CHUNK,
         );
         if verbose {
-            writeln!(
-                &mut plan,
-                "Observed CDB shape (UD04 control payload construction known):"
-            )?;
+            writeln!(&mut plan, "Pioneer transfer CDBs:")?;
             writeln!(&mut plan, "  entry  {:02X?}", cdb_wb_flash_entry())?;
             for offset in (0..image_len).step_by(FLASH_CHUNK) {
                 let len = (image_len - offset).min(FLASH_CHUNK);
@@ -1481,3 +1236,9 @@ impl DriveFamily for Pioneer {
 #[cfg(test)]
 #[path = "pioneer_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "pioneer/oem_reference_tests.rs"]
+mod oem_reference_tests;
+#[cfg(test)]
+use oem_reference_tests::*;

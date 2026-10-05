@@ -1116,3 +1116,179 @@ fn installed_patched_backup_is_not_a_newer_receiver_when_configured() {
         Some(false)
     );
 }
+
+#[test]
+fn receiver_control_uses_resident_descriptor_and_universal_key() {
+    let descriptor = b"PIONEER  BDR-211";
+    let control = receiver_control(descriptor).unwrap();
+    assert_eq!(&control[..16], descriptor);
+    assert_eq!(&control[16..20], &[0x9a, 0x78, 0x23, 0x61]);
+    assert!(control[20..].iter().all(|&b| b == 0));
+    assert!(receiver_control(&descriptor[..15]).is_err());
+    assert!(receiver_control(&[0; 16]).is_err());
+    assert!(receiver_control(&[0xff; 16]).is_err());
+}
+
+#[test]
+fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
+    let Some(root) = std::env::var_os("PIONEER_GENERIC_CORPUS") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(root);
+    for (kernel, normal) in [
+        (
+            "8800__1.54EU__S8800600.154.enc.bin",
+            "8800__1.54EU__S8800601.154.enc.bin",
+        ),
+        (
+            "8801__1.54EU__S8801600.154.enc.bin",
+            "8801__1.54EU__S8801601.154.enc.bin",
+        ),
+    ] {
+        let kernel = std::fs::read(root.join(kernel)).unwrap();
+        let normal = std::fs::read(root.join(normal)).unwrap();
+        linear_fe_control(&kernel, &normal).unwrap();
+        validate_normal_envelope(&normal).unwrap();
+        let mut damaged = normal.clone();
+        let end = damaged.len() - 32;
+        damaged[end] ^= 1;
+        assert!(linear_fe_control(&kernel, &damaged).is_err());
+    }
+}
+
+#[test]
+fn receiver_word_extracts_accepted_immediate_and_rejects_ambiguity() {
+    let bytes = [
+        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 0x16, 0x79, 1, 0, 0x10, 1, 0, 0x6f, 0x70, 0,
+        0x74, 0x5d, 0x40, 0x7a, 0x20, 0x42, 0x66, 0x23, 0xfd, 0x58, 0x60, 5, 0xba,
+    ];
+    assert_eq!(receiver_word(&bytes), Some([0x42, 0x66, 0x23, 0xfd]));
+    assert_eq!(receiver_word(&bytes[..29]), None);
+    assert_eq!(receiver_word(&[bytes, bytes].concat()), None);
+    let mut wrong_branch = bytes;
+    wrong_branch[27] = 0x70;
+    assert_eq!(receiver_word(&wrong_branch), None);
+}
+
+#[test]
+fn live_control_reads_receiver_descriptor_without_target_model() {
+    let descriptor = b"PIONEER  BDR-211";
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
+        descriptor.to_vec(),
+    );
+    let control = live_control(&mut dev, None).unwrap();
+    assert_eq!(&control[..16], descriptor);
+    assert_eq!(&control[16..20], &[0x9a, 0x78, 0x23, 0x61]);
+    assert_eq!(
+        dev.reads
+            .iter()
+            .filter(|cdb| **cdb == pioneer_optical::cdb::read_memory(0x410000, 16))
+            .count(),
+        2
+    );
+    assert!(dev
+        .writes
+        .iter()
+        .all(|(cdb, _)| *cdb != pioneer_optical::cdb::enter_update()));
+}
+
+#[test]
+fn live_control_refuses_missing_descriptor_before_update_entry() {
+    let mut dev = MockScsiDevice::new();
+    assert!(live_control(&mut dev, None).is_err());
+    assert!(dev
+        .writes
+        .iter()
+        .all(|(cdb, _)| *cdb != pioneer_optical::cdb::enter_update()));
+}
+
+#[test]
+fn generic_receiver_matrix_when_configured() {
+    let Some(root) = std::env::var_os("PIONEER_GENERIC_MATRIX") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(root);
+    let mut count = 0;
+    for entry in std::fs::read_dir(&root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "kernel") {
+            continue;
+        }
+        let kernel = std::fs::read(&path).unwrap();
+        let normal = std::fs::read(path.with_extension("normal")).unwrap();
+        if pioneer_optical::envelope::signature::verify_normal_signature(&normal)
+            == pioneer_optical::envelope::signature::SignatureCheck::Invalid
+        {
+            assert!(
+                linear_fe_control(&kernel, &normal).is_err(),
+                "invalid signature accepted"
+            );
+            continue;
+        }
+        linear_fe_control(&kernel, &normal).unwrap_or_else(|e| panic!("{}: {e:#}", path.display()));
+        validate_normal_envelope(&normal)
+            .unwrap_or_else(|e| panic!("{} Normal-only: {e:#}", path.display()));
+        let decoded_kernel = pioneer_optical::envelope::decode_envelope(&kernel).unwrap();
+        let decoded_normal =
+            pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &decoded_kernel)
+                .unwrap();
+        assert!(
+            receiver_word(&decoded_normal.image).is_some(),
+            "{} receiver word",
+            path.display()
+        );
+        count += 1;
+    }
+    assert!(
+        count >= 2,
+        "configured matrix must contain multiple receivers"
+    );
+}
+
+#[test]
+fn pairing_failure_precedes_body_decode_even_when_forced() {
+    let envelope = |kind: &str, tag: &str| {
+        let mut bytes = vec![0u8; 0x1000];
+        let header = format!("********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   NEW-DRIVE\r\nRevision Level : 1.00\r\nHardware Version : SAT 8800\r\nKernel Version : {tag}\r\nDestination : GENERAL\r\nFile Type : {kind}\r\n");
+        bytes[..header.len()].copy_from_slice(header.as_bytes());
+        bytes
+    };
+    let kernel = envelope("Kernel", "ID60");
+    let normal = envelope("Normal", "ID43");
+    let mut archive = tar::Builder::new(Vec::new());
+    for (name, bytes) in [("kernel.enc", &kernel), ("normal.enc", &normal)] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, name, bytes.as_slice())
+            .unwrap();
+    }
+    let input = archive.into_inner().unwrap();
+    let mut request = recover_req(input);
+    request.input_kind = crate::drive::InputKind::PioneerBundle;
+    let mut dev = MockScsiDevice::new();
+    let error = for_family(Family::Pioneer)
+        .flash_bundle(&mut dev, &request, None)
+        .unwrap()
+        .unwrap_err();
+    assert!(error.to_string().contains("required-Kernel tag"), "{error}");
+    assert!(dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
+    for force in [false, true] {
+        let error = validate_header_chain(Some(&kernel), &normal, None, force).unwrap_err();
+        assert!(error.to_string().contains("required-Kernel tag"), "{error}");
+        assert!(!error.to_string().contains("decode"));
+    }
+}
+
+#[test]
+fn transfer_size_bounds_are_protocol_bounds_not_one_drive_size() {
+    for len in [0x11200, 0x20000, 0x1d7700, 0x250000, 0x600000] {
+        assert!(check_normal_size(&vec![0; len]).is_ok());
+    }
+    assert!(check_normal_size(&[0; 0x201]).is_err());
+    assert!(check_normal_size(&[]).is_err());
+}

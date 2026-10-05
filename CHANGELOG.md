@@ -6,6 +6,22 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.4]
+
+### Fixed
+
+- Pioneer flashing no longer uses model/revision allowlists or exact UD04 image
+  sizes. CLI and GUI validate envelope framing, component pairing, receiver
+  authentication, integrity and hardware-family compatibility.
+- Read the control descriptor from the connected drive and derive its control
+  word from the freshly captured receiver, with the universal word as fallback.
+  The static controller-key catalog is now compiled only for historical tests.
+- Resolve the supplied or installed Kernel before decoding Normal firmware,
+  including family comparisons. Reject incompatible component tags before body
+  decoding, and use the Kernel's receiver rules for integrity validation.
+- Offline plans use the same generic envelope validation, with live control and
+  installed-drive compatibility explicitly deferred until a device is available.
+
 ## [0.10.3]
 
 ### Fixed

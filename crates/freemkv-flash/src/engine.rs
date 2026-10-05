@@ -649,271 +649,40 @@ pub fn plan_pioneer_offline(
     allow_crossflash: bool,
     verbose: bool,
 ) -> Result<()> {
-    let bundle = match input_kind {
-        InputKind::PioneerBundle => Some(crate::pioneer_bundle::Bundle::from_tar_bytes(image)?),
-        InputKind::Bin => None,
-        InputKind::Tar => bail!("Pioneer offline flash planning requires a Normal envelope or Pioneer envelope tar, not an MTK backup archive"),
+    if input_kind == InputKind::Tar {
+        bail!("Pioneer planning requires an envelope or Pioneer bundle");
+    }
+    let (kernel, normal) = crate::drive::pioneer::classify_flash_input(image)?;
+    let normal = normal.as_deref().context("Normal component missing")?;
+    let transcript = match kernel.as_deref() {
+        Some(kernel) => crate::drive::pioneer::offline_linear_fe_data_out(kernel, normal)?,
+        None => crate::drive::pioneer::generic_normal_transcript(normal)?,
     };
-    if let Some(bundle) = &bundle {
-        if bundle.components.len() > 1 {
-            return plan_pioneer_bounded_bundle(bundle, model, verbose);
-        }
-    }
-    let image = match &bundle {
-        Some(bundle) => bundle.sole_normal_only()?.bytes.as_slice(),
-        None => image,
-    };
-    let banner = crate::drive::pioneer::parse_banner(image).ok_or_else(|| {
-        anyhow::anyhow!("Pioneer offline plan requires a Normal .enc envelope with a valid banner")
-    })?;
-    if image.len() < crate::drive::pioneer::IMAGE_MIN
-        || image.len() > crate::drive::pioneer::IMAGE_MAX
-        || !image.len().is_multiple_of(0x100)
-    {
-        bail!("Pioneer envelope length {} is outside the supported offline planning range or not 256-byte aligned", image.len());
-    }
-    if model.trim().is_empty() {
-        bail!("Pioneer offline plan requires a nonempty stated drive model");
-    }
-    let drive_model = model.to_ascii_uppercase();
-    if !allow_crossflash
-        && !drive_model
-            .split_whitespace()
-            .any(|part| part == banner.model.to_ascii_uppercase())
-    {
-        bail!(
-            "Pioneer envelope model {:?} does not match stated drive model {:?}",
-            banner.model,
-            model
-        );
-    }
-    use crate::drive::pioneer::{
-        offline_oem_transcript, select_oem_profile, EnvelopeEvidence, TransferStage,
-    };
-    let profile = select_oem_profile(model, image)?;
-    let transcript = offline_oem_transcript(profile, image)?;
-    let profile_name = match profile {
-        crate::drive::pioneer::OemUpdateProfile::Ud04V111Normal => "UD04 1.11",
-        crate::drive::pioneer::OemUpdateProfile::S09V130Normal => "S09 1.30",
-    };
-    println!(
-        "{}",
-        style::header("== Pioneer offline transfer plan (OEM host shape) ==")
-    );
-    if let Some(bundle) = &bundle {
-        println!("{}", style::kv("bundle source", &bundle.source_name));
-        println!(
-            "{}",
-            style::kv(
-                "bundle selection",
-                "unresolved; unique Normal-only profile selected by flasher"
-            )
-        );
-        println!(
-            "{}",
-            style::kv("bundle component", &bundle.components[0].path)
-        );
-    }
+    println!("{}", style::header("== Pioneer offline transfer plan =="));
     println!("{}", style::kv("stated model", ident_or_unknown(model)));
-    println!(
-        "{}",
-        style::kv(
-            "envelope",
-            &format!(
-                "{} bytes, banner model {}, banner revision {}",
-                image.len(),
-                banner.model,
-                banner.revision
-            )
-        )
-    );
     println!(
         "{}",
         style::kv("SHA-256", &format!("{:x}", Sha256::digest(image)))
     );
-    let evidence = profile.evidence();
-    println!("{}", style::kv("OEM host source", evidence.source));
-    println!("{}", style::kv("OEM components", "Normal envelope only"));
     println!(
-        "{}",
-        style::kv("OEM updater SHA-256", evidence.updater_sha256)
+        "Validated envelope integrity and transfer framing; {} data-out commands.",
+        transcript.len()
     );
-    if let Some(hash) = evidence.alternate_updater_sha256 {
-        println!("{}", style::kv("OEM alternate updater SHA-256", hash));
-    }
+    println!("Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.");
     println!(
-        "{}",
-        style::kv("OEM envelope SHA-256", evidence.reference_envelope_sha256)
-    );
-    let status = match profile.envelope_evidence(image) {
-        EnvelopeEvidence::ExactOemReference => "exact audited OEM envelope",
-        EnvelopeEvidence::UncertifiedCandidate => {
-            "uncertified same-model offline candidate (OEM command shape only)"
+        "Installed-family compatibility is checked against the live backup{}.",
+        if allow_crossflash {
+            " (force requested)"
+        } else {
+            ""
         }
-    };
-    println!("{}", style::kv("input evidence", status));
-    println!(
-        "{}",
-        style::kv(
-            &format!("{profile_name} host entry/finish control SHA-256"),
-            &format!("{:x}", Sha256::digest(&transcript[0].data))
-        )
-    );
-    println!(
-        "{profile_name} OEM transcript: {} raw-envelope chunks of at most {} B via the OEM Normal transfer, bracketed by the OEM update entry and finish (256 B control each). This is a dry run (no writes); `--execute --i-understand-risk` performs the live write after a mandatory pre-flash backup.",
-        transcript.len() - 2,
-        crate::drive::pioneer::FLASH_CHUNK
     );
     if verbose {
-        for transfer in &transcript {
-            let label = match transfer.stage {
-                TransferStage::Entry => "entry",
-                TransferStage::KernelPrefix => "kernel",
-                TransferStage::KernelFe => "kernel FE",
-                TransferStage::Normal => "chunk",
-                TransferStage::Finish => "finish",
-            };
-            println!(
-                "  {label:6} {:02X?}  {} B",
-                transfer.cdb,
-                transfer.data.len()
-            );
+        for step in &transcript {
+            println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
         }
     }
-    println!(
-        "{}",
-        style::kv(
-            "decoded payload revision",
-            "unknown (payload not decoded by this planner)"
-        )
-    );
-    println!(
-        "{}",
-        style::amber(
-            "Banner may come from an older encoding template. Profile selection checks model, hardware, destination, and size; modified-envelope integrity and drive acceptance are not established."
-        )
-    );
-    println!(
-        "{}",
-        style::amber("DRY RUN: no SCSI commands issued. `--execute --i-understand-risk` writes it for real (backup-first).")
-    );
-    Ok(())
-}
-
-fn plan_pioneer_bounded_bundle(
-    bundle: &crate::pioneer_bundle::Bundle,
-    model: &str,
-    verbose: bool,
-) -> Result<()> {
-    let stated_matches = |candidate: &str| {
-        model
-            .to_ascii_uppercase()
-            .split_whitespace()
-            .any(|part| part == candidate.to_ascii_uppercase())
-    };
-    if let [first, second] = bundle.components.as_slice() {
-        use crate::pioneer_bundle::Role;
-        let pair = match (first.role, second.role) {
-            (Role::Kernel, Role::Main) => Some((first, second)),
-            (Role::Main, Role::Kernel) => Some((second, first)),
-            _ => None,
-        };
-        if let Some((kernel, normal)) = pair {
-            let kernel_hash = format!("{:x}", Sha256::digest(&kernel.bytes));
-            let normal_hash = format!("{:x}", Sha256::digest(&normal.bytes));
-            if let Ok(steps) =
-                crate::drive::pioneer::offline_linear_fe_data_out(&kernel.bytes, &normal.bytes)
-            {
-                let banner = crate::drive::pioneer::parse_banner(&normal.bytes)
-                    .context("Normal banner missing")?;
-                if !stated_matches(&banner.model)
-                    && !bundle.public_model.as_deref().is_some_and(stated_matches)
-                {
-                    bail!("stated drive model {model:?} matches neither the listed model nor the resource");
-                }
-                println!(
-                    "{}",
-                    style::header("== Pioneer linear-FE offline data-out ==")
-                );
-                if !bundle.source_name.is_empty() {
-                    println!("{}", style::kv("bundle source", &bundle.source_name));
-                }
-                println!("{}", style::kv("stated model", model));
-                println!("{}", style::kv("Kernel SHA-256", &kernel_hash));
-                println!("{}", style::kv("Normal SHA-256", &normal_hash));
-                println!("{}", style::kv("resource model", &banner.model));
-                println!("{}", style::kv("resource hardware", &banner.hardware));
-                println!("Data-out shape: 04/FF entry; {} 07/FE Kernel chunks; {} 07/F0 Normal chunks; 05/FF finish.", steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::KernelFe).count(), steps.iter().filter(|step| step.stage == crate::drive::pioneer::TransferStage::Normal).count());
-                println!("OFFLINE ONLY: entry-state branch, preflight, status/completion, drive acceptance, and restoration are unverified; no device I/O or live writes.");
-                if verbose {
-                    for step in &steps {
-                        println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
-                    }
-                }
-                return Ok(());
-            }
-        }
-    }
-    let (profile, kernel, normal) = bundle.select_bounded_profile()?;
-    let banner = crate::drive::pioneer::parse_banner(&normal.bytes)
-        .ok_or_else(|| anyhow::anyhow!("Normal component lacks Pioneer banner"))?;
-    if model.trim().is_empty()
-        || (!stated_matches(&banner.model)
-            && !bundle.public_model.as_deref().is_some_and(stated_matches))
-    {
-        bail!(
-            "stated drive model {:?} matches neither listed model nor resource banner model {:?}",
-            model,
-            banner.model
-        );
-    }
-    use crate::drive::pioneer::{offline_bounded_oem_data_out, TransferStage};
-    // A deterministic example seed checks every profile-specific control and
-    // resource invariant. The actual updater seed is runtime GetTickCount.
-    let sample = offline_bounded_oem_data_out(profile, &kernel.bytes, &normal.bytes, 0)?;
-    let normal_chunks = sample
-        .iter()
-        .filter(|step| step.stage == TransferStage::Normal)
-        .count();
-    println!(
-        "{}",
-        style::header("== Pioneer bounded OEM offline plan (parameterized) ==")
-    );
-    println!("{}", style::kv("bundle source", &bundle.source_name));
-    println!("{}", style::kv("stated model", model));
-    println!("{}", style::kv("resource model", &banner.model));
-    println!("{}", style::kv("resource revision", &banner.revision));
-    println!("{}", style::kv("resource hardware", &banner.hardware));
-    println!("{}", style::kv("updater member", profile.updater_member));
-    println!("{}", style::kv("updater SHA-256", profile.updater_sha256));
-    println!("{}", style::kv("Kernel SHA-256", profile.kernel_sha256));
-    println!("{}", style::kv("Normal SHA-256", profile.normal_sha256));
-    println!("{}", style::kv("control SHA-256", profile.control_sha256));
-    println!(
-        "{}",
-        style::kv(
-            "clock seed",
-            "GetTickCount at runtime; not present in bundle"
-        )
-    );
-    println!("Data-out shape: 04/FF entry; 07/F0 Kernel prefix 0x1200 B; generated 0x200 B from seeded CRT rand; four 07/FE Kernel slices; {normal_chunks} 07/F0 Normal chunks; 05/FF finish.");
-    println!("OFFLINE ONLY: data-out example validated with seed 0, but preflight, READ/WRITE BUFFER 02/A0 setup, polling, completion, restorable backup, and drive acceptance are not established; no device I/O or live writes.");
-    if verbose {
-        for (index, step) in sample.iter().enumerate() {
-            let stage = match step.stage {
-                TransferStage::Entry => "entry",
-                TransferStage::KernelPrefix => "kernel-prefix",
-                TransferStage::KernelFe => "kernel-FE",
-                TransferStage::Normal => "normal",
-                TransferStage::Finish => "finish",
-            };
-            println!(
-                "  {index:3} {stage:13} {:02X?} {} B",
-                step.cdb,
-                step.data.len()
-            );
-        }
-    }
+    println!("DRY RUN: no device I/O or writes.");
     Ok(())
 }
 

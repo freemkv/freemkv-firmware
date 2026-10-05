@@ -170,7 +170,7 @@ fn pioneer_real_ud04_envelope_is_offline_only() {
 }
 
 #[test]
-fn pioneer_offline_plan_rejects_model_with_matching_prefix() {
+fn pioneer_offline_plan_does_not_gate_on_marketing_model() {
     let Ok(path) = std::env::var("PIONEER_UD04_ENC_FIXTURE") else {
         return;
     };
@@ -178,16 +178,13 @@ fn pioneer_offline_plan_rejects_model_with_matching_prefix() {
     let mut req = bin_req(image, false);
     req.drive_model = "BDR-UD040".into();
     let mut dev = MockScsiDevice::pioneer();
-    let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("does not match stated drive model"));
+    flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap();
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
 }
 
 #[test]
-fn pioneer_offline_plan_rejects_untraced_model_without_device_io() {
+fn pioneer_offline_plan_rejects_malformed_envelope_without_device_io() {
     let mut image = vec![0u8; crate::drive::pioneer::IMAGE_MIN];
     let header = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nThis is microcode file.\r\nID : PIONEER BD-RW   BDR-212.\r\nRevision Level : 1.05 .\r\n";
     image[..header.len()].copy_from_slice(header);
@@ -195,7 +192,7 @@ fn pioneer_offline_plan_rejects_untraced_model_without_device_io() {
     req.drive_model = "BDR-212".into();
     let mut dev = MockScsiDevice::pioneer();
     let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
-    assert!(format!("{err:#}").contains("no audited Pioneer OEM writer profile"));
+    assert!(format!("{err:#}").contains("malformed bundle"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
 }

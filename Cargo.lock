@@ -1311,14 +1311,14 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "freemkv-flash"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "aes",
  "anyhow",
@@ -1340,7 +1340,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "eframe",
@@ -1352,7 +1352,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -1364,7 +1364,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "eframe",

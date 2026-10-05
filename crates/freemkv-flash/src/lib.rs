@@ -36,7 +36,8 @@ pub(crate) mod pioneer_flash;
 pub mod pioneer_flash_plan;
 /// Embedded OEM kernel label/key table (pioneer_k.bin), loaded lazily for Pioneer.
 mod pioneer_k;
-/// Embedded OEM control-key table (pioneer_keys.bin), loaded lazily for Pioneer.
+/// Historical OEM control-key test oracles, excluded from production.
+#[cfg(test)]
 mod pioneer_keys;
 /// Embedded OEM normal seed/signature table (pioneer_n.bin), loaded lazily for Pioneer.
 mod pioneer_n;

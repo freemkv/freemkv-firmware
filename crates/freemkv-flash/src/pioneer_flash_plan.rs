@@ -212,6 +212,13 @@ impl std::fmt::Display for FamilyKey {
     }
 }
 
+/// Hardware family decoded using the receiver's Kernel policy.
+pub fn normal_family_with_kernel(normal: &[u8], kernel: &[u8]) -> Option<FamilyKey> {
+    let kernel = pioneer_optical::envelope::decode_envelope(kernel)?;
+    let normal = pioneer_optical::envelope::decode_envelope_with_kernel(normal, &kernel)?;
+    FamilyKey::from_body(&normal.image)
+}
+
 /// Family of a NORMAL component's raw envelope bytes: decode the envelope and
 /// profile the decoded body. `None` if it does not decode or cannot be profiled.
 pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
@@ -482,14 +489,17 @@ pub fn target_from_components(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> R
         controller_id,
         normal: normal_info,
         kernel: kernel_info,
-        family: normal.and_then(normal_family),
+        family: normal.and_then(|n| match kernel {
+            Some(k) => normal_family_with_kernel(n, k),
+            None => normal_family(n),
+        }),
         required_kernel_tag: normal.and_then(component_kernel_tag),
     })
 }
 
 fn component_controller_id(bytes: Option<&[u8]>) -> Option<u16> {
     let info = pioneer_optical::envelope::header_info(bytes?)?;
-    crate::pioneer_keys::controller_id_from_sat(&info.hardware_version)
+    controller_id_from_sat(&info.hardware_version)
 }
 
 fn component_date(bytes: &[u8]) -> Option<FwDate> {
@@ -525,6 +535,16 @@ fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
 /// 5. Neither component has an unrecovered envelope tail (orthogonal, but we
 ///    package it here so a bundle's integrity is a single call-site).
 pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(), String> {
+    validate_component_headers(kernel, normal)?;
+    ensure_no_unrecovered_tail(kernel, normal).map_err(|e| format!("malformed bundle: {e}"))?;
+    Ok(())
+}
+
+/// Validate component identity and pairing before attempting any body decode.
+pub fn validate_component_headers(
+    kernel: Option<&[u8]>,
+    normal: Option<&[u8]>,
+) -> Result<(), String> {
     for (label, bytes, expected_type) in [
         ("Kernel", kernel, pioneer_optical::ComponentKind::Kernel),
         ("Normal", normal, pioneer_optical::ComponentKind::Normal),
@@ -572,9 +592,6 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
             ));
         }
     }
-    // Tail guard is reused from the executor path; bubble its reason up as a
-    // bundle-sanity error if it fires here.
-    ensure_no_unrecovered_tail(kernel, normal).map_err(|e| format!("malformed bundle: {e}"))?;
     Ok(())
 }
 
@@ -587,6 +604,19 @@ fn decoded_kernel_marker(bytes: &[u8]) -> Result<u8> {
         .get(0xFE)
         .copied()
         .ok_or_else(|| anyhow!("decoded Kernel body is shorter than 0xFF bytes"))
+}
+
+/// Parse a controller id from a `SAT xxxx` hardware tag (as it appears in a
+/// Pioneer banner's `Hardware Version :` field) or a bare hex string. The SAT
+/// value is the controller id in hex, e.g. `"SAT 8A10"` / `"8A10"` -> `0x8A10`.
+pub fn controller_id_from_sat(hardware: &str) -> Option<u16> {
+    let token = hardware
+        .trim()
+        .strip_prefix("SAT")
+        .or_else(|| hardware.trim().strip_prefix("sat"))
+        .unwrap_or(hardware)
+        .trim();
+    u16::from_str_radix(token, 16).ok()
 }
 
 #[cfg(test)]
