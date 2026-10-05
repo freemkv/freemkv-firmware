@@ -462,7 +462,7 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
             "read unlock not confirmed ({error:#}); attempting the read anyway (--force)"
         ));
     }
-    let mut image = read_region(dev, DUMP_BASE, DUMP_MIN_LEN, true)
+    let (mut image, mut gaps) = read_region_deep_gaps(dev, DUMP_BASE, DUMP_MIN_LEN)
         .context("could not read the device firmware span")?;
 
     // Kernel receiver layout (inside the dump) gives the Normal geometry.
@@ -481,9 +481,15 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
         .map(|g| NORMAL_IMAGE_BASE + g.image_len)
         .filter(|end| *end <= pioneer_optical::cdb::READ_CEILING as usize);
     if let Some(end) = normal_end.filter(|end| *end > image.len()) {
-        let extra = read_region(dev, image.len(), end - image.len(), true)
+        let (extra, extra_gaps) = read_region_deep_gaps(dev, image.len(), end - image.len())
             .context("could not read the Normal past the standard dump span")?;
         image.extend_from_slice(&extra);
+        gaps.extend(extra_gaps);
+    }
+    // The dump still succeeds with gaps (it is a best-effort salvage), but say so
+    // loudly in the final summary.
+    if let Some(note) = gap_summary(&gaps) {
+        amber(&note);
     }
     Ok(image)
 }
@@ -696,8 +702,22 @@ fn read_region_strict(
 /// recording them. Returns `len` bytes (with zero-filled gaps) as long as
 /// anything at all was read; errors only if the whole region is unreadable.
 fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec<u8>> {
+    read_region_deep_gaps(dev, start, len).map(|(image, _)| image)
+}
+
+/// Consecutive wholly-unreadable `READ_CHUNK`s (after something had read) that
+/// trigger a liveness probe; a failed probe aborts the salvage.
+const DEAD_STREAK: usize = 4;
+
+/// [`read_region_deep`], also returning the zero-filled gaps `(offset, len)`.
+fn read_region_deep_gaps(
+    dev: &mut dyn ScsiDevice,
+    start: usize,
+    len: usize,
+) -> Result<(Vec<u8>, Vec<(usize, usize)>)> {
     let mut image = vec![0u8; len];
     let mut pos = 0usize;
+    let mut dead_streak = 0usize;
     let mut gaps: Vec<(usize, usize)> = Vec::new();
     let mut any = false;
     let mut progress = crate::style::Progress::new(region_label("recovering", start), len);
@@ -714,6 +734,17 @@ fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Resul
                 let got = salvage_span(dev, start, &mut image, pos, n, &mut gaps);
                 any |= got;
                 pos += n;
+                dead_streak = if got { 0 } else { dead_streak + 1 };
+                // A drive that dropped out would otherwise cost millions of
+                // retries: after a run of dead chunks, check the drive still
+                // answers a basic firmware read and give up if it does not.
+                if any && dead_streak >= DEAD_STREAK && prepare_firmware_read(dev).is_err() {
+                    bail!(
+                        "the drive stopped responding at {:#x} after {dead_streak} consecutive \
+                         unreadable chunks; aborting the salvage read",
+                        start + pos
+                    );
+                }
             }
         }
         progress.set(pos);
@@ -737,7 +768,20 @@ fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Resul
             eprintln!("    gap {off:#x}..{:#x}", off + l);
         }
     }
-    Ok(image)
+    Ok((image, gaps))
+}
+
+/// Loud end-of-dump note for unreadable spans (`None` when the read was gap-free).
+fn gap_summary(gaps: &[(usize, usize)]) -> Option<String> {
+    if gaps.is_empty() {
+        return None;
+    }
+    let total: usize = gaps.iter().map(|(_, l)| l).sum();
+    Some(format!(
+        "DUMP INCOMPLETE: {} gap(s), {total} byte(s) could not be read and are ZERO-FILLED in \
+         the saved image; it is NOT a faithful copy of the flash",
+        gaps.len()
+    ))
 }
 
 /// Salvage one `READ_CHUNK` span that failed a bulk read. First retry the whole
@@ -931,6 +975,48 @@ mod tests {
             .iter()
             .enumerate()
             .all(|(i, b)| *b == (i & 0xff) as u8));
+    }
+
+    #[test]
+    fn deep_read_aborts_when_the_drive_drops_out_mid_region() {
+        // Serves the first chunk, then every read (including the liveness probe)
+        // fails: a dropped drive must not cost millions of retries.
+        struct Dying {
+            good_below: usize,
+            reads: usize,
+        }
+        impl ScsiDevice for Dying {
+            fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+                self.reads += 1;
+                let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+                if start >= self.good_below {
+                    bail!("drive gone");
+                }
+                Ok(vec![0u8; len])
+            }
+            fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn describe(&self) -> String {
+                "dying".into()
+            }
+        }
+        let mut dev = Dying {
+            good_below: READ_CHUNK,
+            reads: 0,
+        };
+        let err = read_region_deep(&mut dev, 0, READ_CHUNK * 24).unwrap_err();
+        assert!(format!("{err:#}").contains("stopped responding"), "{err:#}");
+        assert!(dev.reads < 400_000, "too many retries: {}", dev.reads);
+    }
+
+    #[test]
+    fn gap_summary_is_loud_and_counts_bytes() {
+        assert_eq!(gap_summary(&[]), None);
+        let msg = gap_summary(&[(0x100, 8), (0x200, 0x18)]).unwrap();
+        assert!(msg.contains("2 gap(s)"), "{msg}");
+        assert!(msg.contains("32 byte(s)"), "{msg}");
+        assert!(msg.to_lowercase().contains("zero"), "{msg}");
     }
 
     #[test]
