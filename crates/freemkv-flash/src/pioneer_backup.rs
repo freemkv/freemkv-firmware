@@ -250,7 +250,7 @@ fn embedded_envelope_id(inquiry: &[u8], kernel: &[u8], normal: &[u8]) -> Result<
 /// Structural, codec and signature checks for a Pioneer envelope pair,
 /// regardless of whether it came from an updater or a live capture.
 pub fn validate_envelope_package(bytes: &[u8], product: &str) -> Result<()> {
-    let bundle = Bundle::from_tar_bytes(bytes)?;
+    let bundle = Bundle::from_backup_tar_bytes(bytes)?;
     if bundle.components.is_empty() || bundle.components.len() > 2 {
         bail!("Pioneer package must contain a Kernel and/or a Normal");
     }
@@ -273,7 +273,7 @@ pub fn validate_envelope_package(bytes: &[u8], product: &str) -> Result<()> {
 /// The role (`"kernel"` / `"main"`) and archive filename of each component in a
 /// captured package, for user-facing messaging.
 pub fn component_roles(bytes: &[u8]) -> Vec<(String, String)> {
-    let Ok(bundle) = Bundle::from_tar_bytes(bytes) else {
+    let Ok(bundle) = Bundle::from_backup_tar_bytes(bytes) else {
         return Vec::new();
     };
     bundle
@@ -326,7 +326,7 @@ pub struct Provenance {
 /// Decide [`Provenance`] from a captured `.tar`'s bytes. A package that cannot
 /// be re-parsed is treated as fully non-OEM.
 pub fn package_provenance(bytes: &[u8]) -> Provenance {
-    let Ok(bundle) = Bundle::from_tar_bytes(bytes) else {
+    let Ok(bundle) = Bundle::from_backup_tar_bytes(bytes) else {
         return Provenance {
             kernel_oem: false,
             normal_oem: false,
@@ -814,6 +814,31 @@ fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A Kernel-only partial capture is validatable and named by the backup notice
+    /// (a Kernel-only tar is still not a flashable `Bundle::from_tar_bytes`).
+    #[test]
+    fn kernel_only_partial_backup_validates_and_is_reported_partial() {
+        let mut body = vec![0u8; 0x10000];
+        body[0xFE] = 0x01;
+        body[0x1000..0x1008].copy_from_slice(b"SAT 8A10");
+        body[0x1008..0x1010].copy_from_slice(b"ID58    ");
+        body[0x1010..0x1014].copy_from_slice(b"ID5 ");
+        body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
+        let sum = body
+            .chunks_exact(4)
+            .map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]]))
+            .fold(0u32, |a, w| a.wrapping_add(w));
+        body[0x1020..0x1024].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+        let env = build_kernel_envelope(&body, "PIONEER BD-RW   BDR-UD04").unwrap();
+        let tar = assemble_tar(&[env]).unwrap();
+        validate_envelope_package(&tar, "BD-RW BDR-UD04")
+            .expect("a Kernel-only partial backup must validate");
+        assert!(Bundle::from_tar_bytes(&tar).is_err());
+        let roles = component_roles(&tar);
+        assert_eq!(roles.len(), 1);
+        assert_eq!(roles[0].0, "kernel");
+    }
 
     #[test]
     fn read_access_probe_knocks_then_reads_and_stops_on_any_failure() {

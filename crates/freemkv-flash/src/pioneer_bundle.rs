@@ -68,7 +68,7 @@ pub struct Bundle {
 impl Bundle {
     /// Read a distributable Pioneer package made solely of envelope files.
     /// Roles and identity come from each envelope's own banner, never names.
-    fn from_envelope_tar_bytes(bytes: &[u8]) -> Result<Self> {
+    fn from_envelope_tar_bytes(bytes: &[u8], allow_kernel_only: bool) -> Result<Self> {
         let mut archive = tar::Archive::new(bytes);
         let mut components = Vec::new();
         let mut seen_names = HashSet::new();
@@ -128,6 +128,8 @@ impl Bundle {
             }
         }
         if !matches!(components.as_slice(), [a] if a.role == Role::Main)
+            && !(allow_kernel_only
+                && matches!(components.as_slice(), [a] if a.role == Role::Kernel))
             && !matches!(components.as_slice(), [a, b]
                 if matches!((a.role, b.role), (Role::Kernel, Role::Main) | (Role::Main, Role::Kernel)))
         {
@@ -147,10 +149,18 @@ impl Bundle {
     /// Parse an envelope-only tar: two `components/*.enc` members (or one
     /// Normal). We do NOT read or require any `manifest.json` sidecar — role,
     /// model, revision, hardware all come from the envelope header directly
-    /// (`File Type`, `ID`, `Revision Level`, `Hardware Version`). Any
-    /// `manifest.json` present in the tar is ignored.
+    /// (`File Type`, `ID`, `Revision Level`, `Hardware Version`). Every tar
+    /// member must be an envelope, so a `manifest.json` member is rejected.
+    /// A flashable bundle always carries a Normal; a Kernel-only tar is refused.
     pub fn from_tar_bytes(bytes: &[u8]) -> Result<Self> {
-        Self::from_envelope_tar_bytes(bytes)
+        Self::from_envelope_tar_bytes(bytes, false)
+    }
+
+    /// Like [`Bundle::from_tar_bytes`] but also accepts a Kernel-only archive: the
+    /// partial backup written when the Normal region could not be read. Only for
+    /// backup validation/inspection — never for building a flash input.
+    pub fn from_backup_tar_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::from_envelope_tar_bytes(bytes, true)
     }
 
     /// Return the sole Normal envelope only when no other component needs a
