@@ -8,13 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.2]
 
+### Added
+
+- **Every platform freemkv ships on.** Each tool now has a Linux desktop app
+  (`.deb` and AppImage, x86_64 and ARM64), Windows ARM64 builds, a per-tool
+  Windows installer and portable zip, and static Linux CLIs for x86_64,
+  ARM64 and 32-bit Raspberry Pi OS (armv7). Every GUI download carries its
+  CLI, including the macOS `.app` for the Homebrew cask.
+- **Package repositories.** The `.deb`s are served from the freemkv.org APT
+  repository, and are repackaged as signed `.rpm` (Fedora, RHEL, openSUSE)
+  and pacman (Arch Linux) packages for freemkv.org/rpm and freemkv.org/arch.
+
 ### Changed
 
-- **pioneer-optical 0.8.** The flasher passes the 256-byte control buffer to
+- **pioneer-optical 0.10.** The flasher passes the 256-byte control buffer to
   `drive::enter_update` directly and writes through `Session::write(Role, …)`.
-  The control-buffer substitution and the abort latch in the transport adapter
-  are gone: the crate never sends a commit when a session is dropped, so a
-  failed flash cannot commit a partial image.
+  The crate never sends a commit when a session is dropped, so a failed flash
+  cannot commit a partial image. The separate `pioneer-codec` crate is gone.
+- `--force` waives only the hardware-family gate; Kernel-tag refusals still
+  apply, except that an unknown installed Kernel tag can be forced when the
+  family matches. The warning says exactly what is being waived.
 
 ### Fixed
 
@@ -22,7 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   depend on `libxkbcommon-x11-0`, `libxcursor1`, `libxi6` and `libxrandr2`,
   which the windowing layer loads at run time under X11. Without them the GUI
   exited at start-up.
-- Broken intra-doc links in the Pioneer flash-plan module.
+- A Kernel body of the wrong size is refused instead of silently skipping the
+  marker patch, and the patch is applied only when the plan calls for it.
+- A Kernel+Normal bundle with an empty Kernel tag is rejected. A Kernel-only
+  partial backup validates, but a flash bundle still needs its Normal.
+- `--recover` checks the Normal component's size and alignment before
+  entering update mode, and the Bd update class is assumed only under
+  `--recover`.
+- A failed INQUIRY is reported instead of classifying the drive as
+  unsupported.
+- Text supplied by a drive or bundle is sanitized before it is printed.
+- `dump` ends with a clear summary of any read gaps; salvage stops when the
+  drive drops out, and its liveness probe re-reads the last good offset.
+- Clearer recover advice and blocked-execution messages; broken intra-doc
+  links in the Pioneer flash-plan module.
 
 ## [0.10.1]
 

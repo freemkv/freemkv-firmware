@@ -1,83 +1,120 @@
-# freemkv-flash command contract
+# Pioneer flasher (`freemkv-flash`)
 
-> **Pioneer status note:** the Pioneer paragraphs below predate live Pioneer
-> flashing and the `dump` command. For the current command surface and flash
-> policy (family gate, Kernel-tag gate, bundle self-consistency, `--force`,
-> `--recover`, `backup` vs `dump`), see `../../docs/pioneer-flasher.md`, which
-> takes precedence where they disagree.
+Reference for the Pioneer / Renesas path of the `freemkv-flash` CLI: the
+commands, which one to use, and the policy that decides whether a flash is
+allowed. For the MediaTek path see the [top-level README](../../README.md). For the
+modified-bundle proposal see
+[`docs/pioneer-modified-profile-contract.md`](docs/pioneer-modified-profile-contract.md).
 
-`info` identifies a drive or local firmware file without flashing. `backup`
-creates one firmware rollback file only when the drive's complete update
-image is readable and validates. Pass that file directly to `flash -i` to
-restore the prior firmware. `flash` also accepts a supported firmware image.
-`flash` without `--execute` is the dry run for every supported backend.
-For Pioneer it accepts one `.enc` envelope or an extractor-produced
-`.firmware.tar` bundle and prints the audited OEM transfer shape:
+> **Beta. A bad flash can permanently brick the drive.** Eject any disc first;
+> the tray must be empty and closed. Do not power off or unplug during a write.
+
+## Commands
+
+| Command | Writes? | Summary |
+|---|---|---|
+| `list` | no | List optical drives and the selector to pass to the other commands. |
+| `info` | no | Identify and classify a drive or a firmware file. Read-only. |
+| `backup` | no | Capture a flashable OEM-format package (two `.enc` components in a tar). |
+| `dump` | no | Raw read of the whole device, `0x000000..0x600000`, into one `.bin`. Diagnostics only. |
+| `flash` | with `--execute` | Validate and plan; write only with all safety flags. Dry run by default. |
 
 ```sh
-freemkv-flash flash /dev/sg0 -i BDR-UD04_FW111EU.fw.bin -v
-freemkv-flash flash /dev/sg0 -i BDR-UD04_FW111EU.EXE.firmware.tar -v
-freemkv-flash flash /dev/sg0 -i BDR-S09_FW130EU.enc -v
-freemkv-flash flash /dev/sg0 -i BDR-212_ULBK_EBK_FW105EU.exe.firmware.tar -v
+freemkv-flash list
+freemkv-flash info /dev/sg0
+freemkv-flash backup /dev/sg0 -o backup.tar
+freemkv-flash dump /dev/sg0 -o drive.bin            # add --force for degraded drives
+freemkv-flash flash /dev/sg0 -i update.tar          # dry run: prints plan, no writes
+freemkv-flash flash /dev/sg0 -i update.tar \
+    --backup preflash.tar --execute --i-understand-risk
+freemkv-flash flash /dev/sg0 -i known-good.tar --recover \
+    --execute --i-understand-risk
 ```
 
-The executable flash path currently targets the proven MediaTek MT1959
-family. For this family, a successful `backup` requires every byte of the
-2-MiB firmware image, no read gaps, a valid AES-CMAC, matching drive
-model/family, and coherent per-unit regions. The archive contains
-`backup.toml`, `firmware.bin`, and six per-unit reference files. The archive
-is parsed and hash-checked before it is saved. A flash execution captures
-and saves a fresh complete archive, reads it back, and validates it before
-the first firmware write. An existing output path is not overwritten.
-If any backup check fails, the flash stops before writing. A dry run does
-not create a backup or issue firmware writes.
+The device argument is a `list` number, a `/dev` path, or an `ioreg:` id. It
+may be omitted when exactly one drive is connected.
 
-A `.tar` input selects the archived `firmware.bin` for firmware rollback.
-The per-unit files document the captured state and are checked for
-coherence; they are **not** automatically written after reboot. This is
-not a promise to restore every mutable NVRAM or calibration byte.
+## Which should I use?
 
-For Pioneer, `backup DRIVE --template matching-UD04-1.14.tar` has a bounded
-BDR-UD04 1.14 read-only path: it captures Kernel and Normal twice and saves
-only if the reconstructed tar equals the supplied signed OEM pair byte for
-byte. Other Pioneer backups and live `flash` remain blocked. Renesas identity alone
-selects no flash protocol. The known
-`READ_BUFFER 02/B0` view is a runtime address-space mapping, not a proven
-restorable `.enc` or persistent flash backup. A `flash` dry run can print the
-UD04 1.11 or S09 1.30EU/1.30AEU OEM **Normal-only** data-out transcript from a local
-envelope. S09's updater uses `PIONEER  BDR-209`
-as its control descriptor, while the resource banner and stated drive model
-must say `BDR-S09`; no model alias is inferred from that descriptor.
-For bundles, the tool checks every member's path, size, role, and SHA-256.
-It accepts a sole Normal component through an audited Normal-only profile.
-It also recognizes 38 local packages with exactly one matching updater and
-one exact Kernel/Normal resource pair. Their pinned Rust table records the
-constructor, control buffer, and resource hashes recovered from the
-bounded-flow updater cluster. The plan describes a Kernel prefix, a 512-byte
-clock-seeded CRT-rand block, four FE slices, and the full Normal resource.
-The clock seed is unavailable in the package, so the plan is parameterized;
-an explicit seed can materialize a data-out example in the library. Four
-packages containing two different matching updater executables fail closed
-pending explicit variant selection. Unmatched or modified Kernel/Normal
-resources fail closed. The profile records the audited
-updater and OEM-envelope hashes as evidence; neither original updater nor
-sidecar is a runtime input. A changed same-model envelope is labeled an
-uncertified offline candidate. The updater's full 48-byte F1 identity
-comparison is not yet implemented as a live preflight. Pioneer live writes, drive acceptance, and
-modified-envelope integrity remain unproven. The 6-MiB research sweep
-and experimental read probes are outside this flash package.
+**`backup` vs `dump`: you almost always want `backup`.**
 
-The proposed explicit-base selection contract for modified Kernel+Normal
-bundles is recorded in `docs/pioneer-modified-profile-contract.md`. It is not
-yet a CLI route; the exact-resource selector continues to reject changed
-components.
+- `backup` captures a flashable OEM-format package: two OEM `.enc` components
+  (Kernel and Normal) in a tar. `flash -i` reads it back and can restore it.
+  Use it for rollback, before any flash.
+- `dump` is a raw snapshot of the device address space. It is **not a
+  flashable artifact.** It includes drive RAM state that differs between runs;
+  only the FLASH region is deterministic. Use it for diagnostics and forensics,
+  or to salvage something from a degraded drive. `dump --force` stops trusting
+  what the drive reports (identity/layout failures become warnings) and is
+  still read-only.
 
-A bundle preserves complete Kernel `.enc` bytes as evidence. It does not
-imply the updater streams that file verbatim: observed OEM paths use
-profile-specific offsets, lengths, and control framing for Kernel transfer.
-The bounded-flow plans cover data-out only. Full read/clear/poll/status and
-reset handling, verified drive-side identity gates, and restorable backup
-remain unresolved. The package alone does not contain the clock seed.
+**`flash` vs `flash --recover`:**
+
+- Plain `flash` is for normal updates and rollbacks. All gates below apply.
+- `flash --recover` is for a degraded or soft-bricked drive. It re-pushes
+  known-good bytes. It bypasses the date/pair refusals and the mandatory
+  pre-flash backup, but **keeps the family gate**. It still needs `--execute`
+  and `--i-understand-risk`. Experimental and hardware-unvalidated.
+
+## Flash policy
+
+Three gates and one side-check decide what `flash` will do.
+
+1. **Hardware family match.** The family of the installed (drive) Normal must
+   equal the family of the bundle's Normal (`fw::get_family`). If the silicon
+   differs, the flash is refused. `--force` bypasses this gate. It also waives
+   one refusal of gate 2: an installed Kernel tag that could not be read. It
+   bypasses nothing else.
+2. **Kernel ID tag match (Normal-only bundles).** When the bundle contains only
+   a Normal, the installed Kernel's tag must equal the Kernel tag the incoming
+   Normal requires. This mirrors Pioneer's OEM updater
+   (`memcmp(F1+0x18, file+0xD0, 8)`). On mismatch the flash is refused with a
+   message to use a Kernel+Normal package instead.
+3. **Bundle self-consistency.** The bundle is checked on its own: bad headers,
+   SAT mismatch between Kernel and Normal, the Kernel's own tag differing from
+   the tag the Normal requires, or an unrecovered envelope tail. Any of these
+   is refused **unconditionally**. `--force` does not bypass it.
+4. **Site-1 downgrade patch (side-check, not a refusal).** When writing a
+   Kernel whose decoded marker is `FF` or `00` to a drive whose installed
+   marker is `01`, the executor patches the Kernel body in flight
+   (`[0xFE]` `FF`/`00` -> `01`, plus `0xFE00` mod 2^32 at `0x1020`), re-encodes
+   it, and writes. A loud warning is printed. This is the section 15.3 patch.
+
+Direction (up or down), SAT change (same or cross), and era (`FF` or `01`) do
+not enter the gate decisions. The tag check decides. A separate "reflash" case
+is not needed; it is covered by the same gates.
+
+### Decision matrix
+
+| Condition | Normal flash | `--force` | `--recover` |
+|---|---|---|---|
+| Family differs | refused | allowed | refused (unless `--force`) |
+| Normal-only bundle, Kernel tag mismatch | refused | refused | see note |
+| Normal-only bundle, installed Kernel tag unknown | refused | allowed (warning) | see note |
+| Bundle fails self-consistency | refused | refused | refused |
+| Kernel marker `FF`/`00` onto installed `01` | allowed, Kernel patched, warning | same | same |
+| Everything matches | allowed | allowed | allowed |
+
+Note: `--recover` waives the date/pair refusals and the pre-flash backup, not
+the bundle self-consistency checks. Treat the Kernel-tag check as applying
+unless you have verified otherwise for your build.
+
+## Safety and what will not be done
+
+- A live write requires all of: `--execute`, `--i-understand-risk`, and a
+  pre-flash backup (`--backup <file>`). If the backup fails, the flash aborts
+  before any write. (`--skip-backup` and `--recover` waive it; both are
+  dangerous.)
+- Without `--execute`, `flash` is a dry run: it prints the plan and issues no
+  firmware writes.
+- `--force` never bypasses bundle self-consistency. A malformed or inconsistent
+  bundle is never written.
+- `dump` and `backup` are read-only and do not write to the drive.
+- Kernel mode is never needed for BD flashing, and the flasher never enters
+  it. OEM BD updates use only `04/FF -> 07/FE -> 07/F0 -> 05/FF`. The F3/F2
+  handshake exists only in the `pioneer-optical` crate, for the experimental
+  DVR path.
+- There is no `verify` command, and no safe abort once the write has begun.
 
 ## Adding a controller protocol
 

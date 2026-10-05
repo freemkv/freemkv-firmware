@@ -52,7 +52,7 @@ Every command classifies the drive first, using only proven discriminators:
 `backup` captures a flashable OEM-format package (two `.enc` components in a
 tar); `dump` is a raw, non-flashable device snapshot for diagnostics. Pioneer
 `flash` is gated by a hardware-family check, a Kernel-tag check, and bundle
-self-consistency; see [`docs/pioneer-flasher.md`](docs/pioneer-flasher.md) for
+self-consistency; see [`crates/freemkv-flash/README.md`](crates/freemkv-flash/README.md) for
 the full command reference and policy.
 
 ## Flash workflow
