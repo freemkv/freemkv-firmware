@@ -303,7 +303,21 @@ pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) 
 /// refusal is never bypassed when the family gate passed.
 pub fn decide_flash_plan(installed: &Installed, target: &Target, force: bool) -> FlashPlan {
     match family_gate(installed.family.as_ref(), target.family.as_ref()) {
-        Ok(()) => classify(installed, target),
+        Ok(()) => match classify(installed, target) {
+            // An unknown installed Kernel tag on a same-model Normal-only flash is
+            // forceable (the refusal says "or --force"); a malformed target is not.
+            FlashPlan::Refused(_)
+                if force
+                    && target.controller_id == installed.controller_id
+                    && target.kernel.is_none()
+                    && target.normal.is_some()
+                    && installed.kernel_tag.is_none()
+                    && target.required_kernel_tag.is_some() =>
+            {
+                FlashPlan::Forced(Box::new(FlashPlan::Plain))
+            }
+            plan => plan,
+        },
         Err(reason) if !force => FlashPlan::Refused(reason),
         Err(_) => match classify_forced(installed, target) {
             refused @ FlashPlan::Refused(_) => refused,
@@ -383,12 +397,12 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
         ) {
             (Some(inst), Some(req)) if inst == req => FlashPlan::Plain,
             (Some(inst), Some(req)) => normal_only_tag_mismatch(inst, req),
+            (_, None) => normal_only_no_tag(),
             (None, _) => FlashPlan::Refused(
                 "Normal-only flash refused: could not read the drive's installed Kernel ID \
                  tag (no usable pre-flash backup); use a Kernel+Normal package or --force"
                     .to_string(),
             ),
-            (_, None) => normal_only_no_tag(),
         };
     }
 
@@ -720,6 +734,31 @@ mod tests {
             decide_flash_plan(&inst, &tgt, true),
             FlashPlan::Refused(_)
         ));
+    }
+
+    #[test]
+    fn normal_only_unknown_installed_tag_is_forceable_with_family_match() {
+        let mut inst = installed(0x8A10, true, "22/01/01");
+        inst.kernel_tag = None;
+        let tgt = normal_only_target(0x8A10, "23/01/01");
+        assert!(matches!(
+            decide_flash_plan(&inst, &tgt, false),
+            FlashPlan::Refused(r) if r.contains("--force")
+        ));
+        assert_eq!(
+            decide_flash_plan(&inst, &tgt, true),
+            FlashPlan::Forced(Box::new(FlashPlan::Plain))
+        );
+        // A malformed target (no required tag) is not forceable, and its message
+        // must not suggest --force.
+        let mut bad = tgt.clone();
+        bad.required_kernel_tag = None;
+        for force in [false, true] {
+            match decide_flash_plan(&inst, &bad, force) {
+                FlashPlan::Refused(r) => assert!(!r.contains("--force"), "{r}"),
+                other => panic!("expected refusal, got {other:?}"),
+            }
+        }
     }
 
     #[test]
