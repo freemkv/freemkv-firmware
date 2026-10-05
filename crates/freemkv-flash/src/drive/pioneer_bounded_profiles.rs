@@ -1,6 +1,4 @@
-// Generated from docs/pioneer-bounded-descriptor-facts.json; see its verifier.
 // Exact local OEM hashes only. This table grants no live-write capability.
-// Source facts SHA-256: 458f934304fe236bc08990a1d199192c579ce7bf7a0fb8926a3a4e9e9d7f8ac1
 use super::BoundedOemProfile;
 
 /// Exact local bounded-flow updater profiles; no live-write authorization.
