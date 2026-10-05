@@ -705,6 +705,9 @@ fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Resul
     read_region_deep_gaps(dev, start, len).map(|(image, _)| image)
 }
 
+/// Zero-filled unreadable spans, `(offset, len)`.
+type Gaps = Vec<(usize, usize)>;
+
 /// Consecutive wholly-unreadable `READ_CHUNK`s (after something had read) that
 /// trigger a liveness probe; a failed probe aborts the salvage.
 const DEAD_STREAK: usize = 4;
@@ -714,7 +717,7 @@ fn read_region_deep_gaps(
     dev: &mut dyn ScsiDevice,
     start: usize,
     len: usize,
-) -> Result<(Vec<u8>, Vec<(usize, usize)>)> {
+) -> Result<(Vec<u8>, Gaps)> {
     let mut image = vec![0u8; len];
     let mut pos = 0usize;
     let mut dead_streak = 0usize;
@@ -870,7 +873,7 @@ mod tests {
         body[0x1010..0x1014].copy_from_slice(b"ID5 ");
         body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
         let sum = body
-            .chunks_exact(4)
+            .chunks(4)
             .map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]]))
             .fold(0u32, |a, w| a.wrapping_add(w));
         body[0x1020..0x1024].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());

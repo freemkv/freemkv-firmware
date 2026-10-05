@@ -151,10 +151,14 @@ fn exactly_one_transport_adapter_exists_in_the_flasher() {
 
 #[test]
 fn production_keeps_code_after_an_early_test_only_item() {
-    let src = "fn a() {}\n#[cfg(test)]\nfn helper() { let _ = \"0x3b\"; }\nfn prod() { let _ = 0x3b; }\n\
+    let src =
+        "fn a() {}\n#[cfg(test)]\nfn helper() { let _ = \"0x3b\"; }\nfn prod() { let _ = 0x3b; }\n\
                #[cfg(test)]\nmod tests { fn t() { let _ = 0x3c; } }\n";
     let prod = production(src);
-    assert!(!opcode_hits(&prod).is_empty(), "later production code was hidden");
+    assert!(
+        !opcode_hits(&prod).is_empty(),
+        "later production code was hidden"
+    );
     assert!(!prod.contains("0x3c"), "test module must be excluded");
     assert_eq!(opcode_hits(&prod).len(), 1);
 }

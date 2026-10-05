@@ -445,7 +445,7 @@ mod tests {
         // FrontKey dispatcher signature: `ae fe .. .. .. .. ae f0`.
         body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
         let sum = body
-            .chunks_exact(4)
+            .chunks(4)
             .map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]]))
             .fold(0u32, |a, w| a.wrapping_add(w));
         let fix = 0u32.wrapping_sub(sum);
