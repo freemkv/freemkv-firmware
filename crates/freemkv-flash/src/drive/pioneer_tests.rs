@@ -1061,3 +1061,19 @@ fn untrusted_text_is_sanitized_before_printing() {
     let summary = flash_summary(None, Some(&env));
     assert!(!summary.contains('\x1b'), "{summary:?}");
 }
+
+#[test]
+fn forced_warning_does_not_claim_a_family_bypass_for_the_unknown_tag_case() {
+    use crate::pioneer_flash_plan::FlashPlan;
+    // Same family, installed Kernel tag unreadable: Forced(Plain) via --force.
+    let (mut inst, tgt) = facts(Some("f1"), "22/06/01");
+    inst.kernel_tag = None;
+    let plan = plan_for(Some(&inst), &tgt, true);
+    assert_eq!(plan, FlashPlan::Forced(Box::new(FlashPlan::Plain)));
+    assert!(check_plan_executable(&plan).is_ok());
+    assert!(
+        !FORCED_WARNING.contains("family match was bypassed"),
+        "{FORCED_WARNING}"
+    );
+    assert!(FORCED_WARNING.contains("Kernel tag"), "{FORCED_WARNING}");
+}

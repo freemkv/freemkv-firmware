@@ -299,8 +299,10 @@ pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) 
 /// `force` are a Normal-only bundle whose known installed Kernel tag differs
 /// from the Normal's required tag, and a Normal-only bundle with no declared
 /// required tag. When the family gate fails under `force` the plan is
-/// [`FlashPlan::Forced`] carrying the classification's own plan. A non-family
-/// refusal is never bypassed when the family gate passed.
+/// [`FlashPlan::Forced`] carrying the classification's own plan. When the family
+/// gate passed, `force` only waives one refusal: a same-model Normal-only bundle
+/// whose installed Kernel tag is unknown (the target's required tag being known);
+/// every other refusal stands.
 pub fn decide_flash_plan(installed: &Installed, target: &Target, force: bool) -> FlashPlan {
     match family_gate(installed.family.as_ref(), target.family.as_ref()) {
         Ok(()) => match classify(installed, target) {

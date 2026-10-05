@@ -975,9 +975,12 @@ fn plan_for(
     }
 }
 
-/// Loud notice that the family gate was waived (--force). Kernel-tag refusals still apply.
-const FORCED_WARNING: &str = "WARNING: the firmware-family match was bypassed (--force). \
-    Flashing firmware from a different or unprofiled family can permanently brick this drive.";
+/// Loud notice that a safety gate was waived (--force): the firmware family
+/// and/or the installed Kernel tag could not be verified. A known Kernel-tag
+/// mismatch is still refused.
+const FORCED_WARNING: &str = "WARNING: a safety gate was bypassed (--force): the firmware family \
+    and/or the installed Kernel tag could not be verified. Flashing firmware from a different \
+    or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.";
 
 /// Loud notice shown for a cross-generation downgrade — the §15.3 Site-1
 /// marker patch WILL be applied to the incoming Kernel so it crosses the gate.

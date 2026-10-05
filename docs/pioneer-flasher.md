@@ -62,8 +62,9 @@ Three gates and one side-check decide what `flash` will do.
 
 1. **Hardware family match.** The family of the installed (drive) Normal must
    equal the family of the bundle's Normal (`fw::get_family`). If the silicon
-   differs, the flash is refused. `--force` bypasses this gate, and only this
-   gate.
+   differs, the flash is refused. `--force` bypasses this gate. It also waives
+   one refusal of gate 2: an installed Kernel tag that could not be read. It
+   bypasses nothing else.
 2. **Kernel ID tag match (Normal-only bundles).** When the bundle contains only
    a Normal, the installed Kernel's tag must equal the Kernel tag the incoming
    Normal requires. This mirrors Pioneer's OEM updater
@@ -89,6 +90,7 @@ is not needed; it is covered by the same gates.
 |---|---|---|---|
 | Family differs | refused | allowed | refused (unless `--force`) |
 | Normal-only bundle, Kernel tag mismatch | refused | refused | see note |
+| Normal-only bundle, installed Kernel tag unknown | refused | allowed (warning) | see note |
 | Bundle fails self-consistency | refused | refused | refused |
 | Kernel marker `FF`/`00` onto installed `01` | allowed, Kernel patched, warning | same | same |
 | Everything matches | allowed | allowed | allowed |
