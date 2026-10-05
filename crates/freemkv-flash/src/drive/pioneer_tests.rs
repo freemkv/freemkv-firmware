@@ -1292,3 +1292,89 @@ fn transfer_size_bounds_are_protocol_bounds_not_one_drive_size() {
     assert!(check_normal_size(&[0; 0x201]).is_err());
     assert!(check_normal_size(&[]).is_err());
 }
+
+#[test]
+fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
+    use pioneer_optical::envelope::builder::{
+        encode_encrypted_pair, BuildInputs, KernelBuild, NormalSignature,
+    };
+    use pioneer_optical::envelope::signature::SigningKey;
+    fn checksum(bytes: &mut [u8], at: usize) {
+        bytes[at..at + 4].fill(0);
+        let sum = bytes.chunks_exact(4).fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(word.try_into().unwrap()))
+        });
+        bytes[at..at + 4].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+    }
+    let mut kernel = vec![0; 0x10000];
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
+    kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
+    kernel[0x100..0x114].copy_from_slice(&[
+        0x7a, 0x20, 0, 0, 1, 0, 0x47, 12, 0x7a, 0x20, 0, 0, 2, 0, 0x47, 4, 1, 0xf0, 0x65, 5,
+    ]);
+    checksum(&mut kernel, 0xff00);
+    let mut scalar = [0; 20];
+    scalar[19] = 5;
+    let signer = SigningKey::from_bytes(scalar).unwrap();
+    for len in [0x2000usize, 0x3000, 0x8000] {
+        let mut normal = vec![0; len];
+        normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
+        normal[20..24].copy_from_slice(&(len as u32).to_be_bytes());
+        normal[0x400..0x41e].copy_from_slice(&[
+            0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 0x16, 0x79, 1, 0, 0x10, 1, 0, 0x6f, 0x70, 0,
+            0x74, 0x5d, 0x40, 0x7a, 0x20, 1, 2, 3, 4, 0x58, 0x60, 5, 0xba,
+        ]);
+        checksum(&mut normal, len - 4);
+        let pair = encode_encrypted_pair(
+            &BuildInputs {
+                kernel_image: &kernel,
+                normal_image: &normal,
+                envelope_id: "PIONEER BDR-TEST",
+                normal_revision: "9.99",
+                normal_date: "26/10/05",
+                kernel: KernelBuild::from_seed(7),
+                normal_key_seed: 11,
+            },
+            NormalSignature::Sign(&signer),
+        )
+        .unwrap();
+        linear_fe_control(&pair.kernel, &pair.normal).unwrap();
+        generic_normal_transcript(&pair.normal).unwrap();
+        crate::engine::plan_pioneer_offline(
+            &pair.normal,
+            crate::drive::InputKind::Bin,
+            "UNLISTED DEVICE",
+            false,
+            false,
+        )
+        .unwrap();
+        let mut archive = tar::Builder::new(Vec::new());
+        for (name, bytes) in [("kernel.enc", &pair.kernel), ("normal.enc", &pair.normal)] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            archive
+                .append_data(&mut header, name, bytes.as_slice())
+                .unwrap();
+        }
+        let captured = archive.into_inner().unwrap();
+        validate_normal_receiver(&pair.normal, Some(&captured)).unwrap();
+        let mut dev = MockScsiDevice::new().on(
+            |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
+            normal[..16].to_vec(),
+        );
+        let control = live_control(&mut dev, Some(&captured)).unwrap();
+        assert_eq!(&control[..16], &normal[..16]);
+        assert_eq!(
+            &control[16..20],
+            &[1, 2, 3, 4],
+            "captured receiver key must precede universal fallback"
+        );
+        let mut damaged = pair.normal;
+        let last = damaged.len() - 4;
+        damaged[last] ^= 1;
+        assert!(linear_fe_control(&pair.kernel, &damaged).is_err());
+    }
+}
