@@ -37,7 +37,8 @@ name: release
 # `linux-packages`: glibc GUIs on native amd64/arm64 runners, .deb + AppImage
 # (packaging/linux/). `windows-installer`: Inno Setup (packaging/windows/).
 #
-# Branch pushes / PRs touching the packaging run everything as a dry run
+# Every QA candidate calls this workflow as a required gate. Dev pushes / PRs
+# touching packaging also run everything as a dry run
 # (see `on:`); only tag runs publish or update the Homebrew tap.
 #
 # Build jobs check themselves out into `freemkv-firmware/` and run under
@@ -59,7 +60,7 @@ on:
     # packaging whenever it (or the version/lock) changes, without running the
     # full three-OS release build on every dev commit. GitHub does not apply
     # `paths` to tag pushes, so releases are unaffected.
-    branches: [dev, qa]
+    branches: [dev]
     paths:
       - '.github/workflows/release.yml'
       - 'packaging/**'
@@ -72,6 +73,7 @@ on:
       - 'packaging/**'
       - 'macos/**'
   workflow_dispatch:
+  workflow_call:
 
 # A newer dry run supersedes an older one on the same ref; a tag run is never
 # cancelled.
@@ -471,7 +473,9 @@ jobs:
           for t in flash fw; do
             freemkv-$t --version | tee v.log; grep -Fq "$want" v.log
             # Static = no ELF interpreter (ldd's wording differs on aarch64 static-pie).
-            ! readelf -lW /usr/bin/freemkv-$t | grep -Eq '^\s*INTERP\b'
+            if readelf -lW /usr/bin/freemkv-$t | grep -Eq '^\s*INTERP\b'; then
+              echo "::error::freemkv-$t is not static"; exit 1
+            fi
             test -f /usr/share/applications/org.freemkv.freemkv-$t-gui.desktop
             rc=0; xvfb-run -a timeout 10 /usr/bin/freemkv-$t-gui || rc=$?
             [ "$rc" = 124 ] || { echo "::error::freemkv-$t-gui exited early (rc=$rc)"; exit 1; }
@@ -734,7 +738,8 @@ jobs:
           git commit -aqm "freemkv-firmware ${VER#v}"
           # The app release job pushes to the same branch; rebase and retry if
           # it landed first.
-          for i in 1 2 3; do
+          for attempt in 1 2 3; do
+            echo "tap push attempt $attempt"
             git push && break
             git pull --rebase -q
           done
@@ -746,10 +751,11 @@ jobs:
   # Signed .rpm and pacman packages from this release's .debs (freemkv.org/rpm, /arch).
   linux-repos:
     needs: [linux-packages, linux-cli-armhf]
-    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     uses: ./.github/workflows/linux-repos.yml
+    with:
+      use-build-artifacts: ${{ !startsWith(github.ref, 'refs/tags/') }}
     secrets: inherit
 
   apt:

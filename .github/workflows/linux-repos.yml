@@ -25,6 +25,10 @@ on:
   # paths, so a paths-filtered tag trigger never fires).
   workflow_call:
     inputs:
+      use-build-artifacts:
+        description: validate this run's DEBs without publishing
+        type: boolean
+        default: false
       tag:
         type: string
         default: ''
@@ -59,9 +63,32 @@ jobs:
     outputs:
       tag: ${{ steps.pick.outputs.tag }}
       publish: ${{ steps.pick.outputs.publish }}
-      found: ${{ steps.wait.outputs.found }}
+      found: ${{ steps.current.outputs.found || steps.wait.outputs.found }}
     steps:
+      - uses: actions/download-artifact@v4
+        if: inputs.use-build-artifacts
+        with:
+          pattern: linux-package-*
+          merge-multiple: true
+          path: current-package
+      - name: Use this candidate's packages
+        if: inputs.use-build-artifacts
+        id: current
+        run: |
+          set -euo pipefail
+          mkdir debs
+          # Require every CLI/GUI DEB; never silently test an older release.
+          for t in flash fw; do
+            for arch in amd64 arm64 armhf; do
+              cp "current-package/freemkv-$t-$arch.deb" debs/
+            done
+            for arch in amd64 arm64; do
+              cp "current-package/freemkv-$t-gui-$arch.deb" debs/
+            done
+          done
+          echo "found=true" >> "$GITHUB_OUTPUT"
       - name: Pick the release
+        if: ${{ !inputs.use-build-artifacts }}
         id: pick
         env:
           GH_TOKEN: ${{ github.token }}
@@ -79,6 +106,7 @@ jobs:
       # wait until they are there and the asset list has settled. A test run
       # against a release without .debs has nothing to convert.
       - name: Wait for the release's .debs
+        if: ${{ !inputs.use-build-artifacts }}
         id: wait
         env:
           GH_TOKEN: ${{ github.token }}
@@ -114,7 +142,7 @@ jobs:
           for f in *.deb; do if [ -f "$f.sha256" ]; then sha256sum -c "$f.sha256"; fi; done
           ls -l
       - uses: actions/upload-artifact@v7
-        if: steps.wait.outputs.found == 'true'
+        if: steps.wait.outputs.found == 'true' || steps.current.outputs.found == 'true'
         with: { name: debs, path: debs/*.deb, if-no-files-found: error, retention-days: 7 }
 
   rpm:

@@ -26,6 +26,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Every candidate builds and smoke-tests every shipped architecture/package.
+  # A source-only change must not bypass release packaging validation.
+  release-packages:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+
   # Single source of truth for the MSRV — see ci.yml. Jobs that build/test AT
   # the MSRV read `needs.resolve-msrv.outputs.v` from Cargo.toml's rust-version;
   # clippy (cross-lint) runs on stable instead.
