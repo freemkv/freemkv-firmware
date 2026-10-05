@@ -247,8 +247,18 @@ pub fn resolve_backend(dev: &mut dyn ScsiDevice) -> Result<Option<BackendMatch>>
 }
 
 fn get_config_is_mtk(dev: &mut dyn ScsiDevice) -> bool {
-    let cdb = mtk::cdb_get_config(mtk::FEATURE_FWDATE, 32);
-    matches!(dev.command_in(&cdb, 32), Ok(d) if d.len() >= 10 && d[8] == 0x01 && d[9] == 0x0C)
+    match (mtk::Acquire::GetConfig {
+        feature: mtk::FEATURE_FWDATE,
+        alloc: 32,
+    })
+    .run(dev)
+    {
+        Ok(_) => true,
+        Err(error) => {
+            crate::diagnostics::record(format!("MediaTek feature probe did not match: {error:#}"));
+            false
+        }
+    }
 }
 
 /// True iff the drive's boot-ROM region at `0x003000` carries the ASCII
@@ -274,7 +284,7 @@ fn has_mt19_banner(dev: &mut dyn ScsiDevice) -> bool {
     let Ok(rom) = dev.command_in(&cdb, mtk::ROM_003000_LEN as usize) else {
         return false;
     };
-    rom.windows(4).any(|w| w == b"MT19")
+    rom.len() == mtk::ROM_003000_LEN as usize && rom.windows(4).any(|w| w == b"MT19")
 }
 
 fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {

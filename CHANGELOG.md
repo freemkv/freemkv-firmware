@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Validate MediaTek backup metadata using its response headers instead of treating
+  allocation sizes as required lengths. Accept complete 24-byte serial descriptors
+  and shorter INQUIRY replies, fetch longer metadata with bounded reads, and reject
+  truncated or inconsistent descriptors with header details in the diagnostic log.
+- Require complete MediaTek preflight and fingerprint ROM reads, validate protocol
+  probe descriptors, and recognize fixed-format sense with its valid bit set.
 - Pioneer firmware access uses a four-byte probe and retries short responses up
   to twice, unlocking before each attempt. Explicit errors still stop the probe.
 - Preserve no-medium sense errors on data transfers instead of reporting them as

@@ -68,7 +68,7 @@ pub const ROM_1F0000_LEN: u32 = 0x10000;
 pub const READ_TAR_MEMBER_CAP: usize = 256 * 1024;
 /// INQUIRY allocation length used by the identity flow.
 pub const INQUIRY_LEN: u16 = 96;
-/// GET CONFIGURATION allocation length for the fd_* field descriptors.
+/// Initial GET CONFIGURATION allocation length for the fd_* field descriptors.
 pub const FD_LEN: u16 = 28;
 /// GET CONFIGURATION feature code carrying the ASCII serial number (fd_sn.bin).
 pub const FEATURE_SERIAL: u16 = 0x0108;
@@ -307,11 +307,33 @@ impl Acquire {
             }
             Acquire::Inquiry { alloc } => {
                 let cdb = cdb_inquiry(alloc);
-                dev.command_in(&cdb, alloc as usize)
+                let mut data = dev.command_in(&cdb, alloc as usize)?;
+                log_inquiry(&data);
+                if data.len() >= 5 {
+                    let needed = 5 + usize::from(data[4]);
+                    if needed > alloc as usize {
+                        data = dev.command_in(&cdb_inquiry(needed as u16), needed)?;
+                        log_inquiry(&data);
+                    }
+                }
+                validate_inquiry(&data)?;
+                Ok(data)
             }
             Acquire::GetConfig { feature, alloc } => {
                 let cdb = cdb_get_config(feature, alloc);
-                dev.command_in(&cdb, alloc as usize)
+                let mut data = dev.command_in(&cdb, alloc as usize)?;
+                log_field_descriptor(feature, &data);
+                if data.len() >= 12 {
+                    let needed = 12 + usize::from(data[11]);
+                    if needed > alloc as usize {
+                        crate::diagnostics::record(format!("MediaTek feature 0x{feature:04X}: header requires {needed} bytes; expanding allocation from {alloc}"));
+                        let cdb = cdb_get_config(feature, needed as u16);
+                        data = dev.command_in(&cdb, needed)?;
+                        log_field_descriptor(feature, &data);
+                    }
+                }
+                validate_field_descriptor(&data, feature)?;
+                Ok(data)
             }
         }
     }
@@ -412,23 +434,20 @@ pub struct UserDump {
     pub rom_1ec000: Vec<u8>,
     /// Per-unit calibration NVRAM (offset 0x1F0000, 64 KiB).
     pub rom_1f0000: Vec<u8>,
-    /// INQUIRY response (96 B).
+    /// Complete standard INQUIRY response (variable length).
     pub inq: Vec<u8>,
-    /// fw-date GET CONFIG feature descriptor (28 B).
+    /// Complete fw-date GET CONFIG feature descriptor (variable length).
     pub fd_fwdate: Vec<u8>,
-    /// serial-number GET CONFIG feature descriptor (28 B).
+    /// Complete serial-number GET CONFIG feature descriptor (variable length).
     pub fd_sn: Vec<u8>,
 }
 
 impl UserDump {
     /// Build a [`UserDump`] from `(name, data)` members in any order.
     ///
-    /// Every member is length-bounded to its documented size. A tar file whose
-    /// `rom_1F0000.bin` is 128 KiB would otherwise overrun the flash target at
-    /// `0x200000` when restored; a member > 16 MiB would silently truncate the
-    /// 24-bit CDB length field the WRITE BUFFER writes go out with. Refuse
-    /// tar-supplied lengths that don't match the exact per-member size the
-    /// drive actually stores.
+    /// ROM members must match their fixed on-drive sizes to prevent restore
+    /// overruns. INQUIRY and GET CONFIGURATION metadata use declared lengths;
+    /// their headers must describe complete, bounded replies.
     pub fn from_members(members: Vec<(&str, Vec<u8>)>) -> Result<Self> {
         let mut rom_003000 = None;
         let mut rom_1ec000 = None;
@@ -458,20 +477,29 @@ impl UserDump {
             if data.len() != want {
                 bail!(
                     "dump member '{name}' has length {} — expected exactly {want} bytes; \
-                     refusing to restore (a wrong-size member would either overrun the \
-                     on-drive region or truncate the CDB length field)",
+                     invalid backup member",
                     data.len()
                 );
             }
+            Ok(data)
+        };
+        let check_descriptor = |slot: Option<Vec<u8>>, name: &str, feature| -> Result<Vec<u8>> {
+            let data = slot.ok_or_else(|| anyhow!("missing dump member '{name}'"))?;
+            validate_field_descriptor(&data, feature)
+                .with_context(|| format!("invalid dump member '{name}'"))?;
             Ok(data)
         };
         Ok(Self {
             rom_003000: check_len(rom_003000, "rom_003000.bin", ROM_003000_LEN as usize)?,
             rom_1ec000: check_len(rom_1ec000, "rom_1EC000.bin", ROM_1EC000_LEN as usize)?,
             rom_1f0000: check_len(rom_1f0000, "rom_1F0000.bin", ROM_1F0000_LEN as usize)?,
-            inq: check_len(inq, "inq.bin", INQUIRY_LEN as usize)?,
-            fd_fwdate: check_len(fd_fwdate, "fd_fwdate.bin", FD_LEN as usize)?,
-            fd_sn: check_len(fd_sn, "fd_sn.bin", FD_LEN as usize)?,
+            inq: {
+                let data = inq.ok_or_else(|| anyhow!("missing dump member 'inq.bin'"))?;
+                validate_inquiry(&data).context("invalid dump member 'inq.bin'")?;
+                data
+            },
+            fd_fwdate: check_descriptor(fd_fwdate, "fd_fwdate.bin", FEATURE_FWDATE)?,
+            fd_sn: check_descriptor(fd_sn, "fd_sn.bin", FEATURE_SERIAL)?,
         })
     }
 
@@ -602,7 +630,7 @@ pub struct FieldDescriptor {
 /// byte 3). Returns `None` if the payload is too short or has an unrecognized
 /// response code.
 pub fn parse_sense(data: &[u8]) -> Option<(u8, u8, u8)> {
-    let response_code = *data.first()?;
+    let response_code = *data.first()? & 0x7f;
     match response_code {
         0x70 | 0x71 => {
             if data.len() < 14 {
@@ -629,6 +657,75 @@ pub fn sense_key_is_fatal(key: u8) -> bool {
     matches!(key, 0x3 | 0x4 | 0xB)
 }
 
+// INQUIRY's additional length counts bytes after its five-byte header.
+// Preserve full replies (including any transport padding), never synthesize bytes.
+fn validate_inquiry(data: &[u8]) -> Result<()> {
+    if !(36..=260).contains(&data.len()) {
+        bail!("INQUIRY: expected 36..=260 bytes, got {}", data.len());
+    }
+    let declared = 5 + usize::from(data[4]);
+    if declared < 36 || declared > data.len() {
+        bail!(
+            "INQUIRY: expected complete identity of {declared} declared bytes, got {}",
+            data.len()
+        );
+    }
+    Ok(())
+}
+
+fn log_inquiry(data: &[u8]) {
+    crate::diagnostics::record(format!(
+        "MediaTek backup INQUIRY: returned={} header={:02x?} declared={:?}",
+        data.len(),
+        &data[..data.len().min(5)],
+        data.get(4).map(|n| 5 + usize::from(*n))
+    ));
+}
+
+// GET CONFIGURATION has an eight-byte response header followed by a four-byte
+// feature header and up to 255 additional bytes. Allocation is a ceiling, not
+// a required response size. These metadata bytes are never written to ROM.
+fn validate_field_descriptor(data: &[u8], expected: u16) -> Result<()> {
+    if !(12..=267).contains(&data.len()) {
+        bail!(
+            "feature 0x{expected:04X}: expected 12..=267 response bytes, got {}",
+            data.len()
+        );
+    }
+    let feature = u16::from_be_bytes([data[8], data[9]]);
+    if feature != expected {
+        bail!("expected feature 0x{expected:04X}, got 0x{feature:04X}");
+    }
+    let needed = 12 + usize::from(data[11]);
+    let declared = u64::from(u32::from_be_bytes(data[..4].try_into().unwrap())) + 4;
+    if declared != needed as u64 {
+        bail!("feature 0x{expected:04X}: inconsistent headers: expected {needed} total bytes from feature length, response declares {declared}");
+    }
+    if data.len() < needed {
+        bail!("feature 0x{expected:04X}: incomplete response: expected {needed} declared bytes, got {}", data.len());
+    }
+    if expected == FEATURE_SERIAL {
+        let serial = &data[12..needed];
+        if serial.is_empty() || !serial.len().is_multiple_of(4) {
+            bail!("feature 0x{expected:04X}: expected a nonempty serial field padded to a multiple of four bytes");
+        }
+        if !serial.iter().all(|b| (0x20..=0x7e).contains(b)) {
+            bail!(
+                "feature 0x{expected:04X}: expected ASCII graphic serial bytes with space padding"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn log_field_descriptor(feature: u16, data: &[u8]) {
+    crate::diagnostics::record(format!(
+        "MediaTek GET CONFIGURATION: requested_feature=0x{feature:04X} returned={} header={:02x?}",
+        data.len(),
+        &data[..data.len().min(12)]
+    ));
+}
+
 /// Parse a GET CONFIGURATION single-feature descriptor (fd_sn / fd_fwdate).
 pub fn parse_field_descriptor(data: &[u8]) -> Option<FieldDescriptor> {
     if data.len() < 12 {
@@ -636,7 +733,10 @@ pub fn parse_field_descriptor(data: &[u8]) -> Option<FieldDescriptor> {
     }
     let feature = u16::from_be_bytes([data[8], data[9]]);
     let add_len = data[11];
-    let end = (12 + add_len as usize).min(data.len());
+    let end = 12 + add_len as usize;
+    if end > data.len() {
+        return None;
+    }
     let ascii = String::from_utf8_lossy(&data[12..end])
         .trim_matches(|c: char| c.is_whitespace() || c == '\0')
         .to_string();
@@ -1130,7 +1230,13 @@ impl DriveFamily for Mtk {
         // PROBE is a real ROM read and must succeed. TEST UNIT READY is a faithful
         // handshake: flashed with no disc, a healthy drive answers benign no-medium
         // (key 0x2 ASC 0x3A); any OTHER not-ready reason aborts before PREPARE.
-        let _ = dev.command_in(&cdb_read_probe(), PROBE_ALLOC)?;
+        let probe = dev.command_in(&cdb_read_probe(), PROBE_ALLOC)?;
+        if probe.len() != PROBE_ALLOC {
+            bail!(
+                "short MediaTek preflight ROM read: got {} of {PROBE_ALLOC} bytes",
+                probe.len()
+            );
+        }
         let _ = dev.command_in(&cdb_test_unit_ready(), 0)?;
         Ok(())
     }
@@ -1141,14 +1247,16 @@ impl DriveFamily for Mtk {
     ) -> Result<Option<crate::drive::fw_ident::FwReport>> {
         // The two firmware-code windows a live drive exposes (rom_1F0000 is
         // per-unit calibration and deliberately excluded from the fingerprint).
-        let rom_003000 = dev.command_in(
-            &cdb_read_buffer(MODE_6, ROM_BUFFER_ID, ROM_003000_OFFSET, ROM_003000_LEN),
-            ROM_003000_LEN as usize,
-        )?;
-        let rom_1ec000 = dev.command_in(
-            &cdb_read_buffer(MODE_6, ROM_BUFFER_ID, ROM_1EC000_OFFSET, ROM_1EC000_LEN),
-            ROM_1EC000_LEN as usize,
-        )?;
+        let rom_003000 = Acquire::ReadBuffer {
+            offset: ROM_003000_OFFSET,
+            len: ROM_003000_LEN,
+        }
+        .run(dev)?;
+        let rom_1ec000 = Acquire::ReadBuffer {
+            offset: ROM_1EC000_OFFSET,
+            len: ROM_1EC000_LEN,
+        }
+        .run(dev)?;
         Ok(Some(crate::drive::fw_ident::report(
             &rom_003000,
             &rom_1ec000,

@@ -136,6 +136,8 @@ impl MockScsiDevice {
         // GET CONFIG header (8) + feature descriptor: feature code at bytes 8..10.
         fd[8] = 0x01;
         fd[9] = 0x0C;
+        fd[3] = 24;
+        fd[11] = 16;
         let mut boot_rom = vec![0u8; 32];
         // Short boot-banner: `MT1959 Boot BU5...` — the ASCII substring the
         // classifier's `has_mt19_banner` scans the 32-byte 0x003000 region
@@ -239,6 +241,7 @@ impl ScsiDevice for MockScsiDevice {
         if self.firmware_image.is_some() && cdb.first() == Some(&0x12) {
             let mut inquiry = vec![0u8; alloc_len];
             if inquiry.len() >= 36 {
+                inquiry[4] = (inquiry.len() - 5) as u8;
                 inquiry[8..16].copy_from_slice(b"HL-DT-ST");
                 inquiry[16..32].copy_from_slice(b"BD-RE BU40N     ");
                 inquiry[32..36].copy_from_slice(b"1.00");
@@ -261,6 +264,20 @@ impl ScsiDevice for MockScsiDevice {
                     return Ok(slice.to_vec());
                 }
             }
+        }
+        if cdb.first() == Some(&0x46) && cdb.len() >= 4 && alloc_len == 28 {
+            let mut data = vec![0u8; alloc_len.min(28)];
+            let length = (data.len() - 4) as u32;
+            data[..4].copy_from_slice(&length.to_be_bytes());
+            data[8..10].copy_from_slice(&cdb[2..4]);
+            data[11] = (data.len() - 12) as u8;
+            data[12..].fill(b'S');
+            return Ok(data);
+        }
+        if cdb.first() == Some(&0x12) && alloc_len >= 36 {
+            let mut data = vec![0u8; alloc_len];
+            data[4] = (alloc_len - 5) as u8;
+            return Ok(data);
         }
         Ok(vec![0u8; alloc_len])
     }

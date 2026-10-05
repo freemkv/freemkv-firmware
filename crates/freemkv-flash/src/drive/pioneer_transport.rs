@@ -91,7 +91,12 @@ impl Transport for ScsiTransport<'_, '_> {
         let result = self.dev.with(|d| match data {
             Data::In(buf) => {
                 let got = d.command_in(cdb, buf.len())?;
-                let n = got.len().min(buf.len());
+                let n = got.len();
+                anyhow::ensure!(
+                    n <= buf.len(),
+                    "Pioneer transport returned {n} bytes for a {}-byte buffer",
+                    buf.len()
+                );
                 buf[..n].copy_from_slice(&got[..n]);
                 Ok(n)
             }
@@ -154,4 +159,21 @@ pub fn identify_on(shared: &SharedDevice<'_>) -> Result<Identity> {
 /// [`identify_on`] for a bare device.
 pub fn identify(dev: &mut dyn ScsiDevice) -> Result<Identity> {
     identify_on(&SharedDevice::new(dev))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oversized_read_is_rejected_without_truncating_it() {
+        let mut dev = crate::platform::MockScsiDevice::new().on(|_| true, vec![0; 5]);
+        let shared = SharedDevice::new(&mut dev);
+        let mut transport = ScsiTransport::reads(&shared);
+        let mut buffer = [0u8; 4];
+        let error = transport.exec(&[0x3c], Data::In(&mut buffer)).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("returned 5 bytes for a 4-byte buffer"));
+    }
 }

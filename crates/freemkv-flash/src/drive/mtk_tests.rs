@@ -71,9 +71,13 @@ fn sample_dump(a: u8, b: u8) -> UserDump {
         rom_003000: vec![0; ROM_003000_LEN as usize],
         rom_1ec000: vec![a; ROM_1EC000_LEN as usize],
         rom_1f0000: vec![b; ROM_1F0000_LEN as usize],
-        inq: vec![0; 96],
-        fd_fwdate: vec![0; 28],
-        fd_sn: vec![0; 28],
+        inq: {
+            let mut data = vec![0; 96];
+            data[4] = 91;
+            data
+        },
+        fd_fwdate: descriptor(0x010C, 16),
+        fd_sn: descriptor(0x0108, 16),
     }
 }
 
@@ -109,9 +113,13 @@ fn from_members_rejects_wrong_size_members() {
             ("rom_003000.bin", vec![0; ROM_003000_LEN as usize]),
             ("rom_1EC000.bin", vec![0; ROM_1EC000_LEN as usize]),
             ("rom_1F0000.bin", vec![0; ROM_1F0000_LEN as usize]),
-            ("inq.bin", vec![0; 96]),
-            ("fd_fwdate.bin", vec![0; 28]),
-            ("fd_sn.bin", vec![0; 28]),
+            ("inq.bin", {
+                let mut data = vec![0; 96];
+                data[4] = 91;
+                data
+            }),
+            ("fd_fwdate.bin", descriptor(0x010C, 16)),
+            ("fd_sn.bin", descriptor(0x0108, 16)),
         ]
     }
 
@@ -207,7 +215,7 @@ fn parse_field_descriptor_serial_and_helpers() {
     let mut data = vec![
         0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x01, 0x08, 0x03, 0x10,
     ];
-    data.extend_from_slice(b"009HANK118975   ");
+    data.extend_from_slice(b"009HANK118975    ");
     let fd = parse_field_descriptor(&data).unwrap();
     assert_eq!(fd.feature, FEATURE_SERIAL);
     assert_eq!(fd.ascii, "009HANK118975");
@@ -376,4 +384,167 @@ fn firmware_writes_reject_status_that_a_lenient_transport_would_tolerate() {
         .flash_open(&mut Rejected, crate::manifest::FlashMode::Full)
         .is_err());
     assert!(Mtk.flash_chunk(&mut Rejected, 0, &[0; 4]).is_err());
+}
+
+fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
+    let mut data = vec![0u8; 12 + usize::from(payload_len)];
+    let length = (data.len() - 4) as u32;
+    data[..4].copy_from_slice(&length.to_be_bytes());
+    data[8..10].copy_from_slice(&feature.to_be_bytes());
+    data[11] = payload_len;
+    data[12..].fill(b'S');
+    data
+}
+
+#[test]
+fn backup_accepts_complete_24_byte_serial_and_preserves_it_in_tar() {
+    let serial = descriptor(FEATURE_SERIAL, 12);
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[1, 8][..]),
+        serial.clone(),
+    );
+    let dump = DumpPlan::new().execute(&mut dev).unwrap();
+    assert_eq!(dump.fd_sn, serial);
+    let restored = UserDump::from_tar_bytes(&dump.to_tar_bytes().unwrap()).unwrap();
+    assert_eq!(restored.fd_sn, serial);
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn descriptor_length_comes_from_header_not_allocation() {
+    for payload in [4, 12, 16, 32, 252] {
+        let full = descriptor(FEATURE_SERIAL, payload);
+        let mut dev = MockScsiDevice::new()
+            .on(
+                |cdb| cdb.get(7..9) == Some(&[0, 28][..]),
+                full[..full.len().min(28)].to_vec(),
+            )
+            .on(|cdb| cdb.first() == Some(&0x46), full.clone());
+        let result = Acquire::GetConfig {
+            feature: FEATURE_SERIAL,
+            alloc: FD_LEN,
+        }
+        .run(&mut dev)
+        .unwrap();
+        assert_eq!(result, full);
+        assert_eq!(dev.reads.len(), if payload > 16 { 2 } else { 1 });
+        if payload > 16 {
+            assert_eq!(&dev.reads[1][7..9], &(full.len() as u16).to_be_bytes());
+        }
+    }
+}
+
+#[test]
+fn incomplete_or_inconsistent_descriptors_are_rejected_live_and_in_tar() {
+    let full = descriptor(FEATURE_SERIAL, 16);
+    let mut wrong_feature = full.clone();
+    wrong_feature[9] = 0x0c;
+    let mut wrong_total = full.clone();
+    wrong_total[3] = 20;
+    let mut invalid_ascii = full.clone();
+    invalid_ascii[12] = 0xff;
+    let mut overflowing_total = full.clone();
+    overflowing_total[..4].fill(0xff);
+    let mut longer = descriptor(FEATURE_SERIAL, 32);
+    longer.truncate(28);
+    for data in [
+        vec![],
+        vec![0; 8],
+        full[..11].to_vec(),
+        full[..24].to_vec(),
+        wrong_feature,
+        wrong_total,
+        invalid_ascii,
+        overflowing_total,
+        descriptor(FEATURE_SERIAL, 13),
+        longer,
+    ] {
+        let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x46), data.clone());
+        assert!(Acquire::GetConfig {
+            feature: FEATURE_SERIAL,
+            alloc: FD_LEN
+        }
+        .run(&mut dev)
+        .is_err());
+        assert!(dev.reads.len() <= 2, "descriptor reads must be bounded");
+        let mut dump = sample_dump(0, 0);
+        dump.fd_sn = data;
+        assert!(UserDump::from_tar_bytes(&dump.to_tar_bytes().unwrap()).is_err());
+    }
+}
+
+#[test]
+fn truncated_descriptor_is_not_displayed_as_a_complete_serial() {
+    let data = descriptor(FEATURE_SERIAL, 16);
+    assert!(parse_field_descriptor(&data[..24]).is_none());
+}
+
+#[test]
+fn inquiry_backup_accepts_complete_short_reply_and_reads_long_reply() {
+    for length in [36usize, 96, 128, 260] {
+        let mut reply = vec![0; length];
+        reply[4] = (length - 5) as u8;
+        let mut dev = MockScsiDevice::new()
+            .on(
+                |cdb| cdb.get(3..5) == Some(&[0, 96][..]),
+                reply[..length.min(96)].to_vec(),
+            )
+            .on(|cdb| cdb.first() == Some(&0x12), reply.clone());
+        let data = Acquire::Inquiry { alloc: INQUIRY_LEN }
+            .run(&mut dev)
+            .unwrap();
+        assert_eq!(data, reply);
+        let mut dump = sample_dump(0, 0);
+        dump.inq = data;
+        assert_eq!(
+            UserDump::from_tar_bytes(&dump.to_tar_bytes().unwrap()).unwrap(),
+            dump
+        );
+        assert_eq!(dev.reads.len(), if length > 96 { 2 } else { 1 });
+    }
+}
+
+#[test]
+fn inquiry_backup_rejects_truncated_or_inconsistent_identity() {
+    for (returned, declared) in [(0usize, 0usize), (35, 36), (36, 96), (96, 128), (96, 5)] {
+        let mut reply = vec![0; returned];
+        if returned >= 5 {
+            reply[4] = (declared - 5) as u8;
+        }
+        let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x12), reply.clone());
+        assert!(Acquire::Inquiry { alloc: INQUIRY_LEN }
+            .run(&mut dev)
+            .is_err());
+        assert!(dev.reads.len() <= 2);
+        let mut dump = sample_dump(0, 0);
+        dump.inq = reply;
+        assert!(UserDump::from_tar_bytes(&dump.to_tar_bytes().unwrap()).is_err());
+    }
+}
+
+#[test]
+fn short_preflight_rom_read_prevents_prepare_write() {
+    let mut dev =
+        MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), vec![0; PROBE_ALLOC - 1]);
+    let error = Mtk.flash_open(&mut dev, FlashMode::Full).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("short MediaTek preflight ROM read"));
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn short_firmware_report_window_is_not_fingerprinted() {
+    let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), vec![0; 8]);
+    assert!(Mtk.firmware_report(&mut dev).is_err());
+}
+
+#[test]
+fn fixed_sense_with_valid_information_bit_preserves_hardware_fault() {
+    let mut sense = vec![0; 18];
+    sense[0] = 0xf0;
+    sense[2] = 4;
+    sense[7] = 10;
+    sense[12] = 0x44;
+    assert_eq!(parse_sense(&sense), Some((4, 0x44, 0)));
 }

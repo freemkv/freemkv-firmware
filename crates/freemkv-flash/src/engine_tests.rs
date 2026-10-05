@@ -86,9 +86,13 @@ fn sample_user_dump() -> UserDump {
         rom_1f0000: (0..ROM_1F0000_LEN as usize)
             .map(|i| ((i * 7 + 3) % 251) as u8)
             .collect(),
-        inq: vec![0u8; 96],
-        fd_fwdate: vec![0u8; 28],
-        fd_sn: vec![0u8; 28],
+        inq: {
+            let mut data = vec![0u8; 96];
+            data[4] = 91;
+            data
+        },
+        fd_fwdate: descriptor(0x010C, 16),
+        fd_sn: descriptor(0x0108, 16),
     }
 }
 
@@ -1146,4 +1150,14 @@ fn force_waives_model_identity_but_keeps_input_structure_checks() {
         .validate_forced_image(&mut dev, b"not a firmware image")
         .is_err());
     assert!(dev.writes.is_empty());
+}
+
+fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
+    let mut data = vec![0u8; 12 + usize::from(payload_len)];
+    let length = (data.len() - 4) as u32;
+    data[..4].copy_from_slice(&length.to_be_bytes());
+    data[8..10].copy_from_slice(&feature.to_be_bytes());
+    data[11] = payload_len;
+    data[12..].fill(b'S');
+    data
 }

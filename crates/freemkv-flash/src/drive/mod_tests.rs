@@ -315,3 +315,17 @@ fn short_inquiry_is_an_error_not_an_unknown_model() {
         .to_string()
         .contains("short INQUIRY identity: 35"));
 }
+
+#[test]
+fn truncated_feature_header_is_not_protocol_evidence() {
+    let mut reply = vec![0; 10];
+    reply[8..10].copy_from_slice(&[1, 12]);
+    let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x46), reply);
+    assert!(!get_config_is_mtk(&mut dev));
+}
+
+#[test]
+fn truncated_boot_rom_is_not_protocol_evidence() {
+    let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), b"MT1959".to_vec());
+    assert!(!has_mt19_banner(&mut dev));
+}
