@@ -1974,6 +1974,7 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 [[package]]
 name = "libfreemkv"
 version = "1.7.7"
+source = "git+https://github.com/freemkv/libfreemkv?tag=v1.7.7#c8e67f16b46687fb99a117d42ce4dc4a89001876"
 dependencies = [
  "libc",
  "tracing",
@@ -4920,19 +4921,3 @@ dependencies = [
  "syn 3.0.6",
  "winnow 1.0.4",
 ]
-
-[[patch.unused]]
-name = "freemkv-unlock"
-version = "1.7.7"
-
-[[patch.unused]]
-name = "freemkv-engine"
-version = "1.7.7"
-
-[[patch.unused]]
-name = "freemkv-i18n"
-version = "1.7.7"
-
-[[patch.unused]]
-name = "freemkv-keysources"
-version = "1.7.7"

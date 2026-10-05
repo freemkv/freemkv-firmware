@@ -1,10 +1,8 @@
 name: doc-links
 
 # Thin caller → the canonical reusable doc-links gate in freemkv/.github.
-# freemkv-firmware's freemkv-flash crate path-deps ../../../libfreemkv, which in
-# turn path-deps ../freemkv-unlock, so the reusable checks both out as siblings
-# (no [patch] needed — the flat sibling layout resolves the path deps) and
-# resolves the toolchain from rust-version.
+# Dependencies resolve from the committed Cargo.lock; the toolchain from
+# rust-version.
 on: [push, pull_request]
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,4 +13,3 @@ jobs:
     uses: freemkv/.github/.github/workflows/guard-doclinks.yml@v1
     with:
       self: freemkv-firmware
-      checkout: libfreemkv freemkv-unlock
