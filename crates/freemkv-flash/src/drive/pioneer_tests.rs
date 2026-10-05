@@ -555,7 +555,7 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
     use crate::pioneer_flash_plan::{decide_flash_plan, FamilyKey, FlashPlan, Installed, Target};
     let ud03_installed = Installed {
         controller_id: 0x8510, // BDR-UD03 v1
-        receiver_new_gen: true,
+        receiver_new_gen: Some(true),
         normal_date: None,
         family: Some(FamilyKey::new("f1")),
         kernel_tag: None,
@@ -782,6 +782,7 @@ fn header_only_normal(sat: &str, date: &str) -> Vec<u8> {
          Hardware Version : {sat}\r\n\
          Destination : GENERAL\r\n\
          Generated Date : {date}\r\n\
+         Kernel Version : ID58\r\n\
          File Type : Normal\r\n"
     );
     let bytes = header.as_bytes();
@@ -800,8 +801,8 @@ fn installed_facts_from_header_only_normal_backup() {
     let facts = installed_facts(Some(&backup)).expect("resolves controller id + date");
     assert_eq!(facts.controller_id, 0x8A10);
     assert!(facts.normal_date.is_some());
-    // No Kernel in the backup -> cannot prove new-gen receiver -> conservative false.
-    assert!(!facts.receiver_new_gen);
+    // No Kernel in the backup -> receiver generation unknown.
+    assert_eq!(facts.receiver_new_gen, None);
 }
 
 #[test]
@@ -810,7 +811,11 @@ fn check_plan_executable_covers_every_variant() {
     // All executable plans — including a cross-generation downgrade, which the
     // executor now handles via the §15.3 marker patch when the Kernel is written.
     assert!(check_plan_executable(&FlashPlan::Plain).is_ok());
-    assert!(check_plan_executable(&FlashPlan::Forced).is_ok());
+    assert!(check_plan_executable(&FlashPlan::Forced(Box::new(FlashPlan::Plain))).is_ok());
+    assert!(
+        check_plan_executable(&FlashPlan::Forced(Box::new(FlashPlan::Refused("x".into()))))
+            .is_err()
+    );
     assert!(check_plan_executable(&FlashPlan::KernelCrossflash).is_ok());
     assert!(check_plan_executable(&FlashPlan::KernelDowngrade).is_ok());
     // A refusal always aborts.
@@ -830,7 +835,7 @@ fn facts(
     (
         Installed {
             controller_id: 0x8A10,
-            receiver_new_gen: true,
+            receiver_new_gen: Some(true),
             normal_date: FwDate::parse("22/01/01"),
             family: fam.clone(),
             // Shared tag so the gate-2 Normal-only tag check lands on Plain
@@ -866,7 +871,10 @@ fn plan_for_family_mismatch_is_refused_then_forced() {
         plan_for(Some(&inst), &tgt, false),
         FlashPlan::Refused(r) if r.contains("family mismatch")
     ));
-    assert_eq!(plan_for(Some(&inst), &tgt, true), FlashPlan::Forced);
+    assert_eq!(
+        plan_for(Some(&inst), &tgt, true),
+        FlashPlan::Forced(Box::new(FlashPlan::Plain))
+    );
 }
 
 #[test]
@@ -875,7 +883,10 @@ fn plan_for_unknown_installed_is_refused_unless_forced() {
     // No backup -> installed family unknown -> fail closed (not "plain").
     let (_, tgt) = facts(Some("f1"), "22/06/01");
     assert!(matches!(plan_for(None, &tgt, false), FlashPlan::Refused(_)));
-    assert_eq!(plan_for(None, &tgt, true), FlashPlan::Forced);
+    assert_eq!(
+        plan_for(None, &tgt, true),
+        FlashPlan::Forced(Box::new(FlashPlan::Plain))
+    );
 }
 
 #[test]
@@ -902,12 +913,15 @@ fn resolve_flash_plan_unprofilable_header_only_normal_is_refused_unless_forced()
     let refused = resolve_flash_plan(Some(&installed), None, Some(&target), false, false).unwrap();
     assert!(matches!(refused, FlashPlan::Refused(_)));
     let forced = resolve_flash_plan(Some(&installed), None, Some(&target), false, true).unwrap();
-    assert_eq!(forced, FlashPlan::Forced);
+    assert_eq!(forced, FlashPlan::Forced(Box::new(FlashPlan::Plain)));
     let recover = resolve_flash_plan(Some(&installed), None, Some(&target), true, false).unwrap();
     assert!(matches!(recover, FlashPlan::Refused(_)));
     let recover_forced =
         resolve_flash_plan(Some(&installed), None, Some(&target), true, true).unwrap();
-    assert_eq!(recover_forced, FlashPlan::Forced);
+    assert_eq!(
+        recover_forced,
+        FlashPlan::Forced(Box::new(FlashPlan::Plain))
+    );
 }
 
 #[test]

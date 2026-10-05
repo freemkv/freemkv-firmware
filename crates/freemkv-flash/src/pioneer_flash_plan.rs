@@ -105,7 +105,9 @@ pub struct Installed {
     /// Controller id (SAT value), i.e. the model.
     pub controller_id: u16,
     /// The installed receiver has the new-generation Site-1 incoming-marker gate.
-    pub receiver_new_gen: bool,
+    /// `None` when unknown (no usable installed Kernel); classification treats
+    /// unknown as `false`.
+    pub receiver_new_gen: Option<bool>,
     /// Advertised date of the installed Normal (recency reference). `None` when
     /// the drive reports no usable date.
     pub normal_date: Option<FwDate>,
@@ -174,11 +176,12 @@ pub enum FlashPlan {
     /// mode; see [`kernel_mode_required`]).
     KernelCrossflash,
     /// Refused, with a human-readable reason (including any family-gate failure).
-    /// `--force` turns this into [`FlashPlan::Forced`].
+    /// `--force` turns a family-gate refusal into [`FlashPlan::Forced`]; other
+    /// refusals (e.g. a Kernel-tag mismatch) stay refused.
     Refused(String),
-    /// `--force`: proceed without the safety classification — on your own. Only
-    /// produced when a plan would otherwise have been refused.
-    Forced,
+    /// `--force` waived the family gate; proceed on your own. Carries the plan
+    /// classification produced had the family gate passed.
+    Forced(Box<FlashPlan>),
 }
 
 /// Opaque crossflash-family key: the lowercase-hex rendering of
@@ -265,7 +268,7 @@ pub fn decide_recover_plan(
 ) -> FlashPlan {
     match family_gate(installed, target) {
         Ok(()) => FlashPlan::Plain,
-        Err(_) if force => FlashPlan::Forced,
+        Err(_) if force => FlashPlan::Forced(Box::new(FlashPlan::Plain)),
         Err(reason) => FlashPlan::Refused(reason),
     }
 }
@@ -290,27 +293,72 @@ pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) 
     Ok(())
 }
 
-/// Decide the flash path. Pure: no I/O. `force` converts an otherwise-`Refused`
-/// plan into [`FlashPlan::Forced`]; it never weakens a known-good plan.
+/// Decide the flash path. Pure: no I/O. `force` waives ONLY the family gate:
+/// the post-family classification still runs, and the refusals that survive
+/// `force` are a Normal-only bundle whose known installed Kernel tag differs
+/// from the Normal's required tag, and a Normal-only bundle with no declared
+/// required tag. When the family gate fails under `force` the plan is
+/// [`FlashPlan::Forced`] carrying the classification's own plan. A non-family
+/// refusal is never bypassed when the family gate passed.
 pub fn decide_flash_plan(installed: &Installed, target: &Target, force: bool) -> FlashPlan {
-    match classify(installed, target) {
-        FlashPlan::Refused(reason) if force => {
-            let _ = reason;
-            FlashPlan::Forced
-        }
-        plan => plan,
+    match family_gate(installed.family.as_ref(), target.family.as_ref()) {
+        Ok(()) => classify(installed, target),
+        Err(reason) if !force => FlashPlan::Refused(reason),
+        Err(_) => match classify_forced(installed, target) {
+            refused @ FlashPlan::Refused(_) => refused,
+            inner => FlashPlan::Forced(Box::new(inner)),
+        },
     }
 }
 
 fn classify(installed: &Installed, target: &Target) -> FlashPlan {
-    if let Err(reason) = family_gate(installed.family.as_ref(), target.family.as_ref()) {
-        return FlashPlan::Refused(reason);
-    }
     if target.controller_id == installed.controller_id {
         classify_same_model(installed, target)
     } else {
         classify_crossflash(installed, target)
     }
+}
+
+/// Post-family classification under `--force` (family gate failed and waived).
+/// Only the Normal-only tag check can refuse; an unknown installed tag is
+/// forceable. Otherwise report the plan classification would have produced.
+fn classify_forced(installed: &Installed, target: &Target) -> FlashPlan {
+    if target.kernel.is_none() && target.normal.is_some() {
+        return match (
+            installed.kernel_tag.as_deref(),
+            target.required_kernel_tag.as_deref(),
+        ) {
+            (Some(inst), Some(req)) if inst != req => normal_only_tag_mismatch(inst, req),
+            (_, None) => normal_only_no_tag(),
+            _ => FlashPlan::Plain,
+        };
+    }
+    match target.kernel {
+        Some(kernel)
+            if installed.receiver_new_gen.unwrap_or(false)
+                && Generation::from_marker(kernel.marker).site1_rejected() =>
+        {
+            FlashPlan::KernelDowngrade
+        }
+        Some(_) if target.controller_id != installed.controller_id => FlashPlan::KernelCrossflash,
+        _ => FlashPlan::Plain,
+    }
+}
+
+fn normal_only_tag_mismatch(inst: &str, req: &str) -> FlashPlan {
+    FlashPlan::Refused(format!(
+        "Normal-only flash refused: this Normal needs installed Kernel tag {req:?}, \
+         but the drive currently has Kernel tag {inst:?}. Use a Kernel+Normal \
+         package instead."
+    ))
+}
+
+fn normal_only_no_tag() -> FlashPlan {
+    FlashPlan::Refused(
+        "Normal-only flash refused: this Normal has no declared required-Kernel tag \
+         in its envelope header (malformed or truncated); refusing"
+            .to_string(),
+    )
 }
 
 fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
@@ -333,21 +381,13 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
             target.required_kernel_tag.as_deref(),
         ) {
             (Some(inst), Some(req)) if inst == req => FlashPlan::Plain,
-            (Some(inst), Some(req)) => FlashPlan::Refused(format!(
-                "Normal-only flash refused: this Normal needs installed Kernel tag {req:?}, \
-                 but the drive currently has Kernel tag {inst:?}. Use a Kernel+Normal \
-                 package instead."
-            )),
+            (Some(inst), Some(req)) => normal_only_tag_mismatch(inst, req),
             (None, _) => FlashPlan::Refused(
                 "Normal-only flash refused: could not read the drive's installed Kernel ID \
                  tag (no usable pre-flash backup); use a Kernel+Normal package or --force"
                     .to_string(),
             ),
-            (_, None) => FlashPlan::Refused(
-                "Normal-only flash refused: this Normal has no declared required-Kernel tag \
-                 in its envelope header (malformed or truncated); refusing"
-                    .to_string(),
-            ),
+            (_, None) => normal_only_no_tag(),
         };
     }
 
@@ -357,7 +397,9 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
     // rejects an incoming `FF`/`00` Kernel. That's a KernelDowngrade and
     // triggers the §15.3 patch at write time.
     let kernel = target.kernel.expect("has_kernel branch");
-    if installed.receiver_new_gen && Generation::from_marker(kernel.marker).site1_rejected() {
+    if installed.receiver_new_gen.unwrap_or(false)
+        && Generation::from_marker(kernel.marker).site1_rejected()
+    {
         FlashPlan::KernelDowngrade
     } else {
         FlashPlan::Plain
@@ -385,7 +427,9 @@ fn classify_crossflash(installed: &Installed, target: &Target) -> FlashPlan {
                 .to_string(),
         );
     }
-    if installed.receiver_new_gen && Generation::from_marker(kernel.marker).site1_rejected() {
+    if installed.receiver_new_gen.unwrap_or(false)
+        && Generation::from_marker(kernel.marker).site1_rejected()
+    {
         FlashPlan::KernelDowngrade
     } else {
         FlashPlan::KernelCrossflash
@@ -546,7 +590,7 @@ mod tests {
     fn installed(cid: u16, new_gen: bool, d: &str) -> Installed {
         Installed {
             controller_id: cid,
-            receiver_new_gen: new_gen,
+            receiver_new_gen: Some(new_gen),
             normal_date: date(d),
             family: fam(),
             kernel_tag: tag(),
@@ -632,8 +676,11 @@ mod tests {
             }
             other => panic!("expected refusal, got {other:?}"),
         }
-        // --force bypasses the tag gate.
-        assert_eq!(decide_flash_plan(&inst, &tgt, true), FlashPlan::Forced);
+        // --force bypasses only the family gate; the tag gate stays.
+        assert!(matches!(
+            decide_flash_plan(&inst, &tgt, true),
+            FlashPlan::Refused(_)
+        ));
     }
 
     #[test]
@@ -706,7 +753,63 @@ mod tests {
             decide_flash_plan(&inst, &tgt, false),
             FlashPlan::Refused(r) if r.contains("family mismatch")
         ));
-        assert_eq!(decide_flash_plan(&inst, &tgt, true), FlashPlan::Forced);
+        assert_eq!(
+            decide_flash_plan(&inst, &tgt, true),
+            FlashPlan::Forced(Box::new(FlashPlan::KernelCrossflash))
+        );
+        // Family mismatch + tags match + Normal-only: forced, inner Plain.
+        let mut normal_only = normal_only_target(0x8F00, "22/01/01");
+        normal_only.family = Some(FamilyKey::new("f2"));
+        assert_eq!(
+            decide_flash_plan(&inst, &normal_only, true),
+            FlashPlan::Forced(Box::new(FlashPlan::Plain))
+        );
+        // Family mismatch + Normal-only + tag mismatch: refusal survives force.
+        normal_only.required_kernel_tag = Some("ID81".to_string());
+        assert!(matches!(
+            decide_flash_plan(&inst, &normal_only, true),
+            FlashPlan::Refused(_)
+        ));
+        // Family mismatch + Normal-only crossflash: same tag check, not the SAT refusal.
+        let mut xf = normal_only_target(0x8F01, "22/01/01");
+        xf.family = Some(FamilyKey::new("f2"));
+        assert_eq!(
+            decide_flash_plan(&inst, &xf, true),
+            FlashPlan::Forced(Box::new(FlashPlan::Plain))
+        );
+        // Malformed Normal-only (no required tag) stays refused under force.
+        xf.required_kernel_tag = None;
+        assert!(matches!(
+            decide_flash_plan(&inst, &xf, true),
+            FlashPlan::Refused(_)
+        ));
+    }
+
+    #[test]
+    fn force_does_not_bypass_non_family_refusal_when_family_passes() {
+        let inst = installed(0x8F00, true, "22/01/01");
+        // Same family, Normal-only crossflash: refused with or without force.
+        let tgt = normal_only_target(0x8F01, "22/01/01");
+        assert!(matches!(
+            decide_flash_plan(&inst, &tgt, true),
+            FlashPlan::Refused(_)
+        ));
+    }
+
+    #[test]
+    fn forced_unknown_installed_tag_is_forceable_and_downgrade_is_kept() {
+        let mut inst = installed(0x8A10, true, "22/01/01");
+        inst.family = None;
+        inst.kernel_tag = None;
+        assert_eq!(
+            decide_flash_plan(&inst, &normal_only_target(0x8A10, "23/01/01"), true),
+            FlashPlan::Forced(Box::new(FlashPlan::Plain))
+        );
+        let tgt = pair_target(0x8A10, "20/06/15", "20/06/15", 0xFF);
+        assert_eq!(
+            decide_flash_plan(&inst, &tgt, true),
+            FlashPlan::Forced(Box::new(FlashPlan::KernelDowngrade))
+        );
     }
 
     #[test]
@@ -775,7 +878,10 @@ mod tests {
                 decide_flash_plan(i, t, false),
                 FlashPlan::Refused(_)
             ));
-            assert_eq!(decide_flash_plan(i, t, true), FlashPlan::Forced);
+            assert_eq!(
+                decide_flash_plan(i, t, true),
+                FlashPlan::Forced(Box::new(FlashPlan::Plain))
+            );
         }
         assert_eq!(
             decide_flash_plan(&inst, &ok_target, false),
@@ -809,11 +915,9 @@ mod tests {
             decide_recover_plan(None, Some(&a), false),
             FlashPlan::Refused(_)
         ));
-        assert_eq!(decide_recover_plan(None, Some(&a), true), FlashPlan::Forced);
-        assert_eq!(
-            decide_recover_plan(Some(&a), Some(&b), true),
-            FlashPlan::Forced
-        );
+        let forced = FlashPlan::Forced(Box::new(FlashPlan::Plain));
+        assert_eq!(decide_recover_plan(None, Some(&a), true), forced);
+        assert_eq!(decide_recover_plan(Some(&a), Some(&b), true), forced);
     }
 
     #[test]
@@ -822,7 +926,7 @@ mod tests {
             FlashPlan::Plain,
             FlashPlan::KernelDowngrade,
             FlashPlan::KernelCrossflash,
-            FlashPlan::Forced,
+            FlashPlan::Forced(Box::new(FlashPlan::Plain)),
             FlashPlan::Refused("x".into()),
         ] {
             assert!(!kernel_mode_required(&plan));

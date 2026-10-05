@@ -877,8 +877,7 @@ pub(crate) fn installed_facts(
         .as_deref()
         .and_then(pioneer_optical::envelope::decode_envelope)
         .and_then(|d| d.image.get(0xFE).copied())
-        .map(|m| Generation::from_marker(m) == Generation::Newer)
-        .unwrap_or(false);
+        .map(|m| Generation::from_marker(m) == Generation::Newer);
     // Installed family: profile the decoded installed Normal body (the same
     // decode used for the target, so the two keys are directly comparable).
     let family = installed_normal
@@ -954,7 +953,7 @@ fn plan_for(
             // "unknown installed" refusal applies, which `force` waives.
             let unknown = Installed {
                 controller_id: target.controller_id,
-                receiver_new_gen: false,
+                receiver_new_gen: None,
                 normal_date: None,
                 family: None,
                 kernel_tag: None,
@@ -988,9 +987,9 @@ pub(crate) fn check_plan_executable(plan: &crate::pioneer_flash_plan::FlashPlan)
     use crate::pioneer_flash_plan::FlashPlan;
     match plan {
         FlashPlan::Plain | FlashPlan::KernelCrossflash => Ok(()),
-        FlashPlan::Forced => {
+        FlashPlan::Forced(inner) => {
             eprintln!("{}", crate::style::amber(FORCED_WARNING));
-            Ok(())
+            check_plan_executable(inner)
         }
         FlashPlan::KernelDowngrade => {
             eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
