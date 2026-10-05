@@ -533,11 +533,11 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
         let header = pioneer_optical::envelope::header_info(bytes).ok_or_else(|| {
             format!("malformed bundle: {label} component has no readable envelope header")
         })?;
-        if header.file_type != Some(expected_type) {
+        if header.kind != Some(expected_type) {
             return Err(format!(
                 "malformed bundle: {label} slot carries a component whose header declares \
                  File Type {:?}, not {:?}",
-                header.file_type.map_or("unknown", |t| t.as_str()),
+                header.kind.map_or("unknown", |t| t.as_str()),
                 expected_type.as_str()
             ));
         }

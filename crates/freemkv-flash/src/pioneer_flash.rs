@@ -236,6 +236,7 @@ fn apply_downgrade_patch_if_needed(kernel_enc: &[u8]) -> Result<Option<Vec<u8>>>
             })?;
             Ok(Some(repacked))
         }
+        _ => bail!("downgrade patch returned an unrecognized outcome"),
     }
 }
 

@@ -636,8 +636,8 @@ fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> 
         || nh.hardware_version != kh.hardware_version
         || kh.destination != "GENERAL"
         || nh.destination != kh.destination
-        || kh.file_type != Some(pioneer_optical::ComponentKind::Kernel)
-        || nh.file_type != Some(pioneer_optical::ComponentKind::Normal)
+        || kh.kind != Some(pioneer_optical::ComponentKind::Kernel)
+        || nh.kind != Some(pioneer_optical::ComponentKind::Normal)
         || kh.kernel_version != nh.kernel_version
         || kh.kernel_version2 != nh.kernel_version2
     {
@@ -651,8 +651,8 @@ fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> 
     let decoded_normal =
         pioneer_optical::envelope::decode_envelope_with_kernel(normal, &decoded_kernel)
             .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
-    if decoded_kernel.info.layout != pioneer_optical::envelope::Layout::KernelFront
-        || decoded_normal.info.layout != pioneer_optical::envelope::Layout::Normal
+    if decoded_kernel.info().layout != pioneer_optical::envelope::Layout::KernelFront
+        || decoded_normal.info().layout != pioneer_optical::envelope::Layout::Normal
         || !zero_word_sum(&decoded_kernel.image)
         || !zero_word_sum(&decoded_normal.image)
     {

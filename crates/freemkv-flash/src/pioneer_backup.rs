@@ -295,7 +295,7 @@ pub fn component_roles(bytes: &[u8]) -> Vec<(String, String)> {
 fn validate_kernel_only(kernel: &[u8], product: &str) -> Result<()> {
     let kh = pioneer_optical::envelope::header_info(kernel).context("invalid Kernel header")?;
     if !product.split_whitespace().any(|part| part == kh.model)
-        || kh.file_type != Some(pioneer_optical::ComponentKind::Kernel)
+        || kh.kind != Some(pioneer_optical::ComponentKind::Kernel)
     {
         bail!("Pioneer Kernel identity does not match the drive");
     }
@@ -365,8 +365,8 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
     if !product.split_whitespace().any(|part| part == kh.model)
         || nh.model != kh.model
         || nh.hardware_version != kh.hardware_version
-        || kh.file_type != Some(pioneer_optical::ComponentKind::Kernel)
-        || nh.file_type != Some(pioneer_optical::ComponentKind::Normal)
+        || kh.kind != Some(pioneer_optical::ComponentKind::Kernel)
+        || nh.kind != Some(pioneer_optical::ComponentKind::Normal)
         || kh.kernel_version != nh.kernel_version
         || kh.kernel_version2 != nh.kernel_version2
         || kh.destination != nh.destination
@@ -389,7 +389,7 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
             normal,
             &decoded_kernel.image,
         ))
-        || decoded_normal.info.layout
+        || decoded_normal.info().layout
             != if pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(
                 &decoded_kernel.image,
             )
@@ -1249,9 +1249,9 @@ mod tests {
         let k = pioneer_optical::envelope::decode_envelope(&kernel.bytes).unwrap();
         let detected =
             pioneer_optical::envelope::builder::kernel_layout_from_image(&k.image).unwrap();
-        let expected = match k.info.layout.as_str() {
-            "kernel-front" => pioneer_optical::envelope::builder::KernelLayout::FrontKey,
-            "kernel-derived" => pioneer_optical::envelope::builder::KernelLayout::DerivedKey,
+        let expected = match k.info().layout.as_str() {
+            "kernel-front" => pioneer_optical::envelope::Layout::KernelFront,
+            "kernel-derived" => pioneer_optical::envelope::Layout::KernelDerived,
             other => panic!("unsupported Kernel layout: {other}"),
         };
         assert_eq!(detected, expected);
@@ -1370,8 +1370,8 @@ mod tests {
                         h.model,
                         h.hardware_version,
                         h.destination,
-                        h.file_type.map_or("unknown", |t| t.as_str()),
-                        decoded.info.layout.as_str()
+                        h.kind.map_or("unknown", |t| t.as_str()),
+                        decoded.info().layout.as_str()
                     );
                     if let Some(seed) = decoded.encoding_seed() {
                         *seeds.entry(seed).or_default() += 1;
@@ -1643,14 +1643,14 @@ mod tests {
                         }
                     }
                 }
-                let expected = match decoded.info.layout.as_str() {
+                let expected = match decoded.info().layout.as_str() {
                     "kernel-front" => {
                         front += 1;
-                        pioneer_optical::envelope::builder::KernelLayout::FrontKey
+                        pioneer_optical::envelope::Layout::KernelFront
                     }
                     "kernel-derived" => {
                         derived += 1;
-                        pioneer_optical::envelope::builder::KernelLayout::DerivedKey
+                        pioneer_optical::envelope::Layout::KernelDerived
                     }
                     _ => continue,
                 };
