@@ -46,17 +46,23 @@ const POLL_INTERVAL: Duration = Duration::from_millis(500);
 /// identity (`drive::identify` -> `Identity::class`) when that identity is
 /// unambiguous: a `BD-*` product, or a `DVD-R*` product on a `DVR*` platform.
 ///
-/// FALLBACK: an identity that cannot be read (a degraded drive under `--recover`)
-/// or that is neither of those is ambiguous. If the target Normal profiles as a
-/// known family (`pioneer_optical::image::family` on its decoded body) the
-/// flash is a BD-generation image, so assume [`DriveClass::Bd`] — the `04/FF`-only
-/// entry, which is the only flash route validated on hardware. With no family to
-/// lean on the class is unknowable and the flash is refused before any write.
-fn resolve_class(identity: Result<Identity>, normal: &[u8]) -> Result<DriveClass> {
+/// FALLBACK (`--recover` ONLY): an identity that cannot be read (a degraded
+/// drive) or that is neither of those is ambiguous. If the target Normal
+/// profiles as a known family (`target_family_known`, from
+/// `pioneer_optical::image::family` on its decoded body) the flash is a
+/// BD-generation image, so assume [`DriveClass::Bd`] — the `04/FF`-only entry,
+/// which is the only flash route validated on hardware. A normal (non-recover)
+/// flash never guesses: an unreadable/ambiguous identity is refused before any
+/// write, as is a recover flash with no family to lean on.
+fn resolve_class(
+    identity: Result<Identity>,
+    target_family_known: bool,
+    recover: bool,
+) -> Result<DriveClass> {
     if let Some(class) = identity.as_ref().ok().and_then(Identity::class) {
         return Ok(class);
     }
-    if crate::pioneer_flash_plan::normal_family(normal).is_some() {
+    if recover && target_family_known {
         println!(
             "{}",
             style::dim("  drive class not reported; target is a known BD family, assuming Bd")
@@ -65,12 +71,12 @@ fn resolve_class(identity: Result<Identity>, normal: &[u8]) -> Result<DriveClass
     }
     match identity {
         Err(error) => Err(error).context(
-            "could not read the drive identity to choose the update dialect, and the target \
-             Normal is not a recognised BD family; refusing before any write",
+            "could not read the drive identity to choose the update dialect (a guess is only \
+             made under --recover, for a recognised BD family); refusing before any write",
         ),
         Ok(_) => bail!(
-            "the drive does not identify as a BD or DVR generation, and the target Normal is not \
-             a recognised BD family; refusing before any write"
+            "the drive does not identify as a BD or DVR generation (a guess is only made under \
+             --recover, for a recognised BD family); refusing before any write"
         ),
     }
 }
@@ -135,7 +141,11 @@ pub(crate) fn execute_flash(
     let mut normal_progress = style::Progress::new("flashing normal", normal.len());
 
     let shared = SharedDevice::new(dev);
-    let class = resolve_class(transport::identify_on(&shared), normal)?;
+    let class = resolve_class(
+        transport::identify_on(&shared),
+        crate::pioneer_flash_plan::normal_family(normal).is_some(),
+        recover,
+    )?;
     let mut port = ScsiTransport::flash(&shared);
 
     // OEM update-mode entry, then settle and identity gate. In recover mode the
@@ -673,21 +683,33 @@ mod tests {
     fn class_follows_an_unambiguous_identity() {
         let id = transport::identify(&mut Ident(b"BD-RW   BDR-UD04")).unwrap();
         // The target need not profile: the drive's own identity decides.
-        assert_eq!(
-            resolve_class(Ok(id), &ud04_normal(0x1000)).unwrap(),
-            DriveClass::Bd
-        );
+        assert_eq!(resolve_class(Ok(id), false, false).unwrap(), DriveClass::Bd);
     }
 
     #[test]
     fn ambiguous_identity_without_a_known_family_is_refused_before_any_write() {
         // Neither BD nor DVD-R/DVR, and a Normal that does not profile.
         let id = transport::identify(&mut Ident(b"CD-RW   UNKNOWN1")).unwrap();
-        let err = resolve_class(Ok(id), &ud04_normal(0x1000)).unwrap_err();
+        let err = resolve_class(Ok(id), false, true).unwrap_err();
         assert!(format!("{err:#}").contains("refusing before any write"));
         // An unreadable identity is equally ambiguous.
-        let err =
-            resolve_class(Err(anyhow::anyhow!("no identity")), &ud04_normal(0x1000)).unwrap_err();
+        let err = resolve_class(Err(anyhow::anyhow!("no identity")), false, true).unwrap_err();
         assert!(format!("{err:#}").contains("refusing before any write"));
+    }
+
+    #[test]
+    fn bd_class_is_only_assumed_for_a_recover_flash() {
+        // Unreadable identity + a target that profiles as a known family.
+        let unreadable = || Err(anyhow::anyhow!("no identity"));
+        assert_eq!(
+            resolve_class(unreadable(), true, true).unwrap(),
+            DriveClass::Bd
+        );
+        let err = resolve_class(unreadable(), true, false).unwrap_err();
+        assert!(format!("{err:#}").contains("refusing before any write"));
+        // Same for an identity that is neither BD nor DVR.
+        let id = transport::identify(&mut Ident(b"CD-RW   UNKNOWN1")).unwrap();
+        assert!(resolve_class(Ok(id.clone()), true, false).is_err());
+        assert_eq!(resolve_class(Ok(id), true, true).unwrap(), DriveClass::Bd);
     }
 }
