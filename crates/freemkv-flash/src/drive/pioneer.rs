@@ -1189,6 +1189,29 @@ impl DriveFamily for Pioneer {
                 "{}",
                 crate::style::green("flash complete; drive returned ready.")
             );
+            // Auto post-flash identity readback: the drive just rebooted into
+            // whatever it now reports as its live identity. Print it so the user
+            // sees exactly what landed without a separate `info` invocation.
+            // Non-fatal: a transient post-boot read error is a warning, not a
+            // flash failure (the write already committed).
+            match crate::drive::pioneer_transport::identify(dev) {
+                Ok(ident) => {
+                    println!(
+                        "post-flash: vendor='{}' product='{}' rev='{}' platform='{}' kernel-tag='{}'",
+                        ident.vendor(),
+                        ident.product(),
+                        ident.revision(),
+                        ident.platform(),
+                        ident.kernel_tag(),
+                    );
+                }
+                Err(e) => eprintln!(
+                    "{}",
+                    crate::style::amber(&format!(
+                        "post-flash identify failed ({e:#}); the flash itself committed OK"
+                    ))
+                ),
+            }
             Ok(())
         })())
     }
