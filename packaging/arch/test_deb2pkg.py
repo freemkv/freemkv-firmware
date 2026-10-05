@@ -20,6 +20,13 @@ class Depends(unittest.TestCase):
         self.assertEqual(deb2pkg.depends(APP['Depends'], {'gtk4': '4.10', 'libadwaita': '1.4'}),
                          ['libadwaita>=1.4', 'glibc', 'gcc-libs', 'glib2', 'gtk4>=4.10', 'ca-certificates'])
 
+    def test_gui_maps_its_windowing_libraries(self):
+        gui = ('libc6 (>= 2.39), libgcc-s1 (>= 4.2), libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, '
+               'libwayland-client0, libwayland-egl1, libx11-6, libxcursor1, libxi6, libxrandr2')
+        self.assertEqual(deb2pkg.depends(gui, {}),
+                         ['glibc', 'gcc-libs', 'libglvnd', 'libxkbcommon', 'libxkbcommon-x11', 'wayland', 'libx11',
+                          'libxcursor', 'libxi', 'libxrandr'])
+
     def test_static_cli_has_none(self):
         self.assertEqual(deb2pkg.depends('', {}), [])
 
