@@ -9,11 +9,11 @@ name: release
 # Every asset has a STABLE, unversioned name (so the site can link
 # https://github.com/freemkv/freemkv-firmware/releases/latest/download/<asset>)
 # and a sibling `<asset>.sha256`.
-#   Windows  <t>-x86_64-windows-setup.exe    per-user installer: GUI + CLI, CLI
+#   Windows  <t>-<arch>-windows-setup.exe    per-user installer: GUI + CLI, CLI
 #                                            on PATH, Start-menu shortcut
-#            <t>-x86_64-windows.zip          portable: GUI + CLI
-#            <t>-cli-x86_64-windows.exe      bare CLI
-#            freemkv-firmware-x86_64-windows-setup.exe / .zip  both tools
+#            <t>-<arch>-windows.zip          portable: GUI + CLI
+#            <t>-cli-<arch>-windows.exe      bare CLI          (arch: x86_64, aarch64)
+#            freemkv-firmware-<arch>-windows-setup.exe / .zip  both tools
 #   macOS    <t>-gui-macos-<arch>.zip        <t>-gui.app, with the CLI at
 #                                            Contents/MacOS/<t> (Homebrew cask)
 #            <t>-macos-<arch>.tar.gz         CLI (Homebrew formula)
@@ -29,8 +29,9 @@ name: release
 # tar.gz/zip and linux-x86_64 tar.gz names above -- do not rename them.
 #
 # ── How each is built ──────────────────────────────────────────────────────
-# `build`: CLIs on all five targets (the macOS IOKit / Windows SPTI / Linux SG_IO
-# backends come from libfreemkv); GUIs (eframe/egui) on macOS and Windows.
+# `build`: CLIs on all six targets (the macOS IOKit / Windows SPTI / Linux SG_IO
+# backends come from libfreemkv); GUIs (eframe/egui) on macOS and Windows
+# (Windows arm64 on the native windows-11-arm runner).
 # Linux CLIs are static musl (aarch64 cross-compiled with `cross`).
 # `linux-packages`: glibc GUIs on native amd64/arm64 runners, .deb + AppImage
 # (packaging/linux/). `windows-installer`: Inno Setup (packaging/windows/).
@@ -164,6 +165,14 @@ jobs:
             target: x86_64-pc-windows-msvc
             osname: windows
             arch: x86_64
+            archive: zip
+            binext: '.exe'
+            gui: true
+          # Windows on Arm: native arm64 runner, GUIs included.
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            osname: windows
+            arch: aarch64
             archive: zip
             binext: '.exe'
             gui: true
@@ -497,25 +506,35 @@ jobs:
   # PATH added/removed on install/uninstall, Start-menu shortcut, UNSIGNED, plus
   # a portable zip -- one of each PER TOOL, like freemkv's app, each holding the
   # tool's GUI (windowed) and CLI (console):
-  #   freemkv-flash-x86_64-windows-setup.exe / .zip     freemkv-flash(.exe, -gui.exe)
-  #   freemkv-fw-x86_64-windows-setup.exe / .zip        freemkv-fw(.exe, -gui.exe)
-  #   freemkv-firmware-x86_64-windows-setup.exe / .zip  all four (the original bundle)
-  # each with a .sha256. The bare CLI .exe (freemkv-<tool>-cli-x86_64-windows.exe)
-  # and the per-binary freemkv-<bin>-windows-x86_64.zip archives come from `build`.
+  #   freemkv-flash-<arch>-windows-setup.exe / .zip     freemkv-flash(.exe, -gui.exe)
+  #   freemkv-fw-<arch>-windows-setup.exe / .zip        freemkv-fw(.exe, -gui.exe)
+  #   freemkv-firmware-<arch>-windows-setup.exe / .zip  all four (the original bundle)
+  # each with a .sha256. The bare CLI .exe (freemkv-<tool>-cli-<arch>-windows.exe)
+  # and the per-binary freemkv-<bin>-windows-<arch>.zip archives come from `build`.
   # No winget manifest, by decision.
   windows-installer:
     needs: build
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x86_64
+          - runner: windows-11-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
-          name: freemkv-windows-x86_64
+          name: freemkv-windows-${{ matrix.arch }}
           path: dl
       - name: Stage the binaries and zip
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
           $tools = @{
             'freemkv-flash'    = @('freemkv-flash','freemkv-flash-gui')
@@ -525,15 +544,16 @@ jobs:
           foreach ($t in $tools.Keys) {
             New-Item -ItemType Directory -Force "stage/$t" | Out-Null
             foreach ($b in $tools[$t]) {
-              Expand-Archive -Path "dl/$b-windows-x86_64.zip" -DestinationPath "stage/$t" -Force
-              if (-not (Test-Path "stage/$t/$b.exe")) { throw "$b-windows-x86_64.zip did not contain $b.exe" }
+              Expand-Archive -Path "dl/$b-windows-$env:ARCH.zip" -DestinationPath "stage/$t" -Force
+              if (-not (Test-Path "stage/$t/$b.exe")) { throw "$b-windows-$env:ARCH.zip did not contain $b.exe" }
             }
-            Compress-Archive -Path "stage/$t/*" -DestinationPath "$t-x86_64-windows.zip" -Force
+            Compress-Archive -Path "stage/$t/*" -DestinationPath "$t-$env:ARCH-windows.zip" -Force
           }
       - name: Build the installers
         shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
         run: |
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
@@ -544,13 +564,15 @@ jobs:
           # A branch build has no version tag; the installer only needs a numeric one.
           $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:TAG.TrimStart('v') } else { '0.0.0' }
           foreach ($t in 'freemkv-flash','freemkv-fw','freemkv-firmware') {
-            & $iscc "/DTool=$t" "/DAppVersion=$ver" "/DBinDir=$((Resolve-Path "stage/$t").Path)" "/O$PWD" packaging/windows/freemkv-firmware.iss
+            & $iscc "/DTool=$t" "/DArch=$env:ARCH" "/DAppVersion=$ver" "/DBinDir=$((Resolve-Path "stage/$t").Path)" "/O$PWD" packaging/windows/freemkv-firmware.iss
             if ($LASTEXITCODE -ne 0) { throw "iscc ($t) exited $LASTEXITCODE" }
           }
       # Round-trip each installer: files, shortcuts and PATH land; uninstall
       # removes them and leaves the user's other PATH entries intact.
       - name: Verify the installers
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
           $userPath = { [Environment]::GetEnvironmentVariable('Path', 'User') }
           $keep = @("$env:RUNNER_TEMP\keep-a", "$env:RUNNER_TEMP\keep-b")
@@ -564,7 +586,7 @@ jobs:
             $dir = "$env:LOCALAPPDATA\Programs\$($c.t)"
             $lnks = $c.lnks | ForEach-Object { "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$_.lnk" }
             $before = (& $userPath) -split ';'
-            Start-Process -Wait "./$($c.t)-x86_64-windows-setup.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+            Start-Process -Wait "./$($c.t)-$env:ARCH-windows-setup.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
             foreach ($f in (@($c.clis + $c.guis) | ForEach-Object { "$_.exe" }) + 'unins000.exe') {
               if (-not (Test-Path "$dir\$f")) { throw "$($c.t) installer did not create $dir\$f" }
             }
@@ -590,26 +612,26 @@ jobs:
         run: |
           set -euo pipefail
           for t in freemkv-flash freemkv-fw freemkv-firmware; do
-            A="$t-x86_64-windows"
+            A="$t-${{ matrix.arch }}-windows"
             sha256sum "$A.zip" > "$A.zip.sha256"
             sha256sum "$A-setup.exe" > "$A-setup.exe.sha256"
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-installers
+          name: windows-installers-${{ matrix.arch }}
           path: |
-            *-x86_64-windows.zip*
-            *-x86_64-windows-setup.exe*
+            *-${{ matrix.arch }}-windows.zip*
+            *-${{ matrix.arch }}-windows-setup.exe*
           if-no-files-found: error
       - name: Publish to the release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            *-x86_64-windows.zip
-            *-x86_64-windows.zip.sha256
-            *-x86_64-windows-setup.exe
-            *-x86_64-windows-setup.exe.sha256
+            *-${{ matrix.arch }}-windows.zip
+            *-${{ matrix.arch }}-windows.zip.sha256
+            *-${{ matrix.arch }}-windows-setup.exe
+            *-${{ matrix.arch }}-windows-setup.exe.sha256
 
   # Refresh the Homebrew tap (freemkv/homebrew-tap) to this release: the
   # freemkv-flash / freemkv-fw formulae and their -gui casks. update.sh reads the

@@ -2,16 +2,28 @@
 ; packaging/windows/freemkv.iss: %LOCALAPPDATA%\Programs, no admin, the install
 ; dir added to / removed from the user PATH, Start-menu shortcuts, UNSIGNED.
 ; Built by .github/workflows/release.yml, once per Tool:
-;   iscc /DTool=<tool> /DAppVersion=X.Y.Z /DBinDir=<dir with the .exe> /O<out> freemkv-firmware.iss
-;   Tool=freemkv-flash     freemkv-flash.exe (CLI) + freemkv-flash-gui.exe -> freemkv-flash-x86_64-windows-setup.exe
-;   Tool=freemkv-fw        freemkv-fw.exe (CLI) + freemkv-fw-gui.exe       -> freemkv-fw-x86_64-windows-setup.exe
-;   Tool=freemkv-firmware  all four of the above                           -> freemkv-firmware-x86_64-windows-setup.exe
+;   iscc /DTool=<tool> /DArch=<x86_64|aarch64> /DAppVersion=X.Y.Z /DBinDir=<dir with the .exe> /O<out> freemkv-firmware.iss
+;   Tool=freemkv-flash     freemkv-flash.exe (CLI) + freemkv-flash-gui.exe -> freemkv-flash-<arch>-windows-setup.exe
+;   Tool=freemkv-fw        freemkv-fw.exe (CLI) + freemkv-fw-gui.exe       -> freemkv-fw-<arch>-windows-setup.exe
+;   Tool=freemkv-firmware  all four of the above                           -> freemkv-firmware-<arch>-windows-setup.exe
+; One AppId per tool across both architectures (same install dir), so
+; installing the other architecture's build upgrades in place.
 ; The CLIs are console programs on PATH; the GUIs get Start-menu shortcuts.
 #ifndef AppVersion
   #error AppVersion must be defined (/DAppVersion=X.Y.Z)
 #endif
 #ifndef BinDir
   #error BinDir must be defined (/DBinDir=...)
+#endif
+#ifndef Arch
+  #define Arch "x86_64"
+#endif
+#if Arch == "x86_64"
+  #define InnoArch "x64compatible"
+#elif Arch == "aarch64"
+  #define InnoArch "arm64"
+#else
+  #error Arch must be x86_64 or aarch64
 #endif
 #ifndef Tool
   #error Tool must be defined (/DTool=freemkv-flash, freemkv-fw or freemkv-firmware)
@@ -46,15 +58,15 @@ PrivilegesRequired=lowest
 DefaultDirName={localappdata}\Programs\{#Tool}
 DisableDirPage=yes
 DisableProgramGroupPage=yes
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed={#InnoArch}
+ArchitecturesInstallIn64BitMode={#InnoArch}
 MinVersion=10.0
 ChangesEnvironment=yes
 ; Relative to this script's directory (SourceDir defaults to it).
 SetupIconFile=..\..\crates\{#MainGui}\assets\freemkv.ico
 UninstallDisplayIcon={app}\{#MainGui}.exe
 UninstallDisplayName={#AppTitle}
-OutputBaseFilename={#Tool}-x86_64-windows-setup
+OutputBaseFilename={#Tool}-{#Arch}-windows-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
