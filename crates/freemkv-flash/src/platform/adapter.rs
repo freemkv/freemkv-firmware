@@ -7,6 +7,7 @@
 //! three deleted backends.
 
 use anyhow::{anyhow, bail, Result};
+use sha2::{Digest, Sha256};
 
 use libfreemkv::scsi::{self, DataDirection, ScsiTransport};
 
@@ -226,7 +227,25 @@ impl TransportDevice {
     ) -> libfreemkv::error::Result<scsi::ScsiResult> {
         let start = std::time::Instant::now();
         crate::diagnostics::record(format!("SCSI execute: device={:?} cdb={cdb:02x?} direction={dir:?} requested={} timeout_ms={timeout_ms}", self.path, buf.len()));
+        if dir == DataDirection::ToDevice && !buf.is_empty() {
+            crate::diagnostics::record(format!(
+                "SCSI outgoing data: bytes={} sha256={:x}",
+                buf.len(),
+                Sha256::digest(&*buf)
+            ));
+        }
         let result = self.inner.execute(cdb, dir, buf, timeout_ms);
+        if dir == DataDirection::FromDevice {
+            let count = result.as_ref().ok().map(|r| r.bytes_transferred);
+            let available = count.unwrap_or(buf.len()).min(buf.len());
+            let received = &buf[..available];
+            let metadata = matches!(cdb.first(), Some(0x12 | 0x46 | 0x03 | 0x4a))
+                || (cdb.first() == Some(&0x3c) && cdb.get(1..3) == Some(&[0x02, 0xf1][..]));
+            crate::diagnostics::record(format!("SCSI incoming data: reported={count:?} buffer_bytes={} inspected_bytes={available} sha256={:x} count_known={} status_ok={}", buf.len(), Sha256::digest(received), count.is_some(), result.as_ref().is_ok_and(|r| r.status == 0)));
+            if metadata {
+                crate::diagnostics::record(format!("SCSI metadata bytes: raw_prefix={:02x?} omitted_bytes={} (buffer snapshot; validate status/count/header before use)", &received[..received.len().min(512)], received.len().saturating_sub(512)));
+            }
+        }
         let text = match &result {
             Ok(r) => format!(
                 "SCSI result: status=0x{:02x} transferred={} sense={:02x?}",

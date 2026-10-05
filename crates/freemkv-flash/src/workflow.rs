@@ -315,6 +315,9 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
 pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>> {
     use std::io::Read;
     const MAX_INPUT: u64 = 64 * 1024 * 1024;
+    crate::diagnostics::record(format!(
+        "input file: opening path={path:?} maximum_bytes={MAX_INPUT}"
+    ));
     let file = std::fs::File::open(path)?;
     let mut buf = Vec::new();
     file.take(MAX_INPUT + 1).read_to_end(&mut buf)?;
@@ -325,6 +328,12 @@ pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>> {
             MAX_INPUT / (1024 * 1024)
         );
     }
+    use sha2::{Digest, Sha256};
+    crate::diagnostics::record(format!(
+        "input file: path={path:?} bytes={} sha256={:x}",
+        buf.len(),
+        Sha256::digest(&buf)
+    ));
     Ok(buf)
 }
 

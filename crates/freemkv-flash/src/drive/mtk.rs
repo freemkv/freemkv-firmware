@@ -308,12 +308,12 @@ impl Acquire {
             Acquire::Inquiry { alloc } => {
                 let cdb = cdb_inquiry(alloc);
                 let mut data = dev.command_in(&cdb, alloc as usize)?;
-                log_inquiry(&data);
+                log_inquiry(&data, Some(alloc as usize));
                 if data.len() >= 5 {
                     let needed = 5 + usize::from(data[4]);
                     if needed > alloc as usize {
                         data = dev.command_in(&cdb_inquiry(needed as u16), needed)?;
-                        log_inquiry(&data);
+                        log_inquiry(&data, Some(needed));
                     }
                 }
                 validate_inquiry(&data)?;
@@ -322,14 +322,14 @@ impl Acquire {
             Acquire::GetConfig { feature, alloc } => {
                 let cdb = cdb_get_config(feature, alloc);
                 let mut data = dev.command_in(&cdb, alloc as usize)?;
-                log_field_descriptor(feature, &data);
+                log_field_descriptor(feature, &data, Some(alloc as usize));
                 if data.len() >= 12 {
                     let needed = 12 + usize::from(data[11]);
                     if needed > alloc as usize {
                         crate::diagnostics::record(format!("MediaTek feature 0x{feature:04X}: header requires {needed} bytes; expanding allocation from {alloc}"));
                         let cdb = cdb_get_config(feature, needed as u16);
                         data = dev.command_in(&cdb, needed)?;
-                        log_field_descriptor(feature, &data);
+                        log_field_descriptor(feature, &data, Some(needed));
                     }
                 }
                 validate_field_descriptor(&data, feature)?;
@@ -660,6 +660,13 @@ pub fn sense_key_is_fatal(key: u8) -> bool {
 // INQUIRY's additional length counts bytes after its five-byte header.
 // Preserve full replies (including any transport padding), never synthesize bytes.
 fn validate_inquiry(data: &[u8]) -> Result<()> {
+    log_inquiry(data, None);
+    let result = check_inquiry(data);
+    log_metadata_verdict("INQUIRY", &result);
+    result
+}
+
+fn check_inquiry(data: &[u8]) -> Result<()> {
     if !(36..=260).contains(&data.len()) {
         bail!("INQUIRY: expected 36..=260 bytes, got {}", data.len());
     }
@@ -673,19 +680,33 @@ fn validate_inquiry(data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn log_inquiry(data: &[u8]) {
+fn log_inquiry(data: &[u8], allocation: Option<usize>) {
     crate::diagnostics::record(format!(
-        "MediaTek backup INQUIRY: returned={} header={:02x?} declared={:?}",
-        data.len(),
-        &data[..data.len().min(5)],
-        data.get(4).map(|n| 5 + usize::from(*n))
+        "MediaTek INQUIRY metadata: allocation={allocation:?} returned={} declared_total={:?} raw_prefix={:02x?} omitted_bytes={}",
+        data.len(), data.get(4).map(|n| 5 + usize::from(*n)),
+        &data[..data.len().min(512)], data.len().saturating_sub(512)
     ));
+}
+
+fn log_metadata_verdict(kind: &str, result: &Result<()>) {
+    let verdict = match result {
+        Ok(()) => "accepted: complete response".to_owned(),
+        Err(error) => format!("rejected: {error:#}"),
+    };
+    crate::diagnostics::record(format!("MediaTek {kind} metadata validation: {verdict}"));
 }
 
 // GET CONFIGURATION has an eight-byte response header followed by a four-byte
 // feature header and up to 255 additional bytes. Allocation is a ceiling, not
 // a required response size. These metadata bytes are never written to ROM.
 fn validate_field_descriptor(data: &[u8], expected: u16) -> Result<()> {
+    log_field_descriptor(expected, data, None);
+    let result = check_field_descriptor(data, expected);
+    log_metadata_verdict(&format!("feature 0x{expected:04X}"), &result);
+    result
+}
+
+fn check_field_descriptor(data: &[u8], expected: u16) -> Result<()> {
     if !(12..=267).contains(&data.len()) {
         bail!(
             "feature 0x{expected:04X}: expected 12..=267 response bytes, got {}",
@@ -718,11 +739,18 @@ fn validate_field_descriptor(data: &[u8], expected: u16) -> Result<()> {
     Ok(())
 }
 
-fn log_field_descriptor(feature: u16, data: &[u8]) {
+fn log_field_descriptor(feature: u16, data: &[u8], allocation: Option<usize>) {
+    let response_total = data
+        .get(..4)
+        .map(|bytes| u64::from(u32::from_be_bytes(bytes.try_into().unwrap())) + 4);
+    let returned_feature = data
+        .get(8..10)
+        .map(|bytes| u16::from_be_bytes(bytes.try_into().unwrap()));
+    let additional_length = data.get(11).copied();
+    let feature_total = additional_length.map(|n| 12 + usize::from(n));
     crate::diagnostics::record(format!(
-        "MediaTek GET CONFIGURATION: requested_feature=0x{feature:04X} returned={} header={:02x?}",
-        data.len(),
-        &data[..data.len().min(12)]
+        "MediaTek GET CONFIGURATION metadata: requested_feature=0x{feature:04X} allocation={allocation:?} returned={} returned_feature={returned_feature:?} response_declared_total={response_total:?} additional_length={additional_length:?} feature_declared_total={feature_total:?} raw_prefix={:02x?} omitted_bytes={}",
+        data.len(), &data[..data.len().min(512)], data.len().saturating_sub(512)
     ));
 }
 

@@ -1,4 +1,4 @@
-//! Automatic operation logs shared by the CLI and GUI; never record data buffers.
+//! Automatic CLI/GUI operation logs; bounded identity metadata, no firmware payloads.
 
 use std::cell::RefCell;
 use std::fs::{File, OpenOptions};
@@ -211,7 +211,7 @@ fn run_at<T>(directory: &Path, operation: &str, work: impl FnOnce() -> Result<T>
     let subscriber = tracing_subscriber::fmt()
         .with_ansi(false)
         .without_time()
-        .with_max_level(tracing::Level::WARN)
+        .with_max_level(tracing::Level::TRACE)
         .with_writer(NativeWriter::default)
         .finish();
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -281,6 +281,7 @@ mod tests {
                 run_at(&directory, "test", || {
                     println!("capturing drive firmware");
                     tracing::warn!(target: "freemkv::scsi", last_error = 87, "DeviceIoControl failed");
+                    tracing::trace!(target: "freemkv::scsi", host_status = 7, "native transport detail");
                     run("nested", || {
                         record("SCSI result: status=0x00 transferred=0");
                         Err(anyhow::anyhow!("short firmware read")
@@ -297,6 +298,8 @@ mod tests {
             "os=",
             "capturing drive firmware",
             "last_error=87",
+            "host_status=7",
+            "native transport detail",
             "DeviceIoControl failed",
             "status=0x00 transferred=0",
             "RESULT: error: probing Pioneer firmware read access: short firmware read",
@@ -305,6 +308,66 @@ mod tests {
         }
         assert_eq!(text.matches("freemkv-flash=").count(), 1);
         assert!(LOG.with(|slot| slot.borrow().is_none()));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn metadata_log_records_sizes_bytes_headers_and_validation_decisions() {
+        use crate::drive::mtk::{Acquire, FEATURE_SERIAL};
+        use crate::platform::MockScsiDevice;
+        let path = Arc::new(Mutex::new(None));
+        let captured = path.clone();
+        let directory = std::env::temp_dir().join("freemkv-metadata-log-test");
+        crate::output::capture_events(
+            move |event| {
+                if let crate::output::Event::Field { label, value } = event {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(PathBuf::from(value));
+                    }
+                }
+            },
+            || {
+                run_at(&directory, "metadata-test", || {
+                    for (returned, payload, valid) in
+                        [(24usize, 12u8, true), (24, 16, false), (996, 16, false)]
+                    {
+                        let mut data = vec![b'S'; returned];
+                        data[..4].copy_from_slice(&(8 + u32::from(payload)).to_be_bytes());
+                        data[8..10].copy_from_slice(&FEATURE_SERIAL.to_be_bytes());
+                        data[11] = payload;
+                        let mut dev = MockScsiDevice::new().on(|_| true, data);
+                        assert_eq!(
+                            Acquire::GetConfig {
+                                feature: FEATURE_SERIAL,
+                                alloc: 28
+                            }
+                            .run(&mut dev)
+                            .is_ok(),
+                            valid
+                        );
+                    }
+                    Ok(())
+                })
+            },
+        )
+        .unwrap();
+        let path = path.lock().unwrap().clone().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        for expected in [
+            "allocation=Some(28)",
+            "returned=24",
+            "returned=996",
+            "response_declared_total=Some(24)",
+            "feature_declared_total=Some(28)",
+            "additional_length=Some(12)",
+            "raw_prefix=[00, 00, 00, 14",
+            "omitted_bytes=484",
+            "accepted: complete response",
+            "rejected: feature",
+            "expected 28 declared bytes, got 24",
+        ] {
+            assert!(text.contains(expected), "missing {expected}: {text}");
+        }
         std::fs::remove_file(path).unwrap();
     }
 

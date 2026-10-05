@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic diagnostic logs for CLI and desktop flasher operations, including
   platform/version, drive identity, SCSI commands, status/sense, transfer counts,
   timings, retries, native transport warnings and complete error chains.
+  Command data is fingerprinted; metadata replies include bounded raw bytes.
   The desktop diagnostic viewer displays, copies and saves the same full log;
   failed operations also offer log export beside the error. No debug flag is needed.
 - Logs are limited to 8 MiB per operation, retaining the initial context and recent
@@ -23,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Validate MediaTek backup metadata using its response headers instead of treating
   allocation sizes as required lengths. Accept complete 24-byte serial descriptors
   and shorter INQUIRY replies, fetch longer metadata with bounded reads, and reject
-  truncated or inconsistent descriptors with header details in the diagnostic log.
+  truncated or inconsistent descriptors. Logs include metadata bytes, requested/actual
+  counts, decoded header lengths, follow-up reads, and validation outcomes.
 - Require complete MediaTek preflight and fingerprint ROM reads, validate protocol
   probe descriptors, and recognize fixed-format sense with its valid bit set.
 - Pioneer firmware access uses a four-byte probe and retries short responses up
