@@ -176,8 +176,10 @@ impl Bundle {
                         format!(
                             "{:?}/{} ({})",
                             c.role,
-                            c.hardware.as_deref().unwrap_or("hardware unknown"),
-                            c.path
+                            crate::style::printable(
+                                c.hardware.as_deref().unwrap_or("hardware unknown")
+                            ),
+                            crate::style::printable(&c.path)
                         )
                     })
                     .collect::<Vec<_>>()
@@ -283,6 +285,28 @@ mod tests {
             tar.finish().unwrap();
         }
         out
+    }
+
+    #[test]
+    fn selection_error_inventory_sanitizes_member_names() {
+        let normal = image();
+        let mut kernel = image();
+        let marker = b"File Type : Normal.";
+        let pos = kernel
+            .windows(marker.len())
+            .position(|w| w == marker)
+            .unwrap();
+        kernel[pos..pos + marker.len()].copy_from_slice(b"File Type : Kernel.");
+        let mut out = Vec::new();
+        {
+            let mut tar = tar::Builder::new(&mut out);
+            tar_member(&mut tar, "components/k\u{1b}[31m.enc", &kernel);
+            tar_member(&mut tar, "components/normal.enc", &normal);
+            tar.finish().unwrap();
+        }
+        let bundle = Bundle::from_tar_bytes(&out).unwrap();
+        let err = format!("{:#}", bundle.sole_normal_only().unwrap_err());
+        assert!(!err.contains('\x1b'), "{err:?}");
     }
 
     #[test]

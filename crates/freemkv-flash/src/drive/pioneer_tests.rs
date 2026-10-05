@@ -1037,3 +1037,26 @@ fn recover_refuses_bad_sized_normal_before_entering_update_mode() {
         assert!(dev.writes.is_empty(), "len {len:#x}: update mode entered");
     }
 }
+
+#[test]
+fn untrusted_text_is_sanitized_before_printing() {
+    // Post-flash identity readback: drive-supplied INQUIRY bytes carry an ESC.
+    let mut inquiry = vec![b' '; 36];
+    inquiry[8..15].copy_from_slice(b"PIONEER");
+    inquiry[16..20].copy_from_slice(b"BD\x1b[");
+    inquiry[32..36].copy_from_slice(b"1\x1b[2");
+    let ident = pioneer_optical::Identity::parse(&inquiry, &[b' '; 48]).expect("identity");
+    let line = post_flash_line(&ident);
+    assert!(!line.contains('\x1b'), "{line:?}");
+
+    // flash_summary: a hostile Revision Level in an envelope header.
+    let mut env = header_only_normal("SAT 8A10", "22/01/01");
+    let pos = env
+        .windows(14)
+        .position(|w| w == b"Revision Level")
+        .unwrap();
+    let at = pos + b"Revision Level : ".len();
+    env[at + 1] = 0x1b;
+    let summary = flash_summary(None, Some(&env));
+    assert!(!summary.contains('\x1b'), "{summary:?}");
+}

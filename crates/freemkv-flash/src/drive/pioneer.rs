@@ -840,6 +840,7 @@ pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Str
         pioneer_optical::envelope::header_info(bytes)
             .map(|h| h.revision)
             .filter(|r| !r.is_empty())
+            .map(|r| crate::style::printable(&r))
             .unwrap_or_else(|| "unknown".to_string())
     }
     match (kernel, normal) {
@@ -982,6 +983,20 @@ const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware genera
     checksum word @0x1020 compensated) so the receiver's Site-1 gate accepts it. The drive \
     will run the older firmware with a disguised newer-era marker. Pre-flash backup+dump \
     are mandatory; keep them.";
+
+/// The post-flash identity readback line. The fields are drive-supplied bytes,
+/// so each goes through [`crate::style::printable`].
+fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
+    use crate::style::printable;
+    format!(
+        "post-flash: vendor='{}' product='{}' rev='{}' platform='{}' kernel-tag='{}'",
+        printable(ident.vendor()),
+        printable(ident.product()),
+        printable(ident.revision()),
+        printable(ident.platform()),
+        printable(ident.kernel_tag()),
+    )
+}
 
 /// Whether the §15.3 Site-1 marker patch will be applied to the Kernel written:
 /// a Kernel is written, its decoded `0xFE` marker is `FF`/`00`, and the receiver
@@ -1246,16 +1261,7 @@ impl DriveFamily for Pioneer {
             // Non-fatal: a transient post-boot read error is a warning, not a
             // flash failure (the write already committed).
             match crate::drive::pioneer_transport::identify(dev) {
-                Ok(ident) => {
-                    println!(
-                        "post-flash: vendor='{}' product='{}' rev='{}' platform='{}' kernel-tag='{}'",
-                        ident.vendor(),
-                        ident.product(),
-                        ident.revision(),
-                        ident.platform(),
-                        ident.kernel_tag(),
-                    );
-                }
+                Ok(ident) => println!("{}", post_flash_line(&ident)),
                 Err(e) => eprintln!(
                     "{}",
                     crate::style::amber(&format!(
