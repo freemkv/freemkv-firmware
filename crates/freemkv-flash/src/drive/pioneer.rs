@@ -1053,6 +1053,10 @@ pub(crate) fn check_plan_executable(plan: &crate::pioneer_flash_plan::FlashPlan)
 /// are the consent, so proceed automatically (and say so).
 pub(crate) fn confirm_proceed(summary: &str) -> Result<()> {
     use std::io::IsTerminal;
+    if crate::output::captured() {
+        println!("{}", crate::style::bold(summary));
+        return Ok(()); // The GUI already collected explicit confirmation.
+    }
     let is_tty = std::io::stdin().is_terminal();
     confirm_with(summary, is_tty, &mut std::io::stdin().lock())
 }

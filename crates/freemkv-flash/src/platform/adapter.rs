@@ -96,13 +96,17 @@ impl TransportDevice {
                         // Benign no-disc (key 0x2 / ASC 0x3A): tolerate as 0 bytes.
                         // A read needing medium yields 0 bytes, caught by the
                         // caller's length check — no garbage smuggled upward.
-                        if super::is_no_medium(s.sense_key, s.asc) {
+                        if !strict && super::is_no_medium(s.sense_key, s.asc) {
                             return Ok(0);
                         }
                         // Self-clearing UNIT ATTENTION (key 0x6): retry once, but
                         // never on a data-OUT write (re-sending a burn-triggering
                         // chunk could re-arm the program).
-                        if s.sense_key == 0x6 && attempt == 0 && dir != Direction::ToDevice {
+                        if !strict
+                            && s.sense_key == 0x6
+                            && attempt == 0
+                            && dir != Direction::ToDevice
+                        {
                             continue;
                         }
                     }
@@ -122,7 +126,8 @@ impl TransportDevice {
             // Self-clearing UNIT ATTENTION: retry once, but never a data-OUT write
             // (re-sending a burn-triggering chunk could re-arm the program). On a
             // read the retry is mandatory — the first attempt's data is untrusted.
-            if r.status == CHECK_CONDITION
+            if !strict
+                && r.status == CHECK_CONDITION
                 && key == Some(0x6)
                 && attempt == 0
                 && dir != Direction::ToDevice
@@ -402,6 +407,16 @@ mod tests {
             }),
             path: "test".to_string(),
         }
+    }
+
+    #[test]
+    fn strict_no_data_write_rejects_no_medium_error() {
+        let mut dev = dev_with(ScsiSense {
+            sense_key: 2,
+            asc: 0x3a,
+            ascq: 0,
+        });
+        assert!(dev.command_out_strict(&[0x3b, 0, 0, 0, 0, 0], &[]).is_err());
     }
 
     /// THE INCIDENT: a loaded-but-spun-down disc first reports "medium not

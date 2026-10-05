@@ -1,227 +1,59 @@
-//! Platform-independent glue between the egui front-end and the
-//! `freemkv_flash` library.
-//!
-//! The UI (`app.rs`) owns only the widgets and the event loop. Everything that
-//! actually talks to a drive lives here: drive enumeration, the three jobs
-//! (info / dump / flash), and — on Unix — the stdout capture that streams the
-//! engine's `println!` progress into the log pane.
+//! GUI jobs delegate to the same application workflows as the CLI.
+//! Output is delivered through a scoped callback on every operating system.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use freemkv_flash::drive::{self, Family, FlashRequest};
-use freemkv_flash::{engine, manifest, platform};
+#[cfg(test)]
+use freemkv_flash::{drive::Family, platform};
 
-/// Enumerate candidate optical-drive device paths for this OS.
-///
-/// The `freemkv_flash` library exposes no enumeration API (its `platform::open`
-/// takes an explicit path), so this is a best-effort scan of the conventional
-/// device nodes. The user picks one; a bad guess simply fails at `open` time.
-pub fn enumerate() -> Vec<String> {
-    #[cfg(target_os = "linux")]
-    {
-        // Generic SCSI pass-through nodes: /dev/sg0, /dev/sg1, …
-        collect_dev("sg")
-    }
-    #[cfg(target_os = "macos")]
-    {
-        // Optical units surface as raw disk nodes: /dev/rdisk0, /dev/rdisk1, …
-        collect_dev("rdisk")
-    }
-    #[cfg(target_os = "windows")]
-    {
-        // No cheap enumeration without extra Win32; offer the conventional
-        // CD-ROM device namespace as candidates.
-        (0..4).map(|n| format!("\\\\.\\CdRom{n}")).collect()
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    {
-        Vec::new()
-    }
+/// Enumerate the same optical drives shown by the CLI, including empty trays.
+pub fn enumerate() -> Vec<freemkv_flash::workflow::DriveChoice> {
+    freemkv_flash::workflow::drives()
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn collect_dev(prefix: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    if let Ok(rd) = std::fs::read_dir("/dev") {
-        for e in rd.flatten() {
-            let name = e.file_name();
-            let name = name.to_string_lossy();
-            if let Some(rest) = name.strip_prefix(prefix) {
-                // Keep only the plain "<prefix><n>" nodes (skip partitions like
-                // rdisk0s1), so the list stays short and meaningful.
-                if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) {
-                    out.push(format!("/dev/{name}"));
-                }
-            }
-        }
-    }
-    out.sort();
-    out
-}
-
-/// The three operations the GUI can run against a drive.
+/// Application operations. Both front-ends use the same workflow for each.
+#[derive(Clone)]
 pub enum Job {
-    /// Identify + classify + firmware fingerprint (read-only).
     Info,
-    /// Full image + per-unit regions + read-surface map → one `.tar`.
-    Dump { out: PathBuf },
-    /// Flash a firmware image, backup-first (the dangerous one).
-    Flash { input: PathBuf },
+    InfoFile { input: PathBuf },
+    Backup { out: PathBuf },
+    Dump { out: PathBuf, force: bool },
+    Flash(freemkv_flash::workflow::FlashOptions),
 }
 
-/// Run one job against `device`, letting the engine `println!` to stdout (which
-/// a caller may be capturing). Returns the engine's own `Result`.
+/// Run the same operation as the matching CLI command.
 pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
+    use freemkv_flash::workflow;
     match job {
-        Job::Info => {
-            let mut dev = platform::open(device, false)?;
-            let family = drive::classify(dev.as_mut());
-            let handler = drive::for_family(family);
-            engine::info(dev.as_mut(), handler.as_ref())
-        }
-        Job::Dump { out } => {
-            let mut dev = platform::open(device, false)?;
-            let handler = classify_gated(dev.as_mut())?;
-            engine::backup(dev.as_mut(), handler.as_ref(), out, false, false)
-        }
-        Job::Flash { input } => {
-            let bytes = std::fs::read(input)
-                .map_err(|e| anyhow::anyhow!("reading {}: {e}", input.display()))?;
-            let input_kind = drive::sniff_input(input);
-            let mut dev = platform::open(device, true)?;
-            let handler = classify_gated(dev.as_mut())?;
-            let drive_model = handler.identity(dev.as_mut()).product;
-            let req = FlashRequest {
-                input: bytes,
-                input_kind,
-                mode: manifest::FlashMode::Full,
-                // The GUI's flash button IS the "do it for real" action; the
-                // dry-run lives in the CLI. The confirm checkbox is the gate.
-                execute: true,
-                skip_backup: false,
-                acknowledged_risk: true,
-                enc_override: None,
-                drive_model,
-                verbose: false,
-                // Crossflash is an experimental CLI-only opt-in; the GUI never
-                // waives the model gate.
-                allow_crossflash: false,
-                // Always keep a backup next to the input image.
-                predump_out: default_backup_path(input),
-                // The GUI never does the degraded-drive force-write; that is a
-                // deliberate CLI-only expert path.
-                recover: false,
-                // The GUI never waives the firmware-family match. --force is a
-                // deliberate CLI-only expert path.
-                force: false,
-            };
-            engine::flash(dev.as_mut(), handler.as_ref(), &req)
+        Job::Info => workflow::info(Some(device)),
+        Job::InfoFile { input } => freemkv_flash::engine::info_file(input),
+        Job::Backup { out } => workflow::backup(Some(device), Some(out.clone()), false, false),
+        Job::Dump { out, force } => workflow::backup(Some(device), Some(out.clone()), true, *force),
+        Job::Flash(options) => {
+            let mut options = options.clone();
+            options.device = Some(device.to_string());
+            workflow::flash(options)
         }
     }
 }
 
-/// Classify and enforce the MTK gate: only MediaTek drives may dump/flash.
-fn classify_gated(
-    dev: &mut dyn platform::ScsiDevice,
-) -> anyhow::Result<Box<dyn drive::DriveFamily>> {
-    let family = drive::classify(dev);
-    if family != Family::Mtk {
-        return Err(drive::unsupported_family_error(family));
-    }
-    Ok(drive::for_family(family))
-}
-
-/// Default pre-flash backup path: `<input>.predump.tar` next to the input.
-fn default_backup_path(input: &Path) -> Option<PathBuf> {
-    let name = input.file_name()?.to_string_lossy().into_owned();
-    Some(input.with_file_name(format!("{name}.predump.tar")))
-}
-
-/// Run `f`, redirecting the process's stdout to a pipe so the engine's
-/// `println!` progress is delivered line-by-line to `on_line` from a reader
-/// thread while `f` is still running (live streaming into the log pane).
-///
-/// Only one capture may be active at a time (fd 1 is a process-global), so a
-/// lock serialises them; the GUI also disables its buttons during a job.
-#[cfg(unix)]
-pub fn capture_lines<R>(f: impl FnOnce() -> R, on_line: impl FnMut(String) + Send + 'static) -> R {
-    use std::io::{BufRead, BufReader, Write};
-    use std::os::fd::FromRawFd;
-    use std::sync::Mutex;
-
-    static SERIALISE: Mutex<()> = Mutex::new(());
-    let _guard = SERIALISE.lock().unwrap_or_else(|e| e.into_inner());
-
-    // A pipe; fd 1 is pointed at its write end for the duration of `f`.
-    let mut fds = [0 as libc::c_int; 2];
-    // SAFETY: fds is a valid 2-element array for pipe(2) to fill.
-    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
-        return f(); // capture unavailable: run without redirect.
-    }
-    let (read_fd, write_fd) = (fds[0], fds[1]);
-
-    let _ = std::io::stdout().flush();
-    // SAFETY: dup/dup2 on fd 1 and the pipe fds; all are open here.
-    let saved = unsafe { libc::dup(1) };
-    unsafe {
-        libc::dup2(write_fd, 1);
-        libc::close(write_fd);
-    }
-
-    let reader = std::thread::spawn(move || {
-        // SAFETY: read_fd is a valid, owned read end of the pipe.
-        let file = unsafe { std::fs::File::from_raw_fd(read_fd) };
-        let mut on_line = on_line;
-        // Skip a transient read error rather than ending forwarding on it, so
-        // mid-flash output isn't silently truncated (EOF still ends the loop).
-        for line in BufReader::new(file).lines() {
-            match line {
-                Ok(line) => on_line(line),
-                Err(_) => continue,
-            }
-        }
-    });
-
-    // Run the job under a guard: if it panics, fd 1 must still be restored (else
-    // stdout stays wired to the dead pipe) before we resume unwinding.
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-
-    let _ = std::io::stdout().flush();
-    // Restore stdout; dup2 closes the pipe write end (old fd 1), so the reader
-    // sees EOF and its thread ends.
-    // SAFETY: `saved` is the dup of the original fd 1, still open.
-    unsafe {
-        libc::dup2(saved, 1);
-        libc::close(saved);
-    }
-    let _ = reader.join();
-    match result {
-        Ok(out) => out,
-        Err(payload) => std::panic::resume_unwind(payload),
-    }
-}
-
-/// Non-Unix fallback: the process-global stdout redirect used above relies on
-/// `dup2` on fd 1, which is a Unix facility. On other platforms (Windows) the
-/// job still runs to completion and its `Result` is reported; live line-by-line
-/// streaming of the engine's `println!` progress is simply unavailable.
-#[cfg(not(unix))]
-pub fn capture_lines<R>(f: impl FnOnce() -> R, _on_line: impl FnMut(String) + Send + 'static) -> R {
-    f()
+/// Stream the shared workflow's information, warnings and progress on every OS.
+#[cfg(test)]
+pub fn capture_lines<R>(f: impl FnOnce() -> R, on_line: impl FnMut(String) + 'static) -> R {
+    freemkv_flash::output::capture(on_line, f)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The best-effort device scan must never panic, even on a host with no
-    /// optical drive attached (it may return internal disks or an empty list).
+    /// Discovery must work even on a host with no optical drive attached.
     #[test]
     fn enumerate_does_not_panic() {
         let list = enumerate();
         // Every entry a shell would show must be a plausible device path.
         for d in &list {
-            assert!(!d.is_empty());
+            assert!(!d.path.is_empty());
         }
     }
 
@@ -232,5 +64,32 @@ mod tests {
     fn info_job_on_missing_device_errs_without_panic() {
         let res = execute("/dev/freemkv-flash-gui-no-such-device", &Job::Info);
         assert!(res.is_err(), "expected an open error, got {res:?}");
+    }
+}
+
+#[cfg(test)]
+mod parity_regressions {
+    use super::*;
+
+    #[test]
+    fn gui_accepts_the_same_pioneer_backend_as_cli() {
+        let mut dev = platform::MockScsiDevice::pioneer();
+        let backend = freemkv_flash::workflow::classify_gated(&mut dev)
+            .expect("Pioneer supports backup and flash");
+        assert_eq!(backend, Family::Pioneer);
+        assert!(dev.writes.is_empty());
+    }
+
+    #[test]
+    fn gui_receives_progress_and_warnings() {
+        let lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let received = lines.clone();
+        capture_lines(
+            || {
+                freemkv_flash::style::Progress::new("reading firmware", 0x200000).set(0x100000);
+            },
+            move |line| received.lock().unwrap().push(line),
+        );
+        assert!(lines.lock().unwrap().iter().any(|l| l.contains("50%")));
     }
 }

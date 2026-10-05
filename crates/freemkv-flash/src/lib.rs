@@ -15,6 +15,9 @@
 
 #![deny(missing_docs)]
 
+#[macro_use]
+pub mod output;
+
 pub mod cmac;
 pub mod drive;
 pub mod engine;
@@ -40,6 +43,7 @@ mod pioneer_n;
 pub mod platform;
 pub mod probe;
 pub mod style;
+pub mod workflow;
 
 /// Compute the CRC32 (IEEE) of a byte slice.
 pub fn crc32(data: &[u8]) -> u32 {

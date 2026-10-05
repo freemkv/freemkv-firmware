@@ -28,6 +28,10 @@ use backup::{save_backup, save_validated};
 pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
     println!("{}", style::kv("device", &dev.describe()));
     let id = drive.identity(dev);
+    crate::output::field("Manufacturer", style::printable(&id.vendor));
+    crate::output::field("Model", style::printable(&id.product));
+    crate::output::field("Firmware version", style::printable(&id.revision));
+    crate::output::field("Drive family", drive.family().to_string());
     println!(
         "{}",
         style::kv(
@@ -54,6 +58,22 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
     // drive::Capabilities). `info` is always on for a classified drive; the
     // headline is which of backup/flash are live.
     let caps = drive.capabilities();
+    crate::output::field(
+        "Backup",
+        if caps.backup {
+            "Supported"
+        } else {
+            "Unavailable"
+        },
+    );
+    crate::output::field(
+        "Firmware update",
+        if caps.flash {
+            "Supported"
+        } else {
+            "Unavailable"
+        },
+    );
     let capability = match (caps.backup, caps.flash) {
         (_, true) => style::green("live backup + flash supported"),
         (true, false) => style::amber("live backup supported; live flash unavailable"),
@@ -177,10 +197,12 @@ pub(crate) fn classify_file(image: &[u8]) -> FileClass {
 /// integrity, so a user can ask "what is this .bin and what can I do with it?"
 /// and later know whether it matches a given drive (same family key both sides).
 pub fn info_file(path: &Path) -> Result<()> {
-    let image = std::fs::read(path)
+    let image = crate::workflow::read_capped(path)
         .with_context(|| format!("reading firmware image {}", path.display()))?;
     println!("{}", style::kv("file", &path.display().to_string()));
     println!("{}", style::kv("size", &human_size(image.len())));
+    crate::output::field("File", path.display().to_string());
+    crate::output::field("Size", human_size(image.len()));
     let mut hasher = Sha256::new();
     hasher.update(&image);
     let sha: String = hasher
@@ -246,6 +268,9 @@ pub fn info_file(path: &Path) -> Result<()> {
         return info_file_other(&fc.identity);
     };
 
+    crate::output::field("Chipset", chip.family.label());
+    crate::output::field("Model", ident_or_unknown(&chip.model));
+    crate::output::field("Firmware version", ident_or_unknown(&chip.rev));
     let conf = match chip.confidence {
         freemkv_chipset::Confidence::TagString => "identity string",
         freemkv_chipset::Confidence::BannerFallback => "banner (fallback)",
@@ -325,6 +350,7 @@ pub fn info_file(path: &Path) -> Result<()> {
             style::amber("no signed CMAC table (unsigned or non-standard image)")
         }
     };
+    crate::output::field("Integrity", &integrity);
     println!("{}", style::kv("integrity", &integrity));
 
     println!(
@@ -399,7 +425,7 @@ pub fn backup(
     }
     let kind = drive.backup_kind();
     // Fail fast before the multi-minute capture if the output already exists.
-    if out.exists() {
+    if out.symlink_metadata().is_ok() {
         bail!(
             "backup {} already exists (backups are never overwritten); choose another -o path or remove it",
             out.display()
@@ -443,6 +469,7 @@ pub fn backup(
             &format!("{:x}", Sha256::digest(&bytes))
         )
     );
+    crate::output::field("Saved to", out.display().to_string());
     println!(
         "{} {}",
         style::green("wrote"),
@@ -452,6 +479,7 @@ pub fn backup(
     // capture prints a green confirmation; anything reconstructed prints an
     // amber "unverified" advisory naming what is not OEM.
     if raw_dump {
+        crate::output::field("Artifact", "Raw memory dump — not a flashable backup");
         println!(
             "{}",
             style::amber(
@@ -461,8 +489,14 @@ pub fn backup(
         return Ok(());
     }
     match drive.backup_notice(&bytes) {
-        BackupNotice::VerifiedOem(msg) => println!("{}", style::green(&msg)),
-        BackupNotice::Unverified(msg) => println!("{}", style::amber(&msg)),
+        BackupNotice::VerifiedOem(msg) => {
+            crate::output::field("Backup validation", &msg);
+            println!("{}", style::green(&msg));
+        }
+        BackupNotice::Unverified(msg) => {
+            crate::output::field("Backup warning", &msg);
+            println!("{}", style::amber(&msg));
+        }
         BackupNotice::None => {}
     }
     Ok(())
@@ -534,9 +568,9 @@ fn capture_preflash_backup(
         .context("no preflash backup path supplied")?;
     // Fail fast BEFORE the multi-minute capture read if the destination is taken
     // (backups are never overwritten) — far better than discovering it after.
-    if out.exists() {
+    if out.symlink_metadata().is_ok() {
         bail!(
-            "pre-flash backup path {} already exists (backups are never overwritten). \
+            "pre-flash backup path {} already exists (existing backups are never overwritten). \
              Move/remove it, pass --backup <new-path>, or --skip-backup to proceed with no rollback.",
             out.display()
         );
@@ -842,7 +876,7 @@ fn plan_pioneer_bounded_bundle(
 /// a firmware flash MUST run against an empty, closed tray. On `--execute` this
 /// is a hard abort before any backup or write; on a dry run it is a prominent
 /// warning so the operator ejects before committing.
-fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
+pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
     // Flashing is safe ONLY with a closed, empty tray. A loaded disc can wedge
     // the controller mid-program; an open tray is not a settled flash state.
     let msg = match dev.medium_status()? {
@@ -866,20 +900,9 @@ fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
 
 /// Flash a full `.bin` image VERBATIM: backup-first, stream, read-back verify.
 ///
-/// Post-flash verification treats the DRIVE as the authority, not a byte compare.
-/// The MediaTek firmware recomputes AES-CMAC over its integrity-protected ranges
-/// at boot and refuses to run a mismatched image, so the definitive proof of a
-/// clean flash is that the drive re-enumerates and reports coherent firmware. A
-/// raw byte-for-byte read-back is NOT authoritative and must never hard-fail on
-/// its own — it manufactures false "programming failed" alarms on a good flash,
-/// because the boot/vector page is decrypted+remapped into RAM, per-unit
-/// calibration/config/NVRAM is owned and rewritten by the drive, and some
-/// firmwares don't expose the flash to READ BUFFER at all. We therefore read back
-/// ONLY the image's own CMAC-protected ranges as an informational cross-check;
-/// bytes outside them are mutable by the firmware's own definition and are not
-/// compared. A mismatch inside a protected range is a warning, not a hard failure
-/// (even protected reads can hit the remapped boot page or a still-settling
-/// drive) — the identity read decides.
+/// Compare the decoded input against the backend's readable protected ranges.
+/// Mutable per-unit regions and remapped boot bytes are excluded. A mismatch or
+/// unavailable protected range fails verification; identity alone is insufficient.
 fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
     // Image geometry, integrity, model, and any controller sub-family gate are
     // protocol decisions. The engine only enforces the common workflow.
@@ -888,34 +911,14 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 
     // A firmware write requires a saved, self-checking full rollback artifact.
     // The mapped read often has holes; that condition fails before flash_open.
-    let mut backup_summary = String::from("not captured (dry run)");
-    if req.execute {
-        if req.skip_backup {
-            // Explicit operator override: proceed with no rollback artifact.
-            backup_summary = "SKIPPED (--skip-backup): no rollback artifact".to_string();
-            eprintln!(
-                "{}",
-                style::amber(
-                    "WARNING: --skip-backup set; flashing with NO pre-flash backup. A failed \
-                     write may be unrecoverable."
-                )
-            );
-        } else {
-            // A failed backup aborts the flash before any write is issued.
-            let out = req
-                .predump_out
-                .as_ref()
-                .context("no preflash backup path supplied")?;
-            let bytes = drive.capture_backup(dev).context(
-                "pre-flash backup failed; aborting flash (use --skip-backup to override)",
-            )?;
-            let target_model = drive.identity(dev).product;
-            let saved_len = save_backup(out, &bytes, drive, &target_model).context(
-                "pre-flash backup failed; aborting flash (use --skip-backup to override)",
-            )?;
-            backup_summary = format!("saved {} ({} bytes)", out.display(), saved_len);
+    let backup_summary = if req.execute {
+        if let Err(block) = check_safety(req.acknowledged_risk) {
+            bail!("SAFETY GATE: {}", block.0);
         }
-    }
+        capture_preflash_backup(dev, drive, req)?.0
+    } else {
+        "not captured (dry run)".to_string()
+    };
 
     println!("{}", style::header("== flash plan =="));
     println!("{}", style::kv("device", &dev.describe()));
@@ -997,9 +1000,11 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     drive.flash_open(dev, req.mode)?;
     let chunk = drive.chunk_size();
     let mut offset = 0usize;
+    let mut progress = style::Progress::new("flashing firmware", payload.len());
     for piece in payload.chunks(chunk) {
         drive.flash_chunk(dev, offset, piece)?;
         offset += piece.len();
+        progress.set(offset);
     }
     drive.flash_close(dev, req.mode)?;
     println!(
@@ -1017,7 +1022,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 
     // The backend defines which image bytes can be compared after programming.
     // On MTK these are CMAC-covered ranges outside the remapped boot page.
-    let protected = drive.verification_ranges(&payload)?;
+    let protected = drive.verification_ranges(&req.input)?;
     let is_protected = |pos: usize| protected.iter().any(|&(s, e)| pos >= s && pos <= e);
 
     let mut checked = 0usize; // protected + readable bytes we compared
@@ -1025,7 +1030,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     let mut unverified = 0usize; // protected chunks we could not read back
     let mut first_bad: Option<(usize, u8, u8)> = None;
     let mut offset = 0usize;
-    for piece in payload.chunks(chunk) {
+    for piece in req.input.chunks(chunk) {
         // Does this chunk cover any comparable (protected, past-boot) byte?
         let has_protected = (offset..offset + piece.len()).any(&is_protected);
         match drive.readback(dev, offset, piece.len()) {

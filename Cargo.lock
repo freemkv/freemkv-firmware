@@ -1346,7 +1346,6 @@ dependencies = [
  "eframe",
  "freemkv-flash",
  "image",
- "libc",
  "rfd",
  "winresource",
 ]

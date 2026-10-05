@@ -1,0 +1,380 @@
+//! Shared application workflows for the CLI and desktop front-end.
+
+use crate::drive::{self, Family, FlashRequest, InputKind};
+use crate::manifest::FlashMode;
+use crate::{engine, platform, style};
+use anyhow::{bail, Context, Result};
+use std::path::{Path, PathBuf};
+
+/// One optical drive, discovered even when its tray is empty.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DriveChoice {
+    /// Transport selector accepted by the platform backend.
+    pub path: String,
+    /// Human-readable model and revision. The path distinguishes identical drives.
+    pub label: String,
+}
+
+/// Enumerate actual optical drives through the same platform API on every front-end.
+pub fn drives() -> Vec<DriveChoice> {
+    platform::list_drives()
+        .into_iter()
+        .map(|d| DriveChoice {
+            label: format!(
+                "{} {} (rev {})",
+                style::printable(&d.vendor),
+                style::printable(&d.model),
+                style::printable(&d.firmware)
+            ),
+            path: d.path,
+        })
+        .collect()
+}
+
+/// Flash options shared by both front-ends. Defaults are a backed-up dry run.
+#[derive(Clone, Debug)]
+pub struct FlashOptions {
+    /// Optional device selector; omission selects the sole attached drive.
+    pub device: Option<String>,
+    /// Firmware or backup input.
+    pub input: PathBuf,
+    /// Explicit backup destination; otherwise derive one next to the input.
+    pub backup: Option<PathBuf>,
+    /// Deliberate override of the required backup.
+    pub skip_backup: bool,
+    /// Transfer mode supported by the backend.
+    pub mode: FlashMode,
+    /// Issue firmware writes instead of previewing the plan.
+    pub execute: bool,
+    /// Explicit acknowledgement of the flash risk.
+    pub acknowledged_risk: bool,
+    /// Allow a deliberate compatible crossflash.
+    pub allow_crossflash: bool,
+    /// Recover a degraded drive.
+    pub recover: bool,
+    /// Waive the Pioneer family gate.
+    pub force: bool,
+    /// Print protocol detail.
+    pub verbose: bool,
+    /// Expert encrypted-envelope override.
+    pub enc: bool,
+    /// Expert plaintext-envelope override.
+    pub no_enc: bool,
+}
+
+impl Default for FlashOptions {
+    fn default() -> Self {
+        Self {
+            device: None,
+            input: PathBuf::new(),
+            backup: None,
+            skip_backup: false,
+            mode: FlashMode::Full,
+            execute: false,
+            acknowledged_risk: false,
+            allow_crossflash: false,
+            recover: false,
+            force: false,
+            verbose: false,
+            enc: false,
+            no_enc: false,
+        }
+    }
+}
+
+/// Inspect a drive or a local firmware image.
+pub fn info(target: Option<&str>) -> Result<()> {
+    // A regular file is a firmware image → classify the FILE (no drive needed);
+    // anything else (a selector, a /dev node, or nothing) → probe the DRIVE.
+    if let Some(t) = target {
+        if is_firmware_file(t) {
+            return engine::info_file(Path::new(t));
+        }
+    }
+    let selector = resolve_device(target)?;
+    let mut dev = platform::open(&selector, false)?;
+    let family = resolved_family(dev.as_mut())?;
+    let handler = drive::for_family(family);
+    engine::info(dev.as_mut(), handler.as_ref())
+}
+
+/// Turn an optional user selector into a concrete device selector.
+/// - a bare integer `N` → the Nth drive from `list` (1-based)
+/// - any other string → used verbatim (a `/dev` path or an `ioreg:` id)
+/// - `None` → the only connected drive, or an error listing the choices
+pub fn resolve_device(arg: Option<&str>) -> Result<String> {
+    if let Some(path) = arg.filter(|s| s.parse::<usize>().is_err()) {
+        return Ok(path.to_string());
+    }
+    resolve_from(arg, &drives())
+}
+
+fn resolve_from(arg: Option<&str>, drives: &[DriveChoice]) -> Result<String> {
+    if let Some(a) = arg {
+        if let Ok(n) = a.parse::<usize>() {
+            return drives
+                .get(n.wrapping_sub(1))
+                .map(|d| d.path.clone())
+                .with_context(|| format!("no drive #{a}; run `freemkv-flash list`"));
+        }
+        return Ok(a.to_string());
+    }
+    match drives {
+        [] => bail!("no optical drive found (is one connected and powered on?)"),
+        [only] => Ok(only.path.clone()),
+        many => {
+            let choices = many
+                .iter()
+                .enumerate()
+                .map(|(i, d)| format!("  {}  {}", i + 1, d.label))
+                .collect::<Vec<_>>()
+                .join("\n");
+            bail!("multiple drives found — pass a number or path (or run `list`):\n{choices}")
+        }
+    }
+}
+
+/// Route the `info` argument: a path that exists as a **regular file** is a
+/// firmware image (file info); a SCSI **device node** (`/dev/sg*`, a char/block
+/// device) or a nonexistent path is a live drive to probe. Firmware images are
+/// regular files and device nodes are not, so the two split cleanly with no flag.
+fn is_firmware_file(target: &str) -> bool {
+    std::fs::metadata(target)
+        .map(|m| m.is_file())
+        .unwrap_or(false)
+}
+
+/// Resolve the backend registry while preserving probe and ambiguity errors.
+fn resolved_family(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
+    Ok(drive::resolve_backend(dev)?
+        .map(|matched| matched.evidence.family)
+        .unwrap_or(Family::Unknown))
+}
+
+/// Resolve a backend with a supported flash operation.
+pub fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
+    let family = resolved_family(dev)?;
+    if !drive::for_family(family).capabilities().flash {
+        return Err(drive::unsupported_family_error(family));
+    }
+    Ok(family)
+}
+
+/// Classify a drive for a backend's backup path.
+fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
+    let family = resolved_family(dev)?;
+    if !drive::for_family(family).capabilities().backup {
+        return Err(drive::unsupported_family_error(family));
+    }
+    Ok(family)
+}
+
+/// Print the numbered optical-drive choices accepted by every operation.
+pub fn list() -> Result<()> {
+    let drives = drives();
+    if drives.is_empty() {
+        println!("drives: none found");
+    }
+    for (index, drive) in drives.iter().enumerate() {
+        println!("{}  {} — {}", index + 1, drive.label, drive.path);
+    }
+    Ok(())
+}
+
+/// Capture a backend backup or a salvage dump.
+pub fn backup(
+    device: Option<&str>,
+    out: Option<PathBuf>,
+    recover: bool,
+    force: bool,
+) -> Result<()> {
+    // backup/dump are read-only (no kernel mode), so the device is opened
+    // read-only.
+    let selector = resolve_device(device)?;
+    let mut dev = platform::open(&selector, false)?;
+    let family = classify_for_backup(dev.as_mut())?;
+    let handler = drive::for_family(family);
+    if recover && !handler.capabilities().recover {
+        // No distinct deeper recover for this family: a normal backup already
+        // captures a complete image, so fall through and run one.
+        eprintln!(
+            "note: {} has no deeper recover; running a normal backup",
+            handler.backend_name()
+        );
+    }
+    let out = match out {
+        Some(o) => o,
+        None => {
+            let id = handler.identity(dev.as_mut());
+            let s: String = format!("{}_{}", id.product, id.revision)
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            let extension = handler
+                .backup_extension()
+                .context("backend has no backup format")?;
+            if recover && handler.dump_is_raw() {
+                // A raw dump is a single flat memory image, not a backup archive.
+                PathBuf::from(format!("{s}.dump.bin"))
+            } else {
+                // Filename infix (`backup` / `candidate`) comes from the backend,
+                // so the CLI names no chipset.
+                PathBuf::from(format!("{s}.{}.{extension}", handler.backup_kind().infix))
+            }
+        }
+    };
+    engine::backup(dev.as_mut(), handler.as_ref(), &out, recover, force)
+}
+
+/// Validate and execute the shared flash workflow.
+pub fn flash(args: FlashOptions) -> Result<()> {
+    if args.enc && args.no_enc {
+        bail!("encrypted and plaintext envelope overrides conflict");
+    }
+    if args.execute && !args.acknowledged_risk {
+        bail!("refusing to flash without acknowledging the risk");
+    }
+
+    let input = read_capped(&args.input)
+        .with_context(|| format!("reading input {}", args.input.display()))?;
+    let selector = resolve_device(args.device.as_deref())?;
+    let mut dev = platform::open(&selector, args.execute)?;
+    let family = classify_gated(dev.as_mut())?;
+    let handler = drive::for_family(family);
+    let input_kind = if family == Family::Pioneer {
+        if crate::pioneer_bundle::Bundle::from_tar_bytes(&input).is_ok() {
+            InputKind::PioneerBundle
+        } else if args
+            .input
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        {
+            // Preserve the specific package-parse error in the Pioneer path.
+            InputKind::PioneerBundle
+        } else {
+            InputKind::Bin
+        }
+    } else {
+        handler.classify_input(&args.input)
+    };
+
+    let drive_model = handler.identity(dev.as_mut()).product;
+    let enc_override = if args.enc {
+        Some(true)
+    } else if args.no_enc {
+        Some(false)
+    } else {
+        None
+    };
+    // Recovery waives the mandatory pre-flash backup (a degraded drive may not be
+    // readable, and recovery is the last resort anyway).
+    let predump_out = if args.recover {
+        None
+    } else {
+        args.backup.clone().or_else(|| {
+            handler
+                .backup_extension()
+                .and_then(|ext| default_backup_path(&args.input, ext))
+        })
+    };
+
+    let req = FlashRequest {
+        input,
+        input_kind,
+        mode: args.mode,
+        execute: args.execute,
+        acknowledged_risk: args.acknowledged_risk,
+        enc_override,
+        drive_model,
+        verbose: args.verbose,
+        predump_out,
+        allow_crossflash: args.allow_crossflash,
+        skip_backup: args.skip_backup || args.recover,
+        recover: args.recover,
+        force: args.force,
+    };
+    engine::flash(dev.as_mut(), handler.as_ref(), &req)
+}
+
+/// Read a firmware input file with a hard size cap, so a huge file or an endless
+/// source (e.g. `/dev/zero`, a FIFO) cannot exhaust memory before the per-family
+/// size validation runs. The cap is far above any real firmware/backup artifact
+/// (largest Pioneer envelope is ~4.5 MiB; an MTK image 2 MiB).
+pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>> {
+    use std::io::Read;
+    const MAX_INPUT: u64 = 64 * 1024 * 1024;
+    let file = std::fs::File::open(path)?;
+    let mut buf = Vec::new();
+    file.take(MAX_INPUT + 1).read_to_end(&mut buf)?;
+    if buf.len() as u64 > MAX_INPUT {
+        bail!(
+            "input {} exceeds the {} MiB cap for a firmware file; refusing to load",
+            path.display(),
+            MAX_INPUT / (1024 * 1024)
+        );
+    }
+    Ok(buf)
+}
+
+/// Default pre-flash backup path: `<input>.preflash.backup.<backend-extension>`.
+fn default_backup_path(input: &Path, extension: &str) -> Option<PathBuf> {
+    let name = input.file_name()?;
+    for number in 0u64.. {
+        let mut filename = name.to_os_string();
+        let suffix = if number == 0 {
+            String::new()
+        } else {
+            format!(".{number}")
+        };
+        filename.push(format!(".preflash.backup{suffix}.{extension}"));
+        let candidate = input.with_file_name(filename);
+        match candidate.symlink_metadata() {
+            Ok(_) => continue,
+            Err(_) => return Some(candidate),
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn automatic_backup_path_does_not_reuse_an_existing_backup() {
+        let input = std::env::temp_dir().join(format!("fmkv-workflow-{}.bin", std::process::id()));
+        let first = default_backup_path(&input, "tar").unwrap();
+        std::fs::write(&first, b"previous rollback").unwrap();
+        let second = default_backup_path(&input, "tar").unwrap();
+        std::fs::remove_file(&first).unwrap();
+        assert_ne!(
+            first, second,
+            "a second flash should not be blocked by the automatic backup name"
+        );
+    }
+
+    #[test]
+    fn regular_file_routes_to_file_info() {
+        let path = std::env::temp_dir().join(format!("fmkv-route-{}.bin", std::process::id()));
+        std::fs::write(&path, b"firmware").unwrap();
+        assert!(is_firmware_file(path.to_str().unwrap()));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn oversized_input_is_rejected_before_opening_a_drive() {
+        let path = std::env::temp_dir().join(format!("fmkv-size-{}.bin", std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(64 * 1024 * 1024 + 1).unwrap();
+        drop(file);
+        let error = read_capped(&path).unwrap_err();
+        std::fs::remove_file(path).unwrap();
+        assert!(error.to_string().contains("exceeds"));
+    }
+}

@@ -501,8 +501,9 @@ fn flash_execute_streams_enc_payload_not_plaintext() {
     // enc_override=Some(true): the FIRST streamed chunk must be the
     // AES-transformed payload, not a slice of the plaintext image (proves the
     // enc transform actually ran end-to-end through the streaming loop).
-    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
+    // The device exposes decoded firmware, not the encrypted wire envelope.
+    let mut dev = MockScsiDevice::new().with_firmware_image(image.clone());
     let mut req = bin_req(image.clone(), true);
     req.enc_override = Some(true);
     flash(&mut dev, &Mtk, &req).unwrap();
@@ -1074,4 +1075,37 @@ fn classify_file_rejects_unrecognizable_bytes() {
     let fc = classify_file(&[0u8; 100]);
     assert!(fc.capability.is_none() && fc.flash.is_none());
     assert!(matches!(fc.cmac, CmacSummary::Unsigned));
+}
+
+#[test]
+fn existing_preflash_destination_fails_before_capturing_the_drive() {
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let req = bin_req(backup_firmware(), true);
+    let path = req.predump_out.as_ref().unwrap();
+    std::fs::write(path, b"keep this rollback").unwrap();
+    let result = flash(&mut dev, &Mtk, &req);
+    std::fs::remove_file(path).unwrap();
+    assert!(result.is_err());
+    assert!(
+        dev.reads.is_empty(),
+        "do not spend minutes reading before finding a path collision"
+    );
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
+    let want = offset_bytes(0x10000);
+    let mut dev = MockScsiDevice::new()
+        .with_firmware_image(backup_firmware())
+        .on_after_stream(
+            move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+            vec![0xff; CHUNK],
+        );
+    let mut req = bin_req(backup_firmware(), true);
+    req.enc_override = Some(true);
+    req.skip_backup = true;
+    let error = flash(&mut dev, &Mtk, &req)
+        .expect_err("encrypted transport must not disable integrity verification");
+    assert!(error.to_string().contains("read-back verify FAILED"));
 }

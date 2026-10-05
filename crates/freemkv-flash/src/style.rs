@@ -56,6 +56,22 @@ impl Progress {
         }
         self.last_pct = Some(pct);
         let mib = |b: usize| b as f64 / (1024.0 * 1024.0);
+        if crate::output::publish(crate::output::Event::Progress {
+            label: self.label.clone(),
+            done: done.min(self.len),
+            total: self.len,
+        }) {
+            return;
+        }
+        if !std::io::stderr().is_terminal() {
+            eprintln!(
+                "  {}: {:.2} / {:.2} MiB ({pct}%)",
+                self.label,
+                mib(done),
+                mib(self.len)
+            );
+            return;
+        }
         eprint!(
             "\r  {}: {:.2} / {:.2} MiB ({pct}%)   ",
             self.label,
@@ -74,6 +90,9 @@ impl Progress {
 /// Computed once (stdout's terminal-ness does not change mid-process) and
 /// cached; honors `NO_COLOR` (<https://no-color.org>) unconditionally.
 pub fn color_enabled() -> bool {
+    if crate::output::captured() {
+        return false;
+    }
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED
         .get_or_init(|| std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal())

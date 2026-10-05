@@ -140,6 +140,7 @@ pub(crate) fn execute_flash(
         style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len));
     let mut normal_progress = style::Progress::new("flashing normal", normal.len());
 
+    crate::engine::guard_no_medium(dev, true)?;
     let shared = SharedDevice::new(dev);
     let class = resolve_class(
         transport::identify_on(&shared),
@@ -343,6 +344,19 @@ mod tests {
         fn describe(&self) -> String {
             "recorder".into()
         }
+    }
+
+    #[test]
+    fn disc_inserted_at_confirmation_is_refused_before_update_entry() {
+        let mut dev = crate::platform::MockScsiDevice::pioneer().with_medium_loaded();
+        let normal = ud04_normal(0x100000);
+        let error = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false)
+            .expect_err("a disc inserted since the engine guard must abort the write");
+        assert!(error.to_string().contains("disc"));
+        assert!(
+            dev.writes.is_empty(),
+            "the entry command is already a write"
+        );
     }
 
     #[test]

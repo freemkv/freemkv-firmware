@@ -6,6 +6,19 @@ For installation and the MediaTek workflow see the [top-level README](../../READ
 > **Beta. A bad flash can permanently brick the drive.** Eject any disc first;
 > the tray must be empty and closed. Do not power off or unplug during a write.
 
+## Desktop app
+
+`freemkv-flash-gui` offers Drive info, Backup, and Flash firmware on macOS,
+Windows, and Linux. Its dropdown uses the same optical-drive discovery as
+`freemkv-flash list`, including drives with empty trays. Both front-ends call
+the same workflows and safety checks; `libfreemkv` owns OS transport through
+its `scsi` feature, with default features disabled.
+
+The desktop app shows labeled results and transfer progress bars. Advanced
+options include salvage dumps, recovery, crossflash, envelope selection, and
+backup overrides. Diagnostic output is available under Details. Flashing
+requires a separate confirmation of the selected drive and file.
+
 ## Commands
 
 | Command | Writes? | What it does |

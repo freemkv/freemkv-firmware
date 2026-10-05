@@ -26,11 +26,6 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # Native "open file" / "save file" dialogs on every platform.
 rfd = "0.17"
 
-# libc drives the stdout->pipe redirect that streams the engine's println!
-# progress into the log pane (Unix backends only; see src/ops.rs).
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
 # On a Windows host build, embed the freemkv .ico as the executable icon.
 # No-op when building on macOS/Linux (guarded by cfg(windows) in build.rs).
 [build-dependencies]

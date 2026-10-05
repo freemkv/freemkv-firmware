@@ -1,15 +1,5 @@
-//! `freemkv-flash-gui` — a genuinely minimal desktop UI for `freemkv-flash`.
-//!
-//! One window: a drive picker (with Refresh), a read-only Info action, a safe
-//! Dump action, and a guarded Flash action, plus a scrolling log pane that
-//! streams the operation's output. The heavy lifting is the `freemkv_flash`
-//! *library* (`engine::{info, dump_everything, flash}`, called through
-//! [`ops`]); this crate only draws widgets and marshals a background worker's
-//! output onto the UI thread.
-//!
-//! The UI is drawn with **eframe/egui** — a pure-Rust, immediate-mode toolkit
-//! that is trivially cross-platform (macOS + Windows + Linux) with no system
-//! webview. There is no per-OS shell code: one code path draws everywhere.
+//! Cross-platform desktop interface to the shared freemkv-flash workflows.
+//! Drive discovery, operations, safety policy and progress match the CLI.
 
 // On Windows, don't spawn a console window alongside the GUI in release builds.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -33,8 +23,8 @@ fn load_icon() -> Option<egui::IconData> {
 
 fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("freemkv-flash")
-        .with_inner_size([760.0, 600.0])
+        .with_title("freemkv Firmware Utility")
+        .with_inner_size([720.0, 610.0])
         .with_min_inner_size([560.0, 420.0]);
     if let Some(icon) = load_icon() {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));
@@ -48,6 +38,19 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "freemkv-flash",
         native_options,
-        Box::new(|_cc| Ok(Box::new(app::FlashApp::new()))),
+        Box::new(|cc| {
+            cc.egui_ctx.set_theme(egui::Theme::Light);
+            cc.egui_ctx.style_mut_of(egui::Theme::Light, |style| {
+                style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+                style.spacing.button_padding = egui::vec2(12.0, 7.0);
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+            });
+            Ok(Box::new(app::FlashApp::new()))
+        }),
     )
 }
