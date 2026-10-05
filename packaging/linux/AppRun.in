@@ -1,0 +1,15 @@
+#!/bin/sh
+# AppImage entry point for @TOOL@ (filled in by build-appimage.sh). Like
+# freemkv's AppImage: launched with no arguments it opens the desktop app; with
+# any arguments it runs the command-line tool, e.g.
+#   ./@TOOL@-x86_64-linux.AppImage --help
+# A symlink to the AppImage named @TOOL@ or @TOOL@-gui always runs that binary.
+HERE="$(dirname "$(readlink -f "$0")")"
+case "$(basename "${ARGV0:-$0}")" in
+  @TOOL@-gui) exec "$HERE/usr/bin/@TOOL@-gui" "$@" ;;
+  @TOOL@) exec "$HERE/usr/libexec/@TOOL@" "$@" ;;
+esac
+if [ "$#" -eq 0 ]; then
+  exec "$HERE/usr/bin/@TOOL@-gui"
+fi
+exec "$HERE/usr/libexec/@TOOL@" "$@"

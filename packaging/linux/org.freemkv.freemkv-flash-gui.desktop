@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=freemkv Flash
+Comment=freemkv drive firmware flasher and dumper
+Exec=freemkv-flash-gui
+Icon=org.freemkv.freemkv-flash-gui
+Terminal=false
+Categories=AudioVideo;Utility;

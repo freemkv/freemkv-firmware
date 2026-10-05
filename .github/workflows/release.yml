@@ -1,28 +1,42 @@
 name: release
 
 # Build the freemkv-flash / freemkv-fw CLIs and their desktop GUIs for every
-# shipping platform and attach the binaries to a GitHub Release when a version
-# tag is pushed.
+# shipping platform and attach them to a GitHub Release when a version tag is
+# pushed. Each tool ships freemkv's distribution set (minus the store
+# packages, Flatpak and Snap), and every GUI download also carries its CLI.
 #
-# ── Where the website's download buttons should point ───────────────────────
-# Every leg publishes a STABLE, unversioned archive name, so the download page
-# can link the "latest" URL without knowing the version:
+# ── What a release ships, per tool (<t> = freemkv-flash | freemkv-fw) ───────
+# Every asset has a STABLE, unversioned name (so the site can link
+# https://github.com/freemkv/freemkv-firmware/releases/latest/download/<asset>)
+# and a sibling `<asset>.sha256`.
+#   Windows  <t>-x86_64-windows-setup.exe    per-user installer: GUI + CLI, CLI
+#                                            on PATH, Start-menu shortcut
+#            <t>-x86_64-windows.zip          portable: GUI + CLI
+#            <t>-cli-x86_64-windows.exe      bare CLI
+#            freemkv-firmware-x86_64-windows-setup.exe / .zip  both tools
+#   macOS    <t>-gui-macos-<arch>.zip        <t>-gui.app, with the CLI at
+#                                            Contents/MacOS/<t> (Homebrew cask)
+#            <t>-macos-<arch>.tar.gz         CLI (Homebrew formula)
+#            <t>-cli-<arch>-macos            bare CLI          (arch: aarch64, x86_64)
+#   Linux    <t>-gui-<amd64|arm64>.deb       GUI + CLI (Conflicts/Replaces <t>)
+#            <t>-<amd64|arm64>.deb           static CLI only, no dependencies
+#            <t>-<x86_64|aarch64>-linux.AppImage  GUI + CLI (any argument runs the CLI)
+#            <t>-cli-<x86_64|aarch64>-linux  bare static (musl) CLI
+#            <t>-linux-<x86_64|aarch64>.tar.gz    static CLI (Homebrew formula on Linux)
+# Kept for existing links/the tap: the per-binary <bin>-<os>-<arch>.{tar.gz,zip}
+# archives (<bin> also <t>-gui, which holds the CLI too) and their versioned
+# <bin>-<tag>-<os>-<arch> copies. The tap's update.sh reads the macOS
+# tar.gz/zip and linux-x86_64 tar.gz names above -- do not rename them.
 #
-#   Releases page (all versions):
-#     https://github.com/freemkv/freemkv-firmware/releases/latest
-#   Direct per-asset "always the newest" download URLs:
-#     https://github.com/freemkv/freemkv-firmware/releases/latest/download/freemkv-flash-linux-x86_64.tar.gz
-#     https://github.com/freemkv/freemkv-firmware/releases/latest/download/freemkv-flash-macos-aarch64.tar.gz
-#     https://github.com/freemkv/freemkv-firmware/releases/latest/download/freemkv-flash-windows-x86_64.zip
-#     (and the same for freemkv-fw, freemkv-flash-gui, freemkv-fw-gui)
-#   Each archive has a sibling `<name>.sha256` for verification.
+# ── How each is built ──────────────────────────────────────────────────────
+# `build`: CLIs on all five targets (the macOS IOKit / Windows SPTI / Linux SG_IO
+# backends come from libfreemkv); GUIs (eframe/egui) on macOS and Windows.
+# Linux CLIs are static musl (aarch64 cross-compiled with `cross`).
+# `linux-packages`: glibc GUIs on native amd64/arm64 runners, .deb + AppImage
+# (packaging/linux/). `windows-installer`: Inno Setup (packaging/windows/).
 #
-# ── Which targets are green today ───────────────────────────────────────────
-# The CLIs compile and package on all four targets: the macOS (IOKit) and
-# Windows (SPTI) SCSI backends come from libfreemkv and build cleanly. The GUIs
-# (eframe/egui) ship on the desktop targets — macOS (both arches) and Windows —
-# and are skipped on the static-musl Linux leg, where the windowing/GPU stack
-# does not link; the portable Linux CLI is built there instead.
+# Branch pushes / PRs touching the packaging run everything as a dry run
+# (see `on:`); only tag runs publish or update the Homebrew tap.
 #
 # Build jobs check themselves out into `freemkv-firmware/` and run under
 # `working-directory: freemkv-firmware`, as ci.yml does. All dependencies
@@ -220,7 +234,9 @@ jobs:
         if: matrix.gui
         run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui
 
-      # macOS desktop apps: wrap each GUI binary in a <bin>.app and ship it in a
+      # macOS desktop apps: wrap each GUI binary (and its CLI, at
+      # <bin>.app/Contents/MacOS/<cli>, for the cask's `binary` stanza) in a
+      # <bin>.app and ship it in a
       # plain .zip — the artifact a Homebrew cask installs into /Applications.
       # NO .dmg: a manually-downloaded dmg would trip Gatekeeper (ad-hoc signed,
       # not notarized), but a cask curl-fetches the zip and strips
@@ -275,19 +291,22 @@ jobs:
             fi
             stable="$bin-$osname-$arch"          # e.g. freemkv-flash-linux-x86_64
             versioned="$bin-$ver-$osname-$arch"
-            staged="$bin$ext"
-            cp "$src" "$staged"
+            # Like freemkv, every GUI download carries its CLI too: a -gui
+            # archive holds <bin>-gui and <bin>.
+            staged=("$bin$ext")
+            case "$bin" in *-gui) staged+=("${bin%-gui}$ext") ;; esac
+            for f in "${staged[@]}"; do cp "target/$target/release/$f" "$f"; done
             if [ "$fmt" = "zip" ]; then
               # Git-bash on the Windows runner ships these; PATH may not, so be explicit.
-              7z a -tzip "$stable.$fmt" "$staged" >/dev/null
+              7z a -tzip "$stable.$fmt" "${staged[@]}" >/dev/null
               cp "$stable.$fmt" "$versioned.$fmt"
             else
-              tar czf "$stable.$fmt" "$staged"
+              tar czf "$stable.$fmt" "${staged[@]}"
               cp "$stable.$fmt" "$versioned.$fmt"
             fi
             sha "$stable.$fmt"
             sha "$versioned.$fmt"
-            rm -f "$staged"
+            rm -f "${staged[@]}"
             # The CLIs also ship as bare binaries, freemkv's cli-binaries
             # naming: freemkv-flash-cli-x86_64-linux, ...-aarch64-macos,
             # ...-x86_64-windows.exe.
@@ -329,22 +348,37 @@ jobs:
             freemkv-firmware/*-cli-*-macos
             freemkv-firmware/*-cli-*-windows.exe
 
-  # ── Linux packages (.deb) ───────────────────────────────────────────────────
-  # Mirrors freemkv's deb.yml / packaging/deb/build.py conventions: amd64,
-  # Ubuntu 24.04 baseline, stable `<pkg>-amd64.deb` names with a `.sha256`
-  # sidecar, built with dpkg-deb --root-owner-group and linted with lintian.
-  #   freemkv-flash, freemkv-fw           static musl CLIs (the `build` leg's
-  #                                       binaries), no Depends -- like freemkv-cli
-  #   freemkv-flash-gui, freemkv-fw-gui   glibc eframe/egui desktop apps, built
-  #                                       here (the musl leg cannot link a GUI)
-  # Four distinct package names, so none Conflicts/Replaces another (freemkv's
-  # app/CLI pair share /usr/bin/freemkv; these do not share a path). Unsigned,
-  # like every other asset here. No AppImage/snap/flatpak: freemkv's GTK AppImage
-  # bundles GTK; eframe loads its windowing/GL libraries at runtime instead, so a
-  # plain .deb with those as dependencies is the matching, simplest shape.
+  # ── Linux packages (.deb + AppImage) ────────────────────────────────────────
+  # Mirrors freemkv's deb.yml / appimage.yml: Ubuntu 24.04 baseline, stable
+  # unversioned names with a `.sha256` sidecar, dpkg-deb --root-owner-group,
+  # lintian, then install + smoke-test on the runner. Per tool (flash, fw) and
+  # per architecture (native runners, so the GUI links and is smoke-tested on
+  # the arch it ships for):
+  #   freemkv-<tool>-<amd64|arm64>.deb       static musl CLI only, no Depends
+  #   freemkv-<tool>-gui-<amd64|arm64>.deb   desktop app + the same CLI
+  #                                          (Conflicts/Replaces the CLI deb)
+  #   freemkv-<tool>-<x86_64|aarch64>-linux.AppImage
+  #                                          desktop app + CLI: no arguments
+  #                                          opens the app, any runs the CLI
+  # The packaging lives in packaging/linux/ (build-debs.sh, build-appimage.sh).
+  # Unsigned, like every other asset here.
   linux-packages:
     needs: [resolve-msrv, build]
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            deb: amd64
+            arch: x86_64
+            target: x86_64-unknown-linux-gnu
+            linuxdeploy_sha256: c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d
+          - runner: ubuntu-24.04-arm
+            deb: arm64
+            arch: aarch64
+            target: aarch64-unknown-linux-gnu
+            linuxdeploy_sha256: 620095110d693282b8ebeb244a95b5e911cf8f65f76c88b4b47d16ae6346fcff
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
     defaults:
@@ -357,139 +391,105 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.resolve-msrv.outputs.v }}
-          targets: x86_64-unknown-linux-gnu
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
           shared-key: freemkv-firmware-release
-          key: x86_64-unknown-linux-gnu-gui
+          key: ${{ matrix.target }}-gui
       # eframe/egui/rfd have no -dev system deps (winit, GL and the portal
       # backend are loaded at runtime), unlike freemkv's GTK4/libadwaita app.
       - name: Install build and package tools
         working-directory: .
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config dpkg-dev lintian xvfb desktop-file-utils
-      - name: Build the GUIs (glibc, release)
-        run: cargo build --release --locked --target x86_64-unknown-linux-gnu -p freemkv-flash-gui -p freemkv-fw-gui
-      - uses: actions/download-artifact@v4
-        with:
-          name: freemkv-linux-x86_64
-          path: freemkv-firmware/musl-cli
-      - name: Build the .deb packages
-        env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          WS="$PWD"
-          ver="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
-          epoch="$(git log -1 --format=%ct)"
-          maint='Matthew Jackson <1085847+MattJackson@users.noreply.github.com>'
-          out="$WS/deb-package"; mkdir -p "$out"
-          tar xzf musl-cli/freemkv-flash-linux-x86_64.tar.gz -C musl-cli --one-top-level=flash
-          tar xzf musl-cli/freemkv-fw-linux-x86_64.tar.gz -C musl-cli --one-top-level=fw
-          # The CLI must be the static binary the deb advertises as dependency-free.
-          for b in musl-cli/flash/freemkv-flash musl-cli/fw/freemkv-fw; do
-            if readelf -lW "$b" | grep -Eq '^\s*INTERP\b'; then echo "::error::$b is not static"; exit 1; fi
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config dpkg-dev lintian xvfb \
+            desktop-file-utils imagemagick
+          # Pinned + hash-checked like freemkv's appimage.yml: it runs in the release build.
+          ld=linuxdeploy-${{ matrix.arch }}.AppImage
+          curl -fsSLo "$ld" "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/$ld"
+          echo "${{ matrix.linuxdeploy_sha256 }}  $ld" | sha256sum -c -
+          chmod +x "$ld"
+          echo "LINUXDEPLOY=$PWD/$ld" >> "$GITHUB_ENV"
+      - name: Build the GUIs (glibc, release)
+        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui
+      - uses: actions/download-artifact@v4
+        with:
+          name: freemkv-linux-${{ matrix.arch }}
+          path: freemkv-firmware/musl-cli
+      - name: Validate the desktop entries
+        run: desktop-file-validate packaging/linux/*.desktop
+      - name: Build the .deb packages
+        run: packaging/linux/build-debs.sh ${{ matrix.deb }} musl-cli target/${{ matrix.target }}/release linux-package
+      - name: Build the AppImages
+        run: |
+          set -euo pipefail
+          for t in freemkv-flash freemkv-fw; do
+            packaging/linux/build-appimage.sh "$t" "target/${{ matrix.target }}/release/$t-gui" \
+              "musl-cli/$t-cli-${{ matrix.arch }}-linux" ${{ matrix.arch }} linux-package
           done
-
-          # mkdeb <pkg> <binary> <depends> <recommends> <summary> <long description> <homepage-slug> [gui]
-          mkdeb() {
-            local pkg="$1" bin="$2" depends="$3" recommends="$4" summary="$5" long="$6" slug="$7" gui="${8:-}"
-            local root; root="$(mktemp -d)"; local doc="$root/usr/share/doc/$pkg"
-            install -d -m 755 "$root/usr/bin" "$doc" "$root/usr/share/man/man1" "$root/DEBIAN"
-            cp "$bin" "$root/usr/bin/$pkg"; strip --strip-unneeded "$root/usr/bin/$pkg"
-            chmod 755 "$root/usr/bin/$pkg"
-            { cat LICENSE; printf '\nUpstream: https://github.com/freemkv/freemkv-firmware\n'; } > "$doc/copyright"
-            printf '%s (%s) unstable; urgency=medium\n\n  * Package the upstream release for Ubuntu 24.04 amd64.\n\n -- %s  %s\n' \
-              "$pkg" "$ver" "$maint" "$(date -u -R -d "@$epoch")" | gzip -9n > "$doc/changelog.Debian.gz"
-            gzip -9n < CHANGELOG.md > "$doc/changelog.gz"
-            printf '.TH %s 1\n.SH NAME\n%s \\- %s\n.SH SEE ALSO\nhttps://freemkv.org/firmware/%s/\n' \
-              "$(echo "$pkg" | tr a-z A-Z)" "$pkg" "$summary" "$slug" | gzip -9n > "$root/usr/share/man/man1/$pkg.1.gz"
-            if [ -n "$gui" ]; then
-              install -d -m 755 "$root/usr/share/applications" "$root/usr/share/icons/hicolor/256x256/apps"
-              cp "crates/$pkg/assets/freemkv.png" "$root/usr/share/icons/hicolor/256x256/apps/org.freemkv.$pkg.png"
-              printf '[Desktop Entry]\nType=Application\nName=%s\nComment=%s\nExec=%s\nIcon=org.freemkv.%s\nTerminal=false\nCategories=AudioVideo;Utility;\n' \
-                "$gui" "$summary" "$pkg" "$pkg" > "$root/usr/share/applications/org.freemkv.$pkg.desktop"
-              desktop-file-validate "$root/usr/share/applications/org.freemkv.$pkg.desktop" 2>/dev/null || true
-            else
-              install -d -m 755 "$root/usr/share/lintian/overrides"
-              printf '%s: statically-linked-binary [usr/bin/%s]\n' "$pkg" "$pkg" > "$root/usr/share/lintian/overrides/$pkg"
-            fi
-            find "$root" -type d -exec chmod 755 {} +
-            find "$root" -type f ! -path "$root/usr/bin/*" -exec chmod 644 {} +
-            local size; size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
-            {
-              printf 'Package: %s\nVersion: %s\nArchitecture: amd64\nSection: utils\nPriority: optional\n' "$pkg" "$ver"
-              printf 'Maintainer: %s\nInstalled-Size: %s\n' "$maint" "$size"
-              [ -n "$depends" ] && printf 'Depends: %s\n' "$depends"
-              [ -n "$recommends" ] && printf 'Recommends: %s\n' "$recommends"
-              printf 'Homepage: https://freemkv.org/firmware/%s/\nDescription: %s\n%s\n' "$slug" "$summary" "$long"
-            } > "$root/DEBIAN/control"
-            (cd "$root" && find . -type f ! -path './DEBIAN/*' -printf '%P\n' | sort | xargs md5sum) > "$root/DEBIAN/md5sums"
-            SOURCE_DATE_EPOCH="$epoch" dpkg-deb --root-owner-group --build "$root" "$out/$pkg-amd64.deb"
-            sha256sum "$out/$pkg-amd64.deb" | sed "s#$out/##" > "$out/$pkg-amd64.deb.sha256"
-          }
-
-          flash_long=' Reads, backs up and flashes optical-drive firmware (MediaTek MT19xx and\n Renesas; Pioneer live writes gated). info and dump are read-only; flash\n writes and can brick a drive given the wrong image.\n'
-          fw_long=' Builds and verifies modified optical-drive firmware images offline\n (MediaTek MT19xx integrity tables). It does not touch a drive itself;\n pair it with freemkv-flash to write one.\n'
-          gui_flash_long=' Minimal desktop app for freemkv-flash: drive info, dump and flash.\n'
-          gui_fw_long=' Minimal desktop app for freemkv-fw: create, verify, sign and probe.\n'
-
-          mkdeb freemkv-flash musl-cli/flash/freemkv-flash '' '' \
-            'freemkv drive firmware flasher and dumper (command line)' "$(printf "$flash_long")" flash
-          mkdeb freemkv-fw musl-cli/fw/freemkv-fw '' '' \
-            'freemkv drive firmware modifier (command line)' "$(printf "$fw_long")" modify
-
-          # GUI runtime deps: dpkg-shlibdeps for what is linked, plus the
-          # libraries eframe/winit/glow dlopen at run time (invisible to it).
-          shlibs() {
-            local d; d="$(mktemp -d)"; mkdir "$d/debian"
-            printf 'Source: x\n\nPackage: x\nArchitecture: amd64\nDescription: x\n' > "$d/debian/control"
-            (cd "$d" && dpkg-shlibdeps -O "$1" | sed -n 's/^shlibs:Depends=//p')
-          }
-          dl='libgl1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-6, libxcursor1, libxi6, libxrandr2'
-          rec='libvulkan1, xdg-desktop-portal'
-          for g in flash:Flash:flash fw:Modify:modify; do
-            IFS=: read -r t label slug <<< "$g"
-            bin="target/x86_64-unknown-linux-gnu/release/freemkv-$t-gui"
-            long="$(printf "$([ "$t" = flash ] && echo "$gui_flash_long" || echo "$gui_fw_long")")"
-            mkdeb "freemkv-$t-gui" "$bin" "$(shlibs "$PWD/$bin"), $dl" "$rec" \
-              "freemkv $label desktop app" "$long" "$slug" "freemkv $label"
-          done
-          ls -l "$out"
       - name: Lint and inspect the packages
         run: |
           set -euo pipefail
-          for deb in deb-package/*.deb; do
+          for deb in linux-package/*.deb; do
             lintian --fail-on error "$deb"
             dpkg-deb --info "$deb"; dpkg-deb --contents "$deb"
           done
       # Install into the runner (24.04, the baseline), run the CLIs, and make
       # sure each GUI is still running after 10s under a virtual display
-      # (124 = timed out = alive), as freemkv's deb/AppImage jobs do.
-      - name: Install and smoke-test
+      # (124 = timed out = alive), as freemkv's deb/AppImage jobs do. Then swap
+      # each GUI package for its CLI-only package (Conflicts/Replaces) and back.
+      - name: Install and smoke-test the packages
         run: |
           set -euo pipefail
-          sudo apt-get install -y --no-install-recommends ./deb-package/*.deb libgl1-mesa-dri
+          want="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          a=${{ matrix.deb }}
+          sudo apt-get install -y --no-install-recommends libgl1-mesa-dri \
+            ./linux-package/freemkv-flash-gui-$a.deb ./linux-package/freemkv-fw-gui-$a.deb
           for t in flash fw; do
-            freemkv-$t --version | tee v.log
-            grep -Fq "$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')" v.log
+            freemkv-$t --version | tee v.log; grep -Fq "$want" v.log
             ldd /usr/bin/freemkv-$t 2>&1 | grep -Eq 'statically linked|not a dynamic executable'
+            test -f /usr/share/applications/org.freemkv.freemkv-$t-gui.desktop
             rc=0; xvfb-run -a timeout 10 /usr/bin/freemkv-$t-gui || rc=$?
             [ "$rc" = 124 ] || { echo "::error::freemkv-$t-gui exited early (rc=$rc)"; exit 1; }
+            sudo apt-get install -y --no-install-recommends ./linux-package/freemkv-$t-$a.deb
+            ! dpkg-query -W -f='${Status}\n' freemkv-$t-gui 2>/dev/null | grep -Fxq 'install ok installed' \
+              || { echo "::error::freemkv-$t-gui is still installed alongside freemkv-$t"; exit 1; }
+            test ! -e /usr/bin/freemkv-$t-gui
+            freemkv-$t --version | tee v.log; grep -Fq "$want" v.log
+            sudo apt-get install -y --no-install-recommends ./linux-package/freemkv-$t-gui-$a.deb
+            test -x /usr/bin/freemkv-$t-gui
+          done
+      - name: Smoke-test the AppImages
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          set -euo pipefail
+          want="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          for t in freemkv-flash freemkv-fw; do
+            img="linux-package/$t-${{ matrix.arch }}-linux.AppImage"
+            # Any argument runs the CLI ...
+            "$img" --version | tee v.log; grep -Fq "$want" v.log
+            # ... and a symlink named after the CLI does too.
+            ln -sf "$PWD/$img" "$RUNNER_TEMP/$t"; "$RUNNER_TEMP/$t" --version | grep -Fq "$want"
+            # No arguments opens the desktop app (124 = timed out = alive).
+            rc=0; xvfb-run -a timeout 10 "$img" || rc=$?
+            [ "$rc" = 124 ] || { echo "::error::$img GUI exited early (rc=$rc)"; exit 1; }
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: deb-package
-          path: freemkv-firmware/deb-package/*
+          name: linux-package-${{ matrix.deb }}
+          path: freemkv-firmware/linux-package/*
           if-no-files-found: error
       - name: Publish to the release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            freemkv-firmware/deb-package/*.deb
-            freemkv-firmware/deb-package/*.sha256
+            freemkv-firmware/linux-package/*.deb
+            freemkv-firmware/linux-package/*.AppImage
+            freemkv-firmware/linux-package/*.sha256
 
   # ── Windows installers (Inno Setup) + portable zips ─────────────────────────
   # Mirrors freemkv's build-windows job and packaging/windows/freemkv.iss: a

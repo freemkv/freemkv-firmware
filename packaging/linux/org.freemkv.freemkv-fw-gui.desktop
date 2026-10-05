@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=freemkv Modify
+Comment=freemkv drive firmware modifier
+Exec=freemkv-fw-gui
+Icon=org.freemkv.freemkv-fw-gui
+Terminal=false
+Categories=AudioVideo;Utility;
