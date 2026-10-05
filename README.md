@@ -25,8 +25,10 @@ scope** and will land later as a separate `freemkv-fw` binary.
 | Invocation | Writes? | Input | Behavior |
 |---|---|---|---|
 | `freemkv-flash <dev>` (bare) | no | — | alias for `info` |
+| `freemkv-flash list` | no | — | list drives and their selectors |
 | `freemkv-flash info <dev>` | no | — | INQUIRY + boot banner + classify family |
 | `freemkv-flash backup <dev> [-o out.tar]` | no | — | save one validated rollback archive |
+| `freemkv-flash dump <dev> [-o out.bin] [--force]` | no | — | raw 0x0..0x600000 device read (Pioneer; diagnostics, not flashable) |
 | `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.bin` or `.tar` | validate and plan; execute only after fresh backup |
 
 - `backup` produces one `.tar` file that can be passed directly to `flash -i`.
@@ -46,11 +48,12 @@ Every command classifies the drive first, using only proven discriminators:
 | `READ_BUFFER 0xF1` succeeds | **Pioneer / Renesas** | classified, ❌ no |
 | neither | **Unknown** | ❌ never flashed |
 
-`info` prints the detected family. Pioneer `backup` has one bounded read-only
-profile: BDR-UD04 1.14 with the exact matching signed OEM Kernel+Normal tar
-passed to `--template`. It saves a backup only when both fresh drive reads
-reconstruct that same tar byte for byte. Template-free Pioneer backup and live
-`flash` remain unavailable. The Pioneer flash planner opens no drive.
+`info` prints the detected family. For Pioneer, **use `backup`, not `dump`**:
+`backup` captures a flashable OEM-format package (two `.enc` components in a
+tar); `dump` is a raw, non-flashable device snapshot for diagnostics. Pioneer
+`flash` is gated by a hardware-family check, a Kernel-tag check, and bundle
+self-consistency; see [`docs/pioneer-flasher.md`](docs/pioneer-flasher.md) for
+the full command reference and policy.
 
 ## Flash workflow
 
@@ -109,7 +112,10 @@ refuses to write unless:
 
 - `--i-understand-risk` is given (acknowledging possible bricking),
 - a fresh, complete, validated pre-flash backup has been saved,
-- the drive classified as MediaTek (Unknown/Pioneer/Renesas are refused).
+- the drive classified as a supported family (Unknown is refused).
+
+`flash --recover` (degraded drives) waives the pre-flash backup; `--force`
+bypasses only the Pioneer family gate, never bundle self-consistency.
 
 ## Two independent plug-in layers
 
@@ -117,7 +123,7 @@ refuses to write unless:
 crates/freemkv-flash/
 ├── Cargo.toml
 └── src/
-    ├── main.rs            # clap CLI: info / backup / flash
+    ├── main.rs            # clap CLI: list / info / backup / dump / flash
     ├── lib.rs
     ├── platform/          # OS transport — the ScsiDevice trait
     │   ├── mod.rs         #   trait + open() compile-time OS selection

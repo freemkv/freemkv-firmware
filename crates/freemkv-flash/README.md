@@ -1,5 +1,11 @@
 # freemkv-flash command contract
 
+> **Pioneer status note:** the Pioneer paragraphs below predate live Pioneer
+> flashing and the `dump` command. For the current command surface and flash
+> policy (family gate, Kernel-tag gate, bundle self-consistency, `--force`,
+> `--recover`, `backup` vs `dump`), see `../../docs/pioneer-flasher.md`, which
+> takes precedence where they disagree.
+
 `info` identifies a drive or local firmware file without flashing. `backup`
 creates one firmware rollback file only when the drive's complete update
 image is readable and validates. Pass that file directly to `flash -i` to

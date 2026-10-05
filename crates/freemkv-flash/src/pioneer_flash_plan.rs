@@ -722,7 +722,8 @@ mod tests {
     #[test]
     fn same_family_crossflash_is_not_gated_by_any_table() {
         // Any same-family pair is crossflash-compatible in BOTH directions; the
-        // old hard-coded SAFE_CROSSFLASH table no longer gates anything.
+        // the family-match gate is deterministic from `fw::get_family`;
+        // no hard-coded compatibility table gates anything.
         let fwd = decide_flash_plan(
             &installed(0x8F00, true, "22/01/01"),
             &pair_target(0x8F01, "22/01/01", "22/01/01", 0x01),
