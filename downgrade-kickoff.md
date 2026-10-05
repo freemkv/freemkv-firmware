@@ -22,7 +22,7 @@ settings are global (`~/.claude/settings.json`); never create a project-level
   (`flash_bundle`); key table `src/pioneer_keys.bin` + `src/pioneer_keys.rs`
   (keyed by SAT/controller_id; carries per-model control descriptor + key + a
   fallback `fb`); OEM backup tables `src/pioneer_k.bin` / `src/pioneer_n.bin`.
-- Codec: `firmware-extractor/crates/pioneer-codec` (used as `pioneer_codec`).
+- Codec: the `envelope` module of `pioneer-optical` (`pioneer_optical::envelope`).
   Decoder CLI `firmware-extractor/target/release/pioneer-firmware decode PKG.firmware.tar -o DIR [--unverified-codec]`.
 
 ## What is PROVEN (two independent RE passes, grounded to addresses/offsets)
@@ -108,7 +108,7 @@ the reject.
    `f60f21e2…`, envelope `198b879b…`, changed offsets `0xFE`+`0x1022`, roundtrip
    true). The kernel receive route is checksum-only (no signature on the FE/type-0
    arm — validator `0x4050C6` is reachable only from the Normal arm), so a
-   marker+balance edit is a legal kernel edit. Build it in `pioneer-codec` as
+   marker+balance edit is a legal kernel edit. Build it in `pioneer_optical::envelope` as
    `normalize_generation_marker(envelope)->envelope` (+ `generation_marker`),
    reusing `check_marker_patch`; KAT + zero-sum + idempotency + diff-only-at-`0xFE`/`0x1020` tests.
 4. **Wire into `freemkv-flash`** only the path chosen by step 1, surfaced in the

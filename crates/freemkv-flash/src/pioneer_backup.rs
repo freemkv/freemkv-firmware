@@ -294,7 +294,9 @@ pub fn component_roles(bytes: &[u8]) -> Vec<(String, String)> {
 /// integrity and exact round-trip. Used for a partial (Kernel-only) capture.
 fn validate_kernel_only(kernel: &[u8], product: &str) -> Result<()> {
     let kh = pioneer_optical::envelope::header_info(kernel).context("invalid Kernel header")?;
-    if !product.split_whitespace().any(|part| part == kh.model) || kh.file_type != "Kernel" {
+    if !product.split_whitespace().any(|part| part == kh.model)
+        || kh.file_type != Some(pioneer_optical::ComponentKind::Kernel)
+    {
         bail!("Pioneer Kernel identity does not match the drive");
     }
     let decoded =
@@ -363,8 +365,8 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
     if !product.split_whitespace().any(|part| part == kh.model)
         || nh.model != kh.model
         || nh.hardware_version != kh.hardware_version
-        || kh.file_type != "Kernel"
-        || nh.file_type != "Normal"
+        || kh.file_type != Some(pioneer_optical::ComponentKind::Kernel)
+        || nh.file_type != Some(pioneer_optical::ComponentKind::Normal)
         || kh.kernel_version != nh.kernel_version
         || kh.kernel_version2 != nh.kernel_version2
         || kh.destination != nh.destination
@@ -393,9 +395,9 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
             )
             .is_some()
             {
-                "normal-scaled-key"
+                pioneer_optical::envelope::Layout::NormalScaledKey
             } else {
-                "normal"
+                pioneer_optical::envelope::Layout::Normal
             }
         || !zero_be32_sum(&decoded_kernel.image)
         || !zero_be32_sum(&decoded_normal.image)
@@ -1222,8 +1224,8 @@ mod tests {
                         h.model,
                         h.hardware_version,
                         h.destination,
-                        h.file_type,
-                        decoded.info.layout
+                        h.file_type.map_or("unknown", |t| t.as_str()),
+                        decoded.info.layout.as_str()
                     );
                     if let Some(seed) = decoded.encoding_seed() {
                         *seeds.entry(seed).or_default() += 1;

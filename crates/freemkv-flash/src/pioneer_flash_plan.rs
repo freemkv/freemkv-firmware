@@ -464,18 +464,20 @@ fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
 /// 5. Neither component has an unrecovered envelope tail (orthogonal, but we
 ///    package it here so a bundle's integrity is a single call-site).
 pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(), String> {
-    for (label, bytes, expected_type) in
-        [("Kernel", kernel, "Kernel"), ("Normal", normal, "Normal")]
-    {
+    for (label, bytes, expected_type) in [
+        ("Kernel", kernel, pioneer_optical::ComponentKind::Kernel),
+        ("Normal", normal, pioneer_optical::ComponentKind::Normal),
+    ] {
         let Some(bytes) = bytes else { continue };
         let header = pioneer_optical::envelope::header_info(bytes).ok_or_else(|| {
             format!("malformed bundle: {label} component has no readable envelope header")
         })?;
-        if !header.file_type.eq_ignore_ascii_case(expected_type) {
+        if header.file_type != Some(expected_type) {
             return Err(format!(
                 "malformed bundle: {label} slot carries a component whose header declares \
-                 File Type {:?}, not {expected_type:?}",
-                header.file_type
+                 File Type {:?}, not {:?}",
+                header.file_type.map_or("unknown", |t| t.as_str()),
+                expected_type.as_str()
             ));
         }
     }
