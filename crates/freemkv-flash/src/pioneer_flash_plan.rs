@@ -945,7 +945,7 @@ mod tests {
     }
 
     /// Build a structurally-valid FrontKey Kernel envelope whose DECODED body
-    /// byte at 0xFE equals `marker`, via the pioneer-codec public builder. Mirrors
+    /// byte at 0xFE equals `marker`, via the pioneer-optical public builder. Mirrors
     /// the codec's own `front_kernel` test fixture.
     fn encoded_kernel_with_marker(marker: u8) -> Vec<u8> {
         use pioneer_optical::envelope::builder::{encode_kernel_envelope, KernelBuild};
