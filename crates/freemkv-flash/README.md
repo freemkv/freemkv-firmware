@@ -31,8 +31,9 @@ the final error chain. Firmware transfer payloads are excluded. Paths and drive
 identifiers can appear in the log.
 
 Locations are `%LOCALAPPDATA%\freemkv\logs` on Windows,
-`~/Library/Logs/freemkv` on macOS, and `$XDG_STATE_HOME/freemkv/logs` (or
-`~/.local/state/freemkv/logs`) on Linux. If unavailable, the app tries
+`~/Library/Logs/freemkv` on macOS, and `$XDG_STATE_HOME/freemkv/logs` on Linux.
+When the Linux state directory is unset, it uses `$XDG_CACHE_HOME/freemkv/logs`
+or `~/.cache/freemkv/logs`. If unavailable, the app tries
 `freemkv-logs` under the system temporary directory. Each log is capped at 8 MiB;
 rollover preserves its opening context and newest events. A logging failure is
 reported but does not interrupt firmware programming.

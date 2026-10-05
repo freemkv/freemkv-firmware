@@ -93,8 +93,11 @@ fn log_directory() -> PathBuf {
         if let Some(base) = std::env::var_os("XDG_STATE_HOME") {
             return PathBuf::from(base).join("freemkv/logs");
         }
+        if let Some(base) = std::env::var_os("XDG_CACHE_HOME") {
+            return PathBuf::from(base).join("freemkv/logs");
+        }
         if let Some(base) = std::env::var_os("HOME") {
-            return PathBuf::from(base).join(".local/state/freemkv/logs");
+            return PathBuf::from(base).join(".cache/freemkv/logs");
         }
     }
     std::env::temp_dir().join("freemkv-logs")
