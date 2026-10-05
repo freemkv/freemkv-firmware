@@ -208,6 +208,115 @@ fn mt1939_de_only_fallback_reports_an_already_set_downgrade_byte_as_idempotent()
     );
 }
 
+/// A synthetic MODERN (MT1959-lineage) image: `"MT1959 Boot JB8 "` banner, an
+/// MTEK identity page, and a parseable-but-inactive CMAC table. No MT1959 code
+/// geometry is present, so `build_modify` fails at its first base finder and
+/// `modify` degrades to the DE-only fallback on the MODERN branch — the path that
+/// real JBC6 images such as CH12NS40/UH12NS40 1.03 reach for a different reason
+/// (no integrity-covered free run large enough for the handler).
+fn synthetic_modern_de_only_image(de_byte: u8) -> Vec<u8> {
+    let mut img = synthetic_classic_de_only_image(de_byte);
+    img[freemkv_chipset::BANNER_OFFSET..freemkv_chipset::BANNER_OFFSET + 16]
+        .copy_from_slice(b"MT1959 Boot JB8 ");
+    img
+}
+
+/// Regression for the wrong-refusal-reason defect: the DE-only fallback used to
+/// hard-code "MT1939 classic generation — …" on every skipped lever, even on
+/// MODERN images that reached it for an entirely different reason. Each non-DE
+/// lever must now name the TRUE generation and carry the engine's own base-build
+/// error. Classic path: "MT1939 classic generation" + the classic base error.
+#[test]
+fn mt1939_classic_de_only_fallback_states_classic_generation_and_the_real_base_reason() {
+    let img = synthetic_classic_de_only_image(0x00);
+    let r = Mt1939Engine.modify(&img).expect("classic DE-only modify");
+    for id in [LeverId::RegionFree, LeverId::RawRead, LeverId::Speed] {
+        let lever = r.levers.iter().find(|l| l.id == id).expect("lever present");
+        let LeverOutcome::SignatureNotFound { detail } = &lever.outcome else {
+            panic!("{id:?} expected SignatureNotFound, got {:?}", lever.outcome);
+        };
+        assert!(
+            detail.starts_with("MT1939 classic generation"),
+            "{id:?} must name the classic generation, got: {detail}"
+        );
+        assert!(
+            !detail.contains("modern generation"),
+            "{id:?} must not mislabel a classic image as modern, got: {detail}"
+        );
+        // The actual reason the base build failed, surfaced verbatim.
+        assert!(
+            detail.contains("classic base:") || detail.contains("could not be built"),
+            "{id:?} must state the real base-build reason, got: {detail}"
+        );
+    }
+}
+
+/// Modern path: a non-classic image that degrades to DE-only must label itself
+/// "MT1939 modern generation (MT1959-lineage)" and carry its own base reason —
+/// never the old hard-coded "classic generation" string.
+#[test]
+fn mt1939_modern_de_only_fallback_states_modern_generation_and_the_real_base_reason() {
+    let img = synthetic_modern_de_only_image(0x00);
+    assert!(!is_classic(&img));
+    let r = Mt1939Engine.modify(&img).expect("modern DE-only modify");
+    // DE still applies (family-agnostic).
+    let de = r
+        .levers
+        .iter()
+        .find(|l| l.id == LeverId::DowngradeEnable)
+        .expect("DE lever");
+    assert_eq!(de.outcome, LeverOutcome::Applied);
+    for id in [LeverId::RegionFree, LeverId::RawRead, LeverId::Speed] {
+        let lever = r.levers.iter().find(|l| l.id == id).expect("lever present");
+        let LeverOutcome::SignatureNotFound { detail } = &lever.outcome else {
+            panic!("{id:?} expected SignatureNotFound, got {:?}", lever.outcome);
+        };
+        assert!(
+            detail.contains("MT1939 modern generation (MT1959-lineage)"),
+            "{id:?} must name the modern generation, got: {detail}"
+        );
+        assert!(
+            !detail.contains("classic generation"),
+            "{id:?} must not mislabel a modern image as classic, got: {detail}"
+        );
+        assert!(
+            detail.contains("could not be built"),
+            "{id:?} must state the real base-build reason, got: {detail}"
+        );
+    }
+}
+
+/// Env-gated: on a REAL modern image whose base cannot be built because no
+/// integrity-covered free run is large enough for the handler (CH12NS40 1.03,
+/// UH12NS40 1.03 and the like), the skipped levers must state exactly that — the
+/// CMAC-covered free-space shortfall — and the modern generation, not "classic".
+#[test]
+fn mt1939_modern_nobase_image_reports_the_free_space_shortfall() {
+    let Ok(path) = std::env::var("FREEMKV_MT1939_MODERN_NOBASE") else {
+        eprintln!("skip: set FREEMKV_MT1939_MODERN_NOBASE to a modern image that lacks base free space");
+        return;
+    };
+    let img = std::fs::read(&path).expect("read image");
+    assert!(!is_classic(&img), "{path} must be a modern image");
+    let r = Mt1939Engine.modify(&img).expect("modify");
+    let region = r
+        .levers
+        .iter()
+        .find(|l| l.id == LeverId::RegionFree)
+        .expect("RegionFree lever");
+    let LeverOutcome::SignatureNotFound { detail } = &region.outcome else {
+        panic!("expected SignatureNotFound, got {:?}", region.outcome);
+    };
+    assert!(
+        detail.contains("MT1939 modern generation (MT1959-lineage)"),
+        "got: {detail}"
+    );
+    assert!(
+        detail.contains("free space") && detail.contains("code region"),
+        "must name the CMAC-covered free-space shortfall, got: {detail}"
+    );
+}
+
 /// An MT1939-banner image with NO MTEK identity page has no DE slot and no
 /// classic base, so nothing at all is effective: `modify` must REFUSE cleanly
 /// rather than hand back an image it did not change. The refusal is the signal

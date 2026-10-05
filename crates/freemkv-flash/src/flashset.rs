@@ -9,7 +9,7 @@
 //! so the catalog can never silently drift from what actually executes.
 //!
 //! Sources of truth (per the campaign's sources-of-truth rule): the MT1959
-//! recipe is our hardware-proven path; the 18-brand catalog is transcribed from
+//! recipe is our executable path (not yet proven on hardware); the 18-brand catalog is transcribed from
 //! the firmware/flasher-derived recipes (which cite flasher `.exe` /
 //! firmware-image RE and the XFlash oracle — never DVDFab or forum models).
 //! Every recipe has `host_side_key = false`: no brand needs a host secret, so a

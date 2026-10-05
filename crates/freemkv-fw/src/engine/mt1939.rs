@@ -200,35 +200,52 @@ impl Engine for Mt1939Engine {
         let chip = family::detect_chip(image)?;
         let cap = family::capability_for(&chip.model, chip.family);
 
-        // JB8 / JBP6 / JBC6 (MT1959-lineage): the full MT1959 lever machinery
-        // applies verbatim — the base finders, VID/AKE/Speed/Region signatures and
-        // detours all transfer. Delegate and relabel the family. Any lever whose
-        // signature misses (e.g. a JB8-base image whose VID uses classic
-        // scheduling) is reported SignatureNotFound by the never-abort driver, so
-        // the image still partial-applies.
-        if !is_classic(image) {
-            if let Ok(mut report) = Mt1959Engine.build_modify(image, &chip, &cap) {
-                report.engine = "MT1939";
-                return Ok(report);
-            }
-            // Fall through to the DE-only path if the shared build unexpectedly
-            // fails on a non-classic image (degrade, never refuse).
-        }
+        let classic = is_classic(image);
 
-        // Classic generation: produce the full classic emit (Identity + Region-free
-        // + DE) — structurally valid, self-verifies, passes the structural audit, so
-        // it ships unconditionally (Raw-read stays withheld inside as unsafe). If the
-        // classic base can't be located on this specific image, degrade to the
-        // DE-only fallback below (never refuse).
-        if is_classic(image) {
-            if let Ok(report) = Mt1959Engine.build_modify_classic(image, &chip, &cap) {
-                return Ok(report);
+        // Run the generation-appropriate full build. On success return it; on
+        // failure KEEP the error so the DE-only fallback can report the true reason
+        // each non-DE lever was skipped, instead of a hard-coded generation label.
+        //
+        // * Modern (JB8 / JBP6 / JBC6, MT1959-lineage): the full MT1959 lever
+        //   machinery applies verbatim — base finders, VID/AKE/Speed/Region
+        //   signatures and detours all transfer. Delegate and relabel the family.
+        // * Classic ("MT1939 Boot Code"): the full classic emit (Identity +
+        //   Region-free + DE) ships unconditionally when its base locates.
+        //
+        // Either path falls through to the DE-only fallback only when its base
+        // cannot be built on this specific image (degrade, never refuse).
+        let base_err = if classic {
+            match Mt1959Engine.build_modify_classic(image, &chip, &cap) {
+                Ok(report) => return Ok(report),
+                Err(e) => e,
             }
-        }
+        } else {
+            match Mt1959Engine.build_modify(image, &chip, &cap) {
+                Ok(mut report) => {
+                    report.engine = "MT1939";
+                    return Ok(report);
+                }
+                Err(e) => e,
+            }
+        };
 
-        // DE-only fallback: family-agnostic downgrade-enable when the classic base
-        // isn't locatable. The classic VID/AKE gate signatures are reversed + proven
-        // unique (consts above) but need the classic Identity base to emit.
+        // DE-only fallback: family-agnostic downgrade-enable when the full base
+        // could not be built. Each non-DE lever below is skipped for one shared,
+        // true reason — the base build failed — reported verbatim from the engine's
+        // own decision (`base_reason`), never a model-name guess. The generation
+        // label is derived from the boot banner, not the model string.
+        let generation = if classic {
+            "MT1939 classic generation"
+        } else {
+            "MT1939 modern generation (MT1959-lineage)"
+        };
+        // The actual reason the full build was unavailable, taken verbatim from the
+        // engine's base-build error chain — e.g. "no CMAC-covered free space of 802
+        // bytes in the code region" (no integrity-covered free run large enough for
+        // the injected handler) or "classic base: dispatch scanner not found"
+        // (anchors not located). This is the decision data, not a pattern match.
+        let base_reason = format!("{base_err:#}");
+
         let mut out = image.to_vec();
         let mut levers = Vec::new();
 
@@ -247,40 +264,59 @@ impl Engine for Mt1939Engine {
         };
         levers.push(de);
 
-        // In scope for these BD-writer parts, but the classic-generation emit is
-        // pending its Identity base — report precisely (never-abort partial).
+        // In scope for these BD-writer parts, but the full emit was not built — the
+        // region-free lever is skipped for the same reason as the base.
         levers.push(LeverReport::missed(
             LeverId::RegionFree,
-            "MT1939 classic generation — RPC emitter transfers but the flag-gated \
-             detour needs the classic Identity base (sense-setter + injected handler)",
-        ));
-        // Raw read: the classic VID + AKE gates are reversed and proven-unique; when
-        // both are located we report their offsets so the image is auditably
-        // wireable, with only the classic Identity base + detour still pending.
-        levers.push(match classic_rawread_anchors(image) {
-            Some((vid_gate, ake_gate)) => LeverReport {
-                id: LeverId::RawRead,
-                outcome: super::lever::LeverOutcome::SignatureNotFound {
-                    detail: "classic VID + AKE gates located (reversed, proven-unique); full \
-                             raw-read detour pending the classic Identity base"
-                        .to_string(),
-                },
-                facts: vec![
-                    ("vid_gate_classic", vid_gate),
-                    ("ake_gate_classic", ake_gate),
-                ],
-            },
-            None => LeverReport::missed(
-                LeverId::RawRead,
-                "MT1939 classic generation — VID/AKE gate anchors not located in this image",
+            format!(
+                "{generation}: region-free lever not emitted — the freemkv base could \
+                 not be built on this image ({base_reason})"
             ),
+        ));
+        // Raw read: on the classic generation the VID + AKE gates are reversed and
+        // proven-unique, so when both locate we still report their offsets (the image
+        // is auditably wireable once the classic Identity base exists); the base could
+        // not be built here, so the detour is not emitted. On the modern generation
+        // the classic gate signatures do not apply, so we report only the base reason.
+        levers.push(if classic {
+            match classic_rawread_anchors(image) {
+                Some((vid_gate, ake_gate)) => LeverReport {
+                    id: LeverId::RawRead,
+                    outcome: super::lever::LeverOutcome::SignatureNotFound {
+                        detail: format!(
+                            "{generation}: classic VID + AKE gates located (reversed, \
+                             proven-unique) but the raw-read detour needs the classic \
+                             Identity base, which was not built ({base_reason})"
+                        ),
+                    },
+                    facts: vec![
+                        ("vid_gate_classic", vid_gate),
+                        ("ake_gate_classic", ake_gate),
+                    ],
+                },
+                None => LeverReport::missed(
+                    LeverId::RawRead,
+                    format!(
+                        "{generation}: raw-read lever not emitted — the freemkv base could \
+                         not be built on this image ({base_reason})"
+                    ),
+                ),
+            }
+        } else {
+            LeverReport::missed(
+                LeverId::RawRead,
+                format!(
+                    "{generation}: raw-read lever not emitted — the freemkv base could \
+                     not be built on this image ({base_reason})"
+                ),
+            )
         });
         levers.push(LeverReport::missed(
             LeverId::Speed,
-            "MT1939 classic generation — no MT1959-style ramp-ceiling gate exists (classic \
-             uses a disc-type halfword read-speed clamp through a shared limiter primitive, \
-             no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of \
-             the other levers",
+            format!(
+                "{generation}: speed lever not emitted — the freemkv base could not be \
+                 built on this image ({base_reason})"
+            ),
         ));
 
         if !levers.iter().any(|l| l.outcome.is_effective()) {
