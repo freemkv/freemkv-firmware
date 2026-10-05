@@ -6,7 +6,6 @@ members = [
     "crates/freemkv-flash-gui",
     "crates/freemkv-fw",
     "crates/freemkv-fw-gui",
-    "crates/pioneer-codec",
 ]
 
 [workspace.package]
@@ -29,3 +28,8 @@ all = "warn"
 strip = true
 lto = "thin"
 codegen-units = 1
+
+# Temporary: local pioneer-optical with the `envelope` feature (codec moved in).
+# Remove after publishing pioneer-optical 0.9.0.
+[patch.crates-io]
+pioneer-optical = { path = "../../pioneer-optical" }

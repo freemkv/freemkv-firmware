@@ -211,7 +211,7 @@ impl std::fmt::Display for FamilyKey {
 /// Family of a NORMAL component's raw envelope bytes: decode the envelope and
 /// profile the decoded body. `None` if it does not decode or cannot be profiled.
 pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
-    FamilyKey::from_body(&pioneer_codec::decode_envelope(normal)?.image)
+    FamilyKey::from_body(&pioneer_optical::envelope::decode_envelope(normal)?.image)
 }
 
 /// Whether a flash needs the vendor F3/F2 "kernel mode" unlock. Always `false`.
@@ -276,7 +276,8 @@ pub fn decide_recover_plan(
 pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<()> {
     for (label, bytes) in [("Kernel", kernel), ("Normal", normal)] {
         let Some(bytes) = bytes else { continue };
-        if let Some(tail) = pioneer_codec::decode_envelope(bytes).and_then(|d| d.unrecovered_tail())
+        if let Some(tail) =
+            pioneer_optical::envelope::decode_envelope(bytes).and_then(|d| d.unrecovered_tail())
         {
             return Err(anyhow!(
                 "the {label} envelope has an unrecoverable tail ({:#x}..{:#x} cannot be \
@@ -426,12 +427,12 @@ pub fn target_from_components(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> R
 }
 
 fn component_controller_id(bytes: Option<&[u8]>) -> Option<u16> {
-    let info = pioneer_codec::header_info(bytes?)?;
+    let info = pioneer_optical::envelope::header_info(bytes?)?;
     crate::pioneer_keys::controller_id_from_sat(&info.hardware_version)
 }
 
 fn component_date(bytes: &[u8]) -> Option<FwDate> {
-    FwDate::parse(&pioneer_codec::header_info(bytes)?.generated_date)
+    FwDate::parse(&pioneer_optical::envelope::header_info(bytes)?.generated_date)
 }
 
 /// Parse the envelope header's `Kernel Version` field — for a Normal, the
@@ -439,7 +440,7 @@ fn component_date(bytes: &[u8]) -> Option<FwDate> {
 /// (Pioneer uses the same header field on both, so both callers reach it the
 /// same way). Empty/missing → `None`.
 fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
-    let tag = pioneer_codec::header_info(bytes)?.kernel_version;
+    let tag = pioneer_optical::envelope::header_info(bytes)?.kernel_version;
     let tag = tag.trim();
     (!tag.is_empty()).then(|| tag.to_string())
 }
@@ -467,7 +468,7 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
         [("Kernel", kernel, "Kernel"), ("Normal", normal, "Normal")]
     {
         let Some(bytes) = bytes else { continue };
-        let header = pioneer_codec::header_info(bytes).ok_or_else(|| {
+        let header = pioneer_optical::envelope::header_info(bytes).ok_or_else(|| {
             format!("malformed bundle: {label} component has no readable envelope header")
         })?;
         if !header.file_type.eq_ignore_ascii_case(expected_type) {
@@ -479,8 +480,8 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
         }
     }
     if let (Some(k), Some(n)) = (kernel, normal) {
-        let kh = pioneer_codec::header_info(k).expect("checked above");
-        let nh = pioneer_codec::header_info(n).expect("checked above");
+        let kh = pioneer_optical::envelope::header_info(k).expect("checked above");
+        let nh = pioneer_optical::envelope::header_info(n).expect("checked above");
         if !kh
             .hardware_version
             .eq_ignore_ascii_case(&nh.hardware_version)
@@ -510,8 +511,8 @@ pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(
 
 /// Decode an envelope and read its decoded-body `0xFE` generation marker.
 fn decoded_kernel_marker(bytes: &[u8]) -> Result<u8> {
-    let decoded =
-        pioneer_codec::decode_envelope(bytes).ok_or_else(|| anyhow!("envelope did not decode"))?;
+    let decoded = pioneer_optical::envelope::decode_envelope(bytes)
+        .ok_or_else(|| anyhow!("envelope did not decode"))?;
     decoded
         .image
         .get(0xFE)
@@ -840,7 +841,7 @@ mod tests {
     /// byte at 0xFE equals `marker`, via the pioneer-codec public builder. Mirrors
     /// the codec's own `front_kernel` test fixture.
     fn encoded_kernel_with_marker(marker: u8) -> Vec<u8> {
-        use pioneer_codec::builder::{encode_kernel_envelope, KernelBuild};
+        use pioneer_optical::envelope::builder::{encode_kernel_envelope, KernelBuild};
         fn be32_fix(buf: &mut [u8], at: usize) {
             buf[at..at + 4].copy_from_slice(&[0; 4]);
             let mut sum = 0u32;

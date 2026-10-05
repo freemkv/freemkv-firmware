@@ -104,10 +104,11 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
         .iter()
         .find(|c| c.role == Role::Main)
         .context("missing Normal fixture")?;
-    let kh = pioneer_codec::header_info(&k.bytes).context("Kernel header")?;
-    let nh = pioneer_codec::header_info(&n.bytes).context("Normal header")?;
-    let kd = pioneer_codec::decode_envelope(&k.bytes).context("Kernel codec unresolved")?;
-    let nd = pioneer_codec::decode_envelope_with_kernel(&n.bytes, &kd)
+    let kh = pioneer_optical::envelope::header_info(&k.bytes).context("Kernel header")?;
+    let nh = pioneer_optical::envelope::header_info(&n.bytes).context("Normal header")?;
+    let kd =
+        pioneer_optical::envelope::decode_envelope(&k.bytes).context("Kernel codec unresolved")?;
+    let nd = pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, &kd)
         .context("Normal receiver codec unresolved")?;
     if !kh.hardware_version.starts_with("SAT ") {
         bail!("non-SAT read map unresolved");
@@ -173,8 +174,9 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
         .iter()
         .find(|c| c.role == Role::Main)
         .context("output Normal missing")?;
-    let rk = pioneer_codec::decode_envelope(&rk.bytes).context("output Kernel decode")?;
-    let rn = pioneer_codec::decode_envelope_with_kernel(&rn.bytes, &rk)
+    let rk =
+        pioneer_optical::envelope::decode_envelope(&rk.bytes).context("output Kernel decode")?;
+    let rn = pioneer_optical::envelope::decode_envelope_with_kernel(&rn.bytes, &rk)
         .context("output Normal decode")?;
     if rk.image != kd.image || rn.image != nd.image {
         bail!("captured images differ");

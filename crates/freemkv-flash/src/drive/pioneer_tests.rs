@@ -771,7 +771,7 @@ fn synthetic_pioneer_image(model: &str, len: usize) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 
 /// A header-only Normal envelope (no body) whose banner + fields parse via both
-/// `parse_banner` and `pioneer_codec::header_info`. Good enough to route a plain
+/// `parse_banner` and `pioneer_optical::envelope::header_info`. Good enough to route a plain
 /// flash; it carries no decodable body (so no Kernel marker).
 fn header_only_normal(sat: &str, date: &str) -> Vec<u8> {
     let mut img = vec![0u8; 0x200];

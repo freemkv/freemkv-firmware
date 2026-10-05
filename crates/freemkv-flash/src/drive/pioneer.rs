@@ -608,9 +608,11 @@ const LINEAR_FE_PROFILES: &[LinearFeProfile] = &[LinearFeProfile {
 /// key (the crossflash path bypasses the per-destination dispatcher). Source and
 /// advertised revision do not select this path; receiver acceptance is untested.
 fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> {
-    use pioneer_codec::signature::{verify_normal_signature, SignatureCheck};
-    let kh = pioneer_codec::header_info(kernel).ok_or_else(|| anyhow!("Kernel header missing"))?;
-    let nh = pioneer_codec::header_info(normal).ok_or_else(|| anyhow!("Normal header missing"))?;
+    use pioneer_optical::envelope::signature::{verify_normal_signature, SignatureCheck};
+    let kh = pioneer_optical::envelope::header_info(kernel)
+        .ok_or_else(|| anyhow!("Kernel header missing"))?;
+    let nh = pioneer_optical::envelope::header_info(normal)
+        .ok_or_else(|| anyhow!("Normal header missing"))?;
     let profile = LINEAR_FE_PROFILES
         .iter()
         .find(|profile| {
@@ -634,10 +636,11 @@ fn linear_fe_control(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> 
     if verify_normal_signature(normal) != SignatureCheck::ValidKeyAndCiphertext {
         bail!("Normal signature is invalid or unsupported for this profile");
     }
-    let decoded_kernel =
-        pioneer_codec::decode_envelope(kernel).ok_or_else(|| anyhow!("Kernel decode failed"))?;
-    let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
-        .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
+    let decoded_kernel = pioneer_optical::envelope::decode_envelope(kernel)
+        .ok_or_else(|| anyhow!("Kernel decode failed"))?;
+    let decoded_normal =
+        pioneer_optical::envelope::decode_envelope_with_kernel(normal, &decoded_kernel)
+            .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
     if decoded_kernel.info.layout != "kernel-front"
         || decoded_normal.info.layout != "normal"
         || !zero_word_sum(&decoded_kernel.image)
@@ -827,7 +830,7 @@ pub(crate) fn decide_flash(has_kernel: bool, has_normal: bool) -> Result<FlashSe
 /// `unknown` rather than failing.
 pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> String {
     fn rev(bytes: &[u8]) -> String {
-        pioneer_codec::header_info(bytes)
+        pioneer_optical::envelope::header_info(bytes)
             .map(|h| h.revision)
             .filter(|r| !r.is_empty())
             .unwrap_or_else(|| "unknown".to_string())
@@ -853,7 +856,10 @@ pub(crate) fn installed_facts(
 ) -> Option<crate::pioneer_flash_plan::Installed> {
     use crate::pioneer_flash_plan::{FwDate, Generation, Installed};
     let (installed_kernel, installed_normal) = classify_flash_input(backup?).ok()?;
-    let header = |b: &Option<Vec<u8>>| b.as_deref().and_then(pioneer_codec::header_info);
+    let header = |b: &Option<Vec<u8>>| {
+        b.as_deref()
+            .and_then(pioneer_optical::envelope::header_info)
+    };
     let kinfo = header(&installed_kernel);
     let ninfo = header(&installed_normal);
     // Controller id from the Normal (preferred) or Kernel header.
@@ -869,7 +875,7 @@ pub(crate) fn installed_facts(
     // installed Kernel implies a new-generation (Site-1-bearing) receiver.
     let receiver_new_gen = installed_kernel
         .as_deref()
-        .and_then(pioneer_codec::decode_envelope)
+        .and_then(pioneer_optical::envelope::decode_envelope)
         .and_then(|d| d.image.get(0xFE).copied())
         .map(|m| Generation::from_marker(m) == Generation::Newer)
         .unwrap_or(false);

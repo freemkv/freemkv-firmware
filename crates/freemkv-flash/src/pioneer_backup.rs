@@ -30,19 +30,19 @@ pub fn construct_signed_candidate(
     let normal_oem = crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(normal)));
     let (normal_seed, normal_signature, revision, date): (
         u32,
-        pioneer_codec::builder::NormalSignature,
+        pioneer_optical::envelope::builder::NormalSignature,
         &str,
         &str,
     ) = match normal_oem {
         Some(entry) => (
             entry.seed,
-            pioneer_codec::builder::NormalSignature::Oem(&entry.signature),
+            pioneer_optical::envelope::builder::NormalSignature::Oem(&entry.signature),
             &entry.revision,
             &entry.date,
         ),
         None => (
             0,
-            pioneer_codec::builder::NormalSignature::Zeroed,
+            pioneer_optical::envelope::builder::NormalSignature::Zeroed,
             revision,
             unique_embedded_date(normal).unwrap_or("00/00/00"),
         ),
@@ -52,7 +52,7 @@ pub fn construct_signed_candidate(
     // otherwise stamp the kernel's own zero placeholders (seed 0 is obvious).
     let kernel_build = oem_kernel_build(kernel);
 
-    let input = pioneer_codec::builder::BuildInputs {
+    let input = pioneer_optical::envelope::builder::BuildInputs {
         kernel_image: kernel,
         normal_image: normal,
         envelope_id,
@@ -61,7 +61,7 @@ pub fn construct_signed_candidate(
         kernel: kernel_build,
         normal_key_seed: normal_seed,
     };
-    let pair = pioneer_codec::builder::encode_encrypted_pair(&input, normal_signature)
+    let pair = pioneer_optical::envelope::builder::encode_encrypted_pair(&input, normal_signature)
         .map_err(|e| anyhow::anyhow!(e))?;
     let out = assemble_tar(&[pair.kernel, pair.normal])?;
     let parsed = Bundle::from_tar_bytes(&out)?;
@@ -113,8 +113,12 @@ fn assemble_tar(components: &[Vec<u8>]) -> Result<Vec<u8>> {
 /// when recognized in `crate::pioneer_k`, otherwise zero placeholders. Used to
 /// still produce a Kernel-only archive when the Normal region could not be read.
 fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
-    pioneer_codec::builder::encode_kernel_envelope(kernel, envelope_id, &oem_kernel_build(kernel))
-        .map_err(|e| anyhow::anyhow!(e))
+    pioneer_optical::envelope::builder::encode_kernel_envelope(
+        kernel,
+        envelope_id,
+        &oem_kernel_build(kernel),
+    )
+    .map_err(|e| anyhow::anyhow!(e))
 }
 
 /// Resolve the Kernel build inputs from a captured Kernel image: the byte-exact
@@ -122,8 +126,8 @@ fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
 /// `crate::pioneer_k`, otherwise the obvious zero placeholders (revision
 /// `0000`, date `00/00/00`, seed `0`). Single source of truth for both the
 /// full-pair and Kernel-only capture paths, so they cannot drift.
-fn oem_kernel_build(kernel: &[u8]) -> pioneer_codec::builder::KernelBuild<'static> {
-    use pioneer_codec::builder::{KernelBuild, KernelKeySource};
+fn oem_kernel_build(kernel: &[u8]) -> pioneer_optical::envelope::builder::KernelBuild<'static> {
+    use pioneer_optical::envelope::builder::{KernelBuild, KernelKeySource};
     match crate::pioneer_k::lookup(&format!("{:x}", Sha256::digest(kernel))) {
         Some(entry) => KernelBuild {
             revision: &entry.revision,
@@ -289,11 +293,12 @@ pub fn component_roles(bytes: &[u8]) -> Vec<(String, String)> {
 /// Validate a Kernel envelope on its own: header model match, decode, image
 /// integrity and exact round-trip. Used for a partial (Kernel-only) capture.
 fn validate_kernel_only(kernel: &[u8], product: &str) -> Result<()> {
-    let kh = pioneer_codec::header_info(kernel).context("invalid Kernel header")?;
+    let kh = pioneer_optical::envelope::header_info(kernel).context("invalid Kernel header")?;
     if !product.split_whitespace().any(|part| part == kh.model) || kh.file_type != "Kernel" {
         bail!("Pioneer Kernel identity does not match the drive");
     }
-    let decoded = pioneer_codec::decode_envelope(kernel).context("Kernel cannot be decoded")?;
+    let decoded =
+        pioneer_optical::envelope::decode_envelope(kernel).context("Kernel cannot be decoded")?;
     if !zero_be32_sum(&decoded.image) {
         bail!("Pioneer Kernel image integrity mismatch");
     }
@@ -329,7 +334,7 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
         .components
         .iter()
         .find(|c| c.role == Role::Kernel)
-        .and_then(|c| pioneer_codec::decode_envelope(&c.bytes));
+        .and_then(|c| pioneer_optical::envelope::decode_envelope(&c.bytes));
     let kernel_oem = decoded_kernel
         .as_ref()
         .map(|d| crate::pioneer_k::lookup(&format!("{:x}", Sha256::digest(&d.image))).is_some())
@@ -340,7 +345,7 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
         &decoded_kernel,
         bundle.components.iter().find(|c| c.role == Role::Main),
     ) {
-        (Some(k), Some(n)) => pioneer_codec::decode_envelope_with_kernel(&n.bytes, k)
+        (Some(k), Some(n)) => pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, k)
             .map(|d| crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(&d.image))).is_some())
             .unwrap_or(false),
         _ => false,
@@ -353,8 +358,8 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
 
 /// Validate a pair without interpreting its provenance or archival labels.
 pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Result<()> {
-    let kh = pioneer_codec::header_info(kernel).context("invalid Kernel header")?;
-    let nh = pioneer_codec::header_info(normal).context("invalid Normal header")?;
+    let kh = pioneer_optical::envelope::header_info(kernel).context("invalid Kernel header")?;
+    let nh = pioneer_optical::envelope::header_info(normal).context("invalid Normal header")?;
     if !product.split_whitespace().any(|part| part == kh.model)
         || nh.model != kh.model
         || nh.hardware_version != kh.hardware_version
@@ -367,20 +372,26 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
         bail!("Pioneer envelope identity does not match the drive");
     }
     let decoded_kernel =
-        pioneer_codec::decode_envelope(kernel).context("Kernel cannot be decoded")?;
-    let decoded_normal = pioneer_codec::decode_envelope_with_kernel(normal, &decoded_kernel)
-        .context("Normal cannot be receiver-decoded")?;
+        pioneer_optical::envelope::decode_envelope(kernel).context("Kernel cannot be decoded")?;
+    let decoded_normal =
+        pioneer_optical::envelope::decode_envelope_with_kernel(normal, &decoded_kernel)
+            .context("Normal cannot be receiver-decoded")?;
     // A zeroed signature region is the deliberate "not OEM / unverified"
     // sentinel (a table-miss normal): accept it structurally and skip only the
     // ECDSA check. A nonzero signature must verify.
     let sentinel_signature = normal
-        .get(pioneer_codec::builder::NORMAL_SIGNATURE_RANGE)
+        .get(pioneer_optical::envelope::builder::NORMAL_SIGNATURE_RANGE)
         .is_some_and(|sig| sig.iter().all(|&b| b == 0));
     if (!sentinel_signature
-        && !pioneer_codec::builder::normal_authentication_valid(normal, &decoded_kernel.image))
+        && !pioneer_optical::envelope::builder::normal_authentication_valid(
+            normal,
+            &decoded_kernel.image,
+        ))
         || decoded_normal.info.layout
-            != if pioneer_codec::builder::scaled_normal_geometry_from_kernel(&decoded_kernel.image)
-                .is_some()
+            != if pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(
+                &decoded_kernel.image,
+            )
+            .is_some()
             {
                 "normal-scaled-key"
             } else {
@@ -454,7 +465,7 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
 
     // Kernel receiver layout (inside the dump) gives the Normal geometry.
     let kernel = &image[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE];
-    if let Err(error) = pioneer_codec::builder::kernel_layout_from_image(kernel)
+    if let Err(error) = pioneer_optical::envelope::builder::kernel_layout_from_image(kernel)
         .context("captured Kernel receiver layout is unsupported")
     {
         if !force {
@@ -464,7 +475,7 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
     }
     // If the Normal extends past the minimum span, read the remainder so the dump
     // still holds the whole image; stay within the read ceiling.
-    let normal_end = pioneer_codec::builder::scaled_normal_geometry_from_kernel(kernel)
+    let normal_end = pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(kernel)
         .map(|g| NORMAL_IMAGE_BASE + g.image_len)
         .filter(|end| *end <= pioneer_optical::cdb::READ_CEILING as usize);
     if let Some(end) = normal_end.filter(|end| *end > image.len()) {
@@ -497,7 +508,7 @@ fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
     if kernel.get(0x1000..0x1008) != Some(hardware.as_slice()) {
         bail!("captured Kernel hardware differs from drive identity");
     }
-    pioneer_codec::builder::kernel_layout_from_image(&kernel)
+    pioneer_optical::envelope::builder::kernel_layout_from_image(&kernel)
         .context("captured Kernel receiver layout is unsupported")?;
     let revision = std::str::from_utf8(&inquiry[32..36])?.trim().to_owned();
 
@@ -532,7 +543,7 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
     if kernel.get(0x1000..0x1008) != Some(hardware.as_slice()) {
         bail!("captured Kernel hardware differs from drive identity");
     }
-    pioneer_codec::builder::kernel_layout_from_image(&kernel)
+    pioneer_optical::envelope::builder::kernel_layout_from_image(&kernel)
         .context("captured Kernel receiver layout is unsupported")?;
     let normal = read_normal_region(dev, &kernel, false)?;
     let envelope_id = embedded_envelope_id(&inquiry, &kernel, &normal)?;
@@ -574,10 +585,11 @@ fn read_normal_region(dev: &mut dyn ScsiDevice, kernel: &[u8], deep: bool) -> Re
     if !normal_head.starts_with(b"PIONEER ") {
         bail!("Normal image header is missing at the discovered base");
     }
-    let normal_len = match pioneer_codec::builder::scaled_normal_geometry_from_kernel(kernel) {
-        Some(geometry) => geometry.image_len,
-        None => u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize,
-    };
+    let normal_len =
+        match pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(kernel) {
+            Some(geometry) => geometry.image_len,
+            None => u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize,
+        };
     if !(0x2000..=0x800000).contains(&normal_len)
         || !normal_len.is_multiple_of(0x100)
         || NORMAL_IMAGE_BASE + normal_len > 0x1000000
@@ -1086,16 +1098,17 @@ mod tests {
             .iter()
             .find(|c| c.role == Role::Main)
             .unwrap();
-        let k = pioneer_codec::decode_envelope(&kernel.bytes).unwrap();
-        let detected = pioneer_codec::builder::kernel_layout_from_image(&k.image).unwrap();
+        let k = pioneer_optical::envelope::decode_envelope(&kernel.bytes).unwrap();
+        let detected =
+            pioneer_optical::envelope::builder::kernel_layout_from_image(&k.image).unwrap();
         let expected = match k.info.layout.as_str() {
-            "kernel-front" => pioneer_codec::builder::KernelLayout::FrontKey,
-            "kernel-derived" => pioneer_codec::builder::KernelLayout::DerivedKey,
+            "kernel-front" => pioneer_optical::envelope::builder::KernelLayout::FrontKey,
+            "kernel-derived" => pioneer_optical::envelope::builder::KernelLayout::DerivedKey,
             other => panic!("unsupported Kernel layout: {other}"),
         };
         assert_eq!(detected, expected);
-        let n = pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &k).unwrap();
-        let h = pioneer_codec::header_info(&normal.bytes).unwrap();
+        let n = pioneer_optical::envelope::decode_envelope_with_kernel(&normal.bytes, &k).unwrap();
+        let h = pioneer_optical::envelope::header_info(&normal.bytes).unwrap();
         let output = construct_signed_candidate(&k.image, &n.image, &h.id, &h.revision).unwrap();
         validate_envelope_package(&output, &h.model).unwrap();
         let rebuilt = Bundle::from_tar_bytes(&output).unwrap();
@@ -1116,24 +1129,28 @@ mod tests {
             assert!(rn.bytes[0x1f0..]
                 .starts_with(format!("NORMAL.{}\0", h.revision.replace('.', "")).as_bytes()));
         }
-        if pioneer_codec::builder::normal_authentication_from_kernel(&k.image)
-            == Some(pioneer_codec::builder::NormalAuthentication::ScaledChecksumOnly)
+        if pioneer_optical::envelope::builder::normal_authentication_from_kernel(&k.image)
+            == Some(pioneer_optical::envelope::builder::NormalAuthentication::ScaledChecksumOnly)
         {
-            assert!(pioneer_codec::builder::normal_authentication_valid(
-                &normal.bytes,
-                &k.image
-            ));
-            assert!(pioneer_codec::builder::normal_authentication_valid(
-                &rn.bytes, &k.image
-            ));
+            assert!(
+                pioneer_optical::envelope::builder::normal_authentication_valid(
+                    &normal.bytes,
+                    &k.image
+                )
+            );
+            assert!(
+                pioneer_optical::envelope::builder::normal_authentication_valid(
+                    &rn.bytes, &k.image
+                )
+            );
         } else {
             assert_eq!(
-                pioneer_codec::signature::verify_normal_signature(&normal.bytes),
-                pioneer_codec::signature::verify_normal_signature(&rn.bytes)
+                pioneer_optical::envelope::signature::verify_normal_signature(&normal.bytes),
+                pioneer_optical::envelope::signature::verify_normal_signature(&rn.bytes)
             );
         }
-        let dk = pioneer_codec::decode_envelope(&rk.bytes).unwrap();
-        let dn = pioneer_codec::decode_envelope_with_kernel(&rn.bytes, &dk).unwrap();
+        let dk = pioneer_optical::envelope::decode_envelope(&rk.bytes).unwrap();
+        let dn = pioneer_optical::envelope::decode_envelope_with_kernel(&rn.bytes, &dk).unwrap();
         assert_eq!(dk.image, k.image);
         assert_eq!(dn.image, n.image);
         // Provenance: an OEM-sourced pair rebuilds a byte-exact OEM kernel and,
@@ -1194,10 +1211,12 @@ mod tests {
                     if !seen.insert(Sha256::digest(&component.bytes).to_vec()) {
                         continue;
                     }
-                    let Some(decoded) = pioneer_codec::decode_envelope(&component.bytes) else {
+                    let Some(decoded) =
+                        pioneer_optical::envelope::decode_envelope(&component.bytes)
+                    else {
                         continue;
                     };
-                    let h = pioneer_codec::header_info(&component.bytes).unwrap();
+                    let h = pioneer_optical::envelope::header_info(&component.bytes).unwrap();
                     let group = format!(
                         "{}/{}/{}/{}/{}",
                         h.model,
@@ -1259,11 +1278,13 @@ mod tests {
         let Ok(path) = std::env::var("PIONEER_SCALED_KERNEL_FIXTURE") else {
             return;
         };
-        let kernel = pioneer_codec::decode_envelope(&std::fs::read(path).unwrap()).unwrap();
+        let kernel =
+            pioneer_optical::envelope::decode_envelope(&std::fs::read(path).unwrap()).unwrap();
         let normal_bytes =
             std::fs::read(std::env::var("PIONEER_SCALED_NORMAL_FIXTURE").unwrap()).unwrap();
-        let normal = pioneer_codec::decode_envelope_with_kernel(&normal_bytes, &kernel).unwrap();
-        let h = pioneer_codec::header_info(&normal_bytes).unwrap();
+        let normal =
+            pioneer_optical::envelope::decode_envelope_with_kernel(&normal_bytes, &kernel).unwrap();
+        let h = pioneer_optical::envelope::header_info(&normal_bytes).unwrap();
         let (vendor, product) = h.id.split_once(' ').unwrap();
         let product = product.trim();
         assert!(vendor.len() <= 8 && product.len() <= 16 && h.revision.len() == 4);
@@ -1352,7 +1373,7 @@ mod tests {
                 };
                 let envelope_hash = Sha256::digest(&component.bytes).to_vec();
                 let raw_hash = cache.entry(envelope_hash.clone()).or_insert_with(|| {
-                    pioneer_codec::decode_envelope(&component.bytes)
+                    pioneer_optical::envelope::decode_envelope(&component.bytes)
                         .map(|d| format!("{:x}", Sha256::digest(&d.image)))
                 });
                 let Some(raw_hash) = raw_hash else {
@@ -1422,14 +1443,15 @@ mod tests {
                 if !seen.insert(digest.to_vec()) {
                     continue;
                 }
-                let Some(decoded) = pioneer_codec::decode_envelope(&component.bytes) else {
-                    let hardware = pioneer_codec::header_info(&component.bytes)
+                let Some(decoded) = pioneer_optical::envelope::decode_envelope(&component.bytes)
+                else {
+                    let hardware = pioneer_optical::envelope::header_info(&component.bytes)
                         .map(|h| h.hardware_version)
                         .unwrap_or_else(|| "invalid header".into());
                     *unsupported_kernels.entry(hardware).or_default() += 1;
                     continue;
                 };
-                if let Some(h) = pioneer_codec::header_info(&component.bytes) {
+                if let Some(h) = pioneer_optical::envelope::header_info(&component.bytes) {
                     kernel_revision_literals += usize::from(
                         !h.revision.is_empty()
                             && decoded
@@ -1450,14 +1472,18 @@ mod tests {
                         .insert(format!("{} {} {}", h.model, h.revision, h.generated_date));
                 }
                 if let Some(normal) = bundle.components.iter().find(|c| c.role == Role::Main) {
-                    if pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &decoded).is_none()
+                    if pioneer_optical::envelope::decode_envelope_with_kernel(
+                        &normal.bytes,
+                        &decoded,
+                    )
+                    .is_none()
                     {
-                        let hardware = pioneer_codec::header_info(&normal.bytes)
+                        let hardware = pioneer_optical::envelope::header_info(&normal.bytes)
                             .map(|h| h.hardware_version)
                             .unwrap_or_else(|| "invalid header".into());
                         *unsupported_normals.entry(hardware).or_default() += 1;
                     }
-                    if let Some(header) = pioneer_codec::header_info(&normal.bytes) {
+                    if let Some(header) = pioneer_optical::envelope::header_info(&normal.bytes) {
                         if decoded
                             .image
                             .windows(header.id.len())
@@ -1472,21 +1498,27 @@ mod tests {
                 let expected = match decoded.info.layout.as_str() {
                     "kernel-front" => {
                         front += 1;
-                        pioneer_codec::builder::KernelLayout::FrontKey
+                        pioneer_optical::envelope::builder::KernelLayout::FrontKey
                     }
                     "kernel-derived" => {
                         derived += 1;
-                        pioneer_codec::builder::KernelLayout::DerivedKey
+                        pioneer_optical::envelope::builder::KernelLayout::DerivedKey
                     }
                     _ => continue,
                 };
-                let detected = pioneer_codec::builder::kernel_layout_from_image(&decoded.image);
+                let detected =
+                    pioneer_optical::envelope::builder::kernel_layout_from_image(&decoded.image);
                 if detected.is_none() {
-                    let signature = bundle
-                        .components
-                        .iter()
-                        .find(|c| c.role == Role::Main)
-                        .map(|c| pioneer_codec::signature::verify_normal_signature(&c.bytes));
+                    let signature =
+                        bundle
+                            .components
+                            .iter()
+                            .find(|c| c.role == Role::Main)
+                            .map(|c| {
+                                pioneer_optical::envelope::signature::verify_normal_signature(
+                                    &c.bytes,
+                                )
+                            });
                     unrecognized.push(format!("{} signature={signature:?}", path.display()));
                 } else {
                     assert_eq!(detected, Some(expected), "{}", path.display());
@@ -1546,13 +1578,15 @@ mod tests {
                 ) else {
                     continue;
                 };
-                let Some(k) = pioneer_codec::decode_envelope(&kernel.bytes) else {
+                let Some(k) = pioneer_optical::envelope::decode_envelope(&kernel.bytes) else {
                     continue;
                 };
-                let Some(n) = pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &k) else {
+                let Some(n) =
+                    pioneer_optical::envelope::decode_envelope_with_kernel(&normal.bytes, &k)
+                else {
                     continue;
                 };
-                let Some(h) = pioneer_codec::header_info(&normal.bytes) else {
+                let Some(h) = pioneer_optical::envelope::header_info(&normal.bytes) else {
                     continue;
                 };
                 let identity = if all_pairs {
@@ -1611,13 +1645,13 @@ mod tests {
                             ));
                             generated_name += 1;
                         }
-                        signature_range_match += usize::from(if pioneer_codec::builder::normal_authentication_from_kernel(&k.image) == Some(pioneer_codec::builder::NormalAuthentication::ScaledChecksumOnly) {
-                            pioneer_codec::builder::normal_authentication_valid(&normal.bytes, &k.image)
-                                && pioneer_codec::builder::normal_authentication_valid(&rebuilt_normal.bytes, &k.image)
+                        signature_range_match += usize::from(if pioneer_optical::envelope::builder::normal_authentication_from_kernel(&k.image) == Some(pioneer_optical::envelope::builder::NormalAuthentication::ScaledChecksumOnly) {
+                            pioneer_optical::envelope::builder::normal_authentication_valid(&normal.bytes, &k.image)
+                                && pioneer_optical::envelope::builder::normal_authentication_valid(&rebuilt_normal.bytes, &k.image)
                         } else {
-                            pioneer_codec::signature::verify_normal_signature(
+                            pioneer_optical::envelope::signature::verify_normal_signature(
                                 &rebuilt_normal.bytes,
-                            ) == pioneer_codec::signature::verify_normal_signature(&normal.bytes)
+                            ) == pioneer_optical::envelope::signature::verify_normal_signature(&normal.bytes)
                         });
                     }
                     Err(error) => failures.push(format!("{}: {error:#}", h.hardware_version)),
@@ -1700,12 +1734,16 @@ mod tests {
                 &original_normal.bytes[0x1c0..0x200]
             );
             assert_ne!(&normal.bytes[0x200..], &original_normal.bytes[0x200..]);
-            let generated_kernel = pioneer_codec::decode_envelope(&kernel.bytes).unwrap();
-            let supplied_kernel = pioneer_codec::decode_envelope(&original_kernel.bytes).unwrap();
-            let generated_normal =
-                pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &generated_kernel)
-                    .unwrap();
-            let supplied_normal = pioneer_codec::decode_envelope_with_kernel(
+            let generated_kernel =
+                pioneer_optical::envelope::decode_envelope(&kernel.bytes).unwrap();
+            let supplied_kernel =
+                pioneer_optical::envelope::decode_envelope(&original_kernel.bytes).unwrap();
+            let generated_normal = pioneer_optical::envelope::decode_envelope_with_kernel(
+                &normal.bytes,
+                &generated_kernel,
+            )
+            .unwrap();
+            let supplied_normal = pioneer_optical::envelope::decode_envelope_with_kernel(
                 &original_normal.bytes,
                 &supplied_kernel,
             )
@@ -1734,9 +1772,10 @@ mod tests {
                 assert_eq!(candidate.data.len(), original.data.len());
             }
         }
-        let decoded_kernel = pioneer_codec::decode_envelope(&kernel.bytes).unwrap();
+        let decoded_kernel = pioneer_optical::envelope::decode_envelope(&kernel.bytes).unwrap();
         let decoded_normal =
-            pioneer_codec::decode_envelope_with_kernel(&normal.bytes, &decoded_kernel).unwrap();
+            pioneer_optical::envelope::decode_envelope_with_kernel(&normal.bytes, &decoded_kernel)
+                .unwrap();
         assert_eq!(decoded_kernel.image, dump[0x400000..0x410000]);
         assert_eq!(decoded_normal.image, dump[0x410000..0x5d7500]);
         let output =

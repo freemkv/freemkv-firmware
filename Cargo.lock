@@ -1330,7 +1330,6 @@ dependencies = [
  "freemkv-chipset",
  "getrandom 0.3.4",
  "libfreemkv",
- "pioneer-codec",
  "pioneer-optical",
  "serde",
  "serde_json",
@@ -2698,25 +2697,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "pioneer-codec"
-version = "0.1.0"
+name = "pioneer-optical"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
+ "miniz_oxide 0.8.9",
  "num-bigint",
  "num-traits",
  "serde",
  "sha1",
  "sha2",
-]
-
-[[package]]
-name = "pioneer-optical"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "754f356f6953a2bc1c0125b5a9f3ea6ac614cae195760778196538076e748b8f"
-dependencies = [
- "miniz_oxide 0.8.9",
 ]
 
 [[package]]

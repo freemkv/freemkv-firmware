@@ -185,18 +185,18 @@ pub(crate) fn execute_flash(
 /// decoded body's marker was `FF`/`00` and we flipped it to `01` + rebalanced
 /// the checksum and re-encoded. Logs the exact two-word diff on patch.
 fn apply_downgrade_patch_if_needed(kernel_enc: &[u8]) -> Result<Option<Vec<u8>>> {
-    let decoded = match pioneer_codec::decode_envelope(kernel_enc) {
+    let decoded = match pioneer_optical::envelope::decode_envelope(kernel_enc) {
         Some(d) => d,
         None => return Ok(None), // not a decodable envelope; nothing to patch
     };
-    if decoded.image.len() != pioneer_codec::KERNEL_BODY_LEN {
+    if decoded.image.len() != pioneer_optical::envelope::KERNEL_BODY_LEN {
         return Ok(None); // not a Kernel-sized body (likely a Normal passed as kernel)
     }
-    let (patched_body, outcome) = pioneer_codec::downgrade_patch(&decoded.image)
+    let (patched_body, outcome) = pioneer_optical::envelope::downgrade_patch(&decoded.image)
         .map_err(|e| anyhow!("downgrade patch refused the Kernel body: {e:?}"))?;
     match outcome {
-        pioneer_codec::DowngradePatchOutcome::AlreadyNewer => Ok(None),
-        pioneer_codec::DowngradePatchOutcome::Patched {
+        pioneer_optical::envelope::DowngradePatchOutcome::AlreadyNewer => Ok(None),
+        pioneer_optical::envelope::DowngradePatchOutcome::Patched {
             marker_before,
             checksum_word_before,
             checksum_word_after,
