@@ -2171,6 +2171,24 @@ impl Mt1959Engine {
         flag_base: u32,
         boot_function_entry: u32,
     ) -> Result<Vec<u8>> {
+        self.build_handler_with_identity(
+            image,
+            oem_handler,
+            flag_base,
+            boot_function_entry,
+            identity_blob(),
+        )
+    }
+
+    /// Explicit identity input keeps the golden build independent of release versions.
+    pub(super) fn build_handler_with_identity(
+        &self,
+        image: &[u8],
+        oem_handler: u32,
+        flag_base: u32,
+        boot_function_entry: u32,
+        identity: Vec<u8>,
+    ) -> Result<Vec<u8>> {
         let cdb = self.find_cdb_base(image)?;
         let (writer, commit_off) = self.find_response_writer(image)?;
         let (commit, length_field) = self.find_response_commit(image)?;
@@ -2190,7 +2208,6 @@ impl Mt1959Engine {
             "resolved NV/SAVE block 0x{save_home:x} is outside the flash-write window \
              0x{FLASHWRITE_ALLOW_LO:x}..0x{FLASHWRITE_ALLOW_HI:x}"
         );
-        let identity = identity_blob();
         let id_len = identity.len() as u8;
 
         let mut a = Asm::new();

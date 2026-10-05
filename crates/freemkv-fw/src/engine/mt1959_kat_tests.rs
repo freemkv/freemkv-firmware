@@ -6,9 +6,9 @@
 //! grounded facts, injected handler bytes, and the re-signed CMAC digests. It is
 //! the falsifiable-against-reality gate the old fixture tests never were.
 //!
-//! The OEM base is not committed (cleanroom / licensing); the test reads it from
-//! `$FREEMKV_KAT_BASE` or the private hoard, and **skips** (does not fail) when
-//! the image is absent, so CI without it still passes.
+//! The OEM base is loaded from `$FREEMKV_KAT_BASE` or the committed fixture.
+//! The golden build pins its identity to 0.10.2; a separate production-path test
+//! checks the current crate version and integrity without release-specific digests.
 
 use crate::engine::mt1959::Mt1959Engine;
 use crate::engine::Engine;
@@ -25,11 +25,9 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// table; DUMPALL peeks RAM. Speed/Region/UHD/BD/HRL/AKE/Bus act via flag-gated
 /// OEM-code trampolines keyed by Feature id, not this handler.
 ///
-/// NOTE: the handler embeds the crate version string (`freemkv <CARGO_PKG_VERSION>`),
-/// so a version bump changes these injected bytes AND the two CMAC digests below
-/// (the version bytes fall inside CMAC entries 1 and 15). When the version bumps,
-/// regenerate all three constants (run this test with `FREEMKV_KAT_BASE` set and
-/// copy the `left:` values). This is expected drift, not a real regression.
+/// The golden identity is fixed so release version bumps do not change the oracle.
+/// Changes to emitted code still require reviewing the handler and CMAC snapshots.
+const KAT_IDENTITY: &[u8] = b"freemkv 0.10.2";
 const EXPECT_HANDLER_HEX: &str =
     "b14b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a94b1847f0b5a94f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700247be00d2c03d1587a3070002475e00f2c04d19c4e0420b04700246ee000246ce0f0b5974f1c79022c0bd197485979012900d262e0072900d35fe04018997901705be0042c59d19879ff2823d18e48ff21017041708170c1700171417181718b4806688b4805687619874801783170417871708178b170c178f17001793171417971718179b1712846824907220123824da84732e001280fd17b48ff210170ff214170ff2181700121c17001210171ff214171ff21817120e0734e764a1178ff290ed1ff213170ff217170ff21b1700121f17001213171ff217171ff21b1710ce0517871709178b170d178f17011793171517971719179b171ffe70025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948314601220123564da847044600e0574c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b1712846324907220123324da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ca600250e2d04d22846715db8470135f8e70c4e0e250122072a05d2b15c2846b84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e31302e32";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
@@ -145,6 +143,21 @@ fn load_base() -> Option<Vec<u8>> {
     std::fs::read(fixture).ok()
 }
 
+/// Production builds must embed the current identity and sign the resulting image.
+#[test]
+fn create_embeds_current_version_and_verifies() {
+    let base = load_base().expect("KAT requires the committed OEM fixture");
+    let report = Mt1959Engine.create(&base).expect("production build");
+    let identity = format!("freemkv {}", env!("CARGO_PKG_VERSION"));
+    assert!(report.handler_bytes.ends_with(identity.as_bytes()));
+    let start = report.handler_va as usize;
+    assert_eq!(
+        &report.image[start..start + report.handler_bytes.len()],
+        report.handler_bytes.as_slice()
+    );
+    assert!(freemkv_flash::cmac::verify(&report.image));
+}
+
 #[test]
 fn create_reproduces_hand_built_kat_byte_for_byte() {
     let Some(base) = load_base() else {
@@ -158,8 +171,8 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     );
 
     let report = Mt1959Engine
-        .create(&base)
-        .expect("create must succeed on the OEM base");
+        .build_report_with_identity(&base, KAT_IDENTITY.to_vec())
+        .expect("golden build must succeed on the OEM base");
 
     // grounded facts, every one derived from the image (no consts in the engine)
     assert_eq!(report.cdb_base, EXPECT_CDB_BASE, "cdb_base");

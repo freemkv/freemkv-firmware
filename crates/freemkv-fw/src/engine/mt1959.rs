@@ -90,6 +90,15 @@ impl Mt1959Engine {
     ///
     /// [`Engine`]: super::Engine
     pub fn build_report(&self, image: &[u8]) -> Result<CreateReport> {
+        self.build_report_with_identity(image, identity_blob())
+    }
+
+    /// Uses the production build path with a fixed identity for known-answer tests.
+    pub(super) fn build_report_with_identity(
+        &self,
+        image: &[u8],
+        identity: Vec<u8>,
+    ) -> Result<CreateReport> {
         // ---- BASE (mandatory) — the verb handler + boot hook + save/reset need these;
         // a miss means this image cannot carry a freemkv base, so refuse.
         let scanner_entry = self.find_scanner_entry(image)?;
@@ -139,7 +148,13 @@ impl Mt1959Engine {
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
 
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base, boot_function_entry)
+            .build_handler_with_identity(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                identity,
+            )
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
