@@ -208,8 +208,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
-          shared-key: freemkv-firmware-release
-          key: ${{ matrix.target }}
+          # shared-key replaces key in rust-cache; put the target and build
+          # environment here to prevent host build-script cache collisions.
+          shared-key: freemkv-firmware-release-v2-${{ matrix.target }}-${{ matrix.cross_image && 'cross' || 'native' }}
 
       # musl needs its C toolchain for the linker; the CLI's deps are otherwise
       # pure Rust, so no cross-container is required for x86_64.
@@ -418,8 +419,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
-          shared-key: freemkv-firmware-release
-          key: ${{ matrix.target }}-gui
+          shared-key: freemkv-firmware-release-v2-${{ matrix.target }}-gui
       # eframe/egui/rfd have no -dev system deps (winit, GL and the portal
       # backend are loaded at runtime), unlike freemkv's GTK4/libadwaita app.
       - name: Install build and package tools
