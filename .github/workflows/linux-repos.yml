@@ -203,9 +203,16 @@ jobs:
             gpg --batch --pinentry-mode loopback --local-user "$fpr" --detach-sign --no-armor -o "$p.sig" "$p"
             gpg --verify "$p.sig" "$p"
           done
+          # The install test below trusts this key, as a user's pacman would.
+          gpg --armor --export "$fpr" > out/freemkv.asc
       - name: Install and run (x86_64)
         run: |
           set -euo pipefail
+          if [ -f out/freemkv.asc ]; then
+            pacman-key --init
+            pacman-key --add out/freemkv.asc
+            pacman-key --lsign-key "$(gpg --with-colons --show-keys out/freemkv.asc | awk -F: '/^fpr/{print $10; exit}')"
+          fi
           want=$(pacman -Qip out/freemkv-flash-x86_64.pkg.tar.zst | awk '/^Version/{sub(/-[0-9]+$/, "", $3); print $3}')
           for t in flash fw; do
             pacman -U --noconfirm "./out/freemkv-$t-x86_64.pkg.tar.zst"
