@@ -866,7 +866,7 @@ pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Str
 pub(crate) fn installed_facts(
     backup: Option<&[u8]>,
 ) -> Option<crate::pioneer_flash_plan::Installed> {
-    use crate::pioneer_flash_plan::{FwDate, Generation, Installed};
+    use crate::pioneer_flash_plan::{FwDate, Installed};
     let (installed_kernel, installed_normal) = classify_flash_input(backup?).ok()?;
     let header = |b: &Option<Vec<u8>>| {
         b.as_deref()
@@ -882,14 +882,12 @@ pub(crate) fn installed_facts(
     let normal_date = ninfo
         .as_ref()
         .and_then(|h| FwDate::parse(&h.generated_date));
-    // Receiver-generation proxy: the new-gen Site-1 signatures co-occur with the
-    // installed Kernel's `0x01` marker (whitepaper §15.2), so marker `01` on the
-    // installed Kernel implies a new-generation (Site-1-bearing) receiver.
+    // A recognized generation-patched OEM kernel still contains its original
+    // receiver code. Classify that original marker, not our compatibility edit.
     let receiver_new_gen = installed_kernel
         .as_deref()
         .and_then(pioneer_optical::envelope::decode_envelope)
-        .and_then(|d| d.image.get(0xFE).copied())
-        .map(|m| Generation::from_marker(m) == Generation::Newer);
+        .and_then(|d| crate::pioneer_k::receiver_generation(&d.image));
     // Installed family: profile the decoded installed Normal body (the same
     // decode used for the target, so the two keys are directly comparable).
     let family = installed_normal
@@ -1320,6 +1318,16 @@ impl DriveFamily for Pioneer {
             _ => {}
         }
         let p = crate::pioneer_backup::package_provenance(bytes);
+        if p.kernel_generation_patched {
+            return BackupNotice::Unverified(format!(
+                "OEM kernel — generation patched. Captured kernel bytes are preserved. Normal: {}.",
+                if p.normal_oem {
+                    "OEM recognized"
+                } else {
+                    "not recognized OEM"
+                }
+            ));
+        }
         match (p.kernel_oem, p.normal_oem) {
             (true, true) => BackupNotice::VerifiedOem(
                 "OEM-VERIFIED: kernel and normal are byte-exact OEM originals."

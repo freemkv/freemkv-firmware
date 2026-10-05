@@ -1077,3 +1077,42 @@ fn forced_warning_does_not_claim_a_family_bypass_for_the_unknown_tag_case() {
     );
     assert!(FORCED_WARNING.contains("Kernel tag"), "{FORCED_WARNING}");
 }
+
+#[test]
+fn generation_patch_skips_known_older_receiver() {
+    use pioneer_optical::envelope::builder::{encode_kernel_envelope, KernelBuild};
+    let mut body = vec![0; 0x10000];
+    body[0xfe] = 0xff;
+    body[0x1000..0x1008].copy_from_slice(b"SAT 8A10");
+    body[0x1008..0x1010].copy_from_slice(b"ID58    ");
+    body[0x1010..0x1014].copy_from_slice(b"ID5 ");
+    body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
+    let sum = body
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .fold(0u32, |sum, c| sum.wrapping_add(u32::from_be_bytes(*c)));
+    body[0x1020..0x1024].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+    let kernel = encode_kernel_envelope(
+        &body,
+        "PIONEER BD-RW   BDR-UD04",
+        &KernelBuild::from_seed(0),
+    )
+    .unwrap();
+    assert!(will_patch_kernel(Some(&kernel), Some(true)));
+    assert!(!will_patch_kernel(Some(&kernel), Some(false)));
+    assert!(will_patch_kernel(Some(&kernel), None));
+    assert!(!will_patch_kernel(None, Some(true)));
+}
+
+#[test]
+fn installed_patched_backup_is_not_a_newer_receiver_when_configured() {
+    let Ok(path) = std::env::var("PIONEER_PATCHED_BACKUP_FIXTURE") else {
+        return;
+    };
+    let bytes = std::fs::read(path).unwrap();
+    assert_eq!(
+        installed_facts(Some(&bytes)).unwrap().receiver_new_gen,
+        Some(false)
+    );
+}

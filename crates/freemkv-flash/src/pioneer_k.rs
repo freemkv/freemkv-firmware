@@ -102,9 +102,131 @@ pub fn lookup(image_sha256: &str) -> Option<&'static KernelEntry> {
     table().get(image_sha256)
 }
 
+/// OEM identity, distinguishing an exact image from the supported generation patch.
+pub struct KernelMatch<'a> {
+    pub entry: &'a KernelEntry,
+    pub generation_patched: bool,
+    pub original_marker: u8,
+}
+
+/// Recognition only: never alters the caller's captured image.
+pub fn recognize(image: &[u8]) -> Option<KernelMatch<'static>> {
+    recognize_with(image, lookup)
+}
+
+/// Classify the installed receiver using the original marker for a recognized
+/// patched OEM body: our marker edit does not add a newer receiver implementation.
+pub fn receiver_generation(image: &[u8]) -> Option<bool> {
+    let marker = recognize(image)
+        .map(|m| m.original_marker)
+        .or_else(|| image.get(0xfe).copied())?;
+    match marker {
+        0xff | 0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    }
+}
+
+fn recognize_with<'a>(
+    image: &[u8],
+    resolve: impl Fn(&str) -> Option<&'a KernelEntry>,
+) -> Option<KernelMatch<'a>> {
+    use sha2::{Digest, Sha256};
+    if let Some(entry) = resolve(&format!("{:x}", Sha256::digest(image))) {
+        return Some(KernelMatch {
+            entry,
+            generation_patched: false,
+            original_marker: *image.get(0xfe)?,
+        });
+    }
+    if image.len() != pioneer_optical::envelope::KERNEL_BODY_LEN || image[0xfe] != 1 {
+        return None;
+    }
+    // Invert ONLY the documented marker change and its additive checksum delta.
+    // Hash every byte of each candidate; do not mask checksum or marker fields.
+    for marker in [0xffu8, 0x00] {
+        let mut candidate = image.to_vec();
+        candidate[0xfe] = marker;
+        let word = u32::from_be_bytes(image[0x1020..0x1024].try_into().ok()?);
+        let delta = 1u32.wrapping_sub(u32::from(marker)).wrapping_mul(0x100);
+        candidate[0x1020..0x1024].copy_from_slice(&word.wrapping_add(delta).to_be_bytes());
+        if let Some(entry) = resolve(&format!("{:x}", Sha256::digest(&candidate))) {
+            return Some(KernelMatch {
+                entry,
+                generation_patched: true,
+                original_marker: marker,
+            });
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_patched_oem_fixture_when_configured() {
+        let Ok(path) = std::env::var("PIONEER_PATCHED_KERNEL_FIXTURE") else {
+            return;
+        };
+        let image = std::fs::read(path).unwrap();
+        let matched = recognize(&image).expect("patched OEM kernel recognized");
+        assert!(matched.generation_patched);
+        assert_eq!(matched.original_marker, 0xff);
+        assert_eq!(receiver_generation(&image), Some(false));
+    }
+
+    #[test]
+    fn receiver_generation_keeps_unknown_distinct() {
+        let mut image = vec![0; 0x10000];
+        assert_eq!(receiver_generation(&image), Some(false));
+        image[0xfe] = 1;
+        assert_eq!(receiver_generation(&image), Some(true));
+        image[0xfe] = 0x55;
+        assert_eq!(receiver_generation(&image), None);
+        assert_eq!(receiver_generation(&[]), None);
+    }
+
+    #[test]
+    fn generation_patch_requires_exact_compensation_and_no_other_changes() {
+        use sha2::{Digest, Sha256};
+        for marker in [0xff, 0x00] {
+            let mut original = vec![0x55; 0x10000];
+            original[0xfe] = marker;
+            original[0x1020..0x1024].copy_from_slice(&0xffff_ff00u32.to_be_bytes());
+            let hash = format!("{:x}", Sha256::digest(&original));
+            let entry = KernelEntry {
+                revision: "1.00".into(),
+                date: "17/02/10".into(),
+                key: KeyMaterial::Seed(0),
+            };
+            let resolve = |h: &str| (h == hash).then_some(&entry);
+            let (patched, _) = pioneer_optical::envelope::downgrade_patch(&original).unwrap();
+            assert!(
+                !recognize_with(&original, resolve)
+                    .unwrap()
+                    .generation_patched
+            );
+            assert!(
+                recognize_with(&patched, resolve)
+                    .unwrap()
+                    .generation_patched
+            );
+            assert_eq!(
+                recognize_with(&patched, resolve).unwrap().original_marker,
+                marker
+            );
+            let mut bad = patched.clone();
+            bad[0x1022] ^= 1;
+            assert!(recognize_with(&bad, resolve).is_none());
+            let mut bad = patched.clone();
+            bad[0x2000] ^= 1;
+            assert!(recognize_with(&bad, resolve).is_none());
+            assert!(recognize_with(&patched[..0x1023], resolve).is_none());
+            assert_eq!(original[0xfe], marker);
+        }
+    }
 
     #[test]
     fn embedded_table_parses_and_has_entries() {

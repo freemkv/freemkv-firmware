@@ -329,7 +329,7 @@ impl FlashApp {
                     });
                     ui.add_space(12.0);
                     ui.horizontal(|ui| {
-                        if primary(ui, "Review flash…", selected).clicked() {
+                        if primary(ui, "Flash now", selected).clicked() {
                             self.choose_flash(ctx, true);
                         }
                         if ui.link("Check file").clicked() {
@@ -560,7 +560,7 @@ mod tests {
 
     fn rendered_text(app: &mut FlashApp) -> Vec<(String, bool)> {
         let ctx = egui::Context::default();
-        ctx.set_theme(egui::Theme::Light);
+        crate::configure_style(&ctx);
         let mut text = Vec::new();
         for _ in 0..4 {
             let output = ctx.run_ui(
@@ -602,7 +602,7 @@ mod tests {
             (Task::Dump, vec!["Save raw dump…"]),
             (
                 Task::Flash,
-                vec!["Change file…", "Review flash…", "Check file", "Force flash"],
+                vec!["Change file…", "Flash now", "Check file", "Force flash"],
             ),
         ] {
             app.task = task;

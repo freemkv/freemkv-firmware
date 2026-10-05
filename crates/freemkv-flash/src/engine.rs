@@ -237,6 +237,20 @@ pub fn info_file(path: &Path) -> Result<()> {
             "{}",
             style::kv("components", &bundle.components.len().to_string())
         );
+        let provenance = crate::pioneer_backup::package_provenance(&image);
+        println!(
+            "{}",
+            style::kv(
+                "kernel",
+                if provenance.kernel_generation_patched {
+                    "OEM kernel — generation patched"
+                } else if provenance.kernel_oem {
+                    "OEM kernel — exact match"
+                } else {
+                    "Not recognized OEM"
+                }
+            )
+        );
         for component in &bundle.components {
             println!(
                 "{}",

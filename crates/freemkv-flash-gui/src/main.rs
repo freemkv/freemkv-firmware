@@ -39,18 +39,24 @@ fn main() -> eframe::Result<()> {
         "freemkv-flash",
         native_options,
         Box::new(|cc| {
-            cc.egui_ctx.set_theme(egui::Theme::Light);
-            cc.egui_ctx.style_mut_of(egui::Theme::Light, |style| {
-                style.spacing.item_spacing = egui::vec2(10.0, 8.0);
-                style.spacing.button_padding = egui::vec2(12.0, 7.0);
-                style
-                    .text_styles
-                    .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
-                style
-                    .text_styles
-                    .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
-            });
+            configure_style(&cc.egui_ctx);
             Ok(Box::new(app::FlashApp::new()))
         }),
     )
+}
+
+/// One shared appearance for Windows, Linux and macOS; native window chrome
+/// and file dialogs are supplied by the platform. Tests use this same setup.
+fn configure_style(ctx: &egui::Context) {
+    ctx.set_theme(egui::Theme::Light);
+    ctx.style_mut_of(egui::Theme::Light, |style| {
+        style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+        style.spacing.button_padding = egui::vec2(12.0, 7.0);
+        style
+            .text_styles
+            .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+    });
 }

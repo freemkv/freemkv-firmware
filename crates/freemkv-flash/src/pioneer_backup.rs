@@ -122,13 +122,14 @@ fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
 }
 
 /// Resolve the Kernel build inputs from a captured Kernel image: the byte-exact
-/// OEM revision/date/key when its decoded-image hash is recognized in
+/// OEM revision/date/key when its decoded image (including an exact generation
+/// patch) is recognized in
 /// `crate::pioneer_k`, otherwise the obvious zero placeholders (revision
 /// `0000`, date `00/00/00`, seed `0`). Single source of truth for both the
 /// full-pair and Kernel-only capture paths, so they cannot drift.
 fn oem_kernel_build(kernel: &[u8]) -> pioneer_optical::envelope::builder::KernelBuild<'static> {
     use pioneer_optical::envelope::builder::{KernelBuild, KernelKeySource};
-    match crate::pioneer_k::lookup(&format!("{:x}", Sha256::digest(kernel))) {
+    match crate::pioneer_k::recognize(kernel).map(|m| m.entry) {
         Some(entry) => KernelBuild {
             revision: &entry.revision,
             date: &entry.date,
@@ -314,11 +315,14 @@ fn validate_kernel_only(kernel: &[u8], product: &str) -> Result<()> {
 /// A component is OEM only when it is byte-exact to what the OEM would ship: the
 /// kernel is recognized by its decoded-image hash in `crate::pioneer_k`, and
 /// the normal by its decoded-image hash in `crate::pioneer_n` (which also
-/// supplies the verbatim OEM signature). An unrecognized component is a
+/// supplies the verbatim OEM signature). Generation-patched kernels are tracked
+/// separately and retain the captured bytes. An unrecognized component is a
 /// reconstruction (zero seed, zero signature) and is not OEM.
 pub struct Provenance {
     /// Kernel is byte-exact OEM (recognized and rebuilt from the OEM key table).
     pub kernel_oem: bool,
+    /// Exact OEM image with only the supported generation patch applied.
+    pub kernel_generation_patched: bool,
     /// Normal is byte-exact OEM (recognized seed + verbatim OEM signature).
     pub normal_oem: bool,
 }
@@ -329,6 +333,7 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
     let Ok(bundle) = Bundle::from_backup_tar_bytes(bytes) else {
         return Provenance {
             kernel_oem: false,
+            kernel_generation_patched: false,
             normal_oem: false,
         };
     };
@@ -337,10 +342,11 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
         .iter()
         .find(|c| c.role == Role::Kernel)
         .and_then(|c| pioneer_optical::envelope::decode_envelope(&c.bytes));
-    let kernel_oem = decoded_kernel
+    let kernel_match = decoded_kernel
         .as_ref()
-        .map(|d| crate::pioneer_k::lookup(&format!("{:x}", Sha256::digest(&d.image))).is_some())
-        .unwrap_or(false);
+        .and_then(|d| crate::pioneer_k::recognize(&d.image));
+    let kernel_oem = kernel_match.as_ref().is_some_and(|m| !m.generation_patched);
+    let kernel_generation_patched = kernel_match.as_ref().is_some_and(|m| m.generation_patched);
     // The normal is receiver-decoded with the package's own kernel, then matched
     // by decoded-image hash against the OEM normal table.
     let normal_oem = match (
@@ -354,6 +360,7 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
     };
     Provenance {
         kernel_oem,
+        kernel_generation_patched,
         normal_oem,
     }
 }
@@ -873,6 +880,31 @@ mod tests {
 
     /// A Kernel-only partial capture is validatable and named by the backup notice
     /// (a Kernel-only tar is still not a flashable `Bundle::from_tar_bytes`).
+    #[test]
+    fn patched_oem_backup_preserves_body_and_original_receiver_when_configured() {
+        let Ok(path) = std::env::var("PIONEER_PATCHED_KERNEL_FIXTURE") else {
+            return;
+        };
+        let body = std::fs::read(path).unwrap();
+        let env = build_kernel_envelope(&body, "PIONEER BD-RW   BDR-UD04").unwrap();
+        let decoded = pioneer_optical::envelope::decode_envelope(&env).unwrap();
+        assert_eq!(
+            decoded.image, body,
+            "backup must retain the actual patched body"
+        );
+        let header = pioneer_optical::envelope::header_info(&env).unwrap();
+        assert_eq!(header.revision, "1.00");
+        let tar = assemble_tar(&[env]).unwrap();
+        let provenance = package_provenance(&tar);
+        assert!(!provenance.kernel_oem);
+        assert!(provenance.kernel_generation_patched);
+        // The planner must not confuse our patched marker with a newer receiver.
+        assert_eq!(
+            crate::pioneer_k::receiver_generation(&decoded.image),
+            Some(false)
+        );
+    }
+
     #[test]
     fn kernel_only_partial_backup_validates_and_is_reported_partial() {
         let mut body = vec![0u8; 0x10000];
