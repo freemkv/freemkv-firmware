@@ -173,3 +173,57 @@ fn panic_closes_the_log_and_records_unknown_outcome() {
         .contains("PANIC: test panic; operation outcome unknown"));
     std::fs::remove_file(path).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn diagnostic_collection_is_bounded_and_reports_failure() {
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+    let (status, output) = bounded_output(
+        Command::new("/bin/sh").args(["-c", "printf context; printf error >&2; exit 7"]),
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    assert!(status.contains('7'));
+    assert!(output.contains("context") && output.contains("error"));
+    let (_, output) =
+        bounded_output(&mut Command::new("/usr/bin/yes"), Duration::from_secs(2)).unwrap();
+    assert!(output.len() <= 32 * 1024);
+    assert!(!output.is_empty());
+    let start = Instant::now();
+    let (status, _) = bounded_output(
+        Command::new("/bin/sleep").arg("10"),
+        Duration::from_millis(80),
+    )
+    .unwrap();
+    assert!(status.contains("timed out"));
+    assert!(start.elapsed() < Duration::from_secs(2));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn native_open_failure_is_in_the_operation_log() {
+    let directory =
+        std::env::temp_dir().join(format!("freemkv-native-open-{}", std::process::id()));
+    let result = run_at(&directory, "native-open", || {
+        libfreemkv::scsi::open(std::path::Path::new("ioreg:18446744073709551615"))
+            .map(|_| ())
+            .map_err(anyhow::Error::from)
+    });
+    assert!(result.is_err());
+    let path = std::fs::read_dir(&directory)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("stage=resolve_service result=not_found"),
+        "{text}"
+    );
+    assert!(text.contains("executable="));
+    assert!(text.contains("attribute=com.apple.quarantine"));
+    assert!(text.contains("RESULT: error:"));
+    std::fs::remove_dir_all(directory).unwrap();
+}

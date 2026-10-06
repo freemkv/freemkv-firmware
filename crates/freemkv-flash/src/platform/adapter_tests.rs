@@ -493,3 +493,12 @@ fn medium_status_disc_present_when_spinning_up() {
     let mut dev = dev_status(CHECK_CONDITION, (0x2, 0x04, 0x01));
     assert_eq!(dev.medium_status().unwrap(), MediumStatus::DiscPresent);
 }
+
+#[test]
+fn plugin_failure_is_not_misreported_as_an_exclusive_lock() {
+    let message =
+        super::friendly_open_error("ioreg:123", "E1006: ioreg:123 0xe00002be").to_string();
+    assert!(message.contains("could not initialize the drive interface"));
+    assert!(message.contains("E1006: ioreg:123 0xe00002be"));
+    assert!(!message.contains("already open by another process"));
+}

@@ -1982,7 +1982,7 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 [[package]]
 name = "libfreemkv"
 version = "1.8.0"
-source = "git+https://github.com/freemkv/libfreemkv?rev=d1e0a8a98c0c56b38645b9833b739f3208693527#d1e0a8a98c0c56b38645b9833b739f3208693527"
+source = "git+https://github.com/freemkv/libfreemkv?rev=c3ceb62f5fd7a81907978d21aa1c02510af5754c#c3ceb62f5fd7a81907978d21aa1c02510af5754c"
 dependencies = [
  "libc",
  "tracing",

@@ -56,7 +56,9 @@ pub struct TransportDevice {
 /// friendly, actionable message, keeping the raw text dimmed for debugging.
 fn friendly_open_error(path: &str, raw: &str) -> anyhow::Error {
     let low = raw.to_ascii_lowercase();
-    let hint = if raw.contains("0xe00002c5") || low.contains("exclusive") {
+    let hint = if raw.starts_with("E1006:") {
+        "macOS could not initialize the drive interface; the diagnostic log includes native open steps and available Apple plug-in errors"
+    } else if raw.contains("0xe00002c5") || low.contains("exclusive") {
         "the drive is already open by another process — close other freemkv commands or disc/eject utilities and retry"
     } else if raw.contains("0xe00002bc") || low.contains("not found") || low.contains("no such") {
         "no drive matches that selector — run `freemkv-flash list` to see connected drives"
@@ -77,8 +79,12 @@ impl TransportDevice {
     /// which the read-only `info`/`dump` paths simply never exercise).
     pub fn open(path: &str) -> Result<Self> {
         crate::diagnostics::record(format!("SCSI open: device={path:?}"));
-        let inner = scsi::open(std::path::Path::new(path))
-            .map_err(|e| friendly_open_error(path, &e.to_string()))?;
+        let inner = scsi::open(std::path::Path::new(path)).map_err(|e| {
+            crate::diagnostics::record(format!("SCSI open failed: {e}"));
+            #[cfg(target_os = "macos")]
+            crate::diagnostics::macos_open_failure();
+            friendly_open_error(path, &e.to_string())
+        })?;
         crate::diagnostics::record(format!(
             "SCSI opened: max_transfer_bytes={}",
             inner.max_transfer_bytes()

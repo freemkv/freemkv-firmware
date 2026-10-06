@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.6]
 
+### Added
+
+- macOS CLI/GUI drive-open failures automatically collect bounded, process-specific Apple plug-in messages in the operation log and distinguish interface initialization failures from exclusive-access failures.
+
 ### Changed
 
 - MediaTek `backup` now saves a 2 MiB `.bin` in the vendor's update format instead

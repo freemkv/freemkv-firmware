@@ -289,3 +289,82 @@ impl Drop for NativeWriter {
 #[cfg(test)]
 #[path = "diagnostics_tests.rs"]
 mod tests;
+
+/// Capture Apple's underlying plug-in errors after a failed macOS transport open.
+#[cfg(target_os = "macos")]
+pub(crate) fn macos_open_failure() {
+    use std::process::{Command, Stdio};
+    let predicate = format!(
+        "(subsystem == \"com.apple.iokit.cfplugin\" AND processID == {0}) OR (process == \"authd\" AND (eventMessage CONTAINS \"[{0}]\" OR eventMessage CONTAINS \"PID {0} \" OR eventMessage CONTAINS \"pid {0} \"))",
+        std::process::id()
+    );
+    let mut command = Command::new("/usr/bin/log");
+    command.args([
+        "show",
+        "--last",
+        "1m",
+        "--style",
+        "compact",
+        "--info",
+        "--debug",
+        "--predicate",
+        &predicate,
+    ]);
+    command.stdin(Stdio::null());
+    match bounded_output(&mut command, std::time::Duration::from_secs(3)) {
+        Ok((status, output)) => record(format!("macOS plug-in context: {status}\n{output}")),
+        Err(error) => record(format!("macOS plug-in context unavailable: {error}")),
+    }
+    let mut policy = Command::new("/usr/bin/security");
+    policy
+        .args(["authorizationdb", "read", "system.burn"])
+        .stdin(Stdio::null());
+    match bounded_output(&mut policy, std::time::Duration::from_secs(2)) {
+        Ok((status, output)) => record(format!(
+            "system.burn policy (read-only): {status}\n{output}"
+        )),
+        Err(error) => record(format!("system.burn policy unavailable: {error}")),
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn bounded_output(
+    command: &mut std::process::Command,
+    budget: std::time::Duration,
+) -> io::Result<(String, String)> {
+    use std::io::Read;
+    use std::process::Stdio;
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let read = |stream: Box<dyn Read + Send>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = stream.take(16 * 1024).read_to_end(&mut bytes);
+            bytes
+        })
+    };
+    let stdout = read(Box::new(child.stdout.take().unwrap()));
+    let stderr = read(Box::new(child.stderr.take().unwrap()));
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status.to_string(),
+            Ok(None) if start.elapsed() < budget => {
+                std::thread::sleep(std::time::Duration::from_millis(20))
+            }
+            result => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break match result {
+                    Err(error) => format!("wait failed: {error}"),
+                    _ => "timed out; collector terminated".into(),
+                };
+            }
+        }
+    };
+    let mut bytes = stdout.join().unwrap_or_default();
+    bytes.extend_from_slice(&stderr.join().unwrap_or_default());
+    Ok((status, String::from_utf8_lossy(&bytes).into_owned()))
+}
