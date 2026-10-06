@@ -55,16 +55,19 @@ reported but does not interrupt firmware programming.
 ```sh
 freemkv-flash list
 freemkv-flash info /dev/sg0
-freemkv-flash backup /dev/sg0 -o backup.tar
+freemkv-flash backup /dev/sg0 -o backup.bin
 freemkv-flash flash /dev/sg0 -i update.tar          # dry run: prints the plan, no writes
 freemkv-flash flash /dev/sg0 -i update.tar \
-    --backup preflash.tar --execute --i-understand-risk
+    --backup preflash.bin --execute --i-understand-risk
 ```
 
 The drive is a `list` number, a `/dev` path or an `ioreg:` id, and can be
 omitted when exactly one drive is connected.
 
-**Backup** produces restoration artifacts. **Dump** captures raw drive memory,
+**Backup** produces restoration artifacts. A MediaTek backup is the 2 MiB
+update image as the vendor ships it: per-drive settings, calibration and
+revocation lists are replaced with factory contents, so it is safe to share.
+**Dump** captures raw drive memory,
 including anything readable from a degraded drive, without requiring firmware
 integrity. Pioneer fills unreadable spans with zero; MediaTek uses FF. The dump
 reports gaps and is not automatically a flashable update image.

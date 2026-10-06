@@ -1,4 +1,5 @@
-//! Complete, self-checking MTK firmware rollback archives.
+//! MTK firmware backups: an OEM-format 2 MiB image rebuilt from the drive, plus
+//! decoding of the 0.10.x rollback archives they replace.
 
 use std::io::{Read, Write};
 use std::path::Path;
@@ -12,8 +13,8 @@ use crate::cmac;
 use crate::drive::{DriveFamily, Family, UserDump};
 use crate::platform::ScsiDevice;
 
-/// A complete, self-checking MTK rollback artifact. The mapped READ BUFFER
-/// view is accepted only when every firmware byte was actually returned.
+/// A 0.10.x MTK rollback archive (`backup.toml` + raw `firmware.bin` + per-unit
+/// files). Still accepted for restore; new backups are OEM-format images.
 pub(super) struct BackupArtifact {
     pub(super) firmware: Vec<u8>,
     pub(super) per_unit: UserDump,
@@ -65,32 +66,7 @@ impl BackupArtifact {
         }
         format!("{:x}", h.finalize())
     }
-    pub(super) fn capture(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<Self> {
-        let per_unit = drive
-            .read_dump(dev)
-            .context("reading required per-unit backup regions")?;
-        let (firmware, readable, gaps) = drive
-            .read_full_image(dev)
-            .context("reading required complete firmware image")?;
-        if firmware.len() != drive.image_size() || readable != firmware.len() || !gaps.is_empty() {
-            bail!(
-                "complete restorable backup unavailable: read {} of {} firmware bytes; unreadable ranges {:?}; no flash write is permitted",
-                readable, firmware.len(), gaps
-            );
-        }
-        if !cmac::verify(&firmware) {
-            bail!("captured firmware fails AES-CMAC; mapped read is not a proven restorable update image; no flash write is permitted");
-        }
-        let drive_product = drive.identity(dev).product;
-        let artifact = Self {
-            firmware,
-            per_unit,
-            drive_product,
-        };
-        artifact.validate_coherence()?;
-        Ok(artifact)
-    }
-
+    #[cfg(test)]
     pub(super) fn to_tar_bytes(&self) -> Result<Vec<u8>> {
         let manifest = BackupManifest {
             format: "freemkv-mtk-complete-backup-v1".into(),
@@ -317,42 +293,81 @@ fn publish_no_clobber(
     result
 }
 
-/// MTK's format-specific backup capture, called only by its protocol backend.
+/// MTK's format-specific backup capture, called only by its protocol backend:
+/// read every firmware byte, then rebuild the OEM-format image from it.
 pub(crate) fn capture_mtk_backup(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
 ) -> Result<Vec<u8>> {
-    BackupArtifact::capture(dev, drive)?.to_tar_bytes()
+    let (read, readable, gaps) = drive
+        .read_full_image(dev)
+        .context("reading the drive's firmware")?;
+    if read.len() != drive.image_size() || readable != read.len() || !gaps.is_empty() {
+        bail!(
+            "backup needs every firmware byte, but read {} of {}; unreadable ranges {:#x?}. \
+             `dump` saves what the drive returned",
+            readable,
+            drive.image_size(),
+            gaps
+        );
+    }
+    let (image, report) = crate::drive::mtk_oem::rebuild(&read)?;
+    crate::diagnostics::record(format!(
+        "MTK backup rebuild: boot_page_restored={} factory_regions={:?}",
+        report.boot_page_restored, report.regions_reset
+    ));
+    let product = drive.identity(dev).product;
+    validate_mtk_image(&image, Some(&product))?;
+    Ok(image)
 }
 
-/// Decode a verified archive without imposing its captured model on the target.
+/// Decode a backup without imposing its model on the target (forced restore).
 pub(crate) fn decode_mtk_backup(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
-    Ok(BackupArtifact::from_tar_bytes(bytes, expected_size)?.firmware)
+    let image = backup_image(bytes, expected_size)?;
+    validate_mtk_image(&image, None)?;
+    Ok(image)
 }
 
-/// MTK's format-specific archive validation, called only by its backend.
+/// MTK's format-specific backup validation, called only by its backend.
 pub(crate) fn validate_mtk_backup(
     bytes: &[u8],
     target_model: &str,
     expected_size: usize,
 ) -> Result<Vec<u8>> {
-    let backup = BackupArtifact::from_tar_bytes(bytes, expected_size)?;
-    let captured = backup.drive_product.trim();
-    let target = target_model.trim();
-    // Some callers pass the product token ("BU40N") while INQUIRY includes
-    // the optical class ("BD-RE BU40N"). Accept that exact final token only;
-    // two different full products still cannot restore across devices.
-    let short_form_matches = !target.contains(' ')
-        && captured
-            .split_whitespace()
-            .last()
-            .is_some_and(|token| token.eq_ignore_ascii_case(target));
-    if !captured.eq_ignore_ascii_case(target) && !short_form_matches {
-        bail!("backup was captured from model {:?}, but target drive reports {:?}; refusing cross-device rollback", backup.drive_product, target_model);
-    }
-    Ok(backup.firmware)
+    let image = backup_image(bytes, expected_size)?;
+    validate_mtk_image(&image, Some(target_model))?;
+    Ok(image)
 }
 
+/// The flashable image inside a backup: an OEM-format `.bin`, or the raw
+/// capture of a 0.10.x archive rebuilt the same way, so its in-place-decrypted
+/// boot page is never written back.
+fn backup_image(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+    if bytes.len() == expected_size {
+        return Ok(bytes.to_vec());
+    }
+    let legacy = BackupArtifact::from_tar_bytes(bytes, expected_size)
+        .context("not a MediaTek firmware backup")?;
+    Ok(crate::drive::mtk_oem::rebuild(&legacy.firmware)
+        .context("rebuilding the archived firmware")?
+        .0)
+}
+
+fn validate_mtk_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
+    if !crate::drive::mtk_oem::has_encrypted_boot_page(image) {
+        bail!("backup boot page is not in its stored (encrypted) form; refusing to treat it as flashable");
+    }
+    if !cmac::verify(image) {
+        bail!("backup firmware fails AES-CMAC; it is not a valid MTK update image");
+    }
+    if let Some(model) = target_model {
+        ensure_image_matches_drive(image, model, Family::Mtk, false, None)
+            .context("backup image model/family does not match the target drive")?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn tar_append<W: Write>(b: &mut tar::Builder<W>, name: &str, data: &[u8]) -> Result<()> {
     let mut h = tar::Header::new_gnu();
     h.set_path(name)?;

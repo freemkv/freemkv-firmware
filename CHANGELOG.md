@@ -6,6 +6,27 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.6]
+
+### Changed
+
+- MediaTek `backup` now saves a 2 MiB `.bin` in the vendor's update format instead
+  of a `.tar` archive. It reads every firmware byte, stores the boot page in its
+  encrypted form, and replaces per-drive NVRAM settings, calibration and AACS
+  revocation lists with factory contents. Backups carry no personal data and
+  are byte-identical to the OEM update file for 180 of 186 known MT1959 builds;
+  the rest differ only in the factory BD revocation list. `dump` still saves the
+  raw drive read, including per-drive data.
+- MediaTek `dump` retries a failed 4 KiB read as 512-byte pieces, so readable
+  windows next to unreadable memory are kept.
+
+### Fixed
+
+- Restoring a 0.10.x MediaTek `.tar` backup no longer writes the boot page as
+  READ BUFFER returns it (decrypted in place by the drive); the archive is
+  rebuilt into the stored form before flashing. Backup refuses firmware whose
+  boot page it cannot recognize.
+
 ## [0.10.5]
 
 ### Added

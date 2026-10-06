@@ -3,7 +3,7 @@
 //! Firmware backup and flash commands; `info` is the default:
 //! * `freemkv-flash <dev|file>` / `info <dev|file>` — identify + classify a
 //!   live drive or a firmware image `.bin` (same family key the flash gate uses).
-//! * `freemkv-flash backup <dev> [-o backup.tar]` — firmware package capture.
+//! * `freemkv-flash backup <dev> [-o backup.bin]` — firmware package capture.
 //! * `freemkv-flash flash <dev> -i <file> [flags]` — backed-up write path.
 
 use std::path::PathBuf;
@@ -28,7 +28,7 @@ EXAMPLES:
   freemkv-flash info /dev/sg0
 
   # Save a supported backup before flashing:
-  freemkv-flash backup /dev/sg0 -o backup.tar
+  freemkv-flash backup /dev/sg0 -o backup.bin
 
   # Dry-run a flash — prints the plan, issues NO writes:
   freemkv-flash flash /dev/sg0 -i firmware.bin
@@ -36,7 +36,7 @@ EXAMPLES:
   # Flash for real (risk of permanent failure). EJECT ANY DISC FIRST — an empty, closed
   # tray is required; flashing with a disc loaded can wedge the drive:
   freemkv-flash flash /dev/sg0 -i firmware.bin \\
-      --backup backup-preflash.tar --execute --i-understand-risk
+      --backup backup-preflash.bin --execute --i-understand-risk
 
 Run `freemkv-flash flash --help` for the full flash workflow and all flags."
 )]
@@ -64,7 +64,7 @@ enum Command {
         /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
         /// Omit to auto-pick the only connected drive.
         device: Option<String>,
-        /// Output .tar path (Pioneer defaults to `<model>_<rev>.candidate.tar`).
+        /// Output path (MediaTek `.bin`; Pioneer defaults to `<model>_<rev>.candidate.tar`).
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
@@ -98,19 +98,18 @@ enum Command {
 #[command(after_help = "\
 FLASH WORKFLOW:
   1. freemkv-flash info  /dev/sg0                      # confirm the drive + family
-  2. freemkv-flash backup /dev/sg0 -o backup.tar       # save a backup first
+  2. freemkv-flash backup /dev/sg0 -o backup.bin       # save a backup first
   3. EJECT any disc so the tray is empty and closed
   4. freemkv-flash flash /dev/sg0 -i firmware.bin      # DRY RUN — review the plan
   5. freemkv-flash flash /dev/sg0 -i firmware.bin \\
-         --backup backup-preflash.tar --execute --i-understand-risk   # for real
+         --backup backup-preflash.bin --execute --i-understand-risk   # for real
 
 Do not power off or disconnect the drive during step 5.")]
 struct FlashArgs {
     /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
     /// Omit to auto-pick the only connected drive.
     device: Option<String>,
-    /// Input: MTK image (.bin), complete backup (.tar), Pioneer .enc, or a Pioneer envelope tar.
-    /// A backup .tar rolls back firmware; per-unit reference data is not auto-written.
+    /// Input: MTK image or backup (.bin), 0.10.x MTK backup (.tar), Pioneer .enc, or a Pioneer envelope tar.
     /// Pioneer inputs are dry-run by default; live writes need --execute --i-understand-risk and a pre-flash backup.
     #[arg(short, long)]
     input: PathBuf,

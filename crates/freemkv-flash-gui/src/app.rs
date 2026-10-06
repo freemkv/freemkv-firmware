@@ -365,7 +365,13 @@ impl FlashApp {
                 )
                 .clicked()
                 {
-                    let filename = if dump { "dump.bin" } else { "backup.tar" };
+                    let filename = if dump {
+                        "dump.bin"
+                    } else if self.device_label().to_ascii_uppercase().contains("PIONEER") {
+                        "backup.tar"
+                    } else {
+                        "backup.bin"
+                    };
                     if let Some(out) = rfd::FileDialog::new().set_file_name(filename).save_file() {
                         // The native save dialog already confirms replacement.
                         let replace = out.symlink_metadata().is_ok();

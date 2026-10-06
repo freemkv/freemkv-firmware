@@ -59,6 +59,7 @@ fn stamp_descriptor(img: &mut [u8], model: &str) {
 /// descriptor + one active CMAC range, then sign it so `cmac::verify` passes.
 fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
     assert_eq!(img.len(), IMAGE_SIZE);
+    img[..0x400].copy_from_slice(crate::drive::mtk_oem::encrypted_boot_page());
     stamp_descriptor(&mut img, model);
     let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
     crate::cmac::resign(&img).expect("resign a well-formed image")
@@ -534,7 +535,9 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
         .filter(|(cdb, _)| is_stream_write(cdb))
         .flat_map(|(_, bytes)| bytes.clone())
         .collect();
-    assert_eq!(streamed, backup_firmware());
+    // A 0.10.x archive restores as its OEM-format rebuild, never the raw capture.
+    let (expected, _) = crate::drive::mtk_oem::rebuild(&backup_firmware()).unwrap();
+    assert_eq!(streamed, expected);
     assert!(!dev.writes.iter().any(|(cdb, data)| cdb.get(3..6)
         == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
         && data.len() == ROM_1EC000_LEN as usize));
@@ -920,7 +923,7 @@ fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
     let req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        format!("{err:#}").contains("reading required per-unit backup regions"),
+        format!("{err:#}").contains("backup needs every firmware byte"),
         "got: {err}"
     );
     assert!(
@@ -940,9 +943,7 @@ fn dump_refuses_unreadable_firmware_without_creating_archive() {
         );
     let out = fresh_backup_path();
     let err = backup(&mut dev, &Mtk, &out, false, false).unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("complete restorable backup unavailable"));
+    assert!(err.to_string().contains("backup needs every firmware byte"));
     assert!(!out.exists());
     assert!(dev.writes.is_empty());
 }
@@ -1003,7 +1004,7 @@ fn restore_refuses_other_drive_backup_without_write() {
     assert!(flash(&mut dev, &Mtk, &req)
         .unwrap_err()
         .to_string()
-        .contains("cross-device rollback"));
+        .contains("does not match the target drive"));
     assert!(dev.writes.is_empty());
 }
 

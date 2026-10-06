@@ -1012,7 +1012,15 @@ impl DriveFamily for Mtk {
     }
 
     fn backup_extension(&self) -> Option<&'static str> {
-        Some("tar")
+        Some("bin")
+    }
+
+    fn backup_notice(&self, _bytes: &[u8]) -> super::BackupNotice {
+        super::BackupNotice::VerifiedOem(
+            "OEM-format image: per-drive settings, calibration and revocation lists \
+             replaced with factory contents; safe to share and flash back"
+                .into(),
+        )
     }
 
     fn classify_input(&self, path: &std::path::Path) -> super::InputKind {

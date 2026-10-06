@@ -27,15 +27,19 @@ scope** and will land later as a separate `freemkv-fw` binary.
 | `freemkv-flash <dev>` (bare) | no | — | alias for `info` |
 | `freemkv-flash list` | no | — | list drives and their selectors |
 | `freemkv-flash info <dev>` | no | — | INQUIRY + boot banner + classify family |
-| `freemkv-flash backup <dev> [-o out.tar]` | no | — | save one validated rollback archive |
+| `freemkv-flash backup <dev> [-o out]` | no | — | save one validated, flashable backup (MTK `.bin`, Pioneer `.tar`) |
 | `freemkv-flash dump <dev> [-o out.bin] [--force]` | no | — | raw 0x0..0x600000 device read (Pioneer; diagnostics, not flashable) |
 | `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.bin` or `.tar` | validate and plan; execute only after fresh backup |
 
-- `backup` produces one `.tar` file that can be passed directly to `flash -i`.
-  For MTK it contains a complete, validated 2 MiB firmware image, a manifest,
-  and per-unit reference data. The per-unit data is not separately rewritten.
-- `flash` sniffs the input: `.bin` = full MTK image; `.tar` = validated rollback
-  archive containing the firmware image. Without `--execute`, it is a dry run.
+- `backup` produces one file that can be passed directly to `flash -i`. For MTK
+  it is a 2 MiB image in the vendor's update format: every firmware byte is read
+  from the drive, the boot page is stored in its encrypted form, and per-drive
+  settings, calibration and revocation lists are replaced with factory contents.
+  It carries no personal data and, for most builds, is byte-identical to the
+  OEM update file. Use `dump` for a raw copy that keeps the per-drive data.
+- `flash` sniffs the input: `.bin` = full MTK image; `.tar` = 0.10.x MTK
+  rollback archive (rebuilt the same way before flashing). Without `--execute`,
+  it is a dry run.
 - `verify` does not exist as a command. `flash` verifies as its protocol allows.
 
 ## Automatic diagnostics
@@ -89,7 +93,7 @@ freemkv-flash /dev/sg0
 freemkv-flash info /dev/sg0
 
 # Save one restorable firmware backup file
-freemkv-flash backup /dev/sg0 -o backup.tar
+freemkv-flash backup /dev/sg0 -o backup.bin
 
 # Dry-run a flash (prints the plan, issues no writes)
 freemkv-flash flash /dev/sg0 -i firmware.bin
@@ -99,7 +103,7 @@ freemkv-flash flash /dev/sg0 -i firmware.bin \
     --execute --i-understand-risk
 
 # Reflash the firmware image captured in that backup
-freemkv-flash flash /dev/sg0 -i backup.tar --execute --i-understand-risk
+freemkv-flash flash /dev/sg0 -i backup.bin --execute --i-understand-risk
 
 # Review a Pioneer OEM transfer against the connected drive; no writes
 freemkv-flash flash /dev/sg0 -i update.enc

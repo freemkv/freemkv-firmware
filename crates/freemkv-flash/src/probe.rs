@@ -666,26 +666,50 @@ fn hex_all(v: &[u8]) -> String {
 /// `0xFF`. Returns `(image, readable_bytes, gaps)`. Read-only (`0x3C` only).
 /// 4 KiB reads (~2.5 s for a fully-exposed image). Shared by `dump`.
 pub(crate) fn read_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {
-    let chunk = 0x1000usize;
+    const CHUNK: usize = 0x1000;
+    const PIECE: usize = 0x200;
+    // Stop splitting after this many consecutive dead chunks; resume at the next
+    // readable chunk. Keeps a fully unreadable range to one command per chunk.
+    const SPLIT_BUDGET: usize = 8;
     let mut image = Vec::with_capacity(IMAGE_SIZE);
     let mut readable = 0usize;
     let mut gaps: Vec<(usize, usize)> = Vec::new();
+    let mut dead_chunks = 0usize;
     let mut off = 0usize;
     let mut progress = crate::style::Progress::new("reading drive memory", IMAGE_SIZE);
+    let mut take = |off: usize, len: usize, data: Option<Vec<u8>>, image: &mut Vec<u8>| match data {
+        Some(v) => {
+            image.extend_from_slice(&v);
+            readable += len;
+        }
+        None => {
+            image.extend(std::iter::repeat_n(0xFFu8, len));
+            match gaps.last_mut() {
+                Some((_, end)) if *end == off => *end = off + len,
+                _ => gaps.push((off, off + len)),
+            }
+        }
+    };
+    let read_exact = |dev: &mut dyn ScsiDevice, off: usize, len: usize| {
+        rd(dev, 6, 0, off as u32, len as u32)
+            .ok()
+            .filter(|v| v.len() == len)
+    };
     while off < IMAGE_SIZE {
-        let l = chunk.min(IMAGE_SIZE - off);
-        match rd(dev, 6, 0, off as u32, l as u32) {
-            Ok(v) if v.len() == l => {
-                image.extend_from_slice(&v);
-                readable += l;
+        let l = CHUNK.min(IMAGE_SIZE - off);
+        if let Some(v) = read_exact(dev, off, l) {
+            dead_chunks = 0;
+            take(off, l, Some(v), &mut image);
+        } else if dead_chunks >= SPLIT_BUDGET {
+            take(off, l, None, &mut image);
+        } else {
+            let mut any = false;
+            for piece in (off..off + l).step_by(PIECE) {
+                let data = read_exact(dev, piece, PIECE);
+                any |= data.is_some();
+                take(piece, PIECE, data, &mut image);
             }
-            _ => {
-                image.extend(std::iter::repeat_n(0xFFu8, l));
-                match gaps.last_mut() {
-                    Some((_, end)) if *end == off => *end = off + l,
-                    _ => gaps.push((off, off + l)),
-                }
-            }
+            dead_chunks = if any { 0 } else { dead_chunks + 1 };
         }
         off += l;
         progress.set(off);
