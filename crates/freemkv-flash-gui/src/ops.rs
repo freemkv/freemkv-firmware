@@ -49,52 +49,9 @@ pub fn capture_lines<R>(f: impl FnOnce() -> R, on_line: impl FnMut(String) + 'st
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Discovery must work even on a host with no optical drive attached.
-    #[test]
-    fn enumerate_does_not_panic() {
-        let list = enumerate();
-        // Every entry a shell would show must be a plausible device path.
-        for d in &list {
-            assert!(!d.path.is_empty());
-        }
-    }
-
-    /// Job dispatch must surface a clean `Err` — never a panic — when the
-    /// selected device cannot be opened. This exercises the same `execute`
-    /// path the GUI's worker thread runs, minus the stdout capture.
-    #[test]
-    fn info_job_on_missing_device_errs_without_panic() {
-        let res = execute("/dev/freemkv-flash-gui-no-such-device", &Job::Info);
-        assert!(res.is_err(), "expected an open error, got {res:?}");
-    }
-}
+#[path = "ops_tests.rs"]
+mod tests;
 
 #[cfg(test)]
-mod parity_regressions {
-    use super::*;
-
-    #[test]
-    fn gui_accepts_the_same_pioneer_backend_as_cli() {
-        let mut dev = platform::MockScsiDevice::pioneer();
-        let backend = freemkv_flash::workflow::classify_gated(&mut dev)
-            .expect("Pioneer supports backup and flash");
-        assert_eq!(backend, Family::Pioneer);
-        assert!(dev.writes.is_empty());
-    }
-
-    #[test]
-    fn gui_receives_progress_and_warnings() {
-        let lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let received = lines.clone();
-        capture_lines(
-            || {
-                freemkv_flash::style::Progress::new("reading firmware", 0x200000).set(0x100000);
-            },
-            move |line| received.lock().unwrap().push(line),
-        );
-        assert!(lines.lock().unwrap().iter().any(|l| l.contains("50%")));
-    }
-}
+#[path = "ops_parity_regressions_tests.rs"]
+mod parity_regressions;
