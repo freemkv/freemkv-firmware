@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   READ BUFFER returns it (decrypted in place by the drive); the archive is
   rebuilt into the stored form before flashing. Backup refuses firmware whose
   boot page it cannot recognize.
+- Windows lists every optical drive. Discovery probed only `\\.\CdRom0`–`15`,
+  so drives with higher numbers (common after USB replugging) were missing; it
+  now asks Windows for every CD-ROM device and optical drive letter, retries
+  INQUIRY with 36 bytes for strict USB bridges, and logs each skipped device.
 
 ## [0.10.5]
 
