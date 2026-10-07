@@ -28,7 +28,7 @@ scope** and will land later as a separate `freemkv-fw` binary.
 | `freemkv-flash list` | no | — | list drives by name (`E:`, `/dev/sr1`, `disk4`) and id |
 | `freemkv-flash info <dev>` | no | — | INQUIRY + boot banner + classify family |
 | `freemkv-flash backup <dev> [-o out]` | no | — | save one validated, flashable backup (MTK `.bin`, Pioneer `.tar`) |
-| `freemkv-flash dump <dev> [-o out.bin] [--force]` | no | — | raw 0x0..0x600000 device read (Pioneer; diagnostics, not flashable) |
+| `freemkv-flash dump <dev> [-o out.bin] [--force]` | no | — | raw device read from 0x0 to the first address the drive refuses (probed; UD04: 0x880300) (Pioneer; diagnostics, not flashable) |
 | `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.bin` or `.tar` | validate and plan; execute only after fresh backup |
 
 - `backup` produces one file that can be passed directly to `flash -i`. For MTK

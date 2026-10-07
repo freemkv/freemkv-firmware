@@ -179,6 +179,73 @@ fn deep_read_aborts_when_the_drive_drops_out_mid_region() {
     );
 }
 
+/// The drive's refusal of an address past its read end.
+fn refused() -> anyhow::Error {
+    anyhow::Error::new(crate::platform::ScsiSenseError::new(
+        0x05,
+        0x24,
+        0x00,
+        "address past the read end",
+    ))
+}
+
+/// Serves B0 reads below `end`, refuses at or past it, and counts reads.
+struct Ceiling {
+    end: usize,
+    reads: usize,
+}
+
+impl ScsiDevice for Ceiling {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        if cdb[2] != 0xb0 {
+            return Ok(vec![0; len]);
+        }
+        self.reads += 1;
+        let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+        if start >= self.end {
+            return Err(refused());
+        }
+        Ok(vec![0x5A; len])
+    }
+    fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+    fn describe(&self) -> String {
+        "ceiling".into()
+    }
+}
+
+#[test]
+fn read_end_is_the_first_refused_address() {
+    for end in [0x88_0300, 0x60_0000, 0x7A_1235, 0x40_0001] {
+        let mut dev = Ceiling { end, reads: 0 };
+        assert_eq!(probe_read_end(&mut dev).unwrap(), end);
+        assert!(dev.reads <= 26, "{end:#x}: {} reads", dev.reads);
+    }
+    let mut open = Ceiling {
+        end: ADDRESS_LIMIT,
+        reads: 0,
+    };
+    assert_eq!(probe_read_end(&mut open).unwrap(), ADDRESS_LIMIT);
+}
+
+#[test]
+fn read_end_probe_fails_on_errors_other_than_a_refusal() {
+    struct Broken;
+    impl ScsiDevice for Broken {
+        fn command_in(&mut self, _cdb: &[u8], _len: usize) -> Result<Vec<u8>> {
+            bail!("bus reset")
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "broken".into()
+        }
+    }
+    assert!(probe_read_end(&mut Broken).is_err());
+}
+
 #[test]
 fn force_dump_with_unreadable_kernel_base_still_saves_a_zero_filled_image() {
     // Alive drive; only 0x400000..0x440000 (the Kernel base) is unreadable.
@@ -192,6 +259,9 @@ fn force_dump_with_unreadable_kernel_base_still_saves_a_zero_filled_image() {
             if start < 0x44_0000 && start + len > 0x40_0000 {
                 bail!("unreadable kernel base");
             }
+            if start >= pioneer_optical::cdb::READ_CEILING as usize {
+                return Err(refused());
+            }
             Ok(vec![0xAA; len])
         }
         fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
@@ -202,7 +272,7 @@ fn force_dump_with_unreadable_kernel_base_still_saves_a_zero_filled_image() {
         }
     }
     let image = capture_raw_dump(&mut BadKernelBase, true).expect("dump must complete");
-    assert_eq!(image.len(), DUMP_MIN_LEN);
+    assert_eq!(image.len(), pioneer_optical::cdb::READ_CEILING as usize);
     assert!(image[0x40_0000..0x44_0000].iter().all(|b| *b == 0));
     assert!(image[..0x40_0000].iter().all(|b| *b == 0xAA));
     assert!(image[0x44_0000..].iter().all(|b| *b == 0xAA));

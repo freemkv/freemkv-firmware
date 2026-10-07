@@ -975,6 +975,14 @@ fn dump_force_writes_the_full_raw_span_even_when_identity_fails() {
             }
             if cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xB0) {
                 let off = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+                if off >= pioneer_optical::cdb::READ_CEILING as usize {
+                    return Err(anyhow::Error::new(crate::platform::ScsiSenseError::new(
+                        0x05,
+                        0x24,
+                        0x00,
+                        "past the read end",
+                    )));
+                }
                 return Ok((0..alloc).map(|i| ((off + i) % 251) as u8).collect());
             }
             Ok(vec![0u8; alloc])
@@ -991,9 +999,10 @@ fn dump_force_writes_the_full_raw_span_even_when_identity_fails() {
     }
     let mut dev = Mem::default();
     let dump = Pioneer::new().capture_dump(&mut dev, true).unwrap();
-    assert_eq!(dump.len(), 0x60_0000);
+    assert_eq!(dump.len(), pioneer_optical::cdb::READ_CEILING as usize);
     assert_eq!(dump[0x1234], (0x1234 % 251) as u8);
     assert_eq!(dump[0x5F_FFFF], (0x5F_FFFF % 251) as u8);
+    assert_eq!(dump[0x88_02FF], (0x88_02FF % 251) as u8);
     assert_eq!(dev.kernel_mode_cdbs, 0);
     // Without --force the same untrusted identity is refused.
     assert!(Pioneer::new()

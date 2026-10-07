@@ -434,15 +434,47 @@ pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
 
 /// First address of the `dump` span: the device base.
 const DUMP_BASE: usize = 0;
-/// Minimum `dump` span length: the whole flash, `0x000000..0x600000` (the range
-/// the read-map probe covers; the UD04 Normal ends at `0x5d7500`, inside it).
-/// Extended to the Normal's end if a drive's geometry reaches past it, and never
-/// past the unlocked read ceiling (`pioneer_optical::cdb::READ_CEILING`).
-const DUMP_MIN_LEN: usize = 0x60_0000;
+/// First address the 24-bit B0 offset field cannot express.
+const ADDRESS_LIMIT: usize = 0x100_0000;
 
-/// `dump`: ONE contiguous raw read of the entire device — `0x000000` up to
-/// `0x600000` (or the end of the Normal if the drive's geometry reaches further,
-/// capped at the read ceiling) — as a single verbatim byte image. No envelope
+/// Whether the drive serves a one-byte B0 read at `off`. Only a 05/24/00 refusal
+/// means "past the end"; any other failure is a real error.
+fn serves_address(dev: &mut dyn ScsiDevice, off: usize) -> Result<bool> {
+    match crate::drive::pioneer_transport::read_memory_exact(dev, off as u32, 1) {
+        Ok(_) => Ok(true),
+        Err(error) if crate::platform::sense_triplet(&error) == Some((0x05, 0x24, 0x00)) => {
+            Ok(false)
+        }
+        Err(error) => Err(error.context(format!("probing the read end at {off:#x}"))),
+    }
+}
+
+/// End of the span the drive's B0 memory read serves: the first address it
+/// refuses with 05/24/00. The firmware checks a single upper bound (UD04 1.14:
+/// `0x880300`), so a binary search over the 24-bit space finds it in ~24 reads.
+fn probe_read_end(dev: &mut dyn ScsiDevice) -> Result<usize> {
+    if serves_address(dev, ADDRESS_LIMIT - 1)? {
+        return Ok(ADDRESS_LIMIT);
+    }
+    let (mut served, mut refused) = (DUMP_BASE, ADDRESS_LIMIT - 1);
+    if !serves_address(dev, served)? {
+        bail!("the drive refuses the device base {served:#x}");
+    }
+    while refused - served > 1 {
+        let mid = served + (refused - served) / 2;
+        if serves_address(dev, mid)? {
+            served = mid;
+        } else {
+            refused = mid;
+        }
+    }
+    Ok(refused)
+}
+
+/// `dump`: ONE contiguous raw read of the entire device — `0x000000` up to the
+/// first address the drive refuses (found by [`probe_read_end`]; UD04 1.14:
+/// `0x880300`, which covers the flash, work RAM at `0x800000` and the
+/// `0x880000` register window) — as a single verbatim byte image. No envelope
 /// wrapping, no tar. Uses the deep, instability-tolerant read (unreadable spans
 /// are zero-filled and reported; it errors only if nothing at all was readable).
 /// Never uses vendor kernel mode and issues no flash commands: every read goes
@@ -469,7 +501,20 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
             "read unlock not confirmed ({error:#}); attempting the read anyway (--force)"
         ));
     }
-    let (mut image, mut gaps) = read_region_deep_gaps(dev, DUMP_BASE, DUMP_MIN_LEN)
+    let end = match probe_read_end(dev) {
+        Ok(end) => end,
+        Err(error) if force => {
+            let end = pioneer_optical::cdb::READ_CEILING as usize;
+            amber(&format!(
+                "{error:#}; reading up to the known ceiling {end:#x} (--force)"
+            ));
+            end
+        }
+        Err(error) => return Err(error),
+    };
+    // Always cover the Kernel so its layout can be checked; reads the drive
+    // refuses below that are zero-filled and reported as gaps.
+    let (image, gaps) = read_region_deep_gaps(dev, DUMP_BASE, end.max(NORMAL_IMAGE_BASE))
         .context("could not read the device firmware span")?;
 
     // Kernel receiver layout (inside the dump) gives the Normal geometry.
@@ -482,20 +527,12 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
         }
         amber(&format!("{error:#} (continuing: --force)"));
     }
-    // If the Normal extends past the minimum span, read the remainder so the dump
-    // still holds the whole image; stay within the read ceiling.
-    let normal_end = pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(kernel)
-        .map(|g| NORMAL_IMAGE_BASE + g.image_len)
-        .filter(|end| *end <= pioneer_optical::cdb::READ_CEILING as usize);
-    if let Some(end) = normal_end.filter(|end| *end > image.len()) {
-        let (extra, extra_gaps) = read_region_deep_gaps(dev, image.len(), end - image.len())
-            .context("could not read the Normal past the standard dump span")?;
-        image.extend_from_slice(&extra);
-        gaps.extend(extra_gaps);
-    }
     // The dump still succeeds with gaps (it is a best-effort salvage), but say so
     // loudly in the final summary.
-    crate::output::field("Dump size", format!("{} bytes", image.len()));
+    crate::output::field(
+        "Dump size",
+        format!("{} bytes (0x0..{:#x})", image.len(), image.len()),
+    );
     if let Some(note) = gap_summary(&gaps) {
         crate::output::field("Dump gaps", &note);
         amber(&note);
