@@ -36,6 +36,7 @@ fn sibling_actions_and_diagnostic_controls_fit_the_same_window() {
     app.device = "test-drive".into();
     app.devices.push(DriveChoice {
         path: "test-drive".into(),
+        name: "test-drive".into(),
         label: "Optical drive".into(),
     });
     for (task, action) in [

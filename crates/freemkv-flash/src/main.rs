@@ -43,25 +43,25 @@ Run `freemkv-flash flash --help` for the full flash workflow and all flags."
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
-    /// Device (e.g. /dev/sg0) or firmware image file for the default `info` action.
+    /// Drive name or id from `list`, or a firmware image file, for the default `info` action.
     device: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// List optical drives and the selector to pass to info/backup/flash. Works
+    /// List optical drives by the name or id to pass to info/backup/flash. Works
     /// with an empty tray (a disc-less macOS drive has no /dev/diskN node).
     List,
     /// Identify + classify a drive OR a firmware image file (read-only; never aborts).
     Info {
-        /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id) or a
+        /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`) or a
         /// firmware image file. Omit to auto-pick the only connected drive.
         device: Option<String>,
     },
     /// Capture firmware. Pioneer output is byte-exact OEM where recognized, else a
     /// clearly-labeled non-OEM candidate (zeroed signature).
     Backup {
-        /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
+        /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`).
         /// Omit to auto-pick the only connected drive.
         device: Option<String>,
         /// Output path (MediaTek `.bin`; Pioneer defaults to `<model>_<rev>.candidate.tar`).
@@ -106,7 +106,7 @@ FLASH WORKFLOW:
 
 Do not power off or disconnect the drive during step 5.")]
 struct FlashArgs {
-    /// Drive selector (a `list` number, a /dev path, or an `ioreg:` id).
+    /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`).
     /// Omit to auto-pick the only connected drive.
     device: Option<String>,
     /// Input: MTK image or backup (.bin), 0.10.x MTK backup (.tar), Pioneer .enc, or a Pioneer envelope tar.

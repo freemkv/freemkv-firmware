@@ -93,6 +93,7 @@ fn rendered_text(app: &mut FlashApp) -> Vec<(String, bool)> {
 fn backup_and_flash_controls_are_visible_and_do_not_show_info_results() {
     let mut app = FlashApp::with_drives(vec![DriveChoice {
         path: "test".into(),
+        name: "test".into(),
         label: "Optical drive".into(),
     }]);
     app.input = Some("firmware.bin".into());
@@ -125,6 +126,7 @@ fn backup_and_flash_controls_are_visible_and_do_not_show_info_results() {
 fn long_results_fit_the_original_window_without_resizing() {
     let mut app = FlashApp::with_drives(vec![DriveChoice {
         path: "ioreg:123".into(),
+        name: "ioreg:123".into(),
         label: "PIONEER BDR-UD04".into(),
     }]);
     app.fields = (0..40)
@@ -200,6 +202,7 @@ fn progress_and_results_are_structured_without_console_parsing() {
 fn confirmation_freezes_target_and_requires_fresh_consent() {
     let mut app = FlashApp::with_drives(vec![DriveChoice {
         path: "drive-a".into(),
+        name: "drive-a".into(),
         label: "Drive A".into(),
     }]);
     app.input = Some("firmware.bin".into());
@@ -209,6 +212,24 @@ fn confirmation_freezes_target_and_requires_fresh_consent() {
     assert_eq!(app.pending_flash.as_ref().unwrap().device, "drive-a");
     assert!(!app.risk_ack);
     assert!(!app.running);
+}
+
+#[test]
+fn drive_choice_and_confirmation_show_the_os_name_of_identical_drives() {
+    let drive = |path: &str, name: &str| DriveChoice {
+        path: path.into(),
+        name: name.into(),
+        label: "HL-DT-ST BD-RE BU40N (rev 1.04)".into(),
+    };
+    let mut app =
+        FlashApp::with_drives(vec![drive(r"\\.\CdRom0", "D:"), drive(r"\\.\CdRom1", "E:")]);
+    app.device = r"\\.\CdRom1".into();
+    assert_eq!(app.device_label(), "E:  HL-DT-ST BD-RE BU40N (rev 1.04)");
+    app.input = Some("firmware.bin".into());
+    app.choose_flash(&egui::Context::default(), true);
+    let pending = app.pending_flash.as_ref().unwrap();
+    assert_eq!(pending.device, r"\\.\CdRom1");
+    assert_eq!(pending.label, "E:  HL-DT-ST BD-RE BU40N (rev 1.04)");
 }
 
 #[test]
@@ -230,11 +251,13 @@ fn disconnected_worker_releases_controls_and_reports_failure() {
 fn refresh_removes_disconnected_selection_and_its_consent() {
     let mut app = FlashApp::with_drives(vec![DriveChoice {
         path: "ioreg:old".into(),
+        name: "ioreg:old".into(),
         label: "Drive".into(),
     }]);
     app.risk_ack = true;
     app.refresh(vec![DriveChoice {
         path: "ioreg:new".into(),
+        name: "ioreg:new".into(),
         label: "Reconnected drive".into(),
     }]);
     assert_eq!(app.device, "ioreg:new");

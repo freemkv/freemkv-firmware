@@ -9,10 +9,28 @@ use std::path::{Path, PathBuf};
 /// One optical drive, discovered even when its tray is empty.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DriveChoice {
-    /// Transport selector accepted by the platform backend.
+    /// Transport selector accepted by the platform backend: the drive's id.
     pub path: String,
-    /// Human-readable model and revision. The path distinguishes identical drives.
+    /// The name the OS shows users (`E:`, `/dev/sr1`, `disk4`); the id when it has none.
+    pub name: String,
+    /// Human-readable model and revision.
     pub label: String,
+}
+
+impl DriveChoice {
+    /// The name and model, which tell identical drives apart.
+    pub fn display(&self) -> String {
+        format!("{}  {}", self.name, self.label)
+    }
+
+    /// One `list` line: the display, plus the id when it differs from the name.
+    fn list_line(&self) -> String {
+        if self.name == self.path {
+            self.display()
+        } else {
+            format!("{}  {}", self.display(), self.path)
+        }
+    }
 }
 
 /// Enumerate actual optical drives through the same platform API on every front-end.
@@ -26,6 +44,7 @@ pub fn drives() -> Vec<DriveChoice> {
                 style::printable(&d.model),
                 style::printable(&d.firmware)
             ),
+            name: d.display_name,
             path: d.path,
         })
         .collect()
@@ -91,25 +110,19 @@ fn info_inner(target: Option<&str>) -> Result<()> {
 }
 
 /// Turn an optional user selector into a concrete device selector.
-/// - a bare integer `N` → the Nth drive from `list` (1-based)
-/// - any other string → used verbatim (a `/dev` path or an `ioreg:` id)
+/// - a drive's name from `list` (`E:`, `/dev/sr1`, `disk4`) → that drive's id
+/// - any other string → used verbatim as the id (`\\.\CdRomN`, a `/dev` path or an `ioreg:` id)
 /// - `None` → the only connected drive, or an error listing the choices
 pub fn resolve_device(arg: Option<&str>) -> Result<String> {
-    if let Some(path) = arg.filter(|s| s.parse::<usize>().is_err()) {
-        return Ok(path.to_string());
-    }
     resolve_from(arg, &drives())
 }
 
 fn resolve_from(arg: Option<&str>, drives: &[DriveChoice]) -> Result<String> {
     if let Some(a) = arg {
-        if let Ok(n) = a.parse::<usize>() {
-            return drives
-                .get(n.wrapping_sub(1))
-                .map(|d| d.path.clone())
-                .with_context(|| format!("no drive #{a}; run `freemkv-flash list`"));
-        }
-        return Ok(a.to_string());
+        return Ok(drives
+            .iter()
+            .find(|d| d.name == a)
+            .map_or_else(|| a.to_string(), |d| d.path.clone()));
     }
     match drives {
         [] => bail!("no optical drive found (is one connected and powered on?)"),
@@ -117,11 +130,10 @@ fn resolve_from(arg: Option<&str>, drives: &[DriveChoice]) -> Result<String> {
         many => {
             let choices = many
                 .iter()
-                .enumerate()
-                .map(|(i, d)| format!("  {}  {}", i + 1, d.label))
+                .map(|d| format!("  {}", d.list_line()))
                 .collect::<Vec<_>>()
                 .join("\n");
-            bail!("multiple drives found — pass a number or path (or run `list`):\n{choices}")
+            bail!("multiple drives found — pass a drive name or id:\n{choices}")
         }
     }
 }
@@ -161,7 +173,7 @@ fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
     Ok(family)
 }
 
-/// Print the numbered optical-drive choices accepted by every operation.
+/// Print the optical drives, by the name or id every operation accepts.
 pub fn list() -> Result<()> {
     crate::diagnostics::run("list", list_inner)
 }
@@ -171,8 +183,8 @@ fn list_inner() -> Result<()> {
     if drives.is_empty() {
         println!("drives: none found");
     }
-    for (index, drive) in drives.iter().enumerate() {
-        println!("{}  {} — {}", index + 1, drive.label, drive.path);
+    for drive in &drives {
+        println!("{}", drive.list_line());
     }
     Ok(())
 }

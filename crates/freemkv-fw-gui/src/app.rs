@@ -345,7 +345,7 @@ impl FwApp {
                                     .devices
                                     .iter()
                                     .find(|d| d.path == self.device)
-                                    .map(|d| d.label.clone())
+                                    .map(|d| d.display())
                                     .unwrap_or_else(|| {
                                         "Select Refresh to find optical drives".into()
                                     });
@@ -357,7 +357,7 @@ impl FwApp {
                                             ui.selectable_value(
                                                 &mut self.device,
                                                 drive.path.clone(),
-                                                &drive.label,
+                                                drive.display(),
                                             )
                                             .on_hover_text(&drive.path);
                                         }

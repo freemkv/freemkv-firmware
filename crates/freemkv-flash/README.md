@@ -54,15 +54,19 @@ reported but does not interrupt firmware programming.
 
 ```sh
 freemkv-flash list
-freemkv-flash info /dev/sg0
-freemkv-flash backup /dev/sg0 -o backup.bin
-freemkv-flash flash /dev/sg0 -i update.tar          # dry run: prints the plan, no writes
-freemkv-flash flash /dev/sg0 -i update.tar \
+# E:  HL-DT-ST BD-RE BU40N (rev 1.04)  \\.\CdRom1
+freemkv-flash info E:
+freemkv-flash backup E: -o backup.bin
+freemkv-flash flash E: -i update.tar          # dry run: prints the plan, no writes
+freemkv-flash flash E: -i update.tar \
     --backup preflash.bin --execute --i-understand-risk
 ```
 
-The drive is a `list` number, a `/dev` path or an `ioreg:` id, and can be
-omitted when exactly one drive is connected.
+`list` shows each drive's name as the OS shows it (`E:` on Windows, `/dev/sr1`
+on Linux, `disk4` on macOS while a disc is mounted), its model and its id
+(`\\.\CdRom1`, `/dev/sg3`, `ioreg:…`); a drive the OS has not named is shown
+by its id alone. Pass either the name or the id. The drive can be omitted when
+exactly one is connected. The desktop app lists drives the same way.
 
 **Backup** produces restoration artifacts. A MediaTek backup is the 2 MiB
 update image as the vendor ships it: per-drive settings, calibration and

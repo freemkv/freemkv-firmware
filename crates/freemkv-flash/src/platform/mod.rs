@@ -230,8 +230,8 @@ pub fn list_drives() -> Vec<libfreemkv::DriveInfo> {
     crate::diagnostics::record(format!("discovery: {} drive(s)", drives.len()));
     for drive in &drives {
         crate::diagnostics::record(format!(
-            "discovery: path={:?} vendor={:?} model={:?} firmware={:?}",
-            drive.path, drive.vendor, drive.model, drive.firmware
+            "discovery: path={:?} name={:?} vendor={:?} model={:?} firmware={:?}",
+            drive.path, drive.display_name, drive.vendor, drive.model, drive.firmware
         ));
     }
     drives

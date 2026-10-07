@@ -25,7 +25,7 @@ scope** and will land later as a separate `freemkv-fw` binary.
 | Invocation | Writes? | Input | Behavior |
 |---|---|---|---|
 | `freemkv-flash <dev>` (bare) | no | — | alias for `info` |
-| `freemkv-flash list` | no | — | list drives and their selectors |
+| `freemkv-flash list` | no | — | list drives by name (`E:`, `/dev/sr1`, `disk4`) and id |
 | `freemkv-flash info <dev>` | no | — | INQUIRY + boot banner + classify family |
 | `freemkv-flash backup <dev> [-o out]` | no | — | save one validated, flashable backup (MTK `.bin`, Pioneer `.tar`) |
 | `freemkv-flash dump <dev> [-o out.bin] [--force]` | no | — | raw 0x0..0x600000 device read (Pioneer; diagnostics, not flashable) |

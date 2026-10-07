@@ -6,6 +6,18 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.7]
+
+### Changed
+
+- Drives are listed by the name the OS shows: the drive letter (`E:`) on
+  Windows, `/dev/srN` on Linux and `diskN` on macOS while a disc is mounted,
+  followed by the model, so identical drives can be told apart. The CLI `list`,
+  the "multiple drives found" error, both desktop dropdowns and the flash
+  confirmation all show it. Windows lists drives in letter order.
+- Every command selects a drive by its name or its id (`\\.\CdRom1`,
+  `/dev/sg3`, `ioreg:…`). `list` numbers are no longer accepted.
+
 ## [0.10.6]
 
 ### Added

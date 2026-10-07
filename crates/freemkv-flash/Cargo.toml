@@ -44,7 +44,7 @@ freemkv-chipset = { path = "../freemkv-chipset" }
 # libfreemkv's `ScsiTransport` behind its own `ScsiDevice`. `default-features =
 # false` takes ONLY the transport (libc + tracing), none of the ripping tree, so
 # there is no dependency cycle back onto the firmware/unlock side.
-libfreemkv = { git = "https://github.com/freemkv/libfreemkv", rev = "c3ceb62f5fd7a81907978d21aa1c02510af5754c", default-features = false, features = ["scsi"] }
+libfreemkv = { git = "https://github.com/freemkv/libfreemkv", rev = "4d8cba6ff8184f37b3e0b2c99240ec26c8b7b107", default-features = false, features = ["scsi"] }
 
 [lints]
 workspace = true

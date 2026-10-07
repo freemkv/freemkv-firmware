@@ -152,7 +152,7 @@ impl FlashApp {
         self.devices
             .iter()
             .find(|d| d.path == self.device)
-            .map(|d| d.label.clone())
+            .map(DriveChoice::display)
             .unwrap_or_else(|| "No optical drive found".into())
     }
 
@@ -493,7 +493,7 @@ impl FlashApp {
                                             ui.selectable_value(
                                                 &mut self.device,
                                                 drive.path.clone(),
-                                                &drive.label,
+                                                drive.display(),
                                             )
                                             .on_hover_text(&drive.path);
                                         }
