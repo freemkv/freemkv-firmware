@@ -1028,18 +1028,6 @@ fn live_control_preserves_typed_decode_cause_without_entering_update() {
 }
 
 #[test]
-fn live_control_refuses_missing_descriptor_before_update_entry() {
-    let mut dev = MockScsiDevice::new();
-    let pair = super::prepared_tests::pair(false, 0);
-    let receiver = Receiver::from_installed(&pair).unwrap();
-    assert!(live_control(&mut dev, &receiver).is_err());
-    assert!(dev
-        .writes
-        .iter()
-        .all(|(cdb, _)| *cdb != pioneer_optical::cdb::enter_update()));
-}
-
-#[test]
 fn generic_receiver_matrix_when_configured() {
     let Some(root) = std::env::var_os("PIONEER_GENERIC_MATRIX") else {
         return;
@@ -1201,11 +1189,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
         receiver
             .prepare_normal_without_family_check(&pair.normal)
             .unwrap();
-        let mut dev = MockScsiDevice::new().on(
-            |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
-            normal[..16].to_vec(),
-        );
-        let control = live_control(&mut dev, &receiver).unwrap();
+        let control = receiver.entry_control(&normal[..16]).unwrap();
         assert_eq!(&control[..16], &normal[..16]);
         assert_eq!(
             &control[16..20],

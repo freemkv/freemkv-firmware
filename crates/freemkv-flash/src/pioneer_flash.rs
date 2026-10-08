@@ -5,13 +5,14 @@
 
 #[cfg(test)]
 use crate::drive::pioneer::FLASH_CHUNK;
-use crate::drive::pioneer::{transfer, CONTROL_LEN};
+
 use crate::drive::pioneer_transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use crate::platform::ScsiDevice;
 use crate::style;
 use anyhow::{anyhow, bail, Context, Result};
-use pioneer_optical::drive::{
-    execute_update, UpdateError, UpdateOptions, UpdateRuntime, UpdateTransfer,
+use pioneer_optical::drive::{UpdateError, UpdateOptions, UpdateRuntime};
+use pioneer_optical::receiver::{
+    FlashError, FlashPass, FlashRuntime, FlashTransport, PreparedNormal, PreparedUpdate,
 };
 use pioneer_optical::{DriveClass, Identity, Role};
 use std::time::{Duration, Instant};
@@ -57,51 +58,107 @@ fn resolve_class(
     }
 }
 
-/// Execute one prepared update pass after the final tray guard.
-/// The caller owns captured receiver evidence and any required restoration.
-pub(crate) fn execute_flash(
+/// A validated library plan selected by the app's input routing.
+pub(crate) enum PreparedFlash<'a> {
+    Complete(&'a PreparedUpdate),
+    Normal(&'a PreparedNormal),
+}
+
+pub(crate) fn execute_prepared(
     dev: &mut dyn ScsiDevice,
-    control: &[u8; CONTROL_LEN],
-    kernel: Option<&[u8]>,
-    normal: &[u8],
+    plan: PreparedFlash<'_>,
     recover: bool,
     force: bool,
 ) -> Result<()> {
-    let kernel_transfer = kernel.map(transfer::select_kernel).transpose()?;
-    let kernel = match kernel_transfer.as_ref() {
-        Some(transfer::KernelTransfer::LinearFe(bytes)) => Some(*bytes),
-        Some(transfer::KernelTransfer::PreparedFe(bytes)) => Some(bytes.as_slice()),
-        None => None,
+    let normal = match plan {
+        PreparedFlash::Complete(plan) => plan.normal_transfer(),
+        PreparedFlash::Normal(plan) => plan.normal_transfer(),
     };
-    crate::engine::guard_no_medium(dev, true, force || recover)?;
     let shared = SharedDevice::new(dev);
-    let class = resolve_class(
-        transport::identify_on(&shared),
-        crate::pioneer_flash_plan::normal_family(normal).is_some(),
-        recover,
-    )?;
-    let mut port = ScsiTransport::flash(&shared);
+    let mut reads = ScsiTransport::reads(&shared);
+    let mut writes = ScsiTransport::flash(&shared);
+    let io = FlashTransport {
+        reads: &mut reads,
+        writes: &mut writes,
+    };
     let mut runtime = Runtime {
         start: Instant::now(),
-        kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
-        normal: style::Progress::new("flashing normal", normal.len()),
+        kernel: style::Progress::new("flashing kernel", 0),
+        normal: style::Progress::new("flashing normal", 0),
+        device: &shared,
+        recover,
+        force,
+        family_known: crate::pioneer_flash_plan::normal_family(normal).is_some(),
     };
-    execute_update(
-        &mut port,
-        &mut runtime,
-        control,
-        UpdateTransfer { kernel, normal },
-        UpdateOptions { class, recover },
-    )
-    .map_err(update_error)
+    match plan {
+        PreparedFlash::Complete(plan) => plan.flash(io, &mut runtime),
+        PreparedFlash::Normal(plan) => plan.flash(io, &mut runtime),
+    }
+    .map_err(prepared_error)
 }
 
-struct Runtime {
+fn prepared_error(error: FlashError<anyhow::Error>) -> anyhow::Error {
+    let restoration = matches!(
+        &error,
+        FlashError::Preflight {
+            pass: FlashPass::Restoration,
+            ..
+        } | FlashError::DescriptorRead {
+            pass: FlashPass::Restoration,
+            ..
+        } | FlashError::DescriptorChanged {
+            pass: FlashPass::Restoration
+        } | FlashError::DescriptorMismatch {
+            pass: FlashPass::Restoration
+        } | FlashError::Update {
+            pass: FlashPass::Restoration,
+            ..
+        } | FlashError::Readback {
+            pass: FlashPass::Restoration,
+            ..
+        } | FlashError::ReadbackMismatch {
+            pass: FlashPass::Restoration,
+            ..
+        }
+    );
+    let error = match error {
+        FlashError::Preflight { pass, source } => {
+            source.context(format!("{pass:?} flash preflight refused"))
+        }
+        FlashError::DescriptorRead { pass, source } => flash_err(source).context(format!(
+            "{pass:?} receiver descriptor read failed; update entry was not attempted"
+        )),
+        FlashError::Update { pass, source } => {
+            update_error(source).context(format!("{pass:?} flash pass failed"))
+        }
+        FlashError::Readback { pass, source } => flash_err(source).context(format!(
+            "{pass:?} Kernel readback failed; drive state is not verified{PARTIAL_HINT}"
+        )),
+        error @ FlashError::ReadbackMismatch { .. } => anyhow::Error::new(error)
+            .context(format!("Kernel readback did not verify{PARTIAL_HINT}")),
+        error => anyhow::Error::new(error),
+    };
+    if restoration {
+        error.context("pristine Kernel restoration did not complete; the temporary Kernel may remain installed. Re-flash the captured pre-flash backup to restore the drive")
+    } else {
+        error
+    }
+}
+
+struct Runtime<'a, 'd> {
+    device: &'a SharedDevice<'d>,
+    recover: bool,
+    force: bool,
+    family_known: bool,
     start: Instant,
     kernel: style::Progress,
     normal: style::Progress,
 }
-impl UpdateRuntime for Runtime {
+impl UpdateRuntime for Runtime<'_, '_> {
+    fn starting(&mut self, kernel: usize, normal: usize) {
+        self.kernel = style::Progress::new("flashing kernel", kernel);
+        self.normal = style::Progress::new("flashing normal", normal);
+    }
     fn elapsed(&self) -> Duration {
         self.start.elapsed()
     }
@@ -129,6 +186,25 @@ impl UpdateRuntime for Runtime {
             "Pioneer post-flash readiness: elapsed_ms={} error={error:?}",
             elapsed.as_millis()
         ));
+    }
+}
+
+impl FlashRuntime<anyhow::Error> for Runtime<'_, '_> {
+    fn prepare_pass(&mut self, pass: FlashPass) -> Result<UpdateOptions> {
+        self.device
+            .with(|dev| crate::engine::guard_no_medium(dev, true, self.force || self.recover))?;
+        let class = resolve_class(
+            transport::identify_on(self.device),
+            self.family_known,
+            self.recover,
+        )?;
+        if pass == FlashPass::Restoration {
+            println!("{}", style::dim("restoring the unmodified target Kernel"));
+        }
+        Ok(UpdateOptions {
+            class,
+            recover: self.recover,
+        })
     }
 }
 

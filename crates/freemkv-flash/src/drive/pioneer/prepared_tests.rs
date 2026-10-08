@@ -1,4 +1,16 @@
 use super::*;
+use pioneer_optical::receiver::PreparedUpdate;
+
+const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
+
+fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
+    crate::pioneer_flash::execute_prepared(
+        dev,
+        crate::pioneer_flash::PreparedFlash::Complete(plan),
+        false,
+        false,
+    )
+}
 use pioneer_optical::envelope::{
     builder::{encode_encrypted_pair, BuildInputs, KernelBuild, NormalSignature},
     signature::SigningKey,
@@ -109,7 +121,10 @@ struct Drive {
     kernel: Vec<u8>,
     writes: Vec<(Vec<u8>, Vec<u8>)>,
     fail_at: Option<usize>,
-    corrupt_after_finish: bool,
+    corrupt_after_finish: Option<usize>,
+    finishes: usize,
+    medium_checks: usize,
+    insert_disc_after_first_pass: bool,
 }
 impl Drive {
     fn new(plan: &PreparedUpdate) -> Self {
@@ -119,11 +134,23 @@ impl Drive {
             kernel: Vec::new(),
             writes: Vec::new(),
             fail_at: None,
-            corrupt_after_finish: false,
+            corrupt_after_finish: None,
+            finishes: 0,
+            medium_checks: 0,
+            insert_disc_after_first_pass: false,
         }
     }
 }
 impl ScsiDevice for Drive {
+    fn medium_status(&mut self) -> Result<crate::platform::MediumStatus> {
+        self.medium_checks += 1;
+        Ok(if self.insert_disc_after_first_pass && self.finishes > 0 {
+            crate::platform::MediumStatus::DiscPresent
+        } else {
+            crate::platform::MediumStatus::ClosedEmpty
+        })
+    }
+
     fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
         if cdb == pioneer_optical::cdb::read_memory(CONTROL_DESCRIPTOR_ADDRESS, 16) {
             return Ok(self.descriptor.clone());
@@ -149,15 +176,19 @@ impl ScsiDevice for Drive {
     }
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
         if self.fail_at == Some(self.writes.len()) {
-            bail!("injected restoration write failure");
+            bail!("injected firmware write failure");
         }
         self.writes.push((cdb.to_vec(), data.to_vec()));
+        if cdb == pioneer_optical::cdb::enter_update() {
+            self.kernel.clear();
+        }
         if cdb[..3] == [0x3b, 0x07, 0xfe] {
             self.kernel.extend_from_slice(data);
         }
         if cdb == pioneer_optical::cdb::finish() {
             self.memory = Envelope::load(&self.kernel).unwrap().image;
-            if self.corrupt_after_finish {
+            self.finishes += 1;
+            if self.corrupt_after_finish == Some(self.finishes) {
                 self.memory[0] ^= 1;
             }
         }
@@ -172,31 +203,36 @@ impl ScsiDevice for Drive {
 fn first_pass_readback_failure_prevents_any_restore_write() {
     let plan = plan(true);
     let mut drive = Drive::new(&plan);
-    drive.memory[0] ^= 1;
-    let error = finish_prepared_update(&mut drive, &plan, false, false).unwrap_err();
-    assert!(format!("{error:#}").contains("first-pass Kernel readback"));
-    assert!(format!("{error:#}").contains("resident Kernel readback differs"));
-    assert!(drive.writes.is_empty());
+    drive.corrupt_after_finish = Some(1);
+    let error = execute(&mut drive, &plan).unwrap_err();
+    assert!(format!("{error:#}").contains("Kernel readback did not verify"));
+    assert!(format!("{error:#}").contains("Initial Kernel readback differs"));
+    assert_eq!(drive.finishes, 1);
 }
 #[test]
-fn restore_requires_matching_live_receiver_before_entry() {
+fn prepared_flash_requires_matching_live_receiver_before_entry() {
     let plan = plan(true);
     let mut drive = Drive::new(&plan);
     drive.descriptor[9] ^= 1;
-    let error = finish_prepared_update(&mut drive, &plan, false, false).unwrap_err();
+    let error = execute(&mut drive, &plan).unwrap_err();
     assert_eq!(
-        error.downcast_ref::<pioneer_optical::receiver::Error>(),
-        Some(&pioneer_optical::receiver::Error::DescriptorMismatch)
+        error
+            .downcast_ref::<pioneer_optical::receiver::FlashError<anyhow::Error>>()
+            .map(|error| matches!(
+                error,
+                pioneer_optical::receiver::FlashError::DescriptorMismatch { .. }
+            )),
+        Some(true)
     );
     assert!(drive.writes.is_empty());
 }
 #[test]
-fn restoration_write_failure_propagates_without_finish() {
+fn prepared_write_failure_propagates_without_finish() {
     let plan = plan(true);
     let mut drive = Drive::new(&plan);
     drive.fail_at = Some(1);
-    let error = finish_prepared_update(&mut drive, &plan, false, false).unwrap_err();
-    assert!(format!("{error:#}").contains("injected restoration write failure"));
+    let error = execute(&mut drive, &plan).unwrap_err();
+    assert!(format!("{error:#}").contains("injected firmware write failure"));
     assert_eq!(drive.writes.len(), 1);
     assert_eq!(drive.writes[0].0, pioneer_optical::cdb::enter_update());
 }
@@ -205,8 +241,8 @@ fn restoration_success_requires_pristine_readback_and_preserves_normal() {
     let plan = plan(true);
     for corrupt in [false, true] {
         let mut drive = Drive::new(&plan);
-        drive.corrupt_after_finish = corrupt;
-        let result = finish_prepared_update(&mut drive, &plan, false, false);
+        drive.corrupt_after_finish = corrupt.then_some(2);
+        let result = execute(&mut drive, &plan);
         if corrupt {
             assert!(format!("{:#}", result.unwrap_err()).contains("readback did not verify"));
         } else {
@@ -220,13 +256,44 @@ fn restoration_success_requires_pristine_readback_and_preserves_normal() {
             .filter(|(c, _)| c[..3] == [0x3b, 0x07, 0xf0])
             .flat_map(|(_, d)| d.iter().copied())
             .collect();
-        assert_eq!(normal, plan.normal_transfer());
+        assert_eq!(normal, plan.normal_transfer().repeat(2));
     }
 }
 #[test]
-fn unpatched_update_only_verifies_without_an_extra_session() {
+fn unpatched_update_completes_without_an_extra_session() {
     let plan = plan(false);
     let mut drive = Drive::new(&plan);
-    finish_prepared_update(&mut drive, &plan, false, false).unwrap();
+    execute(&mut drive, &plan).unwrap();
+    assert_eq!(drive.finishes, 1);
+}
+
+#[test]
+fn newly_inserted_disc_blocks_restoration_and_explains_temporary_kernel() {
+    let plan = plan(true);
+    let mut drive = Drive::new(&plan);
+    drive.insert_disc_after_first_pass = true;
+    let error = execute(&mut drive, &plan).unwrap_err();
+    let message = format!("{error:#}");
+    assert!(message.contains("a disc is loaded"));
+    assert!(message.contains("temporary Kernel may remain installed"));
+    assert_eq!(drive.medium_checks, 2);
+    assert_eq!(drive.finishes, 1);
+    assert_eq!(
+        drive
+            .writes
+            .iter()
+            .filter(|(cdb, _)| cdb == &pioneer_optical::cdb::enter_update())
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn missing_descriptor_is_reported_before_update_entry() {
+    let plan = plan(false);
+    let mut drive = Drive::new(&plan);
+    drive.descriptor.clear();
+    let error = execute(&mut drive, &plan).unwrap_err();
+    assert!(format!("{error:#}").contains("receiver descriptor read failed"));
     assert!(drive.writes.is_empty());
 }

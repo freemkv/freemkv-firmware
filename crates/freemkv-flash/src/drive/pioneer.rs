@@ -5,7 +5,7 @@
 //! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
-use pioneer_optical::receiver::{PreparedNormal, PreparedUpdate, Receiver};
+use pioneer_optical::receiver::Receiver;
 use pioneer_optical::Role;
 use std::borrow::Cow;
 
@@ -56,20 +56,6 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
     pioneer_optical::cdb::finish()
 }
 
-const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
-
-fn read_control_descriptor(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-    let length = pioneer_optical::receiver::DESCRIPTOR_LEN as u32;
-    let descriptor =
-        super::pioneer_transport::read_memory_exact(dev, CONTROL_DESCRIPTOR_ADDRESS, length)?;
-    let again =
-        super::pioneer_transport::read_memory_exact(dev, CONTROL_DESCRIPTOR_ADDRESS, length)?;
-    if descriptor != again {
-        bail!("resident descriptor changed between reads");
-    }
-    Ok(descriptor)
-}
-
 fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
     let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")?;
     let (kernel, normal) = classify_flash_input(backup)?;
@@ -91,10 +77,6 @@ fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
         None => Receiver::detect(&normal),
     }
     .context("cannot establish installed receiver entry requirements")
-}
-
-fn live_control(dev: &mut dyn ScsiDevice, receiver: &Receiver) -> Result<[u8; CONTROL_LEN]> {
-    Ok(receiver.entry_control(&read_control_descriptor(dev)?)?)
 }
 
 /// Validate a Normal envelope without marketing-model or revision restrictions.
@@ -428,50 +410,6 @@ fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
     )
 }
 
-fn verify_resident_kernel(dev: &mut dyn ScsiDevice, expected: &[u8]) -> Result<()> {
-    for (index, chunk) in expected.chunks(FLASH_CHUNK).enumerate() {
-        let address = pioneer_optical::image::KERNEL_BASE + (index * FLASH_CHUNK) as u32;
-        let actual = super::pioneer_transport::read_memory_exact(dev, address, chunk.len() as u32)?;
-        if actual != chunk {
-            bail!("resident Kernel readback differs at {address:#x}");
-        }
-    }
-    Ok(())
-}
-
-/// Verify the first pass and perform any preflighted pristine restoration.
-fn finish_prepared_update(
-    dev: &mut dyn ScsiDevice,
-    prepared: &PreparedUpdate,
-    recover: bool,
-    force: bool,
-) -> Result<()> {
-    verify_resident_kernel(dev, prepared.first_kernel_image())
-        .context("first-pass Kernel readback did not verify; no further update attempted")?;
-    if let Some(pristine) = prepared.restoration_kernel_transfer() {
-        let receiver = prepared
-            .restoration_receiver()
-            .context("prepared restoration has no receiver")?;
-        println!(
-            "{}",
-            crate::style::dim("restoring the unmodified target Kernel")
-        );
-        let control = live_control(dev, receiver)?;
-        crate::pioneer_flash::execute_flash(
-            dev,
-            &control,
-            Some(pristine),
-            prepared.normal_transfer(),
-            recover,
-            force,
-        )
-        .context("pristine Kernel restoration failed; drive state is not verified")?;
-        verify_resident_kernel(dev, prepared.final_kernel_image())
-            .context("pristine Kernel restoration completed but readback did not verify")?;
-    }
-    Ok(())
-}
-
 /// Whether the plan (or a `Forced` plan's inner plan) is `KernelDowngrade`.
 fn plan_is_downgrade(plan: &crate::pioneer_flash_plan::FlashPlan) -> bool {
     use crate::pioneer_flash_plan::FlashPlan;
@@ -703,13 +641,6 @@ impl DriveFamily for Pioneer {
                     }),
                 ),
             };
-            let normal_to_write = prepared
-                .as_ref()
-                .map(PreparedUpdate::normal_transfer)
-                .or(normal_only.as_ref().map(PreparedNormal::normal_transfer))
-                .expect("selected Normal");
-            let kernel_to_write = prepared.as_ref().map(PreparedUpdate::kernel_transfer);
-            let control = live_control(dev, &receiver)?;
             let will_patch = prepared
                 .as_ref()
                 .is_some_and(|p| p.restoration_kernel_transfer().is_some());
@@ -718,17 +649,12 @@ impl DriveFamily for Pioneer {
             }
             // Summarize what will be written and what is missing, then confirm.
             confirm_proceed(&flash_summary(kernel.as_deref(), Some(normal)))?;
-            crate::pioneer_flash::execute_flash(
-                dev,
-                &control,
-                kernel_to_write,
-                normal_to_write,
-                req.recover,
-                req.force,
-            )?;
-            if let Some(prepared) = prepared.as_ref() {
-                finish_prepared_update(dev, prepared, req.recover, req.force)?;
-            }
+            let prepared = match (&prepared, &normal_only) {
+                (Some(plan), None) => crate::pioneer_flash::PreparedFlash::Complete(plan),
+                (None, Some(plan)) => crate::pioneer_flash::PreparedFlash::Normal(plan),
+                _ => unreachable!("one prepared plan selected"),
+            };
+            crate::pioneer_flash::execute_prepared(dev, prepared, req.recover, req.force)?;
             println!(
                 "{}",
                 crate::style::green("flash complete; drive returned ready.")

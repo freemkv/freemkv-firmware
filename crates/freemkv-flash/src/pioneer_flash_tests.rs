@@ -1,4 +1,79 @@
 use super::*;
+use crate::drive::pioneer::{transfer, CONTROL_LEN};
+use pioneer_optical::drive::{execute_update, UpdateTransfer};
+
+#[test]
+fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
+    let source = || anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+    for error in [
+        FlashError::Preflight {
+            pass: FlashPass::Restoration,
+            source: source(),
+        },
+        FlashError::DescriptorRead {
+            pass: FlashPass::Restoration,
+            source: pioneer_optical::drive::Error::Transport(source()),
+        },
+        FlashError::Update {
+            pass: FlashPass::Restoration,
+            source: UpdateError::Finish(pioneer_optical::drive::Error::Transport(source())),
+        },
+        FlashError::Readback {
+            pass: FlashPass::Restoration,
+            source: pioneer_optical::drive::Error::Transport(source()),
+        },
+    ] {
+        let error = prepared_error(error);
+        assert_eq!(
+            error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            std::io::ErrorKind::BrokenPipe
+        );
+        assert!(format!("{error:#}").contains("temporary Kernel may remain installed"));
+    }
+}
+
+/// Execute one prepared update pass after the final tray guard.
+/// The caller owns captured receiver evidence and any required restoration.
+fn execute_flash(
+    dev: &mut dyn ScsiDevice,
+    control: &[u8; CONTROL_LEN],
+    kernel: Option<&[u8]>,
+    normal: &[u8],
+    recover: bool,
+    force: bool,
+) -> Result<()> {
+    let kernel_transfer = kernel.map(transfer::select_kernel).transpose()?;
+    let kernel = match kernel_transfer.as_ref() {
+        Some(transfer::KernelTransfer::LinearFe(bytes)) => Some(*bytes),
+        Some(transfer::KernelTransfer::PreparedFe(bytes)) => Some(bytes.as_slice()),
+        None => None,
+    };
+    crate::engine::guard_no_medium(dev, true, force || recover)?;
+    let shared = SharedDevice::new(dev);
+    let class = resolve_class(
+        transport::identify_on(&shared),
+        crate::pioneer_flash_plan::normal_family(normal).is_some(),
+        recover,
+    )?;
+    let mut port = ScsiTransport::flash(&shared);
+    let mut runtime = Runtime {
+        device: &shared,
+        recover,
+        force,
+        family_known: false,
+        start: Instant::now(),
+        kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
+        normal: style::Progress::new("flashing normal", normal.len()),
+    };
+    execute_update(
+        &mut port,
+        &mut runtime,
+        control,
+        UpdateTransfer { kernel, normal },
+        UpdateOptions { class, recover },
+    )
+    .map_err(update_error)
+}
 
 /// A BD-generation INQUIRY response (36+ bytes): `PIONEER` / `BD-RW   BDR-UD04`
 /// with the given 4-byte revision field. The post-entry gate reads `000` out of
