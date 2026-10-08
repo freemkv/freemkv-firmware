@@ -1,6 +1,6 @@
-//! Offline image-to-envelope reconstruction. This does not establish that a
-//! capture came from persistent flash, covers all writable state, or can restore
-//! a drive. Live backup/flash capability remains gated separately.
+//! Pioneer firmware capture and image-to-envelope reconstruction.
+//! Capturing firmware does not capture every writable device setting or prove
+//! drive-side update acceptance. Flash compatibility remains gated separately.
 
 use crate::pioneer_bundle::{Bundle, Role};
 use crate::platform::ScsiDevice;
@@ -14,8 +14,8 @@ use sha2::{Digest, Sha256};
 /// OEM key table. An unrecognized kernel gets honest zero placeholders —
 /// revision `0000`, date `00/00/00`, seed `0` — so the output plainly reads as
 /// "not OEM". The NORMAL self-recovers its real revision/date from its own body
-/// and is signed with a fresh caller-owned key (seed `0`); it is intentionally
-/// not byte-exact and its drive-side acceptance is not established here.
+/// uses a zeroed signature when no OEM reconstruction metadata matches. Such
+/// output is not byte-exact OEM; drive-side acceptance is not established here.
 pub fn construct_signed_candidate(
     kernel: &[u8],
     normal: &[u8],
@@ -499,12 +499,10 @@ pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>
     Ok(image)
 }
 
-/// Capture the Kernel and Normal as INDEPENDENT components and archive whichever
-/// succeeded. The Kernel is read first (it establishes the Normal's geometry);
-/// the Normal is then attempted on its own. A region the read cannot get never
-/// discards the other: the archive holds 2 components on a healthy drive, or 1
-/// when a region failed (the caller points the user at `dump` for a raw salvage read). Fails only
-/// if nothing could be read. `deep` selects the salvage read for failed regions.
+/// Capture and verify Kernel, derive Normal geometry from it, then capture Normal.
+/// A valid Kernel and supported capture layout are required. A failed Normal
+/// capture preserves Kernel in a partial archive; it cannot authorize a flash
+/// that would overwrite Normal. `deep` selects salvage reads for failed regions.
 fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
     let (inquiry, hardware, kernel_len) = read_identity(dev)?;
     prepare_firmware_read(dev)?;
@@ -525,12 +523,14 @@ fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
         .context("captured Kernel receiver layout is unsupported")?;
     let revision = std::str::from_utf8(&inquiry[32..36])?.trim().to_owned();
 
-    // Establish the supported physical map before allowing a partial backup.
-    // A read failure may be salvaged; unknown geometry must never be mislabeled.
-    validate_backup_map(dev, &kernel)?;
+    // Resolve physical capture geometry from the installed Kernel before reading Normal.
+    let layout =
+        pioneer_optical::envelope::NormalLayout::from_kernel(&kernel, KERNEL_IMAGE_BASE as u32)
+            .map_err(layout_error)
+            .context("determining Normal capture layout from the installed Kernel")?;
 
     // The Normal is attempted independently; its failure keeps the Kernel.
-    match read_normal_region(dev, &kernel, deep) {
+    match read_normal_region(dev, &layout, deep) {
         Ok(normal) => {
             let envelope_id = embedded_envelope_id(&inquiry, &kernel, &normal)?;
             construct_signed_candidate(&kernel, &normal, &envelope_id, &revision)
@@ -562,7 +562,9 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
     }
     pioneer_optical::envelope::builder::kernel_layout_from_image(&kernel)
         .context("captured Kernel receiver layout is unsupported")?;
-    let normal = read_normal_region(dev, &kernel, false)?;
+    let layout =
+        pioneer_optical::envelope::NormalLayout::from_kernel(&kernel, KERNEL_IMAGE_BASE as u32)?;
+    let normal = read_normal_region(dev, &layout, false)?;
     let envelope_id = embedded_envelope_id(&inquiry, &kernel, &normal)?;
     let revision = std::str::from_utf8(&inquiry[32..36])?.trim().to_owned();
     Ok((kernel, normal, revision, envelope_id))
@@ -601,79 +603,29 @@ fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> 
     Ok((inquiry, f1[16..24].to_vec(), kernel_len))
 }
 
-/// Probe the readable ceiling and inspect descriptors throughout that span.
-/// The envelope codec currently supports a 64 KiB Kernel at 0x400000 only.
-/// Refuse other/ambiguous maps instead of manufacturing a truncated backup.
-fn validate_backup_map(dev: &mut dyn ScsiDevice, kernel: &[u8]) -> Result<()> {
-    let end = probe_read_end(dev)?;
-    let mut image = Vec::with_capacity(end);
-    for offset in (0..end).step_by(READ_CHUNK) {
-        image.extend_from_slice(&read_chunk(dev, offset, READ_CHUNK.min(end - offset))?);
-    }
-    validate_backup_image_map(&image, kernel)
+fn layout_error(error: pioneer_optical::envelope::NormalLayoutError) -> anyhow::Error {
+    let code = pioneer_optical::CodedError::code(&error);
+    anyhow::Error::new(error).context(format!("Pioneer backup validation failed [{code}]"))
 }
 
-fn validate_backup_image_map(image: &[u8], kernel: &[u8]) -> Result<()> {
-    const DESCRIPTOR_ALIGNMENT: usize = 0x100;
-    const DESCRIPTOR_LEN: usize = 24;
-    let mut bases = Vec::new();
-    for base in (0..image.len().saturating_sub(DESCRIPTOR_LEN - 1)).step_by(DESCRIPTOR_ALIGNMENT) {
-        let header = &image[base..base + DESCRIPTOR_LEN];
-        let length = u32::from_be_bytes(header[20..24].try_into().unwrap()) as usize;
-        // INQUIRY copies and log strings are not firmware descriptors.
-        if header.starts_with(b"PIONEER ")
-            && header[..16]
-                .iter()
-                .all(|b| *b == 0 || b.is_ascii_graphic() || *b == b' ')
-            && (0x2000..=0x800000).contains(&length)
-            && length.is_multiple_of(DESCRIPTOR_ALIGNMENT)
-            // Transfer buffers can retain a complete descriptor after flashing.
-            // It is not a second image unless its entire declared extent fits.
-            && base.checked_add(length).is_some_and(|end| end <= image.len())
-        {
-            bases.push(base);
-        }
-    }
-    if bases != [NORMAL_IMAGE_BASE] {
-        bail!("unsupported or ambiguous firmware map: Normal descriptors at {bases:x?}; no backup created; use dump for raw capture");
-    }
-    if kernel.len() != NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE || !zero_be32_sum(kernel) {
-        bail!("unsupported Kernel extent or invalid checksum; no backup created");
-    }
-    let normal_len = normal_image_len(kernel, &image[NORMAL_IMAGE_BASE..])?;
-    if NORMAL_IMAGE_BASE
-        .checked_add(normal_len)
-        .is_none_or(|end| end > image.len())
-    {
-        bail!("Normal firmware extends beyond the probed readable ceiling; no backup created");
-    }
-    Ok(())
-}
-
-fn normal_image_len(kernel: &[u8], normal_head: &[u8]) -> Result<usize> {
-    if normal_head.len() < 24 || !normal_head.starts_with(b"PIONEER ") {
-        bail!("Normal image header is missing at the supported base");
-    }
-    let normal_len =
-        match pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(kernel) {
-            Some(geometry) => geometry.image_len,
-            None => u32::from_be_bytes(normal_head[20..24].try_into().unwrap()) as usize,
-        };
-    if !(0x2000..=0x800000).contains(&normal_len)
-        || !normal_len.is_multiple_of(0x100)
-        || NORMAL_IMAGE_BASE + normal_len > ADDRESS_LIMIT
-    {
-        bail!("Normal image declares an invalid length");
-    }
-    Ok(normal_len)
-}
-
-/// Read the Normal image region: locate its header, derive its length from the
-/// Kernel geometry, and capture it (`deep` selects the salvage read).
-fn read_normal_region(dev: &mut dyn ScsiDevice, kernel: &[u8], deep: bool) -> Result<Vec<u8>> {
-    let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24, deep)?;
-    let normal_len = normal_image_len(kernel, &normal_head)?;
-    read_region(dev, NORMAL_IMAGE_BASE, normal_len, deep)
+/// Read only the prefix and complete extent established by the captured Kernel.
+fn read_normal_region(
+    dev: &mut dyn ScsiDevice,
+    layout: &pioneer_optical::envelope::NormalLayout,
+    deep: bool,
+) -> Result<Vec<u8>> {
+    let prefix = layout.header_region();
+    let header = read_region(dev, prefix.address() as usize, prefix.length(), deep)?;
+    let region = layout.resolve(&header).map_err(layout_error)?;
+    crate::diagnostics::record(format!(
+        "Pioneer Kernel-derived Normal layout: address={:#x} length={:#x} prefix_bytes={}",
+        region.address(),
+        region.length(),
+        prefix.length(),
+    ));
+    let normal = read_region(dev, region.address() as usize, region.length(), deep)?;
+    layout.validate(&normal).map_err(layout_error)?;
+    Ok(normal)
 }
 
 fn zero_be32_sum(image: &[u8]) -> bool {

@@ -95,3 +95,11 @@ fn every_row_has_well_formed_key_material() {
         }
     }
 }
+
+#[test]
+fn xd06u_111_kernel_is_not_labeled_as_an_unknown_capture() {
+    let entry = lookup("3e3fda63f3d9252b1bf6500b264494af59c4988505c9d776f64ec60e10dd1bdb")
+        .expect("held XD06U Kernel must have reconstruction metadata");
+    assert_ne!(entry.revision, "0000");
+    assert_ne!(entry.date, "00/00/00");
+}

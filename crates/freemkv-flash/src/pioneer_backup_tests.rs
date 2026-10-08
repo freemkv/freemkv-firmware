@@ -1190,54 +1190,216 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
     assert!(capture_signed_candidate(&mut replay).is_err());
 }
 
-#[test]
-fn backup_map_rejects_relocated_ambiguous_and_truncated_regions() {
-    let kernel = vec![0; NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE];
-    let mut image = vec![0; NORMAL_IMAGE_BASE + 0x2000];
-    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + 8].copy_from_slice(b"PIONEER ");
-    image[NORMAL_IMAGE_BASE + 20..NORMAL_IMAGE_BASE + 24].copy_from_slice(&0x2000u32.to_be_bytes());
-    validate_backup_image_map(&image, &kernel).unwrap();
-    assert!(validate_backup_image_map(&image[..image.len() - 1], &kernel).is_err());
-    let mut bad_kernel = kernel.clone();
-    bad_kernel[0] = 1;
-    assert!(validate_backup_image_map(&image, &bad_kernel).is_err());
-    image.resize(0x422000, 0);
-    image[0x420000..0x420018].copy_from_slice(&{
-        let mut header = [0; 24];
-        header[..8].copy_from_slice(b"PIONEER ");
-        header[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
-        header
-    });
-    assert!(validate_backup_image_map(&image, &kernel).is_err());
-    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + 24].fill(0);
-    assert!(validate_backup_image_map(&image, &kernel).is_err());
+// Synthetic firmware with independent H8 fixtures; no proprietary bytes or
+// corpus environment variables are required for this regression in CI.
+fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
+    fn put(image: &mut [u8], offset: usize, hex: &str) {
+        let bytes: Vec<_> = hex
+            .split_whitespace()
+            .map(|s| u8::from_str_radix(s, 16).unwrap())
+            .collect();
+        image[offset..offset + bytes.len()].copy_from_slice(&bytes);
+    }
+    fn fix(image: &mut [u8]) {
+        let end = image.len() - 4;
+        image[end..].fill(0);
+        let sum = image
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .fold(0u32, |s, w| s.wrapping_add(u32::from_be_bytes(*w)));
+        image[end..].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+    }
+    let mut kernel = vec![0; 0x10000];
+    kernel[0x1000..0x1008].copy_from_slice(b"SAT 8A10");
+    kernel[0x1008..0x1010].copy_from_slice(b"GENERAL ");
+    kernel[0x1010..0x1014].copy_from_slice(b"0000");
+    let id = b"PIONEER BD-RW   BDR-UD04";
+    kernel[0x2000..0x2000 + id.len()].copy_from_slice(id);
+    put(&mut kernel, 0x40, "ae fe 00 00 00 00 ae f0");
+    put(
+        &mut kernel,
+        0x100,
+        "7a 20 00 00 01 00 47 0c 7a 20 00 00 02 00 47 04 01 f0 65 05",
+    );
+    put(&mut kernel, 0x200, "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 20 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de");
+    put(&mut kernel, 0x400, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6");
+    fix(&mut kernel);
+    let mut normal = vec![0; 0x2000];
+    normal[..16].copy_from_slice(&id[..16]);
+    normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
+    normal[24..32].copy_from_slice(b"GENERAL ");
+    fix(&mut normal);
+    (kernel, normal)
+}
+
+struct BoundedBackupReplay {
+    inner: CaptureReplay,
+    firmware_reads: Vec<(usize, usize)>,
+    refused_reads: usize,
+}
+impl BoundedBackupReplay {
+    fn new(kernel: &[u8], normal: &[u8]) -> Self {
+        let mut dump = vec![0; NORMAL_IMAGE_BASE + normal.len()];
+        dump[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE].copy_from_slice(kernel);
+        dump[NORMAL_IMAGE_BASE..].copy_from_slice(normal);
+        Self {
+            inner: CaptureReplay {
+                dump,
+                reads: 0,
+                knocks: 0,
+                corrupt_second_pass: false,
+            },
+            firmware_reads: Vec::new(),
+            refused_reads: 0,
+        }
+    }
+}
+impl ScsiDevice for BoundedBackupReplay {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        if cdb.starts_with(&[0x3c, 2, 0xb0]) {
+            let address = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            // Reproduce the user's successful Kernel reads and 05/24/00 for
+            // address zero / the upper probe, and reject every unrelated read.
+            if address < KERNEL_IMAGE_BASE || address + len > self.inner.dump.len() {
+                self.refused_reads += 1;
+                return Err(
+                    crate::platform::ScsiSenseError::new(5, 0x24, 0, "outside firmware").into(),
+                );
+            }
+            self.firmware_reads.push((address, len));
+        }
+        self.inner.command_in(cdb, len)
+    }
+    fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        self.inner.command_out(cdb, data)
+    }
+    fn describe(&self) -> String {
+        "bounded firmware replay; no hardware".into()
+    }
 }
 
 #[test]
-fn backup_map_does_not_mistake_inquiry_or_log_strings_for_firmware() {
-    let kernel = vec![0; NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE];
-    let mut image = vec![0; NORMAL_IMAGE_BASE + 0x2000];
-    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + 8].copy_from_slice(b"PIONEER ");
-    image[NORMAL_IMAGE_BASE + 20..NORMAL_IMAGE_BASE + 24].copy_from_slice(&0x2000u32.to_be_bytes());
-    let inquiry = b"PIONEER BD-RW   SOMEMODEL ";
-    image[0x100..0x100 + inquiry.len()].copy_from_slice(inquiry);
-    image[0x200..0x208].copy_from_slice(b"PIONEER ");
-    validate_backup_image_map(&image, &kernel).unwrap();
+fn backup_succeeds_without_probing_unrelated_or_address_zero_memory() {
+    let (kernel, normal) = bounded_backup_fixture();
+    let mut old_probe = BoundedBackupReplay::new(&kernel, &normal);
+    let error = probe_read_end(&mut old_probe).unwrap_err();
+    assert!(format!("{error:#}").contains("device base 0x0"));
+    assert_eq!(old_probe.refused_reads, 2);
+    let mut replay = BoundedBackupReplay::new(&kernel, &normal);
+    let archive = capture_signed_candidate(&mut replay).unwrap();
+    assert_eq!(replay.refused_reads, 0);
+    assert_eq!(
+        replay.firmware_reads,
+        [
+            (0x400000, 4),
+            (0x400000, 0x8000),
+            (0x408000, 0x8000),
+            (0x400000, 0x8000),
+            (0x408000, 0x8000),
+            (0x410000, 24),
+            (0x410000, 24),
+            (0x410000, 0x2000),
+            (0x410000, 0x2000),
+        ]
+    );
+    let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
+    assert_eq!(bundle.components.len(), 2);
+    let k = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap();
+    let n = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap();
+    validate_envelope_pair(&k.bytes, &n.bytes, "BD-RW BDR-UD04").unwrap();
+    let decoded = pioneer_optical::envelope::decode_envelope(&k.bytes).unwrap();
+    assert_eq!(decoded.image, kernel);
+    let decoded_normal =
+        pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, &decoded).unwrap();
+    assert_eq!(decoded_normal.image, normal);
+    assert_eq!(decoded_normal.encoding_seed(), Some(0));
+    assert!(
+        n.bytes[pioneer_optical::envelope::builder::NORMAL_SIGNATURE_RANGE]
+            .iter()
+            .all(|b| *b == 0)
+    );
+    assert!(!package_provenance(&archive).normal_oem);
 }
 
 #[test]
-fn backup_map_ignores_descriptor_copies_without_a_complete_image_extent() {
-    let kernel = vec![0; NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE];
-    let normal_len = 0x2000usize;
-    let mut image = vec![0; NORMAL_IMAGE_BASE + normal_len + 0x1000];
-    let mut header = [0; 24];
-    header[..8].copy_from_slice(b"PIONEER ");
-    header[20..24].copy_from_slice(&(normal_len as u32).to_be_bytes());
-    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + header.len()].copy_from_slice(&header);
-    let staging = image.len() - 0x100;
-    image[staging..staging + header.len()].copy_from_slice(&header);
-    validate_backup_image_map(&image, &kernel).unwrap();
-    // A full alternate extent remains ambiguous, even with identical headers.
-    image.resize(staging + normal_len, 0);
-    assert!(validate_backup_image_map(&image, &kernel).is_err());
+fn unknown_kernel_geometry_stops_before_any_normal_read() {
+    let (mut kernel, normal) = bounded_backup_fixture();
+    // Preserve the checksum while removing the layout proof.
+    kernel.swap(0x400, 0x404);
+    let mut replay = BoundedBackupReplay::new(&kernel, &normal);
+    let error = capture_signed_candidate(&mut replay).unwrap_err();
+    assert!(format!("{error:#}").contains("pioneer.normal_layout.unsupported"));
+    assert!(replay
+        .firmware_reads
+        .iter()
+        .all(|(a, n)| a + n <= NORMAL_IMAGE_BASE));
+    assert_eq!(replay.refused_reads, 0);
+}
+
+#[test]
+fn invalid_normal_keeps_verified_kernel_but_cannot_be_full_rollback() {
+    use crate::drive::{pioneer::Pioneer, FirmwareBackend};
+    let (kernel, mut normal) = bounded_backup_fixture();
+    let valid =
+        construct_signed_candidate(&kernel, &normal, "PIONEER BD-RW   BDR-UD04", "1.14").unwrap();
+    normal[0x100] ^= 1;
+    let mut replay = BoundedBackupReplay::new(&kernel, &normal);
+    let archive = capture_signed_candidate(&mut replay).unwrap();
+    let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
+    assert_eq!(bundle.components.len(), 1);
+    assert_eq!(bundle.components[0].role, Role::Kernel);
+    assert!(Pioneer.verify_preflash_backup(&archive, &valid).is_err());
+    assert_eq!(replay.refused_reads, 0);
+}
+
+#[test]
+fn xd06u_backup_normal_matches_oem_exactly_when_configured() {
+    let Ok(root) = std::env::var("PIONEER_XD06_RECONSTRUCTION_FIXTURE") else {
+        return;
+    };
+    let root = std::path::Path::new(&root);
+    let backup_kernel = std::fs::read(root.join("backup-kernel.enc")).unwrap();
+    let kernel = pioneer_optical::envelope::decode_envelope(&backup_kernel).unwrap();
+    let normal = std::fs::read(root.join("backup.bin")).unwrap();
+    let held = std::fs::read(root.join("held.enc")).unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&normal)),
+        "7c1175169d33c37e296103569ba5ead98b492bd9d668e850a99cf1a44ed82679"
+    );
+    let header = pioneer_optical::envelope::header_info(&held).unwrap();
+    let rebuilt =
+        construct_signed_candidate(&kernel.image, &normal, &header.id, &header.revision).unwrap();
+    let bundle = Bundle::from_backup_tar_bytes(&rebuilt).unwrap();
+    let n = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&n.bytes)),
+        "1a84f11ecb50a89b4f1a4b09eb4ccc4d69fea785149be78aa51c58cadae16b2a"
+    );
+    assert_eq!(n.bytes, held);
+    let k = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap();
+    let held_kernel = std::fs::read(root.join("held-kernel.enc")).unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&k.bytes)),
+        "817b30930721c97b7b3da57d973d42e45f6630229c7c9efa87b22919b808e051"
+    );
+    assert_eq!(k.bytes, held_kernel);
+    let provenance = package_provenance(&rebuilt);
+    assert!(provenance.kernel_oem && provenance.normal_oem);
 }

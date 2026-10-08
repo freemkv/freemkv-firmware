@@ -6,6 +6,30 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.9]
+
+### Fixed
+
+- Pioneer backup no longer probes unrelated memory or assumes address zero is
+  readable. Normal's location and size come from the captured Kernel's checksum
+  and descriptor code. This fixes the 0.10.8 pre-flash backup failure on firmware
+  that rejects reads below its exposed memory range, including BDR-212 firmware.
+- Save validated captures before checking whether their components cover the
+  proposed update. An incomplete capture remains on disk, while flash is refused.
+- Refresh Pioneer OEM Kernel/Normal reconstruction metadata from the current
+  firmware collection, including BDR-XD06U 1.11. Recognized firmware retains its
+  OEM encoding key and signature instead of receiving zero placeholders.
+
+### Changed
+
+- Pin `pioneer-optical` to 0.11.2 for generic Kernel-derived backup layouts and
+  precise layout validation error codes. Unknown or conflicting layouts are
+  rejected before attempting a Normal read; no model-specific fallback is used.
+- Add transport regressions for restricted read ranges, exact backup round trips,
+  invalid Normal data, unsupported Kernel geometry and backup persistence ordering.
+- Add a reproducible OEM-table generator that validates byte-exact reconstruction
+  before admitting metadata, reports exclusions and preserves historical entries.
+
 ## [0.10.8]
 
 ### Fixed

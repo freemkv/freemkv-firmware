@@ -71,11 +71,14 @@ exactly one is connected. The desktop app lists drives the same way.
 **Backup** produces restoration artifacts. A MediaTek backup is the 2 MiB
 update image as the vendor ships it: per-drive settings, calibration and
 revocation lists are replaced with factory contents, so it is safe to share.
-Pioneer backup probes the readable ceiling and checks for a unique supported
-firmware map before creating an archive. Relocated or ambiguous layouts, invalid
-Kernel checksums, and firmware extending past the ceiling are refused; use
-`dump` to preserve raw data from unsupported layouts. The current envelope codec
-supports a 64 KiB Kernel at `0x400000` and Normal at `0x410000`.
+Pioneer backup reads and verifies the installed Kernel, derives Normal's location
+and extent from that Kernel's checksum and descriptor code, then reads and
+verifies Normal. It does not require unrelated memory or address zero to be
+readable. Unsupported or conflicting layouts and invalid checksums are refused;
+use `dump` to preserve raw data from unsupported layouts. Live H8 backup currently
+supports a 64 KiB Kernel at `0x400000` with Normal immediately following it.
+Validated captures are saved before checking whether they cover a proposed flash;
+a Kernel-only capture cannot authorize overwriting an uncaptured Normal.
 
 **Dump** captures raw drive memory,
 including anything readable from a degraded drive, without requiring firmware

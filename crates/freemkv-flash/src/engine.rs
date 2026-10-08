@@ -620,15 +620,16 @@ fn capture_required_backup(
     let bytes = drive.capture_backup(dev).context(
         "pre-flash backup failed; aborting flash (use --force to proceed without a backup)",
     )?;
-    // A partial capture (e.g. a Pioneer Kernel-only archive when the Normal read
-    // flaked) is NOT a valid rollback for the region the flash overwrites.
-    drive.verify_preflash_backup(&bytes, &req.input).context(
-        "pre-flash backup is not a usable rollback; aborting flash (use --force to proceed without a backup)",
-    )?;
     let target_model = drive.identity(dev).product;
     let saved_len = save_backup(out, &bytes, drive, &target_model).context(
         "pre-flash backup failed; aborting flash (use --force to proceed without a backup)",
     )?;
+    // Preserve a structurally valid capture before target-dependent checks.
+    // A partial capture remains useful, but cannot authorize writing a region
+    // it does not cover. No update command has been issued at this point.
+    drive.verify_preflash_backup(&bytes, &req.input).with_context(|| {
+        format!("backup saved to {}, but it is not a usable rollback for this update; aborting flash", out.display())
+    })?;
     Ok((
         format!("saved {} ({} bytes)", out.display(), saved_len),
         Some(bytes),

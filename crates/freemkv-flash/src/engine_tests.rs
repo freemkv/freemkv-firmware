@@ -1203,3 +1203,90 @@ fn forced_tray_warning_does_not_claim_refusal() {
     assert!(text.contains("Proceeding because --force"));
     assert!(!text.contains("refusing"));
 }
+
+#[test]
+fn capture_is_saved_before_target_dependent_rollback_check() {
+    use crate::drive::{Capabilities, Identity, ProbeEvidence, RestoreRegion};
+    struct RejectUpdate {
+        path: std::path::PathBuf,
+    }
+    impl DriveFamily for RejectUpdate {
+        fn family(&self) -> Family {
+            Family::Mtk
+        }
+        fn capabilities(&self) -> Capabilities {
+            Mtk.capabilities()
+        }
+        fn backend_name(&self) -> &'static str {
+            "rollback ordering test"
+        }
+        fn probe(&self, _: &mut dyn ScsiDevice, _: &Identity) -> Result<Option<ProbeEvidence>> {
+            unreachable!()
+        }
+        fn capture_backup(&self, _: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+            Ok(backup_firmware())
+        }
+        fn validate_backup(&self, bytes: &[u8], model: &str) -> Result<Vec<u8>> {
+            Mtk.validate_backup(bytes, model)
+        }
+        fn verify_preflash_backup(&self, bytes: &[u8], _: &[u8]) -> Result<()> {
+            assert_eq!(
+                std::fs::read(&self.path).expect("capture must already be saved"),
+                bytes
+            );
+            bail!("target requires an uncaptured region")
+        }
+        fn read_dump(&self, _: &mut dyn ScsiDevice) -> Result<UserDump> {
+            unreachable!()
+        }
+        fn image_size(&self) -> usize {
+            Mtk.image_size()
+        }
+        fn chunk_size(&self) -> usize {
+            Mtk.chunk_size()
+        }
+        fn envelope(
+            &self,
+            _: &mut dyn ScsiDevice,
+            _: &[u8],
+            _: Option<bool>,
+        ) -> Result<(Vec<u8>, bool)> {
+            unreachable!()
+        }
+        fn flash_plan(&self, _: usize, _: bool) -> Result<String> {
+            unreachable!()
+        }
+        fn flash_open(&self, _: &mut dyn ScsiDevice, _: FlashMode) -> Result<()> {
+            panic!("update prohibited")
+        }
+        fn flash_chunk(&self, _: &mut dyn ScsiDevice, _: usize, _: &[u8]) -> Result<()> {
+            panic!("update prohibited")
+        }
+        fn flash_close(&self, _: &mut dyn ScsiDevice, _: FlashMode) -> Result<()> {
+            panic!("update prohibited")
+        }
+        fn readback(&self, _: &mut dyn ScsiDevice, _: usize, _: usize) -> Result<Vec<u8>> {
+            unreachable!()
+        }
+        fn restore_regions<'a>(&self, _: &'a UserDump) -> Vec<RestoreRegion<'a>> {
+            unreachable!()
+        }
+        fn write_region(&self, _: &mut dyn ScsiDevice, _: u32, _: &[u8]) -> Result<()> {
+            panic!("update prohibited")
+        }
+    }
+    let req = bin_req(vec![], true);
+    let path = req.predump_out.clone().unwrap();
+    let backend = RejectUpdate { path: path.clone() };
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let error = capture_required_backup(&mut dev, &backend, &req).unwrap_err();
+    let message = format!("{error:#}");
+    assert!(message.contains("backup saved to"), "{message}");
+    assert!(
+        message.contains("target requires an uncaptured region"),
+        "{message}"
+    );
+    assert!(path.exists());
+    assert!(dev.writes.is_empty());
+    std::fs::remove_file(path).unwrap();
+}
