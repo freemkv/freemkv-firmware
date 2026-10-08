@@ -1008,53 +1008,31 @@ fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
 }
 
 #[test]
-fn live_control_refuses_a_missing_backup_before_update_entry() {
-    let descriptor = b"PIONEER  BDR-211";
-    let mut dev = MockScsiDevice::new().on(
-        |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
-        descriptor.to_vec(),
-    );
-    assert!(live_control(&mut dev, None)
+fn installed_receiver_requires_a_backup() {
+    assert!(installed_receiver(None)
         .unwrap_err()
         .to_string()
         .contains("backup is required"));
-    assert_eq!(
-        dev.reads
-            .iter()
-            .filter(|cdb| **cdb == pioneer_optical::cdb::read_memory(0x410000, 16))
-            .count(),
-        2
-    );
-    assert!(dev
-        .writes
-        .iter()
-        .all(|(cdb, _)| *cdb != pioneer_optical::cdb::enter_update()));
 }
 
 #[test]
 fn live_control_preserves_typed_decode_cause_without_entering_update() {
-    let mut dev = MockScsiDevice::new().on(
-        |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
-        b"PIONEER TEST-NEW".to_vec(),
-    );
     let backup = header_only_normal("SAT TEST", "26/10/07");
-    let error = live_control(&mut dev, Some(&backup)).unwrap_err();
+    let error = installed_receiver(Some(&backup)).unwrap_err();
     assert!(error
         .downcast_ref::<pioneer_optical::envelope::DecodeError>()
         .is_some());
     let message = format!("{error:#}");
     assert!(message.contains("installed Normal cannot be decoded for receiver control"));
     assert!(message.contains("unsupported firmware envelope layout"));
-    assert!(dev
-        .writes
-        .iter()
-        .all(|(cdb, _)| *cdb != pioneer_optical::cdb::enter_update()));
 }
 
 #[test]
 fn live_control_refuses_missing_descriptor_before_update_entry() {
     let mut dev = MockScsiDevice::new();
-    assert!(live_control(&mut dev, None).is_err());
+    let pair = super::prepared_tests::pair(false, 0);
+    let receiver = Receiver::from_installed(&pair).unwrap();
+    assert!(live_control(&mut dev, &receiver).is_err());
     assert!(dev
         .writes
         .iter()
@@ -1219,12 +1197,15 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
                 .unwrap();
         }
         let captured = archive.into_inner().unwrap();
-        validate_normal_receiver(&pair.normal, Some(&captured)).unwrap();
+        let receiver = installed_receiver(Some(&captured)).unwrap();
+        receiver
+            .prepare_normal_without_family_check(&pair.normal)
+            .unwrap();
         let mut dev = MockScsiDevice::new().on(
             |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
             normal[..16].to_vec(),
         );
-        let control = live_control(&mut dev, Some(&captured)).unwrap();
+        let control = live_control(&mut dev, &receiver).unwrap();
         assert_eq!(&control[..16], &normal[..16]);
         assert_eq!(
             &control[16..20],

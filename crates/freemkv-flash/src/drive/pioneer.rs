@@ -5,7 +5,7 @@
 //! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
-use pioneer_optical::receiver::{PreparedUpdate, Receiver};
+use pioneer_optical::receiver::{PreparedNormal, PreparedUpdate, Receiver};
 use pioneer_optical::Role;
 use std::borrow::Cow;
 
@@ -70,11 +70,6 @@ fn read_control_descriptor(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     Ok(descriptor)
 }
 
-fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; CONTROL_LEN]> {
-    let descriptor = read_control_descriptor(dev)?;
-    Ok(installed_receiver(backup)?.entry_control(&descriptor)?)
-}
-
 fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
     let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")?;
     let (kernel, normal) = classify_flash_input(backup)?;
@@ -98,10 +93,7 @@ fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
     .context("cannot establish installed receiver entry requirements")
 }
 
-fn receiver_live_control(
-    dev: &mut dyn ScsiDevice,
-    receiver: &Receiver,
-) -> Result<[u8; CONTROL_LEN]> {
+fn live_control(dev: &mut dyn ScsiDevice, receiver: &Receiver) -> Result<[u8; CONTROL_LEN]> {
     Ok(receiver.entry_control(&read_control_descriptor(dev)?)?)
 }
 
@@ -138,17 +130,6 @@ fn validate_header_chain(
             bail!("Normal-only flash needs the installed Kernel; supply a Kernel+Normal package")
         }
     }
-}
-
-fn validate_normal_receiver(normal: &[u8], backup: Option<&[u8]>) -> Result<Vec<u8>> {
-    let Some(backup) = backup else {
-        validate_normal_envelope(normal)?;
-        return Ok(normal.to_vec());
-    };
-    let (kernel, _) = classify_flash_input(backup)?;
-    let kernel = kernel.context("installed Kernel is required to validate Normal decoding")?;
-    let update = pioneer_optical::envelope::Update::load(&kernel, normal)?;
-    Ok(update.normal_transfer().to_vec())
 }
 
 /// Offline framing with an unresolved control placeholder; live control comes from the drive.
@@ -475,7 +456,7 @@ fn finish_prepared_update(
             "{}",
             crate::style::dim("restoring the unmodified target Kernel")
         );
-        let control = receiver_live_control(dev, receiver)?;
+        let control = live_control(dev, receiver)?;
         crate::pioneer_flash::execute_flash(
             dev,
             &control,
@@ -697,33 +678,38 @@ impl DriveFamily for Pioneer {
             check_plan_executable(&plan)?;
             debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
 
-            let prepared = match selection {
+            let receiver = installed_receiver(installed_backup)?;
+            let (prepared, normal_only) = match selection {
                 FlashSelection::KernelAndNormal => {
                     let target = pioneer_optical::envelope::Update::load(
                         kernel.as_deref().expect("selected Kernel"),
                         normal,
                     )?;
-                    let receiver = installed_receiver(installed_backup)?;
-                    Some(if req.force {
-                        receiver.prepare_without_family_check(target)?
-                    } else {
-                        receiver.prepare(target)?
-                    })
+                    (
+                        Some(if req.force {
+                            receiver.prepare_without_family_check(target)?
+                        } else {
+                            receiver.prepare(target)?
+                        }),
+                        None,
+                    )
                 }
-                FlashSelection::NormalOnly => None,
-            };
-            let normal_only_transfer = if prepared.is_none() {
-                Some(validate_normal_receiver(normal, installed_backup)?)
-            } else {
-                None
+                FlashSelection::NormalOnly => (
+                    None,
+                    Some(if req.force {
+                        receiver.prepare_normal_without_family_check(normal)?
+                    } else {
+                        receiver.prepare_normal(normal)?
+                    }),
+                ),
             };
             let normal_to_write = prepared
                 .as_ref()
                 .map(PreparedUpdate::normal_transfer)
-                .or(normal_only_transfer.as_deref())
+                .or(normal_only.as_ref().map(PreparedNormal::normal_transfer))
                 .expect("selected Normal");
             let kernel_to_write = prepared.as_ref().map(PreparedUpdate::kernel_transfer);
-            let control = live_control(dev, installed_backup)?;
+            let control = live_control(dev, &receiver)?;
             let will_patch = prepared
                 .as_ref()
                 .is_some_and(|p| p.restoration_kernel_transfer().is_some());
