@@ -558,8 +558,7 @@ impl DriveFamily for Pioneer {
                 bail!(
                     "pre-flash backup is incomplete: the {label} region (which the flash \
                      overwrites) could not be captured, so it has no rollback. Refusing to flash. \
-                     Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), or pass --skip-backup to \
-                     proceed with NO rollback."
+                     Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying."
                 );
             }
         }

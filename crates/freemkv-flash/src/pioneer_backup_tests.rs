@@ -1224,3 +1224,20 @@ fn backup_map_does_not_mistake_inquiry_or_log_strings_for_firmware() {
     image[0x200..0x208].copy_from_slice(b"PIONEER ");
     validate_backup_image_map(&image, &kernel).unwrap();
 }
+
+#[test]
+fn backup_map_ignores_descriptor_copies_without_a_complete_image_extent() {
+    let kernel = vec![0; NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE];
+    let normal_len = 0x2000usize;
+    let mut image = vec![0; NORMAL_IMAGE_BASE + normal_len + 0x1000];
+    let mut header = [0; 24];
+    header[..8].copy_from_slice(b"PIONEER ");
+    header[20..24].copy_from_slice(&(normal_len as u32).to_be_bytes());
+    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + header.len()].copy_from_slice(&header);
+    let staging = image.len() - 0x100;
+    image[staging..staging + header.len()].copy_from_slice(&header);
+    validate_backup_image_map(&image, &kernel).unwrap();
+    // A full alternate extent remains ambiguous, even with identical headers.
+    image.resize(staging + normal_len, 0);
+    assert!(validate_backup_image_map(&image, &kernel).is_err());
+}

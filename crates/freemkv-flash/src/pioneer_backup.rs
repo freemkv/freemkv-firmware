@@ -627,6 +627,9 @@ fn validate_backup_image_map(image: &[u8], kernel: &[u8]) -> Result<()> {
                 .all(|b| *b == 0 || b.is_ascii_graphic() || *b == b' ')
             && (0x2000..=0x800000).contains(&length)
             && length.is_multiple_of(DESCRIPTOR_ALIGNMENT)
+            // Transfer buffers can retain a complete descriptor after flashing.
+            // It is not a second image unless its entire declared extent fits.
+            && base.checked_add(length).is_some_and(|end| end <= image.len())
         {
             bases.push(base);
         }
