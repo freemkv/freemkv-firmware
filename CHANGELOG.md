@@ -22,13 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Pin `pioneer-optical` to 0.11.2 for generic Kernel-derived backup layouts and
+- Pin `pioneer-optical` to 0.11.3 for generic Kernel-derived backup layouts and
   precise layout validation error codes. Unknown or conflicting layouts are
   rejected before attempting a Normal read; no model-specific fallback is used.
 - Add transport regressions for restricted read ranges, exact backup round trips,
   invalid Normal data, unsupported Kernel geometry and backup persistence ordering.
 - Add a reproducible OEM-table generator that validates byte-exact reconstruction
   before admitting metadata, reports exclusions and preserves historical entries.
+  Placeholder detection and raw encoding-key inspection use the library API.
 
 ## [0.10.8]
 

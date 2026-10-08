@@ -144,7 +144,7 @@ fn main() -> Result<()> {
             row["seed"] = json!(format!("0x{seed:06X}"));
             KernelKeySource::Seed(seed)
         } else if decoded.info().layout == Layout::KernelFront {
-            let key = bytes.get(0x200..0x1200).context("short front key")?;
+            let key = decoded.encoding_key();
             row["key_hex"] = json!(hex(key));
             KernelKeySource::RawKey(key)
         } else {
@@ -163,9 +163,7 @@ fn main() -> Result<()> {
         let image_hash = hash(&decoded.image);
         // Captures can be indexed alongside OEM sources. Never promote our
         // explicit unknown-capture placeholder into OEM reconstruction metadata.
-        let placeholder = header.revision == "0000"
-            && header.generated_date == "00/00/00"
-            && decoded.encoding_seed() == Some(0);
+        let placeholder = decoded.reconstruction_placeholder().is_some();
         let exact = !placeholder && rebuilt.as_ref().is_ok_and(|b| *b == bytes);
         report.push(json!({"path":path,"image_sha256":image_hash,"envelope_sha256":hash(&bytes),"status":if placeholder {"kernel_placeholder"} else if exact {"kernel_byte_exact"} else {"kernel_not_byte_exact"}}));
         if exact {
@@ -206,7 +204,7 @@ fn main() -> Result<()> {
             let signature = bytes
                 .get(NORMAL_SIGNATURE_RANGE)
                 .context("short signature")?;
-            if seed == 0 && signature.iter().all(|b| *b == 0) {
+            if normal.reconstruction_placeholder().is_some() {
                 status = "normal_placeholder";
                 continue;
             }

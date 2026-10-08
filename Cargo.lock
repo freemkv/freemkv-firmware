@@ -2707,9 +2707,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pioneer-optical"
-version = "0.11.2"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "182ca773f907fbd45378d31828740a30652e2164a0c0d4992b9d4a577ba439e7"
+checksum = "54221d4efd1d4bb99704bbde9bed88dbe9e70788164cbe38fba89ad59ddb73b6"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
