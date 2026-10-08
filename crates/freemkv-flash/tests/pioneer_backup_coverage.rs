@@ -13,6 +13,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+const KERNEL_BASE: usize = 0x400000;
+const NORMAL_BASE: usize = 0x410000;
+const READ_CHUNK: usize = 0x8000;
+
 struct Replay {
     inquiry: Vec<u8>,
     hardware: Vec<u8>,
@@ -46,26 +50,28 @@ impl ScsiDevice for Replay {
         }
         let off = ((c[3] as usize) << 16) | ((c[4] as usize) << 8) | c[5] as usize;
         let declared = ((c[6] as usize) << 16) | ((c[7] as usize) << 8) | c[8] as usize;
-        if declared != len || len > 164 || c[9] != 0 {
+        if declared != len || len > READ_CHUNK || c[9] != 0 {
             bail!("invalid read framing");
         }
-        if (0x400000..0x410000).contains(&off) {
-            self.kernel_bytes += len;
-            return self
-                .kernel
-                .get(off - 0x400000..off - 0x400000 + len)
-                .map(|b| b.to_vec())
-                .context("Kernel read outside fixture");
+        let end = off.checked_add(len).context("read address overflow")?;
+        if end > NORMAL_BASE + self.normal.len() {
+            return Err(ScsiSenseError::new(5, 0x24, 0, "read ceiling").into());
         }
-        if off >= 0x410000 {
-            self.normal_bytes += len;
-            return self
-                .normal
-                .get(off - 0x410000..off - 0x410000 + len)
-                .map(|b| b.to_vec())
-                .context("Normal read outside fixture");
+        // Map probing reads RAM and the complete firmware span, including
+        // chunks crossing component boundaries. Unused simulated RAM is zero.
+        let mut bytes = vec![0; len];
+        for (base, image, count) in [
+            (KERNEL_BASE, self.kernel.as_slice(), &mut self.kernel_bytes),
+            (NORMAL_BASE, self.normal.as_slice(), &mut self.normal_bytes),
+        ] {
+            let start = off.max(base);
+            let stop = end.min(base + image.len());
+            if start < stop {
+                bytes[start - off..stop - off].copy_from_slice(&image[start - base..stop - base]);
+                *count += stop - start;
+            }
         }
-        bail!("read outside proven replay map")
+        Ok(bytes)
     }
     fn command_out(&mut self, c: &[u8], data: &[u8]) -> Result<()> {
         if c != [0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0]
@@ -184,7 +190,7 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
     if r.kernel_bytes < 2 * kd.image.len() || r.normal_bytes < 2 * nd.image.len() {
         bail!("double read missing");
     }
-    if r.knocks != usize::from(locked) {
+    if r.knocks != 1 {
         bail!("wrong service-entry count");
     }
     Ok(json!({"status":"supported_offline","knocks":r.knocks,"hardware":nh.hardware_version}))
@@ -273,5 +279,51 @@ fn model_backup_coverage_when_configured() -> Result<()> {
         serde_json::to_vec_pretty(&json!({"summary":summary,"models":models}))?,
     )?;
     assert!(!rows.is_empty());
+    Ok(())
+}
+
+#[test]
+fn replay_serves_map_probe_and_boundary_reads_with_real_ceiling_sense() -> Result<()> {
+    let mut replay = Replay {
+        inquiry: vec![],
+        hardware: vec![],
+        kernel: vec![0xa5; NORMAL_BASE - KERNEL_BASE],
+        normal: vec![0x5a; READ_CHUNK],
+        locked: true,
+        knocks: 0,
+        kernel_bytes: 0,
+        normal_bytes: 0,
+    };
+    let read = |offset: usize, length: usize| {
+        pioneer_optical::cdb::read_memory(offset as u32, length as u32)
+    };
+    let error = replay.command_in(&read(KERNEL_BASE, 4), 4).unwrap_err();
+    assert_eq!(
+        freemkv_flash::platform::sense_triplet(&error),
+        Some((5, 0x24, 0))
+    );
+    replay.command_out(&pioneer_optical::cdb::knock(), &[])?;
+    assert_eq!(
+        replay.command_in(&read(0, READ_CHUNK), READ_CHUNK)?,
+        vec![0; READ_CHUNK]
+    );
+    assert_eq!(
+        replay.command_in(&read(KERNEL_BASE, READ_CHUNK), READ_CHUNK)?,
+        vec![0xa5; READ_CHUNK]
+    );
+    assert_eq!(
+        replay.command_in(&read(NORMAL_BASE - 2, 4), 4)?,
+        [0xa5, 0xa5, 0x5a, 0x5a]
+    );
+    let ceiling = NORMAL_BASE + READ_CHUNK;
+    assert_eq!(replay.command_in(&read(ceiling - 1, 1), 1)?, [0x5a]);
+    let error = replay.command_in(&read(ceiling, 1), 1).unwrap_err();
+    assert_eq!(
+        freemkv_flash::platform::sense_triplet(&error),
+        Some((5, 0x24, 0))
+    );
+    assert_eq!(replay.kernel_bytes, READ_CHUNK + 2);
+    assert_eq!(replay.normal_bytes, 3);
+    assert_eq!(replay.knocks, 1);
     Ok(())
 }
