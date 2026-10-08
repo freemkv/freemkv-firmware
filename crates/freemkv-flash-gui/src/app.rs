@@ -8,12 +8,15 @@ use freemkv_flash::workflow::{DriveChoice, FlashOptions};
 
 enum Msg {
     Event(freemkv_flash::output::Event),
+    Analysis(crate::analysis_ui::ResultView),
     Done(Result<(), String>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Task {
     Info,
+    Inspect,
+    Compare,
     Backup,
     Dump,
     Flash,
@@ -28,6 +31,7 @@ struct PendingFlash {
 
 /// Platform-independent application state.
 pub struct FlashApp {
+    analysis: crate::analysis_ui::Panel,
     task: Task,
     result_task: Task,
     input: Option<std::path::PathBuf>,
@@ -115,6 +119,7 @@ impl FlashApp {
     fn with_drives(devices: Vec<DriveChoice>) -> Self {
         let device = devices.first().map(|d| d.path.clone()).unwrap_or_default();
         Self {
+            analysis: crate::analysis_ui::Panel::default(),
             task: Task::Info,
             result_task: Task::Info,
             input: None,
@@ -160,7 +165,7 @@ impl FlashApp {
         if self.running {
             return;
         }
-        if device.is_empty() && !matches!(job, Job::InfoFile { .. }) {
+        if device.is_empty() && !matches!(job, Job::InfoFile { .. } | Job::Analysis { .. }) {
             self.log.push("No optical drive selected.".into());
             return;
         }
@@ -188,7 +193,15 @@ impl FlashApp {
                         let _ = line_tx.send(Msg::Event(event));
                         line_ctx.request_repaint();
                     },
-                    || ops::execute(&device, &job),
+                    || {
+                        if let Job::Analysis { request, control } = &job {
+                            let result = crate::analysis_ui::execute(request, control)?;
+                            let _ = tx.send(Msg::Analysis(result));
+                            Ok(())
+                        } else {
+                            ops::execute(&device, &job)
+                        }
+                    },
                 )
             }));
             let result = match result {
@@ -217,6 +230,10 @@ impl FlashApp {
                             self.fields.push((label, value))
                         }
                     },
+                    Ok(Msg::Analysis(result)) => {
+                        self.analysis.result = Some(result);
+                        self.analysis.window_open = true;
+                    }
                     Ok(Msg::Done(result)) => {
                         match &result {
                             Ok(()) => self.status = format!("{} complete", self.action),
@@ -326,6 +343,24 @@ impl FlashApp {
     fn task_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let selected = !self.device.is_empty();
         match self.task {
+            Task::Inspect | Task::Compare => {
+                if let Some(request) =
+                    self.analysis
+                        .inputs(ui, self.task == Task::Compare, &self.device)
+                {
+                    let control = self.analysis.control.clone();
+                    self.start_job(
+                        ctx,
+                        if self.task == Task::Compare {
+                            "Compare"
+                        } else {
+                            "Inspect"
+                        },
+                        String::new(),
+                        Job::Analysis { request, control },
+                    );
+                }
+            }
             Task::Info => {
                 ui.horizontal(|ui| {
                     if primary(ui, "Read drive information", selected).clicked() {
@@ -512,25 +547,29 @@ impl FlashApp {
                     ui.add_space(18.0);
                     ui.horizontal(|ui| {
                         ui.selectable_value(&mut self.task, Task::Info, "Drive info");
+                        ui.selectable_value(&mut self.task, Task::Inspect, "Inspect");
+                        ui.selectable_value(&mut self.task, Task::Compare, "Compare");
                         ui.selectable_value(&mut self.task, Task::Backup, "Backup");
                         ui.selectable_value(&mut self.task, Task::Dump, "Dump");
                         ui.selectable_value(&mut self.task, Task::Flash, "Flash firmware");
                     });
                     ui.separator();
-                    ui.add_space(18.0);
+                    ui.add_space(6.0);
                     egui::ScrollArea::vertical()
                         .id_salt(("task_content", self.task as u8))
                         .max_height(match self.task {
                             Task::Info => 60.0,
+                            Task::Inspect | Task::Compare => 180.0,
                             Task::Backup | Task::Dump => 110.0,
                             Task::Flash => 200.0,
                         })
                         .min_scrolled_height(match self.task {
                             Task::Info => 60.0,
+                            Task::Inspect | Task::Compare => 0.0,
                             Task::Backup | Task::Dump => 110.0,
                             Task::Flash => 200.0,
                         })
-                        .auto_shrink([false, false])
+                        .auto_shrink([false, matches!(self.task, Task::Inspect | Task::Compare)])
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             self.task_content(ui, &ctx);
@@ -549,6 +588,12 @@ impl FlashApp {
                 ui.label(egui::RichText::new(&self.status).strong());
             });
             if self.running {
+                if matches!(self.task, Task::Inspect | Task::Compare)
+                    && ui.button("Cancel analysis").clicked()
+                {
+                    self.analysis.control.cancel();
+                    self.status = "Cancelling after the current operation returns…".into();
+                }
                 if let Some((label, done, total)) = &self.progress {
                     ui.label(label);
                     ui.add(
@@ -566,6 +611,16 @@ impl FlashApp {
                 .max_height(ui.available_height().max(1.0))
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    if matches!(self.task, Task::Inspect | Task::Compare) {
+                        if let Some(inspect) = self.analysis.results(ui) {
+                            self.task = if inspect {
+                                Task::Inspect
+                            } else {
+                                Task::Compare
+                            };
+                            self.result_task = self.task;
+                        }
+                    }
                     if !self.fields.is_empty() {
                         egui::Grid::new("operation_results")
                             .num_columns(2)

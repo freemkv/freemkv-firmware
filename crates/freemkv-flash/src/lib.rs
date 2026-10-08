@@ -27,6 +27,7 @@ pub mod engine;
 pub mod flashset;
 /// Signature-driven drive-family identification for a firmware IMAGE.
 pub mod imageid;
+pub mod inspection;
 pub mod manifest;
 /// Offline reconstruction of Pioneer backup candidates from captured images.
 pub mod pioneer_backup;

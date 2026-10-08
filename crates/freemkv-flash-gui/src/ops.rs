@@ -16,9 +16,21 @@ pub fn enumerate() -> Vec<freemkv_flash::workflow::DriveChoice> {
 #[derive(Clone)]
 pub enum Job {
     Info,
-    InfoFile { input: PathBuf },
-    Backup { out: PathBuf, replace: bool },
-    Dump { out: PathBuf, replace: bool },
+    Analysis {
+        request: crate::analysis_ui::Request,
+        control: freemkv_flash::inspection::Control,
+    },
+    InfoFile {
+        input: PathBuf,
+    },
+    Backup {
+        out: PathBuf,
+        replace: bool,
+    },
+    Dump {
+        out: PathBuf,
+        replace: bool,
+    },
     Flash(freemkv_flash::workflow::FlashOptions),
 }
 
@@ -26,6 +38,15 @@ pub enum Job {
 pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
     use freemkv_flash::workflow;
     match job {
+        Job::Analysis { request, control } => {
+            let report = crate::analysis_ui::execute(request, control)?;
+            let text = match report {
+                crate::analysis_ui::ResultView::Inspect(r) => r.text(),
+                crate::analysis_ui::ResultView::Compare(r) => r.text(),
+            };
+            freemkv_flash::output::field("Analysis", text);
+            Ok(())
+        }
         Job::Info => workflow::info(Some(device)),
         Job::InfoFile { input } => workflow::check_file(input),
         Job::Backup { out, replace } => {

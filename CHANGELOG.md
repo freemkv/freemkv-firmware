@@ -6,6 +6,27 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0]
+
+### Added
+
+- Inspect firmware packages or a captured Pioneer drive in a separate results
+  window, including hardware family, Kernel and Normal metadata, UHD support,
+  expanded regions and recognized text tables. Live captures also report DVD
+  region and remaining change counters when available.
+- Compare two packages, or a package and one drive capture. Results lead with
+  hardware families, followed by per-component and per-region differences after
+  alignment, with percentages and text/JSON export.
+- Generic comparison consumes single-image facts from Pioneer Optical. It
+  excludes established metadata and supported direct-reference relocations;
+  constants, unproven address changes and unknown data remain differences.
+
+### Changed
+
+- Use Pioneer Optical 0.12.0's bounded single-envelope analysis API. Unsupported
+  formats and incomplete analysis have explicit messages; comparison does not
+  enter a firmware update session.
+
 ## [0.10.9]
 
 ### Fixed

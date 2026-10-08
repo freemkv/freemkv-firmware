@@ -278,3 +278,27 @@ fn completion_is_not_misreported_as_worker_disconnection() {
     assert!(!app.running);
     assert_eq!(app.log.last().unwrap(), "✓ done.");
 }
+
+#[test]
+fn inspect_and_compare_inputs_fit_without_a_connected_drive() {
+    let mut app = FlashApp::with_drives(Vec::new());
+    for task in [Task::Inspect, Task::Compare] {
+        app.task = task;
+        let visible = rendered_text(&mut app);
+        let expected = if task == Task::Inspect { 1 } else { 2 };
+        assert_eq!(
+            visible
+                .iter()
+                .filter(|(text, _)| text == "Firmware file…")
+                .count(),
+            expected
+        );
+        assert!(visible
+            .iter()
+            .filter(|(text, _)| text == "Firmware file…")
+            .all(|(_, fits)| *fits));
+        assert!(!visible
+            .iter()
+            .any(|(text, _)| text == "Swap" || text == "Filter table records"));
+    }
+}

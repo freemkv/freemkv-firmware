@@ -4,6 +4,7 @@
 // On Windows, don't spawn a console window alongside the GUI in release builds.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod analysis_ui;
 mod app;
 mod ops;
 
@@ -23,9 +24,13 @@ fn load_icon() -> Option<egui::IconData> {
 
 fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("freemkv Firmware Utility")
-        .with_inner_size([720.0, 610.0])
-        .with_resizable(false);
+        .with_title(format!(
+            "freemkv Firmware Utility {}",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .with_inner_size([900.0, 760.0])
+        .with_min_inner_size([720.0, 610.0])
+        .with_resizable(true);
     if let Some(icon) = load_icon() {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));
     }

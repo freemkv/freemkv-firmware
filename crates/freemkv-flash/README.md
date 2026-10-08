@@ -100,3 +100,18 @@ control key; `--force` cannot bypass that requirement.
 - `info` and `backup` do not write firmware. Pioneer `dump` may enable temporary
   CDB logging in RAM; it does not change persistent logging settings or firmware.
 - There is no safe abort once a write has started.
+
+### Inspect and Compare
+
+The GUI can inspect a Pioneer firmware TAR or capture a supported drive, and
+compare two TARs or one TAR with one drive capture. Hardware family is shown
+first. Kernel and Normal have separate results, with decoded/expanded regions,
+recognized text tables, aligned byte differences and percentages. A different
+family does not block comparison. Other formats report that detailed analysis
+is not yet supported.
+
+Comparison is an offline content analysis, not a flashing compatibility decision
+or proof of identical behavior. Verified direct-reference relocations and known
+metadata are separated from changes; unknown data and unproven address changes
+remain visible. Live inspection uses the existing backup path, saves the capture,
+and can be cancelled between drive commands. Reports export as text or JSON.
