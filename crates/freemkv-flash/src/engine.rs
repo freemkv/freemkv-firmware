@@ -565,25 +565,21 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     }
 }
 
-/// Capture and save the mandatory pre-flash backup, or honor `--skip-backup`.
-/// A failed capture/save aborts before any write. Returns a one-line summary and
-/// the captured backup bytes (the installed firmware), so the bundle executor can
-/// route the flash. The bytes are `None` only when `--skip-backup` was set.
+/// Capture the installed firmware unless force or skip-backup bypasses capture.
+/// Forced flashes do not attempt backup reads, validation, or file creation.
+/// Returns a summary and optional captured bytes for the bundle executor.
 fn capture_preflash_backup(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
     req: &FlashRequest,
 ) -> Result<(String, Option<Vec<u8>>)> {
-    match capture_required_backup(dev, drive, req) {
-        Ok(backup) => Ok(backup),
-        Err(error) if req.force => {
-            let warning = format!("Force flash: continuing without a validated backup: {error:#}");
-            crate::output::field("Backup warning", &warning);
-            eprintln!("{warning}");
-            Ok((warning, None))
-        }
-        Err(error) => Err(error),
+    if req.force {
+        let warning = "SKIPPED (--force): no pre-flash backup attempted; no rollback artifact";
+        crate::output::field("Backup warning", warning);
+        eprintln!("{warning}");
+        return Ok((warning.to_string(), None));
     }
+    capture_required_backup(dev, drive, req)
 }
 
 fn capture_required_backup(
@@ -749,8 +745,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     }
     let (payload, enc) = drive.envelope(dev, &req.input, req.enc_override)?;
 
-    // A firmware write requires a saved, self-checking full rollback artifact.
-    // The mapped read often has holes; that condition fails before flash_open.
+    // Unless explicitly bypassed, save a complete rollback before flash_open.
     let backup_summary = if req.execute {
         if let Err(block) = check_safety(req.acknowledged_risk) {
             bail!("SAFETY GATE: {}", block.0);

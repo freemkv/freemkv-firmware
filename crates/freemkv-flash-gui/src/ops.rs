@@ -32,6 +32,7 @@ pub enum Job {
         replace: bool,
     },
     Flash(freemkv_flash::workflow::FlashOptions),
+    Recovery(freemkv_flash::workflow::RecoveryOptions),
 }
 
 /// Run the same operation as the matching CLI command.
@@ -54,6 +55,11 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
         }
         Job::Dump { out, replace } => {
             workflow::backup_with_replace(Some(device), Some(out.clone()), true, *replace)
+        }
+        Job::Recovery(options) => {
+            let mut options = options.clone();
+            options.device = Some(device.to_string());
+            workflow::recover(options)
         }
         Job::Flash(options) => {
             let mut options = options.clone();

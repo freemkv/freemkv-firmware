@@ -44,6 +44,7 @@ mod pioneer_k;
 mod pioneer_keys;
 /// Embedded OEM normal seed/signature table (pioneer_n.bin), loaded lazily for Pioneer.
 mod pioneer_n;
+mod pioneer_recovery;
 pub mod platform;
 pub mod probe;
 pub mod style;

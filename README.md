@@ -126,9 +126,28 @@ refuses to write unless:
 - a fresh, complete, validated pre-flash backup has been saved,
 - the drive classified as a supported family (Unknown is refused).
 
-`flash --force` consolidates crossflash and degraded-drive recovery. It attempts
-a backup but permits proceeding if backup capture/validation fails. Input
-structure, integrity, and supported write-protocol requirements still apply.
+The **Recovery** tab (CLI: `recover`) takes a Current firmware package and a
+firmware package to flash. Both Pioneer packages must contain Kernel and Normal.
+Recovery derives receiver credentials from the supplied Current firmware, skips
+automatic backups and installed-versus-target compatibility policy, and writes
+both target components. It enters update mode only when the drive is not already
+reporting update mode. No firmware memory reads or readback occur with a supplied
+Current file; identity/status queries remain necessary. The user is responsible
+for supplying the correct receiver reference.
+
+```sh
+freemkv-flash recover /dev/sg0 --current current.tar -i restore.tar --execute --i-understand-risk
+# Explicit alternative to supplying Current (reads firmware, saves no backup):
+freemkv-flash recover /dev/sg0 --read-from-drive -i restore.tar --execute --i-understand-risk
+```
+
+Recovery currently supports Pioneer complete packages. It sends the target as
+supplied, without automatic downgrade patches or extra restoration passes.
+Malformed inputs and rejected writes still stop the operation. Success means the
+drive reports normal mode and readiness (including an empty tray), not a byte-for-byte
+readback verification. Hardware recovery of the reported PR1ML incident remains
+unverified. The older CLI `flash --force` is retained for MTK; use `recover` for
+Pioneer recovery.
 
 ## Two independent plug-in layers
 

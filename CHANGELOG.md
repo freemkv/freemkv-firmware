@@ -6,7 +6,13 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.11.0]
+## [0.10.10] - 2026-10-08
+
+- Add a Pioneer Recovery tab and `recover` command with a required Current firmware reference or explicit Read from drive, plus a Kernel + Normal target package.
+- Recovery skips automatic backups, compatibility policy gates, and firmware readback. Receiver credentials come from supplied firmware code, with no model/key lookup table. Drives already reporting update mode skip update entry.
+- Preserve strict write failures and diagnostics; report success only after normal identity and readiness return. This recovery path has simulated-transport coverage, including PR1ML/207M packages, but has not been verified on the affected hardware.
+- Rename Flash firmware to Flash and align inspection source labels with their buttons.
+
 
 ### Added
 

@@ -1113,22 +1113,41 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
 }
 
 #[test]
-fn forced_flash_attempts_backup_and_continues_only_after_failure() {
+fn forced_flash_skips_backup_without_device_io_or_file_creation() {
     let mut req = bin_req(backup_firmware(), true);
     req.force = true;
-    let mut good = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let (_, bytes) = capture_preflash_backup(&mut good, &Mtk, &req).unwrap();
-    assert!(bytes.is_some());
-    assert!(req.predump_out.as_ref().unwrap().exists());
-    std::fs::remove_file(req.predump_out.as_ref().unwrap()).unwrap();
-    let mut bad = MockScsiDevice::new();
-    let (warning, bytes) = capture_preflash_backup(&mut bad, &Mtk, &req).unwrap();
-    assert!(bytes.is_none());
-    assert!(warning.contains("without a validated backup"));
-    assert!(!bad.reads.is_empty());
-    assert!(bad.writes.is_empty());
-    req.force = false;
-    assert!(capture_preflash_backup(&mut bad, &Mtk, &req).is_err());
+    let path = req.predump_out.clone().unwrap();
+    for mut dev in [
+        MockScsiDevice::new().with_firmware_image(backup_firmware()),
+        MockScsiDevice::new(),
+        MockScsiDevice::pioneer(),
+    ] {
+        let (summary, bytes) = capture_preflash_backup(&mut dev, &Mtk, &req).unwrap();
+        assert!(bytes.is_none());
+        assert!(summary.contains("SKIPPED (--force)"));
+        assert!(dev.reads.is_empty());
+        assert!(dev.writes.is_empty());
+        assert!(!path.exists());
+    }
+    // Force does not require a destination or touch an existing backup.
+    std::fs::write(&path, b"keep this rollback").unwrap();
+    let mut dev = MockScsiDevice::new();
+    capture_preflash_backup(&mut dev, &Mtk, &req).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"keep this rollback");
+    std::fs::remove_file(&path).unwrap();
+    req.predump_out = None;
+    capture_preflash_backup(&mut dev, &Mtk, &req).unwrap();
+    assert!(dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn unforced_flash_still_requires_successful_backup() {
+    let req = bin_req(backup_firmware(), true);
+    let mut dev = MockScsiDevice::new();
+    assert!(capture_preflash_backup(&mut dev, &Mtk, &req).is_err());
+    assert!(!dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
 }
 
 #[test]

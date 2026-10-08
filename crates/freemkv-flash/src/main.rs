@@ -83,6 +83,8 @@ enum Command {
     },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
+    /// Recover using a supplied receiver reference or an explicit drive read.
+    Recover(RecoveryArgs),
 }
 
 /// Flash a firmware image (.bin) or roll back firmware from a backup .tar.
@@ -113,7 +115,7 @@ struct FlashArgs {
     /// Pioneer inputs are dry-run by default; live writes need --execute --i-understand-risk and a pre-flash backup.
     #[arg(short, long)]
     input: PathBuf,
-    /// Where to save the mandatory pre-flash backup.
+    /// Where to save the pre-flash backup (ignored with --force).
     #[arg(short, long)]
     backup: Option<PathBuf>,
     /// Actually issue firmware writes (otherwise preview the plan).
@@ -122,10 +124,32 @@ struct FlashArgs {
     /// Acknowledge that flashing can permanently disable the drive.
     #[arg(long)]
     i_understand_risk: bool,
-    /// Override compatibility/recovery checks and permit flashing without a backup.
+    /// Override compatibility/recovery checks and skip the pre-flash backup attempt.
     /// The input must still have a valid format for the drive's write protocol.
     #[arg(long)]
     force: bool,
+}
+
+#[derive(clap::Args, Debug)]
+struct RecoveryArgs {
+    device: Option<String>,
+    /// Target package containing Kernel and Normal.
+    #[arg(short, long)]
+    input: PathBuf,
+    /// Copy of the firmware currently running on the drive.
+    #[arg(
+        long,
+        required_unless_present = "read_from_drive",
+        conflicts_with = "read_from_drive"
+    )]
+    current: Option<PathBuf>,
+    /// Explicitly read Current firmware instead of supplying a file.
+    #[arg(long)]
+    read_from_drive: bool,
+    #[arg(long)]
+    execute: bool,
+    #[arg(long)]
+    i_understand_risk: bool,
 }
 
 fn main() -> ExitCode {
@@ -140,6 +164,18 @@ fn main() -> ExitCode {
             freemkv_flash::workflow::backup(device.as_deref(), out, true)
         }
         Some(Command::Check { input }) => freemkv_flash::workflow::check_file(&input),
+        Some(Command::Recover(args)) => {
+            freemkv_flash::workflow::recover(freemkv_flash::workflow::RecoveryOptions {
+                device: args.device,
+                input: args.input,
+                current: match args.current {
+                    Some(path) => freemkv_flash::workflow::CurrentFirmware::File(path),
+                    None => freemkv_flash::workflow::CurrentFirmware::ReadFromDrive,
+                },
+                execute: args.execute,
+                acknowledged_risk: args.i_understand_risk,
+            })
+        }
         Some(Command::Flash(args)) => freemkv_flash::workflow::flash(args.into()),
         None => freemkv_flash::workflow::info(cli.device.as_deref()),
     };

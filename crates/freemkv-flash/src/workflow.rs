@@ -63,7 +63,7 @@ pub struct FlashOptions {
     pub execute: bool,
     /// Explicit acknowledgement of the flash risk.
     pub acknowledged_risk: bool,
-    /// Override compatibility and recovery gates; backup failure is nonfatal.
+    /// Override compatibility and recovery gates; skip pre-flash backup entirely.
     pub force: bool,
 }
 
@@ -280,6 +280,9 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let family = classify_gated(dev.as_mut())?;
+    if args.force && family == Family::Pioneer {
+        bail!("Pioneer recovery requires Current firmware: use recover --current <file> (or --read-from-drive)");
+    }
     let handler = drive::for_family(family);
     let input_kind = if family == Family::Pioneer {
         if crate::pioneer_bundle::Bundle::from_tar_bytes(&input).is_ok() {
@@ -299,11 +302,15 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
     };
 
     let drive_model = handler.identity(dev.as_mut()).product;
-    let predump_out = args.backup.clone().or_else(|| {
-        handler
-            .backup_extension()
-            .and_then(|ext| default_backup_path(&args.input, ext))
-    });
+    let predump_out = if args.force {
+        None
+    } else {
+        args.backup.clone().or_else(|| {
+            handler
+                .backup_extension()
+                .and_then(|ext| default_backup_path(&args.input, ext))
+        })
+    };
 
     let req = FlashRequest {
         input,
@@ -375,3 +382,70 @@ fn default_backup_path(input: &Path, extension: &str) -> Option<PathBuf> {
 #[cfg(test)]
 #[path = "workflow_tests.rs"]
 mod tests;
+
+/// Receiver reference used by Recovery. Reading the drive is always explicit.
+#[derive(Clone, Debug)]
+pub enum CurrentFirmware {
+    /// User-supplied copy of the receiver's firmware; no firmware reads.
+    File(PathBuf),
+    /// Read firmware into memory for protocol analysis; do not save a backup.
+    ReadFromDrive,
+}
+
+/// Recovery inputs shared by CLI and GUI.
+#[derive(Clone, Debug)]
+pub struct RecoveryOptions {
+    /// Device selector.
+    pub device: Option<String>,
+    /// Firmware to write, including Kernel and Normal.
+    pub input: PathBuf,
+    /// Where to obtain the current receiver's firmware.
+    pub current: CurrentFirmware,
+    /// Issue writes; otherwise prepare without writing.
+    pub execute: bool,
+    /// Explicit acknowledgement of firmware-update risk.
+    pub acknowledged_risk: bool,
+}
+
+/// Recover without automatic backups or installed-versus-target policy gates.
+pub fn recover(args: RecoveryOptions) -> Result<()> {
+    crate::diagnostics::run("recovery", || {
+        if args.execute && !args.acknowledged_risk {
+            bail!("refusing recovery without acknowledging the risk");
+        }
+        crate::diagnostics::record(format!("recovery options: {args:?}"));
+        let target = read_capped(&args.input)?;
+        let supplied = match &args.current {
+            CurrentFirmware::File(path) => Some(read_capped(path)?),
+            CurrentFirmware::ReadFromDrive => None,
+        };
+        let selector = resolve_device(args.device.as_deref())?;
+        let mut dev = platform::open(&selector, args.execute)?;
+        let current = match supplied {
+            Some(bytes) => bytes,
+            None => {
+                if resolved_family(dev.as_mut())? != Family::Pioneer {
+                    bail!("Recovery currently supports Pioneer Kernel + Normal packages");
+                }
+                let handler = drive::for_family(Family::Pioneer);
+                handler.capture_backup(dev.as_mut()).context(
+                    "cannot read Current firmware; supply a Current firmware file instead",
+                )?
+            }
+        };
+        let plan = crate::pioneer_recovery::Plan::prepare(&current, &target)?;
+        crate::output::field(
+            "Recovery",
+            "No automatic backup; compatibility policy bypassed",
+        );
+        if args.execute {
+            plan.execute(dev.as_mut())
+        } else {
+            crate::output::field(
+                "Recovery",
+                "Prepared Kernel + Normal; dry run, no firmware written",
+            );
+            Ok(())
+        }
+    })
+}

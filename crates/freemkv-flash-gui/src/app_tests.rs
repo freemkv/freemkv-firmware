@@ -103,9 +103,16 @@ fn backup_and_flash_controls_are_visible_and_do_not_show_info_results() {
         (Task::Backup, vec!["Save backup…"]),
         (Task::Dump, vec!["Save raw dump…"]),
         (
-            Task::Flash,
-            vec!["Change file…", "Flash now", "Check file", "Force flash"],
+            Task::Recovery,
+            vec![
+                "Current firmware",
+                "Read from drive",
+                "Choose Current…",
+                "Firmware to flash (Kernel + Normal)",
+                "Recover",
+            ],
         ),
+        (Task::Flash, vec!["Change file…", "Flash now", "Check file"]),
     ] {
         app.task = task;
         let text = rendered_text(&mut app);
@@ -138,7 +145,13 @@ fn long_results_fit_the_original_window_without_resizing() {
         })
         .collect();
     let ctx = egui::Context::default();
-    for task in [Task::Info, Task::Backup, Task::Dump, Task::Flash] {
+    for task in [
+        Task::Info,
+        Task::Backup,
+        Task::Dump,
+        Task::Flash,
+        Task::Recovery,
+    ] {
         app.task = task;
         app.result_task = task;
         for _ in 0..3 {

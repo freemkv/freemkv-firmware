@@ -6,6 +6,8 @@ use crate::ops::{self, Job};
 use eframe::egui;
 use freemkv_flash::workflow::{DriveChoice, FlashOptions};
 
+const FORCE_WARNING: &str = "Recovery mode: no backups, compatibility checks overridden. Attempts to write the selected firmware to the drive. An incompatible image can leave the drive unusable. Required file and drive-protocol checks still apply.";
+
 enum Msg {
     Event(freemkv_flash::output::Event),
     Analysis(crate::analysis_ui::ResultView),
@@ -20,6 +22,7 @@ enum Task {
     Backup,
     Dump,
     Flash,
+    Recovery,
 }
 
 #[derive(Clone)]
@@ -27,6 +30,7 @@ struct PendingFlash {
     device: String,
     label: String,
     options: FlashOptions,
+    current: Option<freemkv_flash::workflow::CurrentFirmware>,
 }
 
 /// Platform-independent application state.
@@ -35,6 +39,9 @@ pub struct FlashApp {
     task: Task,
     result_task: Task,
     input: Option<std::path::PathBuf>,
+    recovery_input: Option<std::path::PathBuf>,
+    recovery_current: Option<std::path::PathBuf>,
+    recovery_read: bool,
     status: String,
     failure: Option<String>,
     action: String,
@@ -123,6 +130,9 @@ impl FlashApp {
             task: Task::Info,
             result_task: Task::Info,
             input: None,
+            recovery_input: None,
+            recovery_current: None,
+            recovery_read: false,
             status: "Ready".into(),
             failure: None,
             action: String::new(),
@@ -272,6 +282,7 @@ impl FlashApp {
             return;
         };
         let mut options = self.options.clone();
+        options.force = false;
         options.input = input;
         options.execute = execute;
         options.acknowledged_risk = false;
@@ -281,6 +292,7 @@ impl FlashApp {
                 device: self.device.clone(),
                 label: self.device_label(),
                 options,
+                current: None,
             });
         } else {
             self.start_job(
@@ -298,25 +310,26 @@ impl FlashApp {
         };
         let mut open = true;
         let mut decision = None;
-        egui::Window::new("Confirm flash").default_width(480.0).collapsible(false).resizable(false)
+        egui::Window::new(if pending.current.is_some() { "Confirm recovery" } else { "Confirm flash" }).default_width(480.0).collapsible(false).resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0)).open(&mut open)
             .show(ctx, |ui| {
                 ui.label(format!("Drive: {}", pending.label));
                 ui.label(format!("Image: {}", pending.options.input.display()));
                 ui.colored_label(egui::Color32::from_rgb(220, 80, 80), "Flashing can permanently disable the drive. Keep it connected and powered until completion.");
-                if pending.options.force {
-                    ui.colored_label(egui::Color32::YELLOW, "A backup will be attempted, but this update can proceed without one.");
+                if let Some(current) = &pending.current {
+                    ui.label(match current {
+                        freemkv_flash::workflow::CurrentFirmware::File(path) => format!("Current: {}", path.display()),
+                        freemkv_flash::workflow::CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
+                    });
+                    ui.colored_label(egui::Color32::from_rgb(160, 70, 0), FORCE_WARNING);
                 } else {
                     ui.label("A validated pre-flash backup will be saved before writing.");
-                }
-                if pending.options.force {
-                    ui.colored_label(egui::Color32::from_rgb(160, 70, 0), "Force: compatibility checks are overridden; backup failure will not stop the update.");
                 }
                 ui.add_space(12.0);
                 ui.checkbox(&mut self.risk_ack, "I understand and want to update this drive");
                 ui.horizontal(|ui| {
                     if ui.button("Cancel").clicked() { decision = Some(false); }
-                    if ui.add_enabled(self.risk_ack, egui::Button::new("Flash now")).clicked() { decision = Some(true); }
+                    if ui.add_enabled(self.risk_ack, egui::Button::new(if pending.current.is_some() { "Recover" } else { "Flash now" })).clicked() { decision = Some(true); }
                 });
             });
         match decision {
@@ -324,7 +337,22 @@ impl FlashApp {
                 self.pending_flash = None;
                 let mut options = pending.options;
                 options.acknowledged_risk = self.risk_ack;
-                self.start_job(ctx, "Firmware update", pending.device, Job::Flash(options));
+                if let Some(current) = pending.current {
+                    self.start_job(
+                        ctx,
+                        "Recovery",
+                        pending.device,
+                        Job::Recovery(freemkv_flash::workflow::RecoveryOptions {
+                            device: None,
+                            input: options.input,
+                            current,
+                            execute: true,
+                            acknowledged_risk: self.risk_ack,
+                        }),
+                    );
+                } else {
+                    self.start_job(ctx, "Firmware update", pending.device, Job::Flash(options));
+                }
             }
             Some(false) => self.pending_flash = None,
             None if !open => self.pending_flash = None,
@@ -424,6 +452,48 @@ impl FlashApp {
                     }
                 }
             }
+            Task::Recovery => {
+                ui.label("Current firmware");
+                ui.checkbox(&mut self.recovery_read, "Read from drive");
+                ui.add_enabled_ui(!self.recovery_read, |ui| {
+                    firmware_picker(ui, &mut self.recovery_current, "Choose Current…");
+                });
+                if self.recovery_read {
+                    ui.small(
+                        "Reads installed firmware for protocol analysis. No backup file is saved.",
+                    );
+                }
+                ui.add_space(8.0);
+                ui.label("Firmware to flash (Kernel + Normal)");
+                firmware_picker(ui, &mut self.recovery_input, "Choose firmware…");
+                ui.add_space(8.0);
+                ui.colored_label(egui::Color32::from_rgb(160, 70, 0), FORCE_WARNING);
+                ui.add_space(8.0);
+                let ready = selected
+                    && self.recovery_input.is_some()
+                    && (self.recovery_read || self.recovery_current.is_some());
+                if primary(ui, "Recover", ready).clicked() {
+                    let current = if self.recovery_read {
+                        freemkv_flash::workflow::CurrentFirmware::ReadFromDrive
+                    } else {
+                        freemkv_flash::workflow::CurrentFirmware::File(
+                            self.recovery_current.clone().unwrap(),
+                        )
+                    };
+                    self.risk_ack = false;
+                    self.pending_flash = Some(PendingFlash {
+                        device: self.device.clone(),
+                        label: self.device_label(),
+                        options: FlashOptions {
+                            input: self.recovery_input.clone().unwrap(),
+                            force: true,
+                            execute: true,
+                            ..Default::default()
+                        },
+                        current: Some(current),
+                    });
+                }
+            }
             Task::Flash => {
                 let mut choose_file = false;
                 if let Some(input) = self.input.clone() {
@@ -453,11 +523,6 @@ impl FlashApp {
                             );
                         }
                     });
-                    ui.add_space(8.0);
-                    ui.checkbox(&mut self.options.force, "Force flash")
-                        .on_hover_text(
-                        "Override compatibility checks and proceed if a backup cannot be saved.",
-                    );
                 } else {
                     choose_file = primary(ui, "Choose firmware…", true).clicked();
                 }
@@ -472,6 +537,23 @@ impl FlashApp {
             }
         }
     }
+}
+
+fn firmware_picker(ui: &mut egui::Ui, path: &mut Option<std::path::PathBuf>, label: &str) {
+    ui.horizontal(|ui| {
+        if ui.button(label).clicked() {
+            if let Some(chosen) = rfd::FileDialog::new()
+                .add_filter("Firmware", &["tar", "enc", "bin"])
+                .pick_file()
+            {
+                *path = Some(chosen);
+            }
+        }
+        if let Some(path) = path {
+            ui.label(path.file_name().unwrap_or_default().to_string_lossy())
+                .on_hover_text(path.display().to_string());
+        }
+    });
 }
 
 fn primary(ui: &mut egui::Ui, text: &str, enabled: bool) -> egui::Response {
@@ -551,7 +633,8 @@ impl FlashApp {
                         ui.selectable_value(&mut self.task, Task::Compare, "Compare");
                         ui.selectable_value(&mut self.task, Task::Backup, "Backup");
                         ui.selectable_value(&mut self.task, Task::Dump, "Dump");
-                        ui.selectable_value(&mut self.task, Task::Flash, "Flash firmware");
+                        ui.selectable_value(&mut self.task, Task::Flash, "Flash");
+                        ui.selectable_value(&mut self.task, Task::Recovery, "Recovery");
                     });
                     ui.separator();
                     ui.add_space(6.0);
@@ -562,12 +645,14 @@ impl FlashApp {
                             Task::Inspect | Task::Compare => 180.0,
                             Task::Backup | Task::Dump => 110.0,
                             Task::Flash => 200.0,
+                            Task::Recovery => 280.0,
                         })
                         .min_scrolled_height(match self.task {
                             Task::Info => 60.0,
                             Task::Inspect | Task::Compare => 0.0,
                             Task::Backup | Task::Dump => 110.0,
                             Task::Flash => 200.0,
+                            Task::Recovery => 280.0,
                         })
                         .auto_shrink([false, matches!(self.task, Task::Inspect | Task::Compare)])
                         .show(ui, |ui| {

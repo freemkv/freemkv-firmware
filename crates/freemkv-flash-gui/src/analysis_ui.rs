@@ -32,6 +32,9 @@ impl Panel {
         let mut changed = false;
         for i in 0..if compare { 2 } else { 1 } {
             ui.horizontal(|ui| {
+                let button_height = ui.text_style_height(&egui::TextStyle::Button)
+                    + 2.0 * ui.spacing().button_padding.y;
+                ui.set_min_height(button_height.max(ui.spacing().interact_size.y));
                 ui.label(if compare {
                     if i == 0 {
                         "Source A"
