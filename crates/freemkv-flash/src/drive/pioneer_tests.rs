@@ -1054,13 +1054,14 @@ fn installed_patched_backup_is_not_a_newer_receiver_when_configured() {
 #[test]
 fn receiver_control_requires_an_explicit_receiver_key() {
     let descriptor = b"PIONEER  BDR-211";
-    let control = receiver_control(descriptor, [0x42, 0x66, 0x23, 0xfd]).unwrap();
+    let control =
+        receiver_control(descriptor, ReceiverControl::Key([0x42, 0x66, 0x23, 0xfd])).unwrap();
     assert_eq!(&control[..16], descriptor);
     assert_eq!(&control[16..20], &[0x42, 0x66, 0x23, 0xfd]);
     assert!(control[20..].iter().all(|&b| b == 0));
-    assert!(receiver_control(&descriptor[..15], [0; 4]).is_err());
-    assert!(receiver_control(&[0; 16], [0; 4]).is_err());
-    assert!(receiver_control(&[0xff; 16], [0; 4]).is_err());
+    assert!(receiver_control(&descriptor[..15], ReceiverControl::DescriptorOnly).is_err());
+    assert!(receiver_control(&[0; 16], ReceiverControl::DescriptorOnly).is_err());
+    assert!(receiver_control(&[0xff; 16], ReceiverControl::DescriptorOnly).is_err());
 }
 
 #[test]
@@ -1091,17 +1092,20 @@ fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
 }
 
 #[test]
-fn receiver_word_extracts_accepted_immediate_and_rejects_ambiguity() {
+fn receiver_policy_extracts_accepted_immediate_and_rejects_ambiguity() {
     let bytes = [
         0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 0x16, 0x79, 1, 0, 0x10, 1, 0, 0x6f, 0x70, 0,
         0x74, 0x5d, 0x40, 0x7a, 0x20, 0x42, 0x66, 0x23, 0xfd, 0x58, 0x60, 5, 0xba,
     ];
-    assert_eq!(receiver_word(&bytes), Some([0x42, 0x66, 0x23, 0xfd]));
-    assert_eq!(receiver_word(&bytes[..29]), None);
-    assert_eq!(receiver_word(&[bytes, bytes].concat()), None);
+    assert_eq!(
+        receiver_policy(&bytes),
+        Some(ReceiverControl::Key([0x42, 0x66, 0x23, 0xfd]))
+    );
+    assert_eq!(receiver_policy(&bytes[..29]), None);
+    assert_eq!(receiver_policy(&[bytes, bytes].concat()), None);
     let mut wrong_branch = bytes;
     wrong_branch[27] = 0x70;
-    assert_eq!(receiver_word(&wrong_branch), None);
+    assert_eq!(receiver_policy(&wrong_branch), None);
 }
 
 #[test]
@@ -1122,6 +1126,34 @@ fn live_control_refuses_a_missing_backup_before_update_entry() {
             .count(),
         2
     );
+    assert!(dev
+        .writes
+        .iter()
+        .all(|(cdb, _)| *cdb != pioneer_optical::cdb::enter_update()));
+}
+
+#[test]
+fn descriptor_only_control_keeps_unused_bytes_zero() {
+    let descriptor = b"PIONEER TEST-NEW";
+    let control = receiver_control(descriptor, ReceiverControl::DescriptorOnly).unwrap();
+    assert_eq!(&control[..descriptor.len()], descriptor);
+    assert!(control[descriptor.len()..].iter().all(|&byte| byte == 0));
+}
+
+#[test]
+fn live_control_preserves_typed_decode_cause_without_entering_update() {
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
+        b"PIONEER TEST-NEW".to_vec(),
+    );
+    let backup = header_only_normal("SAT TEST", "26/10/07");
+    let error = live_control(&mut dev, Some(&backup)).unwrap_err();
+    assert!(error
+        .downcast_ref::<pioneer_optical::envelope::DecodeError>()
+        .is_some());
+    let message = format!("{error:#}");
+    assert!(message.contains("installed Normal cannot be decoded for receiver control"));
+    assert!(message.contains("unsupported firmware envelope layout"));
     assert!(dev
         .writes
         .iter()
@@ -1170,7 +1202,7 @@ fn generic_receiver_matrix_when_configured() {
             pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &decoded_kernel)
                 .unwrap();
         assert!(
-            receiver_word(&decoded_normal.image).is_some(),
+            receiver_policy(&decoded_normal.image).is_some(),
             "{} receiver word",
             path.display()
         );
@@ -1306,7 +1338,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
         assert_eq!(
             &control[16..20],
             &[1, 2, 3, 4],
-            "captured receiver key must precede universal fallback"
+            "captured receiver key must be used without a fallback"
         );
         let mut damaged = pair.normal;
         let last = damaged.len() - 4;

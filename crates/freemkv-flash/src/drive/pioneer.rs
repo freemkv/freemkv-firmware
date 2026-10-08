@@ -5,7 +5,7 @@
 //! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
-use pioneer_optical::image::receiver_control_key as receiver_word;
+use pioneer_optical::image::{receiver_control as receiver_policy, ReceiverControl};
 use pioneer_optical::Role;
 use std::borrow::Cow;
 
@@ -57,7 +57,7 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
 }
 
 /// Construct entry/finish control from the resident Normal descriptor.
-fn receiver_control(descriptor: &[u8], key: [u8; 4]) -> Result<[u8; CONTROL_LEN]> {
+fn receiver_control(descriptor: &[u8], policy: ReceiverControl) -> Result<[u8; CONTROL_LEN]> {
     if descriptor.len() != 16
         || !descriptor.starts_with(b"PIONEER ")
         || !descriptor
@@ -68,7 +68,11 @@ fn receiver_control(descriptor: &[u8], key: [u8; 4]) -> Result<[u8; CONTROL_LEN]
     }
     let mut control = [0; CONTROL_LEN];
     control[..16].copy_from_slice(descriptor);
-    control[16..20].copy_from_slice(&key);
+    match policy {
+        ReceiverControl::DescriptorOnly => {}
+        ReceiverControl::Key(key) => control[16..20].copy_from_slice(&key),
+        _ => bail!("unsupported receiver control requirement"),
+    }
     Ok(control)
 }
 
@@ -85,19 +89,19 @@ fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; 
     )?;
     let body = match kernel {
         Some(kernel) => {
-            let kernel = pioneer_optical::envelope::decode_envelope(&kernel)
+            let kernel = pioneer_optical::envelope::Envelope::load(&kernel)
                 .context("installed Kernel cannot be decoded for receiver control")?;
-            pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &kernel)
+            pioneer_optical::envelope::Envelope::load_with_kernel(&normal, &kernel)
         }
-        None => pioneer_optical::envelope::decode_envelope(&normal),
+        None => pioneer_optical::envelope::Envelope::load(&normal),
     }
     .context("installed Normal cannot be decoded for receiver control")?;
     if body.image.get(..16) != Some(descriptor.as_slice()) {
         bail!("installed backup does not match the live receiver descriptor");
     }
-    let word = receiver_word(&body.image)
-        .context("receiver control key is missing or ambiguous; refusing update entry")?;
-    let control = receiver_control(&descriptor, word)?;
+    let policy = receiver_policy(&body.image)
+        .context("receiver entry control is unsupported or ambiguous; refusing update entry")?;
+    let control = receiver_control(&descriptor, policy)?;
     Ok(control)
 }
 
@@ -491,7 +495,7 @@ fn restore_oem_kernel(
     recover: bool,
     force: bool,
 ) -> Result<()> {
-    let decoded = pioneer_optical::envelope::decode_envelope(pristine_kernel)
+    let decoded = pioneer_optical::envelope::Envelope::load(pristine_kernel)
         .context("cannot decode OEM Kernel for restore verification")?;
     let (patched, _) = pioneer_optical::envelope::downgrade_patch(&decoded.image)
         .map_err(|e| anyhow!("cannot derive first-pass Kernel for verification: {e:?}"))?;
@@ -758,13 +762,13 @@ impl DriveFamily for Pioneer {
                     bail!("cannot prove the target receiver accepts the pristine Kernel restore; no update entry attempted");
                 }
                 let target_kernel = pioneer_optical::envelope::Envelope::load(pristine)?;
-                let target_normal = pioneer_optical::envelope::decode_envelope_with_kernel(
+                let target_normal = pioneer_optical::envelope::Envelope::load_with_kernel(
                     normal_to_write,
                     &target_kernel,
                 )
                 .context("cannot decode the target receiver for restore preflight")?;
-                receiver_word(&target_normal.image)
-                    .context("target receiver control key is unavailable for the OEM restore; no update entry attempted")?;
+                receiver_policy(&target_normal.image)
+                    .context("target receiver entry control is unsupported or ambiguous for the OEM restore; no update entry attempted")?;
             }
             if will_patch && !plan_is_downgrade(&plan) {
                 eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
