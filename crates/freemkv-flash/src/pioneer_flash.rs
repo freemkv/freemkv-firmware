@@ -1,47 +1,22 @@
-//! Live Pioneer OEM flash executor.
+//! App adapter for the library's OEM update sequence.
 //!
-//! Issues the OEM `WRITE BUFFER` command sequence over the wire imperatively,
-//! with the documented result checks, post-entry identity gate, settle delays,
-//! and completion poll (see the Pioneer firmware protocol notes). It issues real writes and must only be reached behind the engine's
-//! `--execute`/`--i-understand-risk` safety gate, an empty/closed tray guard,
-//! and a captured pre-flash backup.
-//!
-//! No raw CDB is built here: every Pioneer vendor command goes through
-//! `pioneer_optical::drive` over the single adapter in
-//! [`crate::drive::pioneer_transport`].
-//!
-//! The caller ([`crate::drive::pioneer`]) builds the 256-byte control buffer
-//! (descriptor + key resolved from the live receiver) and selects the components
-//! from the flash input — a Kernel (`07/FE`), a Normal (`07/F0`), or both. This
-//! executor is straight-line: entry, the chunks, finish. There is no
-//! model-specific schedule; validated layout selects the transfer framing.
-
-use std::time::{Duration, Instant};
-
-use anyhow::{bail, Context, Result};
-
-use pioneer_optical::drive::enter_update;
-use pioneer_optical::{DriveClass, Identity, Role};
+//! Owns tray policy, user progress and error guidance. The library owns command
+//! ordering, revision gating, transfer chunks, settle timing and readiness.
 
 #[cfg(test)]
 use crate::drive::pioneer::FLASH_CHUNK;
-use crate::drive::pioneer::{transfer, TransferStage, CONTROL_LEN};
+use crate::drive::pioneer::{transfer, CONTROL_LEN};
 use crate::drive::pioneer_transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use crate::platform::ScsiDevice;
 use crate::style;
+use anyhow::{anyhow, bail, Context, Result};
+use pioneer_optical::drive::{
+    execute_update, UpdateError, UpdateOptions, UpdateRuntime, UpdateTransfer,
+};
+use pioneer_optical::{DriveClass, Identity, Role};
+use std::time::{Duration, Instant};
 
-/// A failed transfer or finish past the entry gate leaves the drive mid-flash.
-const PARTIAL_HINT: &str = " — the drive may now hold a partial firmware; re-flash the captured \
-                            pre-flash backup to restore it";
-
-/// Documented post-entry settle before the identity check.
-const ENTRY_SETTLE: Duration = Duration::from_secs(1);
-/// Documented post-finish settle before status polling.
-const FINISH_SETTLE: Duration = Duration::from_secs(2);
-/// Upper bound on the completion poll after `05/FF` finish.
-const POLL_TIMEOUT: Duration = Duration::from_secs(90);
-/// Delay between completion-poll attempts.
-const POLL_INTERVAL: Duration = Duration::from_millis(500);
+const PARTIAL_HINT: &str = " — the drive may now hold a partial firmware; re-flash the captured pre-flash backup to restore it";
 
 /// The drive dialect an update session must speak. Taken from the drive's own
 /// identity (`drive::identify` -> `Identity::class`) when that identity is
@@ -82,20 +57,8 @@ fn resolve_class(
     }
 }
 
-/// Execute the OEM update against the drive with the pre-built 256-byte
-/// `control` buffer (descriptor + key resolved from the live receiver).
-///
-/// Every Pioneer vendor command is issued by `pioneer_optical::drive`: identify
-/// -> [`enter_update`] (OEM update entry; the crate adds the DVR handshake
-/// first when the class needs it) -> post-entry settle + identity gate ->
-/// Kernel slices (if any) -> Normal chunks -> `finish` ->
-/// finish settle + ready poll. Every write goes through the strict
-/// (abort-on-any-nonzero, no-retry) transport, exactly as the OEM host loop
-/// does. The caller resolves the control key and components and guarantees
-/// gating, the tray guard, and a pre-flash backup.
-///
-/// A failure stops further commands. The drive may already have modified
-/// firmware, so errors must propagate even when finish was not sent.
+/// Execute one prepared update pass after the final tray guard.
+/// The caller owns captured receiver evidence and any required restoration.
 pub(crate) fn execute_flash(
     dev: &mut dyn ScsiDevice,
     control: &[u8; CONTROL_LEN],
@@ -105,24 +68,11 @@ pub(crate) fn execute_flash(
     force: bool,
 ) -> Result<()> {
     let kernel_transfer = kernel.map(transfer::select_kernel).transpose()?;
-    let steps = transfer::data_out(control, normal, kernel_transfer)?;
-    let kernel_total = steps
-        .iter()
-        .filter(|s| matches!(s.stage, TransferStage::KernelFe))
-        .map(|s| s.data.len())
-        .sum();
-
-    style::trace(&format!(
-        "execute_flash: kernel={} bytes, normal={} bytes",
-        kernel.map_or(0, <[u8]>::len),
-        normal.len()
-    ));
-
-    // Two independent progress bars: the Kernel phase and the Normal phase each
-    // report against their own byte total.
-    let mut kernel_progress = style::Progress::new("flashing kernel", kernel_total);
-    let mut normal_progress = style::Progress::new("flashing normal", normal.len());
-
+    let kernel = match kernel_transfer.as_ref() {
+        Some(transfer::KernelTransfer::LinearFe(bytes)) => Some(*bytes),
+        Some(transfer::KernelTransfer::PreparedFe(bytes)) => Some(bytes.as_slice()),
+        None => None,
+    };
     crate::engine::guard_no_medium(dev, true, force || recover)?;
     let shared = SharedDevice::new(dev);
     let class = resolve_class(
@@ -131,104 +81,66 @@ pub(crate) fn execute_flash(
         recover,
     )?;
     let mut port = ScsiTransport::flash(&shared);
+    let mut runtime = Runtime {
+        start: Instant::now(),
+        kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
+        normal: style::Progress::new("flashing normal", normal.len()),
+    };
+    execute_update(
+        &mut port,
+        &mut runtime,
+        control,
+        UpdateTransfer { kernel, normal },
+        UpdateOptions { class, recover },
+    )
+    .map_err(update_error)
+}
 
-    // OEM update-mode entry, then settle and identity gate. In recover mode the
-    // drive is degraded and may not report a trustworthy identity, so the
-    // post-entry gate is skipped — we force the write. A failed entry is before
-    // the update state, so it carries no partial-firmware hint.
-    let mut session = enter_update(&mut port, class, control)
-        .map_err(flash_err)
-        .context("OEM Entry write failed")?;
-    std::thread::sleep(ENTRY_SETTLE);
-    if recover {
+struct Runtime {
+    start: Instant,
+    kernel: style::Progress,
+    normal: style::Progress,
+}
+impl UpdateRuntime for Runtime {
+    fn elapsed(&self) -> Duration {
+        self.start.elapsed()
+    }
+    fn sleep(&mut self, duration: Duration) {
+        std::thread::sleep(duration);
+    }
+    fn progress(&mut self, role: Role, written: usize, _: usize) {
+        match role {
+            Role::Kernel => self.kernel.set(written),
+            Role::Normal => self.normal.set(written),
+        }
+    }
+    fn entered(&mut self, recover: bool) {
         println!(
             "{}",
-            style::dim("  update mode entered (recover: identity gate skipped)")
-        );
-    } else {
-        entry_identity_gate(&shared)?;
-        println!("{}", style::dim("  update mode entered"));
-    }
-
-    let mut kernel_written = 0;
-    let mut normal_written = 0;
-    let mut kernel_pending_settle = false;
-    for step in &steps {
-        let role = match step.stage {
-            TransferStage::Entry | TransferStage::Finish => continue,
-            TransferStage::KernelFe => Role::Kernel,
-            TransferStage::Normal => Role::Normal,
-        };
-        if step.stage == TransferStage::Normal && kernel_pending_settle {
-            std::thread::sleep(Duration::from_secs(2));
-            kernel_pending_settle = false;
-        }
-        session
-            .write(role, step.offset, &step.data)
-            .map_err(flash_err)
-            .with_context(|| {
-                format!(
-                    "OEM {:?} write failed at offset {:#x}, length {}{PARTIAL_HINT}",
-                    step.stage,
-                    step.offset,
-                    step.data.len()
-                )
-            })?;
-        if step.stage == TransferStage::Normal {
-            normal_written += step.data.len();
-            normal_progress.set(normal_written);
-        } else {
-            kernel_written += step.data.len();
-            kernel_progress.set(kernel_written);
-            kernel_pending_settle = true;
-        }
-    }
-
-    // Commit with the control buffer, then settle and poll for ready.
-    session
-        .finish()
-        .map_err(flash_err)
-        .with_context(|| format!("OEM Finish write failed{PARTIAL_HINT}"))?;
-    std::thread::sleep(FINISH_SETTLE);
-    poll_until_ready(&shared)?;
-    Ok(())
-}
-
-/// After the update entry the OEM host waits ~1 s, issues INQUIRY, and requires
-/// ASCII `000` at response bytes `[0x20..0x23]` before transferring. Mirror that
-/// gate: a drive not in the expected update state aborts before any transfer.
-fn entry_identity_gate(shared: &SharedDevice<'_>) -> Result<()> {
-    let inquiry = shared.inquiry(0x60).context("post-entry INQUIRY")?;
-    if inquiry.get(0x20..0x23) != Some(b"000".as_slice()) {
-        bail!(
-            "drive did not report the expected post-entry update state \
-             (INQUIRY[0x20..0x23] != \"000\", returned {} bytes, revision bytes {:02x?}); aborting before any transfer",
-             inquiry.len(), inquiry.get(0x20..0x24).unwrap_or_default()
+            style::dim(if recover {
+                "  update mode entered (recover: identity gate skipped)"
+            } else {
+                "  update mode entered"
+            })
         );
     }
-    Ok(())
+    fn poll_failed(&mut self, elapsed: Duration, error: &dyn std::fmt::Debug) {
+        crate::diagnostics::record(format!(
+            "Pioneer post-flash readiness: elapsed_ms={} error={error:?}",
+            elapsed.as_millis()
+        ));
+    }
 }
 
-/// After the commit the OEM host waits ~2 s, then polls event status and
-/// TEST UNIT READY using status/sense to continue or stop. Poll until the drive
-/// returns ready or the timeout elapses.
-fn poll_until_ready(shared: &SharedDevice<'_>) -> Result<()> {
-    let start = Instant::now();
-    loop {
-        match shared.poll_ready_once() {
-            Ok(()) => return Ok(()),
-            Err(error) => {
-                crate::diagnostics::record(format!(
-                    "Pioneer post-flash readiness: elapsed_ms={} error={error:#}",
-                    start.elapsed().as_millis()
-                ));
-                if start.elapsed() >= POLL_TIMEOUT {
-                    return Err(error)
-                        .context("drive did not return ready within the post-flash poll timeout");
-                }
-                std::thread::sleep(POLL_INTERVAL);
-            }
-        }
+fn update_error(error: UpdateError<anyhow::Error>) -> anyhow::Error {
+    match error {
+        UpdateError::Entry(source) => flash_err(source).context("OEM Entry write failed"),
+        UpdateError::EntryStateRead(source) => flash_err(source).context("post-entry INQUIRY"),
+        UpdateError::EntryState { revision } => anyhow!("drive did not report the expected post-entry update state (revision bytes {revision:02x?}); aborting before any transfer"),
+        UpdateError::Transfer { role, offset, length, source } => flash_err(source).context(format!("OEM {role:?} write failed at offset {offset:#x}, length {length}{PARTIAL_HINT}")),
+        UpdateError::Finish(source) => flash_err(source).context(format!("OEM Finish write failed{PARTIAL_HINT}")),
+        UpdateError::ReadyTimeout(source) => flash_err(source).context("drive did not return ready within the post-flash poll timeout"),
+        other => anyhow!("{other}"),
     }
 }
 

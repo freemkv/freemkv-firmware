@@ -37,22 +37,6 @@ impl<'a> SharedDevice<'a> {
     pub fn with<R>(&self, f: impl FnOnce(&mut dyn ScsiDevice) -> R) -> R {
         f(&mut **self.0.borrow_mut())
     }
-
-    /// Standard INQUIRY (not a Pioneer vendor command): `alloc` bytes.
-    pub fn inquiry(&self, alloc: u8) -> Result<Vec<u8>> {
-        self.with(|d| d.command_in(&pioneer_optical::cdb::inquiry(alloc), alloc as usize))
-    }
-
-    /// One post-flash readiness poll step: a supplementary GET EVENT STATUS drain
-    /// (result ignored, as the OEM host does) then TEST UNIT READY. `Ok` means
-    /// the drive is ready.
-    pub fn poll_ready_once(&self) -> Result<()> {
-        self.with(|d| {
-            let _ = d.command_in(&pioneer_optical::cdb::get_event_status(), 0x08);
-            d.command_in(&pioneer_optical::cdb::test_unit_ready(), 0)
-                .map(|_| ())
-        })
-    }
 }
 
 /// Adapter implementing [`Transport`] over a [`SharedDevice`].
