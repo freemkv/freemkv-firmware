@@ -74,10 +74,7 @@ impl ScsiDevice for Replay {
         Ok(bytes)
     }
     fn command_out(&mut self, c: &[u8], data: &[u8]) -> Result<()> {
-        if c != [0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0]
-            || !data.is_empty()
-            || self.knocks != 0
-        {
+        if c != [0x3b, 2, 0x41, 0xa5, 0xaa, 0xaa, 0, 0, 0, 0] || !data.is_empty() {
             bail!("unexpected write {c:02x?}");
         }
         self.knocks += 1;
@@ -190,8 +187,8 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
     if r.kernel_bytes < 2 * kd.image.len() || r.normal_bytes < 2 * nd.image.len() {
         bail!("double read missing");
     }
-    if r.knocks != 1 {
-        bail!("wrong service-entry count");
+    if r.knocks < 2 {
+        bail!("repeated memory-read unlocks were not exercised");
     }
     Ok(json!({"status":"supported_offline","knocks":r.knocks,"hardware":nh.hardware_version}))
 }
@@ -325,5 +322,16 @@ fn replay_serves_map_probe_and_boundary_reads_with_real_ceiling_sense() -> Resul
     assert_eq!(replay.kernel_bytes, READ_CHUNK + 2);
     assert_eq!(replay.normal_bytes, 3);
     assert_eq!(replay.knocks, 1);
+    for _ in 0..2 {
+        assert_eq!(
+            freemkv_flash::drive::pioneer_transport::read_memory_exact(
+                &mut replay,
+                KERNEL_BASE as u32,
+                4
+            )?,
+            [0xa5; 4]
+        );
+    }
+    assert_eq!(replay.knocks, 3);
     Ok(())
 }
