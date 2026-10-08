@@ -1052,19 +1052,6 @@ fn installed_patched_backup_is_not_a_newer_receiver_when_configured() {
 }
 
 #[test]
-fn receiver_control_requires_an_explicit_receiver_key() {
-    let descriptor = b"PIONEER  BDR-211";
-    let control =
-        receiver_control(descriptor, ReceiverControl::Key([0x42, 0x66, 0x23, 0xfd])).unwrap();
-    assert_eq!(&control[..16], descriptor);
-    assert_eq!(&control[16..20], &[0x42, 0x66, 0x23, 0xfd]);
-    assert!(control[20..].iter().all(|&b| b == 0));
-    assert!(receiver_control(&descriptor[..15], ReceiverControl::DescriptorOnly).is_err());
-    assert!(receiver_control(&[0; 16], ReceiverControl::DescriptorOnly).is_err());
-    assert!(receiver_control(&[0xff; 16], ReceiverControl::DescriptorOnly).is_err());
-}
-
-#[test]
 fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
     let Some(root) = std::env::var_os("PIONEER_GENERIC_CORPUS") else {
         return;
@@ -1092,23 +1079,6 @@ fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
 }
 
 #[test]
-fn receiver_policy_extracts_accepted_immediate_and_rejects_ambiguity() {
-    let bytes = [
-        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 0x16, 0x79, 1, 0, 0x10, 1, 0, 0x6f, 0x70, 0,
-        0x74, 0x5d, 0x40, 0x7a, 0x20, 0x42, 0x66, 0x23, 0xfd, 0x58, 0x60, 5, 0xba,
-    ];
-    assert_eq!(
-        receiver_policy(&bytes),
-        Some(ReceiverControl::Key([0x42, 0x66, 0x23, 0xfd]))
-    );
-    assert_eq!(receiver_policy(&bytes[..29]), None);
-    assert_eq!(receiver_policy(&[bytes, bytes].concat()), None);
-    let mut wrong_branch = bytes;
-    wrong_branch[27] = 0x70;
-    assert_eq!(receiver_policy(&wrong_branch), None);
-}
-
-#[test]
 fn live_control_refuses_a_missing_backup_before_update_entry() {
     let descriptor = b"PIONEER  BDR-211";
     let mut dev = MockScsiDevice::new().on(
@@ -1130,14 +1100,6 @@ fn live_control_refuses_a_missing_backup_before_update_entry() {
         .writes
         .iter()
         .all(|(cdb, _)| *cdb != pioneer_optical::cdb::enter_update()));
-}
-
-#[test]
-fn descriptor_only_control_keeps_unused_bytes_zero() {
-    let descriptor = b"PIONEER TEST-NEW";
-    let control = receiver_control(descriptor, ReceiverControl::DescriptorOnly).unwrap();
-    assert_eq!(&control[..descriptor.len()], descriptor);
-    assert!(control[descriptor.len()..].iter().all(|&byte| byte == 0));
 }
 
 #[test]
@@ -1202,7 +1164,7 @@ fn generic_receiver_matrix_when_configured() {
             pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &decoded_kernel)
                 .unwrap();
         assert!(
-            receiver_policy(&decoded_normal.image).is_some(),
+            Receiver::detect(&decoded_normal).is_ok(),
             "{} receiver word",
             path.display()
         );

@@ -5,7 +5,7 @@
 //! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
-use pioneer_optical::image::{receiver_control as receiver_policy, ReceiverControl};
+use pioneer_optical::receiver::Receiver;
 use pioneer_optical::Role;
 use std::borrow::Cow;
 
@@ -56,26 +56,6 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
     pioneer_optical::cdb::finish()
 }
 
-/// Construct entry/finish control from the resident Normal descriptor.
-fn receiver_control(descriptor: &[u8], policy: ReceiverControl) -> Result<[u8; CONTROL_LEN]> {
-    if descriptor.len() != 16
-        || !descriptor.starts_with(b"PIONEER ")
-        || !descriptor
-            .iter()
-            .all(|b| *b == 0 || b.is_ascii_graphic() || *b == b' ')
-    {
-        bail!("invalid resident Pioneer control descriptor");
-    }
-    let mut control = [0; CONTROL_LEN];
-    control[..16].copy_from_slice(descriptor);
-    match policy {
-        ReceiverControl::DescriptorOnly => {}
-        ReceiverControl::Key(key) => control[16..20].copy_from_slice(&key),
-        _ => bail!("unsupported receiver control requirement"),
-    }
-    Ok(control)
-}
-
 fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; CONTROL_LEN]> {
     let descriptor = super::pioneer_transport::read_memory_exact(dev, 0x410000, 16)?;
     let again = super::pioneer_transport::read_memory_exact(dev, 0x410000, 16)?;
@@ -96,13 +76,9 @@ fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; 
         None => pioneer_optical::envelope::Envelope::load(&normal),
     }
     .context("installed Normal cannot be decoded for receiver control")?;
-    if body.image.get(..16) != Some(descriptor.as_slice()) {
-        bail!("installed backup does not match the live receiver descriptor");
-    }
-    let policy = receiver_policy(&body.image)
-        .context("receiver entry control is unsupported or ambiguous; refusing update entry")?;
-    let control = receiver_control(&descriptor, policy)?;
-    Ok(control)
+    let receiver = Receiver::detect(&body)
+        .context("cannot establish installed receiver entry requirements")?;
+    Ok(receiver.entry_control(&descriptor)?)
 }
 
 /// Validate a Normal envelope without marketing-model or revision restrictions.
@@ -765,7 +741,7 @@ impl DriveFamily for Pioneer {
                     &target_kernel,
                 )
                 .context("cannot decode the target receiver for restore preflight")?;
-                receiver_policy(&target_normal.image)
+                Receiver::detect(&target_normal)
                     .context("target receiver entry control is unsupported or ambiguous for the OEM restore; no update entry attempted")?;
             }
             if will_patch && !plan_is_downgrade(&plan) {
