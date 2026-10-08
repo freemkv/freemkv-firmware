@@ -512,7 +512,7 @@ pub fn backup_with_replace(
         println!(
             "{}",
             style::amber(
-                "RAW DUMP: one contiguous image of device memory; NOT a flashable backup."
+                "RAW DUMP: device memory and diagnostic sections; NOT a flashable backup."
             )
         );
         return Ok(());

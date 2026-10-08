@@ -1114,14 +1114,8 @@ impl DriveFamily for Pioneer {
     fn dump_is_raw(&self) -> bool {
         true
     }
-    fn capture_dump(&self, dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>> {
-        // One contiguous raw read of the whole firmware window. Never uses vendor
-        // kernel mode (not cold-reachable on BD firmware; see
-        // `pioneer_flash_plan::kernel_mode_required`). Unreadable spans are
-        // always zero-filled and reported (loudly, at the end); `force` additionally
-        // stops trusting what the drive reports (identity, read unlock, layout).
-        // Read-only.
-        crate::pioneer_backup::capture_raw_dump(dev, force)
+    fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
+        crate::pioneer_dump::capture(dev)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
         // Per-component structural/codec/signature checks; accepts 1 or 2

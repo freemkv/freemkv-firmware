@@ -928,8 +928,7 @@ fn resolve_flash_plan_unprofilable_header_only_normal_is_refused_unless_forced()
 #[test]
 fn dump_is_raw_and_never_issues_kernel_mode_commands() {
     use crate::platform::ScsiDevice;
-    // A drive that answers nothing useful: the dump must fail on its own terms
-    // (identity) without ever sending the F3/F2 kernel-mode CDBs.
+    // Short replies must never trigger F3/F2 kernel-mode commands.
     #[derive(Default)]
     struct Probe {
         cdbs: Vec<Vec<u8>>,
@@ -959,11 +958,11 @@ fn dump_is_raw_and_never_issues_kernel_mode_commands() {
 }
 
 #[test]
-fn dump_force_writes_the_full_raw_span_even_when_identity_fails() {
+fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
     use crate::platform::ScsiDevice;
     // Memory-backed drive: B0 reads return an address-derived pattern; INQUIRY and
-    // the F1 identity are zeros, so identity validation FAILS. `--force` must still
-    // yield the entire 0x600000 span, and no kernel-mode CDB may ever be sent.
+    // the F1 identity are zeros. Capture still preserves mapped memory without
+    // issuing kernel-mode commands.
     #[derive(Default)]
     struct Mem {
         kernel_mode_cdbs: usize,
@@ -999,15 +998,15 @@ fn dump_force_writes_the_full_raw_span_even_when_identity_fails() {
     }
     let mut dev = Mem::default();
     let dump = Pioneer::new().capture_dump(&mut dev, true).unwrap();
-    assert_eq!(dump.len(), pioneer_optical::cdb::READ_CEILING as usize);
+    assert!(crate::pioneer_dump::directory(&dump).unwrap().is_some());
     assert_eq!(dump[0x1234], (0x1234 % 251) as u8);
     assert_eq!(dump[0x5F_FFFF], (0x5F_FFFF % 251) as u8);
-    assert_eq!(dump[0x88_02FF], (0x88_02FF % 251) as u8);
+    assert_eq!(dump[0xC0_22FF], (0x88_02FF % 251) as u8);
     assert_eq!(dev.kernel_mode_cdbs, 0);
-    // Without --force the same untrusted identity is refused.
+    // Best-effort capture also accepts unavailable identity without --force.
     assert!(Pioneer::new()
         .capture_dump(&mut Mem::default(), false)
-        .is_err());
+        .is_ok());
 }
 
 fn recover_req(input: Vec<u8>) -> crate::drive::FlashRequest {

@@ -54,3 +54,6 @@ pub fn crc32(data: &[u8]) -> u32 {
     h.update(data);
     h.finalize()
 }
+
+/// Address-oriented Pioneer diagnostic captures.
+pub mod pioneer_dump;

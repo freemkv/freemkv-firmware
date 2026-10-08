@@ -215,10 +215,13 @@ fn backup_with_replace_inner(
     crate::diagnostics::record(format!(
         "backup options: device={device:?} output={out:?} recover={recover} replace={replace}"
     ));
-    // backup/dump are read-only (no kernel mode), so the device is opened
-    // read-only.
+    // Dump may enable RAM-only logging after capture; backup needs only reads.
     let selector = resolve_device(device)?;
-    let mut dev = platform::open(&selector, false)?;
+    let mut dev = if recover {
+        platform::open(&selector, true).or_else(|_| platform::open(&selector, false))?
+    } else {
+        platform::open(&selector, false)?
+    };
     let family = classify_for_backup(dev.as_mut())?;
     let handler = drive::for_family(family);
     let out = match out {

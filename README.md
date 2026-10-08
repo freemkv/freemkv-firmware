@@ -28,7 +28,7 @@ scope** and will land later as a separate `freemkv-fw` binary.
 | `freemkv-flash list` | no | — | list drives by name (`E:`, `/dev/sr1`, `disk4`) and id |
 | `freemkv-flash info <dev>` | no | — | INQUIRY + boot banner + classify family |
 | `freemkv-flash backup <dev> [-o out]` | no | — | save one validated, flashable backup (MTK `.bin`, Pioneer `.tar`) |
-| `freemkv-flash dump <dev> [-o out.bin] [--force]` | no | — | raw device read from 0x0 to the first address the drive refuses (probed; UD04: 0x880300) (Pioneer; diagnostics, not flashable) |
+| `freemkv-flash dump <dev> [-o out.bin] [--force]` | RAM logging only, when supported | — | captures memory and diagnostic responses in one address-oriented file; not flashable |
 | `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.bin` or `.tar` | validate and plan; execute only after fresh backup |
 
 - `backup` produces one file that can be passed directly to `flash -i`. For MTK
@@ -179,3 +179,39 @@ OEM optical-drive firmware images (test fixtures, build inputs, any firmware
 offered for download, and any patched image these tools produce) are the
 property of their original manufacturers (LG / Hitachi-LG Data Storage,
 MediaTek) and are **not** covered by the MIT license — see [NOTICE](NOTICE).
+
+Pioneer dump format v1 reserves fixed locations before appending diagnostic
+responses and a JSON capture directory:
+
+| File range (inclusive) | Source |
+|---|---|
+| `0x000000–0xBFFFFF` | Low CPU address space; readable B0 memory occupies `0x000000–0x87FFFF` |
+| `0xC00000–0xC01FFF` | CPU `0xFFFFE000–0xFFFFFFFF`, selector 92 |
+| `0xC02000–0xC022FF` | CPU `0xFF414000–0xFF4142FF`, B0 alias `0x880000` |
+| `0xC02300–0xC0FFFF` | Reserved zero fill |
+| `0xC10000–0x100FFFF` | Separate selector 93 controller space, offsets `0–0x3FFFFF` |
+| `0x1010000` onward | Exact FC log, INQUIRY and other diagnostic responses, then directory/footer |
+
+The FC log is captured first in the order returned by the drive. It is not
+silently rotated or substituted for a later RAM snapshot. Unmapped low CPU
+addresses remain zero; controller addresses are not assumed to be CPU aliases.
+Every read records its CDB, chronological order, destination, returned length,
+status and sense. `05/24/00` produces zero-filled unavailable bytes and continues.
+Short reads retain their returned bytes; transport failures preserve a partial
+capture and stop further drive commands. Unattempted bytes are distinguishable
+from observed zeros through the directory's read coverage. Section hashes are
+SHA-256 over saved bytes, including any zero fill.
+
+The final 64 bytes contain ASCII `FMVKDMP1`, version and footer size (u32 LE),
+directory offset and length (u64 LE), then the directory SHA-256 (32 bytes).
+Memory and response bytes retain their original byte order. The JSON directory
+records tool version, capture time, device, sections, read coverage and logging
+result. Readers find the directory from the footer, so adding responses does not
+move the fixed memory regions. Legacy raw dumps remain readable as raw images.
+
+At the end of a dump, `pioneer-optical` inspects the captured executable firmware
+for a supported RAM-only CDB logging handler, its dispatch-table binding and its
+mask variable. It preserves unrelated mask bits and verifies the live setting.
+Missing support or any logging failure is recorded as skipped and never fails
+the dump. There is no model/version allowlist, logging flag or checkbox. The
+persistent logging API is separate and is never a fallback used by dump.
