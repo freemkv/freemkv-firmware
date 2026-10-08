@@ -1,6 +1,6 @@
 use super::*;
 use crate::pioneer_flash_plan::{self as plan, FlashPlan, Installed};
-use pioneer_optical::{envelope, image};
+use pioneer_optical::{envelope, image, receiver::Receiver};
 
 // Private fixtures are supplied explicitly; synthetic regression tests run in CI.
 #[test]
@@ -46,17 +46,22 @@ fn every_prepared_package_in_both_directions_within_its_family() {
             &normal_wire,
             &update.kernel().image
         ));
-        packages.push((fields[0].to_owned(), installed, target, update));
+        let receiver = Receiver::from_installed(&update).unwrap();
+        packages.push((fields[0].to_owned(), installed, target, update, receiver));
     }
     assert!(packages.len() >= 2, "matrix must contain multiple packages");
     let mut same_family = 0;
     let mut different_family = 0;
     let mut restore_passes = 0;
-    for (source_id, installed, _, _) in &packages {
-        for (target_id, _, target, update) in &packages {
+    for (source_id, installed, _, _, receiver) in &packages {
+        for (target_id, _, target, update, _) in &packages {
             let selected = plan::decide_flash_plan(installed, target, false);
             if installed.family != target.family {
                 assert!(matches!(selected, FlashPlan::Refused(_)));
+                assert!(matches!(
+                    receiver.check_family(update.normal()),
+                    Err(pioneer_optical::receiver::Error::FamilyMismatch { .. })
+                ));
                 different_family += 1;
                 continue;
             }
@@ -64,20 +69,28 @@ fn every_prepared_package_in_both_directions_within_its_family() {
                 !matches!(selected, FlashPlan::Refused(_)),
                 "{source_id} -> {target_id}: {selected:?}"
             );
+            let prepared = receiver
+                .prepare(update.clone())
+                .unwrap_or_else(|error| panic!("{source_id} -> {target_id}: {error}"));
+            assert_eq!(prepared.normal_transfer(), update.normal_transfer());
+            assert_eq!(prepared.final_kernel_image(), update.kernel().image);
             same_family += 1;
             if installed.receiver_new_gen == Some(true)
                 && matches!(update.kernel().image[0xfe], 0 | 0xff)
             {
-                let (patched, _) = envelope::downgrade_patch(&update.kernel().image).unwrap();
+                let patched = prepared.first_kernel_image();
                 assert_eq!(patched[0xfe], 1);
-                let repacked = update.kernel().repack(&patched).unwrap();
-                let wire = envelope::Envelope::load(&repacked)
-                    .unwrap()
-                    .kernel_transfer_image()
-                    .unwrap();
-                assert_eq!(receive_kernel(&wire), patched);
+                assert_eq!(receive_kernel(prepared.kernel_transfer()), patched);
                 assert_eq!(
-                    image::kernel_marker_policy(&patched),
+                    prepared.restoration_kernel_transfer().unwrap(),
+                    update.kernel_transfer()
+                );
+                let restoration = prepared.restoration_receiver().unwrap();
+                assert!(restoration
+                    .entry_control(&update.normal().image[..16])
+                    .is_ok());
+                assert_eq!(
+                    image::kernel_marker_policy(patched),
                     Some(image::KernelMarkerPolicy::NoMarkerCheck)
                 );
                 // The second pass's receiver accepts the pristine marker.
@@ -86,6 +99,10 @@ fn every_prepared_package_in_both_directions_within_its_family() {
                     Some(image::KernelMarkerPolicy::NoMarkerCheck)
                 );
                 restore_passes += 1;
+            } else {
+                assert_eq!(prepared.kernel_transfer(), update.kernel_transfer());
+                assert!(prepared.restoration_kernel_transfer().is_none());
+                assert!(prepared.restoration_receiver().is_none());
             }
         }
     }
