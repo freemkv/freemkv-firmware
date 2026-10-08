@@ -427,14 +427,11 @@ const FORCED_WARNING: &str = "WARNING: a safety gate was bypassed (--force): the
     and/or the installed Kernel tag could not be verified. Flashing firmware from a different \
     or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.";
 
-/// Loud notice shown for a cross-generation downgrade — the §15.3 Site-1
-/// marker patch WILL be applied to the incoming Kernel so it crosses the gate.
-/// The write succeeds, but the drive ends up advertising a disguised marker.
+/// Explain the temporary marker patch and required pristine-Kernel restore.
 const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware generation barrier. \
-    The incoming Kernel's generation marker will be patched (§15.3: body[0xFE] FF/00→01, \
-    checksum word @0x1020 compensated) so the receiver's Site-1 gate accepts it. The drive \
-    will run the older firmware with a disguised newer-era marker. Pre-flash backup+dump \
-    are mandatory; keep them.";
+    The Kernel generation marker is patched temporarily for the first update. A second update \
+    restores the unmodified OEM Kernel, and readback must verify it before success is reported. \
+    Keep the pre-flash backup and dump until both updates complete.";
 
 /// The post-flash identity readback line. The fields are drive-supplied bytes,
 /// so each goes through [`crate::style::printable`].
@@ -544,7 +541,8 @@ fn plan_is_downgrade(plan: &crate::pioneer_flash_plan::FlashPlan) -> bool {
 /// route. A cross-generation downgrade is now executable — the §15.3 patch is
 /// applied to the Kernel bytes inside [`crate::pioneer_flash::execute_flash`]
 /// just before the Kernel write, so the receiver's Site-1 gate accepts the
-/// disguised marker. No plan requires kernel mode
+/// temporary marker. The bundle executor then restores and verifies the pristine
+/// Kernel before reporting success. No plan requires kernel mode
 /// ([`crate::pioneer_flash_plan::kernel_mode_required`]).
 pub(crate) fn check_plan_executable(plan: &crate::pioneer_flash_plan::FlashPlan) -> Result<()> {
     use crate::pioneer_flash_plan::FlashPlan;
