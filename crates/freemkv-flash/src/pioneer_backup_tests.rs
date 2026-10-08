@@ -1212,3 +1212,15 @@ fn backup_map_rejects_relocated_ambiguous_and_truncated_regions() {
     image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + 24].fill(0);
     assert!(validate_backup_image_map(&image, &kernel).is_err());
 }
+
+#[test]
+fn backup_map_does_not_mistake_inquiry_or_log_strings_for_firmware() {
+    let kernel = vec![0; NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE];
+    let mut image = vec![0; NORMAL_IMAGE_BASE + 0x2000];
+    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + 8].copy_from_slice(b"PIONEER ");
+    image[NORMAL_IMAGE_BASE + 20..NORMAL_IMAGE_BASE + 24].copy_from_slice(&0x2000u32.to_be_bytes());
+    let inquiry = b"PIONEER BD-RW   SOMEMODEL ";
+    image[0x100..0x100 + inquiry.len()].copy_from_slice(inquiry);
+    image[0x200..0x208].copy_from_slice(b"PIONEER ");
+    validate_backup_image_map(&image, &kernel).unwrap();
+}

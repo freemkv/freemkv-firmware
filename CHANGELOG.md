@@ -6,17 +6,28 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.8]
+
+### Fixed
+
+- Pioneer Kernel transfers use the decoded key and the receiver representation,
+  correcting the derived-key transfer that could fail midway through a same-family crossflash.
+- Normal transfers authenticate and send the same continuous representation,
+  including recoverable envelopes with inserted file blocks.
+- Receiver generation is recognized from firmware code rather than its editable marker.
+- Cross-generation OEM restoration verifies the intermediate and final Kernel;
+  a failed restore propagates an error instead of claiming the drive is working.
+- Dump captures mark overlong replies incomplete and stop reads on transport loss.
+- Backup layout checks distinguish firmware descriptors from incidental inquiry and log strings.
 
 ### Changed
 
-- Pioneer `dump` now reads everything the drive's memory read serves instead
-  of stopping at `0x600000`. The end is probed on the drive: a binary search
-  finds the first address refused with 05/24/00 (about 24 one-byte reads); any
-  other error stops the dump, or falls back to `0x880300` with `--force`. On a
-  BDR-UD04 1.14 the end is `0x880300`, and the added span holds 512 KiB of work
-  RAM at `0x800000` (firmware trace log, disc sector buffer) and the 768-byte
-  register window at `0x880000`.
+- Pioneer validation and transfer preparation use `pioneer-optical` 0.11.0.
+- Remove the model-specific transfer profile table and generated-prefix schedule.
+- Pioneer diagnostic dumps include address-aligned memory, the dedicated log
+  command, additional read surfaces, and a directory of captured and unavailable regions.
+- Dump enables temporary RAM logging after capture when the receiver supports it;
+  unavailable logging does not fail the dump.
 
 ## [0.10.7]
 

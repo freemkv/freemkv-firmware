@@ -159,14 +159,6 @@ pub struct Target {
     /// updater would refuse "Model name of kernel part is not matched." `None`
     /// if the target has no Normal or its header is missing/corrupt.
     pub required_kernel_tag: Option<String>,
-    /// Whether the target Kernel uses the `KernelDerived` ("generated-block")
-    /// transfer framing — the one whose slice schedule + generated block are
-    /// reverse-engineered from a single anchor receiver and pinned to that
-    /// hardware. A cross-hardware flash using this framing can overrun the
-    /// installed receiver's staging window and brick mid-write, so it is refused.
-    /// `false` when there is no Kernel or it decodes to the self-chunking
-    /// `KernelFront` framing.
-    pub kernel_generated_framing: bool,
 }
 
 /// The chosen flash path.
@@ -365,14 +357,6 @@ fn classify_forced(installed: &Installed, target: &Target) -> FlashPlan {
             _ => FlashPlan::Plain,
         };
     }
-    // Even with the family gate waived by --force, a cross-hardware generated-
-    // block Kernel write is a physical brick risk, not a policy one: refuse it.
-    if target.kernel.is_some()
-        && target.controller_id != installed.controller_id
-        && target.kernel_generated_framing
-    {
-        return FlashPlan::Refused(GENERATED_FRAMING_CROSSFLASH_REFUSAL.to_string());
-    }
     match target.kernel {
         Some(kernel)
             if installed.receiver_new_gen.unwrap_or(false)
@@ -446,24 +430,8 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
     }
 }
 
-/// Different model, same family (gate 1 already passed). A crossflash always
-/// changes the target Kernel generation, so the bundle MUST carry both — a
-/// Normal-only crossflash would land on the drive's existing (wrong-model)
-/// Kernel. If the incoming Kernel marker would be rejected by a new-gen
-/// receiver's Site 1 the crossflash is also a cross-generation downgrade and
-/// gets the §15.3 patch at write time.
-/// A cross-hardware flash whose Kernel uses the generated-block framing is a
-/// brick risk: the generated slice schedule is pinned to its own anchor hardware
-/// (SAT/controller id) and can overrun a different installed receiver's staging
-/// window mid-write (the 212M↔212U `0x11200` failure). Refused before any write,
-/// and NOT waived by `--force` — it is a physical-safety gate, not a policy one.
-pub(crate) const GENERATED_FRAMING_CROSSFLASH_REFUSAL: &str =
-    "crossflash refused: this target Kernel uses the generated-block transfer framing, whose \
-     slice schedule is validated only for its own hardware. Flashing it onto a different-hardware \
-     drive can overrun the installed receiver's staging buffer and brick it mid-write. A \
-     per-hardware dynamic schedule is required before this crossflash is safe; refusing before any \
-     write (your pre-flash backup is intact).";
-
+/// Same-family cross-SAT updates require both components. The receiver's
+/// marker policy determines whether an intermediate Kernel is required.
 fn classify_crossflash(installed: &Installed, target: &Target) -> FlashPlan {
     let Some(kernel) = target.kernel else {
         return FlashPlan::Refused(
@@ -478,11 +446,6 @@ fn classify_crossflash(installed: &Installed, target: &Target) -> FlashPlan {
              bundle is Kernel-only"
                 .to_string(),
         );
-    }
-    // Different-hardware (this is the cross-SAT path) + generated-block framing =
-    // brick risk. Refuse before any write.
-    if target.kernel_generated_framing {
-        return FlashPlan::Refused(GENERATED_FRAMING_CROSSFLASH_REFUSAL.to_string());
     }
     if installed.receiver_new_gen.unwrap_or(false)
         && Generation::from_marker(kernel.marker).site1_rejected()
@@ -527,7 +490,6 @@ pub fn target_from_components(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> R
             None => normal_family(n),
         }),
         required_kernel_tag: normal.and_then(component_kernel_tag),
-        kernel_generated_framing: kernel.is_some_and(kernel_uses_generated_framing),
     })
 }
 
@@ -638,14 +600,6 @@ fn decoded_kernel_marker(bytes: &[u8]) -> Result<u8> {
         .get(0xFE)
         .copied()
         .ok_or_else(|| anyhow!("decoded Kernel body is shorter than 0xFF bytes"))
-}
-
-/// Whether a Kernel envelope decodes to the `KernelDerived` ("generated-block")
-/// transfer framing (vs the self-chunking `KernelFront`). Undecodable ⇒ `false`.
-fn kernel_uses_generated_framing(bytes: &[u8]) -> bool {
-    pioneer_optical::envelope::decode_envelope(bytes)
-        .map(|d| d.info().layout == pioneer_optical::envelope::Layout::KernelDerived)
-        .unwrap_or(false)
 }
 
 /// Parse a controller id from a `SAT xxxx` hardware tag (as it appears in a

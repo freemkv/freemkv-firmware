@@ -71,9 +71,9 @@ impl Capture {
             Ok(b) => {
                 let n = b.len().min(len);
                 self.bytes[dest..dest + n].copy_from_slice(&b[..n]);
-                record.received = n;
-                if n != len {
-                    record.status = "short";
+                record.received = b.len();
+                if b.len() != len {
+                    record.status = if b.len() < len { "short" } else { "overlong" };
                     self.directory.complete = false;
                 }
             }
@@ -184,8 +184,12 @@ pub fn capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     c.section("inquiry", "response", None, id_off, 96);
     if !c.stopped {
         if let Err(e) = dev.command_out(&pioneer_optical::cdb::knock(), &[]) {
+            if sense_triplet(&e).is_none() {
+                c.stopped = true;
+                c.directory.complete = false;
+            }
             c.directory.notes.push(format!(
-                "Extended read enable failed: {e:#}; attempting reads anyway"
+                "Extended read enable failed: {e:#}; transport failures stop capture"
             ));
         }
     }

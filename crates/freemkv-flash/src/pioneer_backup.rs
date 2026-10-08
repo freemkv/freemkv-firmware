@@ -618,7 +618,16 @@ fn validate_backup_image_map(image: &[u8], kernel: &[u8]) -> Result<()> {
     const DESCRIPTOR_LEN: usize = 24;
     let mut bases = Vec::new();
     for base in (0..image.len().saturating_sub(DESCRIPTOR_LEN - 1)).step_by(DESCRIPTOR_ALIGNMENT) {
-        if image[base..].starts_with(b"PIONEER ") {
+        let header = &image[base..base + DESCRIPTOR_LEN];
+        let length = u32::from_be_bytes(header[20..24].try_into().unwrap()) as usize;
+        // INQUIRY copies and log strings are not firmware descriptors.
+        if header.starts_with(b"PIONEER ")
+            && header[..16]
+                .iter()
+                .all(|b| *b == 0 || b.is_ascii_graphic() || *b == b' ')
+            && (0x2000..=0x800000).contains(&length)
+            && length.is_multiple_of(DESCRIPTOR_ALIGNMENT)
+        {
             bases.push(base);
         }
     }

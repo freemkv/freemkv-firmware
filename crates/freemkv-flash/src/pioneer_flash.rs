@@ -98,8 +98,8 @@ fn resolve_class(
 /// (the caller sets it only when writing onto a new-generation or unknown
 /// receiver); when `false` the Kernel is written unmodified.
 ///
-/// A failure after entry never commits: the session sends nothing when dropped,
-/// so a partial image is not blessed.
+/// A failure stops further commands. The drive may already have modified
+/// firmware, so errors must propagate even when finish was not sent.
 pub(crate) fn execute_flash(
     dev: &mut dyn ScsiDevice,
     control: &[u8; CONTROL_LEN],
@@ -130,22 +130,11 @@ pub(crate) fn execute_flash(
     };
     let kernel: Option<&[u8]> = patched_kernel.as_deref().or(kernel);
 
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u32;
-    let kernel_transfer = kernel
-        .map(|k| transfer::select_kernel(k, seed))
-        .transpose()?;
+    let kernel_transfer = kernel.map(transfer::select_kernel).transpose()?;
     let steps = transfer::data_out(control, normal, kernel_transfer)?;
     let kernel_total = steps
         .iter()
-        .filter(|s| {
-            matches!(
-                s.stage,
-                TransferStage::KernelPrefix | TransferStage::KernelFe
-            )
-        })
+        .filter(|s| matches!(s.stage, TransferStage::KernelFe))
         .map(|s| s.data.len())
         .sum();
 
@@ -194,7 +183,7 @@ pub(crate) fn execute_flash(
         let role = match step.stage {
             TransferStage::Entry | TransferStage::Finish => continue,
             TransferStage::KernelFe => Role::Kernel,
-            TransferStage::KernelPrefix | TransferStage::Normal => Role::Normal,
+            TransferStage::Normal => Role::Normal,
         };
         if step.stage == TransferStage::Normal && kernel_pending_settle {
             std::thread::sleep(Duration::from_secs(2));

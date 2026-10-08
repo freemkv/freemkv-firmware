@@ -7,10 +7,8 @@ use std::io::Read;
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 
 use crate::drive::pioneer::parse_banner;
-use crate::drive::pioneer::{BoundedOemProfile, BOUNDED_PROFILES};
 
 const MAX_COMPONENT: u64 = 8 << 20;
 
@@ -186,58 +184,6 @@ impl Bundle {
                     .join(", ");
                 bail!("bundle needs explicit multi-component selection; no audited Kernel/unknown transfer strategy is registered; validated components: {inventory}")
             }
-        }
-    }
-
-    /// Bind a two-component bundle to one exact-resource bounded-flow host
-    /// profile. Source provenance is reported but cannot be reverified from
-    /// this archive; both component bytes must match the pinned PE resources.
-    /// Packages with two matching updater executables remain ambiguous.
-    pub fn select_bounded_profile(
-        &self,
-    ) -> Result<(&'static BoundedOemProfile, &Component, &Component)> {
-        if !self.source_sha256.is_empty()
-            && BOUNDED_PROFILES.iter().any(|profile| {
-                profile.source_sha256 == self.source_sha256
-                    && profile.source_name == self.source_name
-                    && !profile.unique_executable
-            })
-        {
-            bail!("package has multiple matching updater executables; explicit variant selection is required");
-        }
-        let [first, second] = self.components.as_slice() else {
-            bail!("bounded OEM profile requires exactly one Kernel and one Normal component");
-        };
-        let (kernel, normal) = match (first.role, second.role) {
-            (Role::Kernel, Role::Main) => (first, second),
-            (Role::Main, Role::Kernel) => (second, first),
-            _ => bail!("bounded OEM profile requires one Kernel and one Normal component"),
-        };
-        let kernel_banner = parse_banner(&kernel.bytes).context("Kernel banner missing")?;
-        let normal_banner = parse_banner(&normal.bytes).context("Normal banner missing")?;
-        if kernel_banner.model != normal_banner.model
-            || kernel_banner.hardware != normal_banner.hardware
-        {
-            bail!("Kernel and Normal banner model/hardware disagree");
-        }
-        let kernel_hash = format!("{:x}", Sha256::digest(&kernel.bytes));
-        let normal_hash = format!("{:x}", Sha256::digest(&normal.bytes));
-        let matches = BOUNDED_PROFILES
-            .iter()
-            .filter(|profile| {
-                (self.source_sha256.is_empty()
-                    || (profile.source_sha256 == self.source_sha256
-                        && profile.source_name == self.source_name))
-                    && profile.kernel_len == kernel.bytes.len()
-                    && profile.kernel_sha256 == kernel_hash
-                    && profile.normal_len == normal.bytes.len()
-                    && profile.normal_sha256 == normal_hash
-            })
-            .collect::<Vec<_>>();
-        match matches.as_slice() {
-            [profile] if profile.unique_executable => Ok((profile, kernel, normal)),
-            [] => bail!("no pinned bounded OEM profile matches both resource hashes"),
-            _ => bail!("ambiguous pinned bounded OEM profiles"),
         }
     }
 }

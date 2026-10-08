@@ -4,7 +4,6 @@
 use super::*;
 // Independent byte-level oracle for the transcript KATs (the code under test
 // builds its CDBs with the pioneer-optical builders).
-use crate::drive::mtk::cdb_write_buffer;
 use crate::drive::{for_family, Family};
 use crate::manifest::FlashMode;
 use crate::platform::MockScsiDevice;
@@ -218,123 +217,6 @@ fn s09_aeu_updater_shares_the_audited_normal_transfer_profile() {
         evidence.reference_envelope_sha256,
         "7f391cf35bc727bbefc97b3b27786283a6e8e5ca1d82f71dc57c78633843c59f"
     );
-}
-
-#[test]
-fn bdr212_dynamic_stage_is_explicit_and_seeded_generator_matches_crt() {
-    use sha2::{Digest, Sha256};
-    assert_eq!(BDR212_V105_STAGES[0], Bdr212Stage::EntryControl);
-    assert_eq!(
-        BDR212_V105_STAGES[1],
-        Bdr212Stage::KernelPrefix {
-            source_offset: 0,
-            length: 0x1200
-        }
-    );
-    assert_eq!(
-        BDR212_V105_STAGES[2],
-        Bdr212Stage::GeneratedKernelBlock { length: 0x200 }
-    );
-    assert_eq!(
-        BDR212_V105_STAGES[6],
-        Bdr212Stage::KernelFe {
-            cdb_offset: 0x11200,
-            source_offset: 0x10200,
-            length: 0x1000
-        }
-    );
-    assert_eq!(
-        BDR212_V105_STAGES[7],
-        Bdr212Stage::NormalEnvelope { length: 0x1d7600 }
-    );
-    assert_eq!(BDR212_V105_STAGES[8], Bdr212Stage::FinishControl);
-    let block = bdr212_generated_kernel_block(0);
-    assert_eq!(
-        &block[..16],
-        &[
-            0x26, 0x27, 0xf6, 0x85, 0x97, 0x15, 0xad, 0x1d, 0xd2, 0x94, 0xdd, 0xc4, 0x76, 0x19,
-            0x39, 0x31
-        ]
-    );
-    assert_eq!(
-        format!("{:x}", Sha256::digest(block)),
-        "e9687a87ce390b005b343fd185e357587948c16b15aa4ed55fb467ce733866da"
-    );
-}
-
-#[test]
-fn bdr212_v105_exact_resources_materialize_seeded_data_out_only() {
-    use sha2::{Digest, Sha256};
-    let corpus_root = pioneer_corpus_root();
-    let base = corpus_root.join("models/BDR-212/firmware/1.05EU");
-    let kernel_path = base.join("BDR-212_ULBK_EBK_FW105EU_kernel.enc");
-    let normal_path = base.join("BDR-212_ULBK_EBK_FW105EU_main.enc");
-    if !kernel_path.exists() || !normal_path.exists() {
-        return;
-    }
-    let kernel = std::fs::read(kernel_path).unwrap();
-    let normal = std::fs::read(normal_path).unwrap();
-    let transfers = offline_bdr212_v105_data_out(&kernel, &normal, 0).unwrap();
-    assert_eq!(transfers.len(), 66); // entry + prefix + 4 FE + 59 Normal + finish
-    assert_eq!(transfers[0].cdb, cdb_wb_flash_entry());
-    assert_eq!(
-        format!("{:x}", Sha256::digest(&transfers[0].data)),
-        "506030191e30ed5c6a6af3483ceb216b76e5d0d2c25018bfcadb6fbe61c72dbe"
-    );
-    assert_eq!(transfers[1].stage, TransferStage::KernelPrefix);
-    assert_eq!(transfers[1].data.as_ref(), &kernel[..0x1200]);
-    assert_eq!(transfers[2].cdb, cdb_write_buffer(0x07, 0xFE, 0, 0x200));
-    assert_eq!(transfers[2].data.as_ref(), bdr212_generated_kernel_block(0));
-    assert_eq!(
-        transfers[5].cdb,
-        cdb_write_buffer(0x07, 0xFE, 0x11200, 0x1000)
-    );
-    assert_eq!(transfers[5].data.as_ref(), &kernel[0x10200..0x11200]);
-    assert_eq!(transfers.last().unwrap().cdb, cdb_wb_flash_finish());
-    assert_eq!(transfers.last().unwrap().data, transfers[0].data);
-    let mut digest = Sha256::new();
-    for transfer in &transfers[6..65] {
-        digest.update(&transfer.data);
-    }
-    assert_eq!(
-        format!("{:x}", digest.finalize()),
-        format!("{:x}", Sha256::digest(&normal))
-    );
-    let mut bad = kernel.clone();
-    bad[0x300] ^= 1;
-    assert!(offline_bdr212_v105_data_out(&bad, &normal, 0).is_err());
-    let mut bad = normal.clone();
-    bad[0x300] ^= 1;
-    assert!(offline_bdr212_v105_data_out(&kernel, &bad, 0).is_err());
-}
-
-#[test]
-fn bounded_profile_table_has_verified_shape_and_no_duplicate_resource_pairs() {
-    use sha2::{Digest, Sha256};
-    use std::collections::HashSet;
-    assert_eq!(BOUNDED_PROFILES.len(), 46);
-    assert_eq!(
-        BOUNDED_PROFILES
-            .iter()
-            .filter(|p| p.unique_executable)
-            .count(),
-        38
-    );
-    let mut pairs = HashSet::new();
-    for profile in BOUNDED_PROFILES {
-        assert_eq!(profile.kernel_len, 0x11200);
-        assert_eq!(profile.control_header.len(), 16);
-        assert_eq!(profile.source_sha256.len(), 64);
-        assert_eq!(profile.updater_sha256.len(), 64);
-        assert!(pairs.insert((profile.kernel_sha256, profile.normal_sha256)));
-        let mut control = [0u8; 0x100];
-        control[..16].copy_from_slice(&profile.control_header);
-        control[16..20].copy_from_slice(&profile.key.to_le_bytes());
-        assert_eq!(
-            format!("{:x}", Sha256::digest(control)),
-            profile.control_sha256
-        );
-    }
 }
 
 #[test]
@@ -569,7 +451,6 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
         }),
         family: Some(FamilyKey::new("f1")),
         required_kernel_tag: None,
-        kernel_generated_framing: false,
     };
     assert_eq!(
         decide_flash_plan(&ud03_installed, &ud04_target, false),
@@ -853,7 +734,6 @@ fn facts(
             kernel: None,
             family: fam,
             required_kernel_tag: Some("ID58".to_string()),
-            kernel_generated_framing: false,
         },
     )
 }
@@ -1116,30 +996,46 @@ fn generation_patch_skips_known_older_receiver() {
 }
 
 #[test]
-fn oem_restore_targets_only_old_generation_receivers() {
+fn oem_restore_requires_old_receiver_code_not_a_marker() {
     use pioneer_optical::envelope::builder::{encode_kernel_envelope, KernelBuild};
-    let make = |marker: u8| {
+    let make = |marker: u8, receiver_code: bool| {
         let mut body = vec![0u8; 0x10000];
         body[0xfe] = marker;
         body[0x1000..0x1008].copy_from_slice(b"SAT 8A10");
         body[0x1008..0x1010].copy_from_slice(b"ID58    ");
         body[0x1010..0x1014].copy_from_slice(b"ID5 ");
         body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
+        // Synthetic ungated finalizer with bounded local decoder/checksum calls.
+        if receiver_code {
+            let finalizer: &[u8] = &[
+                0x7a, 0x00, 0x00, 0x01, 0x12, 0x00, 0x1f, 0x81, 0x58, 0x60, 0x00, 0x94, 0x1a, 0x91,
+                0x01, 0x00, 0x69, 0xc1, 0x01, 0x00, 0x6f, 0x41, 0x00, 0x08, 0x1a, 0xb3, 0xf3, 0x12,
+                0x0a, 0x93, 0x7a, 0x11, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x69, 0xf1, 0x1a, 0xd5,
+                0xf5, 0x10, 0x01, 0x00, 0x6f, 0xf5, 0x00, 0x04, 0x0f, 0xf0, 0x79, 0x10, 0x00, 0x0c,
+                0x01, 0x00, 0x6f, 0xf0, 0x00, 0x08, 0x0f, 0xc0, 0x7a, 0x02, 0x00, 0x01, 0x00, 0x00,
+                0x0f, 0xb1, 0x5e, 0x40, 0x03, 0x00, 0xa8, 0x01, 0x46, 0x0e, 0x18, 0x99, 0x0f, 0xc0,
+                0x5e, 0x40, 0x03, 0x20, 0x01, 0x00, 0x6f, 0xf0, 0x00, 0x0c, 0x01, 0x00, 0x6f, 0x70,
+                0x00, 0x0c,
+            ];
+            body[0x3000..0x3000 + finalizer.len()].copy_from_slice(finalizer);
+        }
         let sum = body
             .as_chunks::<4>()
             .0
             .iter()
             .fold(0u32, |s, c| s.wrapping_add(u32::from_be_bytes(*c)));
         body[0x1020..0x1024].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
-        encode_kernel_envelope(&body, "PIONEER BD-RW   BDR-UD04", &KernelBuild::from_seed(0)).unwrap()
+        encode_kernel_envelope(
+            &body,
+            "PIONEER BD-RW   BDR-UD04",
+            &KernelBuild::from_seed(0),
+        )
+        .unwrap()
     };
-    // A native FF/00-marker kernel has no Site-1 gate: after a downgrade the drive
-    // runs it and the unmodified kernel can be re-flashed (the #3 OEM restore).
-    assert!(target_receiver_is_old_gen(&make(0xff)));
-    assert!(target_receiver_is_old_gen(&make(0x00)));
-    // A 0x01-marker kernel carries the new-gen gate: not an OEM-restore target.
-    assert!(!target_receiver_is_old_gen(&make(0x01)));
-    // Undecodable input is never treated as old-gen.
+    for marker in [0, 1, 0xff] {
+        assert!(target_receiver_is_old_gen(&make(marker, true)));
+        assert!(!target_receiver_is_old_gen(&make(marker, false)));
+    }
     assert!(!target_receiver_is_old_gen(b"not an envelope"));
 }
 

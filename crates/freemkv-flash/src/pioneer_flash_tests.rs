@@ -72,8 +72,16 @@ impl ScsiDevice for Recorder {
 fn disc_inserted_at_confirmation_is_refused_before_update_entry() {
     let mut dev = crate::platform::MockScsiDevice::pioneer().with_medium_loaded();
     let normal = ud04_normal(0x100000);
-    let error = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false, false)
-        .expect_err("a disc inserted since the engine guard must abort the write");
+    let error = execute_flash(
+        &mut dev,
+        &ud04_control(),
+        None,
+        &normal,
+        false,
+        false,
+        false,
+    )
+    .expect_err("a disc inserted since the engine guard must abort the write");
     assert!(error.to_string().contains("disc"));
     assert!(
         dev.writes.is_empty(),
@@ -118,7 +126,16 @@ fn executes_entry_normal_chunks_finish_via_strict_writes_with_gate_and_poll() {
 fn plain_flash_issues_no_kernel_mode_commands() {
     let normal = ud04_normal(0x0010_0000);
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &ud04_control(), None, &normal, false, false, false).unwrap();
+    execute_flash(
+        &mut dev,
+        &ud04_control(),
+        None,
+        &normal,
+        false,
+        false,
+        false,
+    )
+    .unwrap();
     // No F3/F2 buffer-id traffic at all on the plain path.
     assert!(!dev
         .writes
@@ -153,7 +170,16 @@ fn aborts_before_any_transfer_when_drive_not_in_update_state() {
     }
     let normal = ud04_normal(0x0010_0000 + 0x100);
     let mut dev = BadEntry { writes: Vec::new() };
-    let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false, false).unwrap_err();
+    let err = execute_flash(
+        &mut dev,
+        &ud04_control(),
+        None,
+        &normal,
+        false,
+        false,
+        false,
+    )
+    .unwrap_err();
     assert!(format!("{err:#}").contains("post-entry update state"));
     // Only the entry write happened; NO Normal chunk or finish followed.
     assert_eq!(dev.writes.len(), 1);
@@ -169,7 +195,16 @@ fn a_failed_mid_transfer_write_aborts_with_a_recovery_hint() {
         fail_strict_at: Some(1),
         ..Recorder::default()
     };
-    let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false, false).unwrap_err();
+    let err = execute_flash(
+        &mut dev,
+        &ud04_control(),
+        None,
+        &normal,
+        false,
+        false,
+        false,
+    )
+    .unwrap_err();
     let msg = format!("{err:#}");
     assert!(msg.contains("Normal") && msg.contains("re-flash the captured"));
     // No finish (05/FF) was sent after the failed transfer.
@@ -262,33 +297,49 @@ fn will_patch_only_for_ff_or_00_marker_on_known_new_or_unknown_receiver() {
 }
 
 #[test]
-fn derived_kernel_uses_generated_schedule_before_normal() {
+fn derived_kernel_sends_real_key_and_decodes_exactly_at_receiver() {
     let kernel = layout_kernel(1, true);
+    let expected_body = pioneer_optical::envelope::Envelope::load(&kernel)
+        .unwrap()
+        .image;
     let normal = ud04_normal(0x8100);
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &[0xa5; 256], Some(&kernel), &normal, false, false, false).unwrap();
-    assert_eq!(dev.strict_writes, 9);
+    execute_flash(
+        &mut dev,
+        &[0xa5; 256],
+        Some(&kernel),
+        &normal,
+        false,
+        false,
+        false,
+    )
+    .unwrap();
+    assert_eq!(dev.strict_writes, 7);
     assert_eq!(dev.lenient_writes, 0);
-    let expected = [
-        (0xf0, 0, 0x1200),
-        (0xfe, 0, 0x200),
-        (0xfe, 0x1200, 0x8000),
-        (0xfe, 0x9200, 0x8000),
-        (0xfe, 0x11200, 0x1000),
-    ];
-    for ((cdb, data), (role, offset, len)) in dev.writes[1..6].iter().zip(expected) {
-        assert_eq!(cdb[2], role);
-        let actual_offset = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-        assert_eq!(actual_offset, offset);
-        assert_eq!(data.len(), len);
+    let mut wire = Vec::new();
+    for (cdb, data) in &dev.writes[1..4] {
+        assert_eq!(&cdb[..3], &[0x3b, 7, 0xfe]);
+        let offset = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+        assert_eq!(offset, wire.len());
+        wire.extend_from_slice(data);
     }
-    assert_eq!(dev.writes[1].1, kernel[..0x1200]);
-    assert_eq!(dev.writes[3].1, kernel[0x200..0x8200]);
-    assert_eq!(dev.writes[4].1, kernel[0x8200..0x10200]);
-    assert_eq!(dev.writes[5].1, kernel[0x10200..]);
-    assert_eq!(dev.writes[6].1, normal[..0x8000]);
-    assert_eq!(dev.writes[7].1, normal[0x8000..]);
-    assert_eq!(dev.writes[8].1, dev.writes[0].1);
+    assert_eq!(wire.len(), 0x11200);
+    let key = &wire[0x200..0x1200];
+    let mut decoded = Vec::new();
+    for (i, word) in wire[0x1200..].as_chunks::<4>().0.iter().enumerate() {
+        let key_word = u32::from_le_bytes(key[(i * 4) % key.len()..][..4].try_into().unwrap());
+        let cipher = u32::from_le_bytes(*word);
+        decoded.extend_from_slice(
+            &(cipher ^ key_word)
+                .rotate_right(key_word & 31)
+                .to_le_bytes(),
+        );
+    }
+    assert_eq!(decoded, expected_body);
+    assert_eq!(decoded[0xfe], 1);
+    assert_eq!(dev.writes[4].1, normal[..0x8000]);
+    assert_eq!(dev.writes[5].1, normal[0x8000..]);
+    assert_eq!(dev.writes[6].1, dev.writes[0].1);
 }
 
 #[test]
@@ -297,7 +348,16 @@ fn executes_both_kernel_and_normal_via_strict_writes_in_order() {
     let kernel = marker_kernel(1);
     let normal: Vec<u8> = (0..0x8100usize).map(|i| (i % 251) as u8).collect();
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false, false, false).unwrap();
+    execute_flash(
+        &mut dev,
+        &[0xA5; 256],
+        Some(&kernel),
+        &normal,
+        false,
+        false,
+        false,
+    )
+    .unwrap();
 
     // entry + 3 kernel FE + 2 normal F0 + finish, all strict, nothing lenient.
     assert_eq!(dev.strict_writes, 7);

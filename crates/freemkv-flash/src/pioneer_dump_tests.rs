@@ -68,3 +68,66 @@ fn disconnect_preserves_partial_capture_and_stops_commands() {
     assert_eq!(dir["reads"][2]["status"], "failed");
     assert!(b[0..0x880000].iter().all(|v| *v == 0));
 }
+
+#[test]
+fn knock_disconnect_stops_all_later_drive_commands() {
+    struct Disconnected {
+        reads: usize,
+    }
+    impl ScsiDevice for Disconnected {
+        fn describe(&self) -> String {
+            "disconnect on knock".into()
+        }
+        fn command_in(&mut self, _: &[u8], len: usize) -> Result<Vec<u8>> {
+            self.reads += 1;
+            assert!(self.reads <= 2, "read after transport failure");
+            Ok(vec![0; len])
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            anyhow::bail!("device disconnected")
+        }
+    }
+    let mut dev = Disconnected { reads: 0 };
+    let bytes = capture(&mut dev).unwrap();
+    let dir = directory(&bytes).unwrap().unwrap();
+    assert_eq!(dev.reads, 2);
+    assert_eq!(dir["complete"], false);
+    assert!(dir["logging"].as_str().unwrap().starts_with("skipped:"));
+}
+
+#[test]
+fn overlong_response_is_bounded_and_reported_incomplete() {
+    struct Overlong;
+    impl ScsiDevice for Overlong {
+        fn describe(&self) -> String {
+            "overlong".into()
+        }
+        fn command_in(&mut self, _: &[u8], len: usize) -> Result<Vec<u8>> {
+            Ok(vec![0xaa; len + 1])
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            Ok(())
+        }
+    }
+    let bytes = capture(&mut Overlong).unwrap();
+    let dir = directory(&bytes).unwrap().unwrap();
+    assert_eq!(dir["complete"], false);
+    assert_eq!(dir["reads"][0]["status"], "overlong");
+    assert_eq!(dir["reads"][0]["received"], diagnostic::LOG.length + 1);
+    assert_eq!(bytes[0xC02300], 0); // Reserved gap after the captured controller registers.
+}
+
+#[test]
+fn malformed_footer_bounds_are_errors_not_panics() {
+    let mut dev = Device {
+        reads: vec![],
+        disconnect: true,
+    };
+    let bytes = capture(&mut dev).unwrap();
+    for (field, value) in [(16, u64::MAX), (24, u64::MAX), (16, 0), (24, 0)] {
+        let mut bad = bytes.clone();
+        let start = bad.len() - FOOTER + field;
+        bad[start..start + 8].copy_from_slice(&value.to_le_bytes());
+        assert!(directory(&bad).is_err());
+    }
+}

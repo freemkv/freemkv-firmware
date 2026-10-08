@@ -5,8 +5,8 @@
 //! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
+use pioneer_optical::image::receiver_control_key as receiver_word;
 use pioneer_optical::Role;
-use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 
 #[cfg(test)]
@@ -14,10 +14,6 @@ use super::Identity;
 use super::{Capabilities, DriveFamily, Family, FullImage, RestoreRegion, UserDump};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
-
-#[path = "pioneer_bounded_profiles.rs"]
-mod bounded_profiles;
-pub use bounded_profiles::BOUNDED_PROFILES;
 
 #[path = "pioneer/transfer.rs"]
 pub mod transfer;
@@ -74,33 +70,6 @@ fn receiver_control(descriptor: &[u8], key: [u8; 4]) -> Result<[u8; CONTROL_LEN]
     control[..16].copy_from_slice(descriptor);
     control[16..20].copy_from_slice(&key);
     Ok(control)
-}
-
-/// Extract the receiver's own key from its paired CMP/accept and CMP/reject arms.
-/// Unknown or ambiguous instruction sequences are refused.
-fn receiver_word(body: &[u8]) -> Option<[u8; 4]> {
-    let mut found = None;
-    for (i, w) in body.windows(8).enumerate() {
-        if w[..7] != [0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47] {
-            continue;
-        }
-        let accept = i.checked_add(8)?.checked_add(w[7] as usize)?;
-        if accept > body.len() {
-            continue;
-        }
-        let end = accept;
-        for j in i + 8..end.saturating_sub(7) {
-            let x = &body[j..];
-            if x[..2] == [0x7a, 0x20] && x[6..8] == [0x58, 0x60] && j + 10 == accept {
-                let key = x[2..6].try_into().ok()?;
-                if found.is_some() {
-                    return None;
-                }
-                found = Some(key);
-            }
-        }
-    }
-    found
 }
 
 fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; CONTROL_LEN]> {
@@ -167,29 +136,15 @@ fn validate_header_chain(
     }
 }
 
-fn validate_normal_receiver(normal: &[u8], backup: Option<&[u8]>) -> Result<()> {
-    validate_normal_envelope(normal)?;
+fn validate_normal_receiver(normal: &[u8], backup: Option<&[u8]>) -> Result<Vec<u8>> {
     let Some(backup) = backup else {
-        return Ok(());
+        validate_normal_envelope(normal)?;
+        return Ok(normal.to_vec());
     };
     let (kernel, _) = classify_flash_input(backup)?;
-    let Some(kernel) = kernel else {
-        bail!("installed Kernel is required to validate Normal decoding");
-    };
-    let decoded_kernel = pioneer_optical::envelope::decode_envelope(&kernel)
-        .ok_or_else(|| anyhow!("installed Kernel decode failed"))?;
-    if !pioneer_optical::envelope::builder::normal_authentication_valid(
-        normal,
-        &decoded_kernel.image,
-    ) {
-        bail!("Normal authentication does not satisfy installed Kernel");
-    }
-    let decoded = pioneer_optical::envelope::decode_envelope_with_kernel(normal, &decoded_kernel)
-        .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
-    if !zero_word_sum(&decoded.image) || decoded.repack(&decoded.image).as_deref() != Some(normal) {
-        bail!("Normal receiver integrity check failed");
-    }
-    Ok(())
+    let kernel = kernel.context("installed Kernel is required to validate Normal decoding")?;
+    let update = pioneer_optical::envelope::Update::load(&kernel, normal)?;
+    Ok(update.normal_transfer().to_vec())
 }
 
 /// Offline framing with an unresolved control placeholder; live control comes from the drive.
@@ -198,42 +153,11 @@ pub fn generic_normal_transcript(envelope: &[u8]) -> Result<Vec<OemTransfer<'_>>
     transfer::data_out(&[0; CONTROL_LEN], envelope, None)
 }
 
-/// One exact-resource host profile from the bounded BDR-212-style updater
-/// cluster. The source hash is manifest provenance; both resource hashes are
-/// checked against bytes in the bundle before any offline stage is described.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BoundedOemProfile {
-    /// SHA-256 of the original downloaded package.
-    pub source_sha256: &'static str,
-    /// Basename of the downloaded package.
-    pub source_name: &'static str,
-    /// SHA-256 of the matching nested updater executable.
-    pub updater_sha256: &'static str,
-    /// Member name of the matching updater executable.
-    pub updater_member: &'static str,
-    /// Whether exactly one matching updater executable is in the package.
-    pub unique_executable: bool,
-    /// Exact 16-byte descriptor copied to the OEM control buffer.
-    pub control_header: [u8; 16],
-    /// OEM control key copied little-endian after the descriptor.
-    pub key: u32,
-    /// SHA-256 of the complete 256-byte zero-tailed control buffer.
-    pub control_sha256: &'static str,
-    /// SHA-256 of PE Binary ID131 Kernel resource.
-    pub kernel_sha256: &'static str,
-    /// Length of PE Binary ID131 Kernel resource.
-    pub kernel_len: usize,
-    /// SHA-256 of PE Binary ID132 Normal resource.
-    pub normal_sha256: &'static str,
-    /// Length of PE Binary ID132 Normal resource.
-    pub normal_len: usize,
-}
-
 /// Size sanity for a Normal about to be written: within `IMAGE_MIN..=IMAGE_MAX`
 /// and 256-byte aligned (offsets are 24-bit; a bad size would fail mid-session).
 fn check_normal_size(envelope: &[u8]) -> Result<()> {
     if !(IMAGE_MIN..=IMAGE_MAX).contains(&envelope.len()) || !envelope.len().is_multiple_of(0x100) {
-        bail!("Pioneer envelope length is outside the supported profile range or not 256-byte aligned");
+        bail!("Pioneer envelope length is outside the supported transfer range or not 256-byte aligned");
     }
     Ok(())
 }
@@ -243,8 +167,6 @@ fn check_normal_size(envelope: &[u8]) -> Result<()> {
 pub enum TransferStage {
     /// Enter the OEM update mode with a 256-byte control buffer.
     Entry,
-    /// Transfer the initial raw Kernel prefix on buffer F0.
-    KernelPrefix,
     /// Transfer one Kernel FE slice, possibly generated at runtime.
     KernelFe,
     /// Transfer one raw Normal envelope chunk.
@@ -266,164 +188,14 @@ pub struct OemTransfer<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
-/// A code-backed BDR-212 1.05 stage outline. It intentionally does not
-/// implement the full preflight, status polling, bundle selection, or a live
-/// executor. `GeneratedKernelBlock` depends on the updater's GetTickCount
-/// seed; it cannot be represented by a byte-exact package-only transcript.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Bdr212Stage {
-    /// 04/FF with the descriptor/key control buffer.
-    EntryControl,
-    /// 07/F0 sends the unchanged Kernel resource prefix.
-    KernelPrefix {
-        /// Offset in the Kernel resource.
-        source_offset: u32,
-        /// Transfer length.
-        length: u32,
-    },
-    /// Runtime GetTickCount/CRT-rand block replaces the working buffer head.
-    GeneratedKernelBlock {
-        /// Generated byte count.
-        length: u32,
-    },
-    /// 07/FE sends one selected Kernel working-buffer slice.
-    KernelFe {
-        /// Offset encoded in the WRITE BUFFER CDB.
-        cdb_offset: u32,
-        /// Offset in the working Kernel buffer after generation.
-        source_offset: u32,
-        /// Transfer length.
-        length: u32,
-    },
-    /// 07/F0 sends the unchanged Normal resource in bounded chunks.
-    NormalEnvelope {
-        /// Total transfer length.
-        length: u32,
-    },
-    /// 05/FF with the descriptor/key control buffer.
-    FinishControl,
-}
-
-/// Selected BDR-212 1.05 updater data-out stages, without the separate
-/// read/clear/poll/status operations needed for a complete executable path.
-pub const BDR212_V105_STAGES: &[Bdr212Stage] = &[
-    Bdr212Stage::EntryControl,
-    Bdr212Stage::KernelPrefix {
-        source_offset: 0,
-        length: 0x1200,
-    },
-    Bdr212Stage::GeneratedKernelBlock { length: 0x200 },
-    Bdr212Stage::KernelFe {
-        cdb_offset: 0,
-        source_offset: 0,
-        length: 0x200,
-    },
-    Bdr212Stage::KernelFe {
-        cdb_offset: 0x1200,
-        source_offset: 0x200,
-        length: 0x8000,
-    },
-    Bdr212Stage::KernelFe {
-        cdb_offset: 0x9200,
-        source_offset: 0x8200,
-        length: 0x8000,
-    },
-    Bdr212Stage::KernelFe {
-        cdb_offset: 0x11200,
-        source_offset: 0x10200,
-        length: 0x1000,
-    },
-    Bdr212Stage::NormalEnvelope { length: 0x1d7600 },
-    Bdr212Stage::FinishControl,
-];
-
-/// Reproduce the updater's 512-byte MSVC CRT `rand()` block for an explicit
-/// seed. This is an offline algorithm KAT, not evidence that any seed is
-/// accepted by the drive or that a firmware bundle selects this path.
-pub fn bdr212_generated_kernel_block(seed: u32) -> [u8; 0x200] {
-    let mut state = seed;
-    let mut out = [0u8; 0x200];
-    for byte in &mut out {
-        state = state.wrapping_mul(0x343fd).wrapping_add(0x269ec3);
-        *byte = ((state >> 16) & 0xff) as u8;
-    }
-    out
-}
-
-/// Materialize only the BDR-212 1.05 data-out sequence for exact audited PE
-/// resources and a caller-supplied timestamp seed. The actual updater obtains
-/// that seed from GetTickCount; this API neither predicts it nor performs I/O.
-/// Read/clear/poll/status operations are excluded, so this is not an
-/// executable firmware update plan.
-pub fn offline_bdr212_v105_data_out<'a>(
-    kernel: &'a [u8],
-    normal: &'a [u8],
-    seed: u32,
-) -> Result<Vec<OemTransfer<'a>>> {
-    let profile = BOUNDED_PROFILES
-        .iter()
-        .find(|p| {
-            p.kernel_sha256 == "7c4e8f4a45f2f555d425d7dce3fb6362bdcfc8ff1a78bfa914ca8470c70c97e6"
-                && p.normal_sha256
-                    == "f570afebf6d00aa494b5d6e4ec3ae8360494536de4c2fc9c7f202fd3414c8403"
-        })
-        .ok_or_else(|| anyhow!("audited BDR-212 1.05 profile missing from pinned table"))?;
-    offline_bounded_oem_data_out(profile, kernel, normal, seed)
-}
-
 /// Validate transfer layout and decoded integrity, independent of model and revision.
-fn validate_kernel_normal(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_LEN]> {
+fn validate_kernel_normal(kernel: &[u8], normal: &[u8]) -> Result<()> {
     check_normal_size(kernel)?;
     check_normal_size(normal)?;
     crate::pioneer_flash_plan::validate_bundle(Some(kernel), Some(normal))
         .map_err(anyhow::Error::msg)?;
-    let kh = pioneer_optical::envelope::header_info(kernel)
-        .ok_or_else(|| anyhow!("Kernel header missing"))?;
-    let nh = pioneer_optical::envelope::header_info(normal)
-        .ok_or_else(|| anyhow!("Normal header missing"))?;
-    if nh.hardware_version != kh.hardware_version
-        || nh.destination != kh.destination
-        || kh.kind != Some(pioneer_optical::ComponentKind::Kernel)
-        || nh.kind != Some(pioneer_optical::ComponentKind::Normal)
-        || kh.kernel_version != nh.kernel_version
-        || kh.kernel_version2 != nh.kernel_version2
-    {
-        bail!("Kernel and Normal envelope identities disagree");
-    }
-    let decoded_kernel = pioneer_optical::envelope::decode_envelope(kernel)
-        .ok_or_else(|| anyhow!("Kernel decode failed"))?;
-    if !pioneer_optical::envelope::builder::normal_authentication_valid(
-        normal,
-        &decoded_kernel.image,
-    ) {
-        bail!("Normal authentication does not satisfy the supplied Kernel");
-    }
-    let decoded_normal =
-        pioneer_optical::envelope::decode_envelope_with_kernel(normal, &decoded_kernel)
-            .ok_or_else(|| anyhow!("Normal receiver decode failed"))?;
-    if !matches!(
-        decoded_kernel.info().layout,
-        pioneer_optical::envelope::Layout::KernelFront
-            | pioneer_optical::envelope::Layout::KernelDerived
-    ) || !matches!(
-        decoded_normal.info().layout,
-        pioneer_optical::envelope::Layout::Normal
-            | pioneer_optical::envelope::Layout::NormalScaledKey
-    ) || !zero_word_sum(&decoded_kernel.image)
-        || !zero_word_sum(&decoded_normal.image)
-    {
-        bail!("decoded image integrity or layout mismatch");
-    }
-    if decoded_kernel.repack(&decoded_kernel.image).as_deref() != Some(kernel)
-        || decoded_normal.repack(&decoded_normal.image).as_deref() != Some(normal)
-    {
-        bail!("Pioneer envelope does not round-trip exactly");
-    }
-    receiver_control(
-        decoded_normal.image.get(..16).unwrap_or_default(),
-        receiver_word(&decoded_normal.image)
-            .context("receiver control key is missing or ambiguous")?,
-    )
+    pioneer_optical::envelope::Update::load(kernel, normal)?;
+    Ok(())
 }
 
 /// Validate and plan an envelope pair from its contents.
@@ -433,51 +205,21 @@ pub fn offline_pair_data_out<'a>(
     kernel: &'a [u8],
     normal: &'a [u8],
 ) -> Result<Vec<OemTransfer<'a>>> {
-    let control = validate_kernel_normal(kernel, normal)?;
-    transfer::data_out(&control, normal, Some(transfer::select_kernel(kernel, 0)?))
-}
-
-fn zero_word_sum(bytes: &[u8]) -> bool {
-    bytes.len().is_multiple_of(4)
-        && bytes.as_chunks::<4>().0.iter().fold(0u32, |sum, word| {
-            sum.wrapping_add(u32::from_be_bytes(*word))
-        }) == 0
-}
-
-/// Materialize the shared bounded-flow data-out path for an exact, pinned
-/// Kernel/Normal resource pair and an explicit GetTickCount seed. This omits
-/// preflight, read/clear, polling, status, and reset; it never opens a drive.
-pub fn offline_bounded_oem_data_out<'a>(
-    profile: &BoundedOemProfile,
-    kernel: &'a [u8],
-    normal: &'a [u8],
-    seed: u32,
-) -> Result<Vec<OemTransfer<'a>>> {
-    if profile.kernel_len != 0x11200
-        || kernel.len() != profile.kernel_len
-        || format!("{:x}", Sha256::digest(kernel)) != profile.kernel_sha256
-    {
-        bail!("Kernel resource differs from pinned PE Binary ID131");
-    }
-    if normal.len() != profile.normal_len
-        || format!("{:x}", Sha256::digest(normal)) != profile.normal_sha256
-    {
-        bail!("Normal resource differs from pinned PE Binary ID132");
-    }
-    let mut control = [0u8; CONTROL_LEN];
-    control[..16].copy_from_slice(&profile.control_header);
-    control[16..20].copy_from_slice(&profile.key.to_le_bytes());
-    if format!("{:x}", Sha256::digest(control)) != profile.control_sha256 {
-        bail!("control buffer differs from pinned updater construction");
-    }
-    transfer::data_out(
+    validate_kernel_normal(kernel, normal)?;
+    let control = [0; CONTROL_LEN]; // Offline placeholder; the live key belongs to the installed receiver.
+    let update = pioneer_optical::envelope::Update::load(kernel, normal)?;
+    let steps = transfer::data_out(
         &control,
-        normal,
-        Some(transfer::KernelTransfer::PrefixF0GeneratedFe {
-            bytes: kernel,
-            seed,
-        }),
-    )
+        update.normal_transfer(),
+        Some(transfer::select_kernel(kernel)?),
+    )?;
+    Ok(steps
+        .into_iter()
+        .map(|step| OemTransfer {
+            data: Cow::Owned(step.data.into_owned()),
+            ..step
+        })
+        .collect())
 }
 
 // ---- Flash input classification + confirm prompt ---------------------------
@@ -577,8 +319,7 @@ pub(crate) fn installed_facts(
     let normal_date = ninfo
         .as_ref()
         .and_then(|h| FwDate::parse(&h.generated_date));
-    // A recognized generation-patched OEM kernel still contains its original
-    // receiver code. Classify that original marker, not our compatibility edit.
+    // Recognize the resident receiver code independently of marker edits.
     let receiver_new_gen = installed_kernel
         .as_deref()
         .and_then(pioneer_optical::envelope::decode_envelope)
@@ -727,6 +468,17 @@ fn target_receiver_is_old_gen(kernel: &[u8]) -> bool {
         == Some(false)
 }
 
+fn verify_resident_kernel(dev: &mut dyn ScsiDevice, expected: &[u8]) -> Result<()> {
+    for (index, chunk) in expected.chunks(FLASH_CHUNK).enumerate() {
+        let address = pioneer_optical::image::KERNEL_BASE + (index * FLASH_CHUNK) as u32;
+        let actual = super::pioneer_transport::read_memory_exact(dev, address, chunk.len() as u32)?;
+        if actual != chunk {
+            bail!("resident Kernel readback differs at {address:#x}");
+        }
+    }
+    Ok(())
+}
+
 /// Second pass of a cross-generation downgrade: re-flash the UNMODIFIED
 /// (native-marker) Kernel so the drive ends byte-exact OEM. Keyed from the
 /// just-written target bundle (its Normal body carries the live receiver's key)
@@ -739,6 +491,12 @@ fn restore_oem_kernel(
     recover: bool,
     force: bool,
 ) -> Result<()> {
+    let decoded = pioneer_optical::envelope::decode_envelope(pristine_kernel)
+        .context("cannot decode OEM Kernel for restore verification")?;
+    let (patched, _) = pioneer_optical::envelope::downgrade_patch(&decoded.image)
+        .map_err(|e| anyhow!("cannot derive first-pass Kernel for verification: {e:?}"))?;
+    verify_resident_kernel(dev, &patched)
+        .context("first-pass Kernel not verified; refusing a second update")?;
     println!(
         "{}",
         crate::style::dim(
@@ -756,6 +514,8 @@ fn restore_oem_kernel(
         false, // patch_kernel: write the Kernel byte-identical
         force,
     )?;
+    verify_resident_kernel(dev, &decoded.image)
+        .context("OEM Kernel restore completed but readback did not verify")?;
     println!(
         "{}",
         crate::style::green(
@@ -972,17 +732,17 @@ impl DriveFamily for Pioneer {
             check_plan_executable(&plan)?;
             debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
 
-            let kernel_to_write = match selection {
+            let (kernel_to_write, normal_transfer) = match selection {
                 FlashSelection::KernelAndNormal => {
                     let kernel = kernel.as_deref().expect("selected Kernel");
-                    validate_kernel_normal(kernel, normal)?;
-                    Some(kernel)
+                    let update = pioneer_optical::envelope::Update::load(kernel, normal)?;
+                    (Some(kernel), update.normal_transfer().to_vec())
                 }
                 FlashSelection::NormalOnly => {
-                    validate_normal_receiver(normal, installed_backup)?;
-                    None
+                    (None, validate_normal_receiver(normal, installed_backup)?)
                 }
             };
+            let normal_to_write = normal_transfer.as_slice();
             let control = live_control(dev, installed_backup)?;
             // The §15.3 marker patch is applied only when it will really happen:
             // known new-gen (or unknown, e.g. --recover/--skip-backup) receiver and
@@ -992,6 +752,20 @@ impl DriveFamily for Pioneer {
                 kernel_to_write,
                 installed_facts(installed_backup).and_then(|i| i.receiver_new_gen),
             );
+            if will_patch {
+                let pristine = kernel_to_write.expect("a marker patch requires a Kernel");
+                if !target_receiver_is_old_gen(pristine) {
+                    bail!("cannot prove the target receiver accepts the pristine Kernel restore; no update entry attempted");
+                }
+                let target_kernel = pioneer_optical::envelope::Envelope::load(pristine)?;
+                let target_normal = pioneer_optical::envelope::decode_envelope_with_kernel(
+                    normal_to_write,
+                    &target_kernel,
+                )
+                .context("cannot decode the target receiver for restore preflight")?;
+                receiver_word(&target_normal.image)
+                    .context("target receiver control key is unavailable for the OEM restore; no update entry attempted")?;
+            }
             if will_patch && !plan_is_downgrade(&plan) {
                 eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
             }
@@ -1001,44 +775,30 @@ impl DriveFamily for Pioneer {
                 dev,
                 &control,
                 kernel_to_write,
-                normal,
+                normal_to_write,
                 req.recover,
                 will_patch,
                 req.force,
             )?;
+            // A second update can fail after writing starts. Never report the
+            // first pass as proof that the drive survived a failed restore.
+            if will_patch {
+                if let Some(pristine) = kernel_to_write.filter(|k| target_receiver_is_old_gen(k)) {
+                    restore_oem_kernel(
+                        dev,
+                        &req.input,
+                        pristine,
+                        normal_to_write,
+                        req.recover,
+                        req.force,
+                    )
+                    .context("OEM Kernel restore failed; drive state is not verified")?;
+                }
+            }
             println!(
                 "{}",
                 crate::style::green("flash complete; drive returned ready.")
             );
-            // Restore a byte-exact OEM kernel after a cross-generation downgrade.
-            // Flash #1 §15.3-patched the incoming kernel's marker (FF/00 -> 01)
-            // ONLY to pass the then-installed NEW-gen Site-1 gate. The drive now
-            // runs the OLD-gen receiver, which has no marker gate at all (verified
-            // across the firmware corpus: the body[0xFE] equality check exists only
-            // in new-gen bodies, there is no anti-rollback, and the additive body
-            // checksum is already 0 in the pristine body). So a second write of the
-            // UNMODIFIED kernel is accepted and leaves the drive byte-exact OEM —
-            // strictly better than running a disguised marker. Done automatically
-            // (no flag), only when provably safe. Non-fatal: flash #1 already
-            // produced a working drive; a failed restore is a warning and
-            // re-running the flash reproduces this state.
-            if will_patch {
-                if let Some(pristine) = kernel_to_write {
-                    if target_receiver_is_old_gen(pristine) {
-                        if let Err(e) =
-                            restore_oem_kernel(dev, &req.input, pristine, normal, req.recover, req.force)
-                        {
-                            eprintln!(
-                                "{}",
-                                crate::style::amber(&format!(
-                                    "OEM-kernel restore pass skipped ({e:#}); the drive is working \
-                                     with the marker-patched kernel. Re-run the flash to retry."
-                                ))
-                            );
-                        }
-                    }
-                }
-            }
             // Auto post-flash identity readback: the drive just rebooted into
             // whatever it now reports as its live identity. Print it so the user
             // sees exactly what landed without a separate `info` invocation.
@@ -1253,3 +1013,7 @@ mod tests;
 mod oem_reference_tests;
 #[cfg(test)]
 use oem_reference_tests::*;
+
+#[cfg(test)]
+#[path = "pioneer/matrix_tests.rs"]
+mod matrix_tests;

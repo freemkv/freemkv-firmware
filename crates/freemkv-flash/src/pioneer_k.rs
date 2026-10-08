@@ -106,7 +106,6 @@ pub fn lookup(image_sha256: &str) -> Option<&'static KernelEntry> {
 pub struct KernelMatch<'a> {
     pub entry: &'a KernelEntry,
     pub generation_patched: bool,
-    pub original_marker: u8,
 }
 
 /// Recognition only: never alters the caller's captured image.
@@ -114,15 +113,13 @@ pub fn recognize(image: &[u8]) -> Option<KernelMatch<'static>> {
     recognize_with(image, lookup)
 }
 
-/// Classify the installed receiver using the original marker for a recognized
-/// patched OEM body: our marker edit does not add a newer receiver implementation.
+/// Classify the installed receiver from its finalizer code. A patched marker
+/// does not change its implementation; unknown code remains unknown.
 pub fn receiver_generation(image: &[u8]) -> Option<bool> {
-    let marker = recognize(image)
-        .map(|m| m.original_marker)
-        .or_else(|| image.get(0xfe).copied())?;
-    match marker {
-        0xff | 0 => Some(false),
-        1 => Some(true),
+    use pioneer_optical::image::{kernel_marker_policy, KernelMarkerPolicy};
+    match kernel_marker_policy(image)? {
+        KernelMarkerPolicy::NoMarkerCheck => Some(false),
+        KernelMarkerPolicy::RejectZeroAndErased => Some(true),
         _ => None,
     }
 }
@@ -136,7 +133,6 @@ fn recognize_with<'a>(
         return Some(KernelMatch {
             entry,
             generation_patched: false,
-            original_marker: *image.get(0xfe)?,
         });
     }
     if image.len() != pioneer_optical::envelope::KERNEL_BODY_LEN || image[0xfe] != 1 {
@@ -154,7 +150,6 @@ fn recognize_with<'a>(
             return Some(KernelMatch {
                 entry,
                 generation_patched: true,
-                original_marker: marker,
             });
         }
     }

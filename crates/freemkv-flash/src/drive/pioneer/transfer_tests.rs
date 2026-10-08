@@ -32,45 +32,17 @@ fn linear_chunks_preserve_all_bytes_and_encode_final_fragment() {
 }
 
 #[test]
-fn same_kernel_size_does_not_select_a_strategy() {
-    let kernel: Vec<u8> = (0..0x11200).map(|i| (i % 251) as u8).collect();
-    let normal = [0x33; 0x101];
-    let linear = data_out(&[0; 256], &normal, Some(KernelTransfer::LinearFe(&kernel))).unwrap();
-    let generated = data_out(
-        &[0; 256],
-        &normal,
-        Some(KernelTransfer::PrefixF0GeneratedFe {
-            bytes: &kernel,
-            seed: 1,
-        }),
-    )
-    .unwrap();
-    assert_eq!(linear.len(), 6); // entry, three FE, Normal, finish
-    assert_eq!(generated.len(), 8); // entry, F0 prefix, four FE, Normal, finish
-    assert_eq!(linear[1].cdb, [0x3B, 7, 0xFE, 0, 0, 0, 0, 0x80, 0, 0]);
-    assert_eq!(generated[1].cdb, [0x3B, 7, 0xF0, 0, 0, 0, 0, 0x12, 0, 0]);
-    assert_eq!(generated[3].data.as_ref(), &kernel[0x200..0x8200]);
-    assert_eq!(generated[5].data.as_ref(), &kernel[0x10200..0x11200]);
-    assert_eq!(kernel[0], 0); // input retained, never overwritten with generated data
-}
-
-#[test]
 fn invalid_spans_are_rejected_before_materialization() {
     assert!(data_out(&[0; 256], &[], None).is_err());
     assert!(data_out(&[0; 256], &[1], Some(KernelTransfer::LinearFe(&[]))).is_err());
-    for size in [0, 0x111ff, 0x11201] {
-        let kernel = vec![0; size];
-        assert!(data_out(
-            &[0; 256],
-            &[1],
-            Some(KernelTransfer::PrefixF0GeneratedFe {
-                bytes: &kernel,
-                seed: 0,
-            })
-        )
-        .is_err());
-    }
     let too_large = vec![0; 0x100_0001];
     assert!(data_out(&[0; 256], &too_large, None).is_err());
     assert!(data_out(&[0; 256], &[1], Some(KernelTransfer::LinearFe(&too_large))).is_err());
+}
+
+#[test]
+fn arbitrary_kernel_bytes_never_select_a_transfer() {
+    for size in [0, 0x111ff, 0x11200, 0x11201] {
+        assert!(select_kernel(&vec![0; size]).is_err());
+    }
 }

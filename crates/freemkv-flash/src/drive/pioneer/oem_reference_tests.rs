@@ -1,6 +1,7 @@
 //! Historical OEM transcript oracles; never compiled into production.
 #![allow(dead_code)]
 use super::*;
+use sha2::{Digest, Sha256};
 // ---- Kernel-key table (intentionally minimal) ------------------------------
 
 /// On-wire layout of the 32-bit kernel key inside `payload[0x10..0x14]`.

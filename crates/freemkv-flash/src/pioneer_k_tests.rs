@@ -8,18 +8,16 @@ fn live_patched_oem_fixture_when_configured() {
     let image = std::fs::read(path).unwrap();
     let matched = recognize(&image).expect("patched OEM kernel recognized");
     assert!(matched.generation_patched);
-    assert_eq!(matched.original_marker, 0xff);
     assert_eq!(receiver_generation(&image), Some(false));
 }
 
 #[test]
-fn receiver_generation_keeps_unknown_distinct() {
-    let mut image = vec![0; 0x10000];
-    assert_eq!(receiver_generation(&image), Some(false));
-    image[0xfe] = 1;
-    assert_eq!(receiver_generation(&image), Some(true));
-    image[0xfe] = 0x55;
-    assert_eq!(receiver_generation(&image), None);
+fn receiver_generation_never_treats_a_marker_as_protocol_evidence() {
+    let mut image = vec![0; pioneer_optical::image::KERNEL_LEN];
+    for marker in [0, 1, 0xff, 0x55] {
+        image[0xfe] = marker;
+        assert_eq!(receiver_generation(&image), None);
+    }
     assert_eq!(receiver_generation(&[]), None);
 }
 
@@ -48,10 +46,10 @@ fn generation_patch_requires_exact_compensation_and_no_other_changes() {
                 .unwrap()
                 .generation_patched
         );
-        assert_eq!(
-            recognize_with(&patched, resolve).unwrap().original_marker,
-            marker
-        );
+        assert!(std::ptr::eq(
+            recognize_with(&patched, resolve).unwrap().entry,
+            &entry
+        ));
         let mut bad = patched.clone();
         bad[0x1022] ^= 1;
         assert!(recognize_with(&bad, resolve).is_none());

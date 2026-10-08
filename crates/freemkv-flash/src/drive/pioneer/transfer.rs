@@ -3,8 +3,7 @@
 //! not infer a protocol from an image's size, revision, or filename.
 
 use super::{
-    bdr212_generated_kernel_block, cdb_wb_flash_entry, cdb_wb_flash_finish, OemTransfer,
-    TransferStage, CONTROL_LEN, FLASH_CHUNK,
+    cdb_wb_flash_entry, cdb_wb_flash_finish, OemTransfer, TransferStage, CONTROL_LEN, FLASH_CHUNK,
 };
 use anyhow::{bail, Result};
 use pioneer_optical::Role;
@@ -14,27 +13,20 @@ use std::borrow::Cow;
 pub enum KernelTransfer<'a> {
     /// Send the entire envelope to FE, starting at offset zero.
     LinearFe(&'a [u8]),
-    /// Send the 0x1200-byte prefix to F0, then the generated block and the
-    /// observed three slices to FE. The seed is supplied by the session.
-    PrefixF0GeneratedFe {
-        /// Original Kernel envelope, unchanged by generated-block construction.
-        bytes: &'a [u8],
-        /// Explicit seed for the updater's CRT random-byte generator.
-        seed: u32,
-    },
+    /// Canonical front-key bytes prepared by the envelope codec.
+    PreparedFe(Vec<u8>),
 }
 
-/// Select framing from decoded Kernel layout, never model, revision or length alone.
-pub fn select_kernel(bytes: &[u8], seed: u32) -> Result<KernelTransfer<'_>> {
-    let decoded = pioneer_optical::envelope::decode_envelope(bytes)
-        .ok_or_else(|| anyhow::anyhow!("cannot determine Kernel transfer layout"))?;
-    match decoded.info().layout {
-        pioneer_optical::envelope::Layout::KernelFront => Ok(KernelTransfer::LinearFe(bytes)),
-        pioneer_optical::envelope::Layout::KernelDerived => {
-            Ok(KernelTransfer::PrefixF0GeneratedFe { bytes, seed })
-        }
-        other => bail!("unsupported Kernel transfer layout: {other:?}"),
-    }
+/// Prepare the receiver representation through the library's envelope codec.
+pub fn select_kernel(bytes: &[u8]) -> Result<KernelTransfer<'_>> {
+    let decoded = pioneer_optical::envelope::Envelope::load(bytes)?;
+    let prepared = decoded.kernel_transfer_image().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Kernel transfer representation unavailable for {}",
+            decoded.info().layout
+        )
+    })?;
+    Ok(KernelTransfer::PreparedFe(prepared))
 }
 
 /// Build the data-out portion of a session that requires entry. No device I/O,
@@ -48,13 +40,7 @@ pub fn data_out<'a>(
     if let Some(ref component) = kernel {
         match component {
             KernelTransfer::LinearFe(bytes) => check_span(bytes)?,
-            KernelTransfer::PrefixF0GeneratedFe { bytes, .. } => {
-                // These source slices and destination offsets are established
-                // only for this framing. Do not silently truncate another size.
-                if bytes.len() != 0x11200 {
-                    bail!("prefix/generated Kernel framing requires 0x11200 bytes");
-                }
-            }
+            KernelTransfer::PreparedFe(bytes) => check_span(bytes)?,
         }
     }
     let mut out = vec![OemTransfer {
@@ -68,29 +54,14 @@ pub fn data_out<'a>(
         Some(KernelTransfer::LinearFe(bytes)) => {
             chunks(&mut out, TransferStage::KernelFe, bytes);
         }
-        Some(KernelTransfer::PrefixF0GeneratedFe { bytes, seed }) => {
-            out.push(OemTransfer {
-                stage: TransferStage::KernelPrefix,
-                offset: 0,
-                cdb: pioneer_optical::cdb::transfer(Role::Normal, 0, 0x1200),
-                data: Cow::Borrowed(&bytes[..0x1200]),
-            });
-            out.push(OemTransfer {
-                stage: TransferStage::KernelFe,
-                offset: 0,
-                cdb: pioneer_optical::cdb::transfer(Role::Kernel, 0, 0x200),
-                data: Cow::Owned(bdr212_generated_kernel_block(seed).to_vec()),
-            });
-            for (destination, start, len) in [
-                (0x1200, 0x200, 0x8000),
-                (0x9200, 0x8200, 0x8000),
-                (0x11200, 0x10200, 0x1000),
-            ] {
+        Some(KernelTransfer::PreparedFe(bytes)) => {
+            for (index, data) in bytes.chunks(FLASH_CHUNK).enumerate() {
+                let offset = (index * FLASH_CHUNK) as u32;
                 out.push(OemTransfer {
                     stage: TransferStage::KernelFe,
-                    offset: destination,
-                    cdb: pioneer_optical::cdb::transfer(Role::Kernel, destination, len as u32),
-                    data: Cow::Borrowed(&bytes[start..start + len]),
+                    offset,
+                    cdb: pioneer_optical::cdb::transfer(Role::Kernel, offset, data.len() as u32),
+                    data: Cow::Owned(data.to_vec()),
                 });
             }
         }
