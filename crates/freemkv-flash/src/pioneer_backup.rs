@@ -566,6 +566,10 @@ fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
         .context("captured Kernel receiver layout is unsupported")?;
     let revision = std::str::from_utf8(&inquiry[32..36])?.trim().to_owned();
 
+    // Establish the supported physical map before allowing a partial backup.
+    // A read failure may be salvaged; unknown geometry must never be mislabeled.
+    validate_backup_map(dev, &kernel)?;
+
     // The Normal is attempted independently; its failure keeps the Kernel.
     match read_normal_region(dev, &kernel, deep) {
         Ok(normal) => {
@@ -638,12 +642,46 @@ fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> 
     Ok((inquiry, f1[16..24].to_vec(), kernel_len))
 }
 
-/// Read the Normal image region: locate its header, derive its length from the
-/// Kernel geometry, and capture it (`deep` selects the salvage read).
-fn read_normal_region(dev: &mut dyn ScsiDevice, kernel: &[u8], deep: bool) -> Result<Vec<u8>> {
-    let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24, deep)?;
-    if !normal_head.starts_with(b"PIONEER ") {
-        bail!("Normal image header is missing at the discovered base");
+/// Probe the readable ceiling and inspect descriptors throughout that span.
+/// The envelope codec currently supports a 64 KiB Kernel at 0x400000 only.
+/// Refuse other/ambiguous maps instead of manufacturing a truncated backup.
+fn validate_backup_map(dev: &mut dyn ScsiDevice, kernel: &[u8]) -> Result<()> {
+    let end = probe_read_end(dev)?;
+    let mut image = Vec::with_capacity(end);
+    for offset in (0..end).step_by(READ_CHUNK) {
+        image.extend_from_slice(&read_chunk(dev, offset, READ_CHUNK.min(end - offset))?);
+    }
+    validate_backup_image_map(&image, kernel)
+}
+
+fn validate_backup_image_map(image: &[u8], kernel: &[u8]) -> Result<()> {
+    const DESCRIPTOR_ALIGNMENT: usize = 0x100;
+    const DESCRIPTOR_LEN: usize = 24;
+    let mut bases = Vec::new();
+    for base in (0..image.len().saturating_sub(DESCRIPTOR_LEN - 1)).step_by(DESCRIPTOR_ALIGNMENT) {
+        if image[base..].starts_with(b"PIONEER ") {
+            bases.push(base);
+        }
+    }
+    if bases != [NORMAL_IMAGE_BASE] {
+        bail!("unsupported or ambiguous firmware map: Normal descriptors at {bases:x?}; no backup created; use dump for raw capture");
+    }
+    if kernel.len() != NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE || !zero_be32_sum(kernel) {
+        bail!("unsupported Kernel extent or invalid checksum; no backup created");
+    }
+    let normal_len = normal_image_len(kernel, &image[NORMAL_IMAGE_BASE..])?;
+    if NORMAL_IMAGE_BASE
+        .checked_add(normal_len)
+        .is_none_or(|end| end > image.len())
+    {
+        bail!("Normal firmware extends beyond the probed readable ceiling; no backup created");
+    }
+    Ok(())
+}
+
+fn normal_image_len(kernel: &[u8], normal_head: &[u8]) -> Result<usize> {
+    if normal_head.len() < 24 || !normal_head.starts_with(b"PIONEER ") {
+        bail!("Normal image header is missing at the supported base");
     }
     let normal_len =
         match pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(kernel) {
@@ -652,10 +690,18 @@ fn read_normal_region(dev: &mut dyn ScsiDevice, kernel: &[u8], deep: bool) -> Re
         };
     if !(0x2000..=0x800000).contains(&normal_len)
         || !normal_len.is_multiple_of(0x100)
-        || NORMAL_IMAGE_BASE + normal_len > 0x1000000
+        || NORMAL_IMAGE_BASE + normal_len > ADDRESS_LIMIT
     {
         bail!("Normal image declares an invalid length");
     }
+    Ok(normal_len)
+}
+
+/// Read the Normal image region: locate its header, derive its length from the
+/// Kernel geometry, and capture it (`deep` selects the salvage read).
+fn read_normal_region(dev: &mut dyn ScsiDevice, kernel: &[u8], deep: bool) -> Result<Vec<u8>> {
+    let normal_head = read_region(dev, NORMAL_IMAGE_BASE, 24, deep)?;
+    let normal_len = normal_image_len(kernel, &normal_head)?;
     read_region(dev, NORMAL_IMAGE_BASE, normal_len, deep)
 }
 

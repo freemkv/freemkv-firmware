@@ -1126,15 +1126,15 @@ fn installed_patched_backup_is_not_a_newer_receiver_when_configured() {
 }
 
 #[test]
-fn receiver_control_uses_resident_descriptor_and_universal_key() {
+fn receiver_control_requires_an_explicit_receiver_key() {
     let descriptor = b"PIONEER  BDR-211";
-    let control = receiver_control(descriptor).unwrap();
+    let control = receiver_control(descriptor, [0x42, 0x66, 0x23, 0xfd]).unwrap();
     assert_eq!(&control[..16], descriptor);
-    assert_eq!(&control[16..20], &[0x9a, 0x78, 0x23, 0x61]);
+    assert_eq!(&control[16..20], &[0x42, 0x66, 0x23, 0xfd]);
     assert!(control[20..].iter().all(|&b| b == 0));
-    assert!(receiver_control(&descriptor[..15]).is_err());
-    assert!(receiver_control(&[0; 16]).is_err());
-    assert!(receiver_control(&[0xff; 16]).is_err());
+    assert!(receiver_control(&descriptor[..15], [0; 4]).is_err());
+    assert!(receiver_control(&[0; 16], [0; 4]).is_err());
+    assert!(receiver_control(&[0xff; 16], [0; 4]).is_err());
 }
 
 #[test]
@@ -1179,15 +1179,16 @@ fn receiver_word_extracts_accepted_immediate_and_rejects_ambiguity() {
 }
 
 #[test]
-fn live_control_reads_receiver_descriptor_without_target_model() {
+fn live_control_refuses_a_missing_backup_before_update_entry() {
     let descriptor = b"PIONEER  BDR-211";
     let mut dev = MockScsiDevice::new().on(
         |cdb| cdb == pioneer_optical::cdb::read_memory(0x410000, 16),
         descriptor.to_vec(),
     );
-    let control = live_control(&mut dev, None).unwrap();
-    assert_eq!(&control[..16], descriptor);
-    assert_eq!(&control[16..20], &[0x9a, 0x78, 0x23, 0x61]);
+    assert!(live_control(&mut dev, None)
+        .unwrap_err()
+        .to_string()
+        .contains("backup is required"));
     assert_eq!(
         dev.reads
             .iter()

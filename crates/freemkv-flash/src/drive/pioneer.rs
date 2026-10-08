@@ -129,7 +129,7 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
 }
 
 /// Construct entry/finish control from the resident Normal descriptor.
-fn receiver_control(descriptor: &[u8]) -> Result<[u8; CONTROL_LEN]> {
+fn receiver_control(descriptor: &[u8], key: [u8; 4]) -> Result<[u8; CONTROL_LEN]> {
     if descriptor.len() != 16
         || !descriptor.starts_with(b"PIONEER ")
         || !descriptor
@@ -140,12 +140,12 @@ fn receiver_control(descriptor: &[u8]) -> Result<[u8; CONTROL_LEN]> {
     }
     let mut control = [0; CONTROL_LEN];
     control[..16].copy_from_slice(descriptor);
-    control[16..20].copy_from_slice(&[0x9a, 0x78, 0x23, 0x61]);
+    control[16..20].copy_from_slice(&key);
     Ok(control)
 }
 
 /// Extract the receiver's own key from its paired CMP/accept and CMP/reject arms.
-/// Unknown or ambiguous instruction sequences fall back to the universal word.
+/// Unknown or ambiguous instruction sequences are refused.
 fn receiver_word(body: &[u8]) -> Option<[u8; 4]> {
     let mut found = None;
     for (i, w) in body.windows(8).enumerate() {
@@ -177,23 +177,26 @@ fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; 
     if descriptor != again {
         bail!("resident descriptor changed between reads");
     }
-    let mut control = receiver_control(&descriptor)?;
-    let body = backup.and_then(|b| {
-        let (kernel, normal) = classify_flash_input(b).ok()?;
-        let normal = normal?;
-        match kernel {
-            Some(kernel) => {
-                let kernel = pioneer_optical::envelope::decode_envelope(&kernel)?;
-                pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &kernel)
-            }
-            None => pioneer_optical::envelope::decode_envelope(&normal),
+    let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")?;
+    let (kernel, normal) = classify_flash_input(backup)?;
+    let normal = normal.context(
+        "installed backup has no Normal component; cannot recover the receiver control key",
+    )?;
+    let body = match kernel {
+        Some(kernel) => {
+            let kernel = pioneer_optical::envelope::decode_envelope(&kernel)
+                .context("installed Kernel cannot be decoded for receiver control")?;
+            pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &kernel)
         }
-    });
-    if let Some(body) = body.filter(|b| b.image.get(..16) == Some(descriptor.as_slice())) {
-        if let Some(word) = receiver_word(&body.image) {
-            control[16..20].copy_from_slice(&word);
-        }
+        None => pioneer_optical::envelope::decode_envelope(&normal),
     }
+    .context("installed Normal cannot be decoded for receiver control")?;
+    if body.image.get(..16) != Some(descriptor.as_slice()) {
+        bail!("installed backup does not match the live receiver descriptor");
+    }
+    let word = receiver_word(&body.image)
+        .context("receiver control key is missing or ambiguous; refusing update entry")?;
+    let control = receiver_control(&descriptor, word)?;
     Ok(control)
 }
 
@@ -484,7 +487,11 @@ fn validate_kernel_normal(kernel: &[u8], normal: &[u8]) -> Result<[u8; CONTROL_L
     {
         bail!("Pioneer envelope does not round-trip exactly");
     }
-    receiver_control(decoded_normal.image.get(..16).unwrap_or_default())
+    receiver_control(
+        decoded_normal.image.get(..16).unwrap_or_default(),
+        receiver_word(&decoded_normal.image)
+            .context("receiver control key is missing or ambiguous")?,
+    )
 }
 
 /// Validate and plan an envelope pair from its contents.

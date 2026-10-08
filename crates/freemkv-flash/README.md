@@ -71,6 +71,12 @@ exactly one is connected. The desktop app lists drives the same way.
 **Backup** produces restoration artifacts. A MediaTek backup is the 2 MiB
 update image as the vendor ships it: per-drive settings, calibration and
 revocation lists are replaced with factory contents, so it is safe to share.
+Pioneer backup probes the readable ceiling and checks for a unique supported
+firmware map before creating an archive. Relocated or ambiguous layouts, invalid
+Kernel checksums, and firmware extending past the ceiling are refused; use
+`dump` to preserve raw data from unsupported layouts. The current envelope codec
+supports a 64 KiB Kernel at `0x400000` and Normal at `0x410000`.
+
 **Dump** captures raw drive memory,
 including anything readable from a degraded drive, without requiring firmware
 integrity. Pioneer fills unreadable spans with zero; MediaTek uses FF. The dump
@@ -79,12 +85,15 @@ reports gaps and is not automatically a flashable update image.
 `flash --force` waives compatibility/recovery gates and allows proceeding after a
 failed backup attempt. The input must still pass structural/integrity checks and
 have a supported write protocol. There are no separate mode, encryption,
-crossflash, recovery, skip-backup, or dump-force switches.
+crossflash, recovery, skip-backup, or dump-force switches. Pioneer update entry
+always requires an installed backup containing a uniquely recoverable receiver
+control key; `--force` cannot bypass that requirement.
 
 ## Safety
 
 - A write needs `--execute`, `--i-understand-risk` and a pre-flash backup
   (`--backup FILE`). Without `--force`, backup failure stops the write.
 - Without `--execute`, `flash` is a dry run.
-- `info`, `backup` and `dump` never write to the drive.
+- `info` and `backup` do not write firmware. Pioneer `dump` may enable temporary
+  CDB logging in RAM; it does not change persistent logging settings or firmware.
 - There is no safe abort once a write has started.

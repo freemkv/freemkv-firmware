@@ -424,7 +424,15 @@ impl ScsiDevice for CaptureReplay {
         assert_eq!(cdb[9], 0);
         assert!((1..=READ_CHUNK).contains(&len));
         let offset = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-        assert!(offset >= 0x400000 && offset + len <= 0x5d7500);
+        if offset + len > self.dump.len() {
+            return Err(crate::platform::ScsiSenseError::new(
+                5,
+                0x24,
+                0,
+                "outside saved address space",
+            )
+            .into());
+        }
         let mut data = self.dump[offset..offset + len].to_vec();
         if self.corrupt_second_pass && offset == 0x400000 && self.reads > 0 {
             data[0] ^= 1;
@@ -1161,4 +1169,27 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
     replay.reads = 0;
     replay.corrupt_second_pass = true;
     assert!(capture_signed_candidate(&mut replay).is_err());
+}
+
+#[test]
+fn backup_map_rejects_relocated_ambiguous_and_truncated_regions() {
+    let kernel = vec![0; NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE];
+    let mut image = vec![0; NORMAL_IMAGE_BASE + 0x2000];
+    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + 8].copy_from_slice(b"PIONEER ");
+    image[NORMAL_IMAGE_BASE + 20..NORMAL_IMAGE_BASE + 24].copy_from_slice(&0x2000u32.to_be_bytes());
+    validate_backup_image_map(&image, &kernel).unwrap();
+    assert!(validate_backup_image_map(&image[..image.len() - 1], &kernel).is_err());
+    let mut bad_kernel = kernel.clone();
+    bad_kernel[0] = 1;
+    assert!(validate_backup_image_map(&image, &bad_kernel).is_err());
+    image.resize(0x422000, 0);
+    image[0x420000..0x420018].copy_from_slice(&{
+        let mut header = [0; 24];
+        header[..8].copy_from_slice(b"PIONEER ");
+        header[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
+        header
+    });
+    assert!(validate_backup_image_map(&image, &kernel).is_err());
+    image[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + 24].fill(0);
+    assert!(validate_backup_image_map(&image, &kernel).is_err());
 }
