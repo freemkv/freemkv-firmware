@@ -1186,3 +1186,20 @@ fn guard_no_medium_allows_closed_empty_regardless_of_force() {
     let mut dev = MockScsiDevice::new();
     assert!(guard_no_medium(&mut dev, true, true).is_ok());
 }
+
+#[test]
+fn forced_tray_warning_does_not_claim_refusal() {
+    use std::{cell::RefCell, rc::Rc};
+    let messages = Rc::new(RefCell::new(Vec::new()));
+    let sink = messages.clone();
+    let mut dev = MockScsiDevice::pioneer().with_tray_open();
+    crate::output::capture(
+        move |line| sink.borrow_mut().push(line),
+        || guard_no_medium(&mut dev, true, true),
+    )
+    .unwrap();
+    let text = messages.borrow().join("\n");
+    assert!(text.contains("tray is OPEN"));
+    assert!(text.contains("Proceeding because --force"));
+    assert!(!text.contains("refusing"));
+}

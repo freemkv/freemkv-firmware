@@ -14,7 +14,7 @@ use pioneer_optical::drive::{UpdateError, UpdateOptions, UpdateRuntime};
 use pioneer_optical::receiver::{
     FlashError, FlashPass, FlashRuntime, FlashTransport, PreparedNormal, PreparedUpdate,
 };
-use pioneer_optical::{DriveClass, Identity, Role};
+use pioneer_optical::{CodedError, DriveClass, Identity, Role};
 use std::time::{Duration, Instant};
 
 const PARTIAL_HINT: &str = " — the drive may now hold a partial firmware; re-flash the captured pre-flash backup to restore it";
@@ -97,7 +97,18 @@ pub(crate) fn execute_prepared(
     .map_err(prepared_error)
 }
 
+pub(crate) fn preparation_error<E>(error: E) -> anyhow::Error
+where
+    E: std::error::Error + Send + Sync + CodedError + 'static,
+{
+    let code = error.code();
+    anyhow::Error::new(error).context(format!(
+        "Cannot prepare this firmware update [{code}]. No firmware was written. Check that the firmware package is complete and compatible with this drive"
+    ))
+}
+
 fn prepared_error(error: FlashError<anyhow::Error>) -> anyhow::Error {
+    let code = error.code();
     let restoration = matches!(
         &error,
         FlashError::Preflight {
@@ -136,8 +147,11 @@ fn prepared_error(error: FlashError<anyhow::Error>) -> anyhow::Error {
         )),
         error @ FlashError::ReadbackMismatch { .. } => anyhow::Error::new(error)
             .context(format!("Kernel readback did not verify{PARTIAL_HINT}")),
+        error @ (FlashError::DescriptorChanged { .. } | FlashError::DescriptorMismatch { .. }) => anyhow::Error::new(error)
+            .context("the live drive no longer matches the captured firmware; this update pass was not started. Capture a fresh backup and retry"),
         error => anyhow::Error::new(error),
     };
+    let error = error.context(format!("[{code}]"));
     if restoration {
         error.context("pristine Kernel restoration did not complete; the temporary Kernel may remain installed. Re-flash the captured pre-flash backup to restore the drive")
     } else {
@@ -156,6 +170,10 @@ struct Runtime<'a, 'd> {
 }
 impl UpdateRuntime for Runtime<'_, '_> {
     fn starting(&mut self, kernel: usize, normal: usize) {
+        println!(
+            "\n{}",
+            style::bold("EXECUTING flash — do not power off or disconnect the drive...")
+        );
         self.kernel = style::Progress::new("flashing kernel", kernel);
         self.normal = style::Progress::new("flashing normal", normal);
     }
@@ -209,15 +227,17 @@ impl FlashRuntime<anyhow::Error> for Runtime<'_, '_> {
 }
 
 fn update_error(error: UpdateError<anyhow::Error>) -> anyhow::Error {
-    match error {
-        UpdateError::Entry(source) => flash_err(source).context("OEM Entry write failed"),
-        UpdateError::EntryStateRead(source) => flash_err(source).context("post-entry INQUIRY"),
+    let code = error.code();
+    let result = match error {
+        UpdateError::Entry(source) => flash_err(source).context("could not enter firmware update mode; no firmware data was transferred. Check the connection and save the diagnostic log before retrying"),
+        UpdateError::EntryStateRead(source) => flash_err(source).context("could not confirm firmware update mode; no firmware data was transferred. Check the connection and save the diagnostic log before retrying"),
         UpdateError::EntryState { revision } => anyhow!("drive did not report the expected post-entry update state (revision bytes {revision:02x?}); aborting before any transfer"),
         UpdateError::Transfer { role, offset, length, source } => flash_err(source).context(format!("OEM {role:?} write failed at offset {offset:#x}, length {length}{PARTIAL_HINT}")),
         UpdateError::Finish(source) => flash_err(source).context(format!("OEM Finish write failed{PARTIAL_HINT}")),
-        UpdateError::ReadyTimeout(source) => flash_err(source).context("drive did not return ready within the post-flash poll timeout"),
-        other => anyhow!("{other}"),
-    }
+        UpdateError::ReadyTimeout(source) => flash_err(source).context("firmware data was transferred, but the drive did not return ready within the post-flash poll timeout; completion could not be verified. Keep the captured pre-flash backup and diagnostic log for recovery"),
+        other => anyhow::Error::new(other),
+    };
+    result.context(format!("[{code}]"))
 }
 
 #[cfg(test)]

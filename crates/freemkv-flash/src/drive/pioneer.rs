@@ -605,6 +605,41 @@ impl DriveFamily for Pioneer {
             // garbage; a broken bundle never has a legitimate path.
             crate::pioneer_flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
                 .map_err(|e| anyhow!("{e}"))?;
+
+            let receiver = installed_receiver(installed_backup)?;
+            let (prepared, normal_only) = match selection {
+                FlashSelection::KernelAndNormal => {
+                    let target = pioneer_optical::envelope::Update::load(
+                        kernel.as_deref().expect("selected Kernel"),
+                        normal,
+                    )
+                    .map_err(crate::pioneer_flash::preparation_error)?;
+                    (
+                        Some(if req.force {
+                            receiver
+                                .prepare_without_family_check(target)
+                                .map_err(crate::pioneer_flash::preparation_error)?
+                        } else {
+                            receiver
+                                .prepare(target)
+                                .map_err(crate::pioneer_flash::preparation_error)?
+                        }),
+                        None,
+                    )
+                }
+                FlashSelection::NormalOnly => (
+                    None,
+                    Some(if req.force {
+                        receiver
+                            .prepare_normal_without_family_check(normal)
+                            .map_err(crate::pioneer_flash::preparation_error)?
+                    } else {
+                        receiver
+                            .prepare_normal(normal)
+                            .map_err(crate::pioneer_flash::preparation_error)?
+                    }),
+                ),
+            };
             let plan = resolve_flash_plan(
                 installed_backup,
                 kernel.as_deref(),
@@ -615,31 +650,6 @@ impl DriveFamily for Pioneer {
             check_plan_executable(&plan)?;
             debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
 
-            let receiver = installed_receiver(installed_backup)?;
-            let (prepared, normal_only) = match selection {
-                FlashSelection::KernelAndNormal => {
-                    let target = pioneer_optical::envelope::Update::load(
-                        kernel.as_deref().expect("selected Kernel"),
-                        normal,
-                    )?;
-                    (
-                        Some(if req.force {
-                            receiver.prepare_without_family_check(target)?
-                        } else {
-                            receiver.prepare(target)?
-                        }),
-                        None,
-                    )
-                }
-                FlashSelection::NormalOnly => (
-                    None,
-                    Some(if req.force {
-                        receiver.prepare_normal_without_family_check(normal)?
-                    } else {
-                        receiver.prepare_normal(normal)?
-                    }),
-                ),
-            };
             let will_patch = prepared
                 .as_ref()
                 .is_some_and(|p| p.restoration_kernel_transfer().is_some());

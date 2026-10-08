@@ -214,7 +214,17 @@ fn prepared_flash_requires_matching_live_receiver_before_entry() {
     let plan = plan(true);
     let mut drive = Drive::new(&plan);
     drive.descriptor[9] ^= 1;
-    let error = execute(&mut drive, &plan).unwrap_err();
+    let messages = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let sink = messages.clone();
+    let error = crate::output::capture(
+        move |line| sink.borrow_mut().push(line),
+        || execute(&mut drive, &plan),
+    )
+    .unwrap_err();
+    assert!(!messages
+        .borrow()
+        .iter()
+        .any(|line| line.contains("EXECUTING")));
     assert_eq!(
         error
             .downcast_ref::<pioneer_optical::receiver::FlashError<anyhow::Error>>()

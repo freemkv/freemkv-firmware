@@ -549,10 +549,6 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         // multi-round-trip window; a disc/tray change is the same hazard class).
         guard_no_medium(dev, req.execute, req.force || req.recover)?;
         println!("{}", style::kv("backup", &backup_summary));
-        println!(
-            "\n{}",
-            style::bold("EXECUTING flash — do not power off or disconnect the drive...")
-        );
         return drive
             .flash_bundle(dev, req, backup_bytes.as_deref())
             .unwrap_or_else(|| {
@@ -715,29 +711,25 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool, force: bo
             );
             return Ok(());
         }
-        Err(error) => return Err(error),
+        Err(error) => return Err(error).context("could not check whether the tray is closed and empty; refusing before firmware writes. Check the drive connection and retry"),
     };
-    let msg = match status {
+    let (condition, action) = match status {
         MediumStatus::ClosedEmpty => return Ok(()),
-        MediumStatus::DiscPresent => {
-            "a disc is loaded — refusing to flash. Eject the disc and retry with a \
-             closed, EMPTY tray. Flashing while a medium is loaded can wedge the \
-             drive mid-program."
-        }
-        MediumStatus::TrayOpen => {
-            "the tray is OPEN — refusing to flash. Close the empty tray and retry \
-             (flashing requires a closed, empty tray)."
-        }
+        MediumStatus::DiscPresent => (
+            "a disc is loaded",
+            "Eject the disc, close the empty tray, and retry.",
+        ),
+        MediumStatus::TrayOpen => ("the tray is OPEN", "Close the empty tray and retry."),
     };
     if execute && !force {
-        bail!("{msg}");
+        bail!("{condition} — refusing to flash. {action} This update pass has not started.");
     }
     let note = if force {
-        " (--force: proceeding anyway — force means force)"
+        "Proceeding because --force was supplied."
     } else {
-        ""
+        "An actual flash requires a closed, empty tray."
     };
-    println!("{}", style::amber(&format!("WARNING: {msg}{note}")));
+    println!("{}", style::amber(&format!("WARNING: {condition}. {note}")));
     Ok(())
 }
 

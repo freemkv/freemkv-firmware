@@ -538,3 +538,57 @@ fn bd_class_is_only_assumed_for_a_recover_flash() {
     assert!(resolve_class(Ok(id.clone()), true, false).is_err());
     assert_eq!(resolve_class(Ok(id), true, true).unwrap(), DriveClass::Bd);
 }
+
+#[test]
+fn error_guidance_distinguishes_no_transfer_from_unverified_completion() {
+    let cause = || pioneer_optical::drive::Error::Transport(anyhow!("device disconnected"));
+    for error in [
+        UpdateError::Entry(cause()),
+        UpdateError::EntryStateRead(cause()),
+    ] {
+        let message = format!("{:#}", update_error(error));
+        assert!(message.contains("no firmware data was transferred"));
+        assert!(message.contains("device disconnected"));
+        assert!(message.contains("pioneer.transfer."));
+        assert!(!message.contains("partial firmware"));
+    }
+    let message = format!("{:#}", update_error(UpdateError::ReadyTimeout(cause())));
+    assert!(message.contains("completion could not be verified"));
+    assert!(message.contains("pre-flash backup"));
+    assert!(!message.contains("no firmware data was transferred"));
+}
+
+#[test]
+fn preparation_error_keeps_typed_code_cause_and_prewrite_guidance() {
+    let error = preparation_error(pioneer_optical::receiver::Error::UnknownTargetFamily);
+    assert!(error
+        .downcast_ref::<pioneer_optical::receiver::Error>()
+        .is_some());
+    let message = format!("{error:#}");
+    assert!(message.contains("pioneer.receiver.unknown_target_family"));
+    assert!(message.contains("No firmware was written"));
+}
+
+#[test]
+fn rejected_tray_never_announces_execution() {
+    use std::{cell::RefCell, rc::Rc};
+    let messages = Rc::new(RefCell::new(Vec::new()));
+    let sink = messages.clone();
+    let mut dev = crate::platform::MockScsiDevice::pioneer().with_tray_open();
+    let result = crate::output::capture(
+        move |line| sink.borrow_mut().push(line),
+        || {
+            execute_flash(
+                &mut dev,
+                &ud04_control(),
+                None,
+                &ud04_normal(0x100000),
+                false,
+                false,
+            )
+        },
+    );
+    assert!(result.is_err());
+    assert!(dev.writes.is_empty());
+    assert!(!messages.borrow().iter().any(|m| m.contains("EXECUTING")));
+}

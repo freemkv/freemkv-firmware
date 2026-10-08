@@ -18,11 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-generation OEM restoration verifies the intermediate and final Kernel;
   a failed restore propagates an error instead of claiming the drive is working.
 - Dump captures mark overlong replies incomplete and stop reads on transport loss.
-- Backup layout checks distinguish firmware descriptors from incidental inquiry and log strings.
+- Backup layout checks distinguish firmware descriptors from incidental inquiry and log strings
+  and incomplete descriptor copies retained after an update.
+- Flash execution is announced only after final preflight checks. Forced warnings
+  and failure messages distinguish refusal, transfer failure, and unverified completion.
 
 ### Changed
 
-- Pioneer validation and transfer preparation use `pioneer-optical` 0.11.0.
+- Pioneer validation and transfer preparation use published `pioneer-optical` 0.11.1,
+  with stable error codes for diagnostics and future localized messages.
 - Remove the model-specific transfer profile table and generated-prefix schedule.
 - Pioneer diagnostic dumps include address-aligned memory, the dedicated log
   command, additional read surfaces, and a directory of captured and unavailable regions.
