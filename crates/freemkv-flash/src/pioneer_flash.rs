@@ -18,7 +18,7 @@
 
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 
 use pioneer_optical::drive::enter_update;
 use pioneer_optical::{DriveClass, Identity, Role};
@@ -94,10 +94,6 @@ fn resolve_class(
 /// does. The caller resolves the control key and components and guarantees
 /// gating, the tray guard, and a pre-flash backup.
 ///
-/// `patch_kernel` requests the §15.3 Site-1 marker patch on an `FF`/`00` Kernel
-/// (the caller sets it only when writing onto a new-generation or unknown
-/// receiver); when `false` the Kernel is written unmodified.
-///
 /// A failure stops further commands. The drive may already have modified
 /// firmware, so errors must propagate even when finish was not sent.
 pub(crate) fn execute_flash(
@@ -106,30 +102,8 @@ pub(crate) fn execute_flash(
     kernel: Option<&[u8]>,
     normal: &[u8],
     recover: bool,
-    patch_kernel: bool,
     force: bool,
 ) -> Result<()> {
-    // §15.3 Site-1 downgrade patch: if the incoming Kernel's decoded marker
-    // byte is `FF`/`00` (older generation), the receiver's Site-1 gate at
-    // runtime `0x405266` rejects it. Patch body[`0xFE`]`FF/00`→`01` and
-    // compensate the §8.1 additive checksum word at `0x1020`, then re-encode
-    // the envelope with the original key table. Only the two edited words
-    // differ in ciphertext; the LCG keystream is unchanged. On an older-than-
-    // Site-1 drive the patch is a no-op (marker is already `01`-equivalent in
-    // all paths that reach here with a `FF` body because gate 1/2 already
-    // ran — but we check idempotently). Applied ONLY when the caller asks for it
-    // (`patch_kernel`): writing onto an installed-`01` drive. Otherwise the
-    // Kernel is written byte-identical.
-    let patched_kernel: Option<Vec<u8>> = if patch_kernel {
-        kernel
-            .map(apply_downgrade_patch_if_needed)
-            .transpose()?
-            .flatten()
-    } else {
-        None
-    };
-    let kernel: Option<&[u8]> = patched_kernel.as_deref().or(kernel);
-
     let kernel_transfer = kernel.map(transfer::select_kernel).transpose()?;
     let steps = transfer::data_out(control, normal, kernel_transfer)?;
     let kernel_total = steps
@@ -218,47 +192,6 @@ pub(crate) fn execute_flash(
     std::thread::sleep(FINISH_SETTLE);
     poll_until_ready(&shared)?;
     Ok(())
-}
-
-/// Try the §15.3 downgrade patch on an incoming Kernel envelope. Returns
-/// `Ok(None)` when no patch is needed (marker is already `01`, or the envelope
-/// does not decode); a wrong-sized body is an error, `Ok(Some(new_envelope))` when the
-/// decoded body's marker was `FF`/`00` and we flipped it to `01` + rebalanced
-/// the checksum and re-encoded. Logs the exact two-word diff on patch.
-fn apply_downgrade_patch_if_needed(kernel_enc: &[u8]) -> Result<Option<Vec<u8>>> {
-    let decoded = match pioneer_optical::envelope::decode_envelope(kernel_enc) {
-        Some(d) => d,
-        None => return Ok(None), // not a decodable envelope; nothing to patch
-    };
-    if decoded.image.len() != pioneer_optical::envelope::KERNEL_BODY_LEN {
-        // The caller only asks for the patch (and warns about it) for an FF/00
-        // marker, so a wrong-sized body must be refused, never skipped silently.
-        bail!(
-            "cannot apply the downgrade patch: the Kernel body is {:#x} bytes, expected {:#x}",
-            decoded.image.len(),
-            pioneer_optical::envelope::KERNEL_BODY_LEN
-        );
-    }
-    let (patched_body, outcome) = pioneer_optical::envelope::downgrade_patch(&decoded.image)
-        .map_err(|e| anyhow!("downgrade patch refused the Kernel body: {e:?}"))?;
-    match outcome {
-        pioneer_optical::envelope::DowngradePatchOutcome::AlreadyNewer => Ok(None),
-        pioneer_optical::envelope::DowngradePatchOutcome::Patched {
-            marker_before,
-            checksum_word_before,
-            checksum_word_after,
-        } => {
-            style::trace(&format!(
-                "§15.3 downgrade patch applied: body[0xFE] {marker_before:#04x}->0x01, \
-                 word@0x1020 {checksum_word_before:#010x}->{checksum_word_after:#010x}"
-            ));
-            let repacked = decoded.repack(&patched_body).ok_or_else(|| {
-                anyhow!("could not re-encode the patched Kernel envelope (codec repack failed)")
-            })?;
-            Ok(Some(repacked))
-        }
-        _ => bail!("downgrade patch returned an unrecognized outcome"),
-    }
 }
 
 /// After the update entry the OEM host waits ~1 s, issues INQUIRY, and requires

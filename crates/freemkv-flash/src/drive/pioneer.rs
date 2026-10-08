@@ -5,7 +5,7 @@
 //! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
-use pioneer_optical::receiver::Receiver;
+use pioneer_optical::receiver::{PreparedUpdate, Receiver};
 use pioneer_optical::Role;
 use std::borrow::Cow;
 
@@ -56,29 +56,53 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
     pioneer_optical::cdb::finish()
 }
 
-fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; CONTROL_LEN]> {
-    let descriptor = super::pioneer_transport::read_memory_exact(dev, 0x410000, 16)?;
-    let again = super::pioneer_transport::read_memory_exact(dev, 0x410000, 16)?;
+const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
+
+fn read_control_descriptor(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    let length = pioneer_optical::receiver::DESCRIPTOR_LEN as u32;
+    let descriptor =
+        super::pioneer_transport::read_memory_exact(dev, CONTROL_DESCRIPTOR_ADDRESS, length)?;
+    let again =
+        super::pioneer_transport::read_memory_exact(dev, CONTROL_DESCRIPTOR_ADDRESS, length)?;
     if descriptor != again {
         bail!("resident descriptor changed between reads");
     }
+    Ok(descriptor)
+}
+
+fn live_control(dev: &mut dyn ScsiDevice, backup: Option<&[u8]>) -> Result<[u8; CONTROL_LEN]> {
+    let descriptor = read_control_descriptor(dev)?;
+    Ok(installed_receiver(backup)?.entry_control(&descriptor)?)
+}
+
+fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
     let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")?;
     let (kernel, normal) = classify_flash_input(backup)?;
     let normal = normal.context(
         "installed backup has no Normal component; cannot recover the receiver control key",
     )?;
-    let body = match kernel {
-        Some(kernel) => {
-            let kernel = pioneer_optical::envelope::Envelope::load(&kernel)
-                .context("installed Kernel cannot be decoded for receiver control")?;
-            pioneer_optical::envelope::Envelope::load_with_kernel(&normal, &kernel)
-        }
+    let kernel = kernel
+        .as_deref()
+        .map(pioneer_optical::envelope::Envelope::load)
+        .transpose()
+        .context("installed Kernel cannot be decoded for receiver control")?;
+    let normal = match kernel.as_ref() {
+        Some(kernel) => pioneer_optical::envelope::Envelope::load_with_kernel(&normal, kernel),
         None => pioneer_optical::envelope::Envelope::load(&normal),
     }
     .context("installed Normal cannot be decoded for receiver control")?;
-    let receiver = Receiver::detect(&body)
-        .context("cannot establish installed receiver entry requirements")?;
-    Ok(receiver.entry_control(&descriptor)?)
+    match kernel.as_ref() {
+        Some(kernel) => Receiver::detect_with_kernel(&normal, kernel),
+        None => Receiver::detect(&normal),
+    }
+    .context("cannot establish installed receiver entry requirements")
+}
+
+fn receiver_live_control(
+    dev: &mut dyn ScsiDevice,
+    receiver: &Receiver,
+) -> Result<[u8; CONTROL_LEN]> {
+    Ok(receiver.entry_control(&read_control_descriptor(dev)?)?)
 }
 
 /// Validate a Normal envelope without marketing-model or revision restrictions.
@@ -423,28 +447,6 @@ fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
     )
 }
 
-/// Whether the §15.3 Site-1 marker patch will be applied to the Kernel written:
-/// a Kernel is written, its decoded `0xFE` marker is `FF`/`00`, and the receiver
-/// is not KNOWN to be old-generation (`None` = unknown, patched as before).
-pub(crate) fn will_patch_kernel(kernel: Option<&[u8]>, receiver_new_gen: Option<bool>) -> bool {
-    let Some(kernel) = kernel else { return false };
-    let marker =
-        pioneer_optical::envelope::decode_envelope(kernel).and_then(|d| d.image.get(0xFE).copied());
-    matches!(marker, Some(0xFF | 0x00)) && receiver_new_gen != Some(false)
-}
-
-/// Whether the given Kernel's own receiver code is OLD-generation, i.e. carries
-/// no Site-1 marker gate. After a §15.3 downgrade the drive runs exactly this
-/// receiver (pass 1 wrote this Kernel; the patch touched only `body[0xFE]` + the
-/// checksum word, not the receiver code), so `Some(false)` here is the deciding
-/// condition that the native `FF`/`00` marker can no longer be rejected and the
-/// unmodified Kernel can be re-flashed. `None`/unknown ⇒ do not attempt it.
-fn target_receiver_is_old_gen(kernel: &[u8]) -> bool {
-    pioneer_optical::envelope::decode_envelope(kernel)
-        .and_then(|d| crate::pioneer_k::receiver_generation(&d.image))
-        == Some(false)
-}
-
 fn verify_resident_kernel(dev: &mut dyn ScsiDevice, expected: &[u8]) -> Result<()> {
     for (index, chunk) in expected.chunks(FLASH_CHUNK).enumerate() {
         let address = pioneer_optical::image::KERNEL_BASE + (index * FLASH_CHUNK) as u32;
@@ -456,49 +458,36 @@ fn verify_resident_kernel(dev: &mut dyn ScsiDevice, expected: &[u8]) -> Result<(
     Ok(())
 }
 
-/// Second pass of a cross-generation downgrade: re-flash the UNMODIFIED
-/// (native-marker) Kernel so the drive ends byte-exact OEM. Keyed from the
-/// just-written target bundle (its Normal body carries the live receiver's key)
-/// and written with `patch_kernel = false`.
-fn restore_oem_kernel(
+/// Verify the first pass and perform any preflighted pristine restoration.
+fn finish_prepared_update(
     dev: &mut dyn ScsiDevice,
-    bundle: &[u8],
-    pristine_kernel: &[u8],
-    normal: &[u8],
+    prepared: &PreparedUpdate,
     recover: bool,
     force: bool,
 ) -> Result<()> {
-    let decoded = pioneer_optical::envelope::Envelope::load(pristine_kernel)
-        .context("cannot decode OEM Kernel for restore verification")?;
-    let (patched, _) = pioneer_optical::envelope::downgrade_patch(&decoded.image)
-        .map_err(|e| anyhow!("cannot derive first-pass Kernel for verification: {e:?}"))?;
-    verify_resident_kernel(dev, &patched)
-        .context("first-pass Kernel not verified; refusing a second update")?;
-    println!(
-        "{}",
-        crate::style::dim(
-            "restoring byte-exact OEM kernel: re-flashing the unmodified kernel (native marker) \
-             onto the now old-generation receiver",
+    verify_resident_kernel(dev, prepared.first_kernel_image())
+        .context("first-pass Kernel readback did not verify; no further update attempted")?;
+    if let Some(pristine) = prepared.restoration_kernel_transfer() {
+        let receiver = prepared
+            .restoration_receiver()
+            .context("prepared restoration has no receiver")?;
+        println!(
+            "{}",
+            crate::style::dim("restoring the unmodified target Kernel")
+        );
+        let control = receiver_live_control(dev, receiver)?;
+        crate::pioneer_flash::execute_flash(
+            dev,
+            &control,
+            Some(pristine),
+            prepared.normal_transfer(),
+            recover,
+            force,
         )
-    );
-    let control = live_control(dev, Some(bundle))?;
-    crate::pioneer_flash::execute_flash(
-        dev,
-        &control,
-        Some(pristine_kernel),
-        normal,
-        recover,
-        false, // patch_kernel: write the Kernel byte-identical
-        force,
-    )?;
-    verify_resident_kernel(dev, &decoded.image)
-        .context("OEM Kernel restore completed but readback did not verify")?;
-    println!(
-        "{}",
-        crate::style::green(
-            "OEM kernel restored: the drive now holds the unmodified kernel (native marker)."
-        )
-    );
+        .context("pristine Kernel restoration failed; drive state is not verified")?;
+        verify_resident_kernel(dev, prepared.final_kernel_image())
+            .context("pristine Kernel restoration completed but readback did not verify")?;
+    }
     Ok(())
 }
 
@@ -514,11 +503,9 @@ fn plan_is_downgrade(plan: &crate::pioneer_flash_plan::FlashPlan) -> bool {
 
 /// Decide whether the executor may act on a plan. `Refused` aborts before any
 /// write. Same-generation and same/newer flashes execute via the ordinary OEM
-/// route. A cross-generation downgrade is now executable — the §15.3 patch is
-/// applied to the Kernel bytes inside [`crate::pioneer_flash::execute_flash`]
-/// just before the Kernel write, so the receiver's Site-1 gate accepts the
-/// temporary marker. The bundle executor then restores and verifies the pristine
-/// Kernel before reporting success. No plan requires kernel mode
+/// route. The library prepares any temporary marker patch and pristine restore
+/// before entry. The bundle executor verifies both passes before reporting
+/// success. No plan requires kernel mode
 /// ([`crate::pioneer_flash_plan::kernel_mode_required`]).
 pub(crate) fn check_plan_executable(plan: &crate::pioneer_flash_plan::FlashPlan) -> Result<()> {
     use crate::pioneer_flash_plan::FlashPlan;
@@ -710,40 +697,36 @@ impl DriveFamily for Pioneer {
             check_plan_executable(&plan)?;
             debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
 
-            let (kernel_to_write, normal_transfer) = match selection {
+            let prepared = match selection {
                 FlashSelection::KernelAndNormal => {
-                    let kernel = kernel.as_deref().expect("selected Kernel");
-                    let update = pioneer_optical::envelope::Update::load(kernel, normal)?;
-                    (Some(kernel), update.normal_transfer().to_vec())
+                    let target = pioneer_optical::envelope::Update::load(
+                        kernel.as_deref().expect("selected Kernel"),
+                        normal,
+                    )?;
+                    let receiver = installed_receiver(installed_backup)?;
+                    Some(if req.force {
+                        receiver.prepare_without_family_check(target)?
+                    } else {
+                        receiver.prepare(target)?
+                    })
                 }
-                FlashSelection::NormalOnly => {
-                    (None, validate_normal_receiver(normal, installed_backup)?)
-                }
+                FlashSelection::NormalOnly => None,
             };
-            let normal_to_write = normal_transfer.as_slice();
+            let normal_only_transfer = if prepared.is_none() {
+                Some(validate_normal_receiver(normal, installed_backup)?)
+            } else {
+                None
+            };
+            let normal_to_write = prepared
+                .as_ref()
+                .map(PreparedUpdate::normal_transfer)
+                .or(normal_only_transfer.as_deref())
+                .expect("selected Normal");
+            let kernel_to_write = prepared.as_ref().map(PreparedUpdate::kernel_transfer);
             let control = live_control(dev, installed_backup)?;
-            // The §15.3 marker patch is applied only when it will really happen:
-            // known new-gen (or unknown, e.g. --recover/--skip-backup) receiver and
-            // an FF/00-marker Kernel. Warn once; KernelDowngrade already warned in
-            // check_plan_executable.
-            let will_patch = will_patch_kernel(
-                kernel_to_write,
-                installed_facts(installed_backup).and_then(|i| i.receiver_new_gen),
-            );
-            if will_patch {
-                let pristine = kernel_to_write.expect("a marker patch requires a Kernel");
-                if !target_receiver_is_old_gen(pristine) {
-                    bail!("cannot prove the target receiver accepts the pristine Kernel restore; no update entry attempted");
-                }
-                let target_kernel = pioneer_optical::envelope::Envelope::load(pristine)?;
-                let target_normal = pioneer_optical::envelope::Envelope::load_with_kernel(
-                    normal_to_write,
-                    &target_kernel,
-                )
-                .context("cannot decode the target receiver for restore preflight")?;
-                Receiver::detect(&target_normal)
-                    .context("target receiver entry control is unsupported or ambiguous for the OEM restore; no update entry attempted")?;
-            }
+            let will_patch = prepared
+                .as_ref()
+                .is_some_and(|p| p.restoration_kernel_transfer().is_some());
             if will_patch && !plan_is_downgrade(&plan) {
                 eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
             }
@@ -755,23 +738,10 @@ impl DriveFamily for Pioneer {
                 kernel_to_write,
                 normal_to_write,
                 req.recover,
-                will_patch,
                 req.force,
             )?;
-            // A second update can fail after writing starts. Never report the
-            // first pass as proof that the drive survived a failed restore.
-            if will_patch {
-                if let Some(pristine) = kernel_to_write.filter(|k| target_receiver_is_old_gen(k)) {
-                    restore_oem_kernel(
-                        dev,
-                        &req.input,
-                        pristine,
-                        normal_to_write,
-                        req.recover,
-                        req.force,
-                    )
-                    .context("OEM Kernel restore failed; drive state is not verified")?;
-                }
+            if let Some(prepared) = prepared.as_ref() {
+                finish_prepared_update(dev, prepared, req.recover, req.force)?;
             }
             println!(
                 "{}",
@@ -995,3 +965,7 @@ use oem_reference_tests::*;
 #[cfg(test)]
 #[path = "pioneer/matrix_tests.rs"]
 mod matrix_tests;
+
+#[cfg(test)]
+#[path = "pioneer/prepared_tests.rs"]
+mod prepared_tests;

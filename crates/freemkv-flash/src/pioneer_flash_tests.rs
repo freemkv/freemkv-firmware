@@ -72,16 +72,8 @@ impl ScsiDevice for Recorder {
 fn disc_inserted_at_confirmation_is_refused_before_update_entry() {
     let mut dev = crate::platform::MockScsiDevice::pioneer().with_medium_loaded();
     let normal = ud04_normal(0x100000);
-    let error = execute_flash(
-        &mut dev,
-        &ud04_control(),
-        None,
-        &normal,
-        false,
-        false,
-        false,
-    )
-    .expect_err("a disc inserted since the engine guard must abort the write");
+    let error = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false)
+        .expect_err("a disc inserted since the engine guard must abort the write");
     assert!(error.to_string().contains("disc"));
     assert!(
         dev.writes.is_empty(),
@@ -96,7 +88,7 @@ fn executes_entry_normal_chunks_finish_via_strict_writes_with_gate_and_poll() {
     let normal = ud04_normal(len);
     let control = ud04_control();
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &control, None, &normal, false, false, false).unwrap();
+    execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
 
     let chunks = len.div_ceil(0x8000);
     // EVERY write went through the strict (abort-on-any-nonzero) path — guards
@@ -126,16 +118,7 @@ fn executes_entry_normal_chunks_finish_via_strict_writes_with_gate_and_poll() {
 fn plain_flash_issues_no_kernel_mode_commands() {
     let normal = ud04_normal(0x0010_0000);
     let mut dev = Recorder::default();
-    execute_flash(
-        &mut dev,
-        &ud04_control(),
-        None,
-        &normal,
-        false,
-        false,
-        false,
-    )
-    .unwrap();
+    execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap();
     // No F3/F2 buffer-id traffic at all on the plain path.
     assert!(!dev
         .writes
@@ -170,16 +153,7 @@ fn aborts_before_any_transfer_when_drive_not_in_update_state() {
     }
     let normal = ud04_normal(0x0010_0000 + 0x100);
     let mut dev = BadEntry { writes: Vec::new() };
-    let err = execute_flash(
-        &mut dev,
-        &ud04_control(),
-        None,
-        &normal,
-        false,
-        false,
-        false,
-    )
-    .unwrap_err();
+    let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
     assert!(format!("{err:#}").contains("post-entry update state"));
     // Only the entry write happened; NO Normal chunk or finish followed.
     assert_eq!(dev.writes.len(), 1);
@@ -195,16 +169,7 @@ fn a_failed_mid_transfer_write_aborts_with_a_recovery_hint() {
         fail_strict_at: Some(1),
         ..Recorder::default()
     };
-    let err = execute_flash(
-        &mut dev,
-        &ud04_control(),
-        None,
-        &normal,
-        false,
-        false,
-        false,
-    )
-    .unwrap_err();
+    let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
     let msg = format!("{err:#}");
     assert!(msg.contains("Normal") && msg.contains("re-flash the captured"));
     // No finish (05/FF) was sent after the failed transfer.
@@ -240,7 +205,7 @@ fn layout_kernel(marker: u8, derived: bool) -> Vec<u8> {
 }
 
 #[test]
-fn ff_marker_kernel_is_written_unpatched_when_patch_kernel_is_false() {
+fn executor_preserves_prepared_kernel_bytes() {
     let kernel = marker_kernel(0xFF);
     let normal = ud04_normal(0x8100);
     let mut dev = Recorder::default();
@@ -249,7 +214,6 @@ fn ff_marker_kernel_is_written_unpatched_when_patch_kernel_is_false() {
         &ud04_control(),
         Some(&kernel),
         &normal,
-        false,
         false,
         false,
     )
@@ -261,39 +225,6 @@ fn ff_marker_kernel_is_written_unpatched_when_patch_kernel_is_false() {
         .flat_map(|(_, d)| d.iter().copied())
         .collect();
     assert!(sent == kernel, "Kernel must be written byte-identical");
-
-    // With patch_kernel=true the FF marker IS patched (downgrade path).
-    let mut dev = Recorder::default();
-    execute_flash(
-        &mut dev,
-        &ud04_control(),
-        Some(&kernel),
-        &normal,
-        false,
-        true,
-        false,
-    )
-    .unwrap();
-    let sent: Vec<u8> = dev
-        .writes
-        .iter()
-        .filter(|(c, _)| c[..3] == [0x3b, 0x07, 0xfe])
-        .flat_map(|(_, d)| d.iter().copied())
-        .collect();
-    assert_ne!(sent, kernel);
-}
-
-#[test]
-fn will_patch_only_for_ff_or_00_marker_on_known_new_or_unknown_receiver() {
-    use crate::drive::pioneer::will_patch_kernel;
-    let ff = marker_kernel(0xFF);
-    let zero = marker_kernel(0x00);
-    let one = marker_kernel(0x01);
-    assert!(will_patch_kernel(Some(&ff), Some(true)));
-    assert!(will_patch_kernel(Some(&zero), None));
-    assert!(!will_patch_kernel(Some(&ff), Some(false)));
-    assert!(!will_patch_kernel(Some(&one), Some(true)));
-    assert!(!will_patch_kernel(None, Some(true)));
 }
 
 #[test]
@@ -304,16 +235,7 @@ fn derived_kernel_sends_real_key_and_decodes_exactly_at_receiver() {
         .image;
     let normal = ud04_normal(0x8100);
     let mut dev = Recorder::default();
-    execute_flash(
-        &mut dev,
-        &[0xa5; 256],
-        Some(&kernel),
-        &normal,
-        false,
-        false,
-        false,
-    )
-    .unwrap();
+    execute_flash(&mut dev, &[0xa5; 256], Some(&kernel), &normal, false, false).unwrap();
     assert_eq!(dev.strict_writes, 7);
     assert_eq!(dev.lenient_writes, 0);
     let mut wire = Vec::new();
@@ -348,16 +270,7 @@ fn executes_both_kernel_and_normal_via_strict_writes_in_order() {
     let kernel = marker_kernel(1);
     let normal: Vec<u8> = (0..0x8100usize).map(|i| (i % 251) as u8).collect();
     let mut dev = Recorder::default();
-    execute_flash(
-        &mut dev,
-        &[0xA5; 256],
-        Some(&kernel),
-        &normal,
-        false,
-        false,
-        false,
-    )
-    .unwrap();
+    execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false, false).unwrap();
 
     // entry + 3 kernel FE + 2 normal F0 + finish, all strict, nothing lenient.
     assert_eq!(dev.strict_writes, 7);
@@ -434,7 +347,6 @@ fn recover_skips_the_identity_gate_that_aborts_a_normal_flash() {
         &normal,
         false,
         false,
-        false,
     )
     .unwrap_err();
     assert!(format!("{err:#}").contains("post-entry update state"));
@@ -448,7 +360,6 @@ fn recover_skips_the_identity_gate_that_aborts_a_normal_flash() {
         None,
         &normal,
         true,
-        false,
         false,
     )
     .unwrap();
@@ -479,7 +390,7 @@ fn ud04_self_flash_control_and_wire_bytes_are_byte_exact() {
     // 0x1D7000 => 59 full 07/F0 chunks; the canonical UD04 Normal size.
     let normal = ud04_normal(0x1D7000);
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &control, None, &normal, false, false, false).unwrap();
+    execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
 
     // Exact CDB sequence: 04/FF entry, 59x 07/F0 chunks, 05/FF finish.
     let cdbs: Vec<Vec<u8>> = dev.writes.iter().map(|(c, _)| c.clone()).collect();
