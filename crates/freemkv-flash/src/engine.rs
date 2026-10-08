@@ -536,7 +536,7 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     if let Some(plan) = drive.offline_plan(req) {
         return plan;
     }
-    guard_no_medium(dev, req.execute)?;
+    guard_no_medium(dev, req.execute, req.force || req.recover)?;
     // Whole-package executors (e.g. a Pioneer OEM update session) own the
     // execute flow, but only AFTER the shared safety gate and a captured
     // pre-flash backup — the same invariants the image-chunk path enforces.
@@ -547,7 +547,7 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         let (backup_summary, backup_bytes) = capture_preflash_backup(dev, drive, req)?;
         // Re-check the tray right before any write (the backup opened a
         // multi-round-trip window; a disc/tray change is the same hazard class).
-        guard_no_medium(dev, req.execute)?;
+        guard_no_medium(dev, req.execute, req.force || req.recover)?;
         println!("{}", style::kv("backup", &backup_summary));
         println!(
             "\n{}",
@@ -692,10 +692,32 @@ pub fn plan_pioneer_offline(
 /// a firmware flash MUST run against an empty, closed tray. On `--execute` this
 /// is a hard abort before any backup or write; on a dry run it is a prominent
 /// warning so the operator ejects before committing.
-pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
+///
+/// `bypass` (set by `--force` OR `--recover`) means force: the medium/tray state
+/// is reported as a warning but never blocks, and an UNREADABLE medium status is
+/// tolerated too. A partially bricked drive routinely misreports its tray as open
+/// / disc-present (or fails the status command outright); refusing on that would
+/// lock the operator out of the recovery flash they explicitly asked for.
+pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool, force: bool) -> Result<()> {
     // Flashing is safe ONLY with a closed, empty tray. A loaded disc can wedge
     // the controller mid-program; an open tray is not a settled flash state.
-    let msg = match dev.medium_status()? {
+    let status = match dev.medium_status() {
+        Ok(status) => status,
+        // Under --force a drive too degraded to even report medium status must
+        // not be blocked from its recovery flash.
+        Err(error) if force => {
+            println!(
+                "{}",
+                style::amber(&format!(
+                    "WARNING: could not read tray/medium status ({error:#}); \
+                     proceeding anyway on --force."
+                ))
+            );
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    let msg = match status {
         MediumStatus::ClosedEmpty => return Ok(()),
         MediumStatus::DiscPresent => {
             "a disc is loaded — refusing to flash. Eject the disc and retry with a \
@@ -707,10 +729,15 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result
              (flashing requires a closed, empty tray)."
         }
     };
-    if execute {
+    if execute && !force {
         bail!("{msg}");
     }
-    println!("{}", style::amber(&format!("WARNING: {msg}")));
+    let note = if force {
+        " (--force: proceeding anyway — force means force)"
+    } else {
+        ""
+    };
+    println!("{}", style::amber(&format!("WARNING: {msg}{note}")));
     Ok(())
 }
 
@@ -812,7 +839,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // re-probe RIGHT before `flash_open`; a stale check is the same class
     // of hazard as no check at all (drive controller can wedge mid-program
     // when servicing a medium).
-    guard_no_medium(dev, req.execute)?;
+    guard_no_medium(dev, req.execute, req.force || req.recover)?;
     println!(
         "\n{}",
         style::bold("EXECUTING flash — do not power off or disconnect the drive...")

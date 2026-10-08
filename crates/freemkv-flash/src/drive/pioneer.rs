@@ -34,82 +34,14 @@ pub(crate) const FLASH_CHUNK: usize = 0x8000;
 /// Minimum/maximum plausible Pioneer image sizes for the size safety-belt.
 pub(crate) const IMAGE_MIN: usize = 0x200; // envelope header
 pub(crate) const IMAGE_MAX: usize = 0x00ff_ff00; // aligned 24-bit transfer address limit
-/// The ASCII magic every genuine Pioneer image starts with.
-pub(crate) const PIONEER_MAGIC: &[u8] = b"********  Copyright(c) 2000 Pioneer";
+/// The ASCII banner magic every genuine Pioneer image starts with
+/// (re-exported from `pioneer-optical`; used by tests and banner callers).
+#[allow(unused_imports)]
+pub(crate) use pioneer_optical::ident::BANNER_MAGIC as PIONEER_MAGIC;
 
-/// Extracted fields from the Pioneer plaintext banner (first ~0x160 bytes of
-/// any genuine `.fw.bin`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PioneerBanner {
-    /// Model tag from the banner's `ID :` line, as reported by its envelope.
-    pub model: String,
-    /// `Revision Level :` value, e.g. `1.11`.
-    pub revision: String,
-    /// `Hardware Version :` value, e.g. `SAT 8A10`.
-    pub hardware: String,
-    /// `Destination :` value, e.g. `GENERAL`.
-    pub destination: String,
-    /// `File Type :` value, e.g. `Normal` or `Kernel`.
-    pub file_type: String,
-}
-
-/// Parse the plaintext ASCII banner. Returns `None` if the magic is missing.
-pub fn parse_banner(bytes: &[u8]) -> Option<PioneerBanner> {
-    if !bytes.starts_with(PIONEER_MAGIC) {
-        return None;
-    }
-    let head = &bytes[..bytes.len().min(0x200)];
-    let text = String::from_utf8_lossy(head);
-
-    fn take_after<'a>(hay: &'a str, needle: &str) -> Option<&'a str> {
-        let i = hay.find(needle)?;
-        Some(&hay[i + needle.len()..])
-    }
-    fn until_terminator(s: &str) -> String {
-        // The banner terminates every field with `\r\n`; some also carry an
-        // internal trailing `.` after a padded space (e.g. `1.11 .`). Split on
-        // the line break, then peel a lone trailing `.` if present.
-        let line = s.split(['\r', '\n']).next().unwrap_or("").trim();
-        line.trim_matches('\0')
-            .trim_end_matches('.')
-            .trim()
-            .to_string()
-    }
-
-    let model = take_after(&text, "ID : ")
-        .map(|rest| {
-            let raw = until_terminator(rest);
-            raw.split_whitespace()
-                .last()
-                .unwrap_or("")
-                .trim_end_matches('\u{0}')
-                .to_string()
-        })
-        .unwrap_or_default();
-    let revision = take_after(&text, "Revision Level : ")
-        .map(until_terminator)
-        .unwrap_or_default();
-    let hardware = take_after(&text, "Hardware Version : ")
-        .map(until_terminator)
-        .unwrap_or_default();
-    let destination = take_after(&text, "Destination : ")
-        .map(until_terminator)
-        .unwrap_or_default();
-    let file_type = take_after(&text, "File Type : ")
-        .map(until_terminator)
-        .unwrap_or_default();
-
-    if model.is_empty() {
-        return None;
-    }
-    Some(PioneerBanner {
-        model,
-        revision,
-        hardware,
-        destination,
-        file_type,
-    })
-}
+/// The plaintext Pioneer banner and its parser, re-exported from
+/// `pioneer-optical` (the crate that owns the firmware-identity format).
+pub use pioneer_optical::ident::{parse_banner, Banner as PioneerBanner};
 
 // ---- CDB builders ----------------------------------------------------------
 
@@ -783,6 +715,56 @@ pub(crate) fn will_patch_kernel(kernel: Option<&[u8]>, receiver_new_gen: Option<
     matches!(marker, Some(0xFF | 0x00)) && receiver_new_gen != Some(false)
 }
 
+/// Whether the given Kernel's own receiver code is OLD-generation, i.e. carries
+/// no Site-1 marker gate. After a §15.3 downgrade the drive runs exactly this
+/// receiver (pass 1 wrote this Kernel; the patch touched only `body[0xFE]` + the
+/// checksum word, not the receiver code), so `Some(false)` here is the deciding
+/// condition that the native `FF`/`00` marker can no longer be rejected and the
+/// unmodified Kernel can be re-flashed. `None`/unknown ⇒ do not attempt it.
+fn target_receiver_is_old_gen(kernel: &[u8]) -> bool {
+    pioneer_optical::envelope::decode_envelope(kernel)
+        .and_then(|d| crate::pioneer_k::receiver_generation(&d.image))
+        == Some(false)
+}
+
+/// Second pass of a cross-generation downgrade: re-flash the UNMODIFIED
+/// (native-marker) Kernel so the drive ends byte-exact OEM. Keyed from the
+/// just-written target bundle (its Normal body carries the live receiver's key)
+/// and written with `patch_kernel = false`.
+fn restore_oem_kernel(
+    dev: &mut dyn ScsiDevice,
+    bundle: &[u8],
+    pristine_kernel: &[u8],
+    normal: &[u8],
+    recover: bool,
+    force: bool,
+) -> Result<()> {
+    println!(
+        "{}",
+        crate::style::dim(
+            "restoring byte-exact OEM kernel: re-flashing the unmodified kernel (native marker) \
+             onto the now old-generation receiver",
+        )
+    );
+    let control = live_control(dev, Some(bundle))?;
+    crate::pioneer_flash::execute_flash(
+        dev,
+        &control,
+        Some(pristine_kernel),
+        normal,
+        recover,
+        false, // patch_kernel: write the Kernel byte-identical
+        force,
+    )?;
+    println!(
+        "{}",
+        crate::style::green(
+            "OEM kernel restored: the drive now holds the unmodified kernel (native marker)."
+        )
+    );
+    Ok(())
+}
+
 /// Whether the plan (or a `Forced` plan's inner plan) is `KernelDowngrade`.
 fn plan_is_downgrade(plan: &crate::pioneer_flash_plan::FlashPlan) -> bool {
     use crate::pioneer_flash_plan::FlashPlan;
@@ -1022,11 +1004,41 @@ impl DriveFamily for Pioneer {
                 normal,
                 req.recover,
                 will_patch,
+                req.force,
             )?;
             println!(
                 "{}",
                 crate::style::green("flash complete; drive returned ready.")
             );
+            // Restore a byte-exact OEM kernel after a cross-generation downgrade.
+            // Flash #1 §15.3-patched the incoming kernel's marker (FF/00 -> 01)
+            // ONLY to pass the then-installed NEW-gen Site-1 gate. The drive now
+            // runs the OLD-gen receiver, which has no marker gate at all (verified
+            // across the firmware corpus: the body[0xFE] equality check exists only
+            // in new-gen bodies, there is no anti-rollback, and the additive body
+            // checksum is already 0 in the pristine body). So a second write of the
+            // UNMODIFIED kernel is accepted and leaves the drive byte-exact OEM —
+            // strictly better than running a disguised marker. Done automatically
+            // (no flag), only when provably safe. Non-fatal: flash #1 already
+            // produced a working drive; a failed restore is a warning and
+            // re-running the flash reproduces this state.
+            if will_patch {
+                if let Some(pristine) = kernel_to_write {
+                    if target_receiver_is_old_gen(pristine) {
+                        if let Err(e) =
+                            restore_oem_kernel(dev, &req.input, pristine, normal, req.recover, req.force)
+                        {
+                            eprintln!(
+                                "{}",
+                                crate::style::amber(&format!(
+                                    "OEM-kernel restore pass skipped ({e:#}); the drive is working \
+                                     with the marker-patched kernel. Re-run the flash to retry."
+                                ))
+                            );
+                        }
+                    }
+                }
+            }
             // Auto post-flash identity readback: the drive just rebooted into
             // whatever it now reports as its live identity. Print it so the user
             // sees exactly what landed without a separate `info` invocation.

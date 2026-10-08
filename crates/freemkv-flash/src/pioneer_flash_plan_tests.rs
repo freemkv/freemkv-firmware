@@ -37,6 +37,7 @@ fn pair_target(cid: u16, kd: &str, nd: &str, marker: u8) -> Target {
         }),
         family: fam(),
         required_kernel_tag: tag(),
+        kernel_generated_framing: false,
     }
 }
 
@@ -49,6 +50,7 @@ fn normal_only_target(cid: u16, nd: &str) -> Target {
         kernel: None,
         family: fam(),
         required_kernel_tag: tag(),
+        kernel_generated_framing: false,
     }
 }
 
@@ -493,5 +495,52 @@ fn decoded_kernel_marker_reads_body_offset_0xfe() {
     assert_eq!(
         decoded_kernel_marker(&encoded_kernel_with_marker(0xAB)).unwrap(),
         0xAB
+    );
+}
+
+/// The 212M(8F00) -> 212U(8F01) field report: same family, same date/version,
+/// different hardware, target Kernel uses the generated-block framing. The
+/// generated schedule is pinned to its anchor hardware, so this must be REFUSED
+/// before any write — not silently flashed into a mid-write brick.
+#[test]
+fn cross_hardware_generated_framing_crossflash_is_refused() {
+    let installed = installed(0x8F00, true, "23/08/01"); // 212M 1.05, ID56
+    let mut target = pair_target(0x8F01, "23/08/01", "23/08/01", 0x01); // 212U 1.05
+    target.kernel_generated_framing = true;
+
+    // Reachable without --force (same family): still refused.
+    match decide_flash_plan(&installed, &target, false) {
+        FlashPlan::Refused(msg) => assert!(msg.contains("generated-block")),
+        other => panic!("expected Refused, got {other:?}"),
+    }
+    // NOT waivable by --force: a physical brick gate, not a policy one.
+    match decide_flash_plan(&installed, &target, true) {
+        FlashPlan::Refused(msg) => assert!(msg.contains("generated-block")),
+        other => panic!("--force must not waive the brick gate, got {other:?}"),
+    }
+}
+
+/// A same-hardware flash of a generated-framing Kernel is unaffected (the
+/// generated schedule matches its own receiver) — the guard is cross-hardware only.
+#[test]
+fn same_hardware_generated_framing_is_not_refused() {
+    let installed = installed(0x8F00, true, "23/08/01");
+    let mut target = pair_target(0x8F00, "23/08/01", "23/08/01", 0x01);
+    target.kernel_generated_framing = true;
+    assert!(!matches!(
+        decide_flash_plan(&installed, &target, false),
+        FlashPlan::Refused(_)
+    ));
+}
+
+/// A cross-hardware crossflash whose Kernel uses the self-chunking KernelFront
+/// framing carries no era-pinned schedule, so it is NOT refused by this guard.
+#[test]
+fn cross_hardware_non_generated_framing_still_crossflashes() {
+    let installed = installed(0x8F00, true, "23/08/01");
+    let target = pair_target(0x8F01, "23/08/01", "23/08/01", 0x01); // generated=false
+    assert_eq!(
+        decide_flash_plan(&installed, &target, false),
+        FlashPlan::KernelCrossflash
     );
 }

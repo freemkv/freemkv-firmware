@@ -107,6 +107,7 @@ pub(crate) fn execute_flash(
     normal: &[u8],
     recover: bool,
     patch_kernel: bool,
+    force: bool,
 ) -> Result<()> {
     // §15.3 Site-1 downgrade patch: if the incoming Kernel's decoded marker
     // byte is `FF`/`00` (older generation), the receiver's Site-1 gate at
@@ -159,7 +160,7 @@ pub(crate) fn execute_flash(
     let mut kernel_progress = style::Progress::new("flashing kernel", kernel_total);
     let mut normal_progress = style::Progress::new("flashing normal", normal.len());
 
-    crate::engine::guard_no_medium(dev, true)?;
+    crate::engine::guard_no_medium(dev, true, force || recover)?;
     let shared = SharedDevice::new(dev);
     let class = resolve_class(
         transport::identify_on(&shared),

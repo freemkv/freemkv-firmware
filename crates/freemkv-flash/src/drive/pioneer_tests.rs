@@ -569,6 +569,7 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
         }),
         family: Some(FamilyKey::new("f1")),
         required_kernel_tag: None,
+        kernel_generated_framing: false,
     };
     assert_eq!(
         decide_flash_plan(&ud03_installed, &ud04_target, false),
@@ -852,6 +853,7 @@ fn facts(
             kernel: None,
             family: fam,
             required_kernel_tag: Some("ID58".to_string()),
+            kernel_generated_framing: false,
         },
     )
 }
@@ -1111,6 +1113,34 @@ fn generation_patch_skips_known_older_receiver() {
     assert!(!will_patch_kernel(Some(&kernel), Some(false)));
     assert!(will_patch_kernel(Some(&kernel), None));
     assert!(!will_patch_kernel(None, Some(true)));
+}
+
+#[test]
+fn oem_restore_targets_only_old_generation_receivers() {
+    use pioneer_optical::envelope::builder::{encode_kernel_envelope, KernelBuild};
+    let make = |marker: u8| {
+        let mut body = vec![0u8; 0x10000];
+        body[0xfe] = marker;
+        body[0x1000..0x1008].copy_from_slice(b"SAT 8A10");
+        body[0x1008..0x1010].copy_from_slice(b"ID58    ");
+        body[0x1010..0x1014].copy_from_slice(b"ID5 ");
+        body[0x2000..0x2008].copy_from_slice(&[0xae, 0xfe, 0, 0, 0, 0, 0xae, 0xf0]);
+        let sum = body
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .fold(0u32, |s, c| s.wrapping_add(u32::from_be_bytes(*c)));
+        body[0x1020..0x1024].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+        encode_kernel_envelope(&body, "PIONEER BD-RW   BDR-UD04", &KernelBuild::from_seed(0)).unwrap()
+    };
+    // A native FF/00-marker kernel has no Site-1 gate: after a downgrade the drive
+    // runs it and the unmodified kernel can be re-flashed (the #3 OEM restore).
+    assert!(target_receiver_is_old_gen(&make(0xff)));
+    assert!(target_receiver_is_old_gen(&make(0x00)));
+    // A 0x01-marker kernel carries the new-gen gate: not an OEM-restore target.
+    assert!(!target_receiver_is_old_gen(&make(0x01)));
+    // Undecodable input is never treated as old-gen.
+    assert!(!target_receiver_is_old_gen(b"not an envelope"));
 }
 
 #[test]

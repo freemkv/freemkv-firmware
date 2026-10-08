@@ -1162,3 +1162,27 @@ fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
     data[12..].fill(b'S');
     data
 }
+
+#[test]
+fn guard_no_medium_force_overrides_disc_and_open_tray() {
+    // Non-force execute refuses a loaded disc or open tray (the safe default).
+    let mut loaded = MockScsiDevice::new().with_medium_loaded();
+    assert!(guard_no_medium(&mut loaded, true, false).is_err());
+    let mut open = MockScsiDevice::new().with_tray_open();
+    assert!(guard_no_medium(&mut open, true, false).is_err());
+
+    // --force means force: the same states warn but proceed, because a
+    // partially bricked drive routinely misreports its tray/medium.
+    let mut loaded = MockScsiDevice::new().with_medium_loaded();
+    assert!(guard_no_medium(&mut loaded, true, true).is_ok());
+    let mut open = MockScsiDevice::new().with_tray_open();
+    assert!(guard_no_medium(&mut open, true, true).is_ok());
+}
+
+#[test]
+fn guard_no_medium_allows_closed_empty_regardless_of_force() {
+    let mut dev = MockScsiDevice::new();
+    assert!(guard_no_medium(&mut dev, true, false).is_ok());
+    let mut dev = MockScsiDevice::new();
+    assert!(guard_no_medium(&mut dev, true, true).is_ok());
+}

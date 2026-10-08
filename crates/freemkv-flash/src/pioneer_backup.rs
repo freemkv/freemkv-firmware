@@ -200,52 +200,11 @@ fn unique_embedded_date(image: &[u8]) -> Option<&str> {
 /// only to identify its vendor, media class and model tokens. The fixed-width
 /// INQUIRY product may have different spacing from the envelope header.
 fn embedded_envelope_id(inquiry: &[u8], kernel: &[u8], normal: &[u8]) -> Result<String> {
-    let vendor = std::str::from_utf8(inquiry.get(8..16).context("short INQUIRY vendor")?)?.trim();
+    let vendor = std::str::from_utf8(inquiry.get(8..16).context("short INQUIRY vendor")?)?;
     let product = std::str::from_utf8(inquiry.get(16..32).context("short INQUIRY product")?)?;
-    let tokens: Vec<_> = product.split_whitespace().collect();
-    let (Some(model), media) = (tokens.last(), &tokens[..tokens.len().saturating_sub(1)]) else {
-        bail!("INQUIRY product has no model");
-    };
-    if vendor.is_empty() || media.is_empty() {
-        bail!("INQUIRY identity is incomplete");
-    }
-    let media = media.join(" ");
-    for image in [kernel, normal] {
-        let mut found = None;
-        for spaces in 1..=8 {
-            let candidate = format!("{vendor} {media}{}{model}", " ".repeat(spaces));
-            if candidate.len() > 24 {
-                continue;
-            }
-            if image
-                .windows(candidate.len())
-                .enumerate()
-                .any(|(offset, window)| {
-                    window == candidate.as_bytes()
-                        && image.get(offset + candidate.len()).is_none_or(|next| {
-                            (!next.is_ascii_alphanumeric() && !matches!(*next, b'-' | b'_'))
-                                || image
-                                    .get(offset + candidate.len()..offset + candidate.len() + 5)
-                                    .is_some_and(|tail| {
-                                        tail[0].is_ascii_digit()
-                                            && (tail[1].is_ascii_digit() || tail[1] == b'.')
-                                            && tail[2..4].iter().all(u8::is_ascii_digit)
-                                            && tail[4] == b' '
-                                    })
-                        })
-                })
-            {
-                if found.is_some() {
-                    bail!("multiple firmware envelope identities match INQUIRY");
-                }
-                found = Some(candidate);
-            }
-        }
-        if let Some(id) = found {
-            return Ok(id);
-        }
-    }
-    bail!("captured firmware has no envelope identity matching INQUIRY")
+    // Recovery (spacing/media-class/model-only handling) lives in pioneer-optical.
+    pioneer_optical::ident::embedded_envelope_id(vendor, product, &[kernel, normal])
+        .map_err(anyhow::Error::msg)
 }
 
 /// Structural, codec and signature checks for a Pioneer envelope pair,

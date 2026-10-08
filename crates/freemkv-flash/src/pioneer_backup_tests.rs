@@ -378,6 +378,25 @@ fn embedded_identity_preserves_spacing_and_rejects_model_prefixes() {
     );
 }
 
+#[test]
+fn embedded_identity_accepts_model_only_product() {
+    // Some OEM/engineering units (e.g. BDR-PR1MD2MCM) report the model with no
+    // media-class token in INQUIRY product. The envelope id is recovered from
+    // the embedded vendor+model string at the drive's own spacing.
+    let mut inquiry = [b' '; 36];
+    inquiry[8..15].copy_from_slice(b"PIONEER");
+    inquiry[16..29].copy_from_slice(b"BDR-PR1MD2MCM");
+    assert_eq!(
+        embedded_envelope_id(&inquiry, b"\x00PIONEER BDR-PR1MD2MCM\x00", b"").unwrap(),
+        "PIONEER BDR-PR1MD2MCM"
+    );
+    // A model that is a prefix of the embedded model must not match.
+    let mut shorter = [b' '; 36];
+    shorter[8..15].copy_from_slice(b"PIONEER");
+    shorter[16..28].copy_from_slice(b"BDR-PR1MD2MC");
+    assert!(embedded_envelope_id(&shorter, b"\x00PIONEER BDR-PR1MD2MCM\x00", b"").is_err());
+}
+
 /// Replay captured address-space bytes without opening a device. Reject
 /// every command outside the bounded reference backup transaction.
 struct CaptureReplay {
