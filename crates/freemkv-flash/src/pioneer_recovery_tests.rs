@@ -261,3 +261,29 @@ fn entry_failure_never_sends_components() {
     assert_eq!(drive.attempts, 1);
     assert!(drive.writes.is_empty());
 }
+
+fn archive(update: &Update, unsigned: bool) -> Vec<u8> {
+    let kernel = update.kernel().repack(&update.kernel().image).unwrap();
+    let mut normal = update.normal().repack(&update.normal().image).unwrap();
+    if unsigned {
+        normal[0x170..0x1c0].fill(0);
+    }
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, data) in [("kernel.enc", kernel), ("normal.enc", normal)] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, name, data.as_slice()).unwrap();
+    }
+    tar.into_inner().unwrap()
+}
+
+#[test]
+fn unsigned_backup_is_valid_current_evidence_but_not_a_signed_target() {
+    let update = fixture_pair(false, 1);
+    let unsigned = archive(&update, true);
+    let signed = archive(&update, false);
+    assert!(Plan::prepare(&unsigned, &signed).is_ok());
+    assert!(Plan::prepare(&signed, &unsigned).is_err());
+}

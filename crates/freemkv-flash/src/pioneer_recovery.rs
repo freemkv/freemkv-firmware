@@ -13,25 +13,49 @@ pub(crate) struct Plan {
 
 fn pair(bytes: &[u8], label: &str) -> Result<Update> {
     let (kernel, normal) = classify_flash_input(bytes)?;
-    Update::load(
-        &kernel.with_context(|| format!("{label} must include Kernel and Normal"))?,
-        &normal.with_context(|| format!("{label} must include Kernel and Normal"))?,
-    )
-    .with_context(|| format!("cannot decode {label}"))
+    let kernel = kernel.with_context(|| format!("{label} must include Kernel and Normal"))?;
+    let normal = normal.with_context(|| format!("{label} must include Kernel and Normal"))?;
+    let result = Update::load(&kernel, &normal);
+    if matches!(
+        result,
+        Err(pioneer_optical::envelope::UpdateError::Authentication)
+    ) && normal
+        .get(0x170..0x1c0)
+        .is_some_and(|signature| signature.iter().all(|b| *b == 0))
+    {
+        bail!("{label} has no Normal signature, but its Kernel requires one. Use a signed OEM package for the firmware to flash; an unsigned backup can still be used as Current firmware");
+    }
+    result.with_context(|| format!("cannot decode {label}"))
 }
 
 impl Plan {
     pub(crate) fn prepare(current: &[u8], target: &[u8]) -> Result<Self> {
-        Self::from_updates(
-            pair(current, "Current firmware")?,
-            pair(target, "Firmware to flash")?,
+        let (kernel, normal) = classify_flash_input(current)?;
+        let kernel = pioneer_optical::envelope::Envelope::load(
+            &kernel.context("Current firmware must include Kernel and Normal")?,
         )
+        .context("decoding Current Kernel")?;
+        let normal = pioneer_optical::envelope::Envelope::load_with_kernel(
+            &normal.context("Current firmware must include Kernel and Normal")?,
+            &kernel,
+        )
+        .context("decoding Current Normal")?;
+        ensure!(
+            kernel.info().kind == pioneer_optical::ComponentKind::Kernel
+                && normal.info().kind == pioneer_optical::ComponentKind::Normal,
+            "Current firmware must contain Kernel and Normal components"
+        );
+        Self::from_normal_image(&normal.image, pair(target, "Firmware to flash")?)
     }
 
+    #[cfg(test)]
     fn from_updates(current: Update, target: Update) -> Result<Self> {
+        Self::from_normal_image(&current.normal().image, target)
+    }
+
+    fn from_normal_image(image: &[u8], target: Update) -> Result<Self> {
         // Extract credentials from supplied code, never from a controller table
         // or a pretend live descriptor. The user asserts this receiver reference.
-        let image = &current.normal().image;
         let policy = pioneer_optical::image::receiver_control(image)
             .context("Current firmware has an unsupported receiver entry handler")?;
         let descriptor = image
