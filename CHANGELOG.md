@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Pin the shared SCSI transport to the stable `libfreemkv` 1.8.2 release.
 - Pioneer validation and transfer preparation use published `pioneer-optical` 0.11.1,
   with stable error codes for diagnostics and future localized messages.
 - Remove the model-specific transfer profile table and generated-prefix schedule.
