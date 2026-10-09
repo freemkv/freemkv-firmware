@@ -254,12 +254,12 @@ pub fn family_gate(
         )),
         (None, _) => Err(
             "could not determine the installed firmware family (no usable installed Normal \
-             to profile); refusing without --force"
+             to profile); normal Flash requires a known family"
                 .to_string(),
         ),
         (_, None) => Err(
             "could not determine the target firmware family (the target Normal could not be \
-             profiled); refusing without --force"
+             profiled); normal Flash requires a known family"
                 .to_string(),
         ),
     }
@@ -409,7 +409,7 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
             (_, None) => normal_only_no_tag(),
             (None, _) => FlashPlan::Refused(
                 "Normal-only flash refused: could not read the drive's installed Kernel ID \
-                 tag (no usable pre-flash backup); use a Kernel+Normal package or --force"
+                 tag (no usable pre-flash backup); use a Kernel+Normal package"
                     .to_string(),
             ),
         };

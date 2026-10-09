@@ -152,7 +152,7 @@ fn normal_only_unknown_installed_tag_is_forceable_with_family_match() {
     let tgt = normal_only_target(0x8A10, "23/01/01");
     assert!(matches!(
         decide_flash_plan(&inst, &tgt, false),
-        FlashPlan::Refused(r) if r.contains("--force")
+        FlashPlan::Refused(r) if r.contains("Kernel+Normal")
     ));
     assert_eq!(
         decide_flash_plan(&inst, &tgt, true),

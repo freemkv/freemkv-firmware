@@ -421,12 +421,10 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         };
         let selector = resolve_device(args.device.as_deref())?;
         let mut dev = platform::open(&selector, args.execute)?;
+        crate::pioneer_recovery::identify_receiver(dev.as_mut())?;
         let current = match supplied {
             Some(bytes) => bytes,
             None => {
-                if resolved_family(dev.as_mut())? != Family::Pioneer {
-                    bail!("Recovery currently supports Pioneer Kernel + Normal packages");
-                }
                 let handler = drive::for_family(Family::Pioneer);
                 handler.capture_backup(dev.as_mut()).context(
                     "cannot read Current firmware; supply a Current firmware file instead",

@@ -287,3 +287,73 @@ fn unsigned_backup_is_valid_current_evidence_but_not_a_signed_target() {
     assert!(Plan::prepare(&unsigned, &signed).is_ok());
     assert!(Plan::prepare(&signed, &unsigned).is_err());
 }
+
+struct UnsupportedDrive {
+    inquiry: Vec<u8>,
+    vendor_reads: usize,
+    writes: usize,
+}
+impl ScsiDevice for UnsupportedDrive {
+    fn describe(&self) -> String {
+        "unsupported test drive".into()
+    }
+    fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
+        if command == cdb::inquiry(pioneer_optical::INQUIRY_LEN as u8) {
+            return Ok(self.inquiry.clone());
+        }
+        assert_eq!(command, cdb::vendor_identity());
+        self.vendor_reads += 1;
+        Ok(vec![0; len])
+    }
+    fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+        self.writes += 1;
+        bail!("unexpected write")
+    }
+    fn command_out_strict(&mut self, c: &[u8], b: &[u8]) -> Result<()> {
+        self.command_out(c, b)
+    }
+}
+
+#[test]
+fn wrong_drive_and_short_identity_fail_before_vendor_commands_or_writes() {
+    let mut mtk = vec![0; pioneer_optical::INQUIRY_LEN];
+    mtk[0] = 5;
+    mtk[8..16].copy_from_slice(b"HL-DT-ST");
+    let mut disk = mtk.clone();
+    disk[0] = 0;
+    disk[8..16].copy_from_slice(b"PIONEER ");
+    let plan = recovery_plan();
+    for inquiry in [mtk, disk, vec![0; 8]] {
+        let mut drive = UnsupportedDrive {
+            inquiry,
+            vendor_reads: 0,
+            writes: 0,
+        };
+        // This same eligibility check is used by the workflow before reads/dry-run.
+        assert!(identify_receiver(&mut drive).is_err());
+        let error = plan.run(&mut drive, &mut |_| {}).unwrap_err();
+        assert!(
+            error.to_string().contains("No firmware written")
+                || error.to_string().contains("no firmware written")
+        );
+        assert_eq!(drive.vendor_reads, 0);
+        assert_eq!(drive.writes, 0);
+    }
+}
+
+#[test]
+fn unsupported_pioneer_dialect_fails_before_update_entry() {
+    let mut inquiry = vec![0; pioneer_optical::INQUIRY_LEN];
+    inquiry[0] = 5;
+    inquiry[8..16].copy_from_slice(b"PIONEER ");
+    inquiry[16..32].copy_from_slice(b"UNKNOWN RECEIVER");
+    let mut drive = UnsupportedDrive {
+        inquiry,
+        vendor_reads: 0,
+        writes: 0,
+    };
+    let error = recovery_plan().run(&mut drive, &mut |_| {}).unwrap_err();
+    assert!(error.to_string().contains("update dialect"));
+    assert_eq!(drive.vendor_reads, 1);
+    assert_eq!(drive.writes, 0);
+}

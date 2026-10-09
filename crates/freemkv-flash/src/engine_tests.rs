@@ -815,7 +815,7 @@ fn model_mismatch_is_refused_without_the_flag() {
     )
     .unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
-    assert!(err.to_string().contains("--force"), "got: {err}");
+    assert!(err.to_string().contains("compatible image"), "got: {err}");
 }
 
 #[test]

@@ -2,6 +2,7 @@ use super::*;
 #[test]
 fn obsolete_flash_switches_are_rejected() {
     for flag in [
+        "--force",
         "--mode",
         "--enc",
         "--no-enc",
@@ -21,13 +22,18 @@ fn obsolete_flash_switches_are_rejected() {
     assert!(Cli::try_parse_from(["freemkv-flash", "dump", "--force"]).is_err());
 }
 #[test]
-fn check_file_needs_no_drive_and_force_is_the_only_override() {
+fn check_file_needs_no_drive_and_flash_keeps_safety_gates() {
     assert!(Cli::try_parse_from(["freemkv-flash", "check", "fw.bin"]).is_ok());
-    match Cli::try_parse_from(["freemkv-flash", "flash", "-i", "fw.bin", "--force"])
+    match Cli::try_parse_from(["freemkv-flash", "flash", "-i", "fw.bin"])
         .unwrap()
         .command
     {
-        Some(Command::Flash(a)) => assert!(a.force),
+        Some(Command::Flash(a)) => {
+            let options: freemkv_flash::workflow::FlashOptions = a.into();
+            assert!(!options.force);
+            assert!(!options.execute);
+            assert!(!options.acknowledged_risk);
+        }
         _ => panic!("expected flash"),
     }
 }

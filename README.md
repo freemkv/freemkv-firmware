@@ -3,22 +3,18 @@
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14740/badge)](https://www.bestpractices.dev/projects/14740)
 
 > # ⚠️ BETA — USE AT YOUR OWN RISK
-> **Barely tested.** A full flash cycle (backup → flash → verify) has been
-> exercised on **exactly one drive model — an LG `HL-DT-ST BD-RE BU40N` (rev
-> 1.03, MediaTek MT19xx)** — and **nothing else**. Every other drive, model, and
-> firmware is **completely untested**. Flashing firmware can **permanently BRICK
-> your drive**. Provided with **NO WARRANTY and NO LIABILITY** — if it damages
-> your hardware, that is entirely on you. Do **not** run it on a drive you cannot
-> afford to lose.
+> Hardware validation is limited. A complete MediaTek cycle has been exercised on
+> an LG BU40N (rev 1.03). Reported Pioneer failures motivated the experimental
+> Recovery workflow; recovery of the affected drive is not yet hardware-verified.
+> Flashing can permanently disable a drive. Provided without warranty.
 
 Standalone, multi-OS optical-drive **firmware backup and flasher** for freemkv,
-written 100% in Rust. This tool issues raw SCSI `WRITE_BUFFER` commands — read
+written in Rust with native SCSI transport adapters. This tool issues firmware-write commands — read
 the Safety section before using `flash`.
 
 Binary name: `freemkv-flash` (the crate was renamed from `freemkv-firmware`;
-the repo directory stays `freemkv-firmware`). Firmware *authoring* (X→Y
-modification: downgrade, speed-lock, AACS host-cert) is deliberately **out of
-scope** and will land later as a separate `freemkv-fw` binary.
+the repo directory stays `freemkv-firmware`). Firmware authoring is provided by
+the separate `freemkv-fw` binary in this workspace.
 
 ## Commands
 
@@ -27,18 +23,23 @@ scope** and will land later as a separate `freemkv-fw` binary.
 | `freemkv-flash <dev>` (bare) | no | — | alias for `info` |
 | `freemkv-flash list` | no | — | list drives by name (`E:`, `/dev/sr1`, `disk4`) and id |
 | `freemkv-flash info <dev>` | no | — | INQUIRY + boot banner + classify family |
-| `freemkv-flash backup <dev> [-o out]` | no | — | save one validated, flashable backup (MTK `.bin`, Pioneer `.tar`) |
-| `freemkv-flash dump <dev> [-o out.bin] [--force]` | RAM logging only, when supported | — | captures memory and diagnostic responses in one address-oriented file; not flashable |
+| `freemkv-flash backup <dev> [-o out]` | no | — | save validated captured firmware (MTK `.bin`, Pioneer `.tar`) |
+| `freemkv-flash dump <dev> [-o out.bin]` | RAM logging only, when supported | — | captures memory and diagnostic responses in one address-oriented file; not flashable |
+| `freemkv-flash check <file>` | no | firmware file | inspect without a drive |
+| `freemkv-flash recover <dev> --current <current.tar> -i <target.tar>` | with `--execute` | Pioneer Kernel + Normal packages | experimental recovery without backups |
 | `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.bin` or `.tar` | validate and plan; execute only after fresh backup |
 
-- `backup` produces one file that can be passed directly to `flash -i`. For MTK
+- `backup` produces one firmware file. Pioneer candidates with zero signatures
+  are usable as Current references, but targets must pass transfer authentication.
+  For MTK
   it is a 2 MiB image in the vendor's update format: every firmware byte is read
   from the drive, the boot page is stored in its encrypted form, and per-drive
   settings, calibration and revocation lists are replaced with factory contents.
   It carries no personal data and, for most builds, is byte-identical to the
   OEM update file. Use `dump` for a raw copy that keeps the per-drive data.
 - `flash` sniffs the input: `.bin` = full MTK image; `.tar` = 0.10.x MTK
-  rollback archive (rebuilt the same way before flashing). Without `--execute`,
+  rollback archive (rebuilt the same way before flashing), or a Pioneer envelope
+  package. Pioneer `.enc` inputs are also supported. Without `--execute`,
   it is a dry run.
 - `verify` does not exist as a command. `flash` verifies as its protocol allows.
 
@@ -51,22 +52,14 @@ The CLI prints the path; desktop apps provide **View diagnostic log…**, **Copy
 diagnostic log** and **Save diagnostic log…**, with export beside failures.
 See [log contents and locations](crates/freemkv-flash/README.md#diagnostic-logs).
 
-## MTK-gate (MediaTek-only for now)
+## Backend support
 
-Every command classifies the drive first, using only proven discriminators:
-
-| Discriminator | Family | Supported? |
-|---|---|---|
-| `GET_CONFIG 0x46` feature `0x010C` returns `01 0C` | **MediaTek MT19xx** | ✅ yes |
-| `READ_BUFFER 0xF1` succeeds | **Pioneer / Renesas** | classified, ❌ no |
-| neither | **Unknown** | ❌ never flashed |
-
-`info` prints the detected family. For Pioneer, **use `backup`, not `dump`**:
-`backup` captures a flashable OEM-format package (two `.enc` components in a
-tar); `dump` is a raw, non-flashable device snapshot for diagnostics. Pioneer
-`flash` is gated by a hardware-family check, a Kernel-tag check, and bundle
-self-consistency; see [`crates/freemkv-flash/README.md`](crates/freemkv-flash/README.md) for
-the full command reference and policy.
+The MediaTek and Pioneer backends have executable flash paths for supported
+inputs. MT1959 is the hardware-tested MediaTek path; MT1939 is recognized but
+not hardware-validated. Separate Renesas classification does not imply write
+support. Unknown families are refused. Pioneer normal Flash checks hardware
+family, Kernel tags and bundle consistency. Recovery instead uses the supplied
+Current reference to derive receiver credentials; see the limits below.
 
 ## Flash workflow
 
@@ -111,12 +104,8 @@ freemkv-flash flash /dev/sg0 -i update.enc
 
 ## Safety
 
-**Flashing is a single, irreversible operation.** The drive erases and programs
-its flash the moment the 2 MB upload completes (the last streamed chunk) — there
-is **no safe abort mid-flight**, and read-back verify only runs *afterward*. Once
-`--execute` starts, you are committed. A full cycle has been exercised on **one
-drive model only (an LG BU40N, rev 1.03)** — every other drive is untested;
-treat every flash as potentially bricking.
+**Do not interrupt a firmware write.** Programming and completion behavior depend
+on the backend. No safe abort is guaranteed once writes begin.
 
 The gates below only prevent an accidental *start*; they do nothing once the
 write is underway. `flash` is **dry-run unless `--execute`**, and even then
@@ -141,13 +130,14 @@ freemkv-flash recover /dev/sg0 --current current.tar -i restore.tar --execute --
 freemkv-flash recover /dev/sg0 --read-from-drive -i restore.tar --execute --i-understand-risk
 ```
 
-Recovery currently supports Pioneer complete packages. It sends the target as
+Recovery currently supports Pioneer complete packages. Unsupported drives are rejected before firmware reads or update commands. It sends the target as
 supplied, without automatic downgrade patches or extra restoration passes.
 Malformed inputs and rejected writes still stop the operation. Success means the
 drive reports normal mode and readiness (including an empty tray), not a byte-for-byte
 readback verification. Hardware recovery of the reported PR1ML incident remains
-unverified. The older CLI `flash --force` is retained for MTK; use `recover` for
-Pioneer recovery.
+unverified. Version 0.11.0 removes the public `flash --force` option; use
+`recover` for Pioneer recovery. Current may be an unsigned backup, but the target
+must pass transfer authentication; an unsigned candidate is not a signed OEM update.
 
 ## Two independent plug-in layers
 
@@ -155,13 +145,13 @@ Pioneer recovery.
 crates/freemkv-flash/
 ├── Cargo.toml
 └── src/
-    ├── main.rs            # clap CLI: list / info / check / backup / dump / flash
+    ├── main.rs            # clap CLI: list / info / check / backup / dump / flash / recover
     ├── lib.rs
     ├── platform/          # OS transport — the ScsiDevice trait
     │   ├── mod.rs         #   trait + open() compile-time OS selection
     │   ├── linux.rs       #   #[cfg(linux)]   real SG_IO ioctl
-    │   ├── windows.rs     #   #[cfg(windows)] SPTI stub (unimplemented)
-    │   ├── mac.rs         #   #[cfg(macos)]   IOKit stub (unimplemented)
+    │   ├── windows.rs     #   #[cfg(windows)] SPTI transport
+    │   ├── mac.rs         #   #[cfg(macos)]   IOKit transport
     │   └── mock.rs        #   MockScsiDevice for host-independent tests
     ├── drive/             # chipset/protocol backends — probe + backup/flash
     │   ├── mod.rs         #   Family, classify(), DriveFamily trait
@@ -175,8 +165,8 @@ crates/freemkv-flash/
 ## Device argument by OS
 
 - Linux: `/dev/sgN` (`SG_IO`). May also accept `/dev/srN`.
-- Windows: `\\.\CdRomN` (SPTI backend is a stub for now).
-- macOS: IOKit service / BSD name (IOKit backend is a stub for now).
+- Windows: `\\.\CdRomN`.
+- macOS: IOKit service / BSD name.
 
 ## Build / CI
 

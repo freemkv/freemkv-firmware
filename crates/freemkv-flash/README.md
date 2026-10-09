@@ -8,19 +8,19 @@ For installation and the MediaTek workflow see the [top-level README](../../READ
 
 ## Desktop app
 
-`freemkv-flash-gui` offers Drive info, Backup, Dump, and Flash firmware on macOS,
+`freemkv-flash-gui` offers Drive info, Backup, Dump, Flash, Recovery, Inspect and Compare on macOS,
 Windows, and Linux. Its dropdown uses the same optical-drive discovery as
 `freemkv-flash list`, including drives with empty trays. Both front-ends call
 the same workflows and safety checks; `libfreemkv` owns OS transport through
 its `scsi` feature, with default features disabled.
 
-The desktop app uses a fixed-size window, labeled results, and transfer progress
-bars. Details open in a separate scrolling dialog. Flash has one override:
-**Force flash**. Check file inspects an input without accessing the drive.
+The desktop app has a resizable window, labeled results and transfer progress
+bars. Details open in a separate scrolling dialog. Recovery is a separate tab.
+Check file inspects an input without accessing the drive.
 
 ## Diagnostic logs
 
-Version 0.10.5 saves a diagnostic log automatically for each CLI or desktop
+Since version 0.10.5, the app saves a diagnostic log automatically for each CLI or desktop
 operation. To report a failure, attach the log from that operation; no debug
 flag or diagnostic rerun is needed. The firmware modifier uses the same policy.
 The CLI prints its location; in the desktop app, open **View diagnostic log…**
@@ -48,8 +48,9 @@ reported but does not interrupt firmware programming.
 | `list` | no | Lists optical drives and the selector to pass to other commands. |
 | `info` | no | Identifies a drive or a firmware file. |
 | `check FILE` | no | Inspects a firmware file without a drive. |
-| `backup` | no | Saves a flashable copy of the drive's firmware for rollback. |
-| `dump` | no | Raw capture of accessible memory: Pioneer at least 6 MiB; MediaTek 2 MiB mapped window. Gaps are reported. |
+| `backup` | no | Saves validated firmware; unsigned Pioneer candidates still need target authentication to flash. |
+| `dump` | RAM logging when supported | Raw capture of accessible memory: Pioneer at least 6 MiB; MediaTek 2 MiB mapped window. Gaps are reported. |
+| `recover` | with `--execute` | Pioneer recovery from Current and target packages, without backups. |
 | `flash` | with `--execute` | Checks and plans a flash; writes only with every safety flag. |
 
 ```sh
@@ -85,18 +86,36 @@ including anything readable from a degraded drive, without requiring firmware
 integrity. Pioneer fills unreadable spans with zero; MediaTek uses FF. The dump
 reports gaps and is not automatically a flashable update image.
 
-`flash --force` waives compatibility/recovery gates and allows proceeding after a
-failed backup attempt. The input must still pass structural/integrity checks and
-have a supported write protocol. There are no separate mode, encryption,
-crossflash, recovery, skip-backup, or dump-force switches. Pioneer update entry
-always requires an installed backup containing a uniquely recoverable receiver
-control key; `--force` cannot bypass that requirement.
+## Recovery
+
+```sh
+freemkv-flash recover E: --current current.tar -i target.tar
+freemkv-flash recover E: --current current.tar -i target.tar --execute --i-understand-risk
+# Alternative when firmware reads still work:
+freemkv-flash recover E: --read-from-drive -i target.tar --execute --i-understand-risk
+```
+
+Choose exactly one Current source. Unsupported drives are rejected before firmware reads or update commands. Both packages must contain Pioneer Kernel and
+Normal. A supplied Current file avoids firmware memory reads; identity/status
+queries still run. Recovery makes no backups or readback verification and bypasses
+installed-versus-target compatibility policy. It derives receiver credentials from
+Current, skips update entry if already in kernel mode, and sends both target
+components. Required integrity, target authentication and write-error checks remain.
+An unsigned backup can be a Current reference, but not an authenticated target.
+
+Success means normal identity and readiness returned. It does not prove matching
+installed bytes. Recovery is experimental and not yet verified on the reported
+failed PR1ML drive. No automatic downgrade patch or extra restoration pass is used.
+
+Version 0.11.0 removes `flash --force`. There are no separate mode, encryption,
+crossflash, skip-backup, `flash --recover`, or dump-force switches.
 
 ## Safety
 
-- A write needs `--execute`, `--i-understand-risk` and a pre-flash backup
-  (`--backup FILE`). Without `--force`, backup failure stops the write.
-- Without `--execute`, `flash` is a dry run.
+- Both write commands need `--execute` and `--i-understand-risk`. Normal Flash
+  requires a fresh pre-flash backup; `--backup FILE` optionally chooses its path.
+  Backup failure stops normal Flash. Recovery does not save a backup.
+- Without `--execute`, `flash` and `recover` are dry runs.
 - `info` and `backup` do not write firmware. Pioneer `dump` may enable temporary
   CDB logging in RAM; it does not change persistent logging settings or firmware.
 - There is no safe abort once a write has started.

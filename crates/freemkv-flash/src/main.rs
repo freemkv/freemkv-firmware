@@ -52,7 +52,7 @@ enum Command {
     /// List optical drives by the name or id to pass to info/backup/flash. Works
     /// with an empty tray (a disc-less macOS drive has no /dev/diskN node).
     List,
-    /// Identify + classify a drive OR a firmware image file (read-only; never aborts).
+    /// Identify + classify a drive OR a firmware image file (read-only).
     Info {
         /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`) or a
         /// firmware image file. Omit to auto-pick the only connected drive.
@@ -115,7 +115,7 @@ struct FlashArgs {
     /// Pioneer inputs are dry-run by default; live writes need --execute --i-understand-risk and a pre-flash backup.
     #[arg(short, long)]
     input: PathBuf,
-    /// Where to save the pre-flash backup (ignored with --force).
+    /// Where to save the required pre-flash backup (otherwise chosen automatically).
     #[arg(short, long)]
     backup: Option<PathBuf>,
     /// Actually issue firmware writes (otherwise preview the plan).
@@ -124,10 +124,6 @@ struct FlashArgs {
     /// Acknowledge that flashing can permanently disable the drive.
     #[arg(long)]
     i_understand_risk: bool,
-    /// Override compatibility/recovery checks and skip the pre-flash backup attempt.
-    /// The input must still have a valid format for the drive's write protocol.
-    #[arg(long)]
-    force: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -196,7 +192,7 @@ impl From<FlashArgs> for freemkv_flash::workflow::FlashOptions {
             backup: a.backup,
             execute: a.execute,
             acknowledged_risk: a.i_understand_risk,
-            force: a.force,
+            force: false,
         }
     }
 }

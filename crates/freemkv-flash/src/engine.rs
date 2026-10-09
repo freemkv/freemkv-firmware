@@ -609,17 +609,16 @@ fn capture_required_backup(
     if out.symlink_metadata().is_ok() {
         bail!(
             "pre-flash backup path {} already exists (existing backups are never overwritten). \
-             Move/remove it, pass --backup <new-path>, or --force to proceed with no rollback.",
+             Move/remove it or pass --backup <new-path>.",
             out.display()
         );
     }
-    let bytes = drive.capture_backup(dev).context(
-        "pre-flash backup failed; aborting flash (use --force to proceed without a backup)",
-    )?;
+    let bytes = drive
+        .capture_backup(dev)
+        .context("pre-flash backup failed; aborting flash")?;
     let target_model = drive.identity(dev).product;
-    let saved_len = save_backup(out, &bytes, drive, &target_model).context(
-        "pre-flash backup failed; aborting flash (use --force to proceed without a backup)",
-    )?;
+    let saved_len = save_backup(out, &bytes, drive, &target_model)
+        .context("pre-flash backup failed; aborting flash")?;
     // Preserve a structurally valid capture before target-dependent checks.
     // A partial capture remains useful, but cannot authorize writing a region
     // it does not cover. No update command has been issued at this point.
@@ -1064,7 +1063,7 @@ fn decide_crossflash(
         bail!(
             "image is built for model {image_model:?} but this drive reports \
              {product:?} — refusing to flash a wrong-model image (pass \
-             --force for a deliberate same-chipset crossflash)"
+             a compatible image)"
         );
     }
 

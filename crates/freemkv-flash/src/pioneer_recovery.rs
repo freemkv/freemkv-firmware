@@ -78,14 +78,8 @@ impl Plan {
     }
 
     fn run(&self, dev: &mut dyn ScsiDevice, sleep: &mut impl FnMut(Duration)) -> Result<()> {
-        let identity = transport::identify(dev).context("reading receiver operating mode")?;
-        ensure!(
-            identity.vendor() == "PIONEER",
-            "Recovery requires a Pioneer receiver"
-        );
-        let class = identity
-            .class()
-            .context("receiver does not report a supported update dialect")?;
+        let identity = identify_receiver(dev)?;
+        let class = identity.class().context("unsupported recovery dialect")?;
         crate::diagnostics::record(format!("Recovery receiver: product={} revision={} platform={} kernel_tag={} normal_tag={} code={}", identity.product(), identity.revision(), identity.platform(), identity.kernel_tag(), identity.normal_tag(), identity.code()));
         let updating = in_update_mode(&identity);
         crate::output::field(
@@ -164,6 +158,32 @@ impl Plan {
         }
         bail!("firmware transferred, but return to normal mode could not be verified within 90 seconds; save the diagnostic log")
     }
+}
+
+/// Check protocol eligibility before firmware reads, even for a dry run.
+pub(crate) fn identify_receiver(dev: &mut dyn ScsiDevice) -> Result<Identity> {
+    let inquiry = dev
+        .command_in(
+            &cdb::inquiry(pioneer_optical::INQUIRY_LEN as u8),
+            pioneer_optical::INQUIRY_LEN,
+        )
+        .context("Recovery could not identify the selected drive; no firmware written")?;
+    ensure!(
+        inquiry.len() >= pioneer_optical::INQUIRY_LEN,
+        "Recovery received a truncated drive identity; no firmware written"
+    );
+    ensure!(inquiry[0] & 0x1f == 5 && &inquiry[8..16] == b"PIONEER ",
+        "Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written");
+    let vendor = dev
+        .command_in(&cdb::vendor_identity(), pioneer_optical::IDENTITY_LEN)
+        .context("Recovery could not read the Pioneer receiver identity; no firmware written")?;
+    let identity = Identity::parse(&inquiry, &vendor)
+        .context("Recovery received a truncated Pioneer receiver identity; no firmware written")?;
+    ensure!(
+        identity.class().is_some(),
+        "Recovery does not support this receiver's update dialect; no firmware written"
+    );
+    Ok(identity)
 }
 
 fn in_update_mode(id: &Identity) -> bool {
