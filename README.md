@@ -67,7 +67,7 @@ The flasher does not modify the input image. For supported MTK images, it
 validates integrity and model compatibility before writing. Its workflow is:
 
 1. **Back up** — a live execution reads and saves a fresh, complete, validated
-   rollback archive. A failed backup stops the flash before any firmware write.
+   backup artifact. A failed backup stops the flash before any firmware write.
 2. **Write** — `.bin` streams the full MTK firmware image; `.tar` selects the
    same image from the backup archive and reflashes it.
 3. **Verify** — the backend performs its supported completion/read-back checks.
@@ -139,28 +139,14 @@ unverified. Version 0.11.0 removes the public `flash --force` option; use
 `recover` for Pioneer recovery. Current may be an unsigned backup, but the target
 must pass transfer authentication; an unsigned candidate is not a signed OEM update.
 
-## Two independent plug-in layers
+## Implementation layers
 
-```
-crates/freemkv-flash/
-├── Cargo.toml
-└── src/
-    ├── main.rs            # clap CLI: list / info / check / backup / dump / flash / recover
-    ├── lib.rs
-    ├── platform/          # OS transport — the ScsiDevice trait
-    │   ├── mod.rs         #   trait + open() compile-time OS selection
-    │   ├── linux.rs       #   #[cfg(linux)]   real SG_IO ioctl
-    │   ├── windows.rs     #   #[cfg(windows)] SPTI transport
-    │   ├── mac.rs         #   #[cfg(macos)]   IOKit transport
-    │   └── mock.rs        #   MockScsiDevice for host-independent tests
-    ├── drive/             # chipset/protocol backends — probe + backup/flash
-    │   ├── mod.rs         #   Family, classify(), DriveFamily trait
-    │   ├── mtk.rs         #   MediaTek MT19xx — fully implemented
-    │   ├── pioneer.rs     #   Pioneer OEM backup/flash (dry-run unless --execute)
-    │   └── renesas.rs     #   classified; live backup/flash blocked
-    ├── cmac.rs            # MT1959 AES-CMAC verify + resign
-    └── manifest.rs        # TOML firmware-image manifest / flash mode
-```
+`crates/freemkv-flash/src/workflow.rs` provides the CLI and desktop workflows.
+`platform/adapter.rs` adapts the shared `libfreemkv` SCSI transport;
+`platform/mock.rs` supports tests without hardware. `drive/mtk.rs` and
+`drive/pioneer.rs` implement firmware protocols. `pioneer_recovery.rs` is the
+separate recovery executor, using `pioneer-optical` for Pioneer formats and
+commands. Normal Flash remains in the existing engine and backend paths.
 
 ## Device argument by OS
 
