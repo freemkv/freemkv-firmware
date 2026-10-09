@@ -58,6 +58,7 @@ pub struct FlashApp {
     diagnostic_notice: Option<String>,
     progress: Option<(String, usize, usize)>,
     fields: Vec<(String, String)>,
+    device_settings: Option<freemkv_flash::output::device_settings::Settings>,
     running: bool,
     rx: Option<Receiver<Msg>>,
 }
@@ -149,6 +150,7 @@ impl FlashApp {
             diagnostic_notice: None,
             progress: None,
             fields: Vec::new(),
+            device_settings: None,
             running: false,
             rx: None,
         }
@@ -190,6 +192,7 @@ impl FlashApp {
         self.diagnostic_notice = None;
         self.progress = None;
         self.fields.clear();
+        self.device_settings = None;
         self.log.push(format!("{label}: {device}"));
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
@@ -229,15 +232,19 @@ impl FlashApp {
             loop {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => match event {
+                        freemkv_flash::output::Event::DeviceSettings(settings) => {
+                            self.device_settings = Some(settings)
+                        }
                         freemkv_flash::output::Event::Message(line) => self.log.push(line),
                         freemkv_flash::output::Event::Progress { label, done, total } => {
                             self.progress = Some((label, done, total))
                         }
                         freemkv_flash::output::Event::Field { label, value } => {
                             if label == "Diagnostic log" {
-                                self.diagnostic_log = Some(value.clone().into());
+                                self.diagnostic_log = Some(value.into());
+                            } else {
+                                self.fields.push((label, value));
                             }
-                            self.fields.push((label, value))
                         }
                     },
                     Ok(Msg::Analysis(result)) => {
@@ -618,6 +625,7 @@ impl FlashApp {
                                 if previous != self.device {
                                     self.risk_ack = false;
                                     self.fields.clear();
+                                    self.device_settings = None;
                                     self.status = "Ready".into();
                                     self.failure = None;
                                 }
@@ -706,7 +714,11 @@ impl FlashApp {
                             self.result_task = self.task;
                         }
                     }
-                    if !self.fields.is_empty() {
+                    if self.result_task == Task::Info
+                        && self.fields.iter().any(|(label, _)| label == "Model")
+                    {
+                        crate::info_ui::show(ui, &self.fields, self.device_settings.as_ref());
+                    } else if !self.fields.is_empty() {
                         egui::Grid::new("operation_results")
                             .num_columns(2)
                             .spacing([24.0, 8.0])
@@ -775,6 +787,15 @@ impl FlashApp {
                         }
                     });
                     ui.label("Attach this log to your bug report.");
+                    if let Some(path) = &self.diagnostic_log {
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(path.display().to_string()).small(),
+                            )
+                            .wrap()
+                            .selectable(true),
+                        );
+                    }
                     if let Some(notice) = &self.diagnostic_notice {
                         ui.label(notice);
                     }

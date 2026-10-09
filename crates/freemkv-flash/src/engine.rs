@@ -20,6 +20,7 @@ use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 pub(crate) mod backup;
+mod device_info;
 use backup::save_backup;
 #[cfg(test)]
 use backup::BackupArtifact;
@@ -91,6 +92,7 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
             style::kv("flash", &format!("{} — {}", set.name, set.status.label()))
         );
     }
+    device_info::show(dev, drive.family() == crate::drive::Family::Pioneer);
     // Best-effort firmware identification (read-only). `info` never aborts, so a
     // read failure here is simply omitted.
     if let Ok(Some(r)) = drive.firmware_report(dev) {

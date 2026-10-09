@@ -315,3 +315,21 @@ fn inspect_and_compare_inputs_fit_without_a_connected_drive() {
             .any(|(text, _)| text == "Swap" || text == "Filter table records"));
     }
 }
+
+#[test]
+fn diagnostic_path_stays_out_of_device_fields() {
+    let mut app = FlashApp::with_drives(Vec::new());
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    tx.send(Msg::Event(freemkv_flash::output::Event::Field {
+        label: "Diagnostic log".into(),
+        value: "/tmp/diagnostic.log".into(),
+    }))
+    .unwrap();
+    app.pump();
+    assert!(app.fields.is_empty());
+    assert_eq!(
+        app.diagnostic_log,
+        Some(std::path::PathBuf::from("/tmp/diagnostic.log"))
+    );
+}

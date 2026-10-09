@@ -6,6 +6,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-10-08
+
+- Expand drive information with grouped Kernel/Normal identity, media capabilities,
+  DVD region counters, and codec-driven read-only Quiet Drive/PureRead settings.
+- Compact media capabilities into side-by-side CD/DVD and Blu-ray columns with
+  adjacent read/write checkboxes; hide unknown and unsupported capability rows.
+- Show current and saved Quiet modes together without duplicate values. Hide
+  unsupported PureRead versions and child controls; keep editing disabled.
+- Keep diagnostic log paths in the diagnostics window and show unset DVD regions
+  explicitly instead of presenting their permission mask as a selected region.
+- Use pioneer-optical 0.12.1 with hardened codec validation and Rust regression
+  tests for malformed input, write restrictions, transport failures and UI state.
+
 ## [0.11.0] - 2026-10-08
 
 - Remove the public `flash --force` option. Use the separate `recover` command for Pioneer recovery; normal Flash retains its backup and compatibility requirements.

@@ -185,6 +185,7 @@ impl FwApp {
             loop {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => match event {
+                        freemkv_flash::output::Event::DeviceSettings(_) => {}
                         freemkv_flash::output::Event::Message(line) => self.log.push(line),
                         freemkv_flash::output::Event::Progress { label, done, total } => {
                             self.progress = Some((label, done, total))

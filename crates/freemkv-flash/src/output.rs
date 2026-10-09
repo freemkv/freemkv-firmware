@@ -1,5 +1,7 @@
 //! Scoped application output shared by terminal and graphical front-ends.
 
+pub use pioneer_optical::settings as device_settings;
+
 use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, Write};
@@ -7,6 +9,8 @@ use std::io::{self, Write};
 /// Presentation-independent updates from an operation.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
+    /// Normalized settings from the selected Pioneer protocol codec.
+    DeviceSettings(device_settings::Settings),
     /// Diagnostic text for optional details.
     Message(String),
     /// Actual transfer counts, independent of terminal formatting.
@@ -42,7 +46,7 @@ pub fn capture<R>(mut sink: impl FnMut(String) + 'static, operation: impl FnOnce
                 "{label}: {}%",
                 done.saturating_mul(100) / total.max(1)
             )),
-            Event::Field { .. } => {}
+            Event::Field { .. } | Event::DeviceSettings(_) => {}
         },
         operation,
     )

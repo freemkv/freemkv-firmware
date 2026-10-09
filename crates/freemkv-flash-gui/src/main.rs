@@ -6,6 +6,7 @@
 
 mod analysis_ui;
 mod app;
+mod info_ui;
 mod ops;
 
 use eframe::egui;
