@@ -1036,8 +1036,7 @@ fn decide_crossflash(
         if df != image_family {
             bail!(
                 "image is {} firmware but this drive is {} silicon — refusing to \
-                 flash across chip families (instant brick). --force does \
-                 NOT override the chipset-family gate.",
+                 flash across chip families. This gate cannot be overridden.",
                 image_family.label(),
                 df.label()
             );

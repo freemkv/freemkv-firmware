@@ -83,7 +83,7 @@ enum Command {
     },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
-    /// Recover using a supplied receiver reference or an explicit drive read.
+    /// Recover a Pioneer drive using Current firmware or an explicit drive read.
     Recover(RecoveryArgs),
 }
 
@@ -128,6 +128,7 @@ struct FlashArgs {
 
 #[derive(clap::Args, Debug)]
 struct RecoveryArgs {
+    /// Drive name or id from list; omitted when only one drive is connected.
     device: Option<String>,
     /// Target package containing Kernel and Normal.
     #[arg(short, long)]
@@ -142,8 +143,10 @@ struct RecoveryArgs {
     /// Explicitly read Current firmware instead of supplying a file.
     #[arg(long)]
     read_from_drive: bool,
+    /// Actually write firmware; otherwise preview without firmware writes.
     #[arg(long)]
     execute: bool,
+    /// Acknowledge that recovery can permanently disable the drive.
     #[arg(long)]
     i_understand_risk: bool,
 }
