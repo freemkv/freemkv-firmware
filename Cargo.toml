@@ -28,3 +28,7 @@ all = "warn"
 strip = true
 lto = "thin"
 codegen-units = 1
+
+# pioneer-optical 0.12.4 (production record) from git until it is published.
+[patch.crates-io]
+pioneer-optical = { git = "https://github.com/MattJackson/pioneer-optical", rev = "d9aa3b3c8b11ab3a72d9cee7c6576c5ce205c22e" }

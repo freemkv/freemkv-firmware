@@ -1625,6 +1625,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "h8-asm"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07f60b20bbdeac16166434ca88ab1ea59438a0d5fcc79399c5efd6f7469c5a93"
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2707,13 +2713,12 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pioneer-optical"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d8d210a1e62246fbea4b779957a8bef3d2b1d82dd39ad60711d27d17e6708f3"
+version = "0.12.4"
+source = "git+https://github.com/MattJackson/pioneer-optical?rev=d9aa3b3c8b11ab3a72d9cee7c6576c5ce205c22e#d9aa3b3c8b11ab3a72d9cee7c6576c5ce205c22e"
 dependencies = [
- "anyhow",
  "flate2",
  "getrandom 0.3.4",
+ "h8-asm",
  "miniz_oxide 0.9.1",
  "num-bigint",
  "num-traits",

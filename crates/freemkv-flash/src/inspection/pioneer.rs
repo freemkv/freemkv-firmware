@@ -215,18 +215,9 @@ pub(super) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState
     ) {
         Ok(bytes) => match pioneer_optical::rpc::State::parse(&bytes) {
             Some(rpc) => {
-                let regions = (1..=8)
-                    .filter(|&r| rpc.allows(r))
-                    .map(|r| r.to_string())
-                    .collect::<Vec<_>>();
-                state.fields.push(Field::new(
-                    "DVD region",
-                    if rpc.prohibited_regions == 0xff {
-                        "Unset".into()
-                    } else {
-                        regions.join(", ")
-                    },
-                ));
+                state
+                    .fields
+                    .push(Field::new("DVD region", dvd_region_label(rpc)));
                 state.fields.push(Field::new(
                     "User region changes remaining",
                     rpc.user_changes_remaining,
@@ -250,6 +241,19 @@ pub(super) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState
         }
     }
     state
+}
+
+/// The regions the drive's RPC mask permits. The mask, not the type code, is
+/// what the drive enforces: 0x00 permits all eight, 0xFF permits none.
+pub(crate) fn dvd_region_label(rpc: pioneer_optical::rpc::State) -> String {
+    if rpc.prohibited_regions == 0xff {
+        return "Not set".into();
+    }
+    (1..=8)
+        .filter(|&r| rpc.allows(r))
+        .map(|r| r.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn signature_label(status: pioneer_optical::envelope::SignatureStatus) -> &'static str {

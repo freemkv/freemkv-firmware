@@ -3,7 +3,7 @@
 mod capture;
 mod compare_report;
 mod comparison;
-mod pioneer;
+pub(crate) mod pioneer;
 mod report;
 pub use report::*;
 

@@ -219,3 +219,16 @@ fn absent_kernel_is_visible_in_inspection_and_comparison() {
         .any(|s| s.contains("Source B") && s.contains("not included")));
     assert!(kernel.regions.is_empty());
 }
+#[test]
+fn dvd_region_label_follows_the_mask_not_the_type_code() {
+    let label = |b4: u8, mask: u8| {
+        pioneer::dvd_region_label(
+            pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, b4, mask, 1, 0]).unwrap(),
+        )
+    };
+    // BDR-UD04 live capture: type 0, 5/5 counters, mask 0x00, RPC-2.
+    assert_eq!(label(0x2d, 0x00), "1, 2, 3, 4, 5, 6, 7, 8");
+    assert_eq!(label(0x2d, 0xff), "Not set");
+    assert_eq!(label(0x64, 0xfd), "2");
+    assert_eq!(label(0x64, 0xfa), "1, 3");
+}

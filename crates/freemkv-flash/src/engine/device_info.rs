@@ -3,10 +3,13 @@ use crate::{
     drive::pioneer_transport::{ScsiTransport, SharedDevice},
     platform::ScsiDevice,
 };
-use pioneer_optical::device::{
-    info::Media,
-    settings::{Capability, Observed, PureReadMode, QuietMode},
-    Device,
+use pioneer_optical::{
+    device::{
+        info::Media,
+        settings::{Capability, Observed, PureReadMode, QuietMode},
+        Device,
+    },
+    production,
 };
 
 fn field(label: &str, value: impl Into<String>) {
@@ -121,9 +124,23 @@ pub(super) fn show(dev: &mut dyn ScsiDevice, pioneer: bool) {
             }
             Err(e) => field("Pioneer identity", e.to_string()),
         }
-        for label in ["Product code", "Manufactured", "Product origin"] {
-            field(label, "Not reported");
-        }
+        let mut b = [0; production::PARAMETERS_LEN];
+        let made = device
+            .parameters(&mut b)
+            .ok()
+            .and_then(|n| production::parse(&b[..n]));
+        field("Product code", available(made.map(|p| p.product_code)));
+        field(
+            "Manufactured",
+            available(
+                made.and_then(|p| p.manufactured)
+                    .map(|d| format!("{:04}-{:02}-{:02}", d.year, d.month, d.day)),
+            ),
+        );
+        field(
+            "Product origin",
+            available(serial.and_then(production::origin)),
+        );
     }
     for (name, medium) in [
         ("CD-ROM", Media::CdRom),
@@ -161,9 +178,6 @@ pub(super) fn show(dev: &mut dyn ScsiDevice, pioneer: bool) {
             ),
         );
     }
-    for label in ["LabelFlash", "LightScribe"] {
-        field(label, "Unknown");
-    }
     match device.get(pioneer_optical::device::DvdRegion) {
         Ok(rpc) => {
             field(
@@ -174,17 +188,9 @@ pub(super) fn show(dev: &mut dyn ScsiDevice, pioneer: bool) {
                     v => format!("Unknown ({v})"),
                 },
             );
-            let regions: Vec<String> = (1..=8)
-                .filter(|r| rpc.allows(*r))
-                .map(|r| r.to_string())
-                .collect();
             field(
                 "DVD region",
-                if rpc.type_code == 0 || regions.is_empty() {
-                    "Not set".into()
-                } else {
-                    regions.join(", ")
-                },
+                crate::inspection::pioneer::dvd_region_label(rpc),
             );
             field(
                 "User changes remaining",
@@ -197,7 +203,7 @@ pub(super) fn show(dev: &mut dyn ScsiDevice, pioneer: bool) {
             field(
                 "Region state",
                 match rpc.type_code {
-                    0 => "Not set",
+                    0 => "Never set",
                     1 => "Set",
                     2 => "Last chance",
                     3 => "Permanent",
