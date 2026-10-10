@@ -6,6 +6,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2] - 2026-10-09
+
+- Derive the DVD region from the drive's RPC mask alone: a drive whose mask
+  prohibits nothing lists regions 1-8 instead of "Not set", and the info and
+  inspection views share one formatter. An unset region state reads "Never set".
+- Show the drive's original product code, factory date and country of
+  manufacture from its production record instead of fixed placeholder rows,
+  and drop the never-read LabelFlash/LightScribe rows.
+- Use pioneer-optical 0.12.4 for the production record decoder.
+
 ## [0.11.1] - 2026-10-08
 
 - Expand drive information with grouped Kernel/Normal identity, media capabilities,
