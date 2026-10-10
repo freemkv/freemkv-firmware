@@ -1,8 +1,14 @@
 //! Opt-in offline census of the public backup path. Never opens a device.
 use anyhow::{bail, Context, Result};
 use freemkv_flash::{
-    drive, engine, pioneer_backup,
-    pioneer_bundle::{Bundle, Role},
+    drive::{
+        self,
+        pioneer::{
+            backup as pioneer_backup,
+            bundle::{Bundle, Role},
+        },
+    },
+    engine,
     platform::{ScsiDevice, ScsiSenseError},
 };
 use serde_json::{json, Value};
@@ -324,11 +330,7 @@ fn replay_serves_map_probe_and_boundary_reads_with_real_ceiling_sense() -> Resul
     assert_eq!(replay.knocks, 1);
     for _ in 0..2 {
         assert_eq!(
-            freemkv_flash::drive::pioneer_transport::read_memory_exact(
-                &mut replay,
-                KERNEL_BASE as u32,
-                4
-            )?,
+            freemkv_flash::drive::transport::read_memory_exact(&mut replay, KERNEL_BASE as u32, 4)?,
             [0xa5; 4]
         );
     }

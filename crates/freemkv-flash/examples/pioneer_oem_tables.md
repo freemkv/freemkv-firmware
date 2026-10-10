@@ -9,12 +9,12 @@ From the workspace root, using an OEM-only collection of extracted `.enc` files:
 ```sh
 cargo run --release -p freemkv-flash --example pioneer_oem_tables -- \
   /path/to/hoard/images/pioneer \
-  crates/freemkv-flash/src \
+  crates/freemkv-flash/src/drive/pioneer \
   /tmp/pioneer-oem-refresh
 ```
 
-Inspect `report.json` before copying `pioneer_k.bin` and `pioneer_n.bin` from the
-output directory into `crates/freemkv-flash/src`. Run the flash tests and the
+Inspect `report.json` before copying `k.bin` and `n.bin` from the
+output directory into `crates/freemkv-flash/src/drive/pioneer`. Run the flash tests and the
 configured corpus/byte-exact regressions, then commit both tables with the source.
 The executable embeds them at compile time; changing files beside an installed
 executable does not update its metadata.

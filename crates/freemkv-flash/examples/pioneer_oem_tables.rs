@@ -239,8 +239,8 @@ fn main() -> Result<()> {
         }
         report.push(json!({"path":path,"image_sha256":matched_hash,"envelope_sha256":hash(&bytes),"status":status}));
     }
-    let old_k = read_table(existing, "pioneer_k.bin")?;
-    let old_n = read_table(existing, "pioneer_n.bin")?;
+    let old_k = read_table(existing, "k.bin")?;
+    let old_n = read_table(existing, "n.bin")?;
     // Do not delete historical OEM metadata just because its source is absent
     // from today's corpus. Preserve existing canonical choices for shared bodies.
     let verified_k = kt.len();
@@ -261,8 +261,8 @@ fn main() -> Result<()> {
     }
     let summary = json!({"envelopes":paths.len(),"verified_kernel_images":verified_k,"verified_normal_images":verified_n,"retained_historical_kernel_rows":historical_k,"retained_historical_normal_rows":historical_n,"kernel_rows":kt.len(),"normal_rows":nt.len(),"statuses":counts});
     std::fs::create_dir_all(output)?;
-    write_table(output, "pioneer_k.bin", &kt)?;
-    write_table(output, "pioneer_n.bin", &nt)?;
+    write_table(output, "k.bin", &kt)?;
+    write_table(output, "n.bin", &nt)?;
     std::fs::write(
         output.join("report.json"),
         serde_json::to_vec_pretty(&json!({"summary":summary,"files":report}))?,

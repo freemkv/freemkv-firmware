@@ -1,6 +1,6 @@
 //! Recovery with user-supplied receiver evidence, no implicit firmware reads.
 use crate::drive::pioneer::classify_flash_input;
-use crate::drive::pioneer_transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
+use crate::drive::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use crate::platform::ScsiDevice;
 use anyhow::{bail, ensure, Context, Result};
 use pioneer_optical::{cdb, envelope::Update, image::ReceiverControl, Identity, Role};
@@ -191,5 +191,5 @@ fn in_update_mode(id: &Identity) -> bool {
 }
 
 #[cfg(test)]
-#[path = "pioneer_recovery_tests.rs"]
+#[path = "recovery_tests.rs"]
 mod tests;

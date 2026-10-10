@@ -1,4 +1,4 @@
-//! Embedded OEM control-key table (`pioneer_keys.bin`): a gzip'd JSON map from a
+//! Embedded OEM control-key table (`keys.bin`): a gzip'd JSON map from a
 //! Pioneer controller id (the 16-bit value in a drive's/image's `SAT xxxx`
 //! hardware tag) to that model's 16-byte OEM control descriptor, its per-OEM-tag
 //! key table, and its unmatched-tag fallback key.
@@ -12,7 +12,7 @@
 //! to several controller ids with different keys) cannot be silently resolved.
 //!
 //! Loaded lazily and only when needed (a Pioneer flash), mirroring
-//! `crate::pioneer_k` / `crate::pioneer_n`, so the MTK path and startup pay
+//! `crate::drive::pioneer::k` / `crate::drive::pioneer::n`, so the MTK path and startup pay
 //! nothing.
 
 use std::collections::HashMap;
@@ -58,7 +58,7 @@ struct RawEntry {
     fb: String,
 }
 
-const PIONEER_KEYS: &[u8] = include_bytes!("pioneer_keys.bin");
+const PIONEER_KEYS: &[u8] = include_bytes!("keys.bin");
 
 fn table() -> &'static HashMap<u16, KeyEntry> {
     static TABLE: OnceLock<HashMap<u16, KeyEntry>> = OnceLock::new();
@@ -71,9 +71,9 @@ fn parse(gz: &[u8]) -> Result<HashMap<u16, KeyEntry>, String> {
     let mut json = String::new();
     flate2::read::GzDecoder::new(gz)
         .read_to_string(&mut json)
-        .map_err(|e| format!("pioneer_keys.bin gunzip: {e}"))?;
+        .map_err(|e| format!("keys.bin gunzip: {e}"))?;
     let raw: HashMap<String, RawEntry> =
-        serde_json::from_str(&json).map_err(|e| format!("pioneer_keys.bin json: {e}"))?;
+        serde_json::from_str(&json).map_err(|e| format!("keys.bin json: {e}"))?;
     let mut out = HashMap::with_capacity(raw.len());
     for (cid, v) in raw {
         let controller_id =
@@ -121,8 +121,8 @@ pub fn lookup(controller_id: u16) -> Option<&'static KeyEntry> {
     table().get(&controller_id)
 }
 
-pub use crate::pioneer_flash_plan::controller_id_from_sat;
+pub use crate::drive::pioneer::flash_plan::controller_id_from_sat;
 
 #[cfg(test)]
-#[path = "pioneer_keys_tests.rs"]
+#[path = "keys_tests.rs"]
 mod tests;

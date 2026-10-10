@@ -88,16 +88,19 @@ pub(super) fn normalize(s: &str) -> String {
 /// banner `Hardware Version : SAT xxxx` tag. The SAT value is the controller id
 /// in hex. Resolution is by controller id, never by INQUIRY/banner model string,
 /// so the model-string collisions in the key table cannot be silently resolved.
-fn control_row_for_envelope(envelope: &[u8]) -> Result<&'static crate::pioneer_keys::KeyEntry> {
+fn control_row_for_envelope(
+    envelope: &[u8],
+) -> Result<&'static crate::drive::pioneer::keys::KeyEntry> {
     let banner =
         parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
-    let cid = crate::pioneer_keys::controller_id_from_sat(&banner.hardware).ok_or_else(|| {
-        anyhow!(
-            "envelope hardware {:?} is not a SAT controller id",
-            banner.hardware
-        )
-    })?;
-    crate::pioneer_keys::lookup(cid).ok_or_else(|| {
+    let cid =
+        crate::drive::pioneer::keys::controller_id_from_sat(&banner.hardware).ok_or_else(|| {
+            anyhow!(
+                "envelope hardware {:?} is not a SAT controller id",
+                banner.hardware
+            )
+        })?;
+    crate::drive::pioneer::keys::lookup(cid).ok_or_else(|| {
         anyhow!("no OEM control key on file for controller id {cid:#06X}; cannot flash this model")
     })
 }
@@ -112,7 +115,7 @@ fn oem_normal_control(envelope: &[u8]) -> Result<[u8; CONTROL_LEN]> {
         parse_banner(envelope).ok_or_else(|| anyhow!("invalid Pioneer envelope banner"))?;
     let row = control_row_for_envelope(envelope)?;
     let tag = if banner.destination.is_empty() {
-        crate::pioneer_keys::DEFAULT_TAG
+        crate::drive::pioneer::keys::DEFAULT_TAG
     } else {
         banner.destination.as_str()
     };

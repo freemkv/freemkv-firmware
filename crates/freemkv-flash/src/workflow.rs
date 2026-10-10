@@ -1,6 +1,6 @@
 //! Shared application workflows for the CLI and desktop front-end.
 
-use crate::drive::{self, Family, FlashRequest, InputKind};
+use crate::drive::{self, Family, FlashRequest};
 use crate::manifest::FlashMode;
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
@@ -280,26 +280,13 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let family = classify_gated(dev.as_mut())?;
-    if args.force && family == Family::Pioneer {
-        bail!("Pioneer recovery requires Current firmware: use recover --current <file> (or --read-from-drive)");
-    }
     let handler = drive::for_family(family);
-    let input_kind = if family == Family::Pioneer {
-        if crate::pioneer_bundle::Bundle::from_tar_bytes(&input).is_ok() {
-            InputKind::PioneerBundle
-        } else if args
-            .input
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        {
-            // Preserve the specific package-parse error in the Pioneer path.
-            InputKind::PioneerBundle
-        } else {
-            InputKind::Bin
+    if args.force {
+        if let Some(reason) = handler.force_refusal() {
+            bail!("{reason}");
         }
-    } else {
-        handler.classify_input(&args.input)
-    };
+    }
+    let input_kind = handler.classify_input(&args.input, &input);
 
     let drive_model = handler.identity(dev.as_mut()).product;
     let predump_out = if args.force {
@@ -421,29 +408,16 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         };
         let selector = resolve_device(args.device.as_deref())?;
         let mut dev = platform::open(&selector, args.execute)?;
-        crate::pioneer_recovery::identify_receiver(dev.as_mut())?;
-        let current = match supplied {
-            Some(bytes) => bytes,
-            None => {
-                let handler = drive::for_family(Family::Pioneer);
-                handler.capture_backup(dev.as_mut()).context(
-                    "cannot read Current firmware; supply a Current firmware file instead",
-                )?
+        // Recovery serves drives too damaged to classify, so it does not run the
+        // protocol probe: each backend with a recovery path checks the receiver
+        // itself.
+        for backend in drive::backends() {
+            if let Some(result) =
+                backend.recover(dev.as_mut(), supplied.clone(), &target, args.execute)
+            {
+                return result;
             }
-        };
-        let plan = crate::pioneer_recovery::Plan::prepare(&current, &target)?;
-        crate::output::field(
-            "Recovery",
-            "No automatic backup; compatibility policy bypassed",
-        );
-        if args.execute {
-            plan.execute(dev.as_mut())
-        } else {
-            crate::output::field(
-                "Recovery",
-                "Prepared Kernel + Normal; dry run, no firmware written",
-            );
-            Ok(())
         }
+        bail!("no protocol backend offers recovery for this drive")
     })
 }

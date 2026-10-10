@@ -33,7 +33,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
     if pioneer_optical::envelope::header_info(bytes).is_some() {
         return Err(InspectionError::PackageRequired.into());
     }
-    let bundle = match crate::pioneer_bundle::Bundle::from_backup_tar_bytes(bytes) {
+    let bundle = match crate::drive::pioneer::bundle::Bundle::from_backup_tar_bytes(bytes) {
         Ok(bundle) => bundle,
         Err(error) => {
             // Recognized archive corruption must not become “unsupported.”
@@ -52,7 +52,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
     let kernel = bundle
         .components
         .iter()
-        .find(|c| c.role == crate::pioneer_bundle::Role::Kernel)
+        .find(|c| c.role == crate::drive::pioneer::bundle::Role::Kernel)
         .and_then(|c| Envelope::load(&c.bytes).ok());
     let mut report = Inspection {
         schema: 1,
@@ -67,7 +67,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
     };
     for component in &bundle.components {
         control.check()?;
-        let decoded = if component.role == crate::pioneer_bundle::Role::Kernel {
+        let decoded = if component.role == crate::drive::pioneer::bundle::Role::Kernel {
             Envelope::load(&component.bytes).context("Kernel could not be decoded")
         } else if let Some(kernel) = &kernel {
             Envelope::load_with_kernel(&component.bytes, kernel)
@@ -80,7 +80,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
             Ok(envelope) => envelope,
             Err(error) => {
                 report.components.push(ComponentView {
-                    name: if component.role == crate::pioneer_bundle::Role::Kernel {
+                    name: if component.role == crate::drive::pioneer::bundle::Role::Kernel {
                         "Kernel"
                     } else {
                         "Normal"

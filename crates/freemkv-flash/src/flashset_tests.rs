@@ -17,11 +17,11 @@ fn step(label: &str) -> &'static FlashStep {
 
 #[test]
 fn golden_cdb_kat_fixed_steps_match_mtk_builders() {
-    assert_eq!(step("PROBE").render(0, 0), mtk::cdb_read_probe());
-    assert_eq!(step("READY").render(0, 0), mtk::cdb_test_unit_ready());
-    assert_eq!(step("PREPARE").render(0, 0), mtk::cdb_wb_prepare());
-    assert_eq!(step("COMMIT").render(0, 0), mtk::cdb_wb_commit());
-    assert_eq!(step("STATUS").render(0, 0), mtk::cdb_request_sense());
+    assert_eq!(step("PROBE").render(0, 0), mtk::cdb::probe());
+    assert_eq!(step("READY").render(0, 0), mtk::cdb::test_unit_ready());
+    assert_eq!(step("PREPARE").render(0, 0), mtk::cdb::enter_update());
+    assert_eq!(step("COMMIT").render(0, 0), mtk::cdb::finish());
+    assert_eq!(step("STATUS").render(0, 0), mtk::cdb::request_sense());
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn golden_cdb_kat_stream_matches_mtk_for_every_chunk_offset() {
     for off in (0..mtk::IMAGE_SIZE as u32).step_by(mtk::CHUNK) {
         assert_eq!(
             stream.render(off, len),
-            mtk::cdb_wb_data(off, len as u16).to_vec(),
+            mtk::cdb::transfer(off, len as u16).to_vec(),
             "STREAM CDB differs from mtk::cdb_wb_data at offset {off:#x}"
         );
     }
@@ -45,7 +45,7 @@ fn golden_cdb_kat_readback_matches_mtk_read_buffer() {
     for &(off, len) in &[(0u32, 0x100u32), (0x1E_C000, 0x100), (0x1F_0000, 0x1_0000)] {
         assert_eq!(
             rb.render(off, len),
-            mtk::cdb_read_buffer(mtk::MODE_6, mtk::FLASH_BUFFER_ID, off, len).to_vec(),
+            mtk::cdb::read_memory(off, len).to_vec(),
             "READBACK CDB differs from mtk::cdb_read_buffer at {off:#x}/{len:#x}"
         );
     }

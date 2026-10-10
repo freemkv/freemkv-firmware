@@ -22,7 +22,7 @@ fn patched_oem_backup_preserves_body_and_original_receiver_when_configured() {
     assert!(provenance.kernel_generation_patched);
     // The planner must not confuse our patched marker with a newer receiver.
     assert_eq!(
-        crate::pioneer_k::receiver_generation(&decoded.image),
+        crate::drive::pioneer::k::receiver_generation(&decoded.image),
         Some(false)
     );
 }
@@ -567,7 +567,7 @@ fn oem_pair_rebuilds_from_decoded_images_when_configured() {
         "OEM kernel must be recognized as byte-exact"
     );
     let normal_in_table =
-        crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(&n.image))).is_some();
+        crate::drive::pioneer::n::lookup(&format!("{:x}", Sha256::digest(&n.image))).is_some();
     assert_eq!(
         prov.normal_oem, normal_in_table,
         "normal_oem must reflect the pioneer_n table"
@@ -1170,7 +1170,7 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
         std::env::temp_dir().join(format!("ud04-signed-candidate-{}.tar", std::process::id()));
     let _ = std::fs::remove_file(&output);
     let drive = crate::drive::pioneer::Pioneer::new();
-    crate::engine::plan_pioneer_offline(
+    crate::drive::pioneer::file_info::plan_offline(
         &candidate,
         crate::drive::InputKind::PioneerBundle,
         "BD-RW BDR-UD04",

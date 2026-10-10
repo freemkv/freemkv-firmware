@@ -5,7 +5,7 @@
 //! plan, the streaming loop, read-back verification, and the safety gate. It
 //! drives a [`DriveFamily`] purely through its trait primitives, so a new chip
 //! (Pioneer, Renesas, …) reuses this loop unchanged — the engine calls
-//! `drive.flash_chunk(...)` without caring whose CDBs those are.
+//! `drive.flash_stream(...)` without caring whose CDBs those are.
 //!
 //! Layering: `main` (CLI) → `engine` (this) → [`crate::drive`] (per-chip).
 
@@ -14,16 +14,15 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::cmac;
 use crate::drive::{BackupNotice, DriveFamily, FlashRequest, InputKind};
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 pub(crate) mod backup;
-mod device_info;
-use backup::save_backup;
+pub(crate) mod device_info;
 #[cfg(test)]
-use backup::BackupArtifact;
+use crate::drive::mtk::backup::BackupArtifact;
+use backup::save_backup;
 
 /// Run the `info` command: identify + classify (read-only).
 pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
@@ -92,7 +91,8 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
             style::kv("flash", &format!("{} — {}", set.name, set.status.label()))
         );
     }
-    device_info::show(dev, drive.family() == crate::drive::Family::Pioneer);
+    device_info::show(dev);
+    drive.print_device_info(dev);
     // Best-effort firmware identification (read-only). `info` never aborts, so a
     // read failure here is simply omitted.
     if let Ok(Some(r)) = drive.firmware_report(dev) {
@@ -126,73 +126,6 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
     Ok(())
 }
 
-/// AES-CMAC integrity summary for a firmware image.
-pub(crate) enum CmacSummary {
-    /// Every active CMAC region's stored digest matches a fresh compute.
-    Valid { regions: usize },
-    /// One or more region digests mismatch — corrupt image or an unsigned edit.
-    Invalid { ok: usize, total: usize },
-    /// No active CMAC table found — unsigned or a non-standard image.
-    Unsigned,
-}
-
-/// What `info` reports for a firmware FILE. Kept separate from the printing in
-/// [`info_file`] so the classification can be unit-tested without capturing
-/// stdout. Uses the SAME [`freemkv_chipset::detect_chip`] the flash cross-gate
-/// uses, so `info <file>` and the flash `image-matches-drive` gate never
-/// disagree on a family.
-pub(crate) struct FileClass {
-    /// `None` when the bytes are not a recognizable MT19xx image.
-    pub chip: Option<freemkv_chipset::ChipInfo>,
-    /// Media/AACS/region capability of the recognized model (`None` when
-    /// unrecognized).
-    pub capability: Option<freemkv_chipset::Capability>,
-    /// This tool's flash recipe for the family — `(name, tier)` — if any.
-    pub flash: Option<(&'static str, crate::flashset::FlashStatus)>,
-    /// CMAC integrity of the image bytes.
-    pub cmac: CmacSummary,
-    /// The full drive-family identity: MT19xx OR any other family found in the
-    /// hoard (Pioneer, Renesas, legacy HL-DT-ST, …), by in-image signature.
-    pub identity: crate::imageid::ImageIdentity,
-}
-
-/// Classify a firmware image the way `info` reports it (read-only, no drive).
-pub(crate) fn classify_file(image: &[u8]) -> FileClass {
-    let identity = crate::imageid::identify(image);
-    let chip = freemkv_chipset::detect_chip(image).ok();
-    let capability = chip
-        .as_ref()
-        .map(|c| freemkv_chipset::capability_for(&c.model, c.family));
-    let flash = chip.as_ref().and_then(|c| {
-        // Both MT1959 and MT1939 are MediaTek silicon → the MediaTek recipe.
-        let fam = match c.family {
-            freemkv_chipset::ChipFamily::Mt1959 | freemkv_chipset::ChipFamily::Mt1939 => {
-                crate::drive::Family::Mtk
-            }
-        };
-        crate::flashset::FlashInstructionSet::for_family(fam).map(|s| (s.name, s.status))
-    });
-    let cmac = match cmac::verify_detailed(image) {
-        Ok(v) if v.is_empty() => CmacSummary::Unsigned,
-        Ok(v) => {
-            let ok = v.iter().filter(|e| e.matches).count();
-            if ok == v.len() {
-                CmacSummary::Valid { regions: v.len() }
-            } else {
-                CmacSummary::Invalid { ok, total: v.len() }
-            }
-        }
-        Err(_) => CmacSummary::Unsigned,
-    };
-    FileClass {
-        chip,
-        capability,
-        flash,
-        cmac,
-        identity,
-    }
-}
-
 /// Run the `info` command on a firmware FILE (read-only) — the file-side twin of
 /// [`info`] on a device. Never writes and never needs a drive: it identifies the
 /// chipset, capability, this tool's flash tier for it, and the image's CMAC
@@ -202,9 +135,9 @@ pub fn info_file(path: &Path) -> Result<()> {
     let image = crate::workflow::read_capped(path)
         .with_context(|| format!("reading firmware image {}", path.display()))?;
     println!("{}", style::kv("file", &path.display().to_string()));
-    println!("{}", style::kv("size", &human_size(image.len())));
+    println!("{}", style::kv("size", &style::human_size(image.len())));
     crate::output::field("File", path.display().to_string());
-    crate::output::field("Size", human_size(image.len()));
+    crate::output::field("Size", style::human_size(image.len()));
     let mut hasher = Sha256::new();
     hasher.update(&image);
     let sha: String = hasher
@@ -214,174 +147,12 @@ pub fn info_file(path: &Path) -> Result<()> {
         .collect();
     println!("{}", style::kv("sha256", &sha));
 
-    if let Ok(bundle) = crate::pioneer_bundle::Bundle::from_tar_bytes(&image) {
-        println!("{}", style::kv("family", "Pioneer"));
-        if !bundle.source_name.is_empty() {
-            println!(
-                "{}",
-                style::kv("source", &style::printable(&bundle.source_name))
-            );
+    for backend in crate::drive::backends() {
+        if let Some(report) = backend.describe_file(&image) {
+            return report;
         }
-        if let Some(model) = &bundle.public_model {
-            println!("{}", style::kv("listed model", &style::printable(model)));
-        }
-        if let Some(model) = &bundle.embedded_model {
-            println!("{}", style::kv("firmware model", &style::printable(model)));
-        }
-        if let Some(hardware) = bundle
-            .components
-            .first()
-            .and_then(|c| c.hardware.as_deref())
-        {
-            println!("{}", style::kv("hardware", &style::printable(hardware)));
-        }
-        println!(
-            "{}",
-            style::kv("components", &bundle.components.len().to_string())
-        );
-        let provenance = crate::pioneer_backup::package_provenance(&image);
-        println!(
-            "{}",
-            style::kv(
-                "kernel",
-                if provenance.kernel_generation_patched {
-                    "OEM kernel — generation patched"
-                } else if provenance.kernel_oem {
-                    "OEM kernel — exact match"
-                } else {
-                    "Not recognized OEM"
-                }
-            )
-        );
-        for component in &bundle.components {
-            println!(
-                "{}",
-                style::kv(
-                    "component",
-                    &format!(
-                        "{:?} {} ({} bytes)",
-                        component.role,
-                        style::printable(&component.path),
-                        component.bytes.len()
-                    )
-                )
-            );
-        }
-        println!(
-            "{}",
-            style::kv(
-                "flash",
-                "live OEM write (gated: --execute --i-understand-risk, backup-first)",
-            )
-        );
-        return Ok(());
     }
-
-    let fc = classify_file(&image);
-    let Some(chip) = fc.chip.as_ref() else {
-        // Not MT19xx: report whichever other family the signature layer found
-        // (Pioneer, Renesas, legacy HL-DT-ST, …) — or an honest "unknown".
-        return info_file_other(&fc.identity);
-    };
-
-    crate::output::field("Chipset", chip.family.label());
-    crate::output::field("Model", ident_or_unknown(&chip.model));
-    crate::output::field("Firmware version", ident_or_unknown(&chip.rev));
-    let conf = match chip.confidence {
-        freemkv_chipset::Confidence::TagString => "identity string",
-        freemkv_chipset::Confidence::BannerFallback => "banner (fallback)",
-    };
-    println!(
-        "{}",
-        style::kv(
-            "chipset",
-            &format!(
-                "MediaTek {} (via {}; tag {})",
-                chip.family.label(),
-                conf,
-                chip.tag_string.as_deref().unwrap_or("<none>")
-            )
-        )
-    );
-    println!(
-        "{}",
-        style::kv(
-            "banner",
-            if chip.banner.is_empty() {
-                "<none>"
-            } else {
-                chip.banner.as_str()
-            }
-        )
-    );
-    println!(
-        "{}",
-        style::kv(
-            "descriptor",
-            &format!(
-                "vendor='{}' model='{}' rev='{}'",
-                ident_or_unknown(&chip.vendor),
-                ident_or_unknown(&chip.model),
-                ident_or_unknown(&chip.rev)
-            )
-        )
-    );
-
-    if let Some(cap) = fc.capability {
-        let mut parts = vec![cap.media_class.label().to_string()];
-        if cap.region_lockable {
-            parts.push("region-lockable".to_string());
-        }
-        if cap.bd_aacs {
-            parts.push("AACS content".to_string());
-        }
-        println!("{}", style::kv("capability", &parts.join(", ")));
-    }
-
-    let flash = match fc.flash {
-        // MT1959 is the hardware-proven executable path; an MT1939 image shares the
-        // MediaTek recipe but is not itself proven, so say so rather than overclaim.
-        Some((name, status)) => {
-            let mut s = format!("{name} — {}", status.label());
-            if chip.family == freemkv_chipset::ChipFamily::Mt1939 {
-                s.push_str(" (image is MT1939 — recognized; only the MT1959 path is proven)");
-            }
-            s
-        }
-        None => format!(
-            "not flashable by this tool ({} brand recipes catalogued)",
-            crate::flashset::CATALOG.len()
-        ),
-    };
-    println!("{}", style::kv("flash", &flash));
-
-    let integrity = match fc.cmac {
-        CmacSummary::Valid { regions } => {
-            style::green(&format!("valid ({regions} CMAC regions OK)"))
-        }
-        CmacSummary::Invalid { ok, total } => style::red(&format!(
-            "INVALID ({ok}/{total} CMAC regions OK — corrupt or unsigned edit)"
-        )),
-        CmacSummary::Unsigned => {
-            style::amber("no signed CMAC table (unsigned or non-standard image)")
-        }
-    };
-    crate::output::field("Integrity", &integrity);
-    println!("{}", style::kv("integrity", &integrity));
-
-    println!(
-        "{}",
-        style::kv(
-            "built for",
-            &format!(
-                "{} {} ({})",
-                ident_or_unknown(&chip.vendor),
-                ident_or_unknown(&chip.model),
-                chip.family.label()
-            )
-        )
-    );
-    Ok(())
+    info_file_other(&crate::imageid::identify(&image))
 }
 
 /// Report a firmware FILE that is NOT MediaTek MT19xx: a non-MTK family found by
@@ -504,7 +275,11 @@ pub fn backup_with_replace(
     println!(
         "{} {}",
         style::green("wrote"),
-        style::dim(&format!("{} ({}).", out.display(), human_size(saved_len)))
+        style::dim(&format!(
+            "{} ({}).",
+            out.display(),
+            style::human_size(saved_len)
+        ))
     );
     // Provenance line, computed from the produced bytes: a byte-exact OEM
     // capture prints a green confirmation; anything reconstructed prints an
@@ -563,7 +338,10 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     match req.input_kind {
         InputKind::Tar => flash_restore(dev, drive, req),
         InputKind::Bin => flash_bin(dev, drive, req),
-        InputKind::PioneerBundle => bail!("Pioneer firmware bundles cannot use the MTK flash path"),
+        InputKind::PioneerBundle => bail!(
+            "a Pioneer firmware bundle cannot be flashed to this {} drive",
+            drive.backend_name()
+        ),
     }
 }
 
@@ -633,53 +411,6 @@ fn capture_required_backup(
     ))
 }
 
-/// Render the Pioneer OEM flash plan WITHOUT touching the device (the dry run).
-/// The live write is handled separately by the backend's `flash_bundle`; this
-/// planner is only reached when `--execute` is NOT set.
-pub fn plan_pioneer_offline(
-    image: &[u8],
-    input_kind: InputKind,
-    model: &str,
-    allow_crossflash: bool,
-    verbose: bool,
-) -> Result<()> {
-    if input_kind == InputKind::Tar {
-        bail!("Pioneer planning requires an envelope or Pioneer bundle");
-    }
-    let (kernel, normal) = crate::drive::pioneer::classify_flash_input(image)?;
-    let normal = normal.as_deref().context("Normal component missing")?;
-    let transcript = match kernel.as_deref() {
-        Some(kernel) => crate::drive::pioneer::offline_pair_data_out(kernel, normal)?,
-        None => crate::drive::pioneer::generic_normal_transcript(normal)?,
-    };
-    println!("{}", style::header("== Pioneer offline transfer plan =="));
-    println!("{}", style::kv("stated model", ident_or_unknown(model)));
-    println!(
-        "{}",
-        style::kv("SHA-256", &format!("{:x}", Sha256::digest(image)))
-    );
-    println!(
-        "Validated envelope integrity and transfer framing; {} data-out commands.",
-        transcript.len()
-    );
-    println!("Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.");
-    println!(
-        "Installed-family compatibility is checked against the live backup{}.",
-        if allow_crossflash {
-            " (force requested)"
-        } else {
-            ""
-        }
-    );
-    if verbose {
-        for step in &transcript {
-            println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
-        }
-    }
-    println!("DRY RUN: no device I/O or writes.");
-    Ok(())
-}
-
 /// Refuse to flash while a disc is loaded. Reprogramming the flash while the
 /// drive is busy servicing a medium can wedge the controller mid-program (a
 /// verify-mismatch / `DID_BAD_TARGET` brick that only a power-cycle clears), so
@@ -746,7 +477,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     }
     let (payload, enc) = drive.envelope(dev, &req.input, req.enc_override)?;
 
-    // Unless explicitly bypassed, save a complete rollback before flash_open.
+    // Unless explicitly bypassed, save a complete rollback before flash_stream.
     let backup_summary = if req.execute {
         if let Err(block) = check_safety(req.acknowledged_risk) {
             bail!("SAFETY GATE: {}", block.0);
@@ -758,22 +489,18 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 
     println!("{}", style::header("== flash plan =="));
     println!("{}", style::kv("device", &dev.describe()));
-    println!("{}", style::kv("drive", ident_or_unknown(&req.drive_model)));
-    if let Some(info) = preview_crossflash(
-        &req.input,
-        &req.drive_model,
-        drive.family(),
-        req.allow_crossflash,
-    ) {
-        print_crossflash_banner(&info);
-    }
+    println!(
+        "{}",
+        style::kv("drive", style::ident_or_unknown(&req.drive_model))
+    );
+    drive.print_flash_notes(&req.input, &req.drive_model, req.allow_crossflash);
     println!(
         "{}",
         style::kv(
             "firmware",
             &format!(
                 "{} ({} envelope)",
-                human_size(payload.len()),
+                style::human_size(payload.len()),
                 if enc { "encrypted" } else { "plaintext" }
             )
         )
@@ -825,7 +552,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // print — a multi-SCSI-round-trip window in which a user could
     // physically insert a disc or the drive could report a settling tray
     // as loaded. The write path is the whole reason the guard exists, so
-    // re-probe RIGHT before `flash_open`; a stale check is the same class
+    // re-probe RIGHT before `flash_stream`; a stale check is the same class
     // of hazard as no check at all (drive controller can wedge mid-program
     // when servicing a medium).
     guard_no_medium(dev, req.execute, req.force || req.recover)?;
@@ -833,22 +560,14 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         "\n{}",
         style::bold("EXECUTING flash — do not power off or disconnect the drive...")
     );
-    drive.flash_open(dev, req.mode)?;
     let chunk = drive.chunk_size();
-    let mut offset = 0usize;
     let mut progress = style::Progress::new("flashing firmware", payload.len());
-    for piece in payload.chunks(chunk) {
-        drive.flash_chunk(dev, offset, piece)
-            .with_context(|| format!("firmware write failed at offset {offset:#x}, length {}; drive may contain partial firmware", piece.len()))?;
-        offset += piece.len();
-        progress.set(offset);
-    }
-    drive.flash_close(dev, req.mode)?;
+    drive.flash_stream(dev, &payload, req.mode, &mut |sent| progress.set(sent))?;
     println!(
         "upload complete {}",
         style::dim(&format!(
             "({}); waiting for the drive to finish programming...",
-            human_size(payload.len())
+            style::human_size(payload.len())
         ))
     );
     // The drive keeps programming its flash after the last chunk (it reports
@@ -931,7 +650,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
             "flash complete but read-back INCOMPLETE: could not read back {unverified} \
              integrity-protected chunk(s) ({} verified). Do NOT trust the exit code as \
              success — physically confirm the drive's firmware identity before shipping.",
-            human_size(checked),
+            style::human_size(checked),
         );
     } else {
         println!(
@@ -940,7 +659,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
                 "flash complete",
                 &format!(
                     "{} of integrity-protected regions verified",
-                    human_size(checked)
+                    style::human_size(checked)
                 ),
                 style::Status::Ok
             )
@@ -1005,189 +724,6 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 /// never disagree on a firmware image's family, and byte-shifted extractions
 /// (where the old fixed-offset `0x1EC034` read missed) are still recognized. The
 /// model-vs-drive cross-check is retained as a secondary guard.
-/// Details of an authorized CROSSFLASH (a deliberate flash of a DIFFERENT
-/// same-chipset model's firmware). Present only when `--force` waived
-/// a model mismatch; carries the brick-risk warnings to surface prominently.
-#[derive(Debug)]
-pub(crate) struct CrossflashInfo {
-    pub image_model: String,
-    pub drive_product: String,
-    pub image_family: freemkv_chipset::ChipFamily,
-    /// Loud warnings (DE-not-set / capability mismatch / unverified sub-family).
-    pub warnings: Vec<String>,
-}
-
-/// The crossflash gate decision core (pure — unit-testable without a device).
-///
-/// `drive_fine_family` is the drive's CURRENT silicon family (from reading its
-/// own firmware) when known. Returns `Ok(None)` for a normal same-model flash,
-/// `Ok(Some(..))` for an authorized crossflash, and `Err` when it must refuse.
-/// The chipset-family gate is NON-overridable: even with `allow_crossflash`, a
-/// known drive silicon that differs from the image's is refused.
-fn decide_crossflash(
-    image_family: freemkv_chipset::ChipFamily,
-    image_model: &str,
-    drive_product: &str,
-    drive_fine_family: Option<freemkv_chipset::ChipFamily>,
-    de_enabled: bool,
-    allow_crossflash: bool,
-) -> Result<Option<CrossflashInfo>> {
-    // Non-overridable sub-family gate: MT1959 image onto MT1939 silicon (or vice
-    // versa) is an instant brick — refuse even with --force.
-    if let Some(df) = drive_fine_family {
-        if df != image_family {
-            bail!(
-                "image is {} firmware but this drive is {} silicon — refusing to \
-                 flash across chip families. This gate cannot be overridden.",
-                image_family.label(),
-                df.label()
-            );
-        }
-    }
-
-    let product = drive_product.trim();
-    let model_matches = !product.is_empty()
-        && image_model
-            .to_ascii_uppercase()
-            .contains(&product.to_ascii_uppercase());
-    if model_matches {
-        return Ok(None); // normal same-model flash
-    }
-
-    if !allow_crossflash {
-        if product.is_empty() {
-            bail!(
-                "drive model is unknown (empty INQUIRY product) — refusing to flash \
-                 without confirming the image matches this drive"
-            );
-        }
-        bail!(
-            "image is built for model {image_model:?} but this drive reports \
-             {product:?} — refusing to flash a wrong-model image (pass \
-             a compatible image)"
-        );
-    }
-
-    // Crossflash authorized — collect brick-risk warnings.
-    let mut warnings = Vec::new();
-    if !de_enabled {
-        warnings.push(
-            "image is NOT downgrade-enabled (0x1EC056 != 0xDE) — the target drive will \
-             likely REJECT a foreign image. Run the modify tool first (it sets the \
-             downgrade byte)."
-                .to_string(),
-        );
-    }
-    let icap = freemkv_chipset::capability_for(image_model, image_family);
-    if product.is_empty() {
-        warnings.push(
-            "drive model is unknown — cannot check media-capability compatibility; \
-             proceed only if you are certain the drives are compatible."
-                .to_string(),
-        );
-    } else {
-        let dcap = freemkv_chipset::capability_for(product, image_family);
-        if icap.media_class != dcap.media_class {
-            warnings.push(format!(
-                "media-class MISMATCH: image is {} but the drive model is {} — \
-                 crossflashing across capability tiers can BRICK the drive.",
-                icap.media_class.label(),
-                dcap.media_class.label()
-            ));
-        }
-    }
-    if drive_fine_family.is_none() {
-        warnings.push(
-            "could not read the drive's current firmware to confirm its exact chipset \
-             (MT1959 vs MT1939); the sub-family gate is verified at execute time — \
-             ensure the image chipset matches the drive."
-                .to_string(),
-        );
-    }
-
-    Ok(Some(CrossflashInfo {
-        image_model: image_model.to_string(),
-        drive_product: product.to_string(),
-        image_family,
-        warnings,
-    }))
-}
-
-/// Enforce the image↔drive match on the write path. Returns `Ok(Some(..))` when
-/// an authorized crossflash is in effect (for labeling), `Ok(None)` for a normal
-/// same-model flash, `Err` to refuse. See [`decide_crossflash`] for the gate.
-pub(crate) fn ensure_image_matches_drive(
-    image: &[u8],
-    drive_product: &str,
-    drive_family: crate::drive::Family,
-    allow_crossflash: bool,
-    drive_fine_family: Option<freemkv_chipset::ChipFamily>,
-) -> Result<Option<CrossflashInfo>> {
-    let chip = freemkv_chipset::detect_chip(image)
-        .context("input is not a recognizable MT19xx firmware image — refusing to flash")?;
-
-    // Family cross-gate: an MT19xx image (ChipFamily::Mt1959/Mt1939 are both
-    // MediaTek silicon) must be flashed onto a drive that classified as MediaTek.
-    // Refuse flashing across silicon families outright — never overridable.
-    if drive_family != crate::drive::Family::Mtk {
-        bail!(
-            "image is {} (MediaTek) firmware but this drive classified as {} — \
-             refusing to flash across silicon families",
-            chip.family.label(),
-            drive_family
-        );
-    }
-
-    let de_enabled = image
-        .get(freemkv_chipset::DESCRIPTOR_OFFSET + 0x56)
-        .copied()
-        == Some(0xDE);
-    decide_crossflash(
-        chip.family,
-        &chip.model,
-        drive_product,
-        drive_fine_family,
-        de_enabled,
-        allow_crossflash,
-    )
-}
-
-/// Best-effort crossflash preview for the (non-enforcing) flash plan / dry-run:
-/// swallows every error so an unrecognizable image still prints a plan. Returns
-/// `Some` only for a genuine authorized crossflash.
-fn preview_crossflash(
-    image: &[u8],
-    drive_product: &str,
-    drive_family: crate::drive::Family,
-    allow_crossflash: bool,
-) -> Option<CrossflashInfo> {
-    if !allow_crossflash || drive_family != crate::drive::Family::Mtk {
-        return None;
-    }
-    // drive_fine_family = None here: the plan is informational; the real
-    // sub-family gate runs at execute time in ensure_image_matches_drive.
-    ensure_image_matches_drive(image, drive_product, drive_family, true, None)
-        .ok()
-        .flatten()
-}
-
-/// Render the CROSSFLASH banner + warnings into the plan (shared by dry-run and
-/// execute so the label is identical).
-fn print_crossflash_banner(info: &CrossflashInfo) {
-    println!(
-        "{}",
-        style::amber(&format!(
-            "CROSSFLASH: {} <- {} ({} chipset) — EXPERIMENTAL, hardware-unvalidated",
-            ident_or_unknown(&info.drive_product),
-            info.image_model,
-            info.image_family.label()
-        ))
-    );
-    for w in &info.warnings {
-        println!("{}", style::amber(&format!("  ! {w}")));
-    }
-}
-
 fn flash_restore(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
@@ -1210,35 +746,6 @@ fn flash_restore(
     // coherence/reference data, not separate post-reboot writes.
     flash_bin(dev, drive, &firmware_req)?;
     Ok(())
-}
-
-fn ident_or_unknown(s: &str) -> &str {
-    if s.is_empty() {
-        "<unknown>"
-    } else {
-        s
-    }
-}
-
-/// Format a byte count as a friendly size (`2 MiB`, `16 KiB`, `2.00 MiB`, …).
-pub(crate) fn human_size(bytes: usize) -> String {
-    const K: usize = 1 << 10;
-    const M: usize = 1 << 20;
-    if bytes >= M {
-        if bytes.is_multiple_of(M) {
-            format!("{} MiB", bytes / M)
-        } else {
-            format!("{:.2} MiB", bytes as f64 / M as f64)
-        }
-    } else if bytes >= K {
-        if bytes.is_multiple_of(K) {
-            format!("{} KiB", bytes / K)
-        } else {
-            format!("{:.1} KiB", bytes as f64 / K as f64)
-        }
-    } else {
-        format!("{bytes} B")
-    }
 }
 
 // ---- Safety gate (generic) --------------------------------------------------

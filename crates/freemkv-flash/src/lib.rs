@@ -29,22 +29,6 @@ pub mod flashset;
 pub mod imageid;
 pub mod inspection;
 pub mod manifest;
-/// Offline reconstruction of Pioneer backup candidates from captured images.
-pub mod pioneer_backup;
-/// Read-only validation of extractor-produced Pioneer firmware bundles.
-pub mod pioneer_bundle;
-/// Live Pioneer OEM flash executor — crate-private so the gate chain in `engine`
-/// (--execute/--i-understand-risk, tray guard, backup-first) cannot be bypassed.
-pub(crate) mod pioneer_flash;
-pub mod pioneer_flash_plan;
-/// Embedded OEM kernel label/key table (pioneer_k.bin), loaded lazily for Pioneer.
-mod pioneer_k;
-/// Historical OEM control-key test oracles, excluded from production.
-#[cfg(test)]
-mod pioneer_keys;
-/// Embedded OEM normal seed/signature table (pioneer_n.bin), loaded lazily for Pioneer.
-mod pioneer_n;
-mod pioneer_recovery;
 pub mod platform;
 pub mod probe;
 pub mod style;
@@ -56,6 +40,3 @@ pub fn crc32(data: &[u8]) -> u32 {
     h.update(data);
     h.finalize()
 }
-
-/// Address-oriented Pioneer diagnostic captures.
-pub mod pioneer_dump;

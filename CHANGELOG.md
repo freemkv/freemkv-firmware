@@ -6,6 +6,31 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+- Fix MediaTek backups on MT1939 drives (LG BH14NS40/BE14NU40 and others), which
+  failed with "unrecognized boot page" and so blocked every MT1939 flash. A drive
+  read's boot page is now recognized generically (it mirrors the image's page at
+  `0x10000`) instead of by one BU40N hash.
+- Rebuild MediaTek backups from a catalog of 204 OEM MT1959/MT1939 builds. A
+  known build backs up byte-identical to the vendor file; an unknown build (a
+  revision we lack, or a modified image) is rebuilt from its chip's factory
+  contents and labelled as a reconstruction. Per-drive regions no longer take
+  BU40N contents on every drive.
+- Always check that an image's chip (MT1959 vs MT1939) matches the drive's,
+  including forced flashes, using the drive's identity descriptor (the boot
+  banner can name the wrong generation). Previously this ran only with
+  crossflash.
+- Refuse to flash a raw drive read (such as a `dump` output): its boot page is
+  the read-back copy and would not start the drive. Without `--force`, an
+  image's boot page must be one a known OEM build stores.
+- `info` names the drive's chipset; the MediaTek recipe reads "MT19xx (proven
+  on MT1959)".
+- Move the MediaTek protocol into the new `mediatek-optical` crate, mirroring
+  `pioneer-optical`. The flasher engine no longer contains family-specific code:
+  file reports, crossflash notes, vendor `info` fields, input classification
+  and recovery are backend hooks.
+
 ## [0.11.2] - 2026-10-09
 
 - Derive the DVD region from the drive's RPC mask alone: a drive whose mask

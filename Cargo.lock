@@ -1314,6 +1314,7 @@ name = "freemkv-chipset"
 version = "0.11.2"
 dependencies = [
  "anyhow",
+ "mediatek-optical",
 ]
 
 [[package]]
@@ -1330,6 +1331,7 @@ dependencies = [
  "freemkv-chipset",
  "getrandom 0.3.4",
  "libfreemkv",
+ "mediatek-optical",
  "pioneer-optical",
  "serde",
  "serde_json",
@@ -2066,6 +2068,16 @@ name = "log"
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
+
+[[package]]
+name = "mediatek-optical"
+version = "0.1.0"
+source = "git+https://github.com/MattJackson/mediatek-optical?branch=dev#727309cea76e86955090ae6ff0c41a69a05219a1"
+dependencies = [
+ "aes",
+ "cmac",
+ "sha2",
+]
 
 [[package]]
 name = "memchr"

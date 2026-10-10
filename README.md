@@ -141,12 +141,15 @@ must pass transfer authentication; an unsigned candidate is not a signed OEM upd
 
 ## Implementation layers
 
-`crates/freemkv-flash/src/workflow.rs` provides the CLI and desktop workflows.
-`platform/adapter.rs` adapts the shared `libfreemkv` SCSI transport;
-`platform/mock.rs` supports tests without hardware. `drive/mtk.rs` and
-`drive/pioneer.rs` implement firmware protocols. `pioneer_recovery.rs` is the
-separate recovery executor, using `pioneer-optical` for Pioneer formats and
-commands. Normal Flash remains in the existing engine and backend paths.
+`crates/freemkv-flash/src/workflow.rs` provides the CLI and desktop workflows,
+and `engine.rs` the family-neutral info, backup and flash gates. Each drive
+family is a backend behind the `FirmwareBackend` trait (`drive/mod.rs`):
+`drive/mtk/` for MediaTek MT1959/MT1939 and `drive/pioneer/` for Pioneer. The
+wire protocols live in their own crates, [`mediatek-optical`](https://crates.io/crates/mediatek-optical)
+and [`pioneer-optical`](https://crates.io/crates/pioneer-optical); `drive/transport.rs`
+is the one adapter from `libfreemkv`'s SCSI transport (`platform/adapter.rs`)
+to both crates, and no backend source contains a raw CDB opcode
+(`tests/no_cdbs.rs`). `platform/mock.rs` supports tests without hardware.
 
 ## Device argument by OS
 

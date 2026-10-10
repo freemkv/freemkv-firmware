@@ -221,11 +221,14 @@ fn dump_only_families_stay_read_only() {
         let handler = for_family(Family::Unknown);
         assert!(!handler.is_supported());
         let mut dev = MockScsiDevice::new();
-        assert!(handler.read_dump(&mut dev).is_err());
         assert!(handler
-            .flash_open(&mut dev, crate::manifest::FlashMode::Full)
+            .flash_stream(
+                &mut dev,
+                &[0u8; 4],
+                crate::manifest::FlashMode::Full,
+                &mut |_| {}
+            )
             .is_err());
-        assert!(handler.write_region(&mut dev, 0x1000, &[0u8; 4]).is_err());
         assert!(dev.writes.is_empty());
     }
 }
@@ -321,11 +324,11 @@ fn truncated_feature_header_is_not_protocol_evidence() {
     let mut reply = vec![0; 10];
     reply[8..10].copy_from_slice(&[1, 12]);
     let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x46), reply);
-    assert!(!get_config_is_mtk(&mut dev));
+    assert!(!mtk::get_config_is_mtk(&mut dev));
 }
 
 #[test]
 fn truncated_boot_rom_is_not_protocol_evidence() {
     let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), b"MT1959".to_vec());
-    assert!(!has_mt19_banner(&mut dev));
+    assert!(!mtk::has_mt19_banner(&mut dev));
 }

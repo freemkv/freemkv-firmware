@@ -140,7 +140,7 @@ impl FlashStep {
 /// A complete, declarative flash recipe for one chipset family.
 #[derive(Debug, Clone, Copy)]
 pub struct FlashInstructionSet {
-    /// Human name (`"MediaTek MT1959"`).
+    /// Human name (`"MediaTek MT19xx (proven on MT1959)"`).
     pub name: &'static str,
     /// The silicon family this set drives.
     pub family: Family,
@@ -228,7 +228,7 @@ impl FlashInstructionSet {
     /// KAT asserts these steps render byte-identical to `drive::mtk`'s builders.
     pub const fn mt1959() -> Self {
         FlashInstructionSet {
-            name: "MediaTek MT1959",
+            name: "MediaTek MT19xx (proven on MT1959)",
             family: Family::Mtk,
             transport: Transport::Spti,
             write_opcode: 0x3B,

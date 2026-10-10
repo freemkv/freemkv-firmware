@@ -189,5 +189,5 @@ impl Bundle {
 }
 
 #[cfg(test)]
-#[path = "pioneer_bundle_tests.rs"]
+#[path = "bundle_tests.rs"]
 mod tests;

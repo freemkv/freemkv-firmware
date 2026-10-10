@@ -22,7 +22,7 @@
 //! `0xFE` marker (Site 1). A cross-generation downgrade
 //! ([`FlashPlan::KernelDowngrade`]) is executable: the §15.3 marker patch is
 //! applied to the Kernel at write time (see `execute_flash` in
-//! `crate::pioneer_flash`).
+//! `crate::drive::pioneer::flash`).
 //!
 //! Gates recapped (whitepaper Ch.13/15):
 //! - **Site 1** (incoming-marker gate, newer receiver): rejects an incoming
@@ -616,5 +616,5 @@ pub fn controller_id_from_sat(hardware: &str) -> Option<u16> {
 }
 
 #[cfg(test)]
-#[path = "pioneer_flash_plan_tests.rs"]
+#[path = "flash_plan_tests.rs"]
 mod tests;

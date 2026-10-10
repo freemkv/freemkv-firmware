@@ -1,8 +1,8 @@
 //! Device-free Pioneer planning regressions; no extra public CLI command.
 
+use freemkv_flash::drive::pioneer::bundle::{Bundle, Role};
+use freemkv_flash::drive::pioneer::file_info::plan_offline as plan_pioneer_offline;
 use freemkv_flash::drive::InputKind;
-use freemkv_flash::engine::plan_pioneer_offline;
-use freemkv_flash::pioneer_bundle::{Bundle, Role};
 use sha2::{Digest, Sha256};
 use std::process::Command;
 

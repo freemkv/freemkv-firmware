@@ -11,10 +11,44 @@ use std::borrow::Cow;
 
 #[cfg(test)]
 use super::Identity;
-use super::{Capabilities, DriveFamily, Family, FullImage, RestoreRegion, UserDump};
-use crate::manifest::FlashMode;
+use super::{Capabilities, DriveFamily, Family, FullImage};
 use crate::platform::ScsiDevice;
 
+/// Offline reconstruction of Pioneer backup candidates from captured images.
+#[path = "pioneer/backup.rs"]
+pub mod backup;
+/// Read-only validation of extractor-produced Pioneer firmware bundles.
+#[path = "pioneer/bundle.rs"]
+pub mod bundle;
+/// Pioneer vendor fields for `info`.
+#[path = "pioneer/device_info.rs"]
+pub(crate) mod device_info;
+/// Address-oriented Pioneer diagnostic captures.
+#[path = "pioneer/dump.rs"]
+pub mod dump;
+/// `info <file>` for Pioneer bundles and the offline transfer plan.
+#[path = "pioneer/file_info.rs"]
+pub mod file_info;
+/// Live Pioneer OEM flash executor — crate-private so the gate chain in `engine`
+/// (--execute/--i-understand-risk, tray guard, backup-first) cannot be bypassed.
+#[path = "pioneer/flash.rs"]
+pub(crate) mod flash;
+/// Pioneer flash planning: family gates and Kernel/Normal transfer plans.
+#[path = "pioneer/flash_plan.rs"]
+pub mod flash_plan;
+/// Embedded OEM kernel label/key table (k.bin), loaded lazily for Pioneer.
+#[path = "pioneer/k.rs"]
+pub(crate) mod k;
+/// Historical OEM control-key test oracles, excluded from production.
+#[cfg(test)]
+#[path = "pioneer/keys.rs"]
+pub(crate) mod keys;
+/// Embedded OEM normal seed/signature table (n.bin), loaded lazily for Pioneer.
+#[path = "pioneer/n.rs"]
+pub(crate) mod n;
+/// Pioneer receiver identification and recovery flashing.
+#[path = "pioneer/recovery.rs"]
+pub(crate) mod recovery;
 #[path = "pioneer/transfer.rs"]
 pub mod transfer;
 
@@ -82,7 +116,8 @@ fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
 /// Validate a Normal envelope without marketing-model or revision restrictions.
 pub fn validate_normal_envelope(envelope: &[u8]) -> Result<()> {
     check_normal_size(envelope)?;
-    crate::pioneer_flash_plan::validate_bundle(None, Some(envelope)).map_err(anyhow::Error::msg)?;
+    crate::drive::pioneer::flash_plan::validate_bundle(None, Some(envelope))
+        .map_err(anyhow::Error::msg)?;
     use pioneer_optical::envelope::signature::{verify_normal_signature, SignatureCheck};
     match verify_normal_signature(envelope) {
         SignatureCheck::ValidKeyAndCiphertext | SignatureCheck::ValidCiphertextOnly => Ok(()),
@@ -98,7 +133,7 @@ fn validate_header_chain(
     backup: Option<&[u8]>,
     force: bool,
 ) -> Result<()> {
-    use crate::pioneer_flash_plan::validate_component_headers;
+    use crate::drive::pioneer::flash_plan::validate_component_headers;
     validate_component_headers(kernel, Some(normal)).map_err(anyhow::Error::msg)?;
     if kernel.is_some() {
         return Ok(());
@@ -159,7 +194,7 @@ pub struct OemTransfer<'a> {
 fn validate_kernel_normal(kernel: &[u8], normal: &[u8]) -> Result<()> {
     check_normal_size(kernel)?;
     check_normal_size(normal)?;
-    crate::pioneer_flash_plan::validate_bundle(Some(kernel), Some(normal))
+    crate::drive::pioneer::flash_plan::validate_bundle(Some(kernel), Some(normal))
         .map_err(anyhow::Error::msg)?;
     pioneer_optical::envelope::Update::load(kernel, normal)?;
     Ok(())
@@ -203,7 +238,7 @@ pub(crate) fn classify_flash_input(input: &[u8]) -> Result<FlashComponents> {
     if parse_banner(input).is_some() {
         return Ok((None, Some(input.to_vec())));
     }
-    let bundle = crate::pioneer_bundle::Bundle::from_tar_bytes(input)
+    let bundle = crate::drive::pioneer::bundle::Bundle::from_tar_bytes(input)
         .context("flash input is neither a valid Pioneer bundle nor a Normal .enc")?;
     let find = |role| {
         bundle
@@ -213,8 +248,8 @@ pub(crate) fn classify_flash_input(input: &[u8]) -> Result<FlashComponents> {
             .map(|c| c.bytes.clone())
     };
     Ok((
-        find(crate::pioneer_bundle::Role::Kernel),
-        find(crate::pioneer_bundle::Role::Main),
+        find(crate::drive::pioneer::bundle::Role::Kernel),
+        find(crate::drive::pioneer::bundle::Role::Main),
     ))
 }
 
@@ -269,8 +304,8 @@ pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Str
 /// flash as plain; the backup + gates still protect the drive).
 pub(crate) fn installed_facts(
     backup: Option<&[u8]>,
-) -> Option<crate::pioneer_flash_plan::Installed> {
-    use crate::pioneer_flash_plan::{FwDate, Installed};
+) -> Option<crate::drive::pioneer::flash_plan::Installed> {
+    use crate::drive::pioneer::flash_plan::{FwDate, Installed};
     let (installed_kernel, installed_normal) = classify_flash_input(backup?).ok()?;
     let header = |b: &Option<Vec<u8>>| {
         b.as_deref()
@@ -279,10 +314,9 @@ pub(crate) fn installed_facts(
     let kinfo = header(&installed_kernel);
     let ninfo = header(&installed_normal);
     // Controller id from the Normal (preferred) or Kernel header.
-    let controller_id = ninfo
-        .as_ref()
-        .or(kinfo.as_ref())
-        .and_then(|h| crate::pioneer_flash_plan::controller_id_from_sat(&h.hardware_version))?;
+    let controller_id = ninfo.as_ref().or(kinfo.as_ref()).and_then(|h| {
+        crate::drive::pioneer::flash_plan::controller_id_from_sat(&h.hardware_version)
+    })?;
     let normal_date = ninfo
         .as_ref()
         .and_then(|h| FwDate::parse(&h.generated_date));
@@ -290,11 +324,14 @@ pub(crate) fn installed_facts(
     let receiver_new_gen = installed_kernel
         .as_deref()
         .and_then(pioneer_optical::envelope::decode_envelope)
-        .and_then(|d| crate::pioneer_k::receiver_generation(&d.image));
+        .and_then(|d| crate::drive::pioneer::k::receiver_generation(&d.image));
     // Installed family: profile the decoded installed Normal body (the same
     // decode used for the target, so the two keys are directly comparable).
     let family = installed_normal.as_deref().and_then(|n| {
-        crate::pioneer_flash_plan::normal_family_with_kernel(n, installed_kernel.as_deref()?)
+        crate::drive::pioneer::flash_plan::normal_family_with_kernel(
+            n,
+            installed_kernel.as_deref()?,
+        )
     });
     // Installed Kernel ID tag: use the installed Normal envelope header's
     // declared required-Kernel tag. On a drive that was shipped as a paired
@@ -315,7 +352,7 @@ pub(crate) fn installed_facts(
     })
 }
 
-/// Route the installed firmware against the target ([`crate::pioneer_flash_plan`])
+/// Route the installed firmware against the target ([`crate::drive::pioneer::flash_plan`])
 /// and return the plan. The installed facts come from the just-captured pre-flash
 /// backup (the planner stays pure; the family keys are computed here, where the
 /// backup bytes are in hand). `recover` uses the recover plan (family gate only);
@@ -327,8 +364,8 @@ pub(crate) fn resolve_flash_plan(
     normal: Option<&[u8]>,
     recover: bool,
     force: bool,
-) -> Result<crate::pioneer_flash_plan::FlashPlan> {
-    use crate::pioneer_flash_plan::{
+) -> Result<crate::drive::pioneer::flash_plan::FlashPlan> {
+    use crate::drive::pioneer::flash_plan::{
         decide_recover_plan, normal_family_with_kernel, target_from_components,
     };
 
@@ -361,11 +398,11 @@ pub(crate) fn resolve_flash_plan(
 /// Pure routing core of [`resolve_flash_plan`]: no installed facts means the
 /// installed family is unknown, so the family gate refuses (or `force` overrides).
 fn plan_for(
-    installed: Option<&crate::pioneer_flash_plan::Installed>,
-    target: &crate::pioneer_flash_plan::Target,
+    installed: Option<&crate::drive::pioneer::flash_plan::Installed>,
+    target: &crate::drive::pioneer::flash_plan::Target,
     force: bool,
-) -> crate::pioneer_flash_plan::FlashPlan {
-    use crate::pioneer_flash_plan::{decide_flash_plan, Installed};
+) -> crate::drive::pioneer::flash_plan::FlashPlan {
+    use crate::drive::pioneer::flash_plan::{decide_flash_plan, Installed};
     match installed {
         Some(inst) => decide_flash_plan(inst, target, force),
         None => {
@@ -411,8 +448,8 @@ fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
 }
 
 /// Whether the plan (or a `Forced` plan's inner plan) is `KernelDowngrade`.
-fn plan_is_downgrade(plan: &crate::pioneer_flash_plan::FlashPlan) -> bool {
-    use crate::pioneer_flash_plan::FlashPlan;
+fn plan_is_downgrade(plan: &crate::drive::pioneer::flash_plan::FlashPlan) -> bool {
+    use crate::drive::pioneer::flash_plan::FlashPlan;
     match plan {
         FlashPlan::KernelDowngrade => true,
         FlashPlan::Forced(inner) => plan_is_downgrade(inner),
@@ -425,9 +462,11 @@ fn plan_is_downgrade(plan: &crate::pioneer_flash_plan::FlashPlan) -> bool {
 /// route. The library prepares any temporary marker patch and pristine restore
 /// before entry. The bundle executor verifies both passes before reporting
 /// success. No plan requires kernel mode
-/// ([`crate::pioneer_flash_plan::kernel_mode_required`]).
-pub(crate) fn check_plan_executable(plan: &crate::pioneer_flash_plan::FlashPlan) -> Result<()> {
-    use crate::pioneer_flash_plan::FlashPlan;
+/// ([`crate::drive::pioneer::flash_plan::kernel_mode_required`]).
+pub(crate) fn check_plan_executable(
+    plan: &crate::drive::pioneer::flash_plan::FlashPlan,
+) -> Result<()> {
+    use crate::drive::pioneer::flash_plan::FlashPlan;
     match plan {
         FlashPlan::Plain | FlashPlan::KernelCrossflash => Ok(()),
         FlashPlan::Forced(inner) => {
@@ -516,7 +555,7 @@ impl DriveFamily for Pioneer {
             });
         Ok((identity.vendor.eq_ignore_ascii_case("PIONEER")
             && pioneer_model
-            && super::read_buffer_f1_ok(dev))
+            && read_buffer_f1_ok(dev))
         .then_some(super::ProbeEvidence {
             family: Family::Pioneer,
             backend_name: self.backend_name(),
@@ -529,7 +568,7 @@ impl DriveFamily for Pioneer {
         if req.execute {
             return None;
         }
-        Some(crate::engine::plan_pioneer_offline(
+        Some(file_info::plan_offline(
             &req.input,
             req.input_kind,
             &req.drive_model,
@@ -548,7 +587,7 @@ impl DriveFamily for Pioneer {
             Ok((kernel, normal)) => (kernel.is_some(), normal.is_some()),
             Err(_) => (false, true),
         };
-        let roles = crate::pioneer_backup::component_roles(backup);
+        let roles = crate::drive::pioneer::backup::component_roles(backup);
         let has = |role: &str| roles.iter().any(|(r, _)| r == role);
         for (writes, role, label) in [
             (writes_normal, "main", "Normal"),
@@ -592,7 +631,10 @@ impl DriveFamily for Pioneer {
 
             // An image with an unrecoverable envelope tail is never flashed — not
             // even with --force or --recover.
-            crate::pioneer_flash_plan::ensure_no_unrecovered_tail(kernel.as_deref(), Some(normal))?;
+            crate::drive::pioneer::flash_plan::ensure_no_unrecovered_tail(
+                kernel.as_deref(),
+                Some(normal),
+            )?;
 
             // Routing: the family-match gate (installed vs target Normal family,
             // computed from the just-captured pre-flash backup and the target).
@@ -603,7 +645,7 @@ impl DriveFamily for Pioneer {
             // Normal's required-Kernel tag, unrecovered envelope tail) BEFORE
             // any planning or writes. Even `--force` would still be flashing
             // garbage; a broken bundle never has a legitimate path.
-            crate::pioneer_flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
+            crate::drive::pioneer::flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
                 .map_err(|e| anyhow!("{e}"))?;
 
             let receiver = installed_receiver(installed_backup)?;
@@ -613,16 +655,16 @@ impl DriveFamily for Pioneer {
                         kernel.as_deref().expect("selected Kernel"),
                         normal,
                     )
-                    .map_err(crate::pioneer_flash::preparation_error)?;
+                    .map_err(crate::drive::pioneer::flash::preparation_error)?;
                     (
                         Some(if req.force {
                             receiver
                                 .prepare_without_family_check(target)
-                                .map_err(crate::pioneer_flash::preparation_error)?
+                                .map_err(crate::drive::pioneer::flash::preparation_error)?
                         } else {
                             receiver
                                 .prepare(target)
-                                .map_err(crate::pioneer_flash::preparation_error)?
+                                .map_err(crate::drive::pioneer::flash::preparation_error)?
                         }),
                         None,
                     )
@@ -632,11 +674,11 @@ impl DriveFamily for Pioneer {
                     Some(if req.force {
                         receiver
                             .prepare_normal_without_family_check(normal)
-                            .map_err(crate::pioneer_flash::preparation_error)?
+                            .map_err(crate::drive::pioneer::flash::preparation_error)?
                     } else {
                         receiver
                             .prepare_normal(normal)
-                            .map_err(crate::pioneer_flash::preparation_error)?
+                            .map_err(crate::drive::pioneer::flash::preparation_error)?
                     }),
                 ),
             };
@@ -648,7 +690,9 @@ impl DriveFamily for Pioneer {
                 req.force,
             )?;
             check_plan_executable(&plan)?;
-            debug_assert!(!crate::pioneer_flash_plan::kernel_mode_required(&plan));
+            debug_assert!(!crate::drive::pioneer::flash_plan::kernel_mode_required(
+                &plan
+            ));
 
             let will_patch = prepared
                 .as_ref()
@@ -659,11 +703,11 @@ impl DriveFamily for Pioneer {
             // Summarize what will be written and what is missing, then confirm.
             confirm_proceed(&flash_summary(kernel.as_deref(), Some(normal)))?;
             let prepared = match (&prepared, &normal_only) {
-                (Some(plan), None) => crate::pioneer_flash::PreparedFlash::Complete(plan),
-                (None, Some(plan)) => crate::pioneer_flash::PreparedFlash::Normal(plan),
+                (Some(plan), None) => crate::drive::pioneer::flash::PreparedFlash::Complete(plan),
+                (None, Some(plan)) => crate::drive::pioneer::flash::PreparedFlash::Normal(plan),
                 _ => unreachable!("one prepared plan selected"),
             };
-            crate::pioneer_flash::execute_prepared(dev, prepared, req.recover, req.force)?;
+            crate::drive::pioneer::flash::execute_prepared(dev, prepared, req.recover, req.force)?;
             println!(
                 "{}",
                 crate::style::green("flash complete; drive returned ready.")
@@ -673,7 +717,7 @@ impl DriveFamily for Pioneer {
             // sees exactly what landed without a separate `info` invocation.
             // Non-fatal: a transient post-boot read error is a warning, not a
             // flash failure (the write already committed).
-            match crate::drive::pioneer_transport::identify(dev) {
+            match crate::drive::transport::identify(dev) {
                 Ok(ident) => println!("{}", post_flash_line(&ident)),
                 Err(e) => eprintln!(
                     "{}",
@@ -699,9 +743,67 @@ impl DriveFamily for Pioneer {
             notice: None,
         }
     }
+    fn describe_file(&self, image: &[u8]) -> Option<Result<()>> {
+        file_info::describe(image)
+    }
+
+    fn print_device_info(&self, dev: &mut dyn ScsiDevice) {
+        device_info::show(dev);
+    }
+
+    fn classify_input(&self, path: &std::path::Path, bytes: &[u8]) -> super::InputKind {
+        // A `.tar` that fails to parse still routes to the bundle path, which
+        // reports the specific package-parse error.
+        if bundle::Bundle::from_tar_bytes(bytes).is_ok()
+            || path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        {
+            super::InputKind::PioneerBundle
+        } else {
+            super::InputKind::Bin
+        }
+    }
+
+    fn force_refusal(&self) -> Option<&'static str> {
+        Some("Pioneer recovery requires Current firmware: use recover --current <file> (or --read-from-drive)")
+    }
+
+    fn recover(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        current: Option<Vec<u8>>,
+        target: &[u8],
+        execute: bool,
+    ) -> Option<Result<()>> {
+        Some((|| {
+            recovery::identify_receiver(dev)?;
+            let current = match current {
+                Some(bytes) => bytes,
+                None => self.capture_backup(dev).context(
+                    "cannot read Current firmware; supply a Current firmware file instead",
+                )?,
+            };
+            let plan = recovery::Plan::prepare(&current, target)?;
+            crate::output::field(
+                "Recovery",
+                "No automatic backup; compatibility policy bypassed",
+            );
+            if execute {
+                plan.execute(dev)
+            } else {
+                crate::output::field(
+                    "Recovery",
+                    "Prepared Kernel + Normal; dry run, no firmware written",
+                );
+                Ok(())
+            }
+        })())
+    }
+
     fn backup_notice(&self, bytes: &[u8]) -> super::BackupNotice {
         use super::BackupNotice;
-        let components = crate::pioneer_backup::component_roles(bytes);
+        let components = crate::drive::pioneer::backup::component_roles(bytes);
         let kernel = components.iter().find(|(role, _)| *role == "kernel");
         let normal = components.iter().find(|(role, _)| *role == "main");
         // Partial capture: one region could not be read. Name what was saved and
@@ -721,7 +823,7 @@ impl DriveFamily for Pioneer {
             }
             _ => {}
         }
-        let p = crate::pioneer_backup::package_provenance(bytes);
+        let p = crate::drive::pioneer::backup::package_provenance(bytes);
         if p.kernel_generation_patched {
             return BackupNotice::Unverified(format!(
                 "OEM kernel — generation patched. Captured kernel bytes are preserved. Normal: {}.",
@@ -757,19 +859,19 @@ impl DriveFamily for Pioneer {
     fn capture_backup(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         // Dump the live H8/SAT image regions and re-wrap them as byte-exact OEM
         // envelopes where recognized, else zero-sentinel. Read-only: no write.
-        crate::pioneer_backup::capture_signed_candidate(dev)
+        crate::drive::pioneer::backup::capture_signed_candidate(dev)
     }
     fn dump_is_raw(&self) -> bool {
         true
     }
     fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
-        crate::pioneer_dump::capture(dev)
+        crate::drive::pioneer::dump::capture(dev)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
         // Per-component structural/codec/signature checks; accepts 1 or 2
         // components (a partial capture still yields a valid single-component
         // archive).
-        crate::pioneer_backup::validate_envelope_package(bytes, target_model)?;
+        crate::drive::pioneer::backup::validate_envelope_package(bytes, target_model)?;
         Ok(bytes.to_vec())
     }
     fn capabilities(&self) -> Capabilities {
@@ -786,16 +888,6 @@ impl DriveFamily for Pioneer {
             // it with a deeper, instability-tolerant read.
             recover: true,
         }
-    }
-    fn dump_supported(&self) -> bool {
-        false
-    }
-    fn read_dump(&self, _dev: &mut dyn ScsiDevice) -> Result<UserDump> {
-        bail!(
-            "per-unit region dump is not defined for the {} family; \
-             the full-image dump is used instead",
-            Family::Pioneer
-        )
     }
     fn read_full_image(&self, _dev: &mut dyn ScsiDevice) -> Result<FullImage> {
         bail!("Pioneer has no proven restorable firmware read path")
@@ -844,33 +936,6 @@ impl DriveFamily for Pioneer {
         }
         Ok(plan)
     }
-    fn flash_open(&self, _dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
-        bail!(
-            "Pioneer does not use the generic image-chunk flash path; live flashing goes through the OEM update route (flash --execute --i-understand-risk)"
-        )
-    }
-    fn flash_chunk(&self, _dev: &mut dyn ScsiDevice, _offset: usize, _bytes: &[u8]) -> Result<()> {
-        bail!(
-            "Pioneer does not use the generic image-chunk flash path (flash_open is never reached)"
-        )
-    }
-    fn flash_close(&self, _dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
-        bail!(
-            "Pioneer does not use the generic image-chunk flash path (flash_close is never reached)"
-        )
-    }
-    fn readback(&self, _dev: &mut dyn ScsiDevice, _offset: usize, _len: usize) -> Result<Vec<u8>> {
-        bail!("Pioneer has no proven persistent firmware readback path")
-    }
-    fn restore_regions<'a>(&self, _dump: &'a UserDump) -> Vec<RestoreRegion<'a>> {
-        Vec::new()
-    }
-    fn write_region(&self, _dev: &mut dyn ScsiDevice, _offset: u32, _bytes: &[u8]) -> Result<()> {
-        bail!(
-            "Pioneer flash goes through flash_open + flash_chunk + flash_close; \
-             write_region (per-unit MTK layout) is not defined here"
-        )
-    }
 }
 
 #[cfg(test)]
@@ -886,6 +951,18 @@ use oem_reference_tests::*;
 #[cfg(test)]
 #[path = "pioneer/matrix_tests.rs"]
 mod matrix_tests;
+
+fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
+    // This is the firmware receiver's 48-byte identity response, not the
+    // unrelated READ BUFFER mode-0/F1 8-byte probe once used here.
+    let cdb = pioneer_optical::cdb::vendor_identity();
+    matches!(dev.command_in(&cdb, 48), Ok(d)
+        if d.len() == 48
+            && d[16..24].iter().all(|b| (0x20..=0x7e).contains(b))
+            && [b"SAT ".as_slice(), b"ATA ".as_slice(), b"SCSI".as_slice()]
+                .iter()
+                .any(|prefix| d[16..24].starts_with(prefix)))
+}
 
 #[cfg(test)]
 #[path = "pioneer/prepared_tests.rs"]

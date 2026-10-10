@@ -226,6 +226,36 @@ pub fn printable(s: &str) -> String {
         .collect()
 }
 
+/// `s`, or `<unknown>` when empty.
+pub fn ident_or_unknown(s: &str) -> &str {
+    if s.is_empty() {
+        "<unknown>"
+    } else {
+        s
+    }
+}
+
+/// Format a byte count as a friendly size (`2 MiB`, `16 KiB`, `2.00 MiB`, …).
+pub fn human_size(bytes: usize) -> String {
+    const K: usize = 1 << 10;
+    const M: usize = 1 << 20;
+    if bytes >= M {
+        if bytes.is_multiple_of(M) {
+            format!("{} MiB", bytes / M)
+        } else {
+            format!("{:.2} MiB", bytes as f64 / M as f64)
+        }
+    } else if bytes >= K {
+        if bytes.is_multiple_of(K) {
+            format!("{} KiB", bytes / K)
+        } else {
+            format!("{:.1} KiB", bytes as f64 / K as f64)
+        }
+    } else {
+        format!("{bytes} B")
+    }
+}
+
 #[cfg(test)]
 #[path = "style_tests.rs"]
 mod tests;

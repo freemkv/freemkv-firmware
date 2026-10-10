@@ -1,5 +1,5 @@
 use super::*;
-use crate::pioneer_flash_plan::{self as plan, FlashPlan, Installed};
+use crate::drive::pioneer::flash_plan::{self as plan, FlashPlan, Installed};
 use pioneer_optical::{envelope, image, receiver::Receiver};
 
 // Private fixtures are supplied explicitly; synthetic regression tests run in CI.

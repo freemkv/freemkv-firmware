@@ -22,7 +22,7 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::drive::mtk::{cdb_read_buffer, CHUNK, IMAGE_SIZE};
+use crate::drive::mtk::{cdb, CHUNK, IMAGE_SIZE};
 use crate::drive::FullImage;
 use crate::platform::ScsiDevice;
 
@@ -62,12 +62,12 @@ const DESCR_OFF: u32 = freemkv_chipset::DESCRIPTOR_OFFSET as u32;
 const CHUNK_LADDER: &[usize] = &[0x10000, 0x8000, 0x4000, 0x1000, 0x400, 0x40];
 
 fn read_at(dev: &mut dyn ScsiDevice, ch: &Channel, off: u32, len: u32) -> Result<Vec<u8>> {
-    let cdb = cdb_read_buffer(ch.mode, ch.buffer_id, off, len);
+    let cdb = cdb::read_buffer(ch.mode, ch.buffer_id, off, len);
     dev.command_in(&cdb, len as usize)
 }
 
 fn rd(dev: &mut dyn ScsiDevice, mode: u8, buf: u8, off: u32, len: u32) -> Result<Vec<u8>> {
-    dev.command_in(&cdb_read_buffer(mode, buf, off, len), len as usize)
+    dev.command_in(&cdb::read_buffer(mode, buf, off, len), len as usize)
 }
 
 /// Classify a read result for the map.
@@ -788,13 +788,13 @@ pub fn read_raw(
             );
             println!(
                 "  readable: {}   not-exposed (filled 0xFF): {}",
-                crate::engine::human_size(readable),
-                crate::engine::human_size(IMAGE_SIZE - readable)
+                crate::style::human_size(readable),
+                crate::style::human_size(IMAGE_SIZE - readable)
             );
             for (s, e) in &gaps {
                 println!(
                     "    gap 0x{s:06X}..0x{e:06X} ({} not readable on this channel)",
-                    crate::engine::human_size(e - s)
+                    crate::style::human_size(e - s)
                 );
             }
             if gaps.is_empty() {

@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Shared optical-drive chipset detection + media-capability taxonomy (step-1 identity used by both the modify and flash tools)"
+description = "Shared optical-drive chipset identity (re-exported from mediatek-optical) + media-capability taxonomy, used by both the modify and flash tools"
 
 [lib]
 name = "freemkv_chipset"
@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1"
+mediatek-optical = { git = "https://github.com/MattJackson/mediatek-optical", branch = "dev", features = ["image"] }
 
 [lints]
 workspace = true

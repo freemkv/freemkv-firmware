@@ -1,6 +1,8 @@
 //! Unit tests for [`super`] (the generic engine: flash flow + safety gate).
 
 use super::*;
+use crate::drive::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
+use crate::drive::mtk::file_info::{classify_file, CmacSummary};
 use crate::drive::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
     ROM_1F0000_OFFSET,
@@ -59,10 +61,18 @@ fn stamp_descriptor(img: &mut [u8], model: &str) {
 /// descriptor + one active CMAC range, then sign it so `cmac::verify` passes.
 fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
     assert_eq!(img.len(), IMAGE_SIZE);
-    img[..0x400].copy_from_slice(crate::drive::mtk_oem::encrypted_boot_page());
+    img[..0x400].copy_from_slice(stored_boot_page());
     stamp_descriptor(&mut img, model);
     let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
     crate::cmac::resign(&img).expect("resign a well-formed image")
+}
+
+/// The stored boot page every cataloged MT1959 build shares.
+pub(crate) fn stored_boot_page() -> &'static [u8] {
+    crate::drive::mtk::oem::catalog()
+        .default_for(mediatek_optical::Chip::Mt1959)
+        .expect("MT1959 default")
+        .boot_page()
 }
 
 /// Big-endian 24-bit offset bytes, as they appear at `cdb[3..6]`.
@@ -72,6 +82,13 @@ fn offset_bytes(offset: u32) -> [u8; 3] {
 
 fn is_stream_write(cdb: &[u8]) -> bool {
     cdb.first() == Some(&0x3B) && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
+}
+
+/// A banner or descriptor read: the only reads the chip gate issues.
+fn is_identity_read(cdb: &[u8]) -> bool {
+    is_mode6_read(cdb)
+        && (cdb.get(3..6) == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
+            || cdb.get(3..6) == Some(&offset_bytes(0x3000)[..]))
 }
 
 fn is_mode6_read(cdb: &[u8]) -> bool {
@@ -536,7 +553,10 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
         .flat_map(|(_, bytes)| bytes.clone())
         .collect();
     // A 0.10.x archive restores as its OEM-format rebuild, never the raw capture.
-    let (expected, _) = crate::drive::mtk_oem::rebuild(&backup_firmware()).unwrap();
+    let expected =
+        mediatek_optical::oem::rebuild(&backup_firmware(), crate::drive::mtk::oem::catalog())
+            .unwrap()
+            .image;
     assert_eq!(streamed, expected);
     assert!(!dev.writes.iter().any(|(cdb, data)| cdb.get(3..6)
         == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
@@ -919,7 +939,10 @@ fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
     // model-matching input ensures this test reaches the backup gate.
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(backup_firmware())
-        .on_fail(is_mode6_read, "dump read refused");
+        .on_fail(
+            |cdb: &[u8]| is_mode6_read(cdb) && !is_identity_read(cdb),
+            "dump read refused",
+        );
     let req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
@@ -1088,8 +1111,10 @@ fn existing_preflash_destination_fails_before_capturing_the_drive() {
     let result = flash(&mut dev, &Mtk, &req);
     std::fs::remove_file(path).unwrap();
     assert!(result.is_err());
+    // Only the chip-gate identity reads (banner + descriptor) precede the
+    // collision check; never the multi-minute firmware read.
     assert!(
-        dev.reads.is_empty(),
+        dev.reads.iter().all(|c| is_identity_read(c)),
         "do not spend minutes reading before finding a path collision"
     );
     assert!(dev.writes.is_empty());
@@ -1161,11 +1186,12 @@ fn mediatek_dump_preserves_raw_unsigned_memory_without_requiring_backup_integrit
 
 #[test]
 fn force_waives_model_identity_but_keeps_input_structure_checks() {
-    let mut dev = MockScsiDevice::new();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     assert!(Mtk
         .validate_forced_image(&mut dev, &backup_firmware())
         .is_ok());
-    assert!(dev.reads.is_empty());
+    // --force reads only the drive's identity, for the chip gate.
+    assert!(dev.reads.iter().all(|c| is_identity_read(c)));
     assert!(Mtk
         .validate_forced_image(&mut dev, b"not a firmware image")
         .is_err());
@@ -1225,7 +1251,7 @@ fn forced_tray_warning_does_not_claim_refusal() {
 
 #[test]
 fn capture_is_saved_before_target_dependent_rollback_check() {
-    use crate::drive::{Capabilities, Identity, ProbeEvidence, RestoreRegion};
+    use crate::drive::{Capabilities, Identity, ProbeEvidence};
     struct RejectUpdate {
         path: std::path::PathBuf,
     }
@@ -1255,9 +1281,6 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
             );
             bail!("target requires an uncaptured region")
         }
-        fn read_dump(&self, _: &mut dyn ScsiDevice) -> Result<UserDump> {
-            unreachable!()
-        }
         fn image_size(&self) -> usize {
             Mtk.image_size()
         }
@@ -1275,22 +1298,13 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
         fn flash_plan(&self, _: usize, _: bool) -> Result<String> {
             unreachable!()
         }
-        fn flash_open(&self, _: &mut dyn ScsiDevice, _: FlashMode) -> Result<()> {
-            panic!("update prohibited")
-        }
-        fn flash_chunk(&self, _: &mut dyn ScsiDevice, _: usize, _: &[u8]) -> Result<()> {
-            panic!("update prohibited")
-        }
-        fn flash_close(&self, _: &mut dyn ScsiDevice, _: FlashMode) -> Result<()> {
-            panic!("update prohibited")
-        }
-        fn readback(&self, _: &mut dyn ScsiDevice, _: usize, _: usize) -> Result<Vec<u8>> {
-            unreachable!()
-        }
-        fn restore_regions<'a>(&self, _: &'a UserDump) -> Vec<RestoreRegion<'a>> {
-            unreachable!()
-        }
-        fn write_region(&self, _: &mut dyn ScsiDevice, _: u32, _: &[u8]) -> Result<()> {
+        fn flash_stream(
+            &self,
+            _: &mut dyn ScsiDevice,
+            _: &[u8],
+            _: FlashMode,
+            _: &mut dyn FnMut(usize),
+        ) -> Result<()> {
             panic!("update prohibited")
         }
     }
@@ -1308,4 +1322,67 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
     assert!(path.exists());
     assert!(dev.writes.is_empty());
     std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn chip_gate_refuses_cross_generation_images_even_forced() {
+    // Drive: MT1959 (BU40N). Image: an MT1939 build with a matching model.
+    let mut img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let d = ROM_1EC000_OFFSET as usize;
+    img[d + 0x34..d + 0x3E].copy_from_slice(b"MTEKMT1939");
+    let img = crate::cmac::resign(&img).unwrap();
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let forced = Mtk.validate_forced_image(&mut dev, &img).unwrap_err();
+    assert!(
+        forced.to_string().contains("cannot be overridden"),
+        "{forced}"
+    );
+    let normal = Mtk
+        .validate_image(&mut dev, &img, "BD-RE BU40N", false)
+        .unwrap_err();
+    assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn raw_drive_reads_are_never_flashable() {
+    // A drive read's boot page is the read-back mirror of 0x10000; writing it
+    // would store the wrong boot page. Refused with and without --force.
+    let mut read = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let mirror = read[0x1_0000..0x1_0400].to_vec();
+    read[..0x400].copy_from_slice(&mirror);
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let forced = Mtk.validate_forced_image(&mut dev, &read).unwrap_err();
+    assert!(forced.to_string().contains("raw drive read"), "{forced}");
+    let normal = Mtk
+        .validate_image(&mut dev, &read, "BD-RE BU40N", false)
+        .unwrap_err();
+    assert!(normal.to_string().contains("raw drive read"), "{normal}");
+}
+
+#[test]
+fn unknown_boot_pages_need_force() {
+    let mut img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    img[..0x400].fill(0x42);
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let err = Mtk
+        .validate_image(&mut dev, &img, "BD-RE BU40N", false)
+        .unwrap_err();
+    assert!(err.to_string().contains("boot page"), "{err}");
+    Mtk.validate_forced_image(&mut dev, &img).unwrap();
+}
+
+#[test]
+fn chip_gate_refuses_when_the_descriptor_is_unreadable() {
+    // A banner can name the wrong generation, so a tagged image needs the
+    // drive's descriptor; an unreadable one refuses rather than failing open.
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let mut dev = MockScsiDevice::new()
+        .with_firmware_image(backup_firmware())
+        .on_fail(
+            |cdb: &[u8]| cdb.get(3..6) == Some(&offset_bytes(ROM_1EC000_OFFSET)[..]),
+            "descriptor read refused",
+        );
+    let err = Mtk.validate_forced_image(&mut dev, &img).unwrap_err();
+    assert!(err.to_string().contains("identity descriptor"), "{err}");
 }

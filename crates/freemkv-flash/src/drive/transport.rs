@@ -1,18 +1,20 @@
-//! The ONE bridge between freemkv-flash's [`ScsiDevice`] and the
-//! [`pioneer_optical::drive::Transport`] the [`pioneer_optical::drive`]
-//! sequences run over.
+//! The ONE bridge between freemkv-flash's [`ScsiDevice`] and the protocol
+//! crates' `Transport` traits: [`pioneer_optical::drive::Transport`] and
+//! [`mediatek_optical::drive::Transport`].
 //!
-//! Everything Pioneer-vendor (identity, read-unlock knock, memory reads, OEM
-//! update entry / transfer / finish, the DVR handshake) is issued by
-//! `pioneer_optical::drive::*`; the rest of the flasher never builds a vendor
+//! Every vendor command sequence (Pioneer identity, read-unlock knock, memory
+//! reads, OEM update entry / transfer / finish, the DVR handshake; the MediaTek
+//! flash session) is issued by `pioneer_optical::drive::*` or
+//! `mediatek_optical::drive::*`; the rest of the flasher never builds a vendor
 //! CDB. This adapter passes the crate's CDBs straight through to the SCSI layer
 //! and adds the one policy the flasher owns: **strictness** — a flash transport
 //! sends every data-out through [`ScsiDevice::command_out_strict`] (abort on any
 //! nonzero status, no retry), exactly as the OEM host loop does; a read
 //! transport uses the lenient path.
 //!
-//! Invariant (checked by `tests/no_cdbs.rs`): no Pioneer source file, this one
-//! included, contains a WRITE BUFFER / READ BUFFER opcode literal.
+//! Invariant (checked by `tests/no_cdbs.rs`): no Pioneer or MediaTek backend
+//! source file, this one included, contains a WRITE BUFFER / READ BUFFER opcode
+//! literal.
 
 use std::cell::RefCell;
 
@@ -106,6 +108,55 @@ impl Transport for ScsiTransport<'_, '_> {
     }
 }
 
+/// The MediaTek transport: identical policy, with one wire difference kept
+/// from the MediaTek backend's history — a no-data command (TEST UNIT READY)
+/// is issued as a zero-length data-in, as the OEM tool does.
+impl mediatek_optical::drive::Transport for ScsiTransport<'_, '_> {
+    type Error = anyhow::Error;
+
+    fn exec(&mut self, cdb: &[u8], data: mediatek_optical::drive::Data<'_>) -> Result<usize> {
+        use mediatek_optical::drive::Data as MtkData;
+        let strict = self.strict;
+        let result = self.dev.with(|d| match data {
+            MtkData::In(buf) => {
+                let got = d.command_in(cdb, buf.len())?;
+                let n = got.len();
+                anyhow::ensure!(
+                    n <= buf.len(),
+                    "MediaTek transport returned {n} bytes for a {}-byte buffer",
+                    buf.len()
+                );
+                buf[..n].copy_from_slice(&got[..n]);
+                Ok(n)
+            }
+            MtkData::None => d.command_in(cdb, 0).map(|_| 0),
+            MtkData::Out(bytes) => {
+                if strict {
+                    d.command_out_strict(cdb, bytes)?;
+                } else {
+                    d.command_out(cdb, bytes)?;
+                }
+                Ok(bytes.len())
+            }
+        });
+        self.sense = result.as_ref().err().and_then(sense_triplet);
+        result
+    }
+
+    fn sense(&self) -> Option<(u8, u8, u8)> {
+        self.sense
+    }
+}
+
+/// Fold a MediaTek sequence error back into `anyhow`, keeping the transport's
+/// own error (and with it any structured sense) intact.
+pub fn mtk_err(error: mediatek_optical::drive::Error<anyhow::Error>) -> anyhow::Error {
+    match error {
+        mediatek_optical::drive::Error::Transport(e) => e,
+        other => anyhow!("{other}"),
+    }
+}
+
 /// Fold a high-level flash error back into `anyhow`, keeping the structured
 /// sense (so `sense_triplet` still works on a `Locked` refusal).
 pub fn flash_err(error: Error<anyhow::Error>) -> anyhow::Error {
@@ -146,5 +197,5 @@ pub fn identify(dev: &mut dyn ScsiDevice) -> Result<Identity> {
 }
 
 #[cfg(test)]
-#[path = "pioneer_transport_tests.rs"]
+#[path = "transport_tests.rs"]
 mod tests;

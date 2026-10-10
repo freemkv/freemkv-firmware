@@ -20,10 +20,9 @@ use crate::platform::ScsiDevice;
 
 pub mod fw_ident;
 pub mod mtk;
-pub(crate) mod mtk_oem;
 pub mod pioneer;
 /// The single `Transport` adapter between `ScsiDevice` and `pioneer_optical::drive`.
-pub mod pioneer_transport;
+pub mod transport;
 
 pub use mtk::UserDump;
 
@@ -89,12 +88,17 @@ pub(crate) fn sanitize_ascii(s: &str) -> String {
         .collect()
 }
 
+/// Standard SPC INQUIRY CDB for `alloc` bytes.
+fn inquiry_cdb(alloc: u8) -> [u8; 6] {
+    [0x12, 0x00, 0x00, 0x00, alloc, 0x00]
+}
+
 /// Read standard INQUIRY identity, surfacing a failed INQUIRY (permission or
 /// transport fault) as an error instead of an empty identity.
 pub fn try_read_identity(dev: &mut dyn ScsiDevice) -> Result<Identity> {
     let mut id = Identity::default();
     let data = dev
-        .command_in(&mtk::cdb_inquiry(96), 96)
+        .command_in(&inquiry_cdb(96), 96)
         .context("INQUIRY failed")?;
     if data.len() < 36 {
         anyhow::bail!(
@@ -130,26 +134,6 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
             Identity::default()
         }
     }
-}
-
-/// Read an MT19xx boot banner only from the MTK protocol probe/info path.
-pub(crate) fn read_mt19_banner(dev: &mut dyn ScsiDevice) -> Option<String> {
-    // The 0x3000 ROM buffer is exactly ROM_003000_LEN (32 B); asking for more
-    // makes the drive reject the read with ILLEGAL REQUEST (invalid field in
-    // CDB), which is why the banner previously always came back empty.
-    let cdb = mtk::cdb_read_buffer(
-        mtk::MODE_6,
-        mtk::ROM_BUFFER_ID,
-        mtk::ROM_003000_OFFSET,
-        mtk::ROM_003000_LEN,
-    );
-    let data = dev.command_in(&cdb, mtk::ROM_003000_LEN as usize).ok()?;
-    let end = data
-        .iter()
-        .position(|&b| b == 0 || !(0x20..0x7f).contains(&b))
-        .unwrap_or(data.len());
-    let banner = trim_ascii(&data[..end]);
-    (!banner.is_empty()).then_some(banner)
 }
 
 /// Evidence returned by a protocol backend's read-only probe.
@@ -221,6 +205,11 @@ static BACKENDS: [BackendRegistration; 2] = [
     },
 ];
 
+/// Every registered protocol backend, in registry order.
+pub fn backends() -> impl Iterator<Item = &'static dyn FirmwareBackend> {
+    BACKENDS.iter().map(|registered| registered.prototype)
+}
+
 /// Run every registered, read-only protocol probe. Ambiguous matches fail
 /// closed rather than allowing registry order to select a writer.
 pub fn resolve_backend(dev: &mut dyn ScsiDevice) -> Result<Option<BackendMatch>> {
@@ -245,59 +234,6 @@ pub fn resolve_backend(dev: &mut dyn ScsiDevice) -> Result<Option<BackendMatch>>
         }
     }
     Ok(found.map(|evidence| BackendMatch { identity, evidence }))
-}
-
-fn get_config_is_mtk(dev: &mut dyn ScsiDevice) -> bool {
-    match (mtk::Acquire::GetConfig {
-        feature: mtk::FEATURE_FWDATE,
-        alloc: 32,
-    })
-    .run(dev)
-    {
-        Ok(_) => true,
-        Err(error) => {
-            crate::diagnostics::record(format!("MediaTek feature probe did not match: {error:#}"));
-            false
-        }
-    }
-}
-
-/// True iff the drive's boot-ROM region at `0x003000` carries the ASCII
-/// **`MT19`** boot-banner substring — the MediaTek MT19-family vendor
-/// signature ("MT1959 Boot ..." / "MT1939 Boot ..." across every MT19xx
-/// part). Backstops the standard MMC feature check so a compliant non-MTK
-/// drive that also implements feature 0x010C cannot be misclassified as MTK
-/// (which would then let a `flash --allow-crossflash` write MTK CDBs at a
-/// Pioneer/Renesas controller).
-///
-/// The banner is a stable per-part on-flash string that the OEM ships in
-/// every MT19xx image; we look for `MT19` rather than the more specific
-/// `MTEKMT19` because the 32-byte boot-banner region carries the short
-/// form (e.g. `"MT1959 Boot BU5"`), while the longer `MTEKMT19xx` tag lives
-/// in a different region (`0x1EC000 + 0x34`, the identity descriptor).
-fn has_mt19_banner(dev: &mut dyn ScsiDevice) -> bool {
-    let cdb = mtk::cdb_read_buffer(
-        mtk::MODE_6,
-        mtk::ROM_BUFFER_ID,
-        mtk::ROM_003000_OFFSET,
-        mtk::ROM_003000_LEN,
-    );
-    let Ok(rom) = dev.command_in(&cdb, mtk::ROM_003000_LEN as usize) else {
-        return false;
-    };
-    rom.len() == mtk::ROM_003000_LEN as usize && rom.windows(4).any(|w| w == b"MT19")
-}
-
-fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
-    // This is the firmware receiver's 48-byte identity response, not the
-    // unrelated READ BUFFER mode-0/F1 8-byte probe once used here.
-    let cdb = mtk::cdb_read_buffer(0x02, 0xF1, 0x0000, 48);
-    matches!(dev.command_in(&cdb, 48), Ok(d)
-        if d.len() == 48
-            && d[16..24].iter().all(|b| (0x20..=0x7e).contains(b))
-            && [b"SAT ".as_slice(), b"ATA ".as_slice(), b"SCSI".as_slice()]
-                .iter()
-                .any(|prefix| d[16..24].starts_with(prefix)))
 }
 
 /// How the flash input file was sniffed.
@@ -364,17 +300,6 @@ pub struct FlashRequest {
     /// `--force`: ignore the firmware-family match (Pioneer). Loud warning; the
     /// user takes on the brick risk. Does not waive the unrecoverable-tail refusal.
     pub force: bool,
-}
-
-/// A per-unit region to restore from a `.tar` dump (targeted write).
-#[derive(Debug, Clone, Copy)]
-pub struct RestoreRegion<'a> {
-    /// Human label (the tar member name).
-    pub label: &'static str,
-    /// Absolute ROM offset the region is written to.
-    pub offset: u32,
-    /// The region bytes.
-    pub bytes: &'a [u8],
 }
 
 /// A firmware command protocol's primitives.
@@ -562,8 +487,28 @@ pub trait FirmwareBackend: Sync {
     /// Interpret an input path for this protocol. The default is a direct
     /// firmware image; only backends that implement a backup codec recognize
     /// their backup extension as a restorable input.
-    fn classify_input(&self, _path: &std::path::Path) -> InputKind {
+    fn classify_input(&self, _path: &std::path::Path, _bytes: &[u8]) -> InputKind {
         InputKind::Bin
+    }
+
+    /// Why this backend refuses `--force` on `flash`, if it does.
+    fn force_refusal(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// Recover a drive whose normal update path is unusable, without automatic
+    /// backups or installed-versus-target policy gates. `current` is the
+    /// installed firmware when the caller supplies it; otherwise the backend
+    /// reads it. Returns `None` when this backend has no recovery path, and an
+    /// error when it has one but the drive is not a receiver it recognizes.
+    fn recover(
+        &self,
+        _dev: &mut dyn ScsiDevice,
+        _current: Option<Vec<u8>>,
+        _target: &[u8],
+        _execute: bool,
+    ) -> Option<Result<()>> {
+        None
     }
 
     /// Inclusive byte ranges suitable for post-write read-back comparison.
@@ -624,20 +569,11 @@ pub trait FirmwareBackend: Sync {
         self.capabilities().flash
     }
 
-    /// Legacy diagnostic per-unit read capability. This is distinct from a
-    /// complete rollback [`Self::capture_backup`] and never permits flash.
-    fn dump_supported(&self) -> bool {
-        self.is_supported()
-    }
-
     /// Read INQUIRY + boot banner (the `info` primitive). Standard for all
     /// families, so provided by default.
     fn identity(&self, dev: &mut dyn ScsiDevice) -> Identity {
         read_identity(dev)
     }
-
-    /// Legacy diagnostic per-unit read, retained for existing MTK callers.
-    fn read_dump(&self, dev: &mut dyn ScsiDevice) -> Result<UserDump>;
 
     /// Read the entire firmware image (the `dump --everything` primitive):
     /// `(image, readable_bytes, gaps)`, graceful — any offset the drive doesn't
@@ -706,23 +642,39 @@ pub trait FirmwareBackend: Sync {
         Ok(None)
     }
 
-    /// Open a flash session (preflight + prepare). One data-out command.
-    fn flash_open(&self, dev: &mut dyn ScsiDevice, mode: FlashMode) -> Result<()>;
+    /// Print this backend's report for a firmware FILE (`info <file>`), or
+    /// return `None` when the bytes are not this backend's format. Read-only.
+    fn describe_file(&self, _image: &[u8]) -> Option<Result<()>> {
+        None
+    }
 
-    /// Stream one chunk at absolute `offset`.
-    fn flash_chunk(&self, dev: &mut dyn ScsiDevice, offset: usize, bytes: &[u8]) -> Result<()>;
+    /// Print this backend's vendor fields for `info`, after the standard MMC
+    /// fields. Read-only. Default: none.
+    fn print_device_info(&self, _dev: &mut dyn ScsiDevice) {}
 
-    /// Close a flash session (commit + ready + status).
-    fn flash_close(&self, dev: &mut dyn ScsiDevice, mode: FlashMode) -> Result<()>;
+    /// Print backend-specific notes for a flash plan (e.g. an authorized
+    /// crossflash and its risks). Informational only; gates run separately.
+    fn print_flash_notes(&self, _image: &[u8], _drive_model: &str, _allow_crossflash: bool) {}
+
+    /// Stream a complete flash payload in one backend-owned update session,
+    /// calling `progress` with the bytes sent so far after each chunk. The
+    /// engine runs the shared gates (validation, backup, tray, safety) first.
+    /// Default: this backend has no image-stream flash.
+    fn flash_stream(
+        &self,
+        _dev: &mut dyn ScsiDevice,
+        _payload: &[u8],
+        _mode: FlashMode,
+        _progress: &mut dyn FnMut(usize),
+    ) -> Result<()> {
+        bail!("{} has no image-stream flash", self.backend_name())
+    }
 
     /// Read back `len` bytes at `offset` (the engine uses this for verify).
-    fn readback(&self, dev: &mut dyn ScsiDevice, offset: usize, len: usize) -> Result<Vec<u8>>;
-
-    /// Map a per-unit dump onto the targeted regions a `.tar` restore writes.
-    fn restore_regions<'a>(&self, dump: &'a UserDump) -> Vec<RestoreRegion<'a>>;
-
-    /// Write one targeted region verbatim (the `.tar` restore primitive).
-    fn write_region(&self, dev: &mut dyn ScsiDevice, offset: u32, bytes: &[u8]) -> Result<()>;
+    /// Default: this backend has no image read-back.
+    fn readback(&self, _dev: &mut dyn ScsiDevice, _offset: usize, _len: usize) -> Result<Vec<u8>> {
+        bail!("{} has no image read-back", self.backend_name())
+    }
 }
 
 /// Compatibility name while the remaining command workflow migrates to
@@ -778,12 +730,6 @@ macro_rules! unsupported_drive_family {
                     recover: false,
                 }
             }
-            fn read_dump(
-                &self,
-                _dev: &mut dyn $crate::platform::ScsiDevice,
-            ) -> ::anyhow::Result<$crate::drive::UserDump> {
-                Err($crate::drive::unsupported_family_error($family))
-            }
             fn image_size(&self) -> usize {
                 0
             }
@@ -803,50 +749,6 @@ macro_rules! unsupported_drive_family {
                 _image_len: usize,
                 _verbose: bool,
             ) -> ::anyhow::Result<::std::string::String> {
-                Err($crate::drive::unsupported_family_error($family))
-            }
-            fn flash_open(
-                &self,
-                _dev: &mut dyn $crate::platform::ScsiDevice,
-                _mode: $crate::manifest::FlashMode,
-            ) -> ::anyhow::Result<()> {
-                Err($crate::drive::unsupported_family_error($family))
-            }
-            fn flash_chunk(
-                &self,
-                _dev: &mut dyn $crate::platform::ScsiDevice,
-                _offset: usize,
-                _bytes: &[u8],
-            ) -> ::anyhow::Result<()> {
-                Err($crate::drive::unsupported_family_error($family))
-            }
-            fn flash_close(
-                &self,
-                _dev: &mut dyn $crate::platform::ScsiDevice,
-                _mode: $crate::manifest::FlashMode,
-            ) -> ::anyhow::Result<()> {
-                Err($crate::drive::unsupported_family_error($family))
-            }
-            fn readback(
-                &self,
-                _dev: &mut dyn $crate::platform::ScsiDevice,
-                _offset: usize,
-                _len: usize,
-            ) -> ::anyhow::Result<::std::vec::Vec<u8>> {
-                Err($crate::drive::unsupported_family_error($family))
-            }
-            fn restore_regions<'a>(
-                &self,
-                _dump: &'a $crate::drive::UserDump,
-            ) -> ::std::vec::Vec<$crate::drive::RestoreRegion<'a>> {
-                ::std::vec::Vec::new()
-            }
-            fn write_region(
-                &self,
-                _dev: &mut dyn $crate::platform::ScsiDevice,
-                _offset: u32,
-                _bytes: &[u8],
-            ) -> ::anyhow::Result<()> {
                 Err($crate::drive::unsupported_family_error($family))
             }
         }

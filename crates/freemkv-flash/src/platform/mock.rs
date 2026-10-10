@@ -48,6 +48,8 @@ pub struct MockScsiDevice {
     echo_store: HashMap<u32, Vec<u8>>,
     /// Optional complete mode-6 firmware read surface for backup-path tests.
     firmware_image: Option<Vec<u8>>,
+    /// INQUIRY product reported alongside `firmware_image` (default `BD-RE BU40N`).
+    product: Option<String>,
 }
 
 impl MockScsiDevice {
@@ -71,6 +73,13 @@ impl MockScsiDevice {
     /// Expose a supplied byte-exact firmware image on mode-6 reads.
     pub fn with_firmware_image(mut self, image: Vec<u8>) -> Self {
         self.firmware_image = Some(image);
+        self
+    }
+
+    /// Report `product` (at most 16 bytes) as the INQUIRY product of a mock
+    /// that exposes a firmware image.
+    pub fn with_product(mut self, product: &str) -> Self {
+        self.product = Some(product.to_owned());
         self
     }
 
@@ -243,7 +252,9 @@ impl ScsiDevice for MockScsiDevice {
             if inquiry.len() >= 36 {
                 inquiry[4] = (inquiry.len() - 5) as u8;
                 inquiry[8..16].copy_from_slice(b"HL-DT-ST");
-                inquiry[16..32].copy_from_slice(b"BD-RE BU40N     ");
+                let product = self.product.as_deref().unwrap_or("BD-RE BU40N");
+                inquiry[16..32].fill(b' ');
+                inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
                 inquiry[32..36].copy_from_slice(b"1.00");
             }
             return Ok(inquiry);

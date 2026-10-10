@@ -33,73 +33,54 @@
 
 use std::io::{Read, Write};
 
-use aes::cipher::generic_array::GenericArray;
-use aes::cipher::{BlockEncrypt, KeyInit};
-use aes::Aes128;
 use anyhow::{anyhow, bail, Context, Result};
 
-use super::{Capabilities, DriveFamily, Family, RestoreRegion};
+pub(crate) mod backup;
+pub(crate) mod crossflash;
+pub(crate) mod file_info;
+pub mod oem;
+
+use super::{Capabilities, DriveFamily, Family};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
-// ---- Region geometry --------------------------------------------------------
+// ---- Region geometry and wire constants (from `mediatek_optical`) -----------
 
-/// Boot banner / metadata region offset (shared with `freemkv_chipset`).
-pub const ROM_003000_OFFSET: u32 = freemkv_chipset::BANNER_OFFSET as u32;
+pub use mediatek_optical::cdb;
+use mediatek_optical::layout;
+
+/// Boot banner / metadata region offset.
+pub const ROM_003000_OFFSET: u32 = layout::BANNER.start as u32;
 /// Boot banner / metadata region length.
-pub const ROM_003000_LEN: u32 = 0x20;
-/// Identity-page region offset (shared with `freemkv_chipset`).
-pub const ROM_1EC000_OFFSET: u32 = freemkv_chipset::DESCRIPTOR_OFFSET as u32;
+pub const ROM_003000_LEN: u32 = layout::BANNER.len as u32;
+/// Identity-page region offset.
+pub const ROM_1EC000_OFFSET: u32 = layout::DESCRIPTOR.start as u32;
 /// Identity-page region length (256 B).
-pub const ROM_1EC000_LEN: u32 = 0x100;
-/// Per-unit calibration NVRAM region offset.
-pub const ROM_1F0000_OFFSET: u32 = 0x1F0000;
-/// Per-unit calibration NVRAM region length (64 KiB).
-pub const ROM_1F0000_LEN: u32 = 0x10000;
+pub const ROM_1EC000_LEN: u32 = layout::DESCRIPTOR.len as u32;
+/// Per-unit calibration region offset.
+pub const ROM_1F0000_OFFSET: u32 = layout::CALIBRATION.start as u32;
+/// Per-unit calibration region length (64 KiB).
+pub const ROM_1F0000_LEN: u32 = layout::CALIBRATION.len as u32;
 
 /// Per-member cap for [`UserDump::read_tar`] — hard ceiling on how many bytes
 /// a single tar entry may carry before we refuse. The largest legitimate
 /// member is `rom_1F0000.bin` at 64 KiB; the cap sits well above that so
 /// firmware/ROM regions never bump against it, but low enough that a hostile
 /// tar cannot force a large allocation before the per-member length gate in
-/// `UserDump::from_members` runs. 256 KiB gives 4× headroom over the largest
-/// legitimate member — plenty for any future region grow, still far below
-/// the ~16 GiB "declared size" a naive `read_to_end` would swallow.
+/// `UserDump::from_members` runs.
 pub const READ_TAR_MEMBER_CAP: usize = 256 * 1024;
 /// INQUIRY allocation length used by the identity flow.
-pub const INQUIRY_LEN: u16 = 96;
+pub const INQUIRY_LEN: u16 = cdb::INQUIRY_ALLOC;
 /// Initial GET CONFIGURATION allocation length for the fd_* field descriptors.
 pub const FD_LEN: u16 = 28;
 /// GET CONFIGURATION feature code carrying the ASCII serial number (fd_sn.bin).
-pub const FEATURE_SERIAL: u16 = 0x0108;
+pub const FEATURE_SERIAL: u16 = cdb::FEATURE_SERIAL;
 /// GET CONFIGURATION feature code carrying the ASCII firmware date (fd_fwdate.bin).
-pub const FEATURE_FWDATE: u16 = 0x010C;
-/// READ BUFFER / WRITE BUFFER mode used by the MT19xx register path.
-pub const MODE_6: u8 = 0x06;
-/// READ BUFFER buffer id used for the per-unit ROM regions.
-pub const ROM_BUFFER_ID: u8 = 0x00;
-
+pub const FEATURE_FWDATE: u16 = cdb::FEATURE_FIRMWARE_DATE;
 /// Expected full firmware image size (2 MiB).
-pub const IMAGE_SIZE: usize = 0x200000;
+pub const IMAGE_SIZE: usize = layout::IMAGE_SIZE;
 /// Streaming chunk size for the flash sequence, 16 KiB.
-pub const CHUNK: usize = 0x4000;
-/// WRITE_BUFFER buffer id used by the MT19xx flash path.
-pub const FLASH_BUFFER_ID: u8 = 0x00;
-/// PROBE READ BUFFER allocation length (bytes read from the model page).
-pub const PROBE_ALLOC: usize = 0x100;
-/// DRAM offset read by the PROBE for the model-signature check.
-pub const PROBE_MODEL_OFFSET: u32 = 0x1E_C000;
-/// REQUEST SENSE allocation length.
-pub const REQUEST_SENSE_ALLOC: usize = 16;
-
-/// AES-128-ECB key for the `enc` transport envelope.
-///
-/// Applied to the whole image before streaming **only when [`enc_needed`] (or an
-/// explicit override) selects enc**; see [`enc_transform`]. This is a
-/// host-embedded, non-secret transport key — not the vendor signed-update layer.
-pub const ENC_KEY: [u8; 16] = [
-    0x5e, 0x9e, 0x4f, 0x00, 0x94, 0xef, 0x20, 0xab, 0x52, 0xe3, 0x5e, 0x73, 0x6a, 0xcb, 0x23, 0x24,
-];
+pub const CHUNK: usize = cdb::CHUNK;
 
 /// Ordered tar member names for a per-unit dump.
 pub const MEMBER_NAMES: [&str; 6] = [
@@ -111,144 +92,9 @@ pub const MEMBER_NAMES: [&str; 6] = [
     "fd_sn.bin",
 ];
 
-// ---- CDB builders (pure, testable) ------------------------------------------
-
-/// Build a READ BUFFER CDB (opcode 0x3C, 10 bytes).
-pub fn cdb_read_buffer(mode: u8, buffer_id: u8, offset: u32, len: u32) -> [u8; 10] {
-    [
-        0x3C,
-        mode & 0x1f,
-        buffer_id,
-        (offset >> 16) as u8,
-        (offset >> 8) as u8,
-        offset as u8,
-        (len >> 16) as u8,
-        (len >> 8) as u8,
-        len as u8,
-        0x00,
-    ]
-}
-
-/// Build a standard INQUIRY CDB (opcode 0x12) for `alloc_len` bytes.
-pub fn cdb_inquiry(alloc_len: u16) -> [u8; 6] {
-    [
-        0x12,
-        0x00,
-        0x00,
-        (alloc_len >> 8) as u8,
-        alloc_len as u8,
-        0x00,
-    ]
-}
-
-/// Build a GET CONFIGURATION CDB (opcode 0x46) for a single `feature` (RT=0x02).
-pub fn cdb_get_config(feature: u16, alloc_len: u16) -> [u8; 10] {
-    [
-        0x46,
-        0x02,
-        (feature >> 8) as u8,
-        feature as u8,
-        0x00,
-        0x00,
-        0x00,
-        (alloc_len >> 8) as u8,
-        alloc_len as u8,
-        0x00,
-    ]
-}
-
-/// Build a targeted WRITE BUFFER CDB (opcode 0x3B, 10 bytes) — used by `.tar`
-/// restore for a whole region in one write (`len` may exceed 64 KiB - 1).
-pub fn cdb_write_buffer(mode: u8, buffer_id: u8, offset: u32, len: u32) -> [u8; 10] {
-    [
-        0x3B,
-        mode & 0x1f,
-        buffer_id,
-        (offset >> 16) as u8,
-        (offset >> 8) as u8,
-        offset as u8,
-        (len >> 16) as u8,
-        (len >> 8) as u8,
-        len as u8,
-        0x00,
-    ]
-}
-
-/// PROBE — READ BUFFER mode 6 @ 0x1EC000, 0x100 bytes (data-in). The returned
-/// buffer carries a model signature that freemkv-flash does NOT validate
-/// host-side.
-pub fn cdb_read_probe() -> [u8; 12] {
-    [
-        0x3C, 0x06, 0x00, 0x1E, 0xC0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-    ]
-}
-
-/// READY — TEST UNIT READY, all-zero CDB (poll).
-pub fn cdb_test_unit_ready() -> [u8; 12] {
-    [0x00; 12]
-}
-
-/// PREPARE — WRITE BUFFER mode 1, "enter-download / pre-erase" (len 0). `CDB[9]`=0x0B.
-pub fn cdb_wb_prepare() -> [u8; 12] {
-    [
-        0x3B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0B, 0x00, 0x00,
-    ]
-}
-
-/// STREAM — WRITE BUFFER mode 6 "download microcode with offsets" (data-out).
-///
-/// `offset` is the absolute byte offset (big-endian, CDB[3..5]); `len` is
-/// big-endian in CDB[6..8] (a 0x4000 chunk lands as `00 40 00`).
-pub fn cdb_wb_data(offset: u32, len: u16) -> [u8; 12] {
-    [
-        0x3B,
-        0x06,
-        0x00,
-        (offset >> 16) as u8,
-        (offset >> 8) as u8,
-        offset as u8,
-        0x00,
-        (len >> 8) as u8,
-        len as u8,
-        0x00,
-        0x00,
-        0x00,
-    ]
-}
-
-/// COMMIT — WRITE BUFFER mode 7 "download microcode + save" (len 0). The `1B 12`
-/// magic sits in CDB[10..11].
-pub fn cdb_wb_commit() -> [u8; 12] {
-    [
-        0x3B, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1B, 0x12,
-    ]
-}
-
-/// STATUS — REQUEST SENSE (data-in), the progress/status poll. These are the
-/// exact bytes the drive's own flasher issues (byte 4 is `0x80` there, not the
-/// SPC allocation length); the actual transfer is capped by the caller's buffer
-/// ([`REQUEST_SENSE_ALLOC`] = 16). Left byte-for-byte so the drive sees what it
-/// expects rather than an SPC-strict form it was never tested against.
-pub fn cdb_request_sense() -> [u8; 12] {
-    [
-        0x03, 0x00, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    ]
-}
-
 /// AES-128-ECB encrypt the whole image in place (the `enc` transport envelope).
 pub fn enc_transform(image: &mut [u8]) -> Result<()> {
-    if !image.len().is_multiple_of(16) {
-        bail!(
-            "enc: image length {} is not a multiple of the AES block size",
-            image.len()
-        );
-    }
-    let cipher = Aes128::new(GenericArray::from_slice(&ENC_KEY));
-    for chunk in image.chunks_mut(16) {
-        let block = GenericArray::from_mut_slice(chunk);
-        cipher.encrypt_block(block);
-    }
-    Ok(())
+    mediatek_optical::enc::encrypt(image).map_err(|e| anyhow!(e))
 }
 
 /// Select the format for the implemented MTK update route.
@@ -291,7 +137,7 @@ impl Acquire {
     pub fn run(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         match *self {
             Acquire::ReadBuffer { offset, len } => {
-                let cdb = cdb_read_buffer(MODE_6, ROM_BUFFER_ID, offset, len);
+                let cdb = cdb::read_memory(offset, len);
                 let data = dev.command_in(&cdb, len as usize)?;
                 // A per-unit ROM region is a fixed size; a short transfer means
                 // an incomplete read. Refuse it rather than silently writing a
@@ -306,13 +152,13 @@ impl Acquire {
                 Ok(data)
             }
             Acquire::Inquiry { alloc } => {
-                let cdb = cdb_inquiry(alloc);
+                let cdb = cdb::inquiry(alloc);
                 let mut data = dev.command_in(&cdb, alloc as usize)?;
                 log_inquiry(&data, Some(alloc as usize));
                 if data.len() >= 5 {
                     let needed = 5 + usize::from(data[4]);
                     if needed > alloc as usize {
-                        data = dev.command_in(&cdb_inquiry(needed as u16), needed)?;
+                        data = dev.command_in(&cdb::inquiry(needed as u16), needed)?;
                         log_inquiry(&data, Some(needed));
                     }
                 }
@@ -320,14 +166,14 @@ impl Acquire {
                 Ok(data)
             }
             Acquire::GetConfig { feature, alloc } => {
-                let cdb = cdb_get_config(feature, alloc);
+                let cdb = cdb::get_configuration(feature, alloc);
                 let mut data = dev.command_in(&cdb, alloc as usize)?;
                 log_field_descriptor(feature, &data, Some(alloc as usize));
                 if data.len() >= 12 {
                     let needed = 12 + usize::from(data[11]);
                     if needed > alloc as usize {
                         crate::diagnostics::record(format!("MediaTek feature 0x{feature:04X}: header requires {needed} bytes; expanding allocation from {alloc}"));
-                        let cdb = cdb_get_config(feature, needed as u16);
+                        let cdb = cdb::get_configuration(feature, needed as u16);
                         data = dev.command_in(&cdb, needed)?;
                         log_field_descriptor(feature, &data, Some(needed));
                     }
@@ -623,38 +469,14 @@ pub struct FieldDescriptor {
 }
 
 /// Parse a REQUEST SENSE payload into `(sense_key, asc, ascq)`.
-///
-/// Supports fixed-format sense (response code 0x70/0x71: key in byte 2 low
-/// nibble, ASC in byte 12, ASCQ in byte 13) and descriptor-format sense
-/// (response code 0x72/0x73: key in byte 1 low nibble, ASC in byte 2, ASCQ in
-/// byte 3). Returns `None` if the payload is too short or has an unrecognized
-/// response code.
 pub fn parse_sense(data: &[u8]) -> Option<(u8, u8, u8)> {
-    let response_code = *data.first()? & 0x7f;
-    match response_code {
-        0x70 | 0x71 => {
-            if data.len() < 14 {
-                return None;
-            }
-            Some((data[2] & 0x0F, data[12], data[13]))
-        }
-        0x72 | 0x73 => {
-            if data.len() < 4 {
-                return None;
-            }
-            Some((data[1] & 0x0F, data[2], data[3]))
-        }
-        _ => None,
-    }
+    mediatek_optical::sense::parse(data)
 }
 
-/// SCSI sense keys that unambiguously indicate a programming failure on the
-/// MTK flash path: MEDIUM (0x3), HARDWARE (0x4), ABORTED (0xB). The post-settle
-/// and post-flash sense checks both hard-fail on these three; every other key
-/// is non-fatal at that layer (read-back verify + re-enumeration are the
-/// authorities).
+/// MEDIUM (0x3), HARDWARE (0x4) and ABORTED (0xB): the sense keys that prove a
+/// programming failure on the MTK flash path.
 pub fn sense_key_is_fatal(key: u8) -> bool {
-    matches!(key, 0x3 | 0x4 | 0xB)
+    mediatek_optical::sense::is_flash_fault(key)
 }
 
 // INQUIRY's additional length counts bytes after its five-byte header.
@@ -857,19 +679,19 @@ fn flash_sequence(image_len: usize, chunk: usize) -> Result<Vec<FlashStep>> {
     let mut steps = Vec::with_capacity(image_len / chunk + 6);
     steps.push(FlashStep {
         label: LABEL_PROBE,
-        cdb: cdb_read_probe(),
+        cdb: cdb::probe(),
         dir: Dir::In,
-        data_len: PROBE_ALLOC,
+        data_len: cdb::PROBE_LEN,
     });
     steps.push(FlashStep {
         label: LABEL_READY,
-        cdb: cdb_test_unit_ready(),
+        cdb: cdb::test_unit_ready(),
         dir: Dir::None,
         data_len: 0,
     });
     steps.push(FlashStep {
         label: LABEL_PREPARE,
-        cdb: cdb_wb_prepare(),
+        cdb: cdb::enter_update(),
         dir: Dir::Out,
         data_len: 0,
     });
@@ -877,7 +699,7 @@ fn flash_sequence(image_len: usize, chunk: usize) -> Result<Vec<FlashStep>> {
     while offset < image_len {
         steps.push(FlashStep {
             label: LABEL_STREAM,
-            cdb: cdb_wb_data(offset as u32, chunk as u16),
+            cdb: cdb::transfer(offset as u32, chunk as u16),
             dir: Dir::Out,
             data_len: chunk,
         });
@@ -885,28 +707,28 @@ fn flash_sequence(image_len: usize, chunk: usize) -> Result<Vec<FlashStep>> {
     }
     steps.push(FlashStep {
         label: LABEL_COMMIT,
-        cdb: cdb_wb_commit(),
+        cdb: cdb::finish(),
         dir: Dir::Out,
         data_len: 0,
     });
     steps.push(FlashStep {
         label: LABEL_READY,
-        cdb: cdb_test_unit_ready(),
+        cdb: cdb::test_unit_ready(),
         dir: Dir::None,
         data_len: 0,
     });
     steps.push(FlashStep {
         label: LABEL_STATUS,
-        cdb: cdb_request_sense(),
+        cdb: cdb::request_sense(),
         dir: Dir::In,
-        data_len: REQUEST_SENSE_ALLOC,
+        data_len: cdb::REQUEST_SENSE_LEN,
     });
     Ok(steps)
 }
 
 /// Render the flash sequence for human review (the dry-run output).
 fn describe_sequence(steps: &[FlashStep], verbose: bool) -> String {
-    use crate::engine::human_size;
+    use crate::style::human_size;
     use std::fmt::Write as _;
 
     let stream_total: usize = steps
@@ -974,6 +796,181 @@ fn describe_sequence(steps: &[FlashStep], verbose: bool) -> String {
     out
 }
 
+// ---- Protocol probe ----------------------------------------------------------
+
+/// Read the MT19xx boot banner, or `None` when the drive refuses the read.
+pub(crate) fn read_mt19_banner(dev: &mut dyn ScsiDevice) -> Option<String> {
+    // The 0x3000 ROM buffer is exactly ROM_003000_LEN (32 B); asking for more
+    // makes the drive reject the read with ILLEGAL REQUEST.
+    let data = dev
+        .command_in(
+            &cdb::read_memory(ROM_003000_OFFSET, ROM_003000_LEN),
+            ROM_003000_LEN as usize,
+        )
+        .ok()?;
+    let id = mediatek_optical::Identity::parse(&[0; mediatek_optical::INQUIRY_LEN], &data, &[])?;
+    let banner = id.banner().to_owned();
+    (!banner.is_empty()).then_some(banner)
+}
+
+/// True iff GET CONFIGURATION returns a complete firmware-date feature
+/// (0x010C), one half of the MT19xx protocol probe.
+pub(crate) fn get_config_is_mtk(dev: &mut dyn ScsiDevice) -> bool {
+    match (Acquire::GetConfig {
+        feature: FEATURE_FWDATE,
+        alloc: 32,
+    })
+    .run(dev)
+    {
+        Ok(_) => true,
+        Err(error) => {
+            crate::diagnostics::record(format!("MediaTek feature probe did not match: {error:#}"));
+            false
+        }
+    }
+}
+
+/// True iff the drive's boot banner at `0x003000` carries the ASCII **`MT19`**
+/// family signature ("MT1959 Boot ..." / "MT1939 Boot ..."). Backstops the
+/// standard MMC feature check so a compliant non-MTK drive that also
+/// implements feature 0x010C cannot be misclassified as MTK.
+pub(crate) fn has_mt19_banner(dev: &mut dyn ScsiDevice) -> bool {
+    let Ok(rom) = dev.command_in(
+        &cdb::read_memory(ROM_003000_OFFSET, ROM_003000_LEN),
+        ROM_003000_LEN as usize,
+    ) else {
+        return false;
+    };
+    rom.len() == ROM_003000_LEN as usize
+        && mediatek_optical::Identity::parse(&[0; mediatek_optical::INQUIRY_LEN], &rom, &[])
+            .is_some_and(|id| id.is_mt19())
+}
+
+/// Read `len` bytes at `offset`, retrying once: the chip gate must not fail
+/// open on a transient read error.
+fn read_exact_retry(dev: &mut dyn ScsiDevice, offset: u32, len: u32) -> Option<Vec<u8>> {
+    (0..2).find_map(|_| {
+        dev.command_in(&cdb::read_memory(offset, len), len as usize)
+            .ok()
+            .filter(|data| data.len() == len as usize)
+    })
+}
+
+/// The drive's controller generation as `(descriptor tag, boot banner)`. The
+/// descriptor's `MTEKMT19xx` tag is authoritative; the banner names the
+/// bootloader generation and reads `MT1959 Boot` on some MT1939 parts.
+fn read_chip_sources(
+    dev: &mut dyn ScsiDevice,
+) -> (
+    Option<mediatek_optical::Chip>,
+    Option<mediatek_optical::Chip>,
+) {
+    let tag = read_exact_retry(dev, ROM_1EC000_OFFSET, ROM_1EC000_LEN)
+        .and_then(|d| mediatek_optical::Chip::from_tag(&d));
+    let banner = read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN)
+        .and_then(|b| mediatek_optical::Chip::from_banner(&b));
+    (tag, banner)
+}
+
+/// The drive's controller generation for display: the descriptor tag, else
+/// the boot banner.
+pub(crate) fn read_chip(dev: &mut dyn ScsiDevice) -> Option<mediatek_optical::Chip> {
+    let (tag, banner) = read_chip_sources(dev);
+    tag.or(banner)
+}
+
+/// The chip gate (never overridable): the image's chip generation must equal
+/// the drive's. The drive's descriptor tag decides. The banner is accepted
+/// only for an image that itself carries no identity tag (some MT1939 builds),
+/// because a banner can name the wrong generation. Anything unreadable refuses.
+fn ensure_same_chip(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<mediatek_optical::Chip> {
+    let info = freemkv_chipset::detect_chip(image)
+        .context("identifying the image's controller generation")?;
+    let (tag, banner) = read_chip_sources(dev);
+    let drive = match (tag, info.confidence) {
+        (Some(chip), _) => chip,
+        (None, freemkv_chipset::Confidence::BannerFallback) => banner.context(
+            "could not read this drive's controller generation (MT1959/MT1939) from its \
+             identity descriptor or boot banner; refusing to flash",
+        )?,
+        (None, freemkv_chipset::Confidence::TagString) => bail!(
+            "could not read this drive's identity descriptor to confirm its controller \
+             generation (MT1959/MT1939); refusing to flash"
+        ),
+    };
+    if info.family != drive {
+        bail!(
+            "image is {} firmware but this drive is {drive} silicon — refusing to flash \
+             across chip generations. This gate cannot be overridden.",
+            info.family
+        );
+    }
+    Ok(drive)
+}
+
+/// The boot-page gate. A drive read (boot page equal to the mirror at
+/// `0x10000`) is never flashable: writing it would store the read-back page in
+/// place of the boot page, which the integrity table does not cover. Without
+/// `--force`, the boot page must also be one the OEM catalog knows.
+fn ensure_flashable_boot_page(image: &[u8], forced: bool) -> Result<()> {
+    if mediatek_optical::image::is_drive_read(image) {
+        bail!(
+            "this is a raw drive read (its boot page is the read-back copy), not a flashable \
+             image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's \
+             update image. This gate cannot be overridden."
+        );
+    }
+    let boot = &image[..mediatek_optical::layout::BOOT_PAGE.len];
+    if !forced && !oem::catalog().knows_boot_page(boot) {
+        bail!(
+            "the image's boot page is not one any known OEM build stores — refusing to flash \
+             an image whose boot page may not start the drive"
+        );
+    }
+    Ok(())
+}
+
+/// After the commit trailer: TEST UNIT READY (best-effort) and REQUEST SENSE.
+/// Hard-fail ONLY on a sense key that proves a programming failure; every other
+/// outcome is left to read-back verify and firmware re-identification.
+fn post_commit_status(dev: &mut dyn ScsiDevice) -> Result<()> {
+    if let Err(error) = dev.command_in(&cdb::test_unit_ready(), 0) {
+        crate::diagnostics::record(format!("MediaTek post-commit readiness: {error:#}"));
+    }
+    let sense = match dev.command_in(&cdb::request_sense(), cdb::REQUEST_SENSE_LEN) {
+        Ok(data) => data,
+        Err(error) => {
+            eprintln!("warning: post-flash REQUEST SENSE failed: {error:#}");
+            Vec::new()
+        }
+    };
+    match parse_sense(&sense) {
+        // Hard-fail ONLY on an unambiguous programming failure (see
+        // `sense_key_is_fatal`). Every other key is non-fatal here — the
+        // drive re-enumeration is the authority.
+        Some((key, asc, ascq)) if sense_key_is_fatal(key) => {
+            bail!(
+                "drive reported an error after flash — {}; the flash may have FAILED",
+                crate::platform::describe_sense(key, asc, ascq)
+            );
+        }
+        // Unparseable/short sense: the burn already completed and TEST UNIT
+        // READY passed, so do not conclude failure — but surface it, since
+        // read-back verify is the remaining check.
+        None => {
+            eprintln!(
+                "warning: could not parse the post-flash REQUEST SENSE response ({} bytes); relying on read-back verify",
+                sense.len()
+            );
+        }
+        // Any other key (0x0/0x1 clean, 0x2/0x6 benign transient, or an
+        // unexpected 0x5/0x7/…): not hard-failed here — post-flash identity
+        // re-enumeration + read-back verify are the authorities.
+        _ => {}
+    }
+    Ok(())
+}
+
 // ---- The MTK family ---------------------------------------------------------
 
 /// The MediaTek MT19xx drive family.
@@ -995,19 +992,17 @@ impl DriveFamily for Mtk {
             return Ok(None);
         }
         Ok(
-            (super::get_config_is_mtk(dev) && super::has_mt19_banner(dev)).then_some(
-                super::ProbeEvidence {
-                    family: Family::Mtk,
-                    backend_name: self.backend_name(),
-                    discriminator: "MMC 0x010C + MT19 boot ROM banner",
-                },
-            ),
+            (get_config_is_mtk(dev) && has_mt19_banner(dev)).then_some(super::ProbeEvidence {
+                family: Family::Mtk,
+                backend_name: self.backend_name(),
+                discriminator: "MMC 0x010C + MT19 boot ROM banner",
+            }),
         )
     }
 
     fn identity(&self, dev: &mut dyn ScsiDevice) -> super::Identity {
         let mut identity = super::read_identity(dev);
-        identity.banner = super::read_mt19_banner(dev);
+        identity.banner = read_mt19_banner(dev);
         identity
     }
 
@@ -1015,15 +1010,29 @@ impl DriveFamily for Mtk {
         Some("bin")
     }
 
-    fn backup_notice(&self, _bytes: &[u8]) -> super::BackupNotice {
-        super::BackupNotice::VerifiedOem(
-            "OEM-format image: per-drive settings, calibration and revocation lists \
-             replaced with factory contents; safe to share and flash back"
-                .into(),
-        )
+    fn backup_notice(&self, bytes: &[u8]) -> super::BackupNotice {
+        backup::notice(bytes)
     }
 
-    fn classify_input(&self, path: &std::path::Path) -> super::InputKind {
+    fn describe_file(&self, image: &[u8]) -> Option<Result<()>> {
+        file_info::describe(image)
+    }
+
+    fn print_device_info(&self, dev: &mut dyn ScsiDevice) {
+        let chip = read_chip(dev).map_or("Not reported", |c| c.label());
+        crate::output::field("Chipset", chip);
+        println!("{}", crate::style::kv("chipset", chip));
+    }
+
+    fn print_flash_notes(&self, image: &[u8], drive_model: &str, allow_crossflash: bool) {
+        if let Some(info) =
+            crossflash::preview_crossflash(image, drive_model, Family::Mtk, allow_crossflash)
+        {
+            crossflash::print_crossflash_banner(&info);
+        }
+    }
+
+    fn classify_input(&self, path: &std::path::Path, _bytes: &[u8]) -> super::InputKind {
         super::sniff_input(path)
     }
 
@@ -1043,7 +1052,7 @@ impl DriveFamily for Mtk {
     }
 
     fn capture_backup(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-        crate::engine::backup::capture_mtk_backup(dev, self)
+        backup::capture(dev, self)
     }
 
     fn dump_is_raw(&self) -> bool {
@@ -1067,22 +1076,25 @@ impl DriveFamily for Mtk {
         Ok(image)
     }
 
-    fn validate_forced_image(&self, _dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<()> {
+    fn validate_forced_image(&self, dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<()> {
         if image.len() != self.image_size() {
             bail!("firmware must be exactly {} bytes", self.image_size());
         }
         if !crate::cmac::verify(image) {
             bail!("firmware image fails its AES-CMAC integrity check");
         }
+        // The boot-page and chip gates survive --force.
+        ensure_flashable_boot_page(image, true)?;
+        ensure_same_chip(dev, image)?;
         Ok(())
     }
 
     fn validate_forced_backup(&self, bytes: &[u8], _target_model: &str) -> Result<Vec<u8>> {
-        crate::engine::backup::decode_mtk_backup(bytes, self.image_size())
+        backup::decode(bytes, self.image_size())
     }
 
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
-        crate::engine::backup::validate_mtk_backup(bytes, target_model, self.image_size())
+        backup::validate(bytes, target_model, self.image_size())
     }
 
     fn validate_image(
@@ -1106,19 +1118,9 @@ impl DriveFamily for Mtk {
                  authenticator and can brick the drive."
             );
         }
-        let fine_family = if allow_crossflash {
-            let (bytes, _, _) = self.read_full_image(dev).with_context(|| {
-                "reading current firmware to confirm MT19xx controller variant for --allow-crossflash"
-            })?;
-            Some(
-                freemkv_chipset::detect_chip(&bytes)
-                    .context("identifying controller variant from current firmware")?
-                    .family,
-            )
-        } else {
-            None
-        };
-        crate::engine::ensure_image_matches_drive(
+        ensure_flashable_boot_page(image, false)?;
+        let fine_family = Some(ensure_same_chip(dev, image)?);
+        crossflash::ensure_image_matches_drive(
             image,
             drive_product,
             Family::Mtk,
@@ -1133,10 +1135,6 @@ impl DriveFamily for Mtk {
 
     fn capabilities(&self) -> Capabilities {
         Capabilities::all()
-    }
-
-    fn read_dump(&self, dev: &mut dyn ScsiDevice) -> Result<UserDump> {
-        DumpPlan::new().execute(dev)
     }
 
     fn read_full_image(&self, dev: &mut dyn ScsiDevice) -> Result<super::FullImage> {
@@ -1198,7 +1196,7 @@ impl DriveFamily for Mtk {
         // caller MUST NOT continue as if it were.
         let deadline = Instant::now() + Duration::from_secs(45);
         loop {
-            let error = match dev.command_in(&cdb_test_unit_ready(), 0) {
+            let error = match dev.command_in(&cdb::test_unit_ready(), 0) {
                 Ok(_) => break,
                 Err(error) => error,
             };
@@ -1227,7 +1225,7 @@ impl DriveFamily for Mtk {
         // back down to relying on downstream read-back verify alone, and the
         // operator has no way to know that happened. Matches the sibling
         // `flash_close` behaviour on unparseable sense.
-        let sense = match dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC) {
+        let sense = match dev.command_in(&cdb::request_sense(), cdb::REQUEST_SENSE_LEN) {
             Ok(b) => b,
             Err(e) => {
                 eprintln!(
@@ -1266,14 +1264,15 @@ impl DriveFamily for Mtk {
         // PROBE is a real ROM read and must succeed. TEST UNIT READY is a faithful
         // handshake: flashed with no disc, a healthy drive answers benign no-medium
         // (key 0x2 ASC 0x3A); any OTHER not-ready reason aborts before PREPARE.
-        let probe = dev.command_in(&cdb_read_probe(), PROBE_ALLOC)?;
-        if probe.len() != PROBE_ALLOC {
+        let probe = dev.command_in(&cdb::probe(), cdb::PROBE_LEN)?;
+        if probe.len() != cdb::PROBE_LEN {
             bail!(
-                "short MediaTek preflight ROM read: got {} of {PROBE_ALLOC} bytes",
-                probe.len()
+                "short MediaTek preflight ROM read: got {} of {} bytes",
+                probe.len(),
+                cdb::PROBE_LEN
             );
         }
-        let _ = dev.command_in(&cdb_test_unit_ready(), 0)?;
+        let _ = dev.command_in(&cdb::test_unit_ready(), 0)?;
         Ok(())
     }
 
@@ -1299,90 +1298,53 @@ impl DriveFamily for Mtk {
         )))
     }
 
-    fn flash_open(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
-        self.preflight(dev)?;
-        // PREPARE is the one data-out that must land (strict).
-        dev.command_out_strict(&cdb_wb_prepare(), &[])
-    }
-
-    fn flash_chunk(&self, dev: &mut dyn ScsiDevice, offset: usize, bytes: &[u8]) -> Result<()> {
-        dev.command_out_strict(&cdb_wb_data(offset as u32, bytes.len() as u16), bytes)
-    }
-
-    /// `_mode` is currently informational only: on MTK the commit handshake
-    /// (COMMIT + READY + STATUS below) is always sent regardless of
-    /// [`FlashMode::Main`] vs [`FlashMode::Full`] — the drive programs on
-    /// completion of the streamed 2 MiB either way.
-    fn flash_close(&self, dev: &mut dyn ScsiDevice, _mode: FlashMode) -> Result<()> {
-        // The burn completed on the final chunk; COMMIT + READY + REQUEST SENSE are
-        // trailers the reinit-ing drive may answer with a transient CHECK CONDITION,
-        // so all are best-effort. Only a real fault in the parsed sense below fails.
-        if let Err(error) = dev.command_out_strict(&cdb_wb_commit(), &[]) {
-            eprintln!("MediaTek commit trailer returned an error: {error:#}; checking completion and read-back");
-        }
-        if let Err(error) = dev.command_in(&cdb_test_unit_ready(), 0) {
-            crate::diagnostics::record(format!("MediaTek post-commit readiness: {error:#}"));
-        }
-        let sense = match dev.command_in(&cdb_request_sense(), REQUEST_SENSE_ALLOC) {
-            Ok(data) => data,
-            Err(error) => {
-                eprintln!("warning: post-flash REQUEST SENSE failed: {error:#}");
-                Vec::new()
+    /// Stream the whole payload through `mediatek_optical`'s flash session:
+    /// PROBE + TEST UNIT READY + PREPARE, the 16 KiB transfers, then the commit
+    /// trailer. `_mode` is informational on MTK: the drive programs flash when
+    /// the last chunk of the full 2 MiB image lands.
+    fn flash_stream(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        payload: &[u8],
+        _mode: FlashMode,
+        progress: &mut dyn FnMut(usize),
+    ) -> Result<()> {
+        use crate::drive::transport::{mtk_err, ScsiTransport, SharedDevice};
+        let shared = SharedDevice::new(dev);
+        {
+            let mut transport = ScsiTransport::flash(&shared);
+            let mut session = mediatek_optical::drive::enter_update(&mut transport)
+                .map_err(mtk_err)
+                .context(
+                    "MediaTek preflight/prepare failed before any firmware data was sent; the drive \
+                     may be in update mode — power-cycle it before retrying",
+                )?;
+            let mut sent = 0usize;
+            for piece in payload.chunks(CHUNK) {
+                session.write(sent as u32, piece).map_err(mtk_err).with_context(|| {
+                    format!(
+                        "firmware write failed at offset {sent:#x}, length {}; drive may contain partial firmware",
+                        piece.len()
+                    )
+                })?;
+                sent += piece.len();
+                progress(sent);
             }
-        };
-        match parse_sense(&sense) {
-            // Hard-fail ONLY on an unambiguous programming failure (see
-            // `sense_key_is_fatal`). Every other key is non-fatal here — the
-            // drive re-enumeration is the authority.
-            Some((key, asc, ascq)) if sense_key_is_fatal(key) => {
-                bail!(
-                    "drive reported an error after flash — {}; the flash may have FAILED",
-                    crate::platform::describe_sense(key, asc, ascq)
-                );
+            // The burn completed on the final chunk; the commit is a trailer the
+            // reinitializing drive may answer with a transient CHECK CONDITION.
+            if let Err(error) = session.finish().map_err(mtk_err) {
+                eprintln!("MediaTek commit trailer returned an error: {error:#}; checking completion and read-back");
             }
-            // Unparseable/short sense: the burn already completed and TEST UNIT
-            // READY passed, so do not conclude failure — but surface it, since
-            // read-back verify is the remaining check.
-            None => {
-                eprintln!(
-                    "warning: could not parse the post-flash REQUEST SENSE response ({} bytes); relying on read-back verify",
-                    sense.len()
-                );
-            }
-            // Any other key (0x0/0x1 clean, 0x2/0x6 benign transient, or an
-            // unexpected 0x5/0x7/…): not hard-failed here — post-flash identity
-            // re-enumeration + read-back verify are the authorities (see fn doc).
-            _ => {}
         }
-        Ok(())
+        shared.with(post_commit_status)
     }
 
     fn readback(&self, dev: &mut dyn ScsiDevice, offset: usize, len: usize) -> Result<Vec<u8>> {
-        let cdb = cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, offset as u32, len as u32);
+        let cdb = cdb::read_memory(offset as u32, len as u32);
         dev.command_in(&cdb, len)
-    }
-
-    fn restore_regions<'a>(&self, dump: &'a UserDump) -> Vec<RestoreRegion<'a>> {
-        vec![
-            RestoreRegion {
-                label: "rom_1EC000.bin",
-                offset: ROM_1EC000_OFFSET,
-                bytes: &dump.rom_1ec000,
-            },
-            RestoreRegion {
-                label: "rom_1F0000.bin",
-                offset: ROM_1F0000_OFFSET,
-                bytes: &dump.rom_1f0000,
-            },
-        ]
-    }
-
-    fn write_region(&self, dev: &mut dyn ScsiDevice, offset: u32, bytes: &[u8]) -> Result<()> {
-        let cdb = cdb_write_buffer(MODE_6, FLASH_BUFFER_ID, offset, bytes.len() as u32);
-        dev.command_out_strict(&cdb, bytes)
     }
 }
 
 #[cfg(test)]
-#[path = "mtk_tests.rs"]
+#[path = "mod_tests.rs"]
 mod tests;

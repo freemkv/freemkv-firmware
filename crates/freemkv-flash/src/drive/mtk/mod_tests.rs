@@ -8,7 +8,7 @@ use crate::platform::MockScsiDevice;
 #[test]
 fn read_buffer_cdb_layout() {
     assert_eq!(
-        cdb_read_buffer(MODE_6, ROM_BUFFER_ID, 0x1EC000, 0x100),
+        cdb::read_memory(0x1EC000, 0x100),
         [0x3C, 0x06, 0x00, 0x1E, 0xC0, 0x00, 0x00, 0x01, 0x00, 0x00]
     );
 }
@@ -16,7 +16,7 @@ fn read_buffer_cdb_layout() {
 #[test]
 fn get_config_cdb_layout() {
     assert_eq!(
-        cdb_get_config(FEATURE_FWDATE, FD_LEN),
+        cdb::get_configuration(FEATURE_FWDATE, FD_LEN),
         [0x46, 0x02, 0x01, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x1C, 0x00]
     );
 }
@@ -24,7 +24,7 @@ fn get_config_cdb_layout() {
 #[test]
 fn targeted_write_buffer_cdb_layout() {
     // A 64 KiB region write (len exceeds u16) uses the 10-byte 0x3B form.
-    let cdb = cdb_write_buffer(MODE_6, FLASH_BUFFER_ID, 0x1F0000, 0x10000);
+    let cdb = cdb::write_buffer(cdb::MODE_DATA, cdb::BUFFER_ID, 0x1F0000, 0x10000);
     assert_eq!(
         cdb,
         [0x3B, 0x06, 0x00, 0x1F, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00]
@@ -33,15 +33,15 @@ fn targeted_write_buffer_cdb_layout() {
 
 #[test]
 fn flash_sequence_cdbs_are_twelve_bytes() {
-    assert_eq!(cdb_read_probe().len(), 12);
-    assert_eq!(cdb_test_unit_ready(), [0u8; 12]);
-    assert_eq!(cdb_wb_prepare()[9], 0x0B);
+    assert_eq!(cdb::probe().len(), 12);
+    assert_eq!(cdb::test_unit_ready(), [0u8; 12]);
+    assert_eq!(cdb::enter_update()[9], 0x0B);
     assert_eq!(
-        cdb_wb_data(0x004000, 0x4000),
+        cdb::transfer(0x004000, 0x4000),
         [0x3B, 0x06, 0, 0x00, 0x40, 0x00, 0x00, 0x40, 0x00, 0, 0, 0]
     );
-    assert_eq!(&cdb_wb_commit()[10..], &[0x1B, 0x12]);
-    assert_eq!(cdb_request_sense()[0], 0x03);
+    assert_eq!(&cdb::finish()[10..], &[0x1B, 0x12]);
+    assert_eq!(cdb::request_sense()[0], 0x03);
 }
 
 // ---- enc --------------------------------------------------------------------
@@ -286,17 +286,14 @@ fn mtk_geometry_and_readback() {
     // in `readback` invisible. Pin the exact CDB *and* the returned content.
     let want: Vec<u8> = (0..64u32).map(|i| (i * 3 + 1) as u8).collect();
     let mut dev = MockScsiDevice::new().on(
-        |cdb| cdb == cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, 0x1000, 64).as_slice(),
+        |cdb| cdb == cdb::read_memory(0x1000, 64).as_slice(),
         want.clone(),
     );
     let got = m.readback(&mut dev, 0x1000, 64).unwrap();
     assert_eq!(got.len(), 64);
     assert_eq!(got, want);
     assert_eq!(dev.reads[0][0], 0x3C);
-    assert_eq!(
-        dev.reads[0],
-        cdb_read_buffer(MODE_6, FLASH_BUFFER_ID, 0x1000, 64)
-    );
+    assert_eq!(dev.reads[0], cdb::read_memory(0x1000, 64));
 }
 
 #[test]
@@ -350,13 +347,11 @@ fn preflight_is_read_only_on_a_responsive_drive() {
 }
 
 #[test]
-fn flash_open_aborts_without_writing_when_preflight_fails() {
+fn flash_stream_aborts_without_writing_when_preflight_fails() {
     // TEST UNIT READY fails at the transport for a non-tolerated reason (a real
     // fault). flash_open must abort BEFORE issuing PREPARE — no writes.
     let mut dev = MockScsiDevice::new().on_fail(|cdb| cdb == [0u8; 12].as_slice(), "TUR faulted");
-    assert!(Mtk
-        .flash_open(&mut dev, crate::manifest::FlashMode::Full)
-        .is_err());
+    assert!(stream(&mut dev, &[0; 32]).is_err());
     assert!(
         dev.writes.is_empty(),
         "a not-ready drive must never reach PREPARE"
@@ -380,10 +375,8 @@ fn firmware_writes_reject_status_that_a_lenient_transport_would_tolerate() {
             "rejected write".into()
         }
     }
-    assert!(Mtk
-        .flash_open(&mut Rejected, crate::manifest::FlashMode::Full)
-        .is_err());
-    assert!(Mtk.flash_chunk(&mut Rejected, 0, &[0; 4]).is_err());
+    // PREPARE is the first data-out; it goes strict and its status aborts.
+    assert!(stream(&mut Rejected, &[0; 4]).is_err());
 }
 
 fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
@@ -524,12 +517,16 @@ fn inquiry_backup_rejects_truncated_or_inconsistent_identity() {
 
 #[test]
 fn short_preflight_rom_read_prevents_prepare_write() {
-    let mut dev =
-        MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), vec![0; PROBE_ALLOC - 1]);
-    let error = Mtk.flash_open(&mut dev, FlashMode::Full).unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("short MediaTek preflight ROM read"));
+    let mut dev = MockScsiDevice::new().on(
+        |cdb| cdb.first() == Some(&0x3c),
+        vec![0; cdb::PROBE_LEN - 1],
+    );
+    let error = format!("{:#}", stream(&mut dev, &[0; 32]).unwrap_err());
+    assert!(
+        error.contains("before any firmware data was sent"),
+        "{error}"
+    );
+    assert!(error.contains("short transfer"), "{error}");
     assert!(dev.writes.is_empty());
 }
 
@@ -547,4 +544,30 @@ fn fixed_sense_with_valid_information_bit_preserves_hardware_fault() {
     sense[7] = 10;
     sense[12] = 0x44;
     assert_eq!(parse_sense(&sense), Some((4, 0x44, 0)));
+}
+
+/// Run the MTK image-stream flash of `payload`, discarding progress.
+fn stream(dev: &mut dyn crate::platform::ScsiDevice, payload: &[u8]) -> anyhow::Result<()> {
+    Mtk.flash_stream(dev, payload, crate::manifest::FlashMode::Full, &mut |_| {})
+}
+
+#[test]
+fn flash_stream_sends_the_oem_sequence_and_reports_progress() {
+    let mut dev = MockScsiDevice::new();
+    let payload = vec![0xA5u8; 2 * CHUNK];
+    let mut seen = Vec::new();
+    Mtk.flash_stream(
+        &mut dev,
+        &payload,
+        crate::manifest::FlashMode::Full,
+        &mut |n| seen.push(n),
+    )
+    .unwrap();
+    assert_eq!(seen, vec![CHUNK, 2 * CHUNK]);
+    let cdbs: Vec<&[u8]> = dev.writes.iter().map(|(c, _)| c.as_slice()).collect();
+    assert_eq!(cdbs[0], cdb::enter_update());
+    assert_eq!(cdbs[1], cdb::transfer(0, CHUNK as u16));
+    assert_eq!(cdbs[2], cdb::transfer(CHUNK as u32, CHUNK as u16));
+    assert_eq!(cdbs[3], cdb::finish());
+    assert_eq!(dev.reads[0], cdb::probe());
 }

@@ -1,4 +1,4 @@
-//! Embedded OEM kernel table (`pioneer_k.bin`): a gzip'd JSON map from a
+//! Embedded OEM kernel table (`k.bin`): a gzip'd JSON map from a
 //! decoded-kernel-image SHA-256 to that kernel's true OEM revision/date and the
 //! key material needed to reconstruct a byte-exact OEM kernel envelope.
 //!
@@ -46,7 +46,7 @@ struct RawEntry {
     key_hex: Option<String>,
 }
 
-const PIONEER_K: &[u8] = include_bytes!("pioneer_k.bin");
+const PIONEER_K: &[u8] = include_bytes!("k.bin");
 
 fn table() -> &'static HashMap<String, KernelEntry> {
     static TABLE: OnceLock<HashMap<String, KernelEntry>> = OnceLock::new();
@@ -59,9 +59,9 @@ fn parse(gz: &[u8]) -> Result<HashMap<String, KernelEntry>, String> {
     let mut json = String::new();
     flate2::read::GzDecoder::new(gz)
         .read_to_string(&mut json)
-        .map_err(|e| format!("pioneer_k.bin gunzip: {e}"))?;
+        .map_err(|e| format!("k.bin gunzip: {e}"))?;
     let raw: HashMap<String, RawEntry> =
-        serde_json::from_str(&json).map_err(|e| format!("pioneer_k.bin json: {e}"))?;
+        serde_json::from_str(&json).map_err(|e| format!("k.bin json: {e}"))?;
     let mut out = HashMap::with_capacity(raw.len());
     for (hash, v) in raw {
         let key = match (v.seed, v.key_hex) {
@@ -157,5 +157,5 @@ fn recognize_with<'a>(
 }
 
 #[cfg(test)]
-#[path = "pioneer_k_tests.rs"]
+#[path = "k_tests.rs"]
 mod tests;

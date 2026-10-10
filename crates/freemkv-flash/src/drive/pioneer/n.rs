@@ -1,4 +1,4 @@
-//! Embedded OEM normal table (`pioneer_n.bin`): a gzip'd JSON map from a
+//! Embedded OEM normal table (`n.bin`): a gzip'd JSON map from a
 //! decoded-normal-image SHA-256 to that normal's true OEM revision/date, its LCG
 //! encoding seed, and the verbatim OEM ECDSA signature block needed to rebuild a
 //! byte-exact OEM normal envelope.
@@ -12,7 +12,7 @@
 //! — the obvious "not OEM / unverified" sentinel.
 //!
 //! Loaded lazily and only when needed (a Pioneer backup), mirroring
-//! `crate::pioneer_k`, so the MTK path and startup pay nothing.
+//! `crate::drive::pioneer::k`, so the MTK path and startup pay nothing.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -40,7 +40,7 @@ struct RawEntry {
     sig_hex: String,
 }
 
-const PIONEER_N: &[u8] = include_bytes!("pioneer_n.bin");
+const PIONEER_N: &[u8] = include_bytes!("n.bin");
 
 fn table() -> &'static HashMap<String, NormalEntry> {
     static TABLE: OnceLock<HashMap<String, NormalEntry>> = OnceLock::new();
@@ -53,9 +53,9 @@ fn parse(gz: &[u8]) -> Result<HashMap<String, NormalEntry>, String> {
     let mut json = String::new();
     flate2::read::GzDecoder::new(gz)
         .read_to_string(&mut json)
-        .map_err(|e| format!("pioneer_n.bin gunzip: {e}"))?;
+        .map_err(|e| format!("n.bin gunzip: {e}"))?;
     let raw: HashMap<String, RawEntry> =
-        serde_json::from_str(&json).map_err(|e| format!("pioneer_n.bin json: {e}"))?;
+        serde_json::from_str(&json).map_err(|e| format!("n.bin json: {e}"))?;
     let mut out = HashMap::with_capacity(raw.len());
     for (hash, v) in raw {
         let hex = v.seed.strip_prefix("0x").unwrap_or(&v.seed);
@@ -94,5 +94,5 @@ pub fn lookup(image_sha256: &str) -> Option<&'static NormalEntry> {
 }
 
 #[cfg(test)]
-#[path = "pioneer_n_tests.rs"]
+#[path = "n_tests.rs"]
 mod tests;

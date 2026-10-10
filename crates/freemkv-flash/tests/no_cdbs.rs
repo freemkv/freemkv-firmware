@@ -1,23 +1,25 @@
-//! Source-tree invariant: the Pioneer flasher knows no raw SCSI CDBs.
+//! Source-tree invariant: the flasher's protocol backends know no raw SCSI CDBs.
 //!
 //! Every Pioneer vendor command (identity, read-unlock knock, memory reads, OEM
 //! update entry / transfer / finish, the DVR handshake) is issued by
-//! `pioneer_optical::drive::*`. The flasher's only contact with the wire is the
-//! one `Transport` adapter, `src/drive/pioneer_transport.rs`, which forwards the
-//! crate's CDBs untouched and so itself carries no opcode literals.
+//! `pioneer_optical`, and every MediaTek command (identity, memory reads, the
+//! flash session) by `mediatek_optical`. The flasher's only contact with those
+//! sequences is the one `Transport` adapter, `src/drive/transport.rs`, which
+//! forwards the crates' CDBs untouched and so itself carries no opcode literals.
 //!
-//! This scans the production code of every Pioneer source file (test modules and
-//! `*_tests.rs` are the byte-level oracles and are exempt) for WRITE BUFFER /
-//! READ BUFFER opcode literals (`0x3B` / `0x3C`, or the hex-text form `3B 0x` /
-//! `3C 0x`). The MediaTek backend (`drive/mtk.rs`, `probe.rs`, ...) is a different
-//! protocol family that legitimately issues its own CDBs and is out of scope.
+//! This scans the production code of every Pioneer and MediaTek backend source
+//! file (test modules and `*_tests.rs` are the byte-level oracles and are
+//! exempt) for WRITE BUFFER / READ BUFFER opcode literals (`0x3B` / `0x3C`, or
+//! the hex-text form `3B 0x` / `3C 0x`). Research tooling (`probe.rs`) and the
+//! declarative brand catalog (`flashset.rs`) describe CDBs as data and are out
+//! of scope.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ADAPTER: &str = "src/drive/pioneer_transport.rs";
+const ADAPTER: &str = "src/drive/transport.rs";
 
-fn pioneer_sources(root: &Path) -> Vec<PathBuf> {
+fn backend_sources(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![root.join("src")];
     while let Some(dir) = stack.pop() {
@@ -28,12 +30,12 @@ fn pioneer_sources(root: &Path) -> Vec<PathBuf> {
                 continue;
             }
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            let in_pioneer_dir = path
+            let in_backend_dir = path
                 .parent()
-                .is_some_and(|p| p.file_name().is_some_and(|n| n == "pioneer"));
+                .is_some_and(|p| p.file_name().is_some_and(|n| n == "pioneer" || n == "mtk"));
             if name.ends_with(".rs")
                 && !name.ends_with("_tests.rs")
-                && (name.starts_with("pioneer") || in_pioneer_dir)
+                && (name.starts_with("pioneer") || in_backend_dir || path.ends_with(ADAPTER))
             {
                 out.push(path);
             }
@@ -106,12 +108,16 @@ fn opcode_hits(src: &str) -> Vec<String> {
 }
 
 #[test]
-fn no_pioneer_source_contains_a_write_or_read_buffer_opcode() {
+fn no_backend_source_contains_a_write_or_read_buffer_opcode() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = pioneer_sources(root);
+    let files = backend_sources(root);
     assert!(
         files.iter().any(|f| f.ends_with(ADAPTER)),
         "scanner must cover the adapter"
+    );
+    assert!(
+        files.iter().any(|f| f.ends_with("src/drive/mtk/mod.rs")),
+        "scanner must cover the MediaTek backend"
     );
     let mut offenders = Vec::new();
     for file in files {
@@ -122,7 +128,7 @@ fn no_pioneer_source_contains_a_write_or_read_buffer_opcode() {
     }
     assert!(
         offenders.is_empty(),
-        "raw CDB opcodes found outside pioneer_optical:\n{}",
+        "raw CDB opcodes found outside the protocol crates:\n{}",
         offenders.join("\n")
     );
 }

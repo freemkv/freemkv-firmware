@@ -162,7 +162,7 @@ fn no_medium_err_is_tolerated_so_empty_tray_can_flash() {
         ascq: 0x01,
     });
     let out = dev
-        .command_in(&crate::drive::mtk::cdb_test_unit_ready(), 0)
+        .command_in(&crate::drive::mtk::cdb::test_unit_ready(), 0)
         .expect("no-medium must be tolerated, not fatal");
     assert!(out.is_empty(), "no-medium yields 0 bytes");
 }
@@ -300,7 +300,7 @@ fn genuine_error_err_still_fails() {
         ascq: 0x00,
     });
     assert!(
-        dev.command_in(&crate::drive::mtk::cdb_test_unit_ready(), 0)
+        dev.command_in(&crate::drive::mtk::cdb::test_unit_ready(), 0)
             .is_err(),
         "a real error must not be tolerated"
     );

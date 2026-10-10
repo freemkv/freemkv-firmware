@@ -17,7 +17,7 @@
 //! writer, so the AACS + region levers are in scope; the levers self-gate on
 //! their own signatures regardless).
 
-use crate::detect::ChipFamily;
+use crate::ChipFamily;
 
 /// Media capability class, ordered `Cd < Dvd < Bd < UhdBd`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

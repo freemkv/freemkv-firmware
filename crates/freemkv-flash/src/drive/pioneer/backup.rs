@@ -2,7 +2,7 @@
 //! Capturing firmware does not capture every writable device setting or prove
 //! drive-side update acceptance. Flash compatibility remains gated separately.
 
-use crate::pioneer_bundle::{Bundle, Role};
+use crate::drive::pioneer::bundle::{Bundle, Role};
 use crate::platform::ScsiDevice;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 /// Build an encrypted package directly from two captured images.
 ///
 /// The KERNEL is reconstructed byte-for-byte OEM when its decoded image is one
-/// of our known OEM kernels (`crate::pioneer_k`): real revision/date and the
+/// of our known OEM kernels (`crate::drive::pioneer::k`): real revision/date and the
 /// OEM key table. An unrecognized kernel gets honest zero placeholders —
 /// revision `0000`, date `00/00/00`, seed `0` — so the output plainly reads as
 /// "not OEM". The NORMAL self-recovers its real revision/date from its own body
@@ -27,7 +27,7 @@ pub fn construct_signed_candidate(
     // envelope). A match rebuilds a byte-exact OEM normal (true seed + verbatim
     // OEM signature + OEM revision/date); a miss uses a zero seed and an all-zero
     // signature region — the obvious "not OEM / unverified" sentinel.
-    let normal_oem = crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(normal)));
+    let normal_oem = crate::drive::pioneer::n::lookup(&format!("{:x}", Sha256::digest(normal)));
     let (normal_seed, normal_signature, revision, date): (
         u32,
         pioneer_optical::envelope::builder::NormalSignature,
@@ -110,7 +110,7 @@ fn assemble_tar(components: &[Vec<u8>]) -> Result<Vec<u8>> {
 }
 
 /// Build just the Kernel envelope from a captured Kernel image: byte-exact OEM
-/// when recognized in `crate::pioneer_k`, otherwise zero placeholders. Used to
+/// when recognized in `crate::drive::pioneer::k`, otherwise zero placeholders. Used to
 /// still produce a Kernel-only archive when the Normal region could not be read.
 fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
     pioneer_optical::envelope::builder::encode_kernel_envelope(
@@ -124,18 +124,18 @@ fn build_kernel_envelope(kernel: &[u8], envelope_id: &str) -> Result<Vec<u8>> {
 /// Resolve the Kernel build inputs from a captured Kernel image: the byte-exact
 /// OEM revision/date/key when its decoded image (including an exact generation
 /// patch) is recognized in
-/// `crate::pioneer_k`, otherwise the obvious zero placeholders (revision
+/// `crate::drive::pioneer::k`, otherwise the obvious zero placeholders (revision
 /// `0000`, date `00/00/00`, seed `0`). Single source of truth for both the
 /// full-pair and Kernel-only capture paths, so they cannot drift.
 fn oem_kernel_build(kernel: &[u8]) -> pioneer_optical::envelope::builder::KernelBuild<'static> {
     use pioneer_optical::envelope::builder::{KernelBuild, KernelKeySource};
-    match crate::pioneer_k::recognize(kernel).map(|m| m.entry) {
+    match crate::drive::pioneer::k::recognize(kernel).map(|m| m.entry) {
         Some(entry) => KernelBuild {
             revision: &entry.revision,
             date: &entry.date,
             key: match &entry.key {
-                crate::pioneer_k::KeyMaterial::Seed(seed) => KernelKeySource::Seed(*seed),
-                crate::pioneer_k::KeyMaterial::Raw(bytes) => KernelKeySource::RawKey(bytes),
+                crate::drive::pioneer::k::KeyMaterial::Seed(seed) => KernelKeySource::Seed(*seed),
+                crate::drive::pioneer::k::KeyMaterial::Raw(bytes) => KernelKeySource::RawKey(bytes),
             },
         },
         None => KernelBuild {
@@ -272,8 +272,8 @@ fn validate_kernel_only(kernel: &[u8], product: &str) -> Result<()> {
 
 /// Per-component OEM provenance of a captured package, decided from its bytes.
 /// A component is OEM only when it is byte-exact to what the OEM would ship: the
-/// kernel is recognized by its decoded-image hash in `crate::pioneer_k`, and
-/// the normal by its decoded-image hash in `crate::pioneer_n` (which also
+/// kernel is recognized by its decoded-image hash in `crate::drive::pioneer::k`, and
+/// the normal by its decoded-image hash in `crate::drive::pioneer::n` (which also
 /// supplies the verbatim OEM signature). Generation-patched kernels are tracked
 /// separately and retain the captured bytes. An unrecognized component is a
 /// reconstruction (zero seed, zero signature) and is not OEM.
@@ -303,7 +303,7 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
         .and_then(|c| pioneer_optical::envelope::decode_envelope(&c.bytes));
     let kernel_match = decoded_kernel
         .as_ref()
-        .and_then(|d| crate::pioneer_k::recognize(&d.image));
+        .and_then(|d| crate::drive::pioneer::k::recognize(&d.image));
     let kernel_oem = kernel_match.as_ref().is_some_and(|m| !m.generation_patched);
     let kernel_generation_patched = kernel_match.as_ref().is_some_and(|m| m.generation_patched);
     // The normal is receiver-decoded with the package's own kernel, then matched
@@ -313,7 +313,10 @@ pub fn package_provenance(bytes: &[u8]) -> Provenance {
         bundle.components.iter().find(|c| c.role == Role::Main),
     ) {
         (Some(k), Some(n)) => pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, k)
-            .map(|d| crate::pioneer_n::lookup(&format!("{:x}", Sha256::digest(&d.image))).is_some())
+            .map(|d| {
+                crate::drive::pioneer::n::lookup(&format!("{:x}", Sha256::digest(&d.image)))
+                    .is_some()
+            })
             .unwrap_or(false),
         _ => false,
     };
@@ -399,7 +402,7 @@ const ADDRESS_LIMIT: usize = 0x100_0000;
 /// Whether the drive serves a one-byte B0 read at `off`. Only a 05/24/00 refusal
 /// means "past the end"; any other failure is a real error.
 fn serves_address(dev: &mut dyn ScsiDevice, off: usize) -> Result<bool> {
-    match crate::drive::pioneer_transport::read_memory_exact(dev, off as u32, 1) {
+    match crate::drive::transport::read_memory_exact(dev, off as u32, 1) {
         Ok(_) => Ok(true),
         Err(error) if crate::platform::sense_triplet(&error) == Some((0x05, 0x24, 0x00)) => {
             Ok(false)
@@ -573,7 +576,7 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
 /// Read and validate the drive identity, returning the raw INQUIRY, the 8-byte
 /// H8/SAT hardware tag, and the Kernel image length.
 fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> {
-    let identity = crate::drive::pioneer_transport::identify(dev)
+    let identity = crate::drive::transport::identify(dev)
         .context("Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created")?;
     let inquiry = identity.inquiry_bytes().to_vec();
     // Vendor+product (8..32) AND the revision (32..36) must be printable ASCII:
@@ -652,7 +655,7 @@ const DEEP_MIN_CHUNK: usize = 4;
 /// `pioneer_optical::drive::read_memory` (which issues the read-unlock knock
 /// itself, so no caller ever sequences it).
 fn read_chunk(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Result<Vec<u8>> {
-    let data = crate::drive::pioneer_transport::read_memory_exact(dev, off as u32, n as u32)
+    let data = crate::drive::transport::read_memory_exact(dev, off as u32, n as u32)
         .with_context(|| format!("reading firmware at {off:#x}"))?;
     if data.len() != n {
         bail!("short firmware read at {off:#x}: {}/{n}", data.len());
@@ -879,7 +882,7 @@ fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
             std::env::consts::ARCH, dev.describe()
         );
         for attempt in 1..=3 {
-            let data = crate::drive::pioneer_transport::read_memory_exact(
+            let data = crate::drive::transport::read_memory_exact(
                 dev, KERNEL_IMAGE_BASE as u32, 4,
             )?;
             eprintln!(
@@ -901,5 +904,5 @@ fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
 }
 
 #[cfg(test)]
-#[path = "pioneer_backup_tests.rs"]
+#[path = "backup_tests.rs"]
 mod tests;

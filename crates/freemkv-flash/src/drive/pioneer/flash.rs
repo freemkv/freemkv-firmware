@@ -6,7 +6,7 @@
 #[cfg(test)]
 use crate::drive::pioneer::FLASH_CHUNK;
 
-use crate::drive::pioneer_transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
+use crate::drive::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use crate::platform::ScsiDevice;
 use crate::style;
 use anyhow::{anyhow, bail, Context, Result};
@@ -88,7 +88,7 @@ pub(crate) fn execute_prepared(
         device: &shared,
         recover,
         force,
-        family_known: crate::pioneer_flash_plan::normal_family(normal).is_some(),
+        family_known: crate::drive::pioneer::flash_plan::normal_family(normal).is_some(),
     };
     match plan {
         PreparedFlash::Complete(plan) => plan.flash(io, &mut runtime),
@@ -241,5 +241,5 @@ fn update_error(error: UpdateError<anyhow::Error>) -> anyhow::Error {
 }
 
 #[cfg(test)]
-#[path = "pioneer_flash_tests.rs"]
+#[path = "flash_tests.rs"]
 mod tests;

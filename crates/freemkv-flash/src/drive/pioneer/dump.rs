@@ -214,7 +214,7 @@ pub fn capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
                     .into()
             }
             Some(layout) => {
-                use crate::drive::pioneer_transport::{ScsiTransport, SharedDevice};
+                use crate::drive::transport::{ScsiTransport, SharedDevice};
                 let shared = SharedDevice::new(dev);
                 match pioneer_optical::logging::set_logging_ram(
                     &mut ScsiTransport::flash(&shared),
@@ -273,5 +273,5 @@ pub fn directory(bytes: &[u8]) -> Result<Option<serde_json::Value>> {
 }
 
 #[cfg(test)]
-#[path = "pioneer_dump_tests.rs"]
+#[path = "dump_tests.rs"]
 mod tests;
