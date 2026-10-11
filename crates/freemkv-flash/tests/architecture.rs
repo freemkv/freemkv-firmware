@@ -1163,3 +1163,61 @@ fn pioneer_optical_stays_pinned() {
         "pioneer-optical must stay pinned to =0.12.4: {line}"
     );
 }
+
+/// Every mention of a [`HIDDEN_TYPES`] type outside the device layer, per file:
+/// the reviewed write executors and the standard settings reader. A new mention
+/// (an alias, enum, generic bound or wrapper the shape scans miss) fails here
+/// until reviewed and counted, so this list is closed-world.
+const DEVICE_TYPE_MENTIONS: &[(&str, &str, usize)] = &[
+    ("src/backends/mtk/flash.rs", "ScsiTransport", 2),
+    ("src/backends/mtk/flash.rs", "SharedDevice", 2),
+    ("src/backends/pioneer/dump.rs", "ScsiTransport", 2),
+    ("src/backends/pioneer/dump.rs", "SharedDevice", 2),
+    ("src/backends/pioneer/flash.rs", "FlashTransport", 2),
+    ("src/backends/pioneer/flash.rs", "ScsiTransport", 3),
+    ("src/backends/pioneer/flash.rs", "SharedDevice", 3),
+    ("src/backends/pioneer/recovery.rs", "ScsiTransport", 2),
+    ("src/backends/pioneer/recovery.rs", "SharedDevice", 2),
+    ("src/standard.rs", "Device", 3),
+    ("src/standard.rs", "ScsiTransport", 3),
+    ("src/standard.rs", "SharedDevice", 2),
+];
+
+#[test]
+fn device_types_are_named_only_where_reviewed() {
+    let mut seen = Vec::new();
+    let mut aliases = Vec::new();
+    for s in production_sources() {
+        if DEVICE_LAYER.iter().any(|l| s.path.starts_with(l)) {
+            // The layer defines these types; an alias exported from it would carry
+            // one past the per-file count unseen.
+            aliases.extend(
+                hiding_types(&s.code)
+                    .into_iter()
+                    .filter(|h| h.starts_with("type ") || h.contains(" type "))
+                    .map(|h| format!("{}: {h}", s.path)),
+            );
+            continue;
+        }
+        for t in HIDDEN_TYPES {
+            let n = word_hits(&s.code, t).len();
+            if n > 0 {
+                seen.push((s.path.clone(), t.to_string(), n));
+            }
+        }
+    }
+    assert!(
+        aliases.is_empty(),
+        "device-layer aliases of device types: {aliases:#?}"
+    );
+    seen.sort();
+    let mut expected: Vec<_> = DEVICE_TYPE_MENTIONS
+        .iter()
+        .map(|(p, t, n)| (p.to_string(), t.to_string(), *n))
+        .collect();
+    expected.sort();
+    assert_eq!(
+        seen, expected,
+        "device types named outside the device layer changed; review the new use, then update DEVICE_TYPE_MENTIONS"
+    );
+}
