@@ -31,8 +31,9 @@ name: release
 #
 # ── How each is built ──────────────────────────────────────────────────────
 # `build`: CLIs on all seven targets (the macOS IOKit / Windows SPTI / Linux SG_IO
-# backends come from libfreemkv); GUIs (eframe/egui) on macOS and Windows
-# (Windows arm64 on the native windows-11-arm runner).
+# backends come from libfreemkv); GUIs on macOS and Windows (Windows arm64 on the
+# native windows-11-arm runner). freemkv-flash-gui ships its native shell on each OS
+# (AppKit, Win32, GTK4/libadwaita on glibc Linux); freemkv-fw-gui is eframe/egui.
 # Linux CLIs are static musl (aarch64/armv7 cross-compiled with `cross`).
 # `linux-packages`: glibc GUIs on native amd64/arm64 runners, .deb + AppImage
 # (packaging/linux/). `windows-installer`: Inno Setup (packaging/windows/).
@@ -254,9 +255,10 @@ jobs:
             fi
           done
 
+      # `native` is the flash GUI's default; named so the release never silently ships egui.
       - name: Build the GUIs (release)
         if: matrix.gui
-        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui
+        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui --features freemkv-flash-gui/native
 
       # macOS desktop apps: wrap each GUI binary (and its CLI, at
       # <bin>.app/Contents/MacOS/<cli>, for the cask's `binary` stanza) in a
@@ -420,23 +422,29 @@ jobs:
         with:
           workspaces: freemkv-firmware
           shared-key: freemkv-firmware-release-v2-${{ matrix.target }}-gui
-      # eframe/egui/rfd have no -dev system deps (winit, GL and the portal
-      # backend are loaded at runtime), unlike freemkv's GTK4/libadwaita app.
+      # The flash GUI's native shell links GTK4/libadwaita, as freemkv's app does (headers
+      # to build, the linuxdeploy gtk plugin to bundle the runtime into its AppImage). The
+      # fw GUI is eframe/egui: winit, GL and the portal backend load at run time.
       - name: Install build and package tools
         working-directory: .
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config dpkg-dev lintian xvfb \
-            desktop-file-utils imagemagick
-          # Pinned + hash-checked like freemkv's appimage.yml: it runs in the release build.
+            desktop-file-utils imagemagick libgtk-4-dev libadwaita-1-dev
+          # Pinned + hash-checked like freemkv's appimage.yml: they run in the release build.
+          # The gtk plugin sits beside linuxdeploy, where linuxdeploy looks for plugins.
           ld=linuxdeploy-${{ matrix.arch }}.AppImage
           curl -fsSLo "$ld" "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/$ld"
-          echo "${{ matrix.linuxdeploy_sha256 }}  $ld" | sha256sum -c -
-          chmod +x "$ld"
+          curl -fsSLo linuxdeploy-plugin-gtk.sh https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/7a3fbc31a9e5075073ff8790f26effbac5f84453/linuxdeploy-plugin-gtk.sh
+          printf '%s  %s\n' \
+            "${{ matrix.linuxdeploy_sha256 }}" "$ld" \
+            b0f4cbc684a0103a9651f0955b635eaea0096b3a66c0f5a2c2aa337960375171 linuxdeploy-plugin-gtk.sh \
+            | sha256sum -c -
+          chmod +x "$ld" linuxdeploy-plugin-gtk.sh
           echo "LINUXDEPLOY=$PWD/$ld" >> "$GITHUB_ENV"
       - name: Build the GUIs (glibc, release)
-        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui
+        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui --features freemkv-flash-gui/native
       - uses: actions/download-artifact@v4
         with:
           name: freemkv-linux-${{ matrix.arch }}

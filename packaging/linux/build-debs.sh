@@ -5,9 +5,10 @@
 # (SOURCE_DATE_EPOCH, gzip -n), README.Debian with the optical-drive note.
 #   freemkv-flash, freemkv-fw           the static musl CLI only, no Depends
 #                                       (like freemkv-cli)
-#   freemkv-flash-gui, freemkv-fw-gui   the glibc eframe/egui desktop app AND the
-#                                       same static CLI (like freemkv's app deb,
-#                                       which carries its CLI too)
+#   freemkv-flash-gui, freemkv-fw-gui   the glibc desktop app (flash: GTK4 +
+#                                       libadwaita; fw: eframe/egui) AND the same
+#                                       static CLI (like freemkv's app deb, which
+#                                       carries its CLI too)
 # Each GUI package and its CLI package both ship /usr/bin/<cli>, so they
 # Conflict/Replace each other exactly as freemkv / freemkv-cli do: installing
 # one swaps out the other.
@@ -96,9 +97,10 @@ mkdeb() {
   rm -rf "$root"
 }
 
-# GUI runtime deps: dpkg-shlibdeps for what is linked, plus the libraries
-# eframe/winit/glow dlopen at run time (invisible to it): GL/EGL, X11 and
-# Wayland, xkbcommon.
+# GUI runtime deps: dpkg-shlibdeps for what is linked (GTK4/libadwaita for the
+# flash GUI), plus the libraries eframe/winit/glow dlopen at run time (invisible
+# to it): GL/EGL, X11 and Wayland, xkbcommon. The flash GUI keeps the egui shell
+# behind --egui, so it needs them too.
 shlibs() {
   # Absolute: dpkg-shlibdeps runs from a scratch dir. Empty output is an error.
   local bin d deps; bin="$(realpath "$1")"; d="$(mktemp -d)"; mkdir "$d/debian"

@@ -95,6 +95,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+      # The flash GUI's native Linux shell (gtk4/libadwaita) probes pkg-config at build time.
+      - name: Install GTK4 + libadwaita development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
       - run: cargo fmt --all --check
         working-directory: freemkv-firmware
       - run: cargo +stable clippy --all-targets --all-features -- -D warnings
@@ -113,6 +118,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+      # The flash GUI's native Linux shell (gtk4/libadwaita) probes pkg-config at build time.
+      - name: Install GTK4 + libadwaita development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
       # Includes the CMAC-verify T0 proof against a committed stock image.
       - run: cargo test --tests
         working-directory: freemkv-firmware
