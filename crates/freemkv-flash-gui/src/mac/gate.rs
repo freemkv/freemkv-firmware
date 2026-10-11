@@ -1,6 +1,7 @@
 //! qa's GUI gate on the AppKit shell (`crate::gui_gate`), run by a debug build with
 //! `FREEMKV_FLASH_GATE=<dir>` once the window is up: every tab through `send`, checked in
 //! the segmented control and in a capture (`cacheDisplayInRect:`) of the real window, then
+//! a file picker dismissed with Escape (the main window must survive it), then
 //! the flash confirmation sheet driven through its own checkbox and Cancel button. Writes
 //! `<dir>/gate.txt` and a PNG per tab and sheet, and exits with the verdict.
 
@@ -13,7 +14,7 @@ use objc2_foundation::{NSDate, NSDefaultRunLoopMode};
 
 use super::Controller;
 use crate::gui_gate::{self, Capture, Gate, Order, Region, SheetRun, TabRun};
-use crate::ui::{Input, Task};
+use crate::ui::{Input, Pick, Task};
 
 /// How long a step lets AppKit lay out, draw and animate before it looks.
 const SETTLE: Duration = Duration::from_millis(400);
@@ -69,6 +70,7 @@ pub(super) fn run(c: &Controller, dir: &Path) {
     }
 
     c.send(Input::SelectTask(Task::Flash));
+    escape_closes_only_the_picker(c, &mut g);
     let first = sheet(c, dir, true, &mut g);
     let reopened = sheet(c, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
@@ -128,6 +130,52 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     }
     run.closed = closed(c, &main);
     run
+}
+
+/// Open the flash file picker and press Escape in it: the picker must close and the main
+/// window must stay up (Escape once closed the window and quit the app).
+fn escape_closes_only_the_picker(c: &Controller, g: &mut Gate) {
+    let Some(main) = c.ivars().window.borrow().clone() else {
+        return;
+    };
+    c.send(Input::Choose(Pick::FlashFirmware));
+    settle(c, SETTLE);
+    let picker = main.attachedSheet();
+    g.check(
+        "picker-opens-as-sheet",
+        picker.is_some(),
+        if picker.is_some() {
+            "attached"
+        } else {
+            "no sheet"
+        },
+    );
+    let Some(picker) = picker else {
+        return;
+    };
+    // The panel runs out of process, so a synthetic key event never reaches it; Escape
+    // there sends the panel `cancel:`, which is sent here directly.
+    unsafe {
+        let _: () = objc2::msg_send![&*picker, cancel: Option::<&objc2::runtime::AnyObject>::None];
+    }
+    let until = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < until && main.attachedSheet().is_some() {
+        settle(c, Duration::from_millis(100));
+    }
+    g.check(
+        "escape-closes-picker",
+        main.attachedSheet().is_none(),
+        "cancel: (Escape) in the picker",
+    );
+    g.check(
+        "main-window-survives-escape",
+        main.isVisible() && c.view().confirm.is_none(),
+        if main.isVisible() {
+            "visible"
+        } else {
+            "closed"
+        },
+    );
 }
 
 fn closed(c: &Controller, main: &NSWindow) -> bool {
