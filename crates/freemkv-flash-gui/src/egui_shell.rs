@@ -211,7 +211,7 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 results_ui(ui, results, out);
-                egui::CollapsingHeader::new("Activity log")
+                egui::CollapsingHeader::new(crate::ui::LOG_TITLE)
                     .default_open(false)
                     .show(ui, |ui| {
                         for line in &view.log {
@@ -443,7 +443,10 @@ fn card_ui(ui: &mut egui::Ui, card: &Card) {
                     match &s.value {
                         SettingValue::Toggle(on) => {
                             let mut on = *on;
-                            ui.add_enabled(false, egui::Checkbox::new(&mut on, "Enabled"));
+                            ui.add_enabled(
+                                false,
+                                egui::Checkbox::new(&mut on, crate::ui::SETTING_ENABLED),
+                            );
                         }
                         SettingValue::Choices(choices) => {
                             egui::Grid::new(("setting_choices", &s.title))
@@ -483,7 +486,8 @@ fn media_column<'a>(ui: &mut egui::Ui, rows: impl Iterator<Item = &'a MediaRow>,
         .spacing([8.0, 2.0])
         .show(ui, |ui| {
             ui.label("");
-            ui.strong("R/W").on_hover_text("Read / Write");
+            ui.strong(crate::ui::MEDIA_HEADER)
+                .on_hover_text(crate::ui::MEDIA_HINT);
             ui.end_row();
             for row in rows {
                 ui.label(&row.label);

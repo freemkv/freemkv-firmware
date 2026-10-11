@@ -416,6 +416,17 @@ pub enum SettingValue {
     None,
 }
 
+/// Header over the media read/write ticks, and its expansion.
+pub const MEDIA_HEADER: &str = "R/W";
+pub const MEDIA_HINT: &str = "Read / Write";
+/// The label of a read-only on/off setting.
+pub const SETTING_ENABLED: &str = "Enabled";
+/// Title of the activity log pane.
+pub const LOG_TITLE: &str = "Activity log";
+/// Why the window will not close while a job runs.
+pub const CLOSE_BLOCKED: &str =
+    "An operation is still running. Keep the drive connected and powered until it finishes.";
+
 /// Explains the radio choices of a read-only setting.
 pub const SETTING_HINT: &str =
     "Selected = active mode; saved = startup mode. Choices come from the settings codec.";
