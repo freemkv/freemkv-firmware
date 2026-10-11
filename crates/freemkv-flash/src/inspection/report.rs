@@ -345,20 +345,25 @@ impl ComparisonReport {
             .filter(|r| !r.expected && r.differs())
             .count()
     }
-    /// Forum-friendly summary, family relationship first.
+    /// Forum-friendly summary, family relationship first when either
+    /// provider derives families.
     pub fn text(&self) -> String {
-        let mut out = format!(
-            "Hardware family: {:?}\nA: {} — {}\nB: {} — {}\n",
-            self.family,
-            self.left.source,
-            self.left_family
-                .as_ref()
-                .map_or("Unknown", |f| f.id.as_str()),
-            self.right.source,
-            self.right_family
-                .as_ref()
-                .map_or("Unknown", |f| f.id.as_str())
-        );
+        let mut out = if self.left.derives_family || self.right.derives_family {
+            format!(
+                "Hardware family: {:?}\nA: {} — {}\nB: {} — {}\n",
+                self.family,
+                self.left.source,
+                self.left_family
+                    .as_ref()
+                    .map_or("Unknown", |f| f.id.as_str()),
+                self.right.source,
+                self.right_family
+                    .as_ref()
+                    .map_or("Unknown", |f| f.id.as_str())
+            )
+        } else {
+            format!("A: {}\nB: {}\n", self.left.source, self.right.source)
+        };
         for s in &self.sections {
             out.push_str(&format!("\n{}\n", s.name));
             for finding in &s.summary {

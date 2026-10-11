@@ -234,6 +234,9 @@ fn two_reads_of_one_build_differ_only_as_expected() {
     assert!(summary.contains("No unexpected differences."), "{summary}");
     assert!(summary.contains("0.00% different"), "{summary}");
     assert!(summary.contains("Expected differences"), "{summary}");
+    let text = report.text();
+    assert!(!text.contains("Hardware family"), "{text}");
+    assert!(!text.contains("Unknown"), "{text}");
 }
 
 #[test]
