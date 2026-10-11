@@ -739,6 +739,11 @@ impl App {
     }
 
     fn discover(&mut self) {
+        // Tests must not enumerate the host's real drives.
+        #[cfg(test)]
+        if self.dry_run.is_some() {
+            return;
+        }
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
         let received = events.clone();
         let drives = workflow::capture_events(
