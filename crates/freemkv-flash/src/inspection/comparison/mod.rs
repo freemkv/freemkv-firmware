@@ -27,6 +27,7 @@ pub(crate) struct FirmwareAnalysis {
 pub(crate) struct Region {
     pub id: usize,
     pub name: String,
+    pub role: super::RegionRole,
     pub address: Option<u64>,
     pub metadata: Vec<Range<usize>>,
     pub representation: Representation,
