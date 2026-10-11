@@ -1,6 +1,7 @@
 //! Unit tests for [`super`] (the generic engine: flash flow + safety gate).
 
 use super::*;
+use crate::backend::{DumpFacet, FileFacet};
 use crate::backends::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
 use crate::backends::mtk::ensure_same_chip;
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};
@@ -30,7 +31,7 @@ impl ScsiDevice for BackupBeforeWriteDevice {
         if !self.checked {
             let archive = std::fs::read(&self.backup_path)
                 .context("first write preceded the durable rollback file")?;
-            Mtk.validate_backup(&archive, "BD-RE BU40N")?;
+            BackupFacet::validate(&Mtk, &archive, "BD-RE BU40N")?;
             self.checked = true;
         }
         self.inner.command_out(cdb, bytes)
@@ -1108,7 +1109,7 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
 fn flash_requires_successful_backup() {
     let req = bin_req(backup_firmware(), true);
     let mut dev = MockScsiDevice::new();
-    assert!(capture_required_backup(&mut dev, &Mtk, &req).is_err());
+    assert!(capture_required_backup(&mut dev, &Mtk, &Mtk, &req).is_err());
     assert!(!dev.reads.is_empty());
     assert!(dev.writes.is_empty());
 }
@@ -1117,9 +1118,13 @@ fn flash_requires_successful_backup() {
 fn mediatek_dump_preserves_raw_unsigned_memory_without_requiring_backup_integrity() {
     let raw = vec![0x5a; IMAGE_SIZE];
     let mut dev = MockScsiDevice::new().with_firmware_image(raw.clone());
-    assert_eq!(Mtk.capture_dump(&mut dev).unwrap(), raw);
+    let dump = DumpFacet::capture(
+        &Mtk,
+        DeviceAccess::Read(&mut ReadDevice::new(&mut dev, &[])),
+    );
+    assert_eq!(dump.unwrap(), raw);
     assert!(dev.writes.is_empty());
-    assert!(Mtk.capture_backup(&mut dev).is_err());
+    assert!(BackupFacet::capture(&Mtk, &mut ReadDevice::new(&mut dev, &[])).is_err());
 }
 
 fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
@@ -1151,30 +1156,42 @@ fn guard_no_medium_allows_closed_empty() {
 
 #[test]
 fn capture_is_saved_before_target_dependent_rollback_check() {
-    use crate::backend::FileFormat;
-    use crate::drive::{Capabilities, Identity, ProbeEvidence};
+    use crate::backend::{
+        BackupFacet, BackupFormat, BackupNotice, FlashExecutor, FlashFacet, Identity, Match,
+        ReadDevice,
+    };
     struct RejectUpdate {
         path: std::path::PathBuf,
     }
-    impl DriveFamily for RejectUpdate {
+    impl Backend for RejectUpdate {
         fn descriptor(&self) -> &'static crate::backend::Descriptor {
             &crate::backends::mtk::DESCRIPTOR
         }
-        fn capabilities(&self) -> Capabilities {
-            Mtk.capabilities()
-        }
-        fn classify_input(&self, _: &std::path::Path, _: &[u8]) -> &'static FileFormat {
-            &IMAGE
-        }
-        fn probe(&self, _: &mut dyn ScsiDevice, _: &Identity) -> Result<Option<ProbeEvidence>> {
+        fn probe(&self, _: &mut ReadDevice<'_>, _: &Identity) -> Result<Option<Match>> {
             unreachable!()
         }
-        fn capture_backup(&self, _: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+        fn backup(&self) -> Option<&dyn BackupFacet> {
+            Some(self)
+        }
+        fn flash(&self) -> Option<&dyn FlashFacet> {
+            Some(self)
+        }
+    }
+    impl BackupFacet for RejectUpdate {
+        fn format(&self) -> BackupFormat {
+            Mtk.format()
+        }
+        fn capture(&self, _: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
             Ok(backup_firmware())
         }
-        fn validate_backup(&self, bytes: &[u8], model: &str) -> Result<Vec<u8>> {
-            Mtk.validate_backup(bytes, model)
+        fn notice(&self, _: &[u8]) -> BackupNotice {
+            BackupNotice::None
         }
+        fn validate(&self, bytes: &[u8], model: &str) -> Result<Vec<u8>> {
+            BackupFacet::validate(&Mtk, bytes, model)
+        }
+    }
+    impl FlashFacet for RejectUpdate {
         fn verify_preflash_backup(&self, bytes: &[u8], _: &[u8]) -> Result<()> {
             assert_eq!(
                 std::fs::read(&self.path).expect("capture must already be saved"),
@@ -1182,30 +1199,7 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
             );
             bail!("target requires an uncaptured region")
         }
-        fn image_size(&self) -> usize {
-            Mtk.image_size()
-        }
-        fn chunk_size(&self) -> usize {
-            Mtk.chunk_size()
-        }
-        fn envelope(
-            &self,
-            _: &mut dyn ScsiDevice,
-            _: &[u8],
-            _: Option<bool>,
-        ) -> Result<(Vec<u8>, bool)> {
-            unreachable!()
-        }
-        fn flash_plan(&self, _: usize, _: bool) -> Result<String> {
-            unreachable!()
-        }
-        fn flash_stream(
-            &self,
-            _: &mut dyn ScsiDevice,
-            _: &[u8],
-            _: FlashMode,
-            _: &mut dyn FnMut(usize),
-        ) -> Result<()> {
+        fn executor(&self) -> FlashExecutor<'_> {
             panic!("update prohibited")
         }
     }
@@ -1213,7 +1207,9 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
     let path = req.predump_out.clone().unwrap();
     let backend = RejectUpdate { path: path.clone() };
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let error = capture_required_backup(&mut dev, &backend, &req).unwrap_err();
+    let Err(error) = capture_required_backup(&mut dev, &backend, &backend, &req) else {
+        panic!("an incomplete rollback was accepted");
+    };
     let message = format!("{error:#}");
     assert!(message.contains("backup saved to"), "{message}");
     assert!(
@@ -1236,7 +1232,12 @@ fn chip_gate_refuses_cross_generation_images() {
     let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
     assert!(gate.to_string().contains("cannot be overridden"), "{gate}");
     let normal = Mtk
-        .validate_image(&mut dev, &img, "BD-RE BU40N", false)
+        .validate_image(
+            &mut ReadDevice::new(&mut dev, &[]),
+            &img,
+            "BD-RE BU40N",
+            false,
+        )
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");
     assert!(dev.writes.is_empty());
@@ -1251,7 +1252,12 @@ fn raw_drive_reads_are_never_flashable() {
     read[..0x400].copy_from_slice(&mirror);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let normal = Mtk
-        .validate_image(&mut dev, &read, "BD-RE BU40N", false)
+        .validate_image(
+            &mut ReadDevice::new(&mut dev, &[]),
+            &read,
+            "BD-RE BU40N",
+            false,
+        )
         .unwrap_err();
     assert!(normal.to_string().contains("raw drive read"), "{normal}");
 }
@@ -1262,7 +1268,12 @@ fn unknown_boot_pages_are_refused() {
     img[..0x400].fill(0x42);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let err = Mtk
-        .validate_image(&mut dev, &img, "BD-RE BU40N", false)
+        .validate_image(
+            &mut ReadDevice::new(&mut dev, &[]),
+            &img,
+            "BD-RE BU40N",
+            false,
+        )
         .unwrap_err();
     assert!(err.to_string().contains("boot page"), "{err}");
 }
@@ -1332,7 +1343,9 @@ fn describe_never_prints_escape_sequences_from_the_image() {
     hostile[d + 0x08..d + 0x08 + 4].copy_from_slice(b"\x1b[2J");
     let hostile = crate::cmac::resign(&hostile).unwrap();
     let out = captured_output(|| {
-        Mtk.describe_file(&hostile).expect("recognized").unwrap();
+        FileFacet::describe(&Mtk, &hostile)
+            .expect("recognized")
+            .unwrap();
     });
     assert!(out.contains("Chipset"), "not described: {out}");
     assert!(!out.contains('\x1b') && !out.contains("\\u{1b}"), "{out:?}");
@@ -1373,8 +1386,13 @@ fn classify_file_flags_an_integrity_entry_running_past_the_image() {
 fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    Mtk.validate_image(&mut dev, &img, "BD-RE BU40N", false)
-        .unwrap();
+    Mtk.validate_image(
+        &mut ReadDevice::new(&mut dev, &[]),
+        &img,
+        "BD-RE BU40N",
+        false,
+    )
+    .unwrap();
     let banner = offset_bytes(0x3000);
     let banner_reads = dev
         .reads
@@ -1414,13 +1432,23 @@ fn mt1939_drive() -> MockScsiDevice {
 fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
     let mt1939 = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1959 Boot JB8");
     let mut dev = mt1939_drive();
-    Mtk.validate_image(&mut dev, &mt1939, "BD-RE BU40N", false)
-        .unwrap();
+    Mtk.validate_image(
+        &mut ReadDevice::new(&mut dev, &[]),
+        &mt1939,
+        "BD-RE BU40N",
+        false,
+    )
+    .unwrap();
     ensure_same_chip(&mut dev, &mt1939).unwrap();
 
     let mt1959 = chip_image("BD-RE BU40N", Some(b"MTEKMT1959"), b"MT1959 Boot JB8");
     let normal = Mtk
-        .validate_image(&mut dev, &mt1959, "BD-RE BU40N", false)
+        .validate_image(
+            &mut ReadDevice::new(&mut dev, &[]),
+            &mt1959,
+            "BD-RE BU40N",
+            false,
+        )
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1959"), "{normal:#}");
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");

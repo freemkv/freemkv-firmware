@@ -1,7 +1,9 @@
 //! Shared application workflows for the CLI and desktop front-end.
 
-use crate::backend::{registry, BackendId, UNKNOWN_FAMILY};
-use crate::drive::{self, DriveFamily, FlashRequest};
+use crate::backend::{
+    registry, unsupported_family_error, Backend, BackendId, Capabilities, FlashRequest, ReadDevice,
+    UNKNOWN_FAMILY,
+};
 use crate::manifest::FlashMode;
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
@@ -134,23 +136,19 @@ fn is_firmware_file(target: &str) -> bool {
 }
 
 /// Resolve the backend registry while preserving probe and ambiguity errors.
-fn resolved_backend(
-    dev: &mut dyn platform::ScsiDevice,
-) -> Result<Option<&'static dyn DriveFamily>> {
+fn resolved_backend(dev: &mut dyn platform::ScsiDevice) -> Result<Option<&'static dyn Backend>> {
     Ok(registry::resolve(dev)?.map(|resolved| resolved.backend))
 }
 
 /// Resolve a backend that offers `capability`, else the unsupported error.
 fn resolve_capable(
     dev: &mut dyn platform::ScsiDevice,
-    capability: fn(&drive::Capabilities) -> bool,
-) -> Result<&'static dyn DriveFamily> {
+    capability: fn(&Capabilities) -> bool,
+) -> Result<&'static dyn Backend> {
     match resolved_backend(dev)? {
-        Some(backend) if capability(&backend.capabilities()) => Ok(backend),
-        Some(backend) => Err(drive::unsupported_family_error(
-            backend.descriptor().display_name,
-        )),
-        None => Err(drive::unsupported_family_error(UNKNOWN_FAMILY)),
+        Some(backend) if capability(&Capabilities::of(backend)) => Ok(backend),
+        Some(backend) => Err(unsupported_family_error(backend.descriptor().display_name)),
+        None => Err(unsupported_family_error(UNKNOWN_FAMILY)),
     }
 }
 
@@ -208,11 +206,18 @@ fn backup_with_replace_inner(
     } else {
         platform::open(&selector, false)?
     };
-    let handler = resolve_capable(dev.as_mut(), |c| c.backup)?;
+    let handler = if dump {
+        resolve_capable(dev.as_mut(), |c| c.dump)?
+    } else {
+        resolve_capable(dev.as_mut(), |c| c.backup)?
+    };
     let out = match out {
         Some(o) => o,
         None => {
-            let id = handler.identity(dev.as_mut());
+            let id = handler.identity(&mut ReadDevice::new(
+                dev.as_mut(),
+                handler.allowed_data_out(),
+            ));
             let s: String = format!("{}_{}", id.product, id.revision)
                 .chars()
                 .map(|c| {
@@ -223,16 +228,13 @@ fn backup_with_replace_inner(
                     }
                 })
                 .collect();
-            let extension = handler
-                .backup_extension()
-                .context("backend has no backup format")?;
-            if dump && handler.dump_is_raw() {
-                // A raw dump is a single flat memory image, not a backup archive.
-                PathBuf::from(format!("{s}.dump.bin"))
-            } else {
+            match handler.backup().map(|b| b.format()) {
+                // A dump is a single flat memory image, not a backup archive.
+                _ if dump => PathBuf::from(format!("{s}.dump.bin")),
                 // Filename infix (`backup` / `candidate`) comes from the backend,
                 // so the CLI names no chipset.
-                PathBuf::from(format!("{s}.{}.{extension}", handler.backup_kind().infix))
+                Some(format) => PathBuf::from(format!("{s}.{}.{}", format.infix, format.extension)),
+                None => bail!("backend has no backup format"),
             }
         }
     };
@@ -258,13 +260,17 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
-    let input_format = registry::flash_input_format(handler, &args.input, &input);
+    let input_format = registry::flash_input_format(handler, &args.input, &input)
+        .context("backend reads no firmware files")?;
 
-    let drive_model = handler.identity(dev.as_mut()).product;
+    let unlocks = handler.allowed_data_out();
+    let drive_model = handler
+        .identity(&mut ReadDevice::new(dev.as_mut(), unlocks))
+        .product;
     let predump_out = args.backup.clone().or_else(|| {
         handler
-            .backup_extension()
-            .and_then(|ext| default_backup_path(&args.input, ext))
+            .backup()
+            .and_then(|b| default_backup_path(&args.input, b.format().extension))
     });
 
     let req = FlashRequest {
@@ -376,13 +382,16 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         // Recovery serves drives too damaged to classify, so it does not run the
         // protocol probe: each backend with a recovery path checks the receiver
         // itself.
-        for backend in registry::backends() {
-            if let Some(result) =
-                backend.recover(dev.as_mut(), supplied.as_deref(), &target, args.execute)
-            {
-                return result;
-            }
-        }
-        bail!("no protocol backend offers recovery for this drive")
+        let Some(backend) = registry::backends().find(|b| b.recovery().is_some()) else {
+            bail!("no protocol backend offers recovery for this drive")
+        };
+        engine::recover(
+            dev.as_mut(),
+            backend,
+            supplied.as_deref(),
+            &target,
+            args.execute,
+            args.acknowledged_risk,
+        )
     })
 }

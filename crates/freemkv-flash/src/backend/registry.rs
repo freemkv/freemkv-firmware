@@ -8,28 +8,27 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
-use super::FileFormat;
+use super::{read_identity, Backend, FileFormat, Identity, Match, ReadDevice};
 use crate::backends::{mtk, pioneer};
-use crate::drive::{read_identity, FirmwareBackend, Identity, ProbeEvidence};
 use crate::platform::ScsiDevice;
 
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
 /// Probe order.
-static BACKENDS: [&'static dyn FirmwareBackend; 2] = [&MTK, &PIONEER];
+static BACKENDS: [&'static dyn Backend; 2] = [&MTK, &PIONEER];
 
 /// File-identification order. Pioneer's structural tar parse must precede
 /// MediaTek's whole-file `MTEKMT19dd` search.
-static FILE_ORDER: [&'static dyn FirmwareBackend; 2] = [&PIONEER, &MTK];
+static FILE_ORDER: [&'static dyn Backend; 2] = [&PIONEER, &MTK];
 
 /// Every registered protocol backend, in probe order.
-pub fn backends() -> impl Iterator<Item = &'static dyn FirmwareBackend> {
+pub fn backends() -> impl Iterator<Item = &'static dyn Backend> {
     BACKENDS.iter().copied()
 }
 
 /// Backends in file-identification order (not probe order).
-pub fn file_backends() -> impl Iterator<Item = &'static dyn FirmwareBackend> {
+pub fn file_backends() -> impl Iterator<Item = &'static dyn Backend> {
     FILE_ORDER.iter().copied()
 }
 
@@ -40,53 +39,56 @@ pub struct Resolved {
     /// Device-reported vendor, product, revision and optional banner.
     pub identity: Identity,
     /// The matched backend.
-    pub backend: &'static dyn FirmwareBackend,
+    pub backend: &'static dyn Backend,
     /// Protocol signature independent of the device identity.
-    pub evidence: ProbeEvidence,
+    pub matched: Match,
 }
 
 /// Run every registered, read-only protocol probe. Ambiguous matches fail
 /// closed rather than allowing registry order to select a writer.
 pub fn resolve(dev: &mut dyn ScsiDevice) -> Result<Option<Resolved>> {
-    let identity = read_identity(dev);
-    let mut found: Option<(&'static dyn FirmwareBackend, ProbeEvidence)> = None;
+    let identity = read_identity(&mut ReadDevice::new(dev, &[]));
+    let mut found: Option<(&'static dyn Backend, Match)> = None;
     for backend in backends() {
-        if let Some(evidence) = backend.probe(dev, &identity)? {
-            if evidence.backend != backend.descriptor().id {
+        let mut probe_dev = ReadDevice::new(dev, backend.allowed_data_out());
+        if let Some(matched) = backend.probe(&mut probe_dev, &identity)? {
+            if matched.backend != backend.descriptor().id {
                 bail!("backend probe returned an inconsistent backend id");
             }
             if let Some((_, prior)) = &found {
                 bail!(
                     "ambiguous firmware protocol: {} ({}) and {} ({}) both matched",
                     prior.backend,
-                    prior.discriminator,
-                    evidence.backend,
-                    evidence.discriminator
+                    prior.evidence,
+                    matched.backend,
+                    matched.evidence
                 );
             }
-            found = Some((backend, evidence));
+            found = Some((backend, matched));
         }
     }
-    Ok(found.map(|(backend, evidence)| Resolved {
+    Ok(found.map(|(backend, matched)| Resolved {
         identity,
         backend,
-        evidence,
+        matched,
     }))
 }
 
-/// The format of a flash input bound for `backend`'s drive. A file named for
-/// another backend's format is that format whichever drive is attached (the
-/// engine then refuses it); otherwise the drive's backend classifies it.
+/// The format of a flash input bound for `backend`'s drive, if it reads files.
+/// A file named for another backend's format is that format whichever drive is
+/// attached (the engine then refuses it); otherwise the drive's backend
+/// classifies it.
 pub fn flash_input_format(
-    backend: &dyn FirmwareBackend,
+    backend: &dyn Backend,
     path: &Path,
     bytes: &[u8],
-) -> &'static FileFormat {
+) -> Option<&'static FileFormat> {
     let id = backend.descriptor().id;
-    backends()
+    let foreign = backends()
         .filter(|other| other.descriptor().id != id)
-        .find_map(|other| other.claims_by_name(path))
-        .unwrap_or_else(|| backend.classify_input(path, bytes))
+        .filter_map(|other| other.files())
+        .find_map(|files| files.claims_by_name(path));
+    foreign.or_else(|| backend.files().map(|f| f.classify_input(path, bytes)))
 }
 
 #[cfg(test)]

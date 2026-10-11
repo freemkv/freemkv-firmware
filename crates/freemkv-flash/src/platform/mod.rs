@@ -1,6 +1,6 @@
 //! OS transport layer: SCSI pass-through abstraction.
 //!
-//! This is one of the two independent plug-in layers (the other is [`crate::drive`]).
+//! This is one of the two independent plug-in layers (the other is [`crate::backend`]).
 //! Every backend implements [`ScsiDevice`]; [`open`] performs compile-time OS
 //! selection:
 //!

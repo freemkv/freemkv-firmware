@@ -294,3 +294,16 @@ fn serialize_inspection<S: serde::Serializer>(
 ) -> Result<S::Ok, S::Error> {
     value.as_ref().serialize(serializer)
 }
+
+/// The regions the drive's RPC mask permits. The mask, not the type code, is
+/// what the drive enforces: 0x00 permits all eight, 0xFF permits none.
+pub(crate) fn dvd_region_label(rpc: pioneer_optical::rpc::State) -> String {
+    if rpc.prohibited_regions == 0xff {
+        return "Not set".into();
+    }
+    (1..=8)
+        .filter(|&r| rpc.allows(r))
+        .map(|r| r.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}

@@ -158,7 +158,7 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
         normal_bytes: 0,
     };
     let found = registry::resolve(&mut r)?.context("backend not recognized")?;
-    if found.evidence.backend != pioneer::DESCRIPTOR.id {
+    if found.matched.backend != pioneer::DESCRIPTOR.id {
         bail!("wrong backend");
     }
     let backend = pioneer::Pioneer::new();

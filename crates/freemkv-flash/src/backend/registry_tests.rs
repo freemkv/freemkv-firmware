@@ -1,12 +1,12 @@
 //! Unit tests for [`super`] (protocol probes, input formats, drive identity).
 
 use super::*;
-use crate::drive::{sanitize_ascii, try_read_identity};
+use crate::backend::{sanitize_ascii, try_read_identity};
 use crate::platform::MockScsiDevice;
 
 /// The id of the uniquely matching backend, if any.
 fn matched(dev: &mut dyn ScsiDevice) -> Option<&'static str> {
-    resolve(dev).ok().flatten().map(|r| r.evidence.backend.0)
+    resolve(dev).ok().flatten().map(|r| r.matched.backend.0)
 }
 
 fn f1_sat() -> Vec<u8> {
@@ -20,8 +20,8 @@ fn classify_mtk_from_get_config_010c() {
     let mut dev = MockScsiDevice::mtk();
     assert_eq!(matched(&mut dev), Some("mtk19xx"));
     let matched = resolve(&mut dev).unwrap().unwrap();
-    assert_eq!(matched.evidence.backend.0, "mtk19xx");
-    assert_eq!(Some(matched.evidence.backend.0), Some("mtk19xx"));
+    assert_eq!(matched.matched.backend.0, "mtk19xx");
+    assert_eq!(Some(matched.matched.backend.0), Some("mtk19xx"));
     assert!(dev.writes.is_empty());
 }
 
@@ -37,7 +37,7 @@ fn pioneer_identity_prevents_mtk_vendor_probe_even_if_standard_feature_matches()
         )
         .on(|cdb| cdb.first() == Some(&0x12), inq);
     let matched = resolve(&mut dev).unwrap().unwrap();
-    assert_eq!(Some(matched.evidence.backend.0), Some("pioneer-oem"));
+    assert_eq!(Some(matched.matched.backend.0), Some("pioneer-oem"));
     assert!(!dev
         .reads
         .iter()
@@ -157,7 +157,7 @@ fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
             );
         let matched = resolve(&mut dev).unwrap().unwrap();
         assert_eq!(
-            Some(matched.evidence.backend.0),
+            Some(matched.matched.backend.0),
             Some("pioneer-oem"),
             "{product}"
         );
@@ -191,7 +191,7 @@ fn old_pioneer_hardware_is_classified_but_malformed_f1_is_not() {
                 f1,
             );
         assert_eq!(
-            resolve(&mut dev).unwrap().unwrap().evidence.backend.0,
+            resolve(&mut dev).unwrap().unwrap().matched.backend.0,
             "pioneer-oem"
         );
         assert!(dev.writes.is_empty());
@@ -215,7 +215,7 @@ fn classify_unknown_when_no_discriminator() {
 #[test]
 fn flash_input_formats_follow_the_drive_and_foreign_package_names() {
     let path = std::path::Path::new;
-    let format = |b: &dyn FirmwareBackend, p| flash_input_format(b, path(p), b"").id;
+    let format = |b: &dyn Backend, p| flash_input_format(b, path(p), b"").unwrap().id;
     assert_eq!(format(&MTK, "dump.tar"), "mtk-legacy-tar");
     assert_eq!(format(&MTK, "fw.bin"), "mtk-image");
     assert_eq!(format(&MTK, "image"), "mtk-image");
@@ -237,7 +237,7 @@ fn mtk_identity_parses_boot_banner_from_32b_region() {
         |cdb| cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..]),
         banner,
     );
-    let id = MTK.identity(&mut dev);
+    let id = MTK.identity(&mut ReadDevice::new(&mut dev, &[]));
     assert_eq!(id.banner.as_deref(), Some("MT1959 Boot BU5"));
 }
 

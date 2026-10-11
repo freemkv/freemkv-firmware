@@ -75,7 +75,7 @@ pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
 }
 
 /// Render the Pioneer OEM flash plan WITHOUT touching the device (the dry run).
-/// The live write is handled separately by the backend's `flash_bundle`; this
+/// The live write is handled separately by the bundle executor; this
 /// planner is only reached when `--execute` is NOT set.
 pub fn plan_offline(
     image: &[u8],

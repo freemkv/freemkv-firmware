@@ -29,26 +29,33 @@ impl Observer for Progress<'_> {
     }
 }
 
-pub(crate) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> Result<Inspection> {
+/// Inspect a Pioneer package, or `None` when `bytes` are not a Pioneer
+/// format at all (the caller reports unrecognized or unsupported files).
+pub(crate) fn inspect_file(
+    source: String,
+    bytes: &[u8],
+    control: &Control,
+) -> Option<Result<Inspection>> {
     if pioneer_optical::envelope::header_info(bytes).is_some() {
-        return Err(InspectionError::PackageRequired.into());
+        return Some(Err(InspectionError::PackageRequired.into()));
     }
     let bundle = match crate::backends::pioneer::bundle::Bundle::from_backup_tar_bytes(bytes) {
         Ok(bundle) => bundle,
-        Err(error) => {
-            // Recognized archive corruption must not become “unsupported.”
-            if bytes.get(257..262) == Some(b"ustar") {
-                return Err(error.context("Invalid firmware package"));
-            }
-            let identity = crate::imageid::identify(bytes);
-            return Err(if identity.family == crate::imageid::ImageFamily::Unknown {
-                InspectionError::UnrecognizedFormat
-            } else {
-                InspectionError::UnsupportedFormat(identity.family.label().into())
-            }
-            .into());
+        // Recognized archive corruption must not become “unsupported.”
+        Err(error) if bytes.get(257..262) == Some(b"ustar") => {
+            return Some(Err(error.context("Invalid firmware package")));
         }
+        Err(_) => return None,
     };
+    Some(analyze(source, bytes, bundle, control))
+}
+
+fn analyze(
+    source: String,
+    bytes: &[u8],
+    bundle: crate::backends::pioneer::bundle::Bundle,
+    control: &Control,
+) -> Result<Inspection> {
     let kernel = bundle
         .components
         .iter()
@@ -215,9 +222,10 @@ pub(crate) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState
     ) {
         Ok(bytes) => match pioneer_optical::rpc::State::parse(&bytes) {
             Some(rpc) => {
-                state
-                    .fields
-                    .push(Field::new("DVD region", dvd_region_label(rpc)));
+                state.fields.push(Field::new(
+                    "DVD region",
+                    crate::inspection::dvd_region_label(rpc),
+                ));
                 state.fields.push(Field::new(
                     "User region changes remaining",
                     rpc.user_changes_remaining,
@@ -241,19 +249,6 @@ pub(crate) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState
         }
     }
     state
-}
-
-/// The regions the drive's RPC mask permits. The mask, not the type code, is
-/// what the drive enforces: 0x00 permits all eight, 0xFF permits none.
-pub(crate) fn dvd_region_label(rpc: pioneer_optical::rpc::State) -> String {
-    if rpc.prohibited_regions == 0xff {
-        return "Not set".into();
-    }
-    (1..=8)
-        .filter(|&r| rpc.allows(r))
-        .map(|r| r.to_string())
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 fn signature_label(status: pioneer_optical::envelope::SignatureStatus) -> &'static str {

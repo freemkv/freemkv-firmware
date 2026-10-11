@@ -52,20 +52,10 @@ fn package(revision: &str, change: bool) -> Vec<u8> {
 #[test]
 fn inspection_and_compare_share_decoded_content_and_ignore_envelope_headers() {
     let a = Arc::new(
-        crate::backends::pioneer::inspect::inspect_file(
-            "a.tar".into(),
-            &package("1.00", false),
-            &Control::default(),
-        )
-        .unwrap(),
+        inspect_bytes("a.tar".into(), &package("1.00", false), &Control::default()).unwrap(),
     );
     let b = Arc::new(
-        crate::backends::pioneer::inspect::inspect_file(
-            "b.tar".into(),
-            &package("2.00", false),
-            &Control::default(),
-        )
-        .unwrap(),
+        inspect_bytes("b.tar".into(), &package("2.00", false), &Control::default()).unwrap(),
     );
     let result = compare_inspections(a.clone(), b, &Control::default()).unwrap();
     assert_eq!(result.family, FamilyRelationship::Unknown);
@@ -83,12 +73,7 @@ fn inspection_and_compare_share_decoded_content_and_ignore_envelope_headers() {
     assert!(Arc::ptr_eq(&a, &retained));
     assert!(!a.json().unwrap().contains("analyses"));
     let c = Arc::new(
-        crate::backends::pioneer::inspect::inspect_file(
-            "c.tar".into(),
-            &package("1.00", true),
-            &Control::default(),
-        )
-        .unwrap(),
+        inspect_bytes("c.tar".into(), &package("1.00", true), &Control::default()).unwrap(),
     );
     assert!(compare_inspections(a, c, &Control::default())
         .unwrap()
@@ -125,24 +110,14 @@ fn rpc_reads_state_without_any_write_and_failure_is_optional() {
 }
 #[test]
 fn unsupported_and_corrupt_inputs_have_different_errors() {
-    let error = crate::backends::pioneer::inspect::inspect_file(
-        "unknown.bin".into(),
-        b"unknown",
-        &Control::default(),
-    )
-    .unwrap_err();
+    let error = inspect_bytes("unknown.bin".into(), b"unknown", &Control::default()).unwrap_err();
     assert!(matches!(
         error.downcast_ref::<InspectionError>(),
         Some(InspectionError::UnrecognizedFormat)
     ));
     let mut broken = package("1.00", false);
     broken[0] = 0;
-    let error = crate::backends::pioneer::inspect::inspect_file(
-        "bad.tar".into(),
-        &broken,
-        &Control::default(),
-    )
-    .unwrap_err();
+    let error = inspect_bytes("bad.tar".into(), &broken, &Control::default()).unwrap_err();
     assert!(error.downcast_ref::<InspectionError>().is_none());
 }
 #[test]
@@ -169,20 +144,10 @@ fn cancellation_and_two_drives_stop_before_io() {
 #[test]
 fn comparison_summary_is_readable_and_details_remain_in_json() {
     let a = Arc::new(
-        crate::backends::pioneer::inspect::inspect_file(
-            "a.tar".into(),
-            &package("1.00", false),
-            &Control::default(),
-        )
-        .unwrap(),
+        inspect_bytes("a.tar".into(), &package("1.00", false), &Control::default()).unwrap(),
     );
     let b = Arc::new(
-        crate::backends::pioneer::inspect::inspect_file(
-            "b.tar".into(),
-            &package("2.00", true),
-            &Control::default(),
-        )
-        .unwrap(),
+        inspect_bytes("b.tar".into(), &package("2.00", true), &Control::default()).unwrap(),
     );
     let result = compare_inspections(a.clone(), b, &Control::default()).unwrap();
     let text = result.text();
@@ -229,7 +194,7 @@ fn partial_summary_never_claims_only_relocation_changes() {
 #[test]
 fn absent_kernel_is_visible_in_inspection_and_comparison() {
     let a = Arc::new(
-        crate::backends::pioneer::inspect::inspect_file(
+        inspect_bytes(
             "normal-only.tar".into(),
             &package("1.00", false),
             &Control::default(),
@@ -253,7 +218,7 @@ fn absent_kernel_is_visible_in_inspection_and_comparison() {
 #[test]
 fn dvd_region_label_follows_the_mask_not_the_type_code() {
     let label = |b4: u8, mask: u8| {
-        crate::backends::pioneer::inspect::dvd_region_label(
+        crate::inspection::dvd_region_label(
             pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, b4, mask, 1, 0]).unwrap(),
         )
     };

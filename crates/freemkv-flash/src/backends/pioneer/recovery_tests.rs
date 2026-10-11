@@ -360,7 +360,6 @@ fn unsupported_pioneer_dialect_fails_before_update_entry() {
 
 #[test]
 fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
-    use crate::drive::DriveFamily;
     let current = archive(&fixture_pair(false, 1), false);
     let target = archive(&fixture_pair(false, 0), false);
 
@@ -368,10 +367,8 @@ fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
         updating: true,
         ..Default::default()
     };
-    crate::backends::pioneer::Pioneer::new()
-        .recover(&mut dry, Some(&current), &target, false)
-        .expect("Pioneer has a recovery path")
-        .unwrap();
+    let pioneer = crate::backends::pioneer::Pioneer::new();
+    crate::engine::recover(&mut dry, &pioneer, Some(&current), &target, false, false).unwrap();
     assert_eq!(dry.attempts, 0, "dry run wrote to the drive");
     assert!(dry.writes.is_empty());
 
@@ -379,9 +376,6 @@ fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
         updating: true,
         ..Default::default()
     };
-    crate::backends::pioneer::Pioneer::new()
-        .recover(&mut live, Some(&current), &target, true)
-        .expect("Pioneer has a recovery path")
-        .unwrap();
+    crate::engine::recover(&mut live, &pioneer, Some(&current), &target, true, true).unwrap();
     assert!(live.finished && !live.writes.is_empty());
 }

@@ -188,10 +188,7 @@ pub(super) fn show(dev: &mut dyn ScsiDevice, pioneer: bool) {
                     v => format!("Unknown ({v})"),
                 },
             );
-            field(
-                "DVD region",
-                crate::backends::pioneer::inspect::dvd_region_label(rpc),
-            );
+            field("DVD region", crate::inspection::dvd_region_label(rpc));
             field(
                 "User changes remaining",
                 rpc.user_changes_remaining.to_string(),

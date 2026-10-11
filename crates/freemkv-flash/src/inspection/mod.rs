@@ -6,6 +6,7 @@ pub(crate) mod comparison;
 mod report;
 pub use report::*;
 
+use crate::backend::{registry, ReadDevice};
 use crate::{engine, platform, workflow};
 use anyhow::{Context, Result};
 use std::{
@@ -125,7 +126,7 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned();
-            crate::backends::pioneer::inspect::inspect_file(name, &bytes, control)
+            inspect_bytes(name, &bytes, control)
         }
         Source::Drive { device, capture } => {
             let selector = workflow::resolve_device(Some(device))?;
@@ -134,17 +135,16 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 device: opened.as_mut(),
                 control,
             };
-            let backend = crate::backend::registry::resolve(&mut dev)?
+            let backend = registry::resolve(&mut dev)?
                 .context("Drive protocol could not be identified")?
                 .backend;
-            let descriptor = backend.descriptor();
-            if descriptor.id != crate::backends::pioneer::DESCRIPTOR.id {
-                return Err(
-                    InspectionError::UnsupportedFormat(descriptor.display_name.into()).into(),
-                );
-            }
+            let Some(provider) = backend.inspect() else {
+                let family = backend.descriptor().display_name;
+                return Err(InspectionError::UnsupportedFormat(family.into()).into());
+            };
             control.check()?;
-            let state = crate::backends::pioneer::inspect::live_state(&mut dev);
+            let state =
+                provider.live_state(&mut ReadDevice::new(&mut dev, backend.allowed_data_out()));
             engine::backup_with_replace(&mut dev, backend, capture, false, false)?;
             drop(opened);
             control.check()?;
@@ -153,6 +153,25 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
             Ok(inspection)
         }
     }
+}
+/// Inspect file bytes with the first backend that recognizes them; otherwise
+/// report the file as unrecognized or as a family without an inspector.
+fn inspect_bytes(name: String, bytes: &[u8], control: &Control) -> Result<Inspection> {
+    for backend in registry::file_backends() {
+        if let Some(inspection) = backend
+            .inspect()
+            .and_then(|i| i.inspect(name.clone(), bytes, control))
+        {
+            return inspection;
+        }
+    }
+    let identity = crate::imageid::identify(bytes);
+    Err(if identity.family == crate::imageid::ImageFamily::Unknown {
+        InspectionError::UnrecognizedFormat
+    } else {
+        InspectionError::UnsupportedFormat(identity.family.label().into())
+    }
+    .into())
 }
 /// Compare two sources, with files validated before any live capture.
 pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonReport> {

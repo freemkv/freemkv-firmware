@@ -19,9 +19,8 @@ use sha2::{Digest, Sha256};
 
 use super::crossflash::ensure_image_matches_drive;
 use super::UserDump;
+use crate::backend::{Backend, BackupNotice, ReadDevice};
 use crate::cmac;
-use crate::drive::{BackupNotice, DriveFamily};
-use crate::platform::ScsiDevice;
 
 /// A 0.10.x MTK rollback archive (`backup.toml` + raw `firmware.bin` + per-unit
 /// files). Still accepted for restore; new backups are OEM-format images.
@@ -116,7 +115,7 @@ impl BackupArtifact {
             if entry.size() > expected_size as u64 + 4096 {
                 bail!(
                     "backup member {} exceeds size limit",
-                    crate::drive::sanitize_ascii(&name)
+                    crate::backend::sanitize_ascii(&name)
                 );
             }
             let mut data = Vec::new();
@@ -132,7 +131,7 @@ impl BackupArtifact {
                 | "fd_fwdate.bin" | "fd_sn.bin" => regions.push((name, data)),
                 _ => bail!(
                     "unexpected or duplicate backup member {}",
-                    crate::drive::sanitize_ascii(&name)
+                    crate::backend::sanitize_ascii(&name)
                 ),
             }
         }
@@ -167,16 +166,15 @@ impl BackupArtifact {
 }
 
 /// Read every firmware byte, then rebuild the flashable OEM image from it.
-pub(crate) fn capture(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<Vec<u8>> {
-    let (read, readable, gaps) = drive
-        .read_full_image(dev)
-        .context("reading the drive's firmware")?;
-    if read.len() != drive.image_size() || readable != read.len() || !gaps.is_empty() {
+pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
+    let (read, readable, gaps) =
+        crate::probe::read_full_image(dev).context("reading the drive's firmware")?;
+    if read.len() != super::IMAGE_SIZE || readable != read.len() || !gaps.is_empty() {
         bail!(
             "backup needs every firmware byte, but read {} of {}; unreadable ranges {:#x?}. \
              `dump` saves what the drive returned",
             readable,
-            drive.image_size(),
+            super::IMAGE_SIZE,
             gaps
         );
     }
@@ -186,7 +184,7 @@ pub(crate) fn capture(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Resu
         "MTK backup rebuild: {}",
         describe(&rebuilt.provenance)
     ));
-    let product = drive.identity(dev).product;
+    let product = super::Mtk.identity(dev).product;
     validate_image(&rebuilt.image, Some(&product))?;
     Ok(rebuilt.image)
 }

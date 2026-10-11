@@ -278,7 +278,6 @@ fn plan_verbose_shows_framing_and_collapses_streams() {
 #[test]
 fn mtk_geometry_and_readback() {
     let m = Mtk;
-    assert_eq!(m.image_size(), IMAGE_SIZE);
     assert_eq!(m.chunk_size(), CHUNK);
 
     // Distinct, non-zero bytes at the queried offset: a mock that just
@@ -289,7 +288,9 @@ fn mtk_geometry_and_readback() {
         |cdb| cdb == cdb::read_memory(0x1000, 64).as_slice(),
         want.clone(),
     );
-    let got = m.readback(&mut dev, 0x1000, 64).unwrap();
+    let got = m
+        .readback(&mut ReadDevice::new(&mut dev, &[]), 0x1000, 64)
+        .unwrap();
     assert_eq!(got.len(), 64);
     assert_eq!(got, want);
     assert_eq!(dev.reads[0][0], 0x3C);
@@ -301,11 +302,15 @@ fn mtk_envelope_plaintext_by_default() {
     let m = Mtk;
     let mut dev = MockScsiDevice::new();
     let image = vec![0xABu8; IMAGE_SIZE];
-    let (payload, enc) = m.envelope(&mut dev, &image, None).unwrap();
+    let (payload, enc) = m
+        .envelope(&mut ReadDevice::new(&mut dev, &[]), &image, None)
+        .unwrap();
     assert!(!enc);
     assert_eq!(payload, image);
     // Forced enc changes the bytes.
-    let (enc_payload, enc_on) = m.envelope(&mut dev, &image, Some(true)).unwrap();
+    let (enc_payload, enc_on) = m
+        .envelope(&mut ReadDevice::new(&mut dev, &[]), &image, Some(true))
+        .unwrap();
     assert!(enc_on);
     assert_ne!(enc_payload, image);
 }
@@ -336,12 +341,10 @@ fn parse_sense_fixed_descriptor_and_short_buffers() {
 // disc" case is tolerated in the transport, so at THIS layer a TEST UNIT READY
 // surfacing as an error is a genuine fault that must never reach a write.
 
-use crate::drive::DriveFamily;
-
 #[test]
 fn preflight_is_read_only_on_a_responsive_drive() {
     let mut dev = MockScsiDevice::new();
-    Mtk.preflight(&mut dev)
+    Mtk.preflight(&mut ReadDevice::new(&mut dev, &[]))
         .expect("a responsive drive passes the read-only handshake");
     assert!(dev.writes.is_empty(), "preflight must issue no writes");
 }
@@ -533,7 +536,9 @@ fn short_preflight_rom_read_prevents_prepare_write() {
 #[test]
 fn short_firmware_report_window_is_not_fingerprinted() {
     let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), vec![0; 8]);
-    assert!(Mtk.firmware_report(&mut dev).is_err());
+    assert!(Mtk
+        .post_flash_identity(&mut ReadDevice::new(&mut dev, &[]))
+        .is_err());
 }
 
 #[test]
@@ -548,7 +553,14 @@ fn fixed_sense_with_valid_information_bit_preserves_hardware_fault() {
 
 /// Run the MTK image-stream flash of `payload`, discarding progress.
 fn stream(dev: &mut dyn crate::platform::ScsiDevice, payload: &[u8]) -> anyhow::Result<()> {
-    Mtk.flash_stream(dev, payload, crate::manifest::FlashMode::Full, &mut |_| {})
+    let mut writer = crate::engine::gates::ungated_for_tests(dev);
+    StreamFlash::stream(
+        &Mtk,
+        &mut writer,
+        payload,
+        crate::manifest::FlashMode::Full,
+        &mut |_| {},
+    )
 }
 
 #[test]
@@ -556,8 +568,8 @@ fn flash_stream_sends_the_oem_sequence_and_reports_progress() {
     let mut dev = MockScsiDevice::new();
     let payload = vec![0xA5u8; 2 * CHUNK];
     let mut seen = Vec::new();
-    Mtk.flash_stream(
-        &mut dev,
+    Mtk.stream(
+        &mut crate::engine::gates::ungated_for_tests(&mut dev),
         &payload,
         crate::manifest::FlashMode::Full,
         &mut |n| seen.push(n),

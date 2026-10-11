@@ -21,7 +21,6 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::drive::FullImage;
 use crate::platform::ScsiDevice;
 use mediatek_optical::cdb::{self, CHUNK};
 use mediatek_optical::layout::IMAGE_SIZE;
@@ -84,6 +83,10 @@ fn classify(r: &Result<Vec<u8>>) -> Cls {
         Ok(_) => Cls::Data,
     }
 }
+
+/// A full firmware read: `(image, readable byte count, unreadable (start, end)
+/// gaps)`. Every offset the drive does not expose is filled and recorded.
+pub type FullImage = (Vec<u8>, usize, Vec<(usize, usize)>);
 
 /// Read the full 2 MiB firmware image via the flash channel (`mode6/buf0`),
 /// GRACEFUL: any region the drive doesn't map to READ BUFFER is filled with

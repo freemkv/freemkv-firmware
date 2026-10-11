@@ -6,8 +6,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use freemkv_flash::backend::FlashRequest;
 use freemkv_flash::backends::pioneer;
-use freemkv_flash::drive::FlashRequest;
 use freemkv_flash::manifest::FlashMode;
 use freemkv_flash::platform::MockScsiDevice;
 
@@ -199,7 +199,11 @@ fn word_hits(code: &str, word: &str) -> Vec<usize> {
 
 /// The body of `struct <name> { ... }` in `code`, if declared there.
 fn struct_body<'a>(code: &'a str, name: &str) -> Option<&'a str> {
-    let at = code.find(&format!("struct {name} "))?;
+    let needle = format!("struct {name}");
+    let at = code
+        .match_indices(&needle)
+        .map(|(at, _)| at)
+        .find(|&at| matches!(code.as_bytes().get(at + needle.len()), Some(b' ' | b'<')))?;
     let open = at + code[at..].find('{')?;
     let close = open + code[open..].find('}')?;
     Some(&code[open + 1..close])
@@ -240,7 +244,7 @@ fn force_and_skip_backup_paths_are_gone() {
     }
     // Neither request type carries a bypass, and no flash-path code names one.
     for (path, name) in [
-        ("src/drive/mod.rs", "FlashRequest"),
+        ("src/backend/mod.rs", "FlashRequest"),
         ("src/workflow.rs", "FlashOptions"),
     ] {
         let body = struct_body(&source(&sources, path).code, name)
@@ -255,7 +259,6 @@ fn force_and_skip_backup_paths_are_gone() {
         "src/main.rs",
         "src/workflow.rs",
         "src/engine.rs",
-        "src/drive/mod.rs",
         "src/backends/mtk/mod.rs",
         "src/backends/pioneer/mod.rs",
         "src/backends/pioneer/flash.rs",
@@ -338,4 +341,141 @@ fn read_surface_map_is_gone() {
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+// ---------------------------------------------------------------------------
+// R2: write capability is a runtime handle only the engine's gates create
+// ---------------------------------------------------------------------------
+
+#[test]
+fn write_device_constructed_only_in_engine_gates() {
+    const GATES: &str = "src/engine/gates.rs";
+    let sources = production_sources();
+    let mut problems = Vec::new();
+    let gates = source(&sources, GATES);
+    let body = struct_body(&gates.code, "WriteDevice").expect("WriteDevice is defined in gates");
+    if !word_hits(body, "pub").is_empty() {
+        problems.push("WriteDevice has a public field".to_string());
+    }
+    for s in &sources {
+        let defines = s.code.contains("struct WriteDevice");
+        let literal = s.code.matches("WriteDevice {").count();
+        if s.path != GATES && (defines || literal > 0) {
+            problems.push(format!("{}: defines or builds a WriteDevice", s.path));
+        }
+        // Every function that hands out a WriteDevice is a gate, not public.
+        for (at, _) in s
+            .code
+            .match_indices("-> Result<WriteDevice")
+            .chain(s.code.match_indices("-> WriteDevice"))
+        {
+            let head = &s.code[s.code[..at].rfind("fn ").unwrap_or(0).saturating_sub(40)..at];
+            let restricted = head.contains("pub(in crate::engine) fn") || !head.contains("pub");
+            if s.path != GATES || !restricted {
+                problems.push(format!(
+                    "{}: a WriteDevice source outside the gates",
+                    s.path
+                ));
+            }
+        }
+        // Grants are requested only by the engine.
+        for grant in ["gates::flash(", "gates::recovery(", "gates::dump("] {
+            if s.code.contains(grant) && !s.path.starts_with("src/engine") {
+                problems.push(format!("{}: calls {grant}", s.path));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+// ---------------------------------------------------------------------------
+// R5: "recover" means only the Recovery facet
+// ---------------------------------------------------------------------------
+
+#[test]
+fn recover_names_only_the_recovery_facet() {
+    let sources = production_sources();
+    let mut problems = Vec::new();
+    for s in &sources {
+        for at in word_hits(&s.code, "recover") {
+            let before = s.code[..at].trim_end();
+            let after = s.code[at + "recover".len()..].trim_start();
+            let ok = if before.ends_with("fn") && after.starts_with('(') {
+                // A definition: the facet trait, its implementations, and the
+                // engine/workflow entry points that run it.
+                let enclosing = s.code[..at]
+                    .rfind("\nimpl ")
+                    .max(s.code[..at].rfind("\npub trait "))
+                    .map(|i| &s.code[i..at]);
+                let in_facet = enclosing.is_some_and(|e| {
+                    e.trim_start()
+                        .lines()
+                        .next()
+                        .is_some_and(|l| l.contains("RecoveryFacet"))
+                });
+                in_facet || ["src/engine.rs", "src/workflow.rs"].contains(&s.path.as_str())
+            } else if (before.ends_with('.') || before.ends_with("::")) && after.starts_with('(') {
+                ["src/main.rs", "src/workflow.rs", "src/engine.rs"].contains(&s.path.as_str())
+            } else {
+                // pioneer-optical's own `UpdateOptions::recover`, never requested.
+                s.path == "src/backends/pioneer/flash.rs"
+                    && after.starts_with(": false")
+                    && s.code[..at].rfind("UpdateOptions {").is_some()
+            };
+            if !ok {
+                let line = s.code[..at].lines().count();
+                problems.push(format!("{}:{line}: `recover` outside Recovery", s.path));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+// ---------------------------------------------------------------------------
+// R9: core modules reach backends only through the registry
+// ---------------------------------------------------------------------------
+
+#[test]
+fn core_modules_name_no_backend() {
+    let backends: Vec<String> = fs::read_dir(root().join("src/backends"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(backends.len() >= 2, "{backends:?}");
+    let mut problems = Vec::new();
+    for s in production_sources() {
+        if s.path.starts_with("src/backends/") || s.path == "src/backend/registry.rs" {
+            continue;
+        }
+        // The crate root declares the module tree; nothing else may name it.
+        let code = s.code.replace("pub mod backends;", "");
+        if code.contains("backends::") {
+            problems.push(format!("{}: names the backends module", s.path));
+        }
+        for name in &backends {
+            if code.contains(&format!("{name}::")) && !word_hits(&code, name).is_empty() {
+                problems.push(format!("{}: names backend module `{name}`", s.path));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+// ---------------------------------------------------------------------------
+// R11: pioneer-optical stays pinned through the migration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pioneer_optical_stays_pinned() {
+    let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
+    let line = manifest
+        .lines()
+        .find(|l| l.trim_start().starts_with("pioneer-optical"))
+        .expect("pioneer-optical dependency");
+    assert!(
+        line.contains("version = \"=0.12.4\""),
+        "pioneer-optical must stay pinned to =0.12.4: {line}"
+    );
 }

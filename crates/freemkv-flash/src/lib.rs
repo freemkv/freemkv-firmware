@@ -4,11 +4,11 @@
 //! * [`platform`] — OS SCSI pass-through transport ([`platform::ScsiDevice`])
 //!   with a real Linux `SG_IO` backend, Windows/macOS stubs, and a
 //!   [`platform::MockScsiDevice`] for host-independent tests.
-//! * [`backend`] — backend identity, file formats and the explicit registry;
-//!   [`drive`] — the per-backend command trait ([`drive::DriveFamily`]);
-//!   [`backends`] holds the protocol implementations.
+//! * [`backend`] — the backend contract ([`backend::Backend`] and its facets),
+//!   devices and the explicit registry; [`backends`] holds the protocol
+//!   implementations.
 //! * [`engine`] — the generic, chip-agnostic `info`/`backup`/`flash` orchestration
-//!   that drives a [`drive::DriveFamily`] through its trait primitives.
+//!   that drives a [`backend::Backend`] through its facets and write gates.
 //!
 //! Supporting modules: [`cmac`] (MT1959 AES-CMAC verify/resign) and [`manifest`]
 //! (defines the [`manifest::FlashMode`] enum).
@@ -23,7 +23,6 @@ pub mod diagnostics;
 pub mod backend;
 pub mod backends;
 pub mod cmac;
-pub mod drive;
 pub mod engine;
 /// Declarative per-family/brand flash instruction sets + the 18-brand catalog.
 pub mod flashset;
@@ -34,7 +33,6 @@ pub mod manifest;
 pub mod platform;
 pub mod probe;
 pub mod style;
-/// The single `Transport` adapter between `ScsiDevice` and the protocol crates.
 pub mod transport;
 pub mod workflow;
 

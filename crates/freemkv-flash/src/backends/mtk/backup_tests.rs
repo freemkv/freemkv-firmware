@@ -1,7 +1,7 @@
 //! Unit tests for [`super`] (MediaTek backup capture, notice and validation).
 
 use super::*;
-use crate::backends::mtk::{Mtk, IMAGE_SIZE};
+use crate::backends::mtk::IMAGE_SIZE;
 use crate::platform::MockScsiDevice;
 use mediatek_optical::{layout, Chip};
 
@@ -47,7 +47,7 @@ fn unknown_mt1939_build_backs_up_as_a_labelled_reconstruction() {
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(drive_read(&installed))
         .with_product("BD-RE BE14NU40");
-    let backup = capture(&mut dev, &Mtk).unwrap();
+    let backup = capture(&mut crate::backend::ReadDevice::new(&mut dev, &[])).unwrap();
     assert_eq!(
         backup[..layout::BOOT_PAGE.len],
         installed[..layout::BOOT_PAGE.len]
@@ -72,7 +72,10 @@ fn unknown_boot_page_is_refused() {
     let mut read = drive_read(&installed);
     read[0] ^= 1;
     let mut dev = MockScsiDevice::new().with_firmware_image(read);
-    let error = format!("{:#}", capture(&mut dev, &Mtk).unwrap_err());
+    let error = format!(
+        "{:#}",
+        capture(&mut crate::backend::ReadDevice::new(&mut dev, &[])).unwrap_err()
+    );
     assert!(error.contains("boot page"), "{error}");
 }
 

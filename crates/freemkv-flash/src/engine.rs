@@ -3,35 +3,41 @@
 //! This layer is **chip-agnostic**. It owns everything that does not depend on a
 //! particular silicon: reading the input file, the pre-flash backup, the dry-run
 //! plan, the streaming loop, read-back verification, and the safety gate. It
-//! drives a [`DriveFamily`] purely through its trait primitives, so a new chip
-//! (Pioneer, Renesas, …) reuses this loop unchanged — the engine calls
-//! `drive.flash_stream(...)` without caring whose CDBs those are.
+//! drives a [`Backend`] through its facets: read-only calls get a
+//! [`ReadDevice`], and writes get a `WriteDevice` from [`gates`] only.
 //!
-//! Layering: `main` (CLI) → `engine` (this) → [`crate::drive`] (per-chip).
+//! Layering: `main` (CLI) → `engine` (this) → [`crate::backend`] (contract).
 
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::backend::{FormatRole, UNKNOWN_FAMILY};
-use crate::drive::{BackupNotice, Capabilities, DriveFamily, FlashRequest};
+use crate::backend::{
+    read_identity, Backend, BackupFacet, BackupNotice, Capabilities, DeviceAccess, FlashExecutor,
+    FlashFacet, FlashRequest, FormatRole, ReadDevice, StreamFlash, UNKNOWN_FAMILY,
+};
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
 pub(crate) mod backup;
 pub(crate) mod device_info;
+pub mod gates;
 #[cfg(test)]
 use crate::backends::mtk::backup::BackupArtifact;
 use backup::save_backup;
+use gates::SavedBackup;
 
 /// Run the `info` command: identify + classify (read-only). `drive` is the
 /// matched backend, or `None` for a drive no backend recognizes.
-pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn DriveFamily>) -> Result<()> {
+pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Result<()> {
     println!("{}", style::kv("device", &dev.describe()));
+    let unlocks = drive.map_or(&[][..], |d| d.allowed_data_out());
+    let mut dev = ReadDevice::new(dev, unlocks);
+    let dev = &mut dev;
     let id = match drive {
         Some(drive) => drive.identity(dev),
-        None => crate::drive::read_identity(dev),
+        None => read_identity(dev),
     };
     let family = drive.map_or(UNKNOWN_FAMILY, |d| d.descriptor().display_name);
     crate::output::field("Manufacturer", style::printable(&id.vendor));
@@ -60,10 +66,9 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn DriveFamily>) -> Result
                 .unwrap_or_else(|| "<none>".to_string())
         )
     );
-    // The single source of truth for what this family can do (see
-    // drive::Capabilities). `info` is always on for a classified drive; the
-    // headline is which of backup/flash are live.
-    let caps = drive.map_or(Capabilities::NONE, |d| d.capabilities());
+    // What the backend's facets offer; the headline is which of backup/flash
+    // are live.
+    let caps = drive.map_or(Capabilities::NONE, Capabilities::of);
     crate::output::field(
         "Backup",
         if caps.backup {
@@ -94,21 +99,22 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn DriveFamily>) -> Result
     if let Some(summary) = drive.and_then(|d| d.descriptor().flash_summary) {
         println!("{}", style::kv("flash", summary));
     }
-    device_info::show(dev, drive.is_some_and(|d| d.vendor_snapshot()));
-    let Some(drive) = drive else {
+    let details = drive.and_then(|d| d.details());
+    device_info::show(dev, details.is_some_and(|d| d.vendor_snapshot()));
+    let Some(details) = details else {
         return Ok(());
     };
-    drive.print_device_info(dev);
+    details.print_fields(dev);
     // Best-effort firmware identification (read-only). `info` never aborts, so a
     // read failure here is simply omitted.
-    if let Ok(Some(r)) = drive.firmware_report(dev) {
+    if let Ok(Some(r)) = details.post_flash_identity(dev) {
         match r.matched {
-            Some(m) => {
-                println!("{}", style::kv("firmware", m.desc));
-                if !m.source.is_empty() {
+            Some((desc, source)) => {
+                println!("{}", style::kv("firmware", desc));
+                if !source.is_empty() {
                     println!(
                         "{}",
-                        style::dim_line(&format!("          original image: {}", m.source))
+                        style::dim_line(&format!("          original image: {source}"))
                     );
                 }
             }
@@ -154,7 +160,7 @@ pub fn info_file(path: &Path) -> Result<()> {
     println!("{}", style::kv("sha256", &sha));
 
     for backend in crate::backend::registry::file_backends() {
-        if let Some(report) = backend.describe_file(&image) {
+        if let Some(report) = backend.files().and_then(|f| f.describe(&image)) {
             return report;
         }
     }
@@ -206,12 +212,7 @@ fn info_file_other(id: &crate::imageid::ImageIdentity) -> Result<()> {
 
 /// Capture a complete firmware and per-unit rollback artifact. Any unreadable
 /// firmware range makes the command fail without writing an archive.
-pub fn backup(
-    dev: &mut dyn ScsiDevice,
-    drive: &dyn DriveFamily,
-    out: &Path,
-    dump: bool,
-) -> Result<()> {
+pub fn backup(dev: &mut dyn ScsiDevice, drive: &dyn Backend, out: &Path, dump: bool) -> Result<()> {
     backup_with_replace(dev, drive, out, dump, false)
 }
 
@@ -219,18 +220,21 @@ pub fn backup(
 /// Replacement happens only after the new artifact is written and validated.
 pub fn backup_with_replace(
     dev: &mut dyn ScsiDevice,
-    drive: &dyn DriveFamily,
+    drive: &dyn Backend,
     out: &Path,
     dump: bool,
     replace: bool,
 ) -> Result<()> {
-    if !drive.capabilities().backup {
-        bail!(
-            "no firmware backup capability for {}",
-            drive.descriptor().id
-        );
+    let id = drive.descriptor().id;
+    let facet = drive.backup();
+    if dump {
+        drive
+            .dump()
+            .with_context(|| format!("no firmware dump capability for {id}"))?;
+    } else if facet.is_none() {
+        bail!("no firmware backup capability for {id}");
     }
-    let kind = drive.backup_kind();
+    let infix = facet.map_or("dump", |f| f.format().infix);
     // Fail fast before the multi-minute capture if the output already exists.
     if !replace && out.symlink_metadata().is_ok() {
         bail!(
@@ -238,7 +242,8 @@ pub fn backup_with_replace(
             out.display()
         );
     }
-    let target_model = drive.identity(dev).product;
+    let unlocks = drive.allowed_data_out();
+    let target_model = drive.identity(&mut ReadDevice::new(dev, unlocks)).product;
     println!(
         "{} {}",
         style::bold("Backing up"),
@@ -248,32 +253,40 @@ pub fn backup_with_replace(
             out.display()
         ))
     );
-    // The `dump` command uses the family's salvage capture (never kernel
-    // mode). Families without a distinct dump capture a normal backup.
-    let bytes = if dump {
-        drive.capture_dump(dev)?
-    } else {
-        drive.capture_backup(dev)?
+    let (bytes, facet) = match (dump, drive.dump(), facet) {
+        // The `dump` command's salvage capture (never kernel mode). A dump that
+        // declares writes gets a write grant limited to those commands.
+        (true, Some(dump), _) => {
+            let bytes = if dump.writes().is_empty() {
+                dump.capture(DeviceAccess::Read(&mut ReadDevice::new(dev, unlocks)))?
+            } else {
+                dump.capture(DeviceAccess::Write(&mut gates::dump(dev, dump.writes())))?
+            };
+            (bytes, None)
+        }
+        (false, _, Some(facet)) => (
+            facet.capture(&mut ReadDevice::new(dev, unlocks))?,
+            Some(facet),
+        ),
+        _ => unreachable!("capabilities checked above"),
     };
-    let raw_dump = dump && drive.dump_is_raw();
-    let saved_len = if raw_dump {
+    let saved_len = match facet {
+        Some(facet) => backup::save_validated_with_replace(out, &bytes, replace, |candidate| {
+            facet.validate(candidate, &target_model).map(|_| ())
+        })?,
         // A raw memory image is saved verbatim as ONE file: it is not a backup
         // archive, so only require that something was read.
-        backup::save_validated_with_replace(out, &bytes, replace, |b| {
+        None => backup::save_validated_with_replace(out, &bytes, replace, |b| {
             if b.is_empty() {
                 bail!("dump is empty");
             }
             Ok(())
-        })?
-    } else {
-        backup::save_validated_with_replace(out, &bytes, replace, |candidate| {
-            drive.validate_backup(candidate, &target_model).map(|_| ())
-        })?
+        })?,
     };
     println!(
         "{}",
         style::kv(
-            &format!("{} sha256", kind.infix),
+            &format!("{infix} sha256"),
             &format!("{:x}", Sha256::digest(&bytes))
         )
     );
@@ -290,7 +303,7 @@ pub fn backup_with_replace(
     // Provenance line, computed from the produced bytes: a byte-exact OEM
     // capture prints a green confirmation; anything reconstructed prints an
     // amber "unverified" advisory naming what is not OEM.
-    if raw_dump {
+    let Some(facet) = facet else {
         crate::output::field("Artifact", "Raw memory dump — not a flashable backup");
         println!(
             "{}",
@@ -299,8 +312,8 @@ pub fn backup_with_replace(
             )
         );
         return Ok(());
-    }
-    match drive.backup_notice(&bytes) {
+    };
+    match facet.notice(&bytes) {
         BackupNotice::VerifiedOem(msg) => {
             crate::output::field("Backup validation", &msg);
             println!("{}", style::green(&msg));
@@ -314,54 +327,84 @@ pub fn backup_with_replace(
     Ok(())
 }
 
-/// Run the `flash` command: `.bin` = full image, `.tar` = firmware rollback archive.
-pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
-    if let Some(plan) = drive.offline_plan(req) {
-        return plan;
-    }
-    guard_no_medium(dev, req.execute)?;
-    // Whole-package executors (e.g. a Pioneer OEM update session) own the
-    // execute flow, but only AFTER the shared safety gate and a captured
-    // pre-flash backup — the same invariants the image-chunk path enforces.
-    if req.execute && drive.flash_is_bundle() {
-        if let Err(block) = check_safety(req.acknowledged_risk) {
-            bail!("SAFETY GATE: {}", block.0);
-        }
-        let (backup_summary, backup_bytes) = capture_required_backup(dev, drive, req)?;
-        // Re-check the tray right before any write (the backup opened a
-        // multi-round-trip window; a disc/tray change is the same hazard class).
-        guard_no_medium(dev, req.execute)?;
-        println!("{}", style::kv("backup", &backup_summary));
-        return drive
-            .flash_bundle(dev, req, Some(&backup_bytes))
-            .unwrap_or_else(|| {
-                bail!(
-                    "{} declares a bundle flash but provides none",
-                    drive.descriptor().id
-                )
-            });
-    }
-    let format = req.input_format;
-    if !drive.descriptor().owns(format) {
-        bail!(
-            "a {} cannot be flashed to this {} drive",
-            format.label,
-            drive.descriptor().id
-        );
-    }
-    match format.role {
-        FormatRole::Backup => flash_restore(dev, drive, req),
-        FormatRole::Image | FormatRole::Package => flash_bin(dev, drive, req),
+/// Run a backend's recovery: read-only on a dry run, through the recovery
+/// write grant (execute + acknowledgement; no tray check, no backup) otherwise.
+pub fn recover(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    current: Option<&[u8]>,
+    target: &[u8],
+    execute: bool,
+    acknowledged_risk: bool,
+) -> Result<()> {
+    let facet = drive
+        .recovery()
+        .with_context(|| format!("{} offers no recovery", drive.descriptor().id))?;
+    if execute {
+        let mut writer = gates::recovery(dev, execute, acknowledged_risk)?;
+        facet.recover(DeviceAccess::Write(&mut writer), current, target)
+    } else {
+        let mut reader = ReadDevice::new(dev, drive.allowed_data_out());
+        facet.recover(DeviceAccess::Read(&mut reader), current, target)
     }
 }
 
-/// Capture, save and verify the mandatory pre-flash backup. Returns a summary
-/// line and the captured bytes (the installed firmware, used for routing).
+/// Run the `flash` command: `.bin` = full image, `.tar` = firmware rollback archive.
+pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
+    let facet = drive.flash().with_context(|| {
+        format!(
+            "refusing to flash: {} has no executable flash capability",
+            drive.descriptor().id
+        )
+    })?;
+    match facet.executor() {
+        // A whole-package executor (e.g. a Pioneer OEM update session) plans its
+        // dry run offline and owns the execute flow, but only AFTER the shared
+        // safety gate and a saved pre-flash backup.
+        FlashExecutor::Bundle(bundle) => {
+            if !req.execute {
+                return bundle.dry_run(req);
+            }
+            guard_no_medium(dev, req.execute)?;
+            if let Err(block) = check_safety(req.acknowledged_risk) {
+                bail!("SAFETY GATE: {}", block.0);
+            }
+            let saved = capture_required_backup(dev, drive, facet, req)?;
+            // Re-check the tray right before any write (the backup opened a
+            // multi-round-trip window; a disc/tray change is the same hazard class).
+            guard_no_medium(dev, req.execute)?;
+            println!("{}", style::kv("backup", &saved.summary));
+            let mut writer = gates::flash(dev, req, &saved)?;
+            bundle.execute(&mut writer, req, Some(&saved.bytes))
+        }
+        FlashExecutor::Stream(stream) => {
+            guard_no_medium(dev, req.execute)?;
+            let format = req.input_format;
+            if !drive.descriptor().owns(format) {
+                bail!(
+                    "a {} cannot be flashed to this {} drive",
+                    format.label,
+                    drive.descriptor().id
+                );
+            }
+            match format.role {
+                FormatRole::Backup => flash_restore(dev, drive, facet, stream, req),
+                FormatRole::Image | FormatRole::Package => {
+                    flash_bin(dev, drive, facet, stream, req)
+                }
+            }
+        }
+    }
+}
+
+/// Capture, save and verify the mandatory pre-flash backup. The proof carries
+/// a summary line and the captured bytes (the installed firmware, for routing).
 fn capture_required_backup(
     dev: &mut dyn ScsiDevice,
-    drive: &dyn DriveFamily,
+    drive: &dyn Backend,
+    flash: &dyn FlashFacet,
     req: &FlashRequest,
-) -> Result<(String, Vec<u8>)> {
+) -> Result<SavedBackup> {
     let out = req
         .predump_out
         .as_ref()
@@ -375,22 +418,29 @@ fn capture_required_backup(
             out.display()
         );
     }
-    let bytes = drive
-        .capture_backup(dev)
+    let backup = drive.backup().with_context(|| {
+        format!(
+            "no proven restorable firmware backup for {}",
+            drive.descriptor().id
+        )
+    })?;
+    let unlocks = drive.allowed_data_out();
+    let bytes = backup
+        .capture(&mut ReadDevice::new(dev, unlocks))
         .context("pre-flash backup failed; aborting flash")?;
-    let target_model = drive.identity(dev).product;
-    let saved_len = save_backup(out, &bytes, drive, &target_model)
+    let target_model = drive.identity(&mut ReadDevice::new(dev, unlocks)).product;
+    let saved_len = save_backup(out, &bytes, backup, &target_model)
         .context("pre-flash backup failed; aborting flash")?;
     // Preserve a structurally valid capture before target-dependent checks.
     // A partial capture remains useful, but cannot authorize writing a region
     // it does not cover. No update command has been issued at this point.
-    drive.verify_preflash_backup(&bytes, &req.input).with_context(|| {
+    flash.verify_preflash_backup(&bytes, &req.input).with_context(|| {
         format!("backup saved to {}, but it is not a usable rollback for this update; aborting flash", out.display())
     })?;
-    Ok((
-        format!("saved {} ({} bytes)", out.display(), saved_len),
+    Ok(SavedBackup {
+        summary: format!("saved {} ({} bytes)", out.display(), saved_len),
         bytes,
-    ))
+    })
 }
 
 /// Refuse to flash while a disc is loaded. Reprogramming the flash while the
@@ -428,21 +478,40 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result
 /// Compare the decoded input against the backend's readable protected ranges.
 /// Mutable per-unit regions and remapped boot bytes are excluded. A mismatch or
 /// unavailable protected range fails verification; identity alone is insufficient.
-fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
+fn flash_bin(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    facet: &dyn FlashFacet,
+    stream: &dyn StreamFlash,
+    req: &FlashRequest,
+) -> Result<()> {
+    let unlocks = drive.allowed_data_out();
     // Image geometry, integrity, model, and any controller sub-family gate are
     // protocol decisions. The engine only enforces the common workflow.
-    drive.validate_image(dev, &req.input, &req.drive_model, req.allow_crossflash)?;
-    let (payload, enc) = drive.envelope(dev, &req.input, req.enc_override)?;
+    stream.validate_image(
+        &mut ReadDevice::new(dev, unlocks),
+        &req.input,
+        &req.drive_model,
+        req.allow_crossflash,
+    )?;
+    let (payload, enc) = stream.envelope(
+        &mut ReadDevice::new(dev, unlocks),
+        &req.input,
+        req.enc_override,
+    )?;
 
-    // Save a complete rollback before flash_stream.
-    let backup_summary = if req.execute {
+    // Save a complete rollback before streaming.
+    let saved = if req.execute {
         if let Err(block) = check_safety(req.acknowledged_risk) {
             bail!("SAFETY GATE: {}", block.0);
         }
-        capture_required_backup(dev, drive, req)?.0
+        Some(capture_required_backup(dev, drive, facet, req)?)
     } else {
-        "not captured (dry run)".to_string()
+        None
     };
+    let backup_summary = saved
+        .as_ref()
+        .map_or("not captured (dry run)", |s| s.summary.as_str());
 
     println!("{}", style::header("== flash plan =="));
     println!("{}", style::kv("device", &dev.describe()));
@@ -450,7 +519,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         "{}",
         style::kv("drive", style::ident_or_unknown(&req.drive_model))
     );
-    drive.print_flash_notes(&req.input, &req.drive_model, req.allow_crossflash);
+    stream.print_notes(&req.input, &req.drive_model, req.allow_crossflash);
     println!(
         "{}",
         style::kv(
@@ -462,15 +531,15 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
             )
         )
     );
-    println!("{}", style::kv("backup", &backup_summary));
+    println!("{}", style::kv("backup", backup_summary));
     println!();
-    print!("{}", drive.flash_plan(payload.len(), req.verbose)?);
+    print!("{}", stream.plan(payload.len(), req.verbose)?);
 
     if !req.execute {
         // Read-only readiness handshake (PROBE + TEST UNIT READY) — issues NO
         // write — so a dry-run surfaces a not-ready drive up front, before the
         // operator commits to --execute. A benign no-disc drive passes.
-        match drive.preflight(dev) {
+        match stream.preflight(&mut ReadDevice::new(dev, unlocks)) {
             Ok(()) => println!(
                 "{}",
                 style::status_line(
@@ -488,38 +557,30 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         return Ok(());
     }
 
-    // Execution-tier gate: a real (destructive) write is allowed ONLY for a
-    // hardware-proven, issuable instruction set. Today that is MT1959 (the MTK
-    // family); catalog-only / transport-gated families are dry-run/plan only and
-    // must never issue a write, even with --execute.
-    if !drive.capabilities().flash {
-        bail!(
-            "refusing to flash: {} has no executable flash capability",
-            drive.descriptor().id
-        );
-    }
-
-    // Safety gate only on the write path.
-    if let Err(block) = check_safety(req.acknowledged_risk) {
-        bail!("SAFETY GATE: {}", block.0);
-    }
+    // The write grant re-checks --execute and the risk acknowledgement and
+    // requires the saved backup.
+    let saved = saved.context("no pre-flash backup was saved")?;
+    let mut writer = gates::flash(dev, req, &saved)?;
 
     // Final tray/medium re-check: the top-of-function `guard_no_medium` runs
     // before the pre-flash dump, CMAC verify, crossflash gate, and plan
     // print — a multi-SCSI-round-trip window in which a user could
     // physically insert a disc or the drive could report a settling tray
     // as loaded. The write path is the whole reason the guard exists, so
-    // re-probe RIGHT before `flash_stream`; a stale check is the same class
+    // re-probe RIGHT before the stream; a stale check is the same class
     // of hazard as no check at all (drive controller can wedge mid-program
     // when servicing a medium).
-    guard_no_medium(dev, req.execute)?;
+    guard_no_medium(&mut writer, req.execute)?;
     println!(
         "\n{}",
         style::bold("EXECUTING flash — do not power off or disconnect the drive...")
     );
-    let chunk = drive.chunk_size();
+    let chunk = stream.chunk_size();
     let mut progress = style::Progress::new("flashing firmware", payload.len());
-    drive.flash_stream(dev, &payload, req.mode, &mut |sent| progress.set(sent))?;
+    stream.stream(&mut writer, &payload, req.mode, &mut |sent| {
+        progress.set(sent)
+    })?;
+    let dev = &mut ReadDevice::new(dev, unlocks);
     println!(
         "upload complete {}",
         style::dim(&format!(
@@ -530,12 +591,12 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // The drive keeps programming its flash after the last chunk (it reports
     // NOT READY / LONG WRITE IN PROGRESS). Wait for it to finish before reading
     // back, so a SUCCESSFUL flash never surfaces a scary mid-program error.
-    drive.wait_ready(dev)?;
+    stream.wait_ready(dev)?;
     println!("verifying...");
 
     // The backend defines which image bytes can be compared after programming.
     // On MTK these are CMAC-covered ranges outside the remapped boot page.
-    let protected = drive.verification_ranges(&req.input)?;
+    let protected = stream.verification_ranges(&req.input)?;
     let is_protected = |pos: usize| protected.iter().any(|&(s, e)| pos >= s && pos <= e);
 
     let mut checked = 0usize; // protected + readable bytes we compared
@@ -546,7 +607,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     for piece in req.input.chunks(chunk) {
         // Does this chunk cover any comparable (protected, past-boot) byte?
         let has_protected = (offset..offset + piece.len()).any(&is_protected);
-        match drive.readback(dev, offset, piece.len()) {
+        match stream.readback(dev, offset, piece.len()) {
             Ok(got) if got.len() == piece.len() => {
                 for (i, (a, b)) in got.iter().zip(piece).enumerate() {
                     let pos = offset + i;
@@ -637,11 +698,15 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // and not "drive is confirmed running the new firmware" can inspect
     // the error class; this at least stops the exit code from claiming
     // success on a drive that never came back cleanly.
-    match drive.firmware_report(dev) {
+    let identity = match drive.details() {
+        Some(details) => details.post_flash_identity(dev),
+        None => Ok(None),
+    };
+    match identity {
         Ok(Some(r)) => match r.matched {
-            Some(m) => println!(
+            Some((desc, _)) => println!(
                 "{}",
-                style::kv("firmware now", &format!("{}  [{}]", m.desc, r.fingerprint))
+                style::kv("firmware now", &format!("{desc}  [{}]", r.fingerprint))
             ),
             None => println!(
                 "{}",
@@ -676,10 +741,18 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 /// family gates live in the backend's validation, not here.
 fn flash_restore(
     dev: &mut dyn ScsiDevice,
-    drive: &dyn DriveFamily,
+    drive: &dyn Backend,
+    facet: &dyn FlashFacet,
+    stream: &dyn StreamFlash,
     req: &FlashRequest,
 ) -> Result<()> {
-    let firmware = drive.validate_backup(&req.input, &req.drive_model)?;
+    let backup: &dyn BackupFacet = drive.backup().with_context(|| {
+        format!(
+            "no proven backup restore path for {}",
+            drive.descriptor().id
+        )
+    })?;
+    let firmware = backup.validate(&req.input, &req.drive_model)?;
     println!(
         "{}",
         style::header("== reflash backup firmware (per-unit data retained as reference) ==")
@@ -689,7 +762,7 @@ fn flash_restore(
     firmware_req.allow_crossflash = false;
     // The full image uses the same proven MTK update path. Per-unit members are
     // coherence/reference data, not separate post-reboot writes.
-    flash_bin(dev, drive, &firmware_req)?;
+    flash_bin(dev, drive, facet, stream, &firmware_req)?;
     Ok(())
 }
 

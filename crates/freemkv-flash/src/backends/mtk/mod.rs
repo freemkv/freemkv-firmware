@@ -3,8 +3,8 @@
 //! The MTK backend: identity/dump reads, the flash session, the enc transport
 //! envelope, and the per-unit tar model. CDB construction lives in
 //! `mediatek_optical`; backup, crossflash and file-report logic are submodules.
-//! The generic orchestration lives in [`crate::engine`]. Only `describe_file`,
-//! `print_device_info` and `print_flash_notes` print.
+//! The generic orchestration lives in [`crate::engine`]. Only the file report,
+//! the vendor `info` fields and the crossflash plan notes print.
 //!
 //! ## flash is a DUMB verbatim writer
 //! The flasher writes the given image to the drive **verbatim** and never
@@ -42,8 +42,11 @@ pub(crate) mod file_info;
 pub mod fw_ident;
 pub mod oem;
 
-use crate::backend::{BackendId, Descriptor, FileFormat, FormatRole};
-use crate::drive::{Capabilities, DriveFamily};
+use crate::backend::{
+    read_identity, Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, Descriptor,
+    DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat, FirmwareReport, FlashExecutor,
+    FlashFacet, FormatRole, Identity, Match, ReadDevice, StreamFlash, WriteDevice,
+};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
@@ -314,7 +317,7 @@ impl UserDump {
                 "fd_sn.bin" => &mut fd_sn,
                 other => bail!(
                     "unexpected dump member '{}'",
-                    crate::drive::sanitize_ascii(other)
+                    crate::backend::sanitize_ascii(other)
                 ),
             };
             if slot.is_some() {
@@ -370,12 +373,12 @@ impl UserDump {
     /// Decoded serial number, if the descriptor parses. Sanitized for display
     /// (a malicious/garbled drive cannot inject terminal escapes).
     pub fn serial(&self) -> Option<String> {
-        parse_field_descriptor(&self.fd_sn).map(|d| crate::drive::sanitize_ascii(&d.ascii))
+        parse_field_descriptor(&self.fd_sn).map(|d| crate::backend::sanitize_ascii(&d.ascii))
     }
 
     /// Decoded firmware date, if the descriptor parses.
     pub fn fw_date(&self) -> Option<String> {
-        parse_field_descriptor(&self.fd_fwdate).map(|d| crate::drive::sanitize_ascii(&d.ascii))
+        parse_field_descriptor(&self.fd_fwdate).map(|d| crate::backend::sanitize_ascii(&d.ascii))
     }
 
     /// Write the dump as a `.tar` with compatible member names/order.
@@ -426,7 +429,7 @@ impl UserDump {
                 bail!(
                     "tar member '{}' declares {declared} bytes (> {READ_TAR_MEMBER_CAP} cap); \
                      refusing to allocate a buffer this large before the length gate runs",
-                    crate::drive::sanitize_ascii(&name)
+                    crate::backend::sanitize_ascii(&name)
                 );
             }
             // Read into a capacity-hinted buffer; `take` bounds the actual
@@ -440,7 +443,7 @@ impl UserDump {
             if data.len() > READ_TAR_MEMBER_CAP {
                 bail!(
                     "tar member '{}' body exceeded the {READ_TAR_MEMBER_CAP}-byte cap",
-                    crate::drive::sanitize_ascii(&name)
+                    crate::backend::sanitize_ascii(&name)
                 );
             }
             let canonical = MEMBER_NAMES
@@ -450,7 +453,7 @@ impl UserDump {
                 .with_context(|| {
                     format!(
                         "unexpected dump member '{}'",
-                        crate::drive::sanitize_ascii(&name)
+                        crate::backend::sanitize_ascii(&name)
                     )
                 })?;
             members.push((canonical, data));
@@ -1017,57 +1020,51 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
 /// The MediaTek MT19xx drive family.
 pub struct Mtk;
 
-impl DriveFamily for Mtk {
+impl Backend for Mtk {
     fn descriptor(&self) -> &'static Descriptor {
         &DESCRIPTOR
     }
 
-    fn probe(
-        &self,
-        dev: &mut dyn ScsiDevice,
-        identity: &crate::drive::Identity,
-    ) -> Result<Option<crate::drive::ProbeEvidence>> {
+    fn probe(&self, dev: &mut ReadDevice<'_>, identity: &Identity) -> Result<Option<Match>> {
         // A Pioneer INQUIRY is enough to rule out MT19xx. Do not issue MTK
         // vendor ROM reads at this unrelated controller.
         if identity.vendor.eq_ignore_ascii_case("PIONEER") {
             return Ok(None);
         }
-        Ok((get_config_is_mtk(dev) && has_mt19_banner(dev)).then_some(
-            crate::drive::ProbeEvidence {
+        Ok(
+            (get_config_is_mtk(dev) && has_mt19_banner(dev)).then_some(Match {
                 backend: DESCRIPTOR.id,
-                discriminator: "MMC 0x010C + MT19 boot ROM banner",
-            },
-        ))
+                evidence: "MMC 0x010C + MT19 boot ROM banner",
+            }),
+        )
     }
 
-    fn identity(&self, dev: &mut dyn ScsiDevice) -> crate::drive::Identity {
-        let mut identity = crate::drive::read_identity(dev);
+    fn identity(&self, dev: &mut ReadDevice<'_>) -> Identity {
+        let mut identity = read_identity(dev);
         identity.banner = read_mt19_banner(dev);
         identity
     }
 
-    fn backup_extension(&self) -> Option<&'static str> {
-        Some("bin")
+    fn files(&self) -> Option<&dyn FileFacet> {
+        Some(self)
     }
-
-    fn backup_notice(&self, bytes: &[u8]) -> crate::drive::BackupNotice {
-        backup::notice(bytes)
+    fn details(&self) -> Option<&dyn DetailsFacet> {
+        Some(self)
     }
+    fn backup(&self) -> Option<&dyn BackupFacet> {
+        Some(self)
+    }
+    fn dump(&self) -> Option<&dyn DumpFacet> {
+        Some(self)
+    }
+    fn flash(&self) -> Option<&dyn FlashFacet> {
+        Some(self)
+    }
+}
 
-    fn describe_file(&self, image: &[u8]) -> Option<Result<()>> {
+impl FileFacet for Mtk {
+    fn describe(&self, image: &[u8]) -> Option<Result<()>> {
         file_info::describe(image)
-    }
-
-    fn print_device_info(&self, dev: &mut dyn ScsiDevice) {
-        let chip = read_chip(dev).map_or("Not reported", |c| c.label());
-        crate::output::field("Chipset", chip);
-        println!("{}", crate::style::kv("chipset", chip));
-    }
-
-    fn print_flash_notes(&self, image: &[u8], drive_model: &str, allow_crossflash: bool) {
-        if let Some(info) = crossflash::preview_crossflash(image, drive_model, allow_crossflash) {
-            crossflash::print_crossflash_banner(&info);
-        }
     }
 
     fn classify_input(&self, path: &std::path::Path, _bytes: &[u8]) -> &'static FileFormat {
@@ -1076,32 +1073,61 @@ impl DriveFamily for Mtk {
             _ => &IMAGE,
         }
     }
+}
 
-    fn verification_ranges(&self, image: &[u8]) -> Result<Vec<(usize, usize)>> {
-        let Some(entries) = crate::cmac::parse_table(image).ok() else {
-            return Ok(Vec::new());
-        };
-        Ok(entries
-            .iter()
-            .filter(|entry| entry.is_active())
-            .filter_map(|entry| {
-                let start = (entry.start as usize).max(0x1000);
-                let end = entry.end as usize;
-                (start <= end).then_some((start, end))
-            })
-            .collect())
+impl DetailsFacet for Mtk {
+    fn print_fields(&self, dev: &mut ReadDevice<'_>) {
+        let chip = read_chip(dev).map_or("Not reported", |c| c.label());
+        crate::output::field("Chipset", chip);
+        println!("{}", crate::style::kv("chipset", chip));
     }
 
-    fn capture_backup(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-        backup::capture(dev, self)
+    fn post_flash_identity(&self, dev: &mut ReadDevice<'_>) -> Result<Option<FirmwareReport>> {
+        // The two firmware-code windows a live drive exposes (rom_1F0000 is
+        // per-unit calibration and deliberately excluded from the fingerprint).
+        let rom_003000 = Acquire::ReadBuffer {
+            offset: ROM_003000_OFFSET,
+            len: ROM_003000_LEN,
+        }
+        .run(dev)?;
+        let rom_1ec000 = Acquire::ReadBuffer {
+            offset: ROM_1EC000_OFFSET,
+            len: ROM_1EC000_LEN,
+        }
+        .run(dev)?;
+        let report = fw_ident::report(&rom_003000, &rom_1ec000);
+        Ok(Some(FirmwareReport {
+            descriptor: report.descriptor,
+            fingerprint: report.fingerprint,
+            matched: report.matched.map(|entry| (entry.desc, entry.source)),
+        }))
+    }
+}
+
+impl BackupFacet for Mtk {
+    fn format(&self) -> BackupFormat {
+        BackupFormat {
+            extension: "bin",
+            infix: "backup",
+        }
     }
 
-    fn dump_is_raw(&self) -> bool {
-        true
+    fn capture(&self, dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
+        backup::capture(dev)
     }
 
-    fn capture_dump(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
-        let (image, readable, gaps) = self.read_full_image(dev)?;
+    fn notice(&self, bytes: &[u8]) -> BackupNotice {
+        backup::notice(bytes)
+    }
+
+    fn validate(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
+        backup::validate(bytes, target_model, IMAGE_SIZE)
+    }
+}
+
+impl DumpFacet for Mtk {
+    fn capture(&self, mut dev: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
+        let (image, readable, gaps) = crate::probe::read_full_image(dev.scsi())?;
         if readable == 0 {
             bail!("no MediaTek memory was readable; no dump saved");
         }
@@ -1116,22 +1142,26 @@ impl DriveFamily for Mtk {
         }
         Ok(image)
     }
+}
 
-    fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
-        backup::validate(bytes, target_model, self.image_size())
+impl FlashFacet for Mtk {
+    fn executor(&self) -> FlashExecutor<'_> {
+        FlashExecutor::Stream(self)
     }
+}
 
+impl StreamFlash for Mtk {
     fn validate_image(
         &self,
-        dev: &mut dyn ScsiDevice,
+        dev: &mut ReadDevice<'_>,
         image: &[u8],
         drive_product: &str,
         allow_crossflash: bool,
     ) -> Result<()> {
-        if image.len() != self.image_size() {
+        if image.len() != IMAGE_SIZE {
             bail!(
                 "firmware .bin must be exactly {} bytes, got {}",
-                self.image_size(),
+                IMAGE_SIZE,
                 image.len()
             );
         }
@@ -1152,27 +1182,16 @@ impl DriveFamily for Mtk {
         )?;
         Ok(())
     }
-    fn capabilities(&self) -> Capabilities {
-        Capabilities::all()
-    }
 
-    fn read_full_image(&self, dev: &mut dyn ScsiDevice) -> Result<crate::drive::FullImage> {
-        // The MTK full-image read (mode6/buf0 sweep) lives in `probe`; this trait
-        // method is the entry point the engine calls.
-        crate::probe::read_full_image(dev)
-    }
-
-    fn image_size(&self) -> usize {
-        IMAGE_SIZE
-    }
-
-    fn chunk_size(&self) -> usize {
-        CHUNK
+    fn print_notes(&self, image: &[u8], drive_model: &str, allow_crossflash: bool) {
+        if let Some(info) = crossflash::preview_crossflash(image, drive_model, allow_crossflash) {
+            crossflash::print_crossflash_banner(&info);
+        }
     }
 
     fn envelope(
         &self,
-        dev: &mut dyn ScsiDevice,
+        dev: &mut ReadDevice<'_>,
         image: &[u8],
         enc_override: Option<bool>,
     ) -> Result<(Vec<u8>, bool)> {
@@ -1184,12 +1203,76 @@ impl DriveFamily for Mtk {
         Ok((payload, enc))
     }
 
-    fn flash_plan(&self, image_len: usize, verbose: bool) -> Result<String> {
+    fn plan(&self, image_len: usize, verbose: bool) -> Result<String> {
         let seq = flash_sequence(image_len, CHUNK)?;
         Ok(describe_sequence(&seq, verbose))
     }
 
-    fn wait_ready(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
+    /// Read-only readiness handshake for a dry run: PROBE and TEST UNIT READY,
+    /// no writes.
+    fn preflight(&self, dev: &mut ReadDevice<'_>) -> Result<()> {
+        // PROBE is a real ROM read and must succeed. TEST UNIT READY is a faithful
+        // handshake: flashed with no disc, a healthy drive answers benign no-medium
+        // (key 0x2 ASC 0x3A); any OTHER not-ready reason aborts before PREPARE.
+        let probe = dev.command_in(&cdb::probe(), cdb::PROBE_LEN)?;
+        if probe.len() != cdb::PROBE_LEN {
+            bail!(
+                "short MediaTek preflight ROM read: got {} of {} bytes",
+                probe.len(),
+                cdb::PROBE_LEN
+            );
+        }
+        let _ = dev.command_in(&cdb::test_unit_ready(), 0)?;
+        Ok(())
+    }
+
+    fn chunk_size(&self) -> usize {
+        CHUNK
+    }
+
+    /// Stream the whole payload through `mediatek_optical`'s flash session:
+    /// PROBE + TEST UNIT READY + PREPARE, the 16 KiB transfers, then the commit
+    /// trailer. `_mode` is informational on MTK: the drive programs flash when
+    /// the last chunk of the full 2 MiB image lands.
+    fn stream(
+        &self,
+        dev: &mut WriteDevice<'_>,
+        payload: &[u8],
+        _mode: FlashMode,
+        progress: &mut dyn FnMut(usize),
+    ) -> Result<()> {
+        use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
+        let shared = SharedDevice::new(dev);
+        {
+            let mut transport = ScsiTransport::flash(&shared);
+            let mut session = mediatek_optical::drive::enter_update(&mut transport)
+                .map_err(mtk_err)
+                .context(
+                    "MediaTek PROBE, TEST UNIT READY or PREPARE failed before any firmware data was \
+                     sent; if PREPARE was reached the drive may be in update mode — power-cycle \
+                     it before retrying",
+                )?;
+            let mut sent = 0usize;
+            for piece in payload.chunks(CHUNK) {
+                session.write(sent as u32, piece).map_err(mtk_err).with_context(|| {
+                    format!(
+                        "firmware write failed at offset {sent:#x}, length {}; drive may contain partial firmware",
+                        piece.len()
+                    )
+                })?;
+                sent += piece.len();
+                progress(sent);
+            }
+            // The burn completed on the final chunk; the commit is a trailer the
+            // reinitializing drive may answer with a transient CHECK CONDITION.
+            if let Err(error) = session.finish().map_err(mtk_err) {
+                eprintln!("MediaTek commit trailer returned an error: {error:#}; checking completion and read-back");
+            }
+        }
+        shared.with(post_commit_status)
+    }
+
+    fn wait_ready(&self, dev: &mut ReadDevice<'_>) -> Result<()> {
         use std::time::{Duration, Instant};
         // After the last chunk the drive keeps programming and reports TEST UNIT
         // READY as an error until done. Poll until the transport returns Ok. If
@@ -1249,89 +1332,22 @@ impl DriveFamily for Mtk {
         Ok(())
     }
 
-    /// Read-only readiness handshake for a dry run: PROBE and TEST UNIT READY,
-    /// no writes.
-    fn preflight(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
-        // PROBE is a real ROM read and must succeed. TEST UNIT READY is a faithful
-        // handshake: flashed with no disc, a healthy drive answers benign no-medium
-        // (key 0x2 ASC 0x3A); any OTHER not-ready reason aborts before PREPARE.
-        let probe = dev.command_in(&cdb::probe(), cdb::PROBE_LEN)?;
-        if probe.len() != cdb::PROBE_LEN {
-            bail!(
-                "short MediaTek preflight ROM read: got {} of {} bytes",
-                probe.len(),
-                cdb::PROBE_LEN
-            );
-        }
-        let _ = dev.command_in(&cdb::test_unit_ready(), 0)?;
-        Ok(())
+    fn verification_ranges(&self, image: &[u8]) -> Result<Vec<(usize, usize)>> {
+        let Some(entries) = crate::cmac::parse_table(image).ok() else {
+            return Ok(Vec::new());
+        };
+        Ok(entries
+            .iter()
+            .filter(|entry| entry.is_active())
+            .filter_map(|entry| {
+                let start = (entry.start as usize).max(0x1000);
+                let end = entry.end as usize;
+                (start <= end).then_some((start, end))
+            })
+            .collect())
     }
 
-    fn firmware_report(
-        &self,
-        dev: &mut dyn ScsiDevice,
-    ) -> Result<Option<crate::backends::mtk::fw_ident::FwReport>> {
-        // The two firmware-code windows a live drive exposes (rom_1F0000 is
-        // per-unit calibration and deliberately excluded from the fingerprint).
-        let rom_003000 = Acquire::ReadBuffer {
-            offset: ROM_003000_OFFSET,
-            len: ROM_003000_LEN,
-        }
-        .run(dev)?;
-        let rom_1ec000 = Acquire::ReadBuffer {
-            offset: ROM_1EC000_OFFSET,
-            len: ROM_1EC000_LEN,
-        }
-        .run(dev)?;
-        Ok(Some(crate::backends::mtk::fw_ident::report(
-            &rom_003000,
-            &rom_1ec000,
-        )))
-    }
-
-    /// Stream the whole payload through `mediatek_optical`'s flash session:
-    /// PROBE + TEST UNIT READY + PREPARE, the 16 KiB transfers, then the commit
-    /// trailer. `_mode` is informational on MTK: the drive programs flash when
-    /// the last chunk of the full 2 MiB image lands.
-    fn flash_stream(
-        &self,
-        dev: &mut dyn ScsiDevice,
-        payload: &[u8],
-        _mode: FlashMode,
-        progress: &mut dyn FnMut(usize),
-    ) -> Result<()> {
-        use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
-        let shared = SharedDevice::new(dev);
-        {
-            let mut transport = ScsiTransport::flash(&shared);
-            let mut session = mediatek_optical::drive::enter_update(&mut transport)
-                .map_err(mtk_err)
-                .context(
-                    "MediaTek PROBE, TEST UNIT READY or PREPARE failed before any firmware data was \
-                     sent; if PREPARE was reached the drive may be in update mode — power-cycle \
-                     it before retrying",
-                )?;
-            let mut sent = 0usize;
-            for piece in payload.chunks(CHUNK) {
-                session.write(sent as u32, piece).map_err(mtk_err).with_context(|| {
-                    format!(
-                        "firmware write failed at offset {sent:#x}, length {}; drive may contain partial firmware",
-                        piece.len()
-                    )
-                })?;
-                sent += piece.len();
-                progress(sent);
-            }
-            // The burn completed on the final chunk; the commit is a trailer the
-            // reinitializing drive may answer with a transient CHECK CONDITION.
-            if let Err(error) = session.finish().map_err(mtk_err) {
-                eprintln!("MediaTek commit trailer returned an error: {error:#}; checking completion and read-back");
-            }
-        }
-        shared.with(post_commit_status)
-    }
-
-    fn readback(&self, dev: &mut dyn ScsiDevice, offset: usize, len: usize) -> Result<Vec<u8>> {
+    fn readback(&self, dev: &mut ReadDevice<'_>, offset: usize, len: usize) -> Result<Vec<u8>> {
         let cdb = cdb::read_memory(offset as u32, len as u32);
         dev.command_in(&cdb, len)
     }

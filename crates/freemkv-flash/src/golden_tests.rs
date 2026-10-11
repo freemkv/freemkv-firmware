@@ -26,12 +26,12 @@ use sha2::{Digest, Sha256};
 
 use crate::backends::mtk::{Mtk, CHUNK, IMAGE_SIZE, ROM_1EC000_OFFSET};
 // COMPAT: the module path differs in the 0.11.2 baseline copy of this file.
-use crate::backend::{BackendId, FileFormat};
+use crate::backend::{Backend, FlashRequest};
+use crate::backend::{BackendId, BackupFacet, BundleFlash, FileFormat, FlashFacet};
 use crate::backends::mtk::{IMAGE as MTK_IMAGE, LEGACY_TAR as MTK_LEGACY_TAR};
 use crate::backends::pioneer::flash_plan;
 use crate::backends::pioneer::Pioneer;
 use crate::backends::pioneer::{ENVELOPE as PIONEER_ENVELOPE, PACKAGE as PIONEER_PACKAGE};
-use crate::drive::{DriveFamily, FlashRequest};
 use crate::manifest::FlashMode;
 use crate::output::{capture_events, Event};
 use crate::platform::{MediumStatus, MockScsiDevice, ScsiDevice};
@@ -498,7 +498,7 @@ fn with_inquiry_product(dev: MockScsiDevice, product: &str) -> MockScsiDevice {
 
 /// Pioneer recovery as the workflow performs it once a device is open.
 ///
-/// COMPAT: the 0.11.2 baseline has no `DriveFamily::recover`; its copy of this
+/// COMPAT: the 0.11.2 baseline has no `Backend::recover`; its copy of this
 /// function inlines the body of `workflow::recover`.
 fn recover_via(
     dev: &mut dyn ScsiDevice,
@@ -506,9 +506,18 @@ fn recover_via(
     target: &[u8],
     execute: bool,
 ) -> Result<()> {
-    Pioneer::new()
-        .recover(dev, current, target, execute)
-        .expect("Pioneer has a recovery path")
+    crate::engine::recover(dev, &Pioneer::new(), current, target, execute, true)
+}
+
+/// Pioneer's bundle executor (the old `flash_bundle` on `--execute`), driven
+/// directly with an ungated write grant.
+fn bundle_execute(
+    dev: &mut dyn ScsiDevice,
+    req: &FlashRequest,
+    installed: Option<&[u8]>,
+) -> Result<()> {
+    let mut writer = crate::engine::gates::ungated_for_tests(dev);
+    BundleFlash::execute(&Pioneer::new(), &mut writer, req, installed)
 }
 
 /// A signed image of `chip` (`MTEKMT1959` / `MTEKMT1939`) with the stored boot
@@ -1418,7 +1427,7 @@ fn golden_flash_execute() {
             mtk_drive(),
         ),
     ] {
-        let family: Box<dyn DriveFamily> = if title.contains("MTK drive") {
+        let family: Box<dyn Backend> = if title.contains("MTK drive") {
             Box::new(Mtk)
         } else {
             Box::new(Pioneer::new())
@@ -1432,7 +1441,7 @@ fn golden_flash_execute() {
         &dir.join("pioneer_rollback.tar"),
     );
 
-    // Pioneer: the live bundle executor itself (backend `flash_bundle`), driven
+    // Pioneer: the live bundle executor itself (`BundleFlash::execute`), driven
     // against a stateful synthetic receiver, with the installed rollback the
     // engine would have captured. This is the deepest deterministic stage: a
     // full engine::flash needs a replayable firmware-read surface for the
@@ -1456,10 +1465,7 @@ fn golden_flash_execute() {
         let installed_tar = archive(&installed, false);
         let req = pioneer_request(archive(&target, false), &PIONEER_PACKAGE, true);
         let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
-            match Pioneer::new().flash_bundle(d, &req, Some(&installed_tar)) {
-                Some(r) => r,
-                None => bail!("flash_bundle declined"),
-            }
+            bundle_execute(d, &req, Some(&installed_tar))
         });
         g.case(title, &outcome, Some(&transcript));
     }
@@ -1752,13 +1758,13 @@ fn golden_classify_and_unknown_info() {
             let classified = crate::backend::registry::resolve(&mut rec).ok().flatten();
             println!(
                 "classify: {}",
-                family_label(classified.map(|m| m.evidence.backend))
+                family_label(classified.map(|m| m.matched.backend))
             );
             match crate::backend::registry::resolve(&mut rec) {
                 Ok(Some(m)) => println!(
                     "resolve_backend: {} backend={}",
-                    family_label(Some(m.evidence.backend)),
-                    m.evidence.backend
+                    family_label(Some(m.matched.backend)),
+                    m.matched.backend
                 ),
                 Ok(None) => println!("resolve_backend: no match"),
                 Err(e) => println!("resolve_backend: error {e:#}"),
@@ -2065,7 +2071,8 @@ fn golden_pioneer_plan_and_gates() {
             ("Kernel+Normal bundle", &target_bundle),
             ("bare Normal", &target_normal),
         ] {
-            let outcome = run(|| Pioneer::new().verify_preflash_backup(backup, input));
+            let outcome =
+                run(|| FlashFacet::verify_preflash_backup(&Pioneer::new(), backup, input));
             g.case(
                 &format!("verify_preflash_backup: {title} vs {input_title}"),
                 &outcome,
@@ -2073,12 +2080,12 @@ fn golden_pioneer_plan_and_gates() {
             );
         }
         let outcome = run(|| {
-            match Pioneer::new().backup_notice(backup) {
-                crate::drive::BackupNotice::VerifiedOem(m) => println!("VerifiedOem: {m}"),
-                crate::drive::BackupNotice::Unverified(m) => println!("Unverified: {m}"),
-                crate::drive::BackupNotice::None => println!("None"),
+            match BackupFacet::notice(&Pioneer::new(), backup) {
+                crate::backend::BackupNotice::VerifiedOem(m) => println!("VerifiedOem: {m}"),
+                crate::backend::BackupNotice::Unverified(m) => println!("Unverified: {m}"),
+                crate::backend::BackupNotice::None => println!("None"),
             }
-            match Pioneer::new().validate_backup(backup, "BD-RW   BDR-TEST") {
+            match BackupFacet::validate(&Pioneer::new(), backup, "BD-RW   BDR-TEST") {
                 Ok(b) => println!("validate_backup: ok, {} bytes sha256={}", b.len(), sha(&b)),
                 Err(e) => println!("validate_backup: {e:#}"),
             }
@@ -2147,10 +2154,7 @@ fn golden_pioneer_flash_bundle_failures() {
     for (title, backup, input) in cases {
         let req = pioneer_request(input, &PIONEER_PACKAGE, true);
         let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
-            match Pioneer::new().flash_bundle(d, &req, backup.as_deref()) {
-                Some(r) => r,
-                None => bail!("flash_bundle declined"),
-            }
+            bundle_execute(d, &req, backup.as_deref())
         });
         g.case(
             &format!("Pioneer flash_bundle: {title}"),
@@ -2161,12 +2165,12 @@ fn golden_pioneer_flash_bundle_failures() {
     // Dry-run request: flash_bundle does not run.
     let req = pioneer_request(target_tar, &PIONEER_PACKAGE, false);
     let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
-        match Pioneer::new().flash_bundle(d, &req, None) {
-            Some(r) => r,
-            None => {
-                println!("flash_bundle: not applicable to a dry run");
-                Ok(())
-            }
+        if req.execute {
+            bundle_execute(d, &req, None)
+        } else {
+            // The executor only ever runs on --execute (the engine plans dry runs).
+            println!("flash_bundle: not applicable to a dry run");
+            Ok(())
         }
     });
     g.case(

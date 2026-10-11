@@ -24,19 +24,17 @@ fn pioneer_corpus_root() -> std::path::PathBuf {
 // ---- classify → no restorable dump ------------------------------------------
 
 #[test]
-fn pioneer_classifies_but_cannot_dump_without_restorable_format() {
+fn pioneer_classifies_and_flashes_only_as_a_bundle() {
     let mut dev = MockScsiDevice::pioneer();
     let resolved = crate::backend::registry::resolve(&mut dev)
         .unwrap()
         .unwrap();
-    assert_eq!(resolved.evidence.backend, DESCRIPTOR.id);
-    dev.reads.clear(); // classification probes are separate from the blocked dump API
-
-    let drive = Pioneer::new();
-    assert!(drive.read_full_image(&mut dev).is_err());
-    assert!(drive.readback(&mut dev, 0, 0xA4).is_err());
+    assert_eq!(resolved.matched.backend, DESCRIPTOR.id);
     assert!(dev.writes.is_empty());
-    assert!(dev.reads.is_empty());
+    // No image-stream primitives (full-image read, read-back) exist for Pioneer.
+    let pioneer = Pioneer::new();
+    let executor = pioneer.flash().unwrap().executor();
+    assert!(matches!(executor, FlashExecutor::Bundle(_)));
 }
 
 // ---- Pioneer flash primitives (unit-level, no live drive) -------------------
@@ -463,23 +461,6 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
 }
 
 #[test]
-fn flash_plan_states_execution_blockers() {
-    let plan = Pioneer::new().flash_plan(0x1D7000, false).unwrap();
-    assert!(plan.contains("59 raw-envelope chunks"));
-    assert!(plan.contains("dry run: no writes are issued"));
-    assert!(!plan.contains("blocked"));
-}
-
-#[test]
-fn verbose_plan_uses_actual_variable_image_length() {
-    let plan = Pioneer::new().flash_plan(0x1D7100, true).unwrap();
-    assert!(plan.contains("59 raw-envelope chunks"));
-    assert!(plan.contains("chunk  1D0000  07100  [3B, 07, F0, 1D, 00, 00, 00, 71, 00, 00]"));
-    assert!(plan.contains("entry  [3B, 04, FF, 00, 00, 00, 00, 01, 00, 00]"));
-    assert!(plan.contains("finish [3B, 05, FF, 00, 00, 00, 00, 01, 00, 00]"));
-}
-
-#[test]
 fn preflight_refuses_arbitrary_bytes() {
     let img = vec![0u8; IMAGE_MIN + 1];
     let id = Identity {
@@ -537,30 +518,6 @@ fn preflight_refuses_when_no_key_on_file() {
     };
     let e = preflight(&img, &id, false).unwrap_err().to_string();
     assert!(e.contains("no kernel key on file"), "actual: {e}");
-}
-
-#[test]
-fn image_stream_flash_is_not_a_pioneer_path() {
-    let mut dev = pioneer_with_inquiry("BDR-UD04");
-    let drive = super::Pioneer::new();
-    assert!(drive
-        .flash_stream(&mut dev, &[0x5A; 32], FlashMode::Full, &mut |_| {})
-        .is_err());
-    assert!(drive.readback(&mut dev, 0, 32).is_err());
-    assert!(dev.writes.is_empty());
-}
-
-/// A Pioneer mock plus a configured INQUIRY response: vendor `PIONEER`,
-/// product = `product` padded to 16 chars, revision `1.14`.
-fn pioneer_with_inquiry(product: &str) -> MockScsiDevice {
-    let mut inq = vec![0u8; 96];
-    inq[8..16].copy_from_slice(b"PIONEER ");
-    let mut prod16 = [b' '; 16];
-    let bytes = product.as_bytes();
-    prod16[..bytes.len().min(16)].copy_from_slice(&bytes[..bytes.len().min(16)]);
-    inq[16..32].copy_from_slice(&prod16);
-    inq[32..36].copy_from_slice(b"1.14");
-    MockScsiDevice::pioneer().on(|cdb| cdb.first() == Some(&0x12), inq)
 }
 
 // ---- Generalized flash selection + confirm prompt --------------------------
@@ -801,9 +758,9 @@ fn dump_is_raw_and_never_issues_kernel_mode_commands() {
             "probe".into()
         }
     }
-    assert!(Pioneer::new().dump_is_raw());
+    assert!(Pioneer::new().dump().is_some());
     let mut dev = Probe::default();
-    let _ = Pioneer::new().capture_dump(&mut dev);
+    let _ = dump_capture(&mut dev);
     assert!(!dev
         .cdbs
         .iter()
@@ -850,7 +807,7 @@ fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
         }
     }
     let mut dev = Mem::default();
-    let dump = Pioneer::new().capture_dump(&mut dev).unwrap();
+    let dump = dump_capture(&mut dev).unwrap();
     assert!(crate::backends::pioneer::dump::directory(&dump)
         .unwrap()
         .is_some());
@@ -860,8 +817,8 @@ fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
     assert_eq!(dev.kernel_mode_cdbs, 0);
 }
 
-fn bundle_req(input: Vec<u8>) -> crate::drive::FlashRequest {
-    crate::drive::FlashRequest {
+fn bundle_req(input: Vec<u8>) -> crate::backend::FlashRequest {
+    crate::backend::FlashRequest {
         input,
         input_format: &ENVELOPE,
         mode: FlashMode::Full,
@@ -883,10 +840,7 @@ fn bundle_refuses_bad_sized_normal_before_entering_update_mode() {
         normal.resize(len, 0);
         let mut dev = MockScsiDevice::pioneer();
         dev.writes.clear();
-        let err = drive
-            .flash_bundle(&mut dev, &bundle_req(normal), None)
-            .expect("execute path")
-            .unwrap_err();
+        let err = bundle_execute(&drive, &mut dev, &bundle_req(normal)).unwrap_err();
         assert!(
             format!("{err:#}").contains("256-byte aligned"),
             "len {len:#x}: {err:#}"
@@ -1045,10 +999,7 @@ fn pairing_failure_precedes_body_decode() {
     let mut request = bundle_req(input);
     request.input_format = &PACKAGE;
     let mut dev = MockScsiDevice::new();
-    let error = Pioneer::new()
-        .flash_bundle(&mut dev, &request, None)
-        .unwrap()
-        .unwrap_err();
+    let error = bundle_execute(&Pioneer::new(), &mut dev, &request).unwrap_err();
     assert!(error.to_string().contains("required-Kernel tag"), "{error}");
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
@@ -1240,8 +1191,15 @@ fn classify_input_routes_by_content_then_extension() {
 fn recover_on_a_non_pioneer_drive_errors_without_any_io_beyond_identity() {
     let (current, target) = (envelope_tar(), envelope_tar());
     let mut dev = MockScsiDevice::new();
-    let result = Pioneer::new().recover(&mut dev, Some(&current), &target, true);
-    let err = result.expect("Pioneer has a recovery path").unwrap_err();
+    let err = crate::engine::recover(
+        &mut dev,
+        &Pioneer::new(),
+        Some(&current),
+        &target,
+        true,
+        true,
+    )
+    .unwrap_err();
     assert!(
         format!("{err:#}").contains("No firmware written")
             || format!("{err:#}").contains("no firmware written"),
@@ -1261,10 +1219,15 @@ fn recover_on_a_non_pioneer_drive_errors_without_any_io_beyond_identity() {
 #[test]
 fn recover_without_current_never_reads_firmware_from_an_unrecognized_drive() {
     let mut dev = MockScsiDevice::new();
-    let err = Pioneer::new()
-        .recover(&mut dev, None, &envelope_tar(), false)
-        .unwrap()
-        .unwrap_err();
+    let err = crate::engine::recover(
+        &mut dev,
+        &Pioneer::new(),
+        None,
+        &envelope_tar(),
+        false,
+        false,
+    )
+    .unwrap_err();
     assert!(
         format!("{err:#}")
             .to_lowercase()
@@ -1281,9 +1244,17 @@ fn recover_without_current_never_reads_firmware_from_an_unrecognized_drive() {
 
 #[test]
 fn mediatek_has_no_recovery_path() {
-    let mut dev = MockScsiDevice::new();
-    assert!(crate::backends::mtk::Mtk
-        .recover(&mut dev, Some(&[1, 2, 3]), &[4, 5, 6], true)
-        .is_none());
-    assert!(dev.reads.is_empty() && dev.writes.is_empty());
+    assert!(crate::backends::mtk::Mtk.recovery().is_none());
+}
+
+/// Pioneer's dump with an ungated write grant, as the old raw-device API ran it.
+fn dump_capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    let mut writer = crate::engine::gates::ungated_for_tests(dev);
+    DumpFacet::capture(&Pioneer::new(), DeviceAccess::Write(&mut writer))
+}
+
+/// Pioneer's bundle executor with an ungated write grant and no installed backup.
+fn bundle_execute(drive: &Pioneer, dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
+    let mut writer = crate::engine::gates::ungated_for_tests(dev);
+    BundleFlash::execute(drive, &mut writer, req, None)
 }

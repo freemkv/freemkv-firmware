@@ -1348,7 +1348,6 @@ fn unknown_kernel_geometry_stops_before_any_normal_read() {
 #[test]
 fn invalid_normal_keeps_verified_kernel_but_cannot_be_full_rollback() {
     use crate::backends::pioneer::Pioneer;
-    use crate::drive::FirmwareBackend;
     let (kernel, mut normal) = bounded_backup_fixture();
     let valid =
         construct_signed_candidate(&kernel, &normal, "PIONEER BD-RW   BDR-UD04", "1.14").unwrap();
@@ -1358,7 +1357,9 @@ fn invalid_normal_keeps_verified_kernel_but_cannot_be_full_rollback() {
     let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
     assert_eq!(bundle.components.len(), 1);
     assert_eq!(bundle.components[0].role, Role::Kernel);
-    assert!(Pioneer.verify_preflash_backup(&archive, &valid).is_err());
+    assert!(
+        crate::backend::FlashFacet::verify_preflash_backup(&Pioneer, &archive, &valid).is_err()
+    );
     assert_eq!(replay.refused_reads, 0);
 }
 
