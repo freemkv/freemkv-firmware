@@ -447,32 +447,57 @@ const DEVICE_LAYER: &[&str] = &[
     "src/inspection/capture.rs",
 ];
 
-/// What sends a write to the drive: both raw data-out calls, both transport
-/// constructors (every vendor-crate call needs one), and the vendor crates'
-/// data-out entry points. pioneer-optical: `drive::enter_update` (its
-/// `Session::write`/`finish`), `drive::execute_update`, `drive::diagnostic_memory`,
+/// What can only write the drive's firmware or settings: the strict data-out
+/// call, the write transport, and the vendor crates' data-out entry points.
+/// pioneer-optical: `drive::enter_update` (its `Session::write`/`finish`),
+/// `drive::execute_update`, `drive::diagnostic_memory` (writes on `Data::Out`),
 /// `logging::set_logging_ram`/`_persistent`, `receiver::Prepared*::flash` (via a
-/// `FlashTransport`) and `device::Device::set`. mediatek-optical:
-/// `drive::enter_update` (its `Session::write`/`finish`).
+/// `FlashTransport`) and the settings writer `device::Device::set`.
+/// mediatek-optical: `drive::enter_update` (its `Session::write`/`finish`).
 const WRITE_MARKERS: &[&str] = &[
-    ".command_out(",
     ".command_out_strict(",
     "ScsiTransport::flash(",
-    "ScsiTransport::reads(",
     "drive::enter_update(",
     "execute_update(",
     "diagnostic_memory(",
     "set_logging_",
     "FlashTransport",
-    "Device::new(",
+    "Device::set(",
     "Device::with_settings_codec(",
 ];
 
-/// Device parameters that carry a runtime grant: writes through them are
-/// checked by the handle, so a fn taking one may hold a write marker.
+/// What reaches the drive but may run under a read grant: the read transport,
+/// a settings device over it, and the lenient data-out used for the read knock.
+const READ_MARKERS: &[&str] = &[".command_out(", "ScsiTransport::reads(", "Device::new("];
+
+/// The vendor write functions, which production code names only by path so
+/// the markers above see every call.
+const WRITE_FNS: &[&str] = &[
+    "enter_update",
+    "execute_update",
+    "diagnostic_memory",
+    "set_logging_ram",
+    "set_logging_persistent",
+];
+
+/// Modules and types whose paths the markers match; renaming or glob-importing
+/// them would hide a call from the scan.
+const MARKED_PATHS: &[&str] = &[
+    "drive",
+    "logging",
+    "receiver",
+    "device",
+    "Device",
+    "FlashTransport",
+    "ScsiTransport",
+    "SharedDevice",
+];
+
+/// Device parameters that may hold a read marker: each carries a runtime grant.
 const GATED_HANDLES: &[&str] = &["WriteDevice", "ReadDevice", "DeviceAccess"];
 
-/// Raw device parameters: a write marker beside one bypasses every grant.
+/// Raw device parameters (after [`normalise`]): a marker beside one bypasses
+/// every grant.
 const RAW_HANDLES: &[&str] = &[
     "dyn ScsiDevice",
     "&ScsiTransport",
@@ -483,10 +508,44 @@ const RAW_HANDLES: &[&str] = &[
     ": SharedDevice",
 ];
 
-/// Whether a write issuer with these parameters writes outside every grant.
-fn ungranted(params: &str) -> bool {
-    !GATED_HANDLES.iter().any(|h| params.contains(h))
-        || RAW_HANDLES.iter().any(|h| params.contains(h))
+/// A fn whose body holds a marker, with its signature normalised.
+#[derive(Debug)]
+struct Issuer {
+    name: String,
+    /// The `<...>` after the name, the parameters, and everything between `)`
+    /// and the body (return type and `where` clause).
+    generics: String,
+    params: String,
+    bounds: String,
+    /// The body holds a write marker, not only read markers.
+    writes: bool,
+    /// The body takes the Write arm of a `DeviceAccess`.
+    write_arm: bool,
+}
+
+/// Why `f` reaches the drive outside its grant, if it does.
+fn refusal(f: &Issuer) -> Option<&'static str> {
+    let generic = [&f.generics, &f.params, &f.bounds]
+        .iter()
+        .any(|s| !word_hits(s, "Transport").is_empty())
+        || [&f.generics, &f.bounds]
+            .iter()
+            .any(|s| !word_hits(s, "ScsiDevice").is_empty())
+        || f.params.contains("impl ScsiDevice");
+    if generic {
+        return Some("takes a generic Transport/ScsiDevice");
+    }
+    if RAW_HANDLES.iter().any(|h| f.params.contains(h)) {
+        return Some("takes a raw device beside its grant");
+    }
+    if f.writes {
+        let write_grant =
+            f.params.contains("&mut WriteDevice") || f.params.contains(": WriteDevice");
+        let access = f.params.contains("DeviceAccess") && f.write_arm;
+        return (!write_grant && !access).then_some("writes without a WriteDevice");
+    }
+    (!GATED_HANDLES.iter().any(|h| f.params.contains(h)))
+        .then_some("reaches the drive without a grant")
 }
 
 /// Whether `body` holds `marker`; a marker starting with an identifier must
@@ -498,20 +557,83 @@ fn has_marker(body: &str, marker: &str) -> bool {
         .any(|(at, _)| !word || at == 0 || !is_ident(body.as_bytes()[at - 1]))
 }
 
-/// `(name, parameters)` of every fn in `code` whose body issues a write.
-fn write_issuers(code: &str) -> Vec<(String, String)> {
+/// The offset just past the `>` matching the `<` at `open`; `->` and `=>` do
+/// not close.
+fn angle_end(text: &str, open: usize) -> usize {
+    let (mut depth, mut prev) = (0usize, ' ');
+    for (off, c) in text[open..].char_indices() {
+        match c {
+            '<' => depth += 1,
+            '>' if prev != '-' && prev != '=' => {
+                depth -= 1;
+                if depth == 0 {
+                    return open + off + 1;
+                }
+            }
+            _ => {}
+        }
+        prev = c;
+    }
+    text.len()
+}
+
+/// Lexed `code` with lifetimes (`'a `, `'_, `) and turbofish generics removed,
+/// so `&'a mut ScsiTransport` reads `&mut ScsiTransport` and `Device::<T>::new(`
+/// reads `Device::new(`.
+fn normalise(code: &str) -> String {
+    let mut out = String::with_capacity(code.len());
+    let mut i = 0;
+    while i < code.len() {
+        let rest = &code[i..];
+        if rest.starts_with("::<") {
+            i += angle_end(rest, 2);
+            continue;
+        }
+        let mut chars = rest.chars();
+        let c = chars.next().unwrap();
+        let lifetime = c == '\'' && chars.next().is_some_and(|n| n.is_alphabetic() || n == '_');
+        if lifetime {
+            let len = 1 + rest[1..]
+                .find(|n: char| !(n.is_alphanumeric() || n == '_'))
+                .unwrap_or(rest.len() - 1);
+            let after = rest[len..].trim_start();
+            let after = after
+                .strip_prefix([',', '+'])
+                .map_or(after, str::trim_start);
+            i = code.len() - after.len();
+            continue;
+        }
+        out.push(c);
+        i += c.len_utf8();
+    }
+    out
+}
+
+/// Every fn in lexed `code` whose body holds a write or read marker.
+fn write_issuers(code: &str) -> Vec<Issuer> {
+    let code = normalise(code);
     let mut out = Vec::new();
-    for at in word_hits(code, "fn") {
-        let rest = &code[at + 2..];
+    for at in word_hits(&code, "fn") {
+        let rest = code[at + 2..].trim_start();
         let name: String = rest
-            .trim_start()
             .chars()
             .take_while(|c| c.is_alphanumeric() || *c == '_')
             .collect();
-        let Some(open) = rest.find('(') else { continue };
+        let after_name = &rest[name.len()..];
+        let generics_end = match after_name.trim_start().starts_with('<') {
+            true => angle_end(after_name, after_name.find('<').unwrap()),
+            false => 0,
+        };
+        let generics = &after_name[..generics_end];
+        let Some(open) = after_name[generics_end..]
+            .find('(')
+            .map(|o| o + generics_end)
+        else {
+            continue;
+        };
         let mut depth = 0usize;
-        let mut close = rest.len();
-        for (off, c) in rest[open..].char_indices() {
+        let mut close = after_name.len();
+        for (off, c) in after_name[open..].char_indices() {
             match c {
                 '(' => depth += 1,
                 ')' => {
@@ -524,8 +646,8 @@ fn write_issuers(code: &str) -> Vec<(String, String)> {
                 _ => {}
             }
         }
-        let params = &rest[open + 1..close];
-        let tail = &rest[close..];
+        let params = &after_name[open + 1..close];
+        let tail = &after_name[close..];
         let Some(brace) = tail.find('{') else {
             continue;
         };
@@ -533,11 +655,68 @@ fn write_issuers(code: &str) -> Vec<(String, String)> {
             continue;
         }
         let body = &tail[brace..block_end(tail, brace)];
-        if WRITE_MARKERS.iter().any(|m| has_marker(body, m)) {
-            out.push((name, params.to_string()));
+        let writes = WRITE_MARKERS.iter().any(|m| has_marker(body, m));
+        if writes || READ_MARKERS.iter().any(|m| has_marker(body, m)) {
+            out.push(Issuer {
+                name,
+                generics: generics.to_string(),
+                params: params.to_string(),
+                bounds: tail[1..brace].to_string(),
+                writes,
+                write_arm: body.contains("DeviceAccess::Write(") || body.contains(".writer()"),
+            });
         }
     }
     out
+}
+
+/// Every `use` in lexed `code` that would let a write call dodge the markers:
+/// a vendor write fn imported by bare name, a glob over a marked module, or a
+/// marked module or type renamed.
+fn hiding_imports(code: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for at in word_hits(code, "use") {
+        let rest = &code[at..];
+        let stmt = &rest[..rest.find(';').unwrap_or(rest.len())];
+        let names = |list: &[&str]| list.iter().any(|w| !word_hits(stmt, w).is_empty());
+        let words: Vec<&str> = stmt
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .filter(|w| !w.is_empty())
+            .collect();
+        let renamed = words
+            .windows(3)
+            .any(|w| w[1] == "as" && w[2] != "_" && MARKED_PATHS.contains(&w[0]))
+            || renamed_self(stmt);
+        let marked = names(MARKED_PATHS);
+        if names(WRITE_FNS) || (marked && (stmt.contains('*') || renamed)) {
+            out.push(stmt.split_whitespace().collect::<Vec<_>>().join(" "));
+        }
+    }
+    out
+}
+
+/// Whether `stmt` renames a marked module through `{self as x}`: the module is
+/// the path segment before the group holding that `self`.
+fn renamed_self(stmt: &str) -> bool {
+    let flat: String = stmt.split_whitespace().collect::<Vec<_>>().join(" ");
+    flat.match_indices("self as ").any(|(at, _)| {
+        let mut depth = 0i32;
+        let open = flat[..at].char_indices().rev().find(|&(_, c)| {
+            depth += match c {
+                '}' => 1,
+                '{' => -1,
+                _ => 0,
+            };
+            depth < 0
+        });
+        let module = open.map_or("", |(o, _)| {
+            let path = flat[..o].trim_end_matches("::");
+            path.rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .next()
+                .unwrap_or("")
+        });
+        MARKED_PATHS.contains(&module)
+    })
 }
 
 #[test]
@@ -545,39 +724,53 @@ fn write_issuers_take_the_write_grant() {
     let sources = production_sources();
     let (mut problems, mut issuers) = (Vec::new(), Vec::new());
     for s in &sources {
+        for import in hiding_imports(&s.code) {
+            problems.push(format!("{}: `{import}` hides a write call", s.path));
+        }
         if DEVICE_LAYER.iter().any(|layer| s.path.starts_with(layer)) {
             continue;
         }
-        for (name, params) in write_issuers(&s.code) {
-            if ungranted(&params) {
-                problems.push(format!(
-                    "{}: fn {name}({params}) writes without a grant",
-                    s.path
-                ));
+        for f in write_issuers(&s.code) {
+            if let Some(why) = refusal(&f) {
+                problems.push(format!("{}: fn {}({}) {why}", s.path, f.name, f.params));
             }
-            issuers.push(name);
+            issuers.push((f.name, f.writes));
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
     // The scan must still see the known executors, or it proves nothing.
-    for known in [
-        "execute_prepared",
-        "run",
-        "stream",
-        "enable_logging",
-        "capture",
-        "with_device",
+    for (known, writes) in [
+        ("execute_prepared", true),
+        ("run", true),
+        ("stream", true),
+        ("enable_logging", true),
+        ("capture", false),
+        ("with_device", false),
     ] {
         assert!(
-            issuers.iter().any(|n| n == known),
-            "{known} not scanned: {issuers:?}"
+            issuers.iter().any(|i| *i == (known.to_string(), writes)),
+            "{known} not scanned as writes={writes}: {issuers:?}"
         );
     }
 }
 
+/// The names of the fns in `src` that [`write_issuers`] finds, and of those
+/// [`refusal`] refuses.
+fn scan(src: &str) -> (Vec<String>, Vec<String>) {
+    let (code, _) = lex(&without_test_items(src));
+    let found = write_issuers(&code);
+    let names = found.iter().map(|f| f.name.clone()).collect();
+    let refused = found
+        .iter()
+        .filter(|f| refusal(f).is_some())
+        .map(|f| f.name.clone())
+        .collect();
+    (names, refused)
+}
+
 #[test]
 fn write_issuer_scan_reads_signatures_and_bodies() {
-    let (code, _) = lex(&without_test_items(
+    let (names, refused) = scan(
         "fn a(dev: &mut dyn ScsiDevice) { dev.command_out_strict(c, d); }\n\
          fn b(dev: &mut WriteDevice<'_>, f: impl Fn(u8)) { ScsiTransport::flash(&s); }\n\
          fn c(dev: &mut dyn ScsiDevice) { dev.command_in(c, 0); }\n\
@@ -587,16 +780,80 @@ fn write_issuer_scan_reads_signatures_and_bodies() {
          fn g(t: &mut ScsiTransport<'_, '_>) { logging::set_logging_ram(t, l, true); }\n\
          fn h(dev: &mut dyn ScsiDevice) { ReadDevice::new(dev, &[]); }\n\
          fn i(dev: &mut ReadDevice<'_>) { Device::new(&mut ScsiTransport::reads(&s)); }\n",
-    ));
-    let found = write_issuers(&code);
-    let names: Vec<&str> = found.iter().map(|(n, _)| n.as_str()).collect();
-    assert_eq!(names, ["a", "b", "e", "f", "g", "i"], "{found:?}");
-    let refused: Vec<&str> = found
-        .iter()
-        .filter(|(_, params)| ungranted(params))
-        .map(|(n, _)| n.as_str())
-        .collect();
-    assert_eq!(refused, ["a", "e", "g"], "{found:?}");
+    );
+    assert_eq!(names, ["a", "b", "e", "f", "g", "i"]);
+    assert_eq!(refused, ["a", "e", "g"]);
+}
+
+#[test]
+fn write_markers_need_the_write_grant() {
+    let (names, refused) = scan(
+        "fn r(dev: &mut ReadDevice<'_>) { drive::enter_update(&mut t, c, k); }\n\
+         fn s(a: DeviceAccess<'_, '_>) { set_logging_ram(t, l, true); }\n\
+         fn t(a: DeviceAccess<'_, '_>) {\n\
+             if let DeviceAccess::Write(w) = a { drive::execute_update(w); }\n\
+         }\n\
+         fn u(a: &mut DeviceAccess<'_, '_>) { if let Some(w) = a.writer() { w.command_out_strict(c, d); } }\n\
+         fn v(dev: &mut ReadDevice<'_>) { Device::set(&mut d, q, v); }\n\
+         fn w(dev: &mut WriteDevice<'_>) { drive::enter_update(&mut t, c, k); }\n\
+         fn x(dev: &mut ReadDevice<'_>) { dev.command_out(&knock(), &[]); }\n",
+    );
+    assert_eq!(names, ["r", "s", "t", "u", "v", "w", "x"]);
+    assert_eq!(refused, ["r", "s", "v"]);
+}
+
+#[test]
+fn write_issuer_scan_sees_through_lifetimes_turbofish_and_generics() {
+    let (names, refused) = scan(
+        "fn a<'a>(t: &'a mut ScsiTransport<'a, 'a>, w: &mut WriteDevice<'a>) { ScsiTransport::flash(&s); }\n\
+         fn b(s: &'_ SharedDevice<'_>, w: &mut WriteDevice<'_>) { execute_update(s); }\n\
+         fn c(w: &mut WriteDevice<'_>) { Device::<ScsiTransport<'_, '_>>::new(&mut t); }\n\
+         fn d(w: &mut WriteDevice<'_>) { Device::<T>::set(&mut d, q); }\n\
+         fn e<T: Transport>(t: &mut T, w: &mut WriteDevice<'_>) { drive::enter_update(t, c, k); }\n\
+         fn f(t: &mut impl Transport, w: &mut WriteDevice<'_>) { drive::execute_update(t); }\n\
+         fn g<D>(d: &mut D, w: &mut WriteDevice<'_>) where D: ScsiDevice + ?Sized { d.command_out_strict(c, b); }\n\
+         fn h<D: ScsiDevice + ?Sized>(d: &mut D, r: &mut ReadDevice<'_>) { d.command_out(c, b); }\n\
+         fn i<F: Fn(u8) -> u8>(w: &mut WriteDevice<'_>, f: F) { drive::enter_update(t, c, k); }\n",
+    );
+    assert_eq!(names, ["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
+    assert_eq!(refused, ["a", "b", "e", "f", "g", "h"]);
+    assert_eq!(
+        normalise("x: &'a mut ScsiTransport<'a, 'b>, y: &'_ SharedDevice, z: T<'static + U>"),
+        "x: &mut ScsiTransport<>, y: &SharedDevice, z: T<U>"
+    );
+    assert_eq!(
+        normalise("Device::<A<B>>::new(v.iter().collect::<Vec<_>>())"),
+        "Device::new(v.iter().collect())"
+    );
+}
+
+#[test]
+fn hiding_imports_are_refused() {
+    let (code, _) = lex("use pioneer_optical::drive::enter_update;\n\
+         use pioneer_optical::{drive::{self, execute_update as run}, Role};\n\
+         use pioneer_optical::logging::*;\n\
+         use pioneer_optical::drive as d;\n\
+         use pioneer_optical::drive::{self as dr};\n\
+         use pioneer_optical::device::Device as Dev;\n\
+         use crate::transport::ScsiTransport as T;\n\
+         use pioneer_optical::drive::{Data, Error, Transport};\n\
+         use crate::transport::{self as transport, flash_err, ScsiTransport};\n\
+         use mediatek_optical::drive::Data as MtkData;\n\
+         use pioneer_optical::device::Device;\n\
+         use std::fmt::Write as _;\n\
+         pub use mediatek_optical::image::cmac::*;\n");
+    assert_eq!(
+        hiding_imports(&code),
+        [
+            "use pioneer_optical::drive::enter_update",
+            "use pioneer_optical::{drive::{self, execute_update as run}, Role}",
+            "use pioneer_optical::logging::*",
+            "use pioneer_optical::drive as d",
+            "use pioneer_optical::drive::{self as dr}",
+            "use pioneer_optical::device::Device as Dev",
+            "use crate::transport::ScsiTransport as T",
+        ]
+    );
 }
 
 // ---------------------------------------------------------------------------
