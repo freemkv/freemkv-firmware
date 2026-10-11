@@ -722,6 +722,46 @@ fn hiding_imports(code: &str) -> Vec<String> {
     out
 }
 
+/// Device and transport types a `type` alias or a wrapper struct could hide from
+/// the scan: a method on the wrapper would write with no marker in sight.
+const HIDDEN_TYPES: &[&str] = &["Device", "FlashTransport", "ScsiTransport", "SharedDevice"];
+
+/// Wrappers allowed to hold a device type, each with why it cannot write ungated.
+const ALLOWED_WRAPPERS: &[(&str, &str, &str)] = &[(
+    "src/backends/pioneer/flash.rs",
+    "struct Runtime<'a, 'd>",
+    "built only inside execute_prepared from its WriteDevice; its methods only read",
+)];
+
+/// Every `type` alias of, or struct wrapping, a [`HIDDEN_TYPES`] type in lexed
+/// `code`; outside the device layer these are refused like a renaming `use`.
+fn hiding_types(code: &str) -> Vec<String> {
+    let names = |s: &str| HIDDEN_TYPES.iter().any(|t| !word_hits(s, t).is_empty());
+    let flat = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut out = Vec::new();
+    for at in word_hits(code, "type") {
+        let stmt = &code[at..at + code[at..].find(';').unwrap_or(code.len() - at)];
+        if stmt.split_once('=').is_some_and(|(_, rhs)| names(rhs)) {
+            out.push(flat(stmt));
+        }
+    }
+    for at in word_hits(code, "struct") {
+        let rest = &code[at..];
+        let end = match (rest.find('{'), rest.find(';')) {
+            (Some(b), Some(semi)) if b < semi => block_end(rest, b),
+            (Some(b), None) => block_end(rest, b),
+            (_, Some(semi)) => semi,
+            (None, None) => rest.len(),
+        };
+        let decl = &rest[..end.min(rest.len())];
+        let head = decl.find(['{', '(']).unwrap_or(decl.len());
+        if names(&decl[head..]) {
+            out.push(flat(&decl[..head]));
+        }
+    }
+    out
+}
+
 /// Whether `stmt` renames a marked module through `{self as x}`: the module is
 /// the path segment before the group holding that `self`.
 fn renamed_self(stmt: &str) -> bool {
@@ -749,13 +789,23 @@ fn renamed_self(stmt: &str) -> bool {
 #[test]
 fn write_issuers_take_the_write_grant() {
     let sources = production_sources();
-    let (mut problems, mut issuers) = (Vec::new(), Vec::new());
+    let (mut problems, mut issuers, mut wrappers) = (Vec::new(), Vec::new(), Vec::new());
     for s in &sources {
         for import in hiding_imports(&s.code) {
             problems.push(format!("{}: `{import}` hides a write call", s.path));
         }
         if DEVICE_LAYER.iter().any(|layer| s.path.starts_with(layer)) {
             continue;
+        }
+        for hidden in hiding_types(&s.code) {
+            let allowed = ALLOWED_WRAPPERS
+                .iter()
+                .any(|(path, decl, _)| s.path == *path && hidden == *decl);
+            if allowed {
+                wrappers.push(format!("{}: {hidden}", s.path));
+            } else {
+                problems.push(format!("{}: `{hidden}` hides a device type", s.path));
+            }
         }
         for f in write_issuers(&s.code) {
             if let Some(why) = refusal(&f) {
@@ -777,6 +827,14 @@ fn write_issuers_take_the_write_grant() {
         assert!(
             issuers.iter().any(|i| *i == (known.to_string(), writes)),
             "{known} not scanned as writes={writes}: {issuers:?}"
+        );
+    }
+    // A stale allowance would excuse a future wrapper of the same name.
+    for (path, decl, _) in ALLOWED_WRAPPERS {
+        let entry = format!("{path}: {decl}");
+        assert!(
+            wrappers.contains(&entry),
+            "stale wrapper allowance: {entry}"
         );
     }
 }
@@ -829,11 +887,12 @@ fn write_markers_need_the_write_grant() {
          fn q(dev: &mut ReadDevice<'_>) { Device::with_settings_codec(t, c).query(); }\n\
          fn h(d: &mut pioneer_optical::device::Device<'_, T>) { d.set(QuietMode, v, p); }\n\
          fn p(t: &mut crate::transport::ScsiTransport<'_, '_>, w: &mut WriteDevice<'_>) { ScsiTransport::flash(&s); }\n\
-         fn o(r: &mut ReadDevice<'_>) { r.set_timeout(t); }\n",
+         fn o(r: &mut ReadDevice<'_>) { r.set_timeout(t); }\n\
+         fn k(r: &mut ReadDevice<'_>, c: &Cell<u8>) { c.set(1); r.command_out(&knock(), &[]); }\n",
     );
     assert_eq!(
         names,
-        ["r", "s", "t", "u", "v", "w", "x", "y", "z", "q", "h", "p"]
+        ["r", "s", "t", "u", "v", "w", "x", "y", "z", "q", "h", "p", "k"]
     );
     assert_eq!(refused, ["r", "s", "t", "u", "v", "y", "h", "p"]);
     assert_eq!(
@@ -896,6 +955,26 @@ fn hiding_imports_are_refused() {
             "use pioneer_optical::drive::{self as dr}",
             "use pioneer_optical::device::Device as Dev",
             "use crate::transport::ScsiTransport as T",
+        ]
+    );
+}
+
+#[test]
+fn hiding_types_are_refused() {
+    let (code, _) = lex("type Dev<'a> = Device<'a, ScsiTransport<'a, 'a>>;\n\
+         pub(crate) type T = crate::transport::SharedDevice<'static>;\n\
+         struct Wrap(Device<'static, X>);\n\
+         struct Holder<'a> { inner: &'a mut FlashTransport<'a> }\n\
+         type Bytes = Vec<u8>;\n\
+         struct Plain { n: u32, dev: ReadDeviceInfo }\n\
+         struct Unit;\n");
+    assert_eq!(
+        hiding_types(&code),
+        [
+            "type Dev<'a> = Device<'a, ScsiTransport<'a, 'a>>",
+            "type T = crate::transport::SharedDevice<'static>",
+            "struct Wrap",
+            "struct Holder<'a>",
         ]
     );
 }
