@@ -91,7 +91,7 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
             style::kv("flash", &format!("{} — {}", set.name, set.status.label()))
         );
     }
-    device_info::show(dev);
+    device_info::show(dev, drive.family() == crate::drive::Family::Pioneer);
     drive.print_device_info(dev);
     // Best-effort firmware identification (read-only). `info` never aborts, so a
     // read failure here is simply omitted.

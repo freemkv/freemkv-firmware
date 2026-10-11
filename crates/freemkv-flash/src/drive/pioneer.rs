@@ -20,9 +20,6 @@ pub mod backup;
 /// Read-only validation of extractor-produced Pioneer firmware bundles.
 #[path = "pioneer/bundle.rs"]
 pub mod bundle;
-/// Pioneer vendor fields for `info`.
-#[path = "pioneer/device_info.rs"]
-pub(crate) mod device_info;
 /// Address-oriented Pioneer diagnostic captures.
 #[path = "pioneer/dump.rs"]
 pub mod dump;
@@ -743,10 +740,6 @@ impl DriveFamily for Pioneer {
     }
     fn describe_file(&self, image: &[u8]) -> Option<Result<()>> {
         file_info::describe(image)
-    }
-
-    fn print_device_info(&self, dev: &mut dyn ScsiDevice) {
-        device_info::show(dev);
     }
 
     fn classify_input(&self, path: &std::path::Path, bytes: &[u8]) -> super::InputKind {
