@@ -149,8 +149,7 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 return Err(InspectionError::UnsupportedFormat(family.into()).into());
             };
             control.check()?;
-            let state =
-                provider.live_state(&mut ReadDevice::new(&mut dev, backend.allowed_data_out()));
+            let state = provider.live_state(&mut ReadDevice::for_backend(&mut dev, backend));
             let raw = provider.raw_capture() && !as_backup;
             engine::backup_with_replace(&mut dev, backend, capture, raw, false)?;
             drop(opened);

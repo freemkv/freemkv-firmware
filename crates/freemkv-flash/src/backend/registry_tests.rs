@@ -235,7 +235,7 @@ fn mtk_identity_parses_boot_banner_from_32b_region() {
         |cdb| cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..]),
         banner,
     );
-    let id = MTK.identity(&mut ReadDevice::new(&mut dev, &[]));
+    let id = MTK.identity(&mut ReadDevice::without_unlocks(&mut dev));
     assert_eq!(id.banner.as_deref(), Some("MT1959 Boot BU5"));
 }
 

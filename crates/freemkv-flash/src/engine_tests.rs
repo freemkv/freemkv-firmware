@@ -1045,11 +1045,11 @@ fn mediatek_dump_preserves_raw_unsigned_memory_without_requiring_backup_integrit
     let mut dev = MockScsiDevice::new().with_firmware_image(raw.clone());
     let dump = DumpFacet::capture(
         &Mtk,
-        DeviceAccess::Read(&mut ReadDevice::new(&mut dev, &[])),
+        DeviceAccess::Read(&mut ReadDevice::without_unlocks(&mut dev)),
     );
     assert_eq!(dump.unwrap(), raw);
     assert!(dev.writes.is_empty());
-    assert!(BackupFacet::capture(&Mtk, &mut ReadDevice::new(&mut dev, &[])).is_err());
+    assert!(BackupFacet::capture(&Mtk, &mut ReadDevice::without_unlocks(&mut dev)).is_err());
 }
 
 fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
@@ -1169,7 +1169,11 @@ fn chip_gate_refuses_cross_generation_images() {
     let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
     assert!(gate.to_string().contains("cannot be overridden"), "{gate}");
     let normal = Mtk
-        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &img, "BD-RE BU40N")
+        .validate_image(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            &img,
+            "BD-RE BU40N",
+        )
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");
     assert!(dev.writes.is_empty());
@@ -1184,7 +1188,11 @@ fn raw_drive_reads_are_never_flashable() {
     read[..0x400].copy_from_slice(&mirror);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let normal = Mtk
-        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &read, "BD-RE BU40N")
+        .validate_image(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            &read,
+            "BD-RE BU40N",
+        )
         .unwrap_err();
     assert!(normal.to_string().contains("raw drive read"), "{normal}");
 }
@@ -1195,7 +1203,11 @@ fn unknown_boot_pages_are_refused() {
     img[..0x400].fill(0x42);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let err = Mtk
-        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &img, "BD-RE BU40N")
+        .validate_image(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            &img,
+            "BD-RE BU40N",
+        )
         .unwrap_err();
     assert!(err.to_string().contains("boot page"), "{err}");
 }
@@ -1312,8 +1324,12 @@ fn classify_file_flags_an_integrity_entry_running_past_the_image() {
 fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    Mtk.validate_image(&mut ReadDevice::new(&mut dev, &[]), &img, "BD-RE BU40N")
-        .unwrap();
+    Mtk.validate_image(
+        &mut ReadDevice::without_unlocks(&mut dev),
+        &img,
+        "BD-RE BU40N",
+    )
+    .unwrap();
     let banner = offset_bytes(0x3000);
     let banner_reads = dev
         .reads
@@ -1353,13 +1369,21 @@ fn mt1939_drive() -> MockScsiDevice {
 fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
     let mt1939 = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1959 Boot JB8");
     let mut dev = mt1939_drive();
-    Mtk.validate_image(&mut ReadDevice::new(&mut dev, &[]), &mt1939, "BD-RE BU40N")
-        .unwrap();
+    Mtk.validate_image(
+        &mut ReadDevice::without_unlocks(&mut dev),
+        &mt1939,
+        "BD-RE BU40N",
+    )
+    .unwrap();
     ensure_same_chip(&mut dev, &mt1939).unwrap();
 
     let mt1959 = chip_image("BD-RE BU40N", Some(b"MTEKMT1959"), b"MT1959 Boot JB8");
     let normal = Mtk
-        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &mt1959, "BD-RE BU40N")
+        .validate_image(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            &mt1959,
+            "BD-RE BU40N",
+        )
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1959"), "{normal:#}");
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");

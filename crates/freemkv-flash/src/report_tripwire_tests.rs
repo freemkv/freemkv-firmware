@@ -279,7 +279,7 @@ fn recovery_identify_needs_no_probe() {
     let receiver = Pioneer::new()
         .recovery()
         .unwrap()
-        .identify(&mut ReadDevice::new(&mut dev, &[]))
+        .identify(&mut ReadDevice::without_unlocks(&mut dev))
         .unwrap()
         .expect("identified without a probe match");
     assert_eq!(receiver.label, "BD-RW   BDR-UD04 1.14");
@@ -295,7 +295,7 @@ fn recovery_identify_needs_no_probe() {
     let none = Pioneer::new()
         .recovery()
         .unwrap()
-        .identify(&mut ReadDevice::new(&mut other, &[]))
+        .identify(&mut ReadDevice::without_unlocks(&mut other))
         .unwrap();
     assert!(none.is_none());
 }
@@ -516,12 +516,9 @@ fn conformance_probe_rejects_unknown_mmc_drive() {
             .unwrap_or_else(|| panic!("backend {id} has no conformance fixture"))
             .1;
         let probe = |dev: &mut MockScsiDevice| {
-            let identity = crate::backend::read_identity(&mut ReadDevice::new(dev, &[]));
+            let identity = crate::backend::read_identity(&mut ReadDevice::without_unlocks(dev));
             let found = backend
-                .probe(
-                    &mut ReadDevice::new(dev, backend.allowed_data_out()),
-                    &identity,
-                )
+                .probe(&mut ReadDevice::for_backend(dev, backend), &identity)
                 .unwrap();
             let undeclared = dev.writes.iter().any(|(cdb, data)| {
                 !crate::backend::device::declared(backend.allowed_data_out(), cdb, data)
@@ -559,14 +556,14 @@ fn details_reuse_probe_data_without_repeat_reads() {
 
     // The backend's own rows issue only their own reads.
     let mut snapshot_dev = pioneer_with(b"", b"SN1", b"SAT 8A10");
-    let standard = crate::standard::read(&mut ReadDevice::new(&mut snapshot_dev, &[]));
+    let standard = crate::standard::read(&mut ReadDevice::without_unlocks(&mut snapshot_dev));
     let read = crate::backend::InfoSoFar {
         standard: &standard,
         settings: None,
     };
     let mut dev = Rec::new(pioneer_with(b"", b"SN1", b"SAT 8A10"));
     let rows = Pioneer::new().details().unwrap().rows(
-        &mut ReadDevice::new(&mut dev, &[]),
+        &mut ReadDevice::without_unlocks(&mut dev),
         &read,
         crate::report::Slot::AfterInterface,
     );
@@ -859,7 +856,7 @@ fn settings_are_read_only() {
     let facet = facet.settings().expect("Pioneer exposes its settings");
     // Through a read-only device that permits no data-out at all.
     let mut dev = Rec::new(pioneer_with(b"", b"SN1", b"SAT 8A10"));
-    let _ = facet.read(&mut ReadDevice::new(&mut dev, &[]));
+    let _ = facet.read(&mut ReadDevice::without_unlocks(&mut dev));
     let t = dev.transcript();
     assert!(!t.is_empty());
     assert!(t.iter().all(|l| l.starts_with("IN ")), "{t:#?}");

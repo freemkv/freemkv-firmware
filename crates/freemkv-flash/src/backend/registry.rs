@@ -40,10 +40,10 @@ pub struct Resolved {
 /// Run every registered, read-only protocol probe. Ambiguous matches fail
 /// closed rather than allowing registry order to select a writer.
 pub fn resolve(dev: &mut dyn ScsiDevice) -> Result<Option<Resolved>> {
-    let identity = read_identity(&mut ReadDevice::new(dev, &[]));
+    let identity = read_identity(&mut ReadDevice::without_unlocks(dev));
     let mut found: Option<(&'static dyn Backend, Match)> = None;
     for backend in backends() {
-        let mut probe_dev = ReadDevice::new(dev, backend.allowed_data_out());
+        let mut probe_dev = ReadDevice::for_backend(dev, backend);
         if let Some(matched) = backend.probe(&mut probe_dev, &identity)? {
             if matched.backend != backend.descriptor().id {
                 bail!("backend probe returned an inconsistent backend id");
