@@ -596,6 +596,133 @@ IN   cdb=000000000000 alloc=0 -> ok 0
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
+=== 1003/ID66 BC-5100S :: packages ===
+installed: rev 1.10 (Sep18,2008) sha256=5e4790660c74b38f6f4a8aa8c0e33f63c9c56e74cf6fe75bcaf01bf1d0c5c564
+
+=== 1003/ID66 BC-5100S :: backup ===
+result: OK
+--- text (11) ---
+Backing up BD ROM BC-5100S → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="Optiarc BD ROM BC-5100S " revision="1.10" hardware="SAT 1003"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BD ROM BC-5100S corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (54 updates)
+verifying normal: 1% .. 100% (54 updates)
+candidate sha256: 1fc859dec83eb4901ce1fc5c0a520509847c39eb8aed98d126f41a82ac485d48
+wrote <TMP>/corpus/backup.tar (1.86 MiB).
+PARTIAL OEM: kernel is a byte-exact OEM original; the normal is NOT recognized OEM (zero seed + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+--- events (13) ---
+MSG      Backing up BD ROM BC-5100S → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="Optiarc BD ROM BC-5100S " revision="1.10" hardware="SAT 1003"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BD ROM BC-5100S corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1769472 .. 1769472/1769472 (54 updates)
+PROGRESS verifying normal 32768/1769472 .. 1769472/1769472 (54 updates)
+MSG      candidate sha256: 1fc859dec83eb4901ce1fc5c0a520509847c39eb8aed98d126f41a82ac485d48
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (1.86 MiB).
+FIELD    Backup warning = PARTIAL OEM: kernel is a byte-exact OEM original; the normal is NOT recognized OEM (zero seed + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+MSG      PARTIAL OEM: kernel is a byte-exact OEM original; the normal is NOT recognized OEM (zero seed + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410010: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+READS 0x410000..0x5c0000: 54 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5c0000: 54 x (knock, read <= 0x8000) -> ok
+saved backup: 1952768 bytes sha256=1fc859dec83eb4901ce1fc5c0a520509847c39eb8aed98d126f41a82ac485d48
+
+=== 1003/ID66 BC-5100S :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BD ROM BC-5100S
+SHA-256: 5e4790660c74b38f6f4a8aa8c0e33f63c9c56e74cf6fe75bcaf01bf1d0c5c564
+Validated envelope integrity and transfer framing; 63 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BD ROM BC-5100S
+MSG      SHA-256: 5e4790660c74b38f6f4a8aa8c0e33f63c9c56e74cf6fe75bcaf01bf1d0c5c564
+MSG      Validated envelope integrity and transfer framing; 63 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 1003/ID66 BC-5100S :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="Optiarc BD ROM BC-5100S " revision="1.10" hardware="SAT 1003"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BD ROM BC-5100S corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (54 updates)
+verifying normal: 1% .. 100% (54 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (1952768 bytes)
+This will flash: KERNEL (rev 1.10) + NORMAL (rev 1.10)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="Optiarc BD ROM BC-5100S " revision="1.10" hardware="SAT 1003"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BD ROM BC-5100S corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1769472 .. 1769472/1769472 (54 updates)
+PROGRESS verifying normal 32768/1769472 .. 1769472/1769472 (54 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (1952768 bytes)
+MSG      This will flash: KERNEL (rev 1.10) + NORMAL (rev 1.10)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410010: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+READS 0x410000..0x5c0000: 54 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5c0000: 54 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 1952768 bytes sha256=1fc859dec83eb4901ce1fc5c0a520509847c39eb8aed98d126f41a82ac485d48
+
+=== 1003/ID66 BC-5100S :: recover dry run, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 1003/ID66 BC-5100S :: recover dry run, Current read from the drive ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 1003/ID66 BC-5100S :: recover execute from update mode, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
 === 1003/PIO_ADV BDC-202 :: packages ===
 installed: rev 1.07 (08/05/29) sha256=1effe6113931c42aa1a893ba7ddf2d64570b3fb6a80f80492251165133193ade
 older: rev 1.04 (08/01/10) sha256=8fa348c7a6dd509523e9f3a74cc0b73dbdfe03e893fc21b5796ba68feed05556
@@ -4898,6 +5025,136 @@ IN   cdb=000000000000 alloc=0 -> ok 0
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
+=== 1030/ID20 PP-100 :: packages ===
+installed: rev 2.02 (16/02/22) sha256=9f0d192c8017732e22abfe840b7ed376c0eb6c09eeec18e4c2204c36f3fcf2c4
+
+=== 1030/ID20 PP-100 :: backup ===
+result: OK
+--- text (11) ---
+Backing up BDR-206PA PP-100 → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="PIONEER BDR-206PA PP-100" revision="2.02" hardware="SAT 1030"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PA PP-100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (71 updates)
+verifying normal: 1% .. 100% (71 updates)
+candidate sha256: 9f0d192c8017732e22abfe840b7ed376c0eb6c09eeec18e4c2204c36f3fcf2c4
+wrote <TMP>/corpus/backup.tar (2.33 MiB).
+OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- events (13) ---
+MSG      Backing up BDR-206PA PP-100 → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="PIONEER BDR-206PA PP-100" revision="2.02" hardware="SAT 1030"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PA PP-100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/2309376 .. 2309376/2309376 (71 updates)
+PROGRESS verifying normal 32768/2309376 .. 2309376/2309376 (71 updates)
+MSG      candidate sha256: 9f0d192c8017732e22abfe840b7ed376c0eb6c09eeec18e4c2204c36f3fcf2c4
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (2.33 MiB).
+FIELD    Backup validation = OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+MSG      OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x643d00: 71 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x643d00: 71 x (knock, read <= 0x8000) -> ok
+saved backup: 2447872 bytes sha256=9f0d192c8017732e22abfe840b7ed376c0eb6c09eeec18e4c2204c36f3fcf2c4
+
+=== 1030/ID20 PP-100 :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BDR-206PA PP-100
+SHA-256: 9f0d192c8017732e22abfe840b7ed376c0eb6c09eeec18e4c2204c36f3fcf2c4
+Validated envelope integrity and transfer framing; 78 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BDR-206PA PP-100
+MSG      SHA-256: 9f0d192c8017732e22abfe840b7ed376c0eb6c09eeec18e4c2204c36f3fcf2c4
+MSG      Validated envelope integrity and transfer framing; 78 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 1030/ID20 PP-100 :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="PIONEER BDR-206PA PP-100" revision="2.02" hardware="SAT 1030"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PA PP-100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (71 updates)
+verifying normal: 1% .. 100% (71 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (2447872 bytes)
+This will flash: KERNEL (rev 2.02) + NORMAL (rev 2.02)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="PIONEER BDR-206PA PP-100" revision="2.02" hardware="SAT 1030"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PA PP-100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/2309376 .. 2309376/2309376 (71 updates)
+PROGRESS verifying normal 32768/2309376 .. 2309376/2309376 (71 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (2447872 bytes)
+MSG      This will flash: KERNEL (rev 2.02) + NORMAL (rev 2.02)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x643d00: 71 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x643d00: 71 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 2447872 bytes sha256=9f0d192c8017732e22abfe840b7ed376c0eb6c09eeec18e4c2204c36f3fcf2c4
+
+=== 1030/ID20 PP-100 :: recover dry run, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 1030/ID20 PP-100 :: recover dry run, Current read from the drive ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 1030/ID20 PP-100 :: recover execute from update mode, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
 === 1030/ID43 BDR-206 :: packages ===
 installed: rev 1.06 (11/04/18) sha256=ed1cf82117366a69d9cb8ce3ec7c632b9e73ca0d6424113c6d9cc7968613d054
 older: rev 1.05 (11/01/12) sha256=de1c5a336dcc155f8c6584dbb4ae9aeeb2764c9d97d1631cdc390c6af288f346
@@ -6230,6 +6487,136 @@ IN   cdb=000000000000 alloc=0 -> ok 0
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
+=== 1030/ID76 PP-100 :: packages ===
+installed: rev 2.02 (16/02/22) sha256=17392c970aa586fa546eeb25829edb10ba5a93d34bb312ac96b7515cb4931a6c
+
+=== 1030/ID76 PP-100 :: backup ===
+result: OK
+--- text (11) ---
+Backing up BDR-206PB PP-100 → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="PIONEER BDR-206PB PP-100" revision="2.02" hardware="SAT 1030"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PB PP-100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (71 updates)
+verifying normal: 1% .. 100% (71 updates)
+candidate sha256: 17392c970aa586fa546eeb25829edb10ba5a93d34bb312ac96b7515cb4931a6c
+wrote <TMP>/corpus/backup.tar (2.33 MiB).
+OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- events (13) ---
+MSG      Backing up BDR-206PB PP-100 → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="PIONEER BDR-206PB PP-100" revision="2.02" hardware="SAT 1030"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PB PP-100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/2307072 .. 2307072/2307072 (71 updates)
+PROGRESS verifying normal 32768/2307072 .. 2307072/2307072 (71 updates)
+MSG      candidate sha256: 17392c970aa586fa546eeb25829edb10ba5a93d34bb312ac96b7515cb4931a6c
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (2.33 MiB).
+FIELD    Backup validation = OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+MSG      OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x643400: 71 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x643400: 71 x (knock, read <= 0x8000) -> ok
+saved backup: 2445312 bytes sha256=17392c970aa586fa546eeb25829edb10ba5a93d34bb312ac96b7515cb4931a6c
+
+=== 1030/ID76 PP-100 :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BDR-206PB PP-100
+SHA-256: 17392c970aa586fa546eeb25829edb10ba5a93d34bb312ac96b7515cb4931a6c
+Validated envelope integrity and transfer framing; 78 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BDR-206PB PP-100
+MSG      SHA-256: 17392c970aa586fa546eeb25829edb10ba5a93d34bb312ac96b7515cb4931a6c
+MSG      Validated envelope integrity and transfer framing; 78 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 1030/ID76 PP-100 :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="PIONEER BDR-206PB PP-100" revision="2.02" hardware="SAT 1030"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PB PP-100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (71 updates)
+verifying normal: 1% .. 100% (71 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (2445312 bytes)
+This will flash: KERNEL (rev 2.02) + NORMAL (rev 2.02)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="PIONEER BDR-206PB PP-100" revision="2.02" hardware="SAT 1030"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-206PB PP-100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/2307072 .. 2307072/2307072 (71 updates)
+PROGRESS verifying normal 32768/2307072 .. 2307072/2307072 (71 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (2445312 bytes)
+MSG      This will flash: KERNEL (rev 2.02) + NORMAL (rev 2.02)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x643400: 71 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x643400: 71 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 2445312 bytes sha256=17392c970aa586fa546eeb25829edb10ba5a93d34bb312ac96b7515cb4931a6c
+
+=== 1030/ID76 PP-100 :: recover dry run, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 1030/ID76 PP-100 :: recover dry run, Current read from the drive ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 1030/ID76 PP-100 :: recover execute from update mode, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
 === 1030/OEM_EXT BDR-206 :: packages ===
 installed: rev 9.06 (11/08/22) sha256=63191dbce2dea7e8d69637579f1c7aa2df18cbe84a028c655b245637d8c8b1ef
 
@@ -6425,6 +6812,178 @@ WRITES 3b07f0 0x0..0x23fa00: 72 transfers <= 0x8000, chunk digests sha256=86bce3
 OUTS cdb=3b05ff00000000010000 len=256 sha256=7b5b9258b3922312f2cee5a92a6c775083c20193776f59e1c4b3a413d1bb0d86 -> ok
 IN   cdb=4a000000100000000800 alloc=8 -> ok 8
 IN   cdb=000000000000 alloc=0 -> ok 0
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: packages ===
+installed: rev 1.01 (16/02/22) sha256=126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+Normal-only: rev 1.10 (19/04/09) sha256=5e5b2e76c99bceba1f4bfa2d1b0680b4af3817ae3552a40ff235a6d5f1ac11b6
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: backup ===
+result: OK
+--- text (11) ---
+Backing up BDR-PR1EPDVPP100 → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="PIONEER BDR-PR1EPDVPP100" revision="1.01" hardware="SAT 1031"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-PR1EPDVPP100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (71 updates)
+verifying normal: 1% .. 100% (71 updates)
+candidate sha256: 126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+wrote <TMP>/corpus/backup.tar (2.33 MiB).
+OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- events (13) ---
+MSG      Backing up BDR-PR1EPDVPP100 → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="PIONEER BDR-PR1EPDVPP100" revision="1.01" hardware="SAT 1031"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-PR1EPDVPP100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/2304000 .. 2304000/2304000 (71 updates)
+PROGRESS verifying normal 32768/2304000 .. 2304000/2304000 (71 updates)
+MSG      candidate sha256: 126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (2.33 MiB).
+FIELD    Backup validation = OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+MSG      OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x642800: 71 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x642800: 71 x (knock, read <= 0x8000) -> ok
+saved backup: 2442240 bytes sha256=126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BDR-PR1EPDVPP100
+SHA-256: 126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+Validated envelope integrity and transfer framing; 78 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BDR-PR1EPDVPP100
+MSG      SHA-256: 126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+MSG      Validated envelope integrity and transfer framing; 78 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="PIONEER BDR-PR1EPDVPP100" revision="1.01" hardware="SAT 1031"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-PR1EPDVPP100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (71 updates)
+verifying normal: 1% .. 100% (71 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (2442240 bytes)
+This will flash: KERNEL (rev 1.01) + NORMAL (rev 1.01)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="PIONEER BDR-PR1EPDVPP100" revision="1.01" hardware="SAT 1031"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-PR1EPDVPP100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/2304000 .. 2304000/2304000 (71 updates)
+PROGRESS verifying normal 32768/2304000 .. 2304000/2304000 (71 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (2442240 bytes)
+MSG      This will flash: KERNEL (rev 1.01) + NORMAL (rev 1.01)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x642800: 71 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x642800: 71 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 2442240 bytes sha256=126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: flash Normal-only package ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="PIONEER BDR-PR1EPDVPP100" revision="1.01" hardware="SAT 1031"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-PR1EPDVPP100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (71 updates)
+verifying normal: 1% .. 100% (71 updates)
+backup: saved <TMP>/corpus/preflash_1.tar (2442240 bytes)
+This will flash: NORMAL only — no Kernel in the package
+--- events (9) ---
+MSG      Pioneer backup identity: drive="PIONEER BDR-PR1EPDVPP100" revision="1.01" hardware="SAT 1031"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDR-PR1EPDVPP100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/2304000 .. 2304000/2304000 (71 updates)
+PROGRESS verifying normal 32768/2304000 .. 2304000/2304000 (71 updates)
+MSG      backup: saved <TMP>/corpus/preflash_1.tar (2442240 bytes)
+MSG      This will flash: NORMAL only — no Kernel in the package
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x642800: 71 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x642800: 71 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 2442240 bytes sha256=126f6bb56e4884d56c95502227a6f5cbf01b84f8f0fb099c7029c98fa6e6fe6c
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: recover dry run, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: recover dry run, Current read from the drive ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 1031/ID79 BDR-PR1EPDVPP100 :: recover execute from update mode, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
@@ -17285,6 +17844,133 @@ IN   cdb=000000000000 alloc=0 -> ok 0
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
+=== 8511/ID22 SBW-06D2X-U :: packages ===
+installed: rev 1.10 (17/04/18) sha256=7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c
+
+=== 8511/ID22 SBW-06D2X-U :: backup ===
+result: OK
+--- text (11) ---
+Backing up SBW-06D2X-U → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="ASUS    SBW-06D2X-U     " revision="1.10" hardware="SAT 8511"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBW-06D2X-U corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (55 updates)
+verifying normal: 1% .. 100% (55 updates)
+candidate sha256: 7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c
+wrote <TMP>/corpus/backup.tar (1.83 MiB).
+OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- events (13) ---
+MSG      Backing up SBW-06D2X-U → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="ASUS    SBW-06D2X-U     " revision="1.10" hardware="SAT 8511"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBW-06D2X-U corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1785344 .. 1785344/1785344 (55 updates)
+PROGRESS verifying normal 32768/1785344 .. 1785344/1785344 (55 updates)
+MSG      candidate sha256: 7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (1.83 MiB).
+FIELD    Backup validation = OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+MSG      OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5c3e00: 55 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5c3e00: 55 x (knock, read <= 0x8000) -> ok
+saved backup: 1923584 bytes sha256=7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c
+
+=== 8511/ID22 SBW-06D2X-U :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: SBW-06D2X-U
+SHA-256: 7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c
+Validated envelope integrity and transfer framing; 62 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: SBW-06D2X-U
+MSG      SHA-256: 7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c
+MSG      Validated envelope integrity and transfer framing; 62 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 8511/ID22 SBW-06D2X-U :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="ASUS    SBW-06D2X-U     " revision="1.10" hardware="SAT 8511"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBW-06D2X-U corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (55 updates)
+verifying normal: 1% .. 100% (55 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (1923584 bytes)
+This will flash: KERNEL (rev 1.10) + NORMAL (rev 1.10)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="ASUS    SBW-06D2X-U     " revision="1.10" hardware="SAT 8511"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBW-06D2X-U corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1785344 .. 1785344/1785344 (55 updates)
+PROGRESS verifying normal 32768/1785344 .. 1785344/1785344 (55 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (1923584 bytes)
+MSG      This will flash: KERNEL (rev 1.10) + NORMAL (rev 1.10)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5c3e00: 55 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5c3e00: 55 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 1923584 bytes sha256=7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c
+
+=== 8511/ID22 SBW-06D2X-U :: recover dry run, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 8511/ID22 SBW-06D2X-U :: recover dry run, Current read from the drive ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 8511/ID22 SBW-06D2X-U :: recover execute from update mode, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
 === 8520/GENERAL BDR-XU03 :: packages ===
 installed: rev 1.04 (23/03/13) sha256=283366e657b49342032e814d517fcae532746d2ad77914680a66c81e5501beee
 older: rev 1.03 (15/06/29) sha256=a62c138873f0747aca5048a3ad2c27cd33ebcb7c6482cfb02541895de93244aa
@@ -18364,6 +19050,133 @@ IN   cdb=4a000000100000000800 alloc=8 -> ok 8
 IN   cdb=000000000000 alloc=0 -> ok 0
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 8591/ID22 SBC-06D2X-U :: packages ===
+installed: rev 1.10 (17/04/18) sha256=f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038
+
+=== 8591/ID22 SBC-06D2X-U :: backup ===
+result: OK
+--- text (11) ---
+Backing up SBC-06D2X-U → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="ASUS    SBC-06D2X-U     " revision="1.10" hardware="SAT 8591"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBC-06D2X-U corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (55 updates)
+verifying normal: 1% .. 100% (55 updates)
+candidate sha256: f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038
+wrote <TMP>/corpus/backup.tar (1.83 MiB).
+OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- events (13) ---
+MSG      Backing up SBC-06D2X-U → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="ASUS    SBC-06D2X-U     " revision="1.10" hardware="SAT 8591"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBC-06D2X-U corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1783040 .. 1783040/1783040 (55 updates)
+PROGRESS verifying normal 32768/1783040 .. 1783040/1783040 (55 updates)
+MSG      candidate sha256: f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (1.83 MiB).
+FIELD    Backup validation = OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+MSG      OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5c3500: 55 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5c3500: 55 x (knock, read <= 0x8000) -> ok
+saved backup: 1921536 bytes sha256=f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038
+
+=== 8591/ID22 SBC-06D2X-U :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: SBC-06D2X-U
+SHA-256: f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038
+Validated envelope integrity and transfer framing; 62 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: SBC-06D2X-U
+MSG      SHA-256: f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038
+MSG      Validated envelope integrity and transfer framing; 62 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 8591/ID22 SBC-06D2X-U :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="ASUS    SBC-06D2X-U     " revision="1.10" hardware="SAT 8591"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBC-06D2X-U corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (55 updates)
+verifying normal: 1% .. 100% (55 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (1921536 bytes)
+This will flash: KERNEL (rev 1.10) + NORMAL (rev 1.10)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="ASUS    SBC-06D2X-U     " revision="1.10" hardware="SAT 8591"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=SBC-06D2X-U corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1783040 .. 1783040/1783040 (55 updates)
+PROGRESS verifying normal 32768/1783040 .. 1783040/1783040 (55 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (1921536 bytes)
+MSG      This will flash: KERNEL (rev 1.10) + NORMAL (rev 1.10)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5c3500: 55 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5c3500: 55 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 1921536 bytes sha256=f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038
+
+=== 8591/ID22 SBC-06D2X-U :: recover dry run, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 8591/ID22 SBC-06D2X-U :: recover dry run, Current read from the drive ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 8591/ID22 SBC-06D2X-U :: recover execute from update mode, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
 
 === 8600/GENERAL BDR-209M :: packages ===
 installed: rev 1.54 (20/07/21) sha256=3b6db5c5bda2383a620255758fe121cea99d646ce80044fa0f224825b9660a22
@@ -20810,6 +21623,133 @@ IN   cdb=000000000000 alloc=0 -> ok 0
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
+=== 8600/ID76 BW-16D1X-U :: packages ===
+installed: rev E102 (18/01/15) sha256=201dbefdbf5529f4ed99ee04110d53369ffbc3d0dff1a9ce0fe6f3564bcad3f5
+
+=== 8600/ID76 BW-16D1X-U :: backup ===
+result: OK
+--- text (11) ---
+Backing up BW-16D1X-U → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="ASUS    BW-16D1X-U      " revision="E102" hardware="SAT 8600"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BW-16D1X-U corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (56 updates)
+verifying normal: 1% .. 100% (56 updates)
+candidate sha256: 7b4c337b51e9288f3242bb7b1d7d2c4ef50961d1210f09dbc754db06e51a6f9a
+wrote <TMP>/corpus/backup.tar (1.88 MiB).
+UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+--- events (13) ---
+MSG      Backing up BW-16D1X-U → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="ASUS    BW-16D1X-U      " revision="E102" hardware="SAT 8600"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BW-16D1X-U corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1832192 .. 1832192/1832192 (56 updates)
+PROGRESS verifying normal 32768/1832192 .. 1832192/1832192 (56 updates)
+MSG      candidate sha256: 7b4c337b51e9288f3242bb7b1d7d2c4ef50961d1210f09dbc754db06e51a6f9a
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (1.88 MiB).
+FIELD    Backup warning = UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+MSG      UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5cf500: 56 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5cf500: 56 x (knock, read <= 0x8000) -> ok
+saved backup: 1970688 bytes sha256=7b4c337b51e9288f3242bb7b1d7d2c4ef50961d1210f09dbc754db06e51a6f9a
+
+=== 8600/ID76 BW-16D1X-U :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BW-16D1X-U
+SHA-256: 201dbefdbf5529f4ed99ee04110d53369ffbc3d0dff1a9ce0fe6f3564bcad3f5
+Validated envelope integrity and transfer framing; 63 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BW-16D1X-U
+MSG      SHA-256: 201dbefdbf5529f4ed99ee04110d53369ffbc3d0dff1a9ce0fe6f3564bcad3f5
+MSG      Validated envelope integrity and transfer framing; 63 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 8600/ID76 BW-16D1X-U :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="ASUS    BW-16D1X-U      " revision="E102" hardware="SAT 8600"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BW-16D1X-U corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (56 updates)
+verifying normal: 1% .. 100% (56 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (1970688 bytes)
+This will flash: KERNEL (rev E102) + NORMAL (rev E102)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="ASUS    BW-16D1X-U      " revision="E102" hardware="SAT 8600"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BW-16D1X-U corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1832192 .. 1832192/1832192 (56 updates)
+PROGRESS verifying normal 32768/1832192 .. 1832192/1832192 (56 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (1970688 bytes)
+MSG      This will flash: KERNEL (rev E102) + NORMAL (rev E102)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5cf500: 56 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5cf500: 56 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 1970688 bytes sha256=7b4c337b51e9288f3242bb7b1d7d2c4ef50961d1210f09dbc754db06e51a6f9a
+
+=== 8600/ID76 BW-16D1X-U :: recover dry run, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 8600/ID76 BW-16D1X-U :: recover dry run, Current read from the drive ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
+=== 8600/ID76 BW-16D1X-U :: recover execute from update mode, Current file ===
+result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+
 === 8600/ID81 BDR-209 :: packages ===
 installed: rev 1.55 (23/02/16) sha256=e3655a4feae1dbbc6303202287d133f546fe94511d904987ffa05bfbb5a1058c
 older: rev 1.51 (18/05/08) sha256=b627a41a482bba6815cc2f9f519ff735d0af793b1f5596042ea1bebee72bb9ac
@@ -23150,6 +24090,136 @@ WRITES 3b07f0 0x0..0x1d6600: 59 transfers <= 0x8000, chunk digests sha256=0eb95d
 OUTS cdb=3b05ff00000000010000 len=256 sha256=5f16ae60bb4b0262e4429d3d893504ebbe8cd3b00234fb28d88df008f353ef4d -> ok
 IN   cdb=4a000000100000000800 alloc=8 -> ok 8
 IN   cdb=000000000000 alloc=0 -> ok 0
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 8680/ID79 BDW-PR1EPDVPP100 :: packages ===
+installed: rev 1.01 (18/03/06) sha256=11e38c375765ac213a3b190c3f7b0e1a922b87905efa73696c07f6d309350157
+
+=== 8680/ID79 BDW-PR1EPDVPP100 :: backup ===
+result: OK
+--- text (11) ---
+Backing up BDW-PR1EPDVPP100 → <TMP>/corpus/backup.tar
+Pioneer backup identity: drive="PIONEER BDW-PR1EPDVPP100" revision="1.01" hardware="SAT 8680"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDW-PR1EPDVPP100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (56 updates)
+verifying normal: 1% .. 100% (56 updates)
+candidate sha256: 11e38c375765ac213a3b190c3f7b0e1a922b87905efa73696c07f6d309350157
+wrote <TMP>/corpus/backup.tar (1.88 MiB).
+OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- events (13) ---
+MSG      Backing up BDW-PR1EPDVPP100 → <TMP>/corpus/backup.tar
+MSG      Pioneer backup identity: drive="PIONEER BDW-PR1EPDVPP100" revision="1.01" hardware="SAT 8680"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDW-PR1EPDVPP100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1828864 .. 1828864/1828864 (56 updates)
+PROGRESS verifying normal 32768/1828864 .. 1828864/1828864 (56 updates)
+MSG      candidate sha256: 11e38c375765ac213a3b190c3f7b0e1a922b87905efa73696c07f6d309350157
+FIELD    Saved to = <TMP>/corpus/backup.tar
+MSG      wrote <TMP>/corpus/backup.tar (1.88 MiB).
+FIELD    Backup validation = OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+MSG      OEM-VERIFIED: kernel and normal are byte-exact OEM originals.
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5ce800: 56 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5ce800: 56 x (knock, read <= 0x8000) -> ok
+saved backup: 1967104 bytes sha256=11e38c375765ac213a3b190c3f7b0e1a922b87905efa73696c07f6d309350157
+
+=== 8680/ID79 BDW-PR1EPDVPP100 :: flash dry run ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BDW-PR1EPDVPP100
+SHA-256: 11e38c375765ac213a3b190c3f7b0e1a922b87905efa73696c07f6d309350157
+Validated envelope integrity and transfer framing; 63 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BDW-PR1EPDVPP100
+MSG      SHA-256: 11e38c375765ac213a3b190c3f7b0e1a922b87905efa73696c07f6d309350157
+MSG      Validated envelope integrity and transfer framing; 63 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== 8680/ID79 BDW-PR1EPDVPP100 :: flash same version ===
+result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+--- text (9) ---
+Pioneer backup identity: drive="PIONEER BDW-PR1EPDVPP100" revision="1.01" hardware="SAT 8680"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDW-PR1EPDVPP100 corpus replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+reading normal: 1% .. 100% (56 updates)
+verifying normal: 1% .. 100% (56 updates)
+backup: saved <TMP>/corpus/preflash_0.tar (1967104 bytes)
+This will flash: KERNEL (rev 1.01) + NORMAL (rev 1.01)
+--- events (9) ---
+MSG      Pioneer backup identity: drive="PIONEER BDW-PR1EPDVPP100" revision="1.01" hardware="SAT 8680"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=BDW-PR1EPDVPP100 corpus replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+PROGRESS reading normal 32768/1828864 .. 1828864/1828864 (56 updates)
+PROGRESS verifying normal 32768/1828864 .. 1828864/1828864 (56 updates)
+MSG      backup: saved <TMP>/corpus/preflash_0.tar (1967104 bytes)
+MSG      This will flash: KERNEL (rev 1.01) + NORMAL (rev 1.01)
+--- scsi transcript (16) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+READS 0x400000..0x410000: 2 x (knock, read <= 0x8000) -> ok
+READS 0x400000..0x410018: 3 x (knock, read <= 0x8000) -> ok
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+READS 0x410000..0x5ce800: 56 x (knock, read <= 0x8000) -> ok
+READS 0x410000..0x5ce800: 56 x (knock, read <= 0x8000) -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 1967104 bytes sha256=11e38c375765ac213a3b190c3f7b0e1a922b87905efa73696c07f6d309350157
+
+=== 8680/ID79 BDW-PR1EPDVPP100 :: recover dry run, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 8680/ID79 BDW-PR1EPDVPP100 :: recover dry run, Current read from the drive ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+
+=== 8680/ID79 BDW-PR1EPDVPP100 :: recover execute from update mode, Current file ===
+result: ERR Recovery does not support this receiver's update dialect; no firmware written
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (2) ---
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 

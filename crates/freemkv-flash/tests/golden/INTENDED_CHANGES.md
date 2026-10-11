@@ -4,12 +4,13 @@
 harness against the v0.11.2 tag. `golden_parity_with_0_11_2` requires that
 every difference is listed below, under its golden file and scenario, line
 for line (`-` = only in v0.11.2, `+` = only now). A Pioneer scenario may
-differ only for P1 or P2; a MediaTek scenario only for R1 to R7:
+differ only for P1 to P3; a MediaTek scenario only for R1 to R7:
 
 | id | reason |
 |----|--------|
 | P1 | Pioneer: a package that cannot be read is refused at the plan, before the backup, so no backup file is saved and no `backup:` line is shown |
 | P2 | Pioneer: the last tray check runs after the confirmation, right before the first write. A successful flash issues the same device commands. When authorize refuses (or the user declines), there is one fewer tray check. With a disc inserted after the backup, the `backup:` line, the confirmation text and the prompt appear before the refusal |
+| P3 | Pioneer: a drive that does not identify as a BD or DVR generation is refused without the dead `--recover` hint. v0.11.2: `the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write`; now: `the drive does not identify as a BD or DVR generation; refusing before any write` (954f51d). The hint named a flash mode no user could reach since 0.11.0: the CLI always passed `force: false` (v0.11.2 main.rs:198), the GUI forced it off (app.rs:292), and a forced Pioneer flash was refused anyway (workflow.rs:284). A P3 scenario may differ only by lines that drop the hint, so its device commands are identical |
 | R1 | MT1939 / generic MediaTek backup rebuilt from the OEM catalog |
 | R2 | always-on MT1959/MT1939 chip gate and its extra identity reads |
 | R3 | raw-drive-read refusal |
@@ -91,10 +92,11 @@ one mock drive per Pioneer family of an OEM package corpus: backup, dry run,
 same-version, downgrade, upgrade and Normal-only flashes, and recovery. The
 packages are pinned by SHA-256 in `pioneer_corpus_subset.tsv`; recording
 needs the corpus. Both sets were recorded with the same file, its v0.11.2
-copy changing only COMPAT lines. Its only differences are P2: a Normal-only
-package that authorize refuses after the backup. Families whose refusal still
-carried the `--recover` hint removed in phase 1 are not pinned (they differ
-in that wording only); the full-corpus run reports them.
+copy changing only COMPAT lines. All 145 families the corpus can mock are
+pinned. Its differences are P2, a Normal-only package that authorize refuses
+after the backup, and P3, the refusal of the eight families whose INQUIRY
+product does not start with `BD-` (BC-5100S, PP-100 twice, BDR-PR1EPDVPP100,
+SBW-06D2X-U, SBC-06D2X-U, BW-16D1X-U, BDW-PR1EPDVPP100).
 
 Regenerate the skeleton after an intentional change with
 `FREEMKV_BLESS_INTENDED=1 cargo test -p freemkv-flash golden_parity`, then set
@@ -3064,12 +3066,47 @@ reason: R4, R2
 
 ## pioneer_corpus.txt
 
+### 1003/ID66 BC-5100S :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+```
+
 ### 1005/GENERAL BDR-203 :: flash Normal-only package
 reason: P2
 ```diff
 ---- scsi transcript (13) ---
 +--- scsi transcript (12) ---
 -MEDIUM -> ClosedEmpty
+```
+
+### 1030/ID20 PP-100 :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+```
+
+### 1030/ID76 PP-100 :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+```
+
+### 1031/ID79 BDR-PR1EPDVPP100 :: flash Normal-only package
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+```
+
+### 1031/ID79 BDR-PR1EPDVPP100 :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
 ```
 
 ### 8301/ID43 BDR-S08 :: flash Normal-only package
@@ -3104,6 +3141,20 @@ reason: P2
 -MEDIUM -> ClosedEmpty
 ```
 
+### 8511/ID22 SBW-06D2X-U :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+```
+
+### 8591/ID22 SBC-06D2X-U :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+```
+
 ### 8600/ID43 BDR-S09 :: flash Normal-only package
 reason: P2
 ```diff
@@ -3136,6 +3187,13 @@ reason: P2
 -MEDIUM -> ClosedEmpty
 ```
 
+### 8600/ID76 BW-16D1X-U :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
+```
+
 ### 8600/ID81 BDR-209 :: flash Normal-only package
 reason: P2
 ```diff
@@ -3158,6 +3216,13 @@ reason: P2
 ---- scsi transcript (13) ---
 +--- scsi transcript (12) ---
 -MEDIUM -> ClosedEmpty
+```
+
+### 8680/ID79 BDW-PR1EPDVPP100 :: flash same version
+reason: P3
+```diff
+-result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write
++result: ERR [pioneer.flash.preflight]: Initial flash preflight refused: the drive does not identify as a BD or DVR generation; refusing before any write
 ```
 
 ### 8800/ID43 BDR-S11 :: flash Normal-only package

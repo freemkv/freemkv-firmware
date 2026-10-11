@@ -831,12 +831,9 @@ fn file_name(unit: &str) -> String {
     format!("{safe}.txt")
 }
 
-/// The `--recover` hint 954f51d dropped with the recover-flash path.
-const RECOVER_HINT: &str = " (a guess is only made under --recover, for a recognised BD family)";
-
-/// The known class of a scenario's difference from v0.11.2, if any: P2 when
-/// the only change drops one tray check; `954f51d` when only the removed
-/// `--recover` hint is gone from a refusal.
+/// The known class of a scenario's difference from v0.11.2, if any (see
+/// `INTENDED_CHANGES.md`): P2 when the only change drops one tray check; P3
+/// when only the `--recover` hint 954f51d removed is gone from a refusal.
 fn known_class(ops: &[String]) -> Option<&'static str> {
     let body: Vec<&String> = ops
         .iter()
@@ -845,14 +842,7 @@ fn known_class(ops: &[String]) -> Option<&'static str> {
     if body.len() == 1 && body[0] == "-MEDIUM -> ClosedEmpty" {
         return Some("P2");
     }
-    let (old, new): (Vec<&String>, Vec<&String>) = ops.iter().partition(|op| op.starts_with('-'));
-    let hint_only = !old.is_empty()
-        && old.len() == new.len()
-        && old
-            .iter()
-            .zip(&new)
-            .all(|(o, n)| o.contains(RECOVER_HINT) && o[1..].replace(RECOVER_HINT, "") == n[1..]);
-    hint_only.then_some("954f51d")
+    super::only_recover_hint_dropped(ops).then_some("P3")
 }
 
 /// Every family in the corpus, one file each; compared with a v0.11.2 run.
