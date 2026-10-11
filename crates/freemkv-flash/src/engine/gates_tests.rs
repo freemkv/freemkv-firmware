@@ -142,12 +142,37 @@ fn dump_writes_limited_to_declared_patterns() {
         .all(|(c, d)| crate::backend::device::declared(declared, c, d)));
 }
 
-/// A diagnostic control envelope for `pioneer_optical::logging`: `command`
-/// `0x12` sets the RAM mask, `0x10` the persistent one.
+/// A diagnostic control envelope for `pioneer_optical::logging` in group
+/// `0x93`: `command` `0x12` sets the RAM mask, `0x10` the persistent one.
 fn logging_payload(command: u8) -> Vec<u8> {
     let mut data = vec![0u8; cdb::DIAGNOSTIC_CONTROL_LEN as usize];
-    data[..7].copy_from_slice(&[0x31, command, 1, 0, 0x04, 0, 0]);
+    data[..7].copy_from_slice(&[0x93, command, 1, 0, 0x04, 0, 0]);
     data
+}
+
+#[test]
+fn dump_grant_refuses_logging_switch_outside_dispatch_groups_or_without_arrival_bit() {
+    let writes = Pioneer::new().dump().unwrap().writes();
+    let control = cdb::write_diagnostic_control();
+    let mut low_group = logging_payload(0x12);
+    low_group[0] = 0x7f;
+    let mut cleared = logging_payload(0x12);
+    cleared[4] = 0;
+    let mut other_bits = logging_payload(0x12);
+    other_bits[3..7].copy_from_slice(&0x924d_2490u32.to_be_bytes());
+    let mut mock = MockScsiDevice::new();
+    {
+        let mut writer = dump(&mut mock, writes);
+        for refused in [&low_group, &cleared] {
+            let error = writer.command_out(&control, refused).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("refused data-out"),
+                "{error:#}"
+            );
+        }
+        writer.command_out(&control, &other_bits).unwrap();
+    }
+    assert_eq!(mock.writes, [(control.to_vec(), other_bits)]);
 }
 
 #[test]
