@@ -33,7 +33,6 @@ pub mod file_info;
 /// (--execute/--i-understand-risk, tray guard, backup-first) cannot be bypassed.
 #[path = "pioneer/flash.rs"]
 pub(crate) mod flash;
-/// Pioneer flash planning: family gates and Kernel/Normal transfer plans.
 #[path = "pioneer/flash_plan.rs"]
 pub mod flash_plan;
 /// Embedded OEM kernel label/key table (k.bin), loaded lazily for Pioneer.
@@ -46,7 +45,6 @@ pub(crate) mod keys;
 /// Embedded OEM normal seed/signature table (n.bin), loaded lazily for Pioneer.
 #[path = "pioneer/n.rs"]
 pub(crate) mod n;
-/// Pioneer receiver identification and recovery flashing.
 #[path = "pioneer/recovery.rs"]
 pub(crate) mod recovery;
 #[path = "pioneer/transfer.rs"]

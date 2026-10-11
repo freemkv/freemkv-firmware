@@ -1256,10 +1256,8 @@ impl DriveFamily for Mtk {
         Ok(())
     }
 
-    /// `_mode` is currently informational only: on MTK the full 2 MiB image is
-    /// always streamed and the commit handshake in [`Self::flash_close`] is
-    /// always sent regardless of [`FlashMode::Main`] vs [`FlashMode::Full`] —
-    /// the drive programs on completion either way.
+    /// Read-only readiness handshake for a dry run: PROBE and TEST UNIT READY,
+    /// no writes.
     fn preflight(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
         // PROBE is a real ROM read and must succeed. TEST UNIT READY is a faithful
         // handshake: flashed with no disc, a healthy drive answers benign no-medium
