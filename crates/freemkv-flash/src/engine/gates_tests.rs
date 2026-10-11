@@ -18,15 +18,11 @@ fn request(execute: bool, acknowledged_risk: bool) -> FlashRequest {
         drive_model: String::new(),
         verbose: false,
         predump_out: None,
-        allow_crossflash: false,
     }
 }
 
 fn saved() -> SavedBackup {
-    SavedBackup {
-        summary: String::new(),
-        bytes: Vec::new(),
-    }
+    saved_for_tests(Vec::new())
 }
 
 #[test]

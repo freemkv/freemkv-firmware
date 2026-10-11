@@ -175,7 +175,9 @@ fn main() -> ExitCode {
                 acknowledged_risk: args.i_understand_risk,
             })
         }
-        Some(Command::Flash(args)) => freemkv_flash::workflow::flash(args.into()),
+        Some(Command::Flash(args)) => {
+            freemkv_flash::workflow::flash(args.into(), &mut freemkv_flash::output::TerminalConfirm)
+        }
         None => freemkv_flash::workflow::info(cli.device.as_deref()),
     };
     match result {

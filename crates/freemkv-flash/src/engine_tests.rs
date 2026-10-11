@@ -1,7 +1,7 @@
 //! Unit tests for [`super`] (the generic engine: flash flow + safety gate).
 
 use super::*;
-use crate::backend::{DumpFacet, FileFacet};
+use crate::backend::{BackupFacet, DumpFacet, FileFacet};
 use crate::backends::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
 use crate::backends::mtk::ensure_same_chip;
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};
@@ -13,6 +13,12 @@ use crate::backends::mtk::{UserDump, IMAGE, LEGACY_TAR};
 use crate::backends::pioneer::Pioneer;
 use crate::manifest::FlashMode;
 use crate::platform::{MockScsiDevice, ScsiDevice};
+
+/// The engine's flash with consent already given (the confirmation is the
+/// front-end's; these tests exercise the gates around it).
+fn flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
+    super::flash(dev, drive, req, &mut crate::workflow::Preconfirmed)
+}
 
 /// Observe the very first data-out command and prove the rollback file is
 /// already present, readable, and accepted by the same backend's flash path.
@@ -173,7 +179,6 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         drive_model: "BU40N".into(),
         verbose: false,
         predump_out: execute.then(fresh_backup_path),
-        allow_crossflash: false,
     }
 }
 
@@ -255,17 +260,33 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
 
 #[test]
 fn pioneer_execute_without_risk_ack_is_safety_gated_and_issues_no_writes() {
-    let mut image = vec![0u8; 0x1d7000];
-    let header = b"********  Copyright(c) 2000 Pioneer Corporation\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11.\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";
-    image[..header.len()].copy_from_slice(header);
-    let mut req = bin_req(image, true);
-    req.input_format = &crate::backends::pioneer::ENVELOPE;
+    // A package whose pre-backup plan passes, so the safety gate decides.
+    let envelope = |kind: &str| {
+        let mut bytes = vec![0u8; 0x1000];
+        let header = format!("********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   BDR-UD04\r\nRevision Level : 1.00\r\nHardware Version : SAT 8800\r\nKernel Version : ID60\r\nDestination : GENERAL\r\nFile Type : {kind}\r\n");
+        bytes[..header.len()].copy_from_slice(header.as_bytes());
+        bytes
+    };
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, bytes) in [
+        ("kernel.enc", envelope("Kernel")),
+        ("normal.enc", envelope("Normal")),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, name, bytes.as_slice())
+            .unwrap();
+    }
+    let mut req = bin_req(tar.into_inner().unwrap(), true);
+    req.input_format = &crate::backends::pioneer::PACKAGE;
     req.acknowledged_risk = false;
     req.drive_model = "BD-RW   BDR-UD04".into();
     let mut dev = MockScsiDevice::pioneer();
     let err = flash(&mut dev, &Pioneer::new(), &req).unwrap_err();
     // The shared safety gate fires before any backup or write.
-    assert!(format!("{err:#}").contains("SAFETY GATE"));
+    assert!(format!("{err:#}").contains("SAFETY GATE"), "{err:#}");
     assert!(dev.writes.is_empty());
     assert!(dev.reads.is_empty());
 }
@@ -470,10 +491,8 @@ fn flash_execute_bails_on_unverified_read_back_of_protected_chunk() {
     let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     assert!((0x11000..=0x1FFFF).contains(&bad_offset));
     let want = offset_bytes(bad_offset);
-    // `on_fail` refuses the read entirely — `readback` returns Err, the
-    // engine's match falls through to the `has_protected` arm, and
-    // `unverified` increments. With protected ranges non-empty AND no
-    // differing bytes AND unverified > 0, the new bail! must fire.
+    // A refused read of a protected chunk leaves it unverified; with no
+    // differing byte, an incomplete read-back must still fail.
     let mut dev = MockScsiDevice::echoing()
         .with_firmware_image(backup_firmware())
         .on_fail_after_stream(
@@ -721,49 +740,46 @@ fn flash_restore_tar_detects_readback_mismatch() {
 #[test]
 fn model_gate_accepts_a_matching_image() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "BU40N", false, None).is_ok());
+    assert!(ensure_image_matches_drive(&img, "BU40N", None).is_ok());
 }
 
 #[test]
 fn model_gate_refuses_a_wrong_model_image() {
     // A valid MT19xx image built for a DIFFERENT model than the drive reports.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
-    let err = ensure_image_matches_drive(&img, "BU40N", false, None).unwrap_err();
+    let err = ensure_image_matches_drive(&img, "BU40N", None).unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
 }
 
 #[test]
 fn model_gate_refuses_a_non_mt19xx_image() {
     // No MTEKMT19 family tag at the descriptor → not a recognizable image.
-    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", false, None).is_err());
+    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", None).is_err());
 }
 
 #[test]
 fn model_gate_refuses_an_unknown_drive_product() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "   ", false, None).is_err());
+    assert!(ensure_image_matches_drive(&img, "   ", None).is_err());
 }
 
 #[test]
 fn model_gate_refuses_a_truncated_image() {
-    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", false, None).is_err());
+    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", None).is_err());
 }
 
-// ---- crossflash gate (--allow-crossflash): waive model, never the family ------
+// ---- chip-family and model gate --------------------------------------------
 
 use freemkv_chipset::ChipFamily;
 
 #[test]
-fn crossflash_refuses_cross_chip_family_even_with_the_flag() {
-    // MT1959 image, but the drive's CURRENT firmware reads as MT1939 silicon:
-    // an instant brick. --allow-crossflash must NOT override this.
+fn model_gate_refuses_cross_chip_family_first() {
+    // MT1959 image, but the drive's current firmware reads as MT1939 silicon.
     let err = decide_crossflash(
         ChipFamily::Mt1959,
         "BD-RE BU40N",
-        "WH16NS60",
+        "BU40N",
         Some(ChipFamily::Mt1939),
-        true,
-        true, // allow_crossflash
     )
     .unwrap_err();
     assert!(
@@ -773,115 +789,25 @@ fn crossflash_refuses_cross_chip_family_even_with_the_flag() {
 }
 
 #[test]
-fn crossflash_waives_the_model_match_with_the_flag_same_family() {
-    // Different model, same chipset (or unknown drive silicon) + the flag → allowed.
-    let info = decide_crossflash(
-        ChipFamily::Mt1959,
-        "BD-RE BU40N",
-        "WH16NS60",
-        Some(ChipFamily::Mt1959),
-        true, // de enabled
-        true, // allow_crossflash
-    )
-    .unwrap()
-    .expect("authorized crossflash");
-    assert_eq!(info.image_family, ChipFamily::Mt1959);
-    assert!(!info.warnings.iter().any(|w| w.contains("downgrade")));
-}
-
-#[test]
-fn model_mismatch_is_refused_without_the_flag() {
-    let err = decide_crossflash(
-        ChipFamily::Mt1959,
-        "BD-RE BU40N",
-        "WH16NS60",
-        None,
-        true,
-        false, // no crossflash
-    )
-    .unwrap_err();
+fn model_mismatch_is_refused() {
+    let err = decide_crossflash(ChipFamily::Mt1959, "BD-RE BU40N", "WH16NS60", None).unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
     assert!(err.to_string().contains("compatible image"), "got: {err}");
-}
-
-#[test]
-fn crossflash_warns_when_image_is_not_downgrade_enabled() {
-    let info = decide_crossflash(
+    let same = decide_crossflash(
         ChipFamily::Mt1959,
         "BD-RE BU40N",
-        "WH16NS60",
+        "BU40N",
         Some(ChipFamily::Mt1959),
-        false, // DE NOT set → the drive will likely reject it
-        true,
-    )
-    .unwrap()
-    .expect("authorized crossflash");
-    assert!(
-        info.warnings
-            .iter()
-            .any(|w| w.contains("downgrade-enabled")),
-        "warnings: {:?}",
-        info.warnings
     );
+    assert!(same.is_ok());
 }
 
 #[test]
-fn crossflash_warns_when_the_drive_silicon_is_unconfirmed() {
-    // drive_fine_family = None → the sub-family gate could not be checked here.
-    let info = decide_crossflash(
-        ChipFamily::Mt1959,
-        "BD-RE BU40N",
-        "WH16NS60",
-        None,
-        true,
-        true,
-    )
-    .unwrap()
-    .expect("authorized crossflash");
-    assert!(
-        info.warnings.iter().any(|w| w.contains("MT1959 vs MT1939")),
-        "warnings: {:?}",
-        info.warnings
-    );
-}
-
-#[test]
-fn crossflash_requires_model_override_and_complete_backup() {
-    // Two behaviours in one test:
-    //
-    // 1. Without `--allow-crossflash`, a wrong-model image is refused at the
-    //    model-name gate regardless of drive firmware — the existing "model
-    //    gate is authoritative" contract.
-    //
-    // 2. With `--allow-crossflash`, the sub-family gate (`MT1959` vs
-    //    `MT1939`) becomes load-bearing and MUST be verified by reading the
-    //    drive's current firmware. If that read succeeds but the bytes
-    //    aren't identifiable as an MT19xx image (as here — the mock's
-    //    default zero-fill response), the flash MUST refuse. Previously the
-    //    engine used `.ok()` on `detect_chip` and silently treated an
-    //    unidentifiable firmware as "family unknown, warn and proceed",
-    //    which let a cross-family flash slip through on any drive whose
-    //    firmware couldn't be identified — the exact class of brick this
-    //    gate exists to prevent. See the codeaudit HIGH-1 fix in
-    //    `engine.rs::flash` where `drive_fine_family` is now `?`-propagated.
+fn wrong_model_flash_is_refused_without_writes() {
     let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
-
-    let refused = bin_req(image.clone(), true);
-    assert!(
-        flash(
-            &mut MockScsiDevice::new().with_firmware_image(backup_firmware()),
-            &Mtk,
-            &refused
-        )
-        .is_err(),
-        "wrong-model flash must refuse without --allow-crossflash"
-    );
-
-    let mut allowed = bin_req(image, true);
-    allowed.allow_crossflash = true;
-    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    flash(&mut dev, &Mtk, &allowed).expect("same-silicon crossflash with full saved backup");
-    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    assert!(flash(&mut dev, &Mtk, &bin_req(image, true)).is_err());
+    assert!(dev.writes.is_empty());
 }
 
 #[test]
@@ -988,7 +914,6 @@ fn restore_refuses_other_drive_backup_without_write() {
     let mut req = bin_req(tar, true);
     req.input_format = &LEGACY_TAR;
     req.drive_model = "WH16NS60".into();
-    req.allow_crossflash = true;
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     assert!(flash(&mut dev, &Mtk, &req)
         .unwrap_err()
@@ -1109,7 +1034,7 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
 fn flash_requires_successful_backup() {
     let req = bin_req(backup_firmware(), true);
     let mut dev = MockScsiDevice::new();
-    assert!(capture_required_backup(&mut dev, &Mtk, &Mtk, &req).is_err());
+    assert!(capture_required_backup(&mut dev, &Mtk, &Mtk, &FlashPlan::new(()), &req).is_err());
     assert!(!dev.reads.is_empty());
     assert!(dev.writes.is_empty());
 }
@@ -1157,8 +1082,8 @@ fn guard_no_medium_allows_closed_empty() {
 #[test]
 fn capture_is_saved_before_target_dependent_rollback_check() {
     use crate::backend::{
-        BackupFacet, BackupFormat, BackupNotice, FlashExecutor, FlashFacet, Identity, Match,
-        ReadDevice,
+        AuthorizedPlan, BackupFormat, BackupNotice, FlashFacet, Identity, Match, ReadDevice,
+        WriteDevice,
     };
     struct RejectUpdate {
         path: std::path::PathBuf,
@@ -1192,14 +1117,25 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
         }
     }
     impl FlashFacet for RejectUpdate {
-        fn verify_preflash_backup(&self, bytes: &[u8], _: &[u8]) -> Result<()> {
+        fn plan(&self, _: &mut ReadDevice<'_>, _: &FlashRequest) -> Result<FlashPlan> {
+            Ok(FlashPlan::new(()))
+        }
+        fn verify_backup(&self, _: &FlashPlan, bytes: &[u8]) -> Result<()> {
             assert_eq!(
                 std::fs::read(&self.path).expect("capture must already be saved"),
                 bytes
             );
             bail!("target requires an uncaptured region")
         }
-        fn executor(&self) -> FlashExecutor<'_> {
+        fn authorize(
+            &self,
+            _: &mut ReadDevice<'_>,
+            _: FlashPlan,
+            _: &SavedBackup,
+        ) -> Result<AuthorizedPlan> {
+            panic!("authorize after a refused coverage check")
+        }
+        fn execute(&self, _: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> Result<()> {
             panic!("update prohibited")
         }
     }
@@ -1207,7 +1143,8 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
     let path = req.predump_out.clone().unwrap();
     let backend = RejectUpdate { path: path.clone() };
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let Err(error) = capture_required_backup(&mut dev, &backend, &backend, &req) else {
+    let plan = FlashPlan::new(());
+    let Err(error) = capture_required_backup(&mut dev, &backend, &backend, &plan, &req) else {
         panic!("an incomplete rollback was accepted");
     };
     let message = format!("{error:#}");
@@ -1232,12 +1169,7 @@ fn chip_gate_refuses_cross_generation_images() {
     let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
     assert!(gate.to_string().contains("cannot be overridden"), "{gate}");
     let normal = Mtk
-        .validate_image(
-            &mut ReadDevice::new(&mut dev, &[]),
-            &img,
-            "BD-RE BU40N",
-            false,
-        )
+        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &img, "BD-RE BU40N")
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");
     assert!(dev.writes.is_empty());
@@ -1252,12 +1184,7 @@ fn raw_drive_reads_are_never_flashable() {
     read[..0x400].copy_from_slice(&mirror);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let normal = Mtk
-        .validate_image(
-            &mut ReadDevice::new(&mut dev, &[]),
-            &read,
-            "BD-RE BU40N",
-            false,
-        )
+        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &read, "BD-RE BU40N")
         .unwrap_err();
     assert!(normal.to_string().contains("raw drive read"), "{normal}");
 }
@@ -1268,12 +1195,7 @@ fn unknown_boot_pages_are_refused() {
     img[..0x400].fill(0x42);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let err = Mtk
-        .validate_image(
-            &mut ReadDevice::new(&mut dev, &[]),
-            &img,
-            "BD-RE BU40N",
-            false,
-        )
+        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &img, "BD-RE BU40N")
         .unwrap_err();
     assert!(err.to_string().contains("boot page"), "{err}");
 }
@@ -1386,13 +1308,8 @@ fn classify_file_flags_an_integrity_entry_running_past_the_image() {
 fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    Mtk.validate_image(
-        &mut ReadDevice::new(&mut dev, &[]),
-        &img,
-        "BD-RE BU40N",
-        false,
-    )
-    .unwrap();
+    Mtk.validate_image(&mut ReadDevice::new(&mut dev, &[]), &img, "BD-RE BU40N")
+        .unwrap();
     let banner = offset_bytes(0x3000);
     let banner_reads = dev
         .reads
@@ -1432,23 +1349,13 @@ fn mt1939_drive() -> MockScsiDevice {
 fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
     let mt1939 = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1959 Boot JB8");
     let mut dev = mt1939_drive();
-    Mtk.validate_image(
-        &mut ReadDevice::new(&mut dev, &[]),
-        &mt1939,
-        "BD-RE BU40N",
-        false,
-    )
-    .unwrap();
+    Mtk.validate_image(&mut ReadDevice::new(&mut dev, &[]), &mt1939, "BD-RE BU40N")
+        .unwrap();
     ensure_same_chip(&mut dev, &mt1939).unwrap();
 
     let mt1959 = chip_image("BD-RE BU40N", Some(b"MTEKMT1959"), b"MT1959 Boot JB8");
     let normal = Mtk
-        .validate_image(
-            &mut ReadDevice::new(&mut dev, &[]),
-            &mt1959,
-            "BD-RE BU40N",
-            false,
-        )
+        .validate_image(&mut ReadDevice::new(&mut dev, &[]), &mt1959, "BD-RE BU40N")
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1959"), "{normal:#}");
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");

@@ -22,11 +22,9 @@ pub fn construct_signed_candidate(
     envelope_id: &str,
     revision: &str,
 ) -> Result<Vec<u8>> {
-    // Recognize the normal by its decoded-image hash. `normal` is already the
-    // decoded on-flash image, so hash it directly (do NOT re-decode it as an
-    // envelope). A match rebuilds a byte-exact OEM normal (true seed + verbatim
-    // OEM signature + OEM revision/date); a miss uses a zero seed and an all-zero
-    // signature region — the obvious "not OEM / unverified" sentinel.
+    // `normal` is already the decoded image: hash it directly. A catalog match
+    // rebuilds the byte-exact OEM normal; a miss uses a zero seed and an
+    // all-zero signature, the "not OEM / unverified" sentinel.
     let normal_oem = crate::backends::pioneer::n::lookup(&format!("{:x}", Sha256::digest(normal)));
     let (normal_seed, normal_signature, revision, date): (
         u32,
@@ -398,114 +396,6 @@ pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     capture(dev, true)
 }
 
-/// First address of the `dump` span: the device base.
-const DUMP_BASE: usize = 0;
-/// First address the 24-bit B0 offset field cannot express.
-const ADDRESS_LIMIT: usize = 0x100_0000;
-
-/// Whether the drive serves a one-byte B0 read at `off`. Only a 05/24/00 refusal
-/// means "past the end"; any other failure is a real error.
-fn serves_address(dev: &mut dyn ScsiDevice, off: usize) -> Result<bool> {
-    match crate::transport::read_memory_exact(dev, off as u32, 1) {
-        Ok(_) => Ok(true),
-        Err(error) if crate::platform::sense_triplet(&error) == Some((0x05, 0x24, 0x00)) => {
-            Ok(false)
-        }
-        Err(error) => Err(error.context(format!("probing the read end at {off:#x}"))),
-    }
-}
-
-/// End of the span the drive's B0 memory read serves: the first address it
-/// refuses with 05/24/00. The firmware checks a single upper bound (UD04 1.14:
-/// `0x880300`), so a binary search over the 24-bit space finds it in ~24 reads.
-fn probe_read_end(dev: &mut dyn ScsiDevice) -> Result<usize> {
-    if serves_address(dev, ADDRESS_LIMIT - 1)? {
-        return Ok(ADDRESS_LIMIT);
-    }
-    let (mut served, mut refused) = (DUMP_BASE, ADDRESS_LIMIT - 1);
-    if !serves_address(dev, served)? {
-        bail!("the drive refuses the device base {served:#x}");
-    }
-    while refused - served > 1 {
-        let mid = served + (refused - served) / 2;
-        if serves_address(dev, mid)? {
-            served = mid;
-        } else {
-            refused = mid;
-        }
-    }
-    Ok(refused)
-}
-
-/// `dump`: ONE contiguous raw read of the entire device — `0x000000` up to the
-/// first address the drive refuses (found by [`probe_read_end`]; UD04 1.14:
-/// `0x880300`, which covers the flash, work RAM at `0x800000` and the
-/// `0x880000` register window) — as a single verbatim byte image. No envelope
-/// wrapping, no tar. Uses the deep, instability-tolerant read (unreadable spans
-/// are zero-filled and reported; it errors only if nothing at all was readable).
-/// Never uses vendor kernel mode and issues no flash commands: every read goes
-/// through `pioneer_optical::drive::read_memory`, which handles the read unlock.
-///
-/// Normally the drive identity and the Kernel receiver layout must validate.
-/// `force` trusts nothing the drive reports: identity, read-unlock and layout
-/// failures become warnings and the FULL span is still read and written.
-pub fn capture_raw_dump(dev: &mut dyn ScsiDevice, force: bool) -> Result<Vec<u8>> {
-    let amber = |msg: &str| eprintln!("  {}", crate::style::amber(msg));
-    if let Err(error) = read_identity(dev) {
-        if !force {
-            return Err(error);
-        }
-        amber(&format!(
-            "identity not trusted ({error:#}); reading the full device span anyway (--force)"
-        ));
-    }
-    if let Err(error) = prepare_firmware_read(dev) {
-        if !force {
-            return Err(error);
-        }
-        amber(&format!(
-            "read unlock not confirmed ({error:#}); attempting the read anyway (--force)"
-        ));
-    }
-    let end = match probe_read_end(dev) {
-        Ok(end) => end,
-        Err(error) if force => {
-            let end = pioneer_optical::cdb::READ_CEILING as usize;
-            amber(&format!(
-                "{error:#}; reading up to the known ceiling {end:#x} (--force)"
-            ));
-            end
-        }
-        Err(error) => return Err(error),
-    };
-    // Always cover the Kernel so its layout can be checked; reads the drive
-    // refuses below that are zero-filled and reported as gaps.
-    let (image, gaps) = read_region_deep_gaps(dev, DUMP_BASE, end.max(NORMAL_IMAGE_BASE))
-        .context("could not read the device firmware span")?;
-
-    // Kernel receiver layout (inside the dump) gives the Normal geometry.
-    let kernel = &image[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE];
-    if let Err(error) = pioneer_optical::envelope::builder::kernel_layout_from_image(kernel)
-        .context("captured Kernel receiver layout is unsupported")
-    {
-        if !force {
-            return Err(error);
-        }
-        amber(&format!("{error:#} (continuing: --force)"));
-    }
-    // The dump still succeeds with gaps (it is a best-effort salvage), but say so
-    // loudly in the final summary.
-    crate::output::field(
-        "Dump size",
-        format!("{} bytes (0x0..{:#x})", image.len(), image.len()),
-    );
-    if let Some(note) = gap_summary(&gaps) {
-        crate::output::field("Dump gaps", &note);
-        amber(&note);
-    }
-    Ok(image)
-}
-
 /// Capture and verify Kernel, derive Normal geometry from it, then capture Normal.
 /// A valid Kernel and supported capture layout are required. A failed Normal
 /// capture preserves Kernel in a partial archive; it cannot authorize a flash
@@ -792,19 +682,6 @@ fn read_region_deep_gaps(
         }
     }
     Ok((image, gaps))
-}
-
-/// Loud end-of-dump note for unreadable spans (`None` when the read was gap-free).
-fn gap_summary(gaps: &[(usize, usize)]) -> Option<String> {
-    if gaps.is_empty() {
-        return None;
-    }
-    let total: usize = gaps.iter().map(|(_, l)| l).sum();
-    Some(format!(
-        "DUMP INCOMPLETE: {} gap(s), {total} byte(s) could not be read and are ZERO-FILLED in \
-         the saved image; it is NOT a faithful copy of the flash",
-        gaps.len()
-    ))
 }
 
 /// Salvage one `READ_CHUNK` span that failed a bulk read. First retry the whole

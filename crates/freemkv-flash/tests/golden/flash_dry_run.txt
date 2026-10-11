@@ -171,26 +171,6 @@ MSG        Finish [3B, 05, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
 MSG      DRY RUN: no device I/O or writes.
 --- scsi transcript (0) ---
 
-=== Pioneer dry run: bundle with crossflash ===
-result: OK
---- text (7) ---
-== Pioneer offline transfer plan ==
-stated model: BD-RW   BDR-TEST
-SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-Validated envelope integrity and transfer framing; 8 data-out commands.
-Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-Installed-family compatibility is checked against the live backup (force requested).
-DRY RUN: no device I/O or writes.
---- events (7) ---
-MSG      == Pioneer offline transfer plan ==
-MSG      stated model: BD-RW   BDR-TEST
-MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
-MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-MSG      Installed-family compatibility is checked against the live backup (force requested).
-MSG      DRY RUN: no device I/O or writes.
---- scsi transcript (0) ---
-
 === Pioneer dry run: header-only bundle ===
 result: ERR Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 --- text (0) ---

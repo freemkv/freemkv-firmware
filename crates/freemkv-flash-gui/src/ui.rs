@@ -521,16 +521,20 @@ impl Node {
 pub(crate) enum Msg {
     Event(Event),
     Analysis(ResultView),
+    /// A flash plan, read-only and made before any backup.
+    Plan(Vec<String>),
     Done(Result<(), String>),
 }
 
-/// A confirmation in progress: the target is frozen when the sheet opens.
+/// A confirmation in progress: the target is frozen when the sheet opens. A
+/// flash shows its plan, made before the sheet opened.
 #[derive(Clone, Debug)]
 pub(crate) struct Pending {
     pub(crate) device: String,
     pub(crate) label: String,
     pub(crate) options: FlashOptions,
     pub(crate) current: Option<CurrentFirmware>,
+    pub(crate) plan: Vec<String>,
 }
 
 /// Called from the worker after each event so an event-driven shell repaints.
@@ -558,6 +562,8 @@ pub struct App {
     pub(crate) action: String,
     pub(crate) risk_ack: bool,
     pub(crate) pending: Option<Pending>,
+    /// A flash whose read-only plan is running; its sheet opens when it passes.
+    pub(crate) planning: Option<Pending>,
     pub(crate) log: Vec<String>,
     pub(crate) diagnostic_log: Option<PathBuf>,
     pub(crate) diagnostics_open: bool,
@@ -607,6 +613,7 @@ impl App {
             action: String::new(),
             risk_ack: false,
             pending: None,
+            planning: None,
             log: vec!["Ready. Select an optical drive and choose an action.".into()],
             diagnostic_log: None,
             diagnostics_open: false,
@@ -724,14 +731,11 @@ impl App {
             }
             Input::FlashNow if !self.busy() && self.selected() => {
                 if let Some(input) = self.flash_input.clone() {
-                    self.ask(
-                        FlashOptions {
-                            input,
-                            execute: true,
-                            ..Default::default()
-                        },
-                        None,
-                    );
+                    return self.plan_flash(FlashOptions {
+                        input,
+                        execute: true,
+                        ..Default::default()
+                    });
                 }
             }
             Input::Recover if !self.busy() && self.recovery_ready() => {
@@ -917,7 +921,26 @@ impl App {
             label: self.device_label(),
             options,
             current,
+            plan: Vec::new(),
         });
+    }
+
+    /// A flash first runs its read-only plan (no backup, no writes) for the
+    /// frozen target; the confirmation opens only when the plan passes.
+    fn plan_flash(&mut self, mut options: FlashOptions) -> Vec<Effect> {
+        options.acknowledged_risk = false;
+        let target = Pending {
+            device: self.device.clone(),
+            label: self.device_label(),
+            options: options.clone(),
+            current: None,
+            plan: Vec::new(),
+        };
+        let effects = self.start_job("Flash plan", target.device.clone(), Job::PlanFlash(options));
+        if !effects.is_empty() {
+            self.planning = Some(target);
+        }
+        effects
     }
 
     fn confirm(&mut self) -> Vec<Effect> {
@@ -1016,7 +1039,18 @@ impl App {
                         self.set_analysis(Some(result));
                         self.analysis_open = true;
                     }
+                    Ok(Msg::Plan(lines)) => {
+                        if let Some(planning) = &mut self.planning {
+                            planning.plan = lines;
+                        }
+                    }
                     Ok(Msg::Done(result)) => {
+                        if let Some(target) = self.planning.take() {
+                            if result.is_ok() {
+                                self.risk_ack = false;
+                                self.pending = Some(target);
+                            }
+                        }
                         match &result {
                             Ok(()) => self.status = format!("{} complete", self.action),
                             Err(error) => {
@@ -1033,6 +1067,7 @@ impl App {
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
+                        self.planning = None;
                         self.status = "Operation interrupted".into();
                         self.failure = Some(WORKER_GONE.into());
                         self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
@@ -1367,6 +1402,7 @@ impl App {
                 CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
             });
         }
+        details.extend(pending.plan.iter().filter(|l| !l.is_empty()).cloned());
         Confirm {
             title: if recovery {
                 "Confirm recovery"
@@ -1439,6 +1475,9 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
                 if let Job::Analysis { request, control } = &job {
                     let result = ops::analyze(request, control)?;
                     let _ = tx.send(Msg::Analysis(result));
+                    Ok(())
+                } else if let Job::PlanFlash(options) = &job {
+                    let _ = tx.send(Msg::Plan(ops::plan_flash(device, options)?));
                     Ok(())
                 } else {
                     ops::execute(device, &job)

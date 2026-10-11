@@ -10,6 +10,7 @@
 //! except the backend's declared read-unlock commands. Writes receive a
 //! [`WriteDevice`], which only the engine's gates can create.
 
+use std::any::Any;
 use std::fmt;
 use std::path::Path;
 
@@ -22,7 +23,7 @@ use crate::platform::ScsiDevice;
 pub mod device;
 pub mod registry;
 
-pub use crate::engine::gates::WriteDevice;
+pub use crate::engine::gates::{SavedBackup, WriteDevice};
 pub use device::{CdbPattern, DeviceAccess, ReadDevice};
 
 // ---- Identity and formats ---------------------------------------------------
@@ -200,9 +201,6 @@ pub struct FlashRequest {
     pub verbose: bool,
     /// Where to save the required pre-flash backup.
     pub predump_out: Option<std::path::PathBuf>,
-    /// EXPERIMENTAL crossflash: allow flashing a DIFFERENT same-chipset model's
-    /// firmware (waives the model match; never the chipset-family gate).
-    pub allow_crossflash: bool,
 }
 
 /// What a drive offers, derived from the facets its backend provides.
@@ -398,77 +396,123 @@ pub trait DumpFacet {
     fn capture(&self, dev: DeviceAccess<'_, '_>) -> Result<Vec<u8>>;
 }
 
-/// Firmware update.
+/// One line of a flash plan, styled by the engine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlanLine {
+    /// A bold section header.
+    Header(String),
+    /// A `label: value` fact.
+    Field(&'static str, String),
+    /// The `backup:` fact: the saved backup, or that a dry run captures none.
+    Backup,
+    /// Plain text.
+    Text(String),
+    /// A caution.
+    Warning(String),
+    /// A dotted-leader status row that passed.
+    Ok(&'static str, String),
+    /// Multi-line text shown as one block (it carries its own newlines).
+    Block(String),
+    /// A line set off from the previous one by a blank line.
+    Spaced(Box<PlanLine>),
+}
+
+/// A pre-backup flash plan: what to show, plus backend-private state that only
+/// the same backend's `authorize` reads.
+pub struct FlashPlan {
+    /// Shown as soon as the plan is made, on a dry run and on execute.
+    pub notes: Vec<PlanLine>,
+    /// The plan a dry run shows.
+    pub dry_run: Vec<PlanLine>,
+    /// What execute shows once the backup is saved and covers the update.
+    pub after_backup: Vec<PlanLine>,
+    state: Box<dyn Any + Send>,
+}
+
+impl FlashPlan {
+    /// A plan carrying `state` for the backend's own `authorize`.
+    pub fn new(state: impl Any + Send) -> Self {
+        Self {
+            notes: Vec::new(),
+            dry_run: Vec::new(),
+            after_backup: Vec::new(),
+            state: Box::new(state),
+        }
+    }
+
+    /// The backend state, when this plan was made by that backend.
+    pub fn state<T: 'static>(&self) -> Result<&T> {
+        self.state
+            .downcast_ref()
+            .context("flash plan was made by another backend")
+    }
+}
+
+/// A plan every installed-firmware gate has passed. Front-ends show
+/// `warnings`, then ask for `confirmation` when it is set.
+pub struct AuthorizedPlan {
+    /// The plan this authorizes.
+    pub plan: FlashPlan,
+    /// Cautions shown before the confirmation (e.g. a generation barrier).
+    pub warnings: Vec<String>,
+    /// What the user confirms; `None` needs no further confirmation.
+    pub confirmation: Option<String>,
+    state: Box<dyn Any + Send>,
+}
+
+impl AuthorizedPlan {
+    /// An authorization of `plan` carrying `state` for the backend's `execute`.
+    pub fn new(plan: FlashPlan, state: impl Any + Send) -> Self {
+        Self {
+            plan,
+            warnings: Vec::new(),
+            confirmation: None,
+            state: Box::new(state),
+        }
+    }
+
+    /// The backend state, when this authorization was made by that backend.
+    pub fn state<T: 'static>(&self) -> Result<&T> {
+        self.state
+            .downcast_ref()
+            .context("authorized plan was made by another backend")
+    }
+}
+
+/// A front-end's answer to an authorized flash's confirmation text.
+pub trait Confirm {
+    /// Whether to write. The engine has already shown the warnings and text.
+    fn confirm(&mut self, plan: &AuthorizedPlan) -> Result<bool>;
+}
+
+/// Firmware update in two read-only stages, then the write.
 pub trait FlashFacet {
-    /// Check that a just-saved pre-flash backup covers what `input` overwrites.
-    fn verify_preflash_backup(&self, _backup: &[u8], _input: &[u8]) -> Result<()> {
+    /// Read-only and pre-backup: validate the input against the drive and
+    /// describe the plan. Must not need the backup.
+    fn plan(&self, dev: &mut ReadDevice<'_>, req: &FlashRequest) -> Result<FlashPlan>;
+    /// Whether a dry run touches the drive (tray warning, preflight).
+    fn dry_run_uses_device(&self) -> bool {
+        true
+    }
+    /// Read-only readiness check that ends a dry run, and its lines.
+    fn preflight(&self, _dev: &mut ReadDevice<'_>, _plan: &FlashPlan) -> Result<Vec<PlanLine>> {
+        Ok(Vec::new())
+    }
+    /// Whether the saved backup holds a rollback for every region the plan
+    /// overwrites. The backup stays saved when this refuses.
+    fn verify_backup(&self, _plan: &FlashPlan, _backup: &[u8]) -> Result<()> {
         Ok(())
     }
-    /// How this backend writes firmware.
-    fn executor(&self) -> FlashExecutor<'_>;
-}
-
-/// The two update shapes the engine drives.
-pub enum FlashExecutor<'a> {
-    /// A fixed-size image streamed in chunks, then read back.
-    Stream(&'a dyn StreamFlash),
-    /// A whole OEM update session the backend runs itself.
-    Bundle(&'a dyn BundleFlash),
-}
-
-/// The image-stream update primitives the engine sequences.
-pub trait StreamFlash {
-    /// Validate an image against this drive before any write (read-only).
-    fn validate_image(
+    /// Read-only, after the backup: every gate that needs the installed
+    /// firmware. May refuse; the saved backup is kept.
+    fn authorize(
         &self,
         dev: &mut ReadDevice<'_>,
-        image: &[u8],
-        drive_product: &str,
-        allow_crossflash: bool,
-    ) -> Result<()>;
-    /// Print backend notes for the plan (e.g. an authorized crossflash).
-    fn print_notes(&self, _image: &[u8], _drive_model: &str, _allow_crossflash: bool) {}
-    /// The payload to stream and whether the enc envelope was applied.
-    fn envelope(
-        &self,
-        dev: &mut ReadDevice<'_>,
-        image: &[u8],
-        enc_override: Option<bool>,
-    ) -> Result<(Vec<u8>, bool)>;
-    /// The plan text for an `image_len`-byte flash.
-    fn plan(&self, image_len: usize, verbose: bool) -> Result<String>;
-    /// Read-only readiness handshake for a dry run.
-    fn preflight(&self, dev: &mut ReadDevice<'_>) -> Result<()>;
-    /// Read-back chunk size.
-    fn chunk_size(&self) -> usize;
-    /// Stream the payload in one update session.
-    fn stream(
-        &self,
-        dev: &mut WriteDevice<'_>,
-        payload: &[u8],
-        mode: FlashMode,
-        progress: &mut dyn FnMut(usize),
-    ) -> Result<()>;
-    /// Wait (read-only, bounded) for the drive to finish programming.
-    fn wait_ready(&self, dev: &mut ReadDevice<'_>) -> Result<()>;
-    /// Inclusive byte ranges that read-back must match.
-    fn verification_ranges(&self, image: &[u8]) -> Result<Vec<(usize, usize)>>;
-    /// Read back `len` bytes at `offset`.
-    fn readback(&self, dev: &mut ReadDevice<'_>, offset: usize, len: usize) -> Result<Vec<u8>>;
-}
-
-/// A whole-package update the backend runs itself.
-pub trait BundleFlash {
-    /// The dry-run plan; needs no device.
-    fn dry_run(&self, req: &FlashRequest) -> Result<()>;
-    /// Run the update. `installed_backup` is the pre-flash backup (the
-    /// installed firmware), used for routing.
-    fn execute(
-        &self,
-        dev: &mut WriteDevice<'_>,
-        req: &FlashRequest,
-        installed_backup: Option<&[u8]>,
-    ) -> Result<()>;
+        plan: FlashPlan,
+        backup: &SavedBackup,
+    ) -> Result<AuthorizedPlan>;
+    /// Write, then verify the result.
+    fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<()>;
 }
 
 /// Recovery without automatic backups or installed-versus-target policy.

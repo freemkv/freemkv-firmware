@@ -1,36 +1,17 @@
-//! MediaTek MT1959 / MT1939 drive family — the only fully-implemented family.
+//! MediaTek MT1959 / MT1939 drive family.
 //!
-//! The MTK backend: identity/dump reads, the flash session, the enc transport
-//! envelope, and the per-unit tar model. CDB construction lives in
-//! `mediatek_optical`; backup, crossflash and file-report logic are submodules.
-//! The generic orchestration lives in [`crate::engine`]. Only the file report,
-//! the vendor `info` fields and the crossflash plan notes print.
+//! Identity and dump reads, the flash session, the `enc` transport envelope
+//! and the per-unit tar model. CDBs come from `mediatek_optical`; backup,
+//! crossflash, file reports and the two-stage flash are submodules.
 //!
-//! ## flash is a DUMB verbatim writer
-//! The flasher writes the given image to the drive **verbatim** and never
-//! modifies it: no DE byte, no downgrade magic, no per-unit splice, no CMAC
-//! resign — those are *firmware modification* and belong to a separate future
-//! tool. flash's whole job is (1) back up, (2) write the bytes, (3) verify.
+//! The flash is a verbatim writer: it never modifies the image (no downgrade
+//! byte, per-unit splice or CMAC re-sign). It backs up, writes the bytes and
+//! verifies. [`enc_needed`] currently always selects plaintext.
 //!
-//! ## enc transport envelope
-//! [`enc_needed`] decides on every flash whether the drive needs the AES-128-ECB
-//! `enc` envelope (a known-open question); it currently defaults to plaintext.
-//! `--enc`/`--no-enc` are a hidden expert override. When enc is active the whole
-//! image is [`enc_transform`]ed before streaming.
-//!
-//! ## the flash sequence
-//! A 2 MiB image is programmed over a fixed ordered sequence of 12-byte SCSI
-//! CDBs: PROBE (READ BUFFER) → READY (TEST UNIT READY) → PREPARE (WRITE BUFFER
-//! mode 1) → 128× STREAM (WRITE BUFFER mode 6, 16 KiB) → COMMIT (WRITE BUFFER
-//! mode 7) → READY → STATUS (REQUEST SENSE). The drive erases+programs flash
-//! when the 2 MiB upload completes (the last STREAM chunk) — COMMIT is a
-//! trailing handshake, not the burn.
-//!
-//! ## `--mode` is currently informational on MTK
-//! [`FlashMode`] (main vs. full) does not change MTK behavior: the full 2 MiB
-//! image is always streamed and the commit handshake is always sent
-//! regardless of the selected mode — the drive programs on completion either
-//! way.
+//! A 2 MiB image goes over a fixed sequence of 12-byte CDBs: PROBE, TEST UNIT
+//! READY, PREPARE, 128 x 16 KiB STREAM, COMMIT, TEST UNIT READY, REQUEST
+//! SENSE. The drive programs when the last STREAM chunk lands; COMMIT is a
+//! trailing handshake. `FlashMode` does not change this sequence.
 
 use std::io::{Read, Write};
 
@@ -39,15 +20,15 @@ use anyhow::{anyhow, bail, Context, Result};
 pub(crate) mod backup;
 pub(crate) mod crossflash;
 pub(crate) mod file_info;
+mod flash;
 pub mod fw_ident;
 pub mod oem;
 
 use crate::backend::{
     read_identity, Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, Descriptor,
-    DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat, FirmwareReport, FlashExecutor,
-    FlashFacet, FormatRole, Identity, Match, ReadDevice, StreamFlash, WriteDevice,
+    DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat, FirmwareReport, FlashFacet,
+    FormatRole, Identity, Match, ReadDevice,
 };
-use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
 // ---- Region geometry and wire constants (from `mediatek_optical`) -----------
@@ -1141,215 +1122,6 @@ impl DumpFacet for Mtk {
             eprintln!("{message}");
         }
         Ok(image)
-    }
-}
-
-impl FlashFacet for Mtk {
-    fn executor(&self) -> FlashExecutor<'_> {
-        FlashExecutor::Stream(self)
-    }
-}
-
-impl StreamFlash for Mtk {
-    fn validate_image(
-        &self,
-        dev: &mut ReadDevice<'_>,
-        image: &[u8],
-        drive_product: &str,
-        allow_crossflash: bool,
-    ) -> Result<()> {
-        if image.len() != IMAGE_SIZE {
-            bail!(
-                "firmware .bin must be exactly {} bytes, got {}",
-                IMAGE_SIZE,
-                image.len()
-            );
-        }
-        if !crate::cmac::verify(image) {
-            bail!(
-                "firmware image fails its AES-CMAC integrity check — refusing to flash. \
-                 A mis-signed or corrupted image is rejected by the drive's boot \
-                 authenticator and can brick the drive."
-            );
-        }
-        ensure_flashable_boot_page(image)?;
-        let fine_family = Some(ensure_same_chip(dev, image)?);
-        crossflash::ensure_image_matches_drive(
-            image,
-            drive_product,
-            allow_crossflash,
-            fine_family,
-        )?;
-        Ok(())
-    }
-
-    fn print_notes(&self, image: &[u8], drive_model: &str, allow_crossflash: bool) {
-        if let Some(info) = crossflash::preview_crossflash(image, drive_model, allow_crossflash) {
-            crossflash::print_crossflash_banner(&info);
-        }
-    }
-
-    fn envelope(
-        &self,
-        dev: &mut ReadDevice<'_>,
-        image: &[u8],
-        enc_override: Option<bool>,
-    ) -> Result<(Vec<u8>, bool)> {
-        let enc = enc_override.unwrap_or_else(|| enc_needed(dev));
-        let mut payload = image.to_vec();
-        if enc {
-            enc_transform(&mut payload)?;
-        }
-        Ok((payload, enc))
-    }
-
-    fn plan(&self, image_len: usize, verbose: bool) -> Result<String> {
-        let seq = flash_sequence(image_len, CHUNK)?;
-        Ok(describe_sequence(&seq, verbose))
-    }
-
-    /// Read-only readiness handshake for a dry run: PROBE and TEST UNIT READY,
-    /// no writes.
-    fn preflight(&self, dev: &mut ReadDevice<'_>) -> Result<()> {
-        // PROBE is a real ROM read and must succeed. TEST UNIT READY is a faithful
-        // handshake: flashed with no disc, a healthy drive answers benign no-medium
-        // (key 0x2 ASC 0x3A); any OTHER not-ready reason aborts before PREPARE.
-        let probe = dev.command_in(&cdb::probe(), cdb::PROBE_LEN)?;
-        if probe.len() != cdb::PROBE_LEN {
-            bail!(
-                "short MediaTek preflight ROM read: got {} of {} bytes",
-                probe.len(),
-                cdb::PROBE_LEN
-            );
-        }
-        let _ = dev.command_in(&cdb::test_unit_ready(), 0)?;
-        Ok(())
-    }
-
-    fn chunk_size(&self) -> usize {
-        CHUNK
-    }
-
-    /// Stream the whole payload through `mediatek_optical`'s flash session:
-    /// PROBE + TEST UNIT READY + PREPARE, the 16 KiB transfers, then the commit
-    /// trailer. `_mode` is informational on MTK: the drive programs flash when
-    /// the last chunk of the full 2 MiB image lands.
-    fn stream(
-        &self,
-        dev: &mut WriteDevice<'_>,
-        payload: &[u8],
-        _mode: FlashMode,
-        progress: &mut dyn FnMut(usize),
-    ) -> Result<()> {
-        use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
-        let shared = SharedDevice::new(dev);
-        {
-            let mut transport = ScsiTransport::flash(&shared);
-            let mut session = mediatek_optical::drive::enter_update(&mut transport)
-                .map_err(mtk_err)
-                .context(
-                    "MediaTek PROBE, TEST UNIT READY or PREPARE failed before any firmware data was \
-                     sent; if PREPARE was reached the drive may be in update mode — power-cycle \
-                     it before retrying",
-                )?;
-            let mut sent = 0usize;
-            for piece in payload.chunks(CHUNK) {
-                session.write(sent as u32, piece).map_err(mtk_err).with_context(|| {
-                    format!(
-                        "firmware write failed at offset {sent:#x}, length {}; drive may contain partial firmware",
-                        piece.len()
-                    )
-                })?;
-                sent += piece.len();
-                progress(sent);
-            }
-            // The burn completed on the final chunk; the commit is a trailer the
-            // reinitializing drive may answer with a transient CHECK CONDITION.
-            if let Err(error) = session.finish().map_err(mtk_err) {
-                eprintln!("MediaTek commit trailer returned an error: {error:#}; checking completion and read-back");
-            }
-        }
-        shared.with(post_commit_status)
-    }
-
-    fn wait_ready(&self, dev: &mut ReadDevice<'_>) -> Result<()> {
-        use std::time::{Duration, Instant};
-        // After the last chunk the drive keeps programming and reports TEST UNIT
-        // READY as an error until done. Poll until the transport returns Ok. If
-        // the ceiling elapses without a good reply the drive is still busy or
-        // has genuinely faulted — either way the flash is NOT settled and the
-        // caller MUST NOT continue as if it were.
-        let deadline = Instant::now() + Duration::from_secs(45);
-        loop {
-            let error = match dev.command_in(&cdb::test_unit_ready(), 0) {
-                Ok(_) => break,
-                Err(error) => error,
-            };
-            crate::diagnostics::record(format!("MediaTek post-flash readiness: {error:#}"));
-            if Instant::now() >= deadline {
-                bail!(
-                    "drive did not settle after the flash burn within 45 s — TEST UNIT READY \
-                     never came back Ok. The flash may have FAILED, or the drive is hung; do \
-                     NOT trust the exit code as success. Physically power-cycle the drive and \
-                    re-verify its firmware identity before shipping. Last error: {error:#}"
-                );
-            }
-            std::thread::sleep(Duration::from_millis(500));
-        }
-        // Post-settle sense check on the settled drive, where the sense reflects
-        // the final flash outcome. The fatal-sense policy (MEDIUM 0x3, HARDWARE
-        // 0x4, ABORTED 0xB; every other key benign) is shared with
-        // `post_commit_status`. A failing or unparseable sense query WARNs
-        // rather than being swallowed, as `post_commit_status` does.
-        let sense = match dev.command_in(&cdb::request_sense(), cdb::REQUEST_SENSE_LEN) {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!(
-                    "warning: post-settle REQUEST SENSE errored ({e:#}); relying on read-back \
-                     verify — the drive settled but its final sense state is unknown."
-                );
-                Vec::new()
-            }
-        };
-        match parse_sense(&sense) {
-            Some((key, asc, ascq)) if sense_key_is_fatal(key) => {
-                bail!(
-                    "post-settle sense reports a flash fault — {}; the flash may have FAILED. \
-                     Physically confirm the drive's firmware identity before shipping.",
-                    crate::platform::describe_sense(key, asc, ascq)
-                );
-            }
-            Some(_) => {}
-            None if !sense.is_empty() => {
-                eprintln!(
-                    "warning: post-settle REQUEST SENSE returned an unparseable {}-byte reply; \
-                     relying on read-back verify.",
-                    sense.len()
-                );
-            }
-            None => {}
-        }
-        Ok(())
-    }
-
-    fn verification_ranges(&self, image: &[u8]) -> Result<Vec<(usize, usize)>> {
-        let Some(entries) = crate::cmac::parse_table(image).ok() else {
-            return Ok(Vec::new());
-        };
-        Ok(entries
-            .iter()
-            .filter(|entry| entry.is_active())
-            .filter_map(|entry| {
-                let start = (entry.start as usize).max(0x1000);
-                let end = entry.end as usize;
-                (start <= end).then_some((start, end))
-            })
-            .collect())
-    }
-
-    fn readback(&self, dev: &mut ReadDevice<'_>, offset: usize, len: usize) -> Result<Vec<u8>> {
-        let cdb = cdb::read_memory(offset as u32, len as u32);
-        dev.command_in(&cdb, len)
     }
 }
 

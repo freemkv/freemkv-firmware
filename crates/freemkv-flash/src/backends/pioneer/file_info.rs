@@ -4,7 +4,7 @@
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::backend::FileFormat;
+use crate::backend::{FileFormat, PlanLine};
 use crate::style;
 
 /// Print the Pioneer bundle report for `image`, or `None` when it is not one.
@@ -74,16 +74,14 @@ pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
     Some(Ok(()))
 }
 
-/// Render the Pioneer OEM flash plan WITHOUT touching the device (the dry run).
-/// The live write is handled separately by the bundle executor; this
-/// planner is only reached when `--execute` is NOT set.
+/// The Pioneer dry-run plan, built from the file alone (no device I/O). The
+/// live write is planned and run by the flash facet's execute stages.
 pub fn plan_offline(
     image: &[u8],
     format: &FileFormat,
     model: &str,
-    allow_crossflash: bool,
     verbose: bool,
-) -> Result<()> {
+) -> Result<Vec<PlanLine>> {
     if !super::DESCRIPTOR.owns(format) {
         bail!("Pioneer planning requires an envelope or Pioneer bundle");
     }
@@ -93,33 +91,27 @@ pub fn plan_offline(
         Some(kernel) => super::offline_pair_data_out(kernel, normal)?,
         None => super::generic_normal_transcript(normal)?,
     };
-    println!("{}", style::header("== Pioneer offline transfer plan =="));
-    println!(
-        "{}",
-        style::kv("stated model", style::ident_or_unknown(model))
-    );
-    println!(
-        "{}",
-        style::kv("SHA-256", &format!("{:x}", Sha256::digest(image)))
-    );
-    println!(
-        "Validated envelope integrity and transfer framing; {} data-out commands.",
-        transcript.len()
-    );
-    println!("Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.");
-    println!(
-        "Installed-family compatibility is checked against the live backup{}.",
-        if allow_crossflash {
-            " (force requested)"
-        } else {
-            ""
-        }
-    );
+    let mut lines = vec![
+        PlanLine::Header("== Pioneer offline transfer plan ==".into()),
+        PlanLine::Field("stated model", style::ident_or_unknown(model).into()),
+        PlanLine::Field("SHA-256", format!("{:x}", Sha256::digest(image))),
+        PlanLine::Text(format!(
+            "Validated envelope integrity and transfer framing; {} data-out commands.",
+            transcript.len()
+        )),
+        PlanLine::Text("Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.".into()),
+        PlanLine::Text("Installed-family compatibility is checked against the live backup.".into()),
+    ];
     if verbose {
         for step in &transcript {
-            println!("  {:?} {:02X?} {} B", step.stage, step.cdb, step.data.len());
+            lines.push(PlanLine::Text(format!(
+                "  {:?} {:02X?} {} B",
+                step.stage,
+                step.cdb,
+                step.data.len()
+            )));
         }
     }
-    println!("DRY RUN: no device I/O or writes.");
-    Ok(())
+    lines.push(PlanLine::Text("DRY RUN: no device I/O or writes.".into()));
+    Ok(lines)
 }

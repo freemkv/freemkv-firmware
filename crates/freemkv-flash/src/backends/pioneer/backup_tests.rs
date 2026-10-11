@@ -179,114 +179,6 @@ fn deep_read_aborts_when_the_drive_drops_out_mid_region() {
     );
 }
 
-/// The drive's refusal of an address past its read end.
-fn refused() -> anyhow::Error {
-    anyhow::Error::new(crate::platform::ScsiSenseError::new(
-        0x05,
-        0x24,
-        0x00,
-        "address past the read end",
-    ))
-}
-
-/// Serves B0 reads below `end`, refuses at or past it, and counts reads.
-struct Ceiling {
-    end: usize,
-    reads: usize,
-}
-
-impl ScsiDevice for Ceiling {
-    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-        if cdb[2] != 0xb0 {
-            return Ok(vec![0; len]);
-        }
-        self.reads += 1;
-        let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-        if start >= self.end {
-            return Err(refused());
-        }
-        Ok(vec![0x5A; len])
-    }
-    fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
-        Ok(())
-    }
-    fn describe(&self) -> String {
-        "ceiling".into()
-    }
-}
-
-#[test]
-fn read_end_is_the_first_refused_address() {
-    for end in [0x88_0300, 0x60_0000, 0x7A_1235, 0x40_0001] {
-        let mut dev = Ceiling { end, reads: 0 };
-        assert_eq!(probe_read_end(&mut dev).unwrap(), end);
-        assert!(dev.reads <= 26, "{end:#x}: {} reads", dev.reads);
-    }
-    let mut open = Ceiling {
-        end: ADDRESS_LIMIT,
-        reads: 0,
-    };
-    assert_eq!(probe_read_end(&mut open).unwrap(), ADDRESS_LIMIT);
-}
-
-#[test]
-fn read_end_probe_fails_on_errors_other_than_a_refusal() {
-    struct Broken;
-    impl ScsiDevice for Broken {
-        fn command_in(&mut self, _cdb: &[u8], _len: usize) -> Result<Vec<u8>> {
-            bail!("bus reset")
-        }
-        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
-            Ok(())
-        }
-        fn describe(&self) -> String {
-            "broken".into()
-        }
-    }
-    assert!(probe_read_end(&mut Broken).is_err());
-}
-
-#[test]
-fn force_dump_with_unreadable_kernel_base_still_saves_a_zero_filled_image() {
-    // Alive drive; only 0x400000..0x440000 (the Kernel base) is unreadable.
-    struct BadKernelBase;
-    impl ScsiDevice for BadKernelBase {
-        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-            if cdb[2] != 0xb0 {
-                bail!("no identity");
-            }
-            let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-            if start < 0x44_0000 && start + len > 0x40_0000 {
-                bail!("unreadable kernel base");
-            }
-            if start >= pioneer_optical::cdb::READ_CEILING as usize {
-                return Err(refused());
-            }
-            Ok(vec![0xAA; len])
-        }
-        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
-            Ok(())
-        }
-        fn describe(&self) -> String {
-            "bad kernel base".into()
-        }
-    }
-    let image = capture_raw_dump(&mut BadKernelBase, true).expect("dump must complete");
-    assert_eq!(image.len(), pioneer_optical::cdb::READ_CEILING as usize);
-    assert!(image[0x40_0000..0x44_0000].iter().all(|b| *b == 0));
-    assert!(image[..0x40_0000].iter().all(|b| *b == 0xAA));
-    assert!(image[0x44_0000..].iter().all(|b| *b == 0xAA));
-}
-
-#[test]
-fn gap_summary_is_loud_and_counts_bytes() {
-    assert_eq!(gap_summary(&[]), None);
-    let msg = gap_summary(&[(0x100, 8), (0x200, 0x18)]).unwrap();
-    assert!(msg.contains("2 gap(s)"), "{msg}");
-    assert!(msg.contains("32 byte(s)"), "{msg}");
-    assert!(msg.to_lowercase().contains("zero"), "{msg}");
-}
-
 #[test]
 fn push_gap_merges_contiguous_runs_and_separates_disjoint_ones() {
     let mut g = Vec::new();
@@ -1175,7 +1067,6 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
         &crate::backends::pioneer::PACKAGE,
         "BD-RW BDR-UD04",
         false,
-        false,
     )
     .unwrap();
     replay.knocks = 0;
@@ -1282,10 +1173,6 @@ impl ScsiDevice for BoundedBackupReplay {
 #[test]
 fn backup_succeeds_without_probing_unrelated_or_address_zero_memory() {
     let (kernel, normal) = bounded_backup_fixture();
-    let mut old_probe = BoundedBackupReplay::new(&kernel, &normal);
-    let error = probe_read_end(&mut old_probe).unwrap_err();
-    assert!(format!("{error:#}").contains("device base 0x0"));
-    assert_eq!(old_probe.refused_reads, 2);
     let mut replay = BoundedBackupReplay::new(&kernel, &normal);
     let archive = capture_signed_candidate(&mut replay).unwrap();
     assert_eq!(replay.refused_reads, 0);
@@ -1347,7 +1234,6 @@ fn unknown_kernel_geometry_stops_before_any_normal_read() {
 
 #[test]
 fn invalid_normal_keeps_verified_kernel_but_cannot_be_full_rollback() {
-    use crate::backends::pioneer::Pioneer;
     let (kernel, mut normal) = bounded_backup_fixture();
     let valid =
         construct_signed_candidate(&kernel, &normal, "PIONEER BD-RW   BDR-UD04", "1.14").unwrap();
@@ -1357,9 +1243,7 @@ fn invalid_normal_keeps_verified_kernel_but_cannot_be_full_rollback() {
     let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
     assert_eq!(bundle.components.len(), 1);
     assert_eq!(bundle.components[0].role, Role::Kernel);
-    assert!(
-        crate::backend::FlashFacet::verify_preflash_backup(&Pioneer, &archive, &valid).is_err()
-    );
+    assert!(crate::backends::pioneer::verify_preflash_backup(&archive, &valid).is_err());
     assert_eq!(replay.refused_reads, 0);
 }
 

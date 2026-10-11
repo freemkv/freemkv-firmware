@@ -31,10 +31,8 @@ fn pioneer_classifies_and_flashes_only_as_a_bundle() {
         .unwrap();
     assert_eq!(resolved.matched.backend, DESCRIPTOR.id);
     assert!(dev.writes.is_empty());
-    // No image-stream primitives (full-image read, read-back) exist for Pioneer.
-    let pioneer = Pioneer::new();
-    let executor = pioneer.flash().unwrap().executor();
-    assert!(matches!(executor, FlashExecutor::Bundle(_)));
+    // Its dry run plans from the file alone.
+    assert!(!Pioneer::new().flash().unwrap().dry_run_uses_device());
 }
 
 // ---- Pioneer flash primitives (unit-level, no live drive) -------------------
@@ -316,17 +314,11 @@ fn ud04_local_oem_envelope_transcript_when_configured() {
     );
 }
 
-/// Golden KAT for the kernel-mode downgrade/crossflash wire output
-/// (`offline_pair_data_out`): the exact Kernel+Normal linear-FE transcript
-/// that a UD03->UD04 crossflash — or a UD04 full-pair downgrade — streams after
-/// the vendor kernel-mode unlock. It uses the real autoflasher-sourced UD04 1.14
-/// Kernel+Normal from the hoard, so the bytes are OEM-exact. Auto-resolves the
-/// hoard; skips (never fails) when the corpus is absent.
-///
-/// NOTE: the Kernel and Normal are streamed UNMODIFIED (the trusted BDRFlash /
-/// Autoflasher mechanism), so this transcript is identical whether the plan is
-/// `KernelDowngrade` or `KernelCrossflash` — those differ only in the decision
-/// layer and the unlock precondition, not in the data-out bytes.
+/// Golden KAT for `offline_pair_data_out`: the exact Kernel+Normal linear-FE
+/// transcript of a UD03->UD04 crossflash or UD04 full-pair downgrade, from the
+/// real UD04 1.14 pair in the hoard (skipped when the corpus is absent). The
+/// components stream unmodified, so `KernelDowngrade` and `KernelCrossflash`
+/// share these bytes.
 const UD04_LINEAR_FE_GOLDEN: &str =
     "112c6a26ceaf04144711f3409a608b28224e8e46fe6ae05288270756fa647cc8";
 
@@ -566,25 +558,6 @@ fn flash_summary_names_components_and_a_missing_kernel() {
     assert!(both.contains("+ NORMAL (rev "), "actual: {both}");
 }
 
-#[test]
-fn confirm_auto_proceeds_when_stdin_is_not_a_tty() {
-    // The consent carries from --execute/--i-understand-risk: no prompt is read.
-    let mut empty: &[u8] = b"";
-    super::confirm_with("This will flash: NORMAL only", false, &mut empty).unwrap();
-}
-
-#[test]
-fn confirm_on_a_tty_requires_an_explicit_yes() {
-    for input in ["y\n", "yes\n", "Y\n", "YES\n"] {
-        let mut bytes = input.as_bytes();
-        super::confirm_with("s", true, &mut bytes).unwrap();
-    }
-    for input in ["\n", "n\n", "no\n", "nope\n"] {
-        let mut bytes = input.as_bytes();
-        assert!(super::confirm_with("s", true, &mut bytes).is_err());
-    }
-}
-
 fn synthetic_pioneer_image(model: &str, len: usize) -> Vec<u8> {
     let mut img = vec![0u8; len];
     let header = format!(
@@ -641,15 +614,19 @@ fn installed_facts_from_header_only_normal_backup() {
 }
 
 #[test]
-fn check_plan_executable_covers_every_variant() {
-    use crate::backends::pioneer::flash_plan::FlashPlan;
-    // All executable plans — including a cross-generation downgrade, which the
-    // executor now handles via the §15.3 marker patch when the Kernel is written.
-    assert!(check_plan_executable(&FlashPlan::Plain).is_ok());
-    assert!(check_plan_executable(&FlashPlan::KernelCrossflash).is_ok());
-    assert!(check_plan_executable(&FlashPlan::KernelDowngrade).is_ok());
+fn routing_warnings_cover_every_variant() {
+    use crate::backends::pioneer::flash_plan::FlashPlan as Route;
+    // Every executable route; a generation-barrier downgrade carries its caution.
+    assert!(routing_warnings(&Route::Plain).unwrap().is_empty());
+    assert!(routing_warnings(&Route::KernelCrossflash)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        routing_warnings(&Route::KernelDowngrade).unwrap(),
+        [DOWNGRADE_WARNING]
+    );
     // A refusal always aborts.
-    assert!(check_plan_executable(&FlashPlan::Refused("x".into())).is_err());
+    assert!(routing_warnings(&Route::Refused("x".into())).is_err());
 }
 
 /// Injected installed/target facts for the family-match routing tests.
@@ -828,7 +805,6 @@ fn bundle_req(input: Vec<u8>) -> crate::backend::FlashRequest {
         drive_model: "BD-RW BDR-UD04".into(),
         verbose: false,
         predump_out: None,
-        allow_crossflash: false,
     }
 }
 
@@ -1003,7 +979,10 @@ fn pairing_failure_precedes_body_decode() {
     assert!(error.to_string().contains("required-Kernel tag"), "{error}");
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
-    let error = validate_header_chain(Some(&kernel), &normal, None).unwrap_err();
+    // The header chain is a pre-backup plan check.
+    let Err(error) = execute_plan(&request.input) else {
+        panic!("a mismatched header chain was planned");
+    };
     assert!(error.to_string().contains("required-Kernel tag"), "{error}");
     assert!(!error.to_string().contains("decode"));
 }
@@ -1069,7 +1048,6 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
             &pair.normal,
             &ENVELOPE,
             "UNLISTED DEVICE",
-            false,
             false,
         )
         .unwrap();
@@ -1253,8 +1231,10 @@ fn dump_capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     DumpFacet::capture(&Pioneer::new(), DeviceAccess::Write(&mut writer))
 }
 
-/// Pioneer's bundle executor with an ungated write grant and no installed backup.
+/// Pioneer's flash stages with an ungated write grant and no installed backup.
 fn bundle_execute(drive: &Pioneer, dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
+    let plan = drive.plan(&mut ReadDevice::new(dev, &[]), req)?;
+    let authorized = authorize_installed(plan, None)?;
     let mut writer = crate::engine::gates::ungated_for_tests(dev);
-    BundleFlash::execute(drive, &mut writer, req, None)
+    drive.execute(&mut writer, &authorized)
 }

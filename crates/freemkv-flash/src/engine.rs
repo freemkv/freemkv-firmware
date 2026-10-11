@@ -1,9 +1,9 @@
 //! Generic command engine: `info` / `backup` / `flash`.
 //!
-//! This layer is **chip-agnostic**. It owns everything that does not depend on a
-//! particular silicon: reading the input file, the pre-flash backup, the dry-run
-//! plan, the streaming loop, read-back verification, and the safety gate. It
-//! drives a [`Backend`] through its facets: read-only calls get a
+//! This layer is **chip-agnostic**. It owns the workflow that does not depend
+//! on a particular drive: the tray and safety gates, the mandatory pre-flash
+//! backup, the order of the two read-only flash stages, and showing their
+//! plans. It drives a [`Backend`] through its facets: read-only calls get a
 //! [`ReadDevice`], and writes get a `WriteDevice` from [`gates`] only.
 //!
 //! Layering: `main` (CLI) → `engine` (this) → [`crate::backend`] (contract).
@@ -14,8 +14,8 @@ use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
 use crate::backend::{
-    read_identity, Backend, BackupFacet, BackupNotice, Capabilities, DeviceAccess, FlashExecutor,
-    FlashFacet, FlashRequest, FormatRole, ReadDevice, StreamFlash, UNKNOWN_FAMILY,
+    read_identity, Backend, BackupNotice, Capabilities, Confirm, DeviceAccess, FlashFacet,
+    FlashPlan, FlashRequest, PlanLine, ReadDevice, SavedBackup, UNKNOWN_FAMILY,
 };
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
@@ -26,7 +26,6 @@ pub mod gates;
 #[cfg(test)]
 use crate::backends::mtk::backup::BackupArtifact;
 use backup::save_backup;
-use gates::SavedBackup;
 
 /// Run the `info` command: identify + classify (read-only). `drive` is the
 /// matched backend, or `None` for a drive no backend recognizes.
@@ -349,68 +348,149 @@ pub fn recover(
     }
 }
 
-/// Run the `flash` command: `.bin` = full image, `.tar` = firmware rollback archive.
-pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
-    let facet = drive.flash().with_context(|| {
+/// Run the `flash` command in two read-only stages around the backup:
+///
+/// * dry run: tray warning, `plan`, the plan, the backend's preflight;
+/// * execute: tray, `plan`, acknowledgement, backup (saved, read back, and
+///   covering the update), the plan, `authorize`, the front-end's `confirm`,
+///   tray again, then the write through a `gates::flash` grant.
+pub fn flash(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    req: &FlashRequest,
+    confirm: &mut dyn Confirm,
+) -> Result<()> {
+    let facet = flash_facet(drive)?;
+    let plan = plan_flash(dev, drive, req)?;
+    if !req.execute {
+        return dry_run(dev, drive, facet, &plan).map(drop);
+    }
+    if let Err(block) = check_safety(req.acknowledged_risk) {
+        bail!("SAFETY GATE: {}", block.0);
+    }
+    let saved = capture_required_backup(dev, drive, facet, &plan, req)?;
+    emit_plan(&plan.after_backup, saved.summary());
+    let reader = &mut ReadDevice::new(dev, drive.allowed_data_out());
+    let authorized = facet.authorize(reader, plan, &saved)?;
+    for warning in &authorized.warnings {
+        eprintln!("{}", style::amber(warning));
+    }
+    if let Some(text) = &authorized.confirmation {
+        println!("{}", style::bold(text));
+        if !confirm.confirm(&authorized)? {
+            bail!("flash aborted at confirmation prompt");
+        }
+    }
+    // The last tray check sits right before the first write: the backup and
+    // the confirmation left a window for a disc to be loaded.
+    guard_no_medium(dev, true)?;
+    let mut writer = gates::flash(dev, req, &saved)?;
+    facet.execute(&mut writer, &authorized)
+}
+
+/// The read-only first stage alone: the tray check (a warning on a dry run)
+/// and the backend's plan, with its notes shown. Needs no backup.
+pub fn plan_flash(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    req: &FlashRequest,
+) -> Result<FlashPlan> {
+    let facet = flash_facet(drive)?;
+    if req.execute || facet.dry_run_uses_device() {
+        guard_no_medium(dev, req.execute)?;
+    }
+    let plan = facet.plan(&mut ReadDevice::new(dev, drive.allowed_data_out()), req)?;
+    emit_plan(&plan.notes, "");
+    Ok(plan)
+}
+
+/// A dry run, for a front-end to show before asking for consent: the plan
+/// and the preflight, as shown, rendered as text. No backup, no writes.
+pub fn preview_flash(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    req: &FlashRequest,
+) -> Result<Vec<String>> {
+    if req.execute {
+        bail!("a flash preview is a dry run");
+    }
+    let facet = flash_facet(drive)?;
+    let plan = plan_flash(dev, drive, req)?;
+    let lines = dry_run(dev, drive, facet, &plan)?;
+    Ok(lines
+        .iter()
+        .map(|line| render_plan_line(line, DRY_RUN_BACKUP))
+        .collect())
+}
+
+const DRY_RUN_BACKUP: &str = "not captured (dry run)";
+
+/// Show the dry-run plan, then end with the backend's read-only preflight.
+fn dry_run(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    facet: &dyn FlashFacet,
+    plan: &FlashPlan,
+) -> Result<Vec<PlanLine>> {
+    emit_plan(&plan.dry_run, DRY_RUN_BACKUP);
+    let tail = facet.preflight(&mut ReadDevice::new(dev, drive.allowed_data_out()), plan)?;
+    emit_plan(&tail, "");
+    Ok(plan
+        .notes
+        .iter()
+        .chain(&plan.dry_run)
+        .chain(&tail)
+        .cloned()
+        .collect())
+}
+
+fn flash_facet(drive: &dyn Backend) -> Result<&dyn FlashFacet> {
+    drive.flash().with_context(|| {
         format!(
             "refusing to flash: {} has no executable flash capability",
             drive.descriptor().id
         )
-    })?;
-    match facet.executor() {
-        // A whole-package executor (e.g. a Pioneer OEM update session) plans its
-        // dry run offline and owns the execute flow, but only AFTER the shared
-        // safety gate and a saved pre-flash backup.
-        FlashExecutor::Bundle(bundle) => {
-            if !req.execute {
-                return bundle.dry_run(req);
-            }
-            guard_no_medium(dev, req.execute)?;
-            if let Err(block) = check_safety(req.acknowledged_risk) {
-                bail!("SAFETY GATE: {}", block.0);
-            }
-            let saved = capture_required_backup(dev, drive, facet, req)?;
-            // Re-check the tray right before any write (the backup opened a
-            // multi-round-trip window; a disc/tray change is the same hazard class).
-            guard_no_medium(dev, req.execute)?;
-            println!("{}", style::kv("backup", &saved.summary));
-            let mut writer = gates::flash(dev, req, &saved)?;
-            bundle.execute(&mut writer, req, Some(&saved.bytes))
-        }
-        FlashExecutor::Stream(stream) => {
-            guard_no_medium(dev, req.execute)?;
-            let format = req.input_format;
-            if !drive.descriptor().owns(format) {
-                bail!(
-                    "a {} cannot be flashed to this {} drive",
-                    format.label,
-                    drive.descriptor().id
-                );
-            }
-            match format.role {
-                FormatRole::Backup => flash_restore(dev, drive, facet, stream, req),
-                FormatRole::Image | FormatRole::Package => {
-                    flash_bin(dev, drive, facet, stream, req)
-                }
-            }
+    })
+}
+
+/// Print plan lines; `backup` fills the `backup:` line.
+pub(crate) fn emit_plan(lines: &[PlanLine], backup: &str) {
+    for line in lines {
+        match line {
+            PlanLine::Block(text) => print!("{text}"),
+            line => println!("{}", render_plan_line(line, backup)),
         }
     }
 }
 
-/// Capture, save and verify the mandatory pre-flash backup. The proof carries
-/// a summary line and the captured bytes (the installed firmware, for routing).
+/// One plan line as the terminal shows it.
+pub fn render_plan_line(line: &PlanLine, backup: &str) -> String {
+    match line {
+        PlanLine::Header(text) => style::header(text),
+        PlanLine::Field(label, value) => style::kv(label, value),
+        PlanLine::Backup => style::kv("backup", backup),
+        PlanLine::Text(text) => text.clone(),
+        PlanLine::Warning(text) => style::amber(text),
+        PlanLine::Ok(label, text) => style::status_line(label, text, style::Status::Ok),
+        PlanLine::Block(text) => text.clone(),
+        PlanLine::Spaced(line) => format!("\n{}", render_plan_line(line, backup)),
+    }
+}
+
+/// Capture, save, read back and coverage-check the mandatory pre-flash backup.
+/// The proof carries the captured bytes (the installed firmware).
 fn capture_required_backup(
     dev: &mut dyn ScsiDevice,
     drive: &dyn Backend,
     flash: &dyn FlashFacet,
+    plan: &FlashPlan,
     req: &FlashRequest,
 ) -> Result<SavedBackup> {
     let out = req
         .predump_out
         .as_ref()
         .context("no preflash backup path supplied")?;
-    // Fail fast BEFORE the multi-minute capture read if the destination is taken
-    // (backups are never overwritten) — far better than discovering it after.
+    // Fail fast, before the multi-minute capture, if the destination is taken.
     if out.symlink_metadata().is_ok() {
         bail!(
             "pre-flash backup path {} already exists (existing backups are never overwritten). \
@@ -431,27 +511,21 @@ fn capture_required_backup(
     let target_model = drive.identity(&mut ReadDevice::new(dev, unlocks)).product;
     let saved_len = save_backup(out, &bytes, backup, &target_model)
         .context("pre-flash backup failed; aborting flash")?;
-    // Preserve a structurally valid capture before target-dependent checks.
-    // A partial capture remains useful, but cannot authorize writing a region
-    // it does not cover. No update command has been issued at this point.
-    flash.verify_preflash_backup(&bytes, &req.input).with_context(|| {
-        format!("backup saved to {}, but it is not a usable rollback for this update; aborting flash", out.display())
+    // A partial capture stays saved, but cannot authorize writing a region it
+    // does not cover. No update command has been issued at this point.
+    flash.verify_backup(plan, &bytes).with_context(|| {
+        format!(
+            "backup saved to {}, but it is not a usable rollback for this update; aborting flash",
+            out.display()
+        )
     })?;
-    Ok(SavedBackup {
-        summary: format!("saved {} ({} bytes)", out.display(), saved_len),
-        bytes,
-    })
+    Ok(SavedBackup::new(out, bytes, saved_len))
 }
 
-/// Refuse to flash while a disc is loaded. Reprogramming the flash while the
-/// drive is busy servicing a medium can wedge the controller mid-program (a
-/// verify-mismatch / `DID_BAD_TARGET` brick that only a power-cycle clears), so
-/// a firmware flash MUST run against an empty, closed tray. On `--execute` this
-/// is a hard abort before any backup or write; on a dry run it is a prominent
-/// warning so the operator ejects before committing.
+/// Refuse to flash while a disc is loaded or the tray is open: reprogramming
+/// while the drive services a medium can wedge the controller mid-program. On
+/// `--execute` this aborts before any backup or write; a dry run warns.
 pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
-    // Flashing is safe ONLY with a closed, empty tray. A loaded disc can wedge
-    // the controller mid-program; an open tray is not a settled flash state.
     let status = dev.medium_status().context("could not check whether the tray is closed and empty; refusing before firmware writes. Check the drive connection and retry")?;
     let (condition, action) = match status {
         MediumStatus::ClosedEmpty => return Ok(()),
@@ -470,299 +544,6 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result
             "WARNING: {condition}. An actual flash requires a closed, empty tray."
         ))
     );
-    Ok(())
-}
-
-/// Flash a full `.bin` image VERBATIM: backup-first, stream, read-back verify.
-///
-/// Compare the decoded input against the backend's readable protected ranges.
-/// Mutable per-unit regions and remapped boot bytes are excluded. A mismatch or
-/// unavailable protected range fails verification; identity alone is insufficient.
-fn flash_bin(
-    dev: &mut dyn ScsiDevice,
-    drive: &dyn Backend,
-    facet: &dyn FlashFacet,
-    stream: &dyn StreamFlash,
-    req: &FlashRequest,
-) -> Result<()> {
-    let unlocks = drive.allowed_data_out();
-    // Image geometry, integrity, model, and any controller sub-family gate are
-    // protocol decisions. The engine only enforces the common workflow.
-    stream.validate_image(
-        &mut ReadDevice::new(dev, unlocks),
-        &req.input,
-        &req.drive_model,
-        req.allow_crossflash,
-    )?;
-    let (payload, enc) = stream.envelope(
-        &mut ReadDevice::new(dev, unlocks),
-        &req.input,
-        req.enc_override,
-    )?;
-
-    // Save a complete rollback before streaming.
-    let saved = if req.execute {
-        if let Err(block) = check_safety(req.acknowledged_risk) {
-            bail!("SAFETY GATE: {}", block.0);
-        }
-        Some(capture_required_backup(dev, drive, facet, req)?)
-    } else {
-        None
-    };
-    let backup_summary = saved
-        .as_ref()
-        .map_or("not captured (dry run)", |s| s.summary.as_str());
-
-    println!("{}", style::header("== flash plan =="));
-    println!("{}", style::kv("device", &dev.describe()));
-    println!(
-        "{}",
-        style::kv("drive", style::ident_or_unknown(&req.drive_model))
-    );
-    stream.print_notes(&req.input, &req.drive_model, req.allow_crossflash);
-    println!(
-        "{}",
-        style::kv(
-            "firmware",
-            &format!(
-                "{} ({} envelope)",
-                style::human_size(payload.len()),
-                if enc { "encrypted" } else { "plaintext" }
-            )
-        )
-    );
-    println!("{}", style::kv("backup", backup_summary));
-    println!();
-    print!("{}", stream.plan(payload.len(), req.verbose)?);
-
-    if !req.execute {
-        // Read-only readiness handshake (PROBE + TEST UNIT READY) — issues NO
-        // write — so a dry-run surfaces a not-ready drive up front, before the
-        // operator commits to --execute. A benign no-disc drive passes.
-        match stream.preflight(&mut ReadDevice::new(dev, unlocks)) {
-            Ok(()) => println!(
-                "{}",
-                style::status_line(
-                    "preflight",
-                    "transport ready; backup capture is checked only on execute",
-                    style::Status::Ok
-                )
-            ),
-            Err(e) => bail!("read-only preflight failed: {e}"),
-        }
-        println!(
-            "\n{}",
-            style::amber("DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.")
-        );
-        return Ok(());
-    }
-
-    // The write grant re-checks --execute and the risk acknowledgement and
-    // requires the saved backup.
-    let saved = saved.context("no pre-flash backup was saved")?;
-    let mut writer = gates::flash(dev, req, &saved)?;
-
-    // Final tray/medium re-check: the top-of-function `guard_no_medium` runs
-    // before the pre-flash dump, CMAC verify, crossflash gate, and plan
-    // print — a multi-SCSI-round-trip window in which a user could
-    // physically insert a disc or the drive could report a settling tray
-    // as loaded. The write path is the whole reason the guard exists, so
-    // re-probe RIGHT before the stream; a stale check is the same class
-    // of hazard as no check at all (drive controller can wedge mid-program
-    // when servicing a medium).
-    guard_no_medium(&mut writer, req.execute)?;
-    println!(
-        "\n{}",
-        style::bold("EXECUTING flash — do not power off or disconnect the drive...")
-    );
-    let chunk = stream.chunk_size();
-    let mut progress = style::Progress::new("flashing firmware", payload.len());
-    stream.stream(&mut writer, &payload, req.mode, &mut |sent| {
-        progress.set(sent)
-    })?;
-    let dev = &mut ReadDevice::new(dev, unlocks);
-    println!(
-        "upload complete {}",
-        style::dim(&format!(
-            "({}); waiting for the drive to finish programming...",
-            style::human_size(payload.len())
-        ))
-    );
-    // The drive keeps programming its flash after the last chunk (it reports
-    // NOT READY / LONG WRITE IN PROGRESS). Wait for it to finish before reading
-    // back, so a SUCCESSFUL flash never surfaces a scary mid-program error.
-    stream.wait_ready(dev)?;
-    println!("verifying...");
-
-    // The backend defines which image bytes can be compared after programming.
-    // On MTK these are CMAC-covered ranges outside the remapped boot page.
-    let protected = stream.verification_ranges(&req.input)?;
-    let is_protected = |pos: usize| protected.iter().any(|&(s, e)| pos >= s && pos <= e);
-
-    let mut checked = 0usize; // protected + readable bytes we compared
-    let mut differing = 0usize; // of those, how many differed
-    let mut unverified = 0usize; // protected chunks we could not read back
-    let mut first_bad: Option<(usize, u8, u8)> = None;
-    let mut offset = 0usize;
-    for piece in req.input.chunks(chunk) {
-        // Does this chunk cover any comparable (protected, past-boot) byte?
-        let has_protected = (offset..offset + piece.len()).any(&is_protected);
-        match stream.readback(dev, offset, piece.len()) {
-            Ok(got) if got.len() == piece.len() => {
-                for (i, (a, b)) in got.iter().zip(piece).enumerate() {
-                    let pos = offset + i;
-                    if !is_protected(pos) {
-                        continue;
-                    }
-                    checked += 1;
-                    if a != b {
-                        differing += 1;
-                        first_bad.get_or_insert((pos, *a, *b));
-                    }
-                }
-            }
-            // Errored or short read-back of a protected chunk: it stays
-            // unverified, so the success message below must not claim it.
-            result if has_protected => {
-                unverified += 1;
-                let reason = match result {
-                    Ok(data) => format!("short read: {}/{}", data.len(), piece.len()),
-                    Err(error) => format!("{error:#}"),
-                };
-                crate::diagnostics::record(format!(
-                    "read-back incomplete: offset={offset:#x} length={} reason={reason}",
-                    piece.len()
-                ));
-            }
-            _ => {}
-        }
-        offset += piece.len();
-    }
-    if let Some((pos, read, wrote)) = first_bad {
-        // A differing byte INSIDE a CMAC-protected range is genuine corruption:
-        // these are exactly the bytes the drive authenticates at boot. Bytes
-        // outside those ranges are drive-owned and never compared (see fn doc).
-        bail!(
-            "read-back verify FAILED at 0x{pos:06X}: an integrity-protected byte differs \
-             (read 0x{read:02X}, wrote 0x{wrote:02X}) — the image did not program cleanly \
-             ({differing} of {checked} protected bytes differ)."
-        );
-    }
-    if protected.is_empty() {
-        println!(
-            "{}",
-            style::dim_line(
-                "  read-back cross-check: image carries no integrity table; \
-                 relying on the drive's firmware identity below."
-            )
-        );
-    } else if unverified > 0 {
-        // Some protected chunks could not be read back — verification is
-        // incomplete and the flash's success is NOT confirmed. On a "final
-        // prod flash" workflow the caller has to know this before shipping,
-        // so surface it as a hard error rather than a warning + exit 0. If
-        // an operator explicitly wants to proceed with an incomplete
-        // read-back, they can re-run `info` after the drive re-enumerates
-        // and inspect the fingerprint themselves.
-        bail!(
-            "flash complete but read-back INCOMPLETE: could not read back {unverified} \
-             integrity-protected chunk(s) ({} verified). Do NOT trust the exit code as \
-             success — physically confirm the drive's firmware identity before shipping.",
-            style::human_size(checked),
-        );
-    } else {
-        println!(
-            "{}",
-            style::status_line(
-                "flash complete",
-                &format!(
-                    "{} of integrity-protected regions verified",
-                    style::human_size(checked)
-                ),
-                style::Status::Ok
-            )
-        );
-    }
-    println!(
-        "{}",
-        style::dim_line(
-            "  Integrity is enforced on-device: the drive recomputes CMAC at boot and \
-             rejects a bad image. The firmware identity below is the real result."
-        )
-    );
-    // Positive proof the new firmware is resident and booted. The
-    // firmware-identity readback IS the authoritative "flash succeeded"
-    // signal on this platform, so an unreadable identity here is not an
-    // acceptable exit state — bail! rather than merely printing a dim line
-    // and returning Ok. Callers that only care about "flash bytes shipped"
-    // and not "drive is confirmed running the new firmware" can inspect
-    // the error class; this at least stops the exit code from claiming
-    // success on a drive that never came back cleanly.
-    let identity = match drive.details() {
-        Some(details) => details.post_flash_identity(dev),
-        None => Ok(None),
-    };
-    match identity {
-        Ok(Some(r)) => match r.matched {
-            Some((desc, _)) => println!(
-                "{}",
-                style::kv("firmware now", &format!("{desc}  [{}]", r.fingerprint))
-            ),
-            None => println!(
-                "{}",
-                style::kv(
-                    "firmware now",
-                    &format!(
-                        "{}  [{}]",
-                        r.descriptor.as_deref().unwrap_or("unrecognized"),
-                        r.fingerprint
-                    )
-                )
-            ),
-        },
-        // The drive is still re-enumerating (or reports nothing): we can't
-        // confirm the resident firmware here. Refuse to exit 0 on that.
-        Ok(None) => bail!(
-            "flash complete but drive did not report a firmware identity — the drive is \
-             likely still re-enumerating or has failed to come back. Physically confirm \
-             the drive is alive (`info /dev/sgX`) before treating this flash as successful."
-        ),
-        Err(e) => bail!(
-            "flash complete but firmware-identity read-back errored ({e:#}); the drive \
-             is not confirmed running the new image. Physically re-verify before \
-             shipping."
-        ),
-    }
-    Ok(())
-}
-
-/// Restore from a backup archive: decode it through the backend's
-/// `validate_backup`, then reflash the decoded firmware image through [`flash_bin`]. The model and
-/// family gates live in the backend's validation, not here.
-fn flash_restore(
-    dev: &mut dyn ScsiDevice,
-    drive: &dyn Backend,
-    facet: &dyn FlashFacet,
-    stream: &dyn StreamFlash,
-    req: &FlashRequest,
-) -> Result<()> {
-    let backup: &dyn BackupFacet = drive.backup().with_context(|| {
-        format!(
-            "no proven backup restore path for {}",
-            drive.descriptor().id
-        )
-    })?;
-    let firmware = backup.validate(&req.input, &req.drive_model)?;
-    println!(
-        "{}",
-        style::header("== reflash backup firmware (per-unit data retained as reference) ==")
-    );
-    let mut firmware_req = req.clone();
-    firmware_req.input = firmware;
-    firmware_req.allow_crossflash = false;
-    // The full image uses the same proven MTK update path. Per-unit members are
-    // coherence/reference data, not separate post-reboot writes.
-    flash_bin(dev, drive, facet, stream, &firmware_req)?;
     Ok(())
 }
 

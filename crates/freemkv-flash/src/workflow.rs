@@ -4,6 +4,7 @@ use crate::backend::{
     registry, unsupported_family_error, Backend, BackendId, Capabilities, FlashRequest, ReadDevice,
     UNKNOWN_FAMILY,
 };
+pub use crate::backend::{AuthorizedPlan, Confirm};
 use crate::manifest::FlashMode;
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
@@ -218,35 +219,48 @@ fn backup_with_replace_inner(
                 dev.as_mut(),
                 handler.allowed_data_out(),
             ));
-            let s: String = format!("{}_{}", id.product, id.revision)
-                .chars()
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
-                        c
-                    } else {
-                        '_'
-                    }
-                })
-                .collect();
-            match handler.backup().map(|b| b.format()) {
-                // A dump is a single flat memory image, not a backup archive.
-                _ if dump => PathBuf::from(format!("{s}.dump.bin")),
-                // Filename infix (`backup` / `candidate`) comes from the backend,
-                // so the CLI names no chipset.
-                Some(format) => PathBuf::from(format!("{s}.{}.{}", format.infix, format.extension)),
-                None => bail!("backend has no backup format"),
-            }
+            default_backup_name(&id, handler.backup().map(|b| b.format()), dump)?
         }
     };
     engine::backup_with_replace(dev.as_mut(), handler, &out, dump, replace)
 }
 
-/// Validate and execute the shared flash workflow.
-pub fn flash(args: FlashOptions) -> Result<()> {
-    crate::diagnostics::run("flash", || flash_inner(args))
+/// The default backup or dump file name: `<model>_<rev>.<infix>.<extension>`
+/// from the backend's format, or `<model>_<rev>.dump.bin` for a raw dump (a
+/// flat memory image, not a backup archive). The name carries no chipset.
+pub fn default_backup_name(
+    id: &crate::backend::Identity,
+    format: Option<crate::backend::BackupFormat>,
+    dump: bool,
+) -> Result<PathBuf> {
+    let stem: String = format!("{}_{}", id.product, id.revision)
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    match format {
+        _ if dump => Ok(PathBuf::from(format!("{stem}.dump.bin"))),
+        Some(format) => Ok(PathBuf::from(format!(
+            "{stem}.{}.{}",
+            format.infix, format.extension
+        ))),
+        None => bail!("backend has no backup format"),
+    }
 }
 
-fn flash_inner(args: FlashOptions) -> Result<()> {
+/// Validate and execute the shared flash workflow. `confirm` answers the
+/// backend's confirmation once the backup is saved and every installed-firmware
+/// gate has passed.
+pub fn flash(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<()> {
+    crate::diagnostics::run("flash", || flash_inner(args, confirm))
+}
+
+fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<()> {
     crate::diagnostics::record(format!(
         "flash options: input={:?} backup={:?} execute={} acknowledged_risk={}",
         args.input, args.backup, args.execute, args.acknowledged_risk
@@ -254,7 +268,31 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
     if args.execute && !args.acknowledged_risk {
         bail!("refusing to flash without acknowledging the risk");
     }
+    let (mut dev, handler, req) = open_flash(&args)?;
+    engine::flash(dev.as_mut(), handler, &req, confirm)
+}
 
+/// The read-only first stage for a front-end to show before asking for
+/// consent: the dry run's checks and plan as text. Needs no backup.
+pub fn plan_flash(args: &FlashOptions) -> Result<Vec<String>> {
+    crate::diagnostics::run("flash plan", || {
+        let args = FlashOptions {
+            execute: false,
+            ..args.clone()
+        };
+        let (mut dev, handler, req) = open_flash(&args)?;
+        engine::preview_flash(dev.as_mut(), handler, &req)
+    })
+}
+
+/// Open the drive, resolve its flash backend and build the request.
+fn open_flash(
+    args: &FlashOptions,
+) -> Result<(
+    Box<dyn platform::ScsiDevice>,
+    &'static dyn Backend,
+    FlashRequest,
+)> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
     let selector = resolve_device(args.device.as_deref())?;
@@ -262,7 +300,6 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
     let input_format = registry::flash_input_format(handler, &args.input, &input)
         .context("backend reads no firmware files")?;
-
     let unlocks = handler.allowed_data_out();
     let drive_model = handler
         .identity(&mut ReadDevice::new(dev.as_mut(), unlocks))
@@ -272,7 +309,6 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
             .backup()
             .and_then(|b| default_backup_path(&args.input, b.format().extension))
     });
-
     let req = FlashRequest {
         input,
         input_format,
@@ -283,9 +319,17 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
         drive_model,
         verbose: false,
         predump_out,
-        allow_crossflash: false,
     };
-    engine::flash(dev.as_mut(), handler, &req)
+    Ok((dev, handler, req))
+}
+
+/// Consent a front-end collected before the job started (the GUI's sheet).
+pub struct Preconfirmed;
+
+impl Confirm for Preconfirmed {
+    fn confirm(&mut self, _plan: &AuthorizedPlan) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 /// Read a firmware input file with a hard size cap, so a huge file or an endless

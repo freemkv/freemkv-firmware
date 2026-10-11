@@ -133,6 +133,40 @@ macro_rules! eprint {
     ($($arg:tt)*) => { $crate::output::emit(format_args!($($arg)*), false, true) };
 }
 
+/// The CLI's confirmation. On a terminal, require `y`/`yes`; when stdin is
+/// not a terminal the `--execute`/`--i-understand-risk` flags already are the
+/// consent, so proceed and say so.
+pub struct TerminalConfirm;
+
+impl crate::backend::Confirm for TerminalConfirm {
+    fn confirm(&mut self, _plan: &crate::backend::AuthorizedPlan) -> anyhow::Result<bool> {
+        use std::io::IsTerminal;
+        let is_tty = std::io::stdin().is_terminal();
+        confirm_with(is_tty, &mut std::io::stdin().lock())
+    }
+}
+
+/// [`TerminalConfirm`] with the terminal check and input injected.
+pub(crate) fn confirm_with(is_tty: bool, reader: &mut impl io::BufRead) -> anyhow::Result<bool> {
+    if !is_tty {
+        println!(
+            "{}",
+            crate::style::dim(
+                "stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent."
+            )
+        );
+        return Ok(true);
+    }
+    print!("Proceed? [y/N] ");
+    let _ = io::stdout().flush();
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
+}
+
 #[cfg(test)]
 #[path = "output_tests.rs"]
 mod tests;

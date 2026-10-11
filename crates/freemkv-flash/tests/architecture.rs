@@ -276,10 +276,11 @@ fn force_and_skip_backup_paths_are_gone() {
     }
     assert!(problems.is_empty(), "{problems:#?}");
 
-    // Behaviour: an execute request without a backup destination never writes.
+    // Behaviour: an execute request without a backup destination never writes,
+    // even when its plan (built before any backup) passes.
     let mut dev = MockScsiDevice::new();
     let request = FlashRequest {
-        input: vec![0; 0x20_0000],
+        input: header_only_bundle(),
         input_format: &pioneer::PACKAGE,
         mode: FlashMode::Full,
         execute: true,
@@ -288,10 +289,15 @@ fn force_and_skip_backup_paths_are_gone() {
         drive_model: "BU40N".into(),
         verbose: false,
         predump_out: None,
-        allow_crossflash: false,
     };
     let backend = pioneer::Pioneer::new();
-    let error = freemkv_flash::engine::flash(&mut dev, &backend, &request).unwrap_err();
+    let error = freemkv_flash::engine::flash(
+        &mut dev,
+        &backend,
+        &request,
+        &mut freemkv_flash::workflow::Preconfirmed,
+    )
+    .unwrap_err();
     assert!(
         format!("{error:#}").contains("preflash backup path"),
         "{error:#}"
@@ -300,6 +306,30 @@ fn force_and_skip_backup_paths_are_gone() {
         dev.writes.is_empty(),
         "a flash without a saved backup wrote"
     );
+}
+
+/// A Kernel+Normal package of header-only envelopes: it passes the pre-backup
+/// plan checks and fails only once the installed firmware is consulted.
+fn header_only_bundle() -> Vec<u8> {
+    let envelope = |kind: &str| {
+        let mut bytes = vec![0u8; 0x1000];
+        let header = format!("********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   NEW-DRIVE\r\nRevision Level : 1.00\r\nHardware Version : SAT 8800\r\nKernel Version : ID60\r\nDestination : GENERAL\r\nFile Type : {kind}\r\n");
+        bytes[..header.len()].copy_from_slice(header.as_bytes());
+        bytes
+    };
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, bytes) in [
+        ("kernel.enc", envelope("Kernel")),
+        ("normal.enc", envelope("Normal")),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, name, bytes.as_slice())
+            .unwrap();
+    }
+    tar.into_inner().unwrap()
 }
 
 #[test]

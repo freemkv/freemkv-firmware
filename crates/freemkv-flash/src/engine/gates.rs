@@ -4,9 +4,11 @@
 //!
 //! | grant | gates |
 //! |---|---|
-//! | `flash` | `--execute`, risk acknowledgement, a saved pre-flash backup (the tray is checked by the caller, twice) |
+//! | `flash` | `--execute`, risk acknowledgement, a saved pre-flash backup; the caller checks the tray twice and runs `authorize` first |
 //! | `recovery` | `--execute` and risk acknowledgement; no tray check and no backup, by design |
 //! | `dump` | the dump command itself; limited to the dump's declared commands |
+
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 
@@ -21,12 +23,37 @@ pub struct WriteDevice<'d> {
     limit: Option<&'static [CdbPattern]>,
 }
 
-/// Proof that the mandatory pre-flash backup was captured, saved and verified.
-pub(in crate::engine) struct SavedBackup {
+/// Proof that the mandatory pre-flash backup was captured, saved and read
+/// back. Only the engine creates one; a flash grant requires it.
+pub struct SavedBackup {
+    summary: String,
+    bytes: Vec<u8>,
+    path: PathBuf,
+}
+
+impl SavedBackup {
+    pub(in crate::engine) fn new(path: &Path, bytes: Vec<u8>, saved_len: usize) -> Self {
+        Self {
+            summary: format!("saved {} ({} bytes)", path.display(), saved_len),
+            bytes,
+            path: path.to_path_buf(),
+        }
+    }
+
     /// The `backup:` summary line.
-    pub(in crate::engine) summary: String,
+    pub fn summary(&self) -> &str {
+        &self.summary
+    }
+
     /// The captured bytes: the installed firmware.
-    pub(in crate::engine) bytes: Vec<u8>,
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Where the backup is saved.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 fn grant<'d>(dev: &'d mut dyn ScsiDevice, limit: Option<&'static [CdbPattern]>) -> WriteDevice<'d> {
@@ -76,6 +103,13 @@ pub(in crate::engine) fn dump<'d>(
 #[cfg(test)]
 pub(crate) fn ungated_for_tests(dev: &mut dyn ScsiDevice) -> WriteDevice<'_> {
     grant(dev, None)
+}
+
+/// A saved-backup proof for test harnesses that drive `authorize` directly.
+#[cfg(test)]
+pub(crate) fn saved_for_tests(bytes: Vec<u8>) -> SavedBackup {
+    let len = bytes.len();
+    SavedBackup::new(Path::new("test-backup"), bytes, len)
 }
 
 impl WriteDevice<'_> {

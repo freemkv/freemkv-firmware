@@ -179,10 +179,8 @@ fn from_members_rejects_wrong_size_members() {
 /// per-member length gate.
 #[test]
 fn read_tar_refuses_oversized_member_before_allocating() {
-    // Build a minimal single-entry tar whose header claims a size just
-    // beyond the cap. `tar::Builder` writes the header verbatim, so we
-    // can drive `read_tar` into the oversize branch without allocating
-    // the full body ourselves.
+    // A single-entry tar whose header claims one byte past the cap; the
+    // builder writes the header verbatim, so no large body is needed.
     let mut buf: Vec<u8> = Vec::new();
     {
         let mut b = tar::Builder::new(&mut buf);
@@ -192,10 +190,8 @@ fn read_tar_refuses_oversized_member_before_allocating() {
             .expect("set_path on header");
         header.set_size(READ_TAR_MEMBER_CAP as u64 + 1);
         header.set_cksum();
-        // Body bytes: use a real (much smaller) body — the tar reader
-        // truncates to the header's declared size, so read_tar hits our
-        // size guard on the declared size, not the body. That's exactly
-        // the point: reject before allocation.
+        // A small body: the guard must refuse on the declared size, before
+        // allocating.
         let body = [0u8; 32];
         b.append(&header, &body[..]).expect("append body");
         b.finish().expect("finalize tar");
@@ -278,7 +274,6 @@ fn plan_verbose_shows_framing_and_collapses_streams() {
 #[test]
 fn mtk_geometry_and_readback() {
     let m = Mtk;
-    assert_eq!(m.chunk_size(), CHUNK);
 
     // Distinct, non-zero bytes at the queried offset: a mock that just
     // zero-fills would make a bug that swaps FLASH_BUFFER_ID / mode / offset
@@ -344,7 +339,7 @@ fn parse_sense_fixed_descriptor_and_short_buffers() {
 #[test]
 fn preflight_is_read_only_on_a_responsive_drive() {
     let mut dev = MockScsiDevice::new();
-    Mtk.preflight(&mut ReadDevice::new(&mut dev, &[]))
+    Mtk.readiness(&mut ReadDevice::new(&mut dev, &[]))
         .expect("a responsive drive passes the read-only handshake");
     assert!(dev.writes.is_empty(), "preflight must issue no writes");
 }
@@ -554,13 +549,7 @@ fn fixed_sense_with_valid_information_bit_preserves_hardware_fault() {
 /// Run the MTK image-stream flash of `payload`, discarding progress.
 fn stream(dev: &mut dyn crate::platform::ScsiDevice, payload: &[u8]) -> anyhow::Result<()> {
     let mut writer = crate::engine::gates::ungated_for_tests(dev);
-    StreamFlash::stream(
-        &Mtk,
-        &mut writer,
-        payload,
-        crate::manifest::FlashMode::Full,
-        &mut |_| {},
-    )
+    Mtk.stream(&mut writer, payload, &mut |_| {})
 }
 
 #[test]
@@ -571,7 +560,6 @@ fn flash_stream_sends_the_oem_sequence_and_reports_progress() {
     Mtk.stream(
         &mut crate::engine::gates::ungated_for_tests(&mut dev),
         &payload,
-        crate::manifest::FlashMode::Full,
         &mut |n| seen.push(n),
     )
     .unwrap();

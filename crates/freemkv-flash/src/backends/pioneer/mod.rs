@@ -10,10 +10,10 @@ use pioneer_optical::Role;
 use std::borrow::Cow;
 
 use crate::backend::{
-    Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, BundleFlash, CdbPattern,
-    Descriptor, DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat, FlashExecutor,
-    FlashFacet, FlashRequest, FormatRole, Identity, InspectFacet, Match, ReadDevice, RecoveryFacet,
-    WriteDevice,
+    AuthorizedPlan, Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, CdbPattern,
+    Descriptor, DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat, FlashFacet,
+    FlashPlan, FlashRequest, FormatRole, Identity, InspectFacet, Match, PlanLine, ReadDevice,
+    RecoveryFacet, SavedBackup, WriteDevice,
 };
 use crate::platform::ScsiDevice;
 
@@ -41,11 +41,7 @@ pub(crate) mod n;
 pub(crate) mod recovery;
 pub mod transfer;
 
-// ---- Protocol constants -----------------------------------------------------
-
-// ============================================================================
-// Pioneer transfer framing
-// ============================================================================
+// ---- Pioneer transfer framing -----------------------------------------------
 
 pub(crate) const CONTROL_LEN: usize = 0x100;
 /// OEM Normal transfer chunk limit.
@@ -115,20 +111,12 @@ pub fn validate_normal_envelope(envelope: &[u8]) -> Result<()> {
     }
 }
 
-/// Resolve and check the effective pair before any payload decoding.
-fn validate_header_chain(
-    kernel: Option<&[u8]>,
-    normal: &[u8],
-    backup: Option<&[u8]>,
-) -> Result<()> {
+/// A Normal-only flash pairs with the installed Kernel: its headers must
+/// chain to the Kernel in the saved backup.
+fn validate_installed_kernel(normal: &[u8], backup: Option<&[u8]>) -> Result<()> {
     use crate::backends::pioneer::flash_plan::validate_component_headers;
-    validate_component_headers(kernel, Some(normal)).map_err(anyhow::Error::msg)?;
-    if kernel.is_some() {
-        return Ok(());
-    }
     let captured = backup.map(classify_flash_input).transpose()?;
-    let installed_kernel = captured.as_ref().and_then(|(k, _)| k.as_deref());
-    match installed_kernel {
+    match captured.as_ref().and_then(|(k, _)| k.as_deref()) {
         Some(k) => validate_component_headers(Some(k), Some(normal)).map_err(anyhow::Error::msg),
         None => {
             bail!("Normal-only flash needs the installed Kernel; supply a Kernel+Normal package")
@@ -211,7 +199,7 @@ pub fn offline_pair_data_out<'a>(
         .collect())
 }
 
-// ---- Flash input classification + confirm prompt ---------------------------
+// ---- Flash input classification and routing --------------------------------
 
 /// Writable components resolved from a flash input: `(kernel, normal)`, each
 /// present only when the input carries that envelope.
@@ -320,12 +308,9 @@ pub(crate) fn installed_facts(
             installed_kernel.as_deref()?,
         )
     });
-    // Installed Kernel ID tag: use the installed Normal envelope header's
-    // declared required-Kernel tag. On a drive that was shipped as a paired
-    // Kernel+Normal release this is exactly the drive's live `3C/02/F1`
-    // kernel-tag byte-for-byte (OEM Pioneer updaters compare the two). If a
-    // live Identity is also available we would prefer it (handles the
-    // paired-mismatch edge case), but the backup header is a reliable source.
+    // The installed Normal header's required-Kernel tag: for a paired release
+    // it equals the drive's live `3C/02/F1` kernel tag byte for byte, which is
+    // what OEM updaters compare.
     let kernel_tag = ninfo
         .as_ref()
         .map(|h| h.kernel_version.trim().to_string())
@@ -420,68 +405,137 @@ fn plan_is_downgrade(plan: &crate::backends::pioneer::flash_plan::FlashPlan) -> 
     )
 }
 
-/// Decide whether the executor may act on a plan. `Refused` aborts before any
-/// write. Same-generation and same/newer flashes execute via the ordinary OEM
-/// route. The library prepares any temporary marker patch and pristine restore
-/// before entry. The bundle executor verifies both passes before reporting
-/// success. No plan requires kernel mode
-/// ([`crate::backends::pioneer::flash_plan::kernel_mode_required`]).
-pub(crate) fn check_plan_executable(
+/// The cautions a routed plan carries; `Refused` aborts before any write.
+/// Same-generation and newer flashes take the ordinary OEM route. A
+/// generation-barrier downgrade is prepared by the library (temporary marker
+/// patch, then a verified pristine-Kernel restore). No plan needs kernel mode.
+pub(crate) fn routing_warnings(
     plan: &crate::backends::pioneer::flash_plan::FlashPlan,
-) -> Result<()> {
-    use crate::backends::pioneer::flash_plan::FlashPlan;
+) -> Result<Vec<String>> {
+    use crate::backends::pioneer::flash_plan::FlashPlan as Route;
     match plan {
-        FlashPlan::Plain | FlashPlan::KernelCrossflash => Ok(()),
-        FlashPlan::KernelDowngrade => {
-            eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
-            Ok(())
+        Route::Plain | Route::KernelCrossflash => Ok(Vec::new()),
+        Route::KernelDowngrade => Ok(vec![DOWNGRADE_WARNING.to_string()]),
+        Route::Refused(reason) => bail!("refusing to flash: {reason}"),
+    }
+}
+
+/// The components an execute plan resolved from the input; the installed
+/// firmware is not needed to build it.
+pub(crate) struct ExecutePlan {
+    kernel: Option<Vec<u8>>,
+    normal: Vec<u8>,
+    selection: FlashSelection,
+}
+
+/// The pre-backup checks of a live flash: component selection, transfer size,
+/// header chain, envelope tail and bundle self-consistency.
+pub(crate) fn execute_plan(input: &[u8]) -> Result<ExecutePlan> {
+    use crate::backends::pioneer::flash_plan::{
+        ensure_no_unrecovered_tail, validate_bundle, validate_component_headers,
+    };
+    let (kernel, normal) = classify_flash_input(input)?;
+    let selection = decide_flash(kernel.is_some(), normal.is_some())?;
+    let normal = normal.expect("normal present for both selections");
+    check_normal_size(&normal)?;
+    validate_component_headers(kernel.as_deref(), Some(&normal)).map_err(anyhow::Error::msg)?;
+    ensure_no_unrecovered_tail(kernel.as_deref(), Some(&normal))?;
+    validate_bundle(kernel.as_deref(), Some(&normal)).map_err(|e| anyhow!("{e}"))?;
+    Ok(ExecutePlan {
+        kernel,
+        normal,
+        selection,
+    })
+}
+
+/// The library plan the receiver accepted.
+struct Prepared {
+    complete: Option<pioneer_optical::receiver::PreparedUpdate>,
+    normal: Option<pioneer_optical::receiver::PreparedNormal>,
+}
+
+/// The installed-firmware gates: the Kernel a Normal-only flash pairs with,
+/// the receiver's entry requirements, preparation of the transfer, and the
+/// family/generation routing. `installed` is the saved pre-flash backup.
+pub(crate) fn authorize_installed(
+    plan: FlashPlan,
+    installed: Option<&[u8]>,
+) -> Result<AuthorizedPlan> {
+    use crate::backends::pioneer::flash::preparation_error;
+    let p: &ExecutePlan = plan.state()?;
+    let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
+    if kernel.is_none() {
+        validate_installed_kernel(normal, installed)?;
+    }
+    let receiver = installed_receiver(installed)?;
+    let prepared = match p.selection {
+        FlashSelection::KernelAndNormal => {
+            let target =
+                pioneer_optical::envelope::Update::load(kernel.expect("selected Kernel"), normal)
+                    .map_err(preparation_error)?;
+            Prepared {
+                complete: Some(receiver.prepare(target).map_err(preparation_error)?),
+                normal: None,
+            }
         }
-        FlashPlan::Refused(reason) => bail!("refusing to flash: {reason}"),
+        FlashSelection::NormalOnly => Prepared {
+            complete: None,
+            normal: Some(receiver.prepare_normal(normal).map_err(preparation_error)?),
+        },
+    };
+    let route = resolve_flash_plan(installed, kernel, Some(normal))?;
+    let mut warnings = routing_warnings(&route)?;
+    debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
+        &route
+    ));
+    let will_patch = prepared
+        .complete
+        .as_ref()
+        .is_some_and(|p| p.restoration_kernel_transfer().is_some());
+    if will_patch && !plan_is_downgrade(&route) {
+        warnings.push(DOWNGRADE_WARNING.to_string());
     }
+    let confirmation = flash_summary(kernel, Some(normal));
+    let mut authorized = AuthorizedPlan::new(plan, prepared);
+    authorized.warnings = warnings;
+    authorized.confirmation = Some(confirmation);
+    Ok(authorized)
 }
 
-/// Print the summary and get explicit consent. On a TTY, require `y`/`yes`;
-/// when stdin is not a TTY the `--execute`/`--i-understand-risk` flags already
-/// are the consent, so proceed automatically (and say so).
-pub(crate) fn confirm_proceed(summary: &str) -> Result<()> {
-    use std::io::IsTerminal;
-    if crate::output::captured() {
-        println!("{}", crate::style::bold(summary));
-        return Ok(()); // The GUI already collected explicit confirmation.
+/// Whether `backup` holds a rollback for every region the flash overwrites.
+fn verify_coverage(backup: &[u8], writes_kernel: bool, writes_normal: bool) -> Result<()> {
+    let roles = crate::backends::pioneer::backup::component_roles(backup);
+    let has = |role: &str| roles.iter().any(|(r, _)| r == role);
+    for (writes, role, label) in [
+        (writes_normal, "main", "Normal"),
+        (writes_kernel, "kernel", "Kernel"),
+    ] {
+        if writes && !has(role) {
+            bail!(
+                "pre-flash backup is incomplete: the {label} region (which the flash \
+                 overwrites) could not be captured, so it has no rollback. Refusing to flash. \
+                 Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying."
+            );
+        }
     }
-    let is_tty = std::io::stdin().is_terminal();
-    confirm_with(summary, is_tty, &mut std::io::stdin().lock())
+    Ok(())
 }
 
-/// Testable core of [`confirm_proceed`]: decoupled from the real stdin so the
-/// non-TTY auto-proceed and the explicit-yes TTY paths can be exercised offline.
-fn confirm_with(summary: &str, is_tty: bool, reader: &mut impl std::io::BufRead) -> Result<()> {
-    use std::io::Write;
-    println!("{}", crate::style::bold(summary));
-    if !is_tty {
-        println!(
-            "{}",
-            crate::style::dim(
-                "stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent."
-            )
-        );
-        return Ok(());
-    }
-    print!("Proceed? [y/N] ");
-    let _ = std::io::stdout().flush();
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    match line.trim().to_ascii_lowercase().as_str() {
-        "y" | "yes" => Ok(()),
-        _ => bail!("flash aborted at confirmation prompt"),
-    }
+/// Backup coverage decided from the raw input: an input that cannot be
+/// classified yet is assumed to write a Normal.
+#[cfg(test)]
+pub(crate) fn verify_preflash_backup(backup: &[u8], input: &[u8]) -> Result<()> {
+    let (writes_kernel, writes_normal) = match classify_flash_input(input) {
+        Ok((kernel, normal)) => (kernel.is_some(), normal.is_some()),
+        Err(_) => (false, true),
+    };
+    verify_coverage(backup, writes_kernel, writes_normal)
 }
 
 // ---- The Pioneer backend ---------------------------------------------------
 
 /// Pioneer OEM protocol backend: identity, byte-exact OEM backup capture, a
-/// raw dump, Recovery, inspection, and a gated live OEM write through its
-/// bundle executor ([`BundleFlash`]); it has no image-stream path.
+/// raw dump, Recovery, inspection, and a gated live OEM package update.
 #[derive(Default)]
 pub struct Pioneer;
 
@@ -714,140 +768,56 @@ impl DumpFacet for Pioneer {
 }
 
 impl FlashFacet for Pioneer {
-    fn verify_preflash_backup(&self, backup: &[u8], input: &[u8]) -> Result<()> {
-        // The backup must hold a rollback for EVERY region this flash overwrites.
-        // Decide what will be written from the input; if it cannot be classified
-        // yet, fall back to the historical rule (a Normal is always written).
-        let (writes_kernel, writes_normal) = match classify_flash_input(input) {
-            Ok((kernel, normal)) => (kernel.is_some(), normal.is_some()),
-            Err(_) => (false, true),
-        };
-        let roles = crate::backends::pioneer::backup::component_roles(backup);
-        let has = |role: &str| roles.iter().any(|(r, _)| r == role);
-        for (writes, role, label) in [
-            (writes_normal, "main", "Normal"),
-            (writes_kernel, "kernel", "Kernel"),
-        ] {
-            if writes && !has(role) {
-                bail!(
-                    "pre-flash backup is incomplete: the {label} region (which the flash \
-                     overwrites) could not be captured, so it has no rollback. Refusing to flash. \
-                     Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying."
-                );
-            }
+    fn plan(&self, _dev: &mut ReadDevice<'_>, req: &FlashRequest) -> Result<FlashPlan> {
+        if !req.execute {
+            let mut plan = FlashPlan::new(());
+            plan.dry_run = file_info::plan_offline(
+                &req.input,
+                req.input_format,
+                &req.drive_model,
+                req.verbose,
+            )?;
+            return Ok(plan);
         }
-        Ok(())
+        let mut plan = FlashPlan::new(execute_plan(&req.input)?);
+        plan.after_backup = vec![PlanLine::Backup];
+        Ok(plan)
     }
 
-    fn executor(&self) -> FlashExecutor<'_> {
-        FlashExecutor::Bundle(self)
-    }
-}
-
-impl BundleFlash for Pioneer {
-    fn dry_run(&self, req: &FlashRequest) -> Result<()> {
-        file_info::plan_offline(
-            &req.input,
-            req.input_format,
-            &req.drive_model,
-            req.allow_crossflash,
-            req.verbose,
-        )
+    /// The dry run plans from the file alone: no device I/O.
+    fn dry_run_uses_device(&self) -> bool {
+        false
     }
 
-    fn execute(
+    fn verify_backup(&self, plan: &FlashPlan, backup: &[u8]) -> Result<()> {
+        let p: &ExecutePlan = plan.state()?;
+        verify_coverage(backup, p.kernel.is_some(), true)
+    }
+
+    fn authorize(
         &self,
-        dev: &mut WriteDevice<'_>,
-        req: &FlashRequest,
-        installed_backup: Option<&[u8]>,
-    ) -> Result<()> {
-        // Flash whatever components the input carries: a Kernel+Normal
-        // package selects its transfer schedule by decoded layout, a Normal-only input
-        // (bundle or bare `.enc`) via the OEM Normal path. A Kernel-only
-        // input has no validated path and is refused. The 256-byte control
-        // buffer comes from the live receiver, then the executor issues the WRITE
-        // BUFFER CDBs imperatively — there is no pre-built replayed list.
-        let (kernel, normal) = classify_flash_input(&req.input)?;
-        let selection = decide_flash(kernel.is_some(), normal.is_some())?;
-        let normal = normal
-            .as_deref()
-            .expect("normal present for both selections");
+        _dev: &mut ReadDevice<'_>,
+        plan: FlashPlan,
+        backup: &SavedBackup,
+    ) -> Result<AuthorizedPlan> {
+        authorize_installed(plan, Some(backup.bytes()))
+    }
 
-        check_normal_size(normal)?;
-
-        validate_header_chain(kernel.as_deref(), normal, installed_backup)?;
-
-        // An image with an unrecoverable envelope tail is never flashed.
-        crate::backends::pioneer::flash_plan::ensure_no_unrecovered_tail(
-            kernel.as_deref(),
-            Some(normal),
-        )?;
-
-        // Routing: the family-match gate (installed vs target Normal family,
-        // computed from the just-captured pre-flash backup and the target).
-        // No path uses kernel mode.
-        // Bundle self-consistency gate: refuse malformed bundles (bad
-        // headers, SAT mismatch between Kernel/Normal, Kernel ID tag ≠
-        // Normal's required-Kernel tag, unrecovered envelope tail) BEFORE
-        // any planning or writes; a broken bundle never has a legitimate path.
-        crate::backends::pioneer::flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
-            .map_err(|e| anyhow!("{e}"))?;
-
-        let receiver = installed_receiver(installed_backup)?;
-        let (prepared, normal_only) = match selection {
-            FlashSelection::KernelAndNormal => {
-                let target = pioneer_optical::envelope::Update::load(
-                    kernel.as_deref().expect("selected Kernel"),
-                    normal,
-                )
-                .map_err(crate::backends::pioneer::flash::preparation_error)?;
-                (
-                    Some(
-                        receiver
-                            .prepare(target)
-                            .map_err(crate::backends::pioneer::flash::preparation_error)?,
-                    ),
-                    None,
-                )
-            }
-            FlashSelection::NormalOnly => (
-                None,
-                Some(
-                    receiver
-                        .prepare_normal(normal)
-                        .map_err(crate::backends::pioneer::flash::preparation_error)?,
-                ),
-            ),
-        };
-        let plan = resolve_flash_plan(installed_backup, kernel.as_deref(), Some(normal))?;
-        check_plan_executable(&plan)?;
-        debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
-            &plan
-        ));
-
-        let will_patch = prepared
-            .as_ref()
-            .is_some_and(|p| p.restoration_kernel_transfer().is_some());
-        if will_patch && !plan_is_downgrade(&plan) {
-            eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
-        }
-        // Summarize what will be written and what is missing, then confirm.
-        confirm_proceed(&flash_summary(kernel.as_deref(), Some(normal)))?;
-        let prepared = match (&prepared, &normal_only) {
-            (Some(plan), None) => crate::backends::pioneer::flash::PreparedFlash::Complete(plan),
-            (None, Some(plan)) => crate::backends::pioneer::flash::PreparedFlash::Normal(plan),
+    fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<()> {
+        use crate::backends::pioneer::flash::{execute_prepared, PreparedFlash};
+        let prepared: &Prepared = plan.state()?;
+        let selected = match (&prepared.complete, &prepared.normal) {
+            (Some(plan), None) => PreparedFlash::Complete(plan),
+            (None, Some(plan)) => PreparedFlash::Normal(plan),
             _ => unreachable!("one prepared plan selected"),
         };
-        crate::backends::pioneer::flash::execute_prepared(dev, prepared)?;
+        execute_prepared(dev, selected)?;
         println!(
             "{}",
             crate::style::green("flash complete; drive returned ready.")
         );
-        // Auto post-flash identity readback: the drive just rebooted into
-        // whatever it now reports as its live identity. Print it so the user
-        // sees exactly what landed without a separate `info` invocation.
-        // Non-fatal: a transient post-boot read error is a warning, not a
-        // flash failure (the write already committed).
+        // Show what the rebooted drive now reports. A transient read error is
+        // a warning, not a failure: the write already committed.
         match crate::transport::identify(dev) {
             Ok(ident) => println!("{}", post_flash_line(&ident)),
             Err(e) => eprintln!(

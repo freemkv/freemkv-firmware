@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 use crate::backends::mtk::{Mtk, CHUNK, IMAGE_SIZE, ROM_1EC000_OFFSET};
 // COMPAT: the module path differs in the 0.11.2 baseline copy of this file.
 use crate::backend::{Backend, FlashRequest};
-use crate::backend::{BackendId, BackupFacet, BundleFlash, FileFormat, FlashFacet};
+use crate::backend::{BackendId, BackupFacet, FileFormat, FlashFacet, ReadDevice};
 use crate::backends::mtk::{IMAGE as MTK_IMAGE, LEGACY_TAR as MTK_LEGACY_TAR};
 use crate::backends::pioneer::flash_plan;
 use crate::backends::pioneer::Pioneer;
@@ -509,15 +509,31 @@ fn recover_via(
     crate::engine::recover(dev, &Pioneer::new(), current, target, execute, true)
 }
 
-/// Pioneer's bundle executor (the old `flash_bundle` on `--execute`), driven
-/// directly with an ungated write grant.
+/// The engine's flash with consent collected up front, as the GUI gives it.
+fn engine_flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
+    crate::engine::flash(dev, drive, req, &mut crate::workflow::Preconfirmed)
+}
+
+/// Pioneer's live flash stages after the backup (the old `flash_bundle` on
+/// `--execute`): `authorize` against `installed`, the warnings and
+/// confirmation text as the engine shows them, then `execute` with an
+/// ungated write grant.
 fn bundle_execute(
     dev: &mut dyn ScsiDevice,
     req: &FlashRequest,
     installed: Option<&[u8]>,
 ) -> Result<()> {
+    let pioneer = Pioneer::new();
+    let plan = pioneer.plan(&mut ReadDevice::new(dev, &[]), req)?;
+    let authorized = crate::backends::pioneer::authorize_installed(plan, installed)?;
+    for warning in &authorized.warnings {
+        eprintln!("{}", crate::style::amber(warning));
+    }
+    if let Some(text) = &authorized.confirmation {
+        println!("{}", crate::style::bold(text));
+    }
     let mut writer = crate::engine::gates::ungated_for_tests(dev);
-    BundleFlash::execute(&Pioneer::new(), &mut writer, req, installed)
+    pioneer.execute(&mut writer, &authorized)
 }
 
 /// A signed image of `chip` (`MTEKMT1959` / `MTEKMT1939`) with the stored boot
@@ -607,7 +623,6 @@ fn mtk_request(image: Vec<u8>, execute: bool, backup: Option<PathBuf>) -> FlashR
         drive_model: "BU40N".into(),
         verbose: false,
         predump_out: backup,
-        allow_crossflash: false,
     }
 }
 
@@ -1225,7 +1240,6 @@ fn pioneer_request(input: Vec<u8>, kind: &'static FileFormat, execute: bool) -> 
         drive_model: "BD-RW   BDR-TEST".into(),
         verbose: false,
         predump_out: None,
-        allow_crossflash: false,
     }
 }
 
@@ -1255,22 +1269,19 @@ fn golden_flash_dry_run() {
             mtk_request(vec![0u8; 1024], false, None),
         ),
     ] {
-        let (outcome, transcript) = drive_run(mtk_drive(), |d| crate::engine::flash(d, &Mtk, &req));
+        let (outcome, transcript) = drive_run(mtk_drive(), |d| engine_flash(d, &Mtk, &req));
         g.case(title, &outcome, Some(&transcript));
     }
 
     let bundle = archive(&pioneer_pair(false, 0), false);
     let mut verbose = pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false);
     verbose.verbose = true;
-    let mut crossflash = pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false);
-    crossflash.allow_crossflash = true;
     for (title, req) in [
         (
             "Pioneer dry run: signed Kernel+Normal bundle",
             pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false),
         ),
         ("Pioneer dry run: bundle verbose", verbose),
-        ("Pioneer dry run: bundle with crossflash", crossflash),
         (
             "Pioneer dry run: header-only bundle",
             pioneer_request(header_only_bundle(), &PIONEER_PACKAGE, false),
@@ -1300,14 +1311,14 @@ fn golden_flash_dry_run() {
         ),
     ] {
         let (outcome, transcript) = drive_run(MockScsiDevice::pioneer(), |d| {
-            crate::engine::flash(d, &Pioneer::new(), &req)
+            engine_flash(d, &Pioneer::new(), &req)
         });
         g.case(title, &outcome, Some(&transcript));
     }
 
     // A Pioneer bundle against an MTK drive and an MTK image against Pioneer.
     let req = pioneer_request(bundle, &PIONEER_PACKAGE, false);
-    let (outcome, transcript) = drive_run(mtk_drive(), |d| crate::engine::flash(d, &Mtk, &req));
+    let (outcome, transcript) = drive_run(mtk_drive(), |d| engine_flash(d, &Mtk, &req));
     g.case(
         "MTK drive given a Pioneer bundle",
         &outcome,
@@ -1331,7 +1342,7 @@ fn golden_flash_execute() {
     let rollback = dir.join("mtk_rollback.tar");
     let req = mtk_request(image.clone(), true, Some(rollback.clone()));
     let echoing = || MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    let (outcome, transcript) = drive_run(echoing(), |d| crate::engine::flash(d, &Mtk, &req));
+    let (outcome, transcript) = drive_run(echoing(), |d| engine_flash(d, &Mtk, &req));
     g.case(
         "MTK execute: .bin with pre-flash backup",
         &outcome,
@@ -1346,9 +1357,7 @@ fn golden_flash_execute() {
     // MTK: the drive does not echo what was written -> read-back verify fails.
     let mismatch = dir.join("mtk_rollback_mismatch.tar");
     let req_mismatch = mtk_request(image.clone(), true, Some(mismatch.clone()));
-    let (outcome, transcript) = drive_run(mtk_drive(), |d| {
-        crate::engine::flash(d, &Mtk, &req_mismatch)
-    });
+    let (outcome, transcript) = drive_run(mtk_drive(), |d| engine_flash(d, &Mtk, &req_mismatch));
     g.case(
         "MTK execute: read-back mismatch",
         &outcome,
@@ -1363,7 +1372,7 @@ fn golden_flash_execute() {
     restore.input_format = &MTK_LEGACY_TAR;
     restore.drive_model = "BD-RE BU40N".into();
     let dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    let (outcome, transcript) = drive_run(dev, |d| crate::engine::flash(d, &Mtk, &restore));
+    let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &restore));
     g.case(
         "MTK execute: restore the saved .tar",
         &outcome,
@@ -1387,7 +1396,7 @@ fn golden_flash_execute() {
             mtk_drive().with_tray_open(),
         ),
     ] {
-        let (outcome, transcript) = drive_run(dev, |d| crate::engine::flash(d, &Mtk, &req));
+        let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
         g.case(title, &outcome, Some(&transcript));
     }
     g.file(
@@ -1432,8 +1441,7 @@ fn golden_flash_execute() {
         } else {
             Box::new(Pioneer::new())
         };
-        let (outcome, transcript) =
-            drive_run(dev, |d| crate::engine::flash(d, family.as_ref(), &req));
+        let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, family.as_ref(), &req));
         g.case(title, &outcome, Some(&transcript));
     }
     g.file(
@@ -1441,11 +1449,9 @@ fn golden_flash_execute() {
         &dir.join("pioneer_rollback.tar"),
     );
 
-    // Pioneer: the live bundle executor itself (`BundleFlash::execute`), driven
-    // against a stateful synthetic receiver, with the installed rollback the
-    // engine would have captured. This is the deepest deterministic stage: a
-    // full engine::flash needs a replayable firmware-read surface for the
-    // pre-flash backup, which no existing mock provides for these bundles.
+    // Pioneer's post-backup stages (authorize, then execute) against a stateful
+    // synthetic receiver, given the installed rollback the engine would have
+    // captured; no mock replays a backup surface for these packages.
     for (title, restore) in [
         (
             "Pioneer flash_bundle: plain update (no kernel patch)",
@@ -1888,7 +1894,7 @@ fn golden_mtk_flash_input_refusals() {
     ];
     for (title, image) in inputs {
         let req = mtk_request(image.clone(), false, None);
-        let (outcome, transcript) = drive_run(mtk_drive(), |d| crate::engine::flash(d, &Mtk, &req));
+        let (outcome, transcript) = drive_run(mtk_drive(), |d| engine_flash(d, &Mtk, &req));
         g.case(
             &format!("MTK dry run: {title}"),
             &outcome,
@@ -1902,7 +1908,7 @@ fn golden_mtk_flash_input_refusals() {
         ("tray open", mtk_drive().with_tray_open()),
     ] {
         let req = mtk_request(good.clone(), false, None);
-        let (outcome, transcript) = drive_run(dev, |d| crate::engine::flash(d, &Mtk, &req));
+        let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
         g.case(
             &format!("MTK dry run: {title}"),
             &outcome,
@@ -1918,8 +1924,7 @@ fn golden_mtk_flash_input_refusals() {
         ("tray open", MockScsiDevice::pioneer().with_tray_open()),
     ] {
         let req = pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false);
-        let (outcome, transcript) =
-            drive_run(dev, |d| crate::engine::flash(d, &Pioneer::new(), &req));
+        let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Pioneer::new(), &req));
         g.case(
             &format!("Pioneer dry run: {title}"),
             &outcome,
@@ -1967,7 +1972,7 @@ fn header_only_kernel(sat: &str, kernel_tag: &str) -> Vec<u8> {
 
 #[test]
 fn golden_pioneer_plan_and_gates() {
-    use crate::backends::pioneer::{check_plan_executable, resolve_flash_plan};
+    use crate::backends::pioneer::{resolve_flash_plan, routing_warnings};
     let mut g = Golden::default();
 
     // resolve_flash_plan / check_plan_executable over installed x target.
@@ -1995,8 +2000,13 @@ fn golden_pioneer_plan_and_gates() {
             match resolve_flash_plan(backup.as_deref(), None, Some(&target)) {
                 Ok(plan) => {
                     println!("plan: {plan:?}");
-                    match check_plan_executable(&plan) {
-                        Ok(()) => println!("executable: yes"),
+                    match routing_warnings(&plan) {
+                        Ok(warnings) => {
+                            for warning in warnings {
+                                eprintln!("{}", crate::style::amber(&warning));
+                            }
+                            println!("executable: yes")
+                        }
                         Err(e) => println!("executable: no: {e:#}"),
                     }
                 }
@@ -2071,8 +2081,7 @@ fn golden_pioneer_plan_and_gates() {
             ("Kernel+Normal bundle", &target_bundle),
             ("bare Normal", &target_normal),
         ] {
-            let outcome =
-                run(|| FlashFacet::verify_preflash_backup(&Pioneer::new(), backup, input));
+            let outcome = run(|| crate::backends::pioneer::verify_preflash_backup(backup, input));
             g.case(
                 &format!("verify_preflash_backup: {title} vs {input_title}"),
                 &outcome,
@@ -2181,17 +2190,11 @@ fn golden_pioneer_flash_bundle_failures() {
     check("pioneer_flash_bundle_failures", g);
 }
 
-// ---------------------------------------------------------------------------
-// Parity with the v0.11.2 baseline
-// ---------------------------------------------------------------------------
-//
-// `tests/golden/v0.11.2/` holds the same scenarios recorded with the same
-// harness against the v0.11.2 tag (only the COMPAT shims differ). Pioneer
-// behaviour must be byte-identical to it. MediaTek behaviour may differ only
-// where `tests/golden/INTENDED_CHANGES.md` lists the exact line, under its
-// golden file and scenario, with an allowed reason.
+// ---- Parity with the v0.11.2 baseline (same harness, COMPAT shims only) ----
 
-/// Reasons a MediaTek line may differ from v0.11.2.
+/// Reasons a MediaTek line may differ from v0.11.2. `tests/golden/v0.11.2/`
+/// was recorded at that tag; Pioneer scenarios must match it byte for byte,
+/// and a MediaTek line may differ only where `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7"];
 
 /// Split a golden file into `(scenario title, lines)` sections.
@@ -2387,3 +2390,7 @@ fn golden_parity_with_0_11_2() {
     }
     assert!(problems.is_empty(), "\n{}\n", problems.join("\n"));
 }
+
+#[cfg(test)]
+#[path = "flash_tripwire_tests.rs"]
+mod flash_tripwires;

@@ -41,10 +41,23 @@ pub fn analyze(request: &Request, control: &Control) -> anyhow::Result<ResultVie
 #[derive(Clone)]
 pub enum Job {
     Info,
-    Analysis { request: Request, control: Control },
-    InfoFile { input: PathBuf },
-    Backup { out: PathBuf, replace: bool },
-    Dump { out: PathBuf, replace: bool },
+    Analysis {
+        request: Request,
+        control: Control,
+    },
+    InfoFile {
+        input: PathBuf,
+    },
+    Backup {
+        out: PathBuf,
+        replace: bool,
+    },
+    Dump {
+        out: PathBuf,
+        replace: bool,
+    },
+    /// The read-only flash plan shown before consent; no backup, no writes.
+    PlanFlash(freemkv_flash::workflow::FlashOptions),
     Flash(freemkv_flash::workflow::FlashOptions),
     Recovery(freemkv_flash::workflow::RecoveryOptions),
 }
@@ -74,12 +87,25 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
             options.device = Some(device.to_string());
             workflow::recover(options)
         }
+        Job::PlanFlash(options) => plan_flash(device, options).map(drop),
+        // The user confirmed the plan before this job started; the backend's
+        // confirmation text after `authorize` is logged, not asked again.
         Job::Flash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
-            workflow::flash(options)
+            workflow::flash(options, &mut workflow::Preconfirmed)
         }
     }
+}
+
+/// The flash plan for `device`: the dry run's checks and plan, as text.
+pub fn plan_flash(
+    device: &str,
+    options: &freemkv_flash::workflow::FlashOptions,
+) -> anyhow::Result<Vec<String>> {
+    let mut options = options.clone();
+    options.device = Some(device.to_string());
+    freemkv_flash::workflow::plan_flash(&options)
 }
 
 /// Stream the shared workflow's information, warnings and progress on every OS.

@@ -55,6 +55,20 @@ fn last_job(app: &App) -> &(String, String, Job) {
         .expect("a job was started")
 }
 
+/// Flash now runs the read-only plan first; let it pass with `plan` so the
+/// confirmation opens.
+fn plan_passes(app: &mut App) {
+    let (label, _, job) = last_job(app);
+    assert_eq!(label, "Flash plan");
+    assert!(matches!(job, Job::PlanFlash(o) if !o.acknowledged_risk));
+    let worker = app.worker.take().unwrap();
+    worker
+        .send(Msg::Plan(vec!["== flash plan ==".into(), String::new()]))
+        .unwrap();
+    worker.send(Msg::Done(Ok(()))).unwrap();
+    app.poll();
+}
+
 fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
     app.worker.take().unwrap().send(Msg::Done(result)).unwrap();
     app.poll()
@@ -220,9 +234,19 @@ fn flash_requires_fresh_acknowledgement_and_explicit_confirmation() {
     app.task = Task::Flash;
     app.flash_input = Some("firmware.bin".into());
     app.risk_ack = true;
-    assert!(app.dispatch(Input::FlashNow).is_empty());
-    assert!(!app.running(), "Flash now only opens the confirmation");
+    assert_eq!(app.dispatch(Input::FlashNow), [Effect::StartTicking]);
+    assert!(app.view().confirm.is_none(), "the plan runs before consent");
+    plan_passes(&mut app);
+    assert!(!app.running(), "a passing plan only opens the confirmation");
     let confirm = app.view().confirm.expect("confirmation sheet");
+    assert_eq!(
+        confirm.details,
+        [
+            "Drive: drive-a  Drive A",
+            "Image: firmware.bin",
+            "== flash plan =="
+        ]
+    );
     assert_eq!(confirm.title, "Confirm flash");
     assert_eq!(confirm.danger, FLASH_DANGER);
     assert_eq!(confirm.ack_text, RISK_ACK);
@@ -260,11 +284,30 @@ fn cancelled_confirmation_runs_nothing_and_clears_consent() {
     let mut app = one_drive();
     app.flash_input = Some("firmware.bin".into());
     app.dispatch(Input::FlashNow);
+    plan_passes(&mut app);
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::CancelConfirm);
     assert!(app.view().confirm.is_none() && !app.risk_ack && !app.running());
     assert!(app.dispatch(Input::Confirm).is_empty());
-    assert!(app.dry_run.as_ref().unwrap().is_empty());
+    assert_eq!(app.dry_run.as_ref().unwrap().len(), 1, "only the plan ran");
+}
+
+#[test]
+fn a_refused_plan_opens_no_confirmation() {
+    let mut app = one_drive();
+    app.flash_input = Some("firmware.bin".into());
+    app.dispatch(Input::FlashNow);
+    finish(
+        &mut app,
+        Err("image fails its AES-CMAC integrity check".into()),
+    );
+    assert!(app.view().confirm.is_none() && app.pending.is_none());
+    assert_eq!(
+        app.failure.as_deref(),
+        Some("image fails its AES-CMAC integrity check")
+    );
+    assert!(app.dispatch(Input::Confirm).is_empty());
+    assert_eq!(app.dry_run.as_ref().unwrap().len(), 1, "only the plan ran");
 }
 
 #[test]
@@ -294,6 +337,8 @@ fn confirmation_freezes_target_and_requires_fresh_consent() {
     app.risk_ack = true;
     app.dispatch(Input::FlashNow);
     app.dispatch(Input::SelectDrive(1));
+    plan_passes(&mut app);
+    app.dispatch(Input::SelectDrive(1));
     app.dispatch(Input::Refresh);
     assert_eq!(app.device, "drive-a", "drive bar is locked under the sheet");
     assert_eq!(app.pending.as_ref().unwrap().device, "drive-a");
@@ -315,6 +360,7 @@ fn drive_choice_and_confirmation_show_the_os_name_of_identical_drives() {
     assert_eq!(bar.items[1].tooltip, r"\\.\CdRom1");
     app.flash_input = Some("firmware.bin".into());
     app.dispatch(Input::FlashNow);
+    plan_passes(&mut app);
     let confirm = app.view().confirm.unwrap();
     assert_eq!(
         confirm.details[0],

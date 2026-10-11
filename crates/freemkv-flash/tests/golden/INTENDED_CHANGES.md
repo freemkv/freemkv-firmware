@@ -37,6 +37,12 @@ both the current and the v0.11.2 sets:
 * pioneer_flash_bundle_failures.txt: `Pioneer flash_bundle: --recover`,
   `Pioneer flash_bundle: --force`
 
+removed in phase 3: `FlashRequest.allow_crossflash` was always false (the CLI
+and GUI never set it), so its waiver was unreachable and is deleted. The one
+scenario that set it was dropped from both sets:
+
+* flash_dry_run.txt: `Pioneer dry run: bundle with crossflash`
+
 Regenerate the skeleton after an intentional change with
 `FREEMKV_BLESS_INTENDED=1 cargo test -p freemkv-flash golden_parity`, then set
 the `reason:` of any `UNCLASSIFIED` section by hand.
