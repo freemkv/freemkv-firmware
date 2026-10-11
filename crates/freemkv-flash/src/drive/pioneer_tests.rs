@@ -1197,3 +1197,44 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
         assert!(validate_kernel_normal(&pair.kernel, &damaged).is_err());
     }
 }
+
+// ---- `info` presentation order and snapshot cost ----------------------------
+
+#[test]
+fn info_prints_pioneer_identity_before_region_and_reads_snapshot_once() {
+    use std::{cell::RefCell, rc::Rc};
+    let mut dev = MockScsiDevice::pioneer();
+    let drive = for_family(Family::Pioneer);
+    let labels = Rc::new(RefCell::new(Vec::<String>::new()));
+    let sink = labels.clone();
+    crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Field { label, .. } = event {
+                sink.borrow_mut().push(label);
+            }
+        },
+        || crate::engine::info(&mut dev, drive.as_ref()).expect("info"),
+    );
+    let labels = labels.borrow();
+    let at = |names: &[&str]| {
+        labels
+            .iter()
+            .position(|l| names.contains(&l.as_str()))
+            .unwrap_or_else(|| panic!("none of {names:?} in {labels:?}"))
+    };
+    let interface = at(&["Interface type"]);
+    let identity = at(&["Hardware type", "Pioneer identity"]);
+    let region = at(&["RPC scheme", "DVD region"]);
+    let quiet = at(&["Quiet Drive"]);
+    assert!(
+        interface < identity && identity < region && region < quiet,
+        "unexpected order: {labels:?}"
+    );
+    // MODE SENSE(10) page 0x2A is read only by the pioneer-optical snapshot.
+    let snapshots = dev
+        .reads
+        .iter()
+        .filter(|c| c.first() == Some(&0x5A) && c.get(2) == Some(&0x2A))
+        .count();
+    assert_eq!(snapshots, 1, "Device::info() must run once per `info`");
+}
