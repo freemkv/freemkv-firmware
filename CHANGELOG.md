@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   image's boot page must be one a known OEM build stores.
 - `info` names the drive's chipset; the MediaTek recipe reads "MT19xx (proven
   on MT1959)".
+- `info <file>` reports a corrupt MediaTek integrity table as INVALID instead
+  of unsigned, and drive- and file-derived text is sanitized before it reaches
+  the terminal.
 - Move the MediaTek protocol into the new `mediatek-optical` crate, mirroring
   `pioneer-optical`. The flasher engine no longer contains family-specific code:
   file reports, crossflash notes, vendor `info` fields, input classification
