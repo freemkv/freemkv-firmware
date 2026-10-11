@@ -33,7 +33,7 @@ fn production_sources() -> Vec<Source> {
                 continue;
             }
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            if !name.ends_with(".rs") || name.ends_with("_tests.rs") || name == "tests.rs" {
+            if !scanned_name(&name) {
                 continue;
             }
             let raw = fs::read_to_string(&path).unwrap();
@@ -50,39 +50,87 @@ fn production_sources() -> Vec<Source> {
     out
 }
 
-/// The source with every `#[cfg(test)]` item removed: a block, or an item,
-/// field or statement that ends at a `;` or `,` outside brackets before any `{`.
+/// Whether [`production_sources`] scans a file of this name: Rust source that
+/// is not a test module.
+fn scanned_name(name: &str) -> bool {
+    name.ends_with(".rs") && !name.ends_with("_tests.rs") && name != "tests.rs"
+}
+
+/// The source with every `#[cfg(test)]` item removed. An item with a body ends
+/// at its block; one without (a statement, a field, a `mod x;`) at the first
+/// `;` outside brackets, or `,` outside brackets and generics, or where its
+/// enclosing list closes. Comments and literals are skipped, so a `#[cfg(test)]`
+/// in a doc comment strips nothing and a `;` in a string ends nothing.
 fn without_test_items(src: &str) -> String {
+    const ATTR: &str = "#[cfg(test)]";
+    let b: Vec<char> = src.chars().collect();
+    let attr: Vec<char> = ATTR.chars().collect();
     let mut out = String::new();
-    let mut rest = src;
-    while let Some(i) = rest.find("#[cfg(test)]") {
-        out.push_str(&rest[..i]);
-        let after = &rest[i + "#[cfg(test)]".len()..];
-        let mut nesting = 0i32;
-        let mut end = after.len();
-        let mut prev = ' ';
-        for (off, c) in after.char_indices() {
-            match c {
-                '(' | '[' => nesting += 1,
-                '<' if prev != '-' && prev != '=' => nesting += 1,
-                ')' | ']' => nesting -= 1,
-                '>' if prev != '-' && prev != '=' => nesting -= 1,
-                ';' | ',' if nesting <= 0 => {
-                    end = off + 1;
-                    break;
-                }
-                '{' => {
-                    end = block_end(after, off);
-                    break;
-                }
-                _ => {}
-            }
-            prev = c;
+    let mut i = 0;
+    while i < b.len() {
+        if let Some((end, _)) = literal_at(&b, i) {
+            out.extend(&b[i..end]);
+            i = end;
+        } else if b[i..].starts_with(&attr) {
+            i = test_item_end(&b, i + attr.len());
+        } else {
+            out.push(b[i]);
+            i += 1;
         }
-        rest = &after[end..];
     }
-    out.push_str(rest);
     out
+}
+
+/// The index just past the item that starts at `start` (after its
+/// `#[cfg(test)]`). `<` counts as a bracket only when it opens generics
+/// (`Option<`, `::<`), never as a comparison (`1 < 2`).
+fn test_item_end(b: &[char], start: usize) -> usize {
+    let (mut depth, mut angle) = (0i32, 0i32);
+    let mut i = start;
+    while i < b.len() {
+        if let Some((end, _)) = literal_at(b, i) {
+            i = end;
+            continue;
+        }
+        let prev = if i > 0 { b[i - 1] } else { ' ' };
+        match b[i] {
+            '(' | '[' => depth += 1,
+            ')' | ']' | '}' if depth == 0 => return i,
+            ')' | ']' => depth -= 1,
+            '<' if prev.is_alphanumeric() || prev == '_' || prev == ':' => angle += 1,
+            '>' if angle > 0 && !matches!(prev, '-' | '=' | ' ') => angle -= 1,
+            ';' if depth == 0 => return i + 1,
+            ',' if depth == 0 && angle == 0 => return i + 1,
+            '{' if depth == 0 => return literal_block_end(b, i),
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
+}
+
+/// The index just past the `}` matching the `{` at `open`, skipping literals.
+fn literal_block_end(b: &[char], open: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < b.len() {
+        if let Some((end, _)) = literal_at(b, i) {
+            i = end;
+            continue;
+        }
+        match b[i] {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
 }
 
 /// The offset just past the `}` matching the `{` at `open`.
@@ -103,6 +151,97 @@ fn block_end(text: &str, open: usize) -> usize {
     text.len()
 }
 
+/// A comment, string or char literal in source.
+enum Literal {
+    Comment,
+    Str(String),
+    Char,
+}
+
+/// The comment or literal starting at `b[i]`, with the index just past it:
+/// `//` and nested `/* */` comments; `"…"`, `b"…"` and `c"…"` strings;
+/// `r"…"`, `r#"…"#`, `br"…"`, `br#"…"#`, `cr"…"` and `cr#"…"#` raw strings;
+/// and `'x'`, `'\''` and `b'x'` char literals (a lifetime `'a` is code).
+fn literal_at(b: &[char], i: usize) -> Option<(usize, Literal)> {
+    let at = |k: usize| b.get(k).copied();
+    let starts_token = !ident_char(b, i);
+    match (at(i)?, at(i + 1)) {
+        ('/', Some('/')) => {
+            let end = (i..b.len()).find(|&k| b[k] == '\n').unwrap_or(b.len());
+            Some((end, Literal::Comment))
+        }
+        ('/', Some('*')) => {
+            let (mut depth, mut k) = (0, i);
+            while k < b.len() {
+                if b[k] == '/' && at(k + 1) == Some('*') {
+                    depth += 1;
+                    k += 2;
+                } else if b[k] == '*' && at(k + 1) == Some('/') {
+                    depth -= 1;
+                    k += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    k += 1;
+                }
+            }
+            Some((k.min(b.len()), Literal::Comment))
+        }
+        ('"', _) => Some(quoted(b, i + 1)),
+        ('b' | 'c', Some('"')) if starts_token => Some(quoted(b, i + 2)),
+        ('r', Some('"' | '#')) if starts_token => raw(b, i + 1),
+        ('b' | 'c', Some('r')) if starts_token => raw(b, i + 2),
+        ('b', Some('\'')) if starts_token => Some((char_end(b, i + 1), Literal::Char)),
+        ('\'', _) if is_char_literal(b, i) => Some((char_end(b, i), Literal::Char)),
+        _ => None,
+    }
+}
+
+/// The escaped string whose contents start at `b[i]`.
+fn quoted(b: &[char], mut i: usize) -> (usize, Literal) {
+    let mut s = String::new();
+    while i < b.len() && b[i] != '"' {
+        if b[i] == '\\' {
+            s.push(b[i]);
+            i += 1;
+        }
+        if i < b.len() {
+            s.push(b[i]);
+        }
+        i += 1;
+    }
+    ((i + 1).min(b.len()), Literal::Str(s))
+}
+
+/// The raw string whose `#`s or opening quote start at `b[i]`; `None` for a raw
+/// identifier (`r#match`) or a plain identifier.
+fn raw(b: &[char], i: usize) -> Option<(usize, Literal)> {
+    let hashes = b[i..].iter().take_while(|&&c| c == '#').count();
+    if b.get(i + hashes) != Some(&'"') {
+        return None;
+    }
+    let open = i + hashes + 1;
+    let closes = |k: usize| b[k] == '"' && (1..=hashes).all(|h| b.get(k + h) == Some(&'#'));
+    let close = (open..b.len()).find(|&k| closes(k)).unwrap_or(b.len());
+    let end = (close + 1 + hashes).min(b.len());
+    Some((end, Literal::Str(b[open..close].iter().collect())))
+}
+
+/// The index just past the char literal whose opening quote is `b[i]`.
+fn char_end(b: &[char], i: usize) -> usize {
+    let mut k = i + 1;
+    if b.get(k) == Some(&'\\') {
+        k += 2;
+    } else {
+        k += 1;
+    }
+    while k < b.len() && b[k] != '\'' {
+        k += 1;
+    }
+    (k + 1).min(b.len())
+}
+
 /// Split Rust source into code (comments, strings and char literals replaced
 /// by spaces) and the contents of its string literals.
 fn lex(src: &str) -> (String, Vec<String>) {
@@ -110,78 +249,22 @@ fn lex(src: &str) -> (String, Vec<String>) {
     let (mut code, mut strings) = (String::new(), Vec::new());
     let mut i = 0;
     while i < b.len() {
-        let c = b[i];
-        let next = b.get(i + 1).copied();
-        if c == '/' && next == Some('/') {
-            while i < b.len() && b[i] != '\n' {
-                i += 1;
-            }
-        } else if c == '/' && next == Some('*') {
-            let mut depth = 0;
-            while i < b.len() {
-                if b[i] == '/' && b.get(i + 1) == Some(&'*') {
-                    depth += 1;
-                    i += 2;
-                } else if b[i] == '*' && b.get(i + 1) == Some(&'/') {
-                    depth -= 1;
-                    i += 2;
-                    if depth == 0 {
-                        break;
+        match literal_at(&b, i) {
+            Some((end, literal)) => {
+                match literal {
+                    Literal::Comment => code.push(' '),
+                    Literal::Str(s) => {
+                        strings.push(s);
+                        code.push_str(" \"\" ");
                     }
-                } else {
-                    i += 1;
+                    Literal::Char => code.push_str(" ' ' "),
                 }
+                i = end;
             }
-            code.push(' ');
-        } else if c == 'r' && matches!(next, Some('"') | Some('#')) && !ident_char(&b, i) {
-            let mut j = i + 1;
-            let mut hashes = 0;
-            while b.get(j) == Some(&'#') {
-                hashes += 1;
-                j += 1;
-            }
-            if b.get(j) != Some(&'"') {
-                code.push(c);
-                i += 1;
-                continue;
-            }
-            let close: String = std::iter::once('"')
-                .chain("#".repeat(hashes).chars())
-                .collect();
-            let rest: String = b[j + 1..].iter().collect();
-            let end = rest.find(&close).unwrap_or(rest.len());
-            strings.push(rest[..end].to_string());
-            i = j + 1 + rest[..end].chars().count() + close.chars().count();
-            code.push_str(" \"\" ");
-        } else if c == '"' {
-            let mut s = String::new();
-            i += 1;
-            while i < b.len() && b[i] != '"' {
-                if b[i] == '\\' {
-                    s.push(b[i]);
-                    i += 1;
-                }
-                if i < b.len() {
-                    s.push(b[i]);
-                }
+            None => {
+                code.push(b[i]);
                 i += 1;
             }
-            i += 1;
-            strings.push(s);
-            code.push_str(" \"\" ");
-        } else if c == '\'' && is_char_literal(&b, i) {
-            i += 1;
-            if b[i] == '\\' {
-                i += 1;
-            }
-            while i < b.len() && b[i] != '\'' {
-                i += 1;
-            }
-            i += 1;
-            code.push_str(" ' ' ");
-        } else {
-            code.push(c);
-            i += 1;
         }
     }
     (code, strings)
@@ -191,6 +274,8 @@ fn ident_char(b: &[char], i: usize) -> bool {
     i > 0 && (b[i - 1].is_alphanumeric() || b[i - 1] == '_')
 }
 
+/// Whether the `'` at `b[i]` opens a char literal rather than a lifetime: an
+/// escape follows, or a single char and a closing quote.
 fn is_char_literal(b: &[char], i: usize) -> bool {
     matches!(
         (b.get(i + 1), b.get(i + 2)),
@@ -364,6 +449,182 @@ fn scanner_sees_through_comments_and_strings() {
     assert!(Path::new(&root()).join("src/lib.rs").exists());
 }
 
+#[test]
+fn lexer_ends_every_literal_form_where_it_ends() {
+    let (code, strings) = lex(r##"let a = b"\""; m_byte
+        let b = br"\"; m_raw_byte
+        let c = br#"x"y"#; m_raw_byte_hash
+        let d = c"\""; m_c_str
+        let e = cr"\"; m_raw_c
+        let f = cr#"\"#; m_raw_c_hash
+        let g = b'"'; m_byte_char
+        let h = '"'; m_char
+        let i = '\''; m_escaped_char
+        fn j<'a>(x: &'a u8) -> &'a u8 { m_lifetime }
+        let k = r#match; m_raw_ident
+        let l = r"\"; m_raw"##);
+    for marker in [
+        "m_byte",
+        "m_raw_byte",
+        "m_raw_byte_hash",
+        "m_c_str",
+        "m_raw_c",
+        "m_raw_c_hash",
+        "m_byte_char",
+        "m_char",
+        "m_escaped_char",
+        "m_lifetime",
+        "match",
+        "m_raw",
+    ] {
+        assert_eq!(word_hits(&code, marker).len(), 1, "{marker} hidden: {code}");
+    }
+    assert_eq!(
+        strings,
+        [r#"\""#, r"\", r#"x"y"#, r#"\""#, r"\", r"\", r"\"]
+    );
+}
+
+#[test]
+fn test_items_end_where_they_end() {
+    // A comparison is not a generic bracket.
+    assert_eq!(
+        without_test_items("#[cfg(test)]\nlet _p = 1 < 2;\nm1 { }"),
+        "\nm1 { }"
+    );
+    assert_eq!(
+        without_test_items("#[cfg(test)]\nconst X: bool = 3 > 2 && 1 < 2;\nfn m2() {}"),
+        "\nfn m2() {}"
+    );
+    // A `;` or `}` in a literal, or the attribute in a comment, ends nothing.
+    assert_eq!(
+        without_test_items("#[cfg(test)]\nconst S: &str = \"};\";\nm3"),
+        "\nm3"
+    );
+    let doc = "/// #[cfg(test)]\nfn m4() {}";
+    assert_eq!(without_test_items(doc), doc);
+    // A field: generics hold commas; the last field ends at the closing brace.
+    assert_eq!(
+        without_test_items("S {\n#[cfg(test)]\nf: HashMap<A, B>,\nm5: C }"),
+        "S {\n\nm5: C }"
+    );
+    assert_eq!(
+        without_test_items("S { a: A,\n#[cfg(test)]\ng: Vec<Vec<u8>> }\nm6"),
+        "S { a: A,\n}\nm6"
+    );
+    assert_eq!(
+        without_test_items("#[cfg(test)]\n#[path = \"x_tests.rs\"]\nmod tests;\nm7"),
+        "\nm7"
+    );
+}
+
+/// How production code loads a file: `#[path = ".."]`, `include!("..")` (whose
+/// target is `None` unless a plain literal) or `mod name;`.
+#[derive(Debug, PartialEq)]
+enum Link {
+    Path(String),
+    Include(Option<String>),
+    Mod(String),
+}
+
+/// Every [`Link`] in lexed `code`, whose string literals are `strings` in order.
+fn module_links(code: &str, strings: &[String]) -> Vec<Link> {
+    let tight = tighten(code);
+    // The literal whose `""` placeholder starts at `at`.
+    let literal = |at: usize| strings.get(tight[..at].matches("\"\"").count()).cloned();
+    let mut out = Vec::new();
+    for at in word_hits(&tight, "path") {
+        let rest = &tight[at + "path".len()..];
+        if tight[..at].ends_with("#[") && rest.starts_with("=\"\"") {
+            out.extend(literal(at + "path=".len()).map(Link::Path));
+        }
+    }
+    for at in word_hits(&tight, "include") {
+        let rest = &tight[at + "include".len()..];
+        if rest.starts_with('!') {
+            let plain = rest.starts_with("!(\"\")");
+            let target = plain.then(|| literal(at + "include!(".len())).flatten();
+            out.push(Link::Include(target));
+        }
+    }
+    for at in word_hits(&tight, "mod") {
+        let rest = &tight[at + "mod".len()..].trim_start();
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if !name.is_empty() && rest[name.len()..].starts_with(';') {
+            out.push(Link::Mod(name));
+        }
+    }
+    out
+}
+
+/// Production code loads only files the scan reads: every `#[path]` and
+/// `include!` outside `#[cfg(test)]` names an existing, scanned `.rs` file, and
+/// no `mod x;` loads a `tests.rs` or `*_tests.rs` file.
+#[test]
+fn production_code_loads_only_scanned_files() {
+    let mut problems = Vec::new();
+    let mut mods = 0;
+    for s in production_sources() {
+        let dir = root().join(&s.path);
+        let dir = dir.parent().unwrap();
+        let scanned = |target: &str| {
+            let file = dir.join(target);
+            let name = file.file_name().map(|n| n.to_string_lossy().into_owned());
+            file.is_file()
+                && file.starts_with(root().join("src"))
+                && name.is_some_and(|n| scanned_name(&n))
+        };
+        for link in module_links(&s.code, &s.strings) {
+            let ok = match &link {
+                Link::Path(target) | Link::Include(Some(target)) => scanned(target),
+                Link::Include(None) => false,
+                Link::Mod(name) => {
+                    mods += 1;
+                    scanned_name(&format!("{name}.rs"))
+                }
+            };
+            if !ok {
+                problems.push(format!("{}: {link:?} loads a file the scan skips", s.path));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert!(mods >= 10, "the scan found only {mods} module declarations");
+}
+
+#[test]
+fn module_links_find_every_loaded_file() {
+    let src = "#[cfg(test)]\n#[path = \"a_tests.rs\"]\nmod tests;\n\
+               #[path = \"x_tests.rs\"]\npub mod x;\n\
+               #[cfg(any())]\n#[path=\"y.txt\"] mod y;\n\
+               fn f() { include!(\"gen.in\"); include ! (concat!(env!(\"OUT_DIR\"), \"/g.rs\")); }\n\
+               const T: &str = include_str!(\"t.txt\");\n\
+               mod tests;\n\
+               pub(crate) mod engine;\n\
+               mod inline { }\n";
+    let (code, strings) = lex(&without_test_items(src));
+    assert_eq!(
+        module_links(&code, &strings),
+        [
+            Link::Path("x_tests.rs".into()),
+            Link::Path("y.txt".into()),
+            Link::Include(Some("gen.in".into())),
+            Link::Include(None),
+            Link::Mod("x".into()),
+            Link::Mod("y".into()),
+            Link::Mod("tests".into()),
+            Link::Mod("engine".into()),
+        ]
+    );
+    assert!(scanned_name("engine.rs"));
+    for name in ["x_tests.rs", "tests.rs", "y.txt", "gen.in"] {
+        assert!(!scanned_name(name), "{name}");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // R5: read_surface_map had no caller and is deleted with its map builder
 // ---------------------------------------------------------------------------
@@ -437,6 +698,39 @@ fn write_device_constructed_only_in_engine_gates() {
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
+/// A read grant's data-out patterns come only from `Backend::allowed_data_out`
+/// (`ReadDevice::new` is private), so only a registered backend may declare
+/// them: no other module implements `Backend` or `allowed_data_out`.
+#[test]
+fn read_grant_patterns_come_only_from_backends() {
+    let mut problems = Vec::new();
+    let mut backends = 0;
+    for s in production_sources() {
+        let backend_module = s.path.starts_with("src/backends/");
+        for at in word_hits(&s.code, "allowed_data_out") {
+            let defines = s.code[..at].trim_end().ends_with("fn");
+            if defines && !backend_module && s.path != "src/backend/mod.rs" {
+                problems.push(format!("{}: defines allowed_data_out", s.path));
+            }
+        }
+        for at in word_hits(&s.code, "impl") {
+            let end = s.code[at..]
+                .find(['{', ';'])
+                .map_or(s.code.len(), |e| at + e);
+            let head = strip_paths(&s.code[at..end]);
+            let words: Vec<&str> = head.split_whitespace().collect();
+            if words.windows(2).any(|w| w == ["Backend", "for"]) {
+                backends += 1;
+                if !backend_module {
+                    problems.push(format!("{}: implements Backend", s.path));
+                }
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert!(backends >= 2, "the scan found {backends} Backend impls");
+}
+
 /// The SCSI device layer: the trait, its implementations and wrappers, and
 /// the transport bridge. Everything above it writes through a grant.
 const DEVICE_LAYER: &[&str] = &[
@@ -452,7 +746,10 @@ const DEVICE_LAYER: &[&str] = &[
 /// pioneer-optical: `drive::enter_update` (its `Session::write`/`finish`),
 /// `drive::execute_update`, `drive::diagnostic_memory` (writes on `Data::Out`),
 /// `logging::set_logging_ram`/`_persistent`, `receiver::Prepared*::flash` (via a
-/// `FlashTransport`) and the settings writer `device::Device::set`.
+/// `FlashTransport`) and the settings writers `device::Device::set` and
+/// `device::Writable::write` (implemented by `QuietDrive`, `PureRead` and
+/// `DvdRegion`; `Device::write_setting` is crate-private, and the device and
+/// settings modules have no `set_*` setters).
 /// mediatek-optical: `drive::enter_update` (its `Session::write`/`finish`).
 const WRITE_MARKERS: &[&str] = &[
     ".command_out_strict(",
@@ -463,24 +760,32 @@ const WRITE_MARKERS: &[&str] = &[
     "set_logging_",
     "FlashTransport",
     "Device::set(",
+    "Writable",
 ];
 
 /// What reaches the drive but may run under a read grant: the read transport,
-/// a settings device over it, and the lenient data-out used for the read knock.
+/// a settings device over it (or lent by `standard::with_device`), and the
+/// lenient data-out used for the read knock.
 const READ_MARKERS: &[&str] = &[
     ".command_out(",
     "ScsiTransport::reads(",
     "Device::new(",
     "Device::with_settings_codec(",
+    "with_device(",
 ];
 
-/// What opens a settings device; with a `.set(` in the same function, that is a
-/// settings write whichever way `set` is spelled.
+/// What opens a settings device; with a [`SETTINGS_WRITES`] form in the same
+/// function, that is a settings write whichever way it is spelled.
 const SETTINGS_DEVICE: &[&str] = &[
     "Device::new(",
     "Device::with_settings_codec(",
     "with_device(",
 ];
+
+/// The settings-write calls on a pioneer-optical `Device`, matched after
+/// [`tighten`]: `d.set(..)`, `Device::set(..)`, `QuietDrive.write(d, ..)`,
+/// `Writable::write(..)`.
+const SETTINGS_WRITES: &[&str] = &[".set(", "::set(", ".write(", "::write(", "Writable"];
 
 /// The vendor write functions, which production code names only by path so
 /// the markers above see every call.
@@ -633,11 +938,41 @@ fn normalise(code: &str) -> String {
     out
 }
 
-/// Every fn in lexed `code` whose body holds a write or read marker.
-fn write_issuers(code: &str) -> Vec<Issuer> {
-    let code = normalise(code);
+/// `code` with whitespace removed except between two identifier characters,
+/// where one space stays: `d . set (` reads `d.set(`.
+fn tighten(code: &str) -> String {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(code.len());
+    let mut gap = false;
+    for c in code.chars() {
+        if c.is_whitespace() {
+            gap = true;
+            continue;
+        }
+        if gap && ident(c) && out.chars().next_back().is_some_and(ident) {
+            out.push(' ');
+        }
+        gap = false;
+        out.push(c);
+    }
+    out
+}
+
+/// A fn with a body in normalised code.
+struct FnItem {
+    name: String,
+    /// The `<...>` after the name, the parameters, and everything between `)`
+    /// and the body (return type and `where` clause).
+    generics: String,
+    params: String,
+    bounds: String,
+    body: String,
+}
+
+/// Every fn with a body in [`normalise`]d `code`.
+fn fn_items(code: &str) -> Vec<FnItem> {
     let mut out = Vec::new();
-    for at in word_hits(&code, "fn") {
+    for at in word_hits(code, "fn") {
         let rest = code[at + 2..].trim_start();
         let name: String = rest
             .chars()
@@ -678,20 +1013,88 @@ fn write_issuers(code: &str) -> Vec<Issuer> {
         if tail.find(';').is_some_and(|semi| semi < brace) {
             continue;
         }
-        let body = &tail[brace..block_end(tail, brace)];
-        // A helper handed the vendor settings `Device` counts too: `fn f(d: &mut Device<..>)`.
-        let settings_device = SETTINGS_DEVICE.iter().any(|m| has_marker(body, m))
-            || has_marker(&strip_paths(params), "Device<");
-        let settings_write = settings_device && body.contains(".set(");
-        let writes = settings_write || WRITE_MARKERS.iter().any(|m| has_marker(body, m));
-        if writes || READ_MARKERS.iter().any(|m| has_marker(body, m)) {
+        out.push(FnItem {
+            name,
+            generics: generics.to_string(),
+            params: params.to_string(),
+            bounds: tail[1..brace].to_string(),
+            body: tail[brace..block_end(tail, brace)].to_string(),
+        });
+    }
+    out
+}
+
+/// Every fn in lexed `code` whose body holds a write or read marker.
+fn write_issuers(code: &str) -> Vec<Issuer> {
+    let mut out = Vec::new();
+    for f in fn_items(&normalise(code)) {
+        let body = tighten(&f.body);
+        // A helper handed the vendor settings `Device` counts too, whether as a
+        // parameter, a returned closure's argument or a typed closure argument.
+        let signature = tighten(&strip_paths(&format!(
+            "{}({}){}",
+            f.generics, f.params, f.bounds
+        )));
+        let settings_device = SETTINGS_DEVICE.iter().any(|m| has_marker(&body, m))
+            || has_marker(&signature, "Device<")
+            || has_marker(&strip_paths(&body), "Device<");
+        let settings_write =
+            settings_device && SETTINGS_WRITES.iter().any(|m| has_marker(&body, m));
+        let writes = settings_write || WRITE_MARKERS.iter().any(|m| has_marker(&body, m));
+        if writes || READ_MARKERS.iter().any(|m| has_marker(&body, m)) {
             out.push(Issuer {
-                name,
-                generics: generics.to_string(),
-                params: params.to_string(),
-                bounds: tail[1..brace].to_string(),
+                name: f.name,
+                generics: f.generics,
+                params: f.params,
+                bounds: f.bounds,
                 writes,
             });
+        }
+    }
+    out
+}
+
+/// What a fn in lexed `code` lends: the [`HIDDEN_TYPES`] or `dyn ScsiDevice`
+/// named in a closure parameter's arguments (`impl FnOnce(&mut X)`, `F:
+/// Fn(X)`) or in its return type, as `(name, lent text)`. Every fn counts,
+/// whatever its visibility: a trait method needs no `pub`.
+fn lenders(code: &str) -> Vec<(String, String)> {
+    let lent = |s: &str| {
+        HIDDEN_TYPES.iter().any(|t| !word_hits(s, t).is_empty()) || s.contains("dyn ScsiDevice")
+    };
+    let mut out = Vec::new();
+    for f in fn_items(&normalise(code)) {
+        let sig = format!("{} {} {}", f.generics, f.params, f.bounds);
+        let mut handed = Vec::new();
+        for closure in ["Fn", "FnMut", "FnOnce"] {
+            for at in word_hits(&sig, closure) {
+                let rest = &sig[at + closure.len()..];
+                if rest.starts_with('(') {
+                    let mut depth = 0i32;
+                    let close = rest
+                        .char_indices()
+                        .find(|&(_, c)| {
+                            depth += match c {
+                                '(' => 1,
+                                ')' => -1,
+                                _ => 0,
+                            };
+                            depth == 0
+                        })
+                        .map_or(rest.len(), |(i, _)| i);
+                    handed.push(rest[1..close].to_string());
+                }
+            }
+        }
+        let ret = f.bounds.split(" where ").next().unwrap_or("");
+        if let Some((_, ret)) = ret.split_once("->") {
+            handed.push(ret.trim().to_string());
+        }
+        for h in handed.into_iter().filter(|h| lent(h)) {
+            out.push((
+                f.name.clone(),
+                h.split_whitespace().collect::<Vec<_>>().join(" "),
+            ));
         }
     }
     out
@@ -745,18 +1148,29 @@ fn hiding_types(code: &str) -> Vec<String> {
             out.push(flat(stmt));
         }
     }
-    for at in word_hits(code, "struct") {
-        let rest = &code[at..];
-        let end = match (rest.find('{'), rest.find(';')) {
-            (Some(b), Some(semi)) if b < semi => block_end(rest, b),
-            (Some(b), None) => block_end(rest, b),
-            (_, Some(semi)) => semi,
-            (None, None) => rest.len(),
-        };
-        let decl = &rest[..end.min(rest.len())];
-        let head = decl.find(['{', '(']).unwrap_or(decl.len());
-        if names(&decl[head..]) {
-            out.push(flat(&decl[..head]));
+    for kind in ["struct", "enum", "union"] {
+        for at in word_hits(code, kind) {
+            let rest = &code[at..];
+            let end = match (rest.find('{'), rest.find(';')) {
+                (Some(b), Some(semi)) if b < semi => block_end(rest, b),
+                (Some(b), None) => block_end(rest, b),
+                (_, Some(semi)) => semi,
+                (None, None) => rest.len(),
+            };
+            let decl = &rest[..end.min(rest.len())];
+            let head = decl.find(['{', '(']).unwrap_or(decl.len());
+            // Everything after the name, so a generic default hides nothing.
+            let name_end = kind.len()
+                + decl[kind.len()..]
+                    .find(|c: char| !(c.is_whitespace()))
+                    .unwrap_or(0);
+            let name_end = name_end
+                + decl[name_end..]
+                    .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .unwrap_or(decl.len() - name_end);
+            if names(&decl[name_end..]) {
+                out.push(flat(&decl[..head]));
+            }
         }
     }
     out
@@ -906,6 +1320,28 @@ fn write_markers_need_the_write_grant() {
 }
 
 #[test]
+fn settings_writes_through_a_lent_device_need_the_write_grant() {
+    let (names, refused) = scan(
+        "fn a(dev: &mut ReadDevice<'_>) {\n\
+             crate::standard::with_device(dev, |d| QuietDrive.write(d, QuietMode::Quiet, Persistence::Saved));\n\
+         }\n\
+         fn b(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d . set (QuietDrive, v, p)); }\n\
+         fn c(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d\n.set(QuietDrive, v, p)); }\n\
+         fn d(dev: &mut ReadDevice<'_>) { with_device(dev, |d| Writable::write(&PureRead, d, v, p)); }\n\
+         fn e(dev: &mut ReadDevice<'_>) { with_device(dev, |d| <DvdRegion as W>::write(&DvdRegion, d, v, p)); }\n\
+         fn f() -> impl FnOnce(&mut Device<'_, ScsiTransport<'_, '_>>) { |d| { d.set(QuietDrive, v, p); } }\n\
+         fn g(dev: &mut ReadDevice<'_>) { let w = |d: &mut device::Device<'_, T>| d.set(q, v, p); go(dev, w); }\n\
+         fn h(o: &Opened) { with_device(&mut ReadDevice::without_unlocks(o.raw()), |d| d.info()); }\n\
+         fn i(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d.get(DvdRegion)); }\n\
+         fn j(dev: &mut ReadDevice<'_>) { standard::with_device(dev, |d| d.settings()); }\n",
+    );
+    assert_eq!(names, ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]);
+    assert_eq!(refused, ["a", "b", "c", "d", "e", "f", "g", "h"]);
+    assert_eq!(tighten("d . set (q,\n v)"), "d.set(q,v)");
+    assert_eq!(tighten("pub fn  a"), "pub fn a");
+}
+
+#[test]
 fn write_issuer_scan_sees_through_lifetimes_turbofish_and_generics() {
     let (names, refused) = scan(
         "fn a<'a>(t: &'a mut ScsiTransport<'a, 'a>, w: &mut WriteDevice<'a>) { ScsiTransport::flash(&s); }\n\
@@ -967,7 +1403,10 @@ fn hiding_types_are_refused() {
          struct Holder<'a> { inner: &'a mut FlashTransport<'a> }\n\
          type Bytes = Vec<u8>;\n\
          struct Plain { n: u32, dev: ReadDeviceInfo }\n\
-         struct Unit;\n");
+         struct Unit;\n\
+         pub enum Hide<'a> { T(ScsiTransport<'a, 'a>), N }\n\
+         struct Defaulted<T = SharedDevice<'static>> { t: T }\n\
+         enum Plain2 { A, B(u8) }\n");
     assert_eq!(
         hiding_types(&code),
         [
@@ -975,6 +1414,8 @@ fn hiding_types_are_refused() {
             "type T = crate::transport::SharedDevice<'static>",
             "struct Wrap",
             "struct Holder<'a>",
+            "struct Defaulted<T = SharedDevice<'static>>",
+            "enum Hide<'a>",
         ]
     );
 }
@@ -1164,24 +1605,304 @@ fn pioneer_optical_stays_pinned() {
     );
 }
 
-/// Every mention of a [`HIDDEN_TYPES`] type outside the device layer, per file:
-/// the reviewed write executors and the standard settings reader. A new mention
-/// (an alias, enum, generic bound or wrapper the shape scans miss) fails here
-/// until reviewed and counted, so this list is closed-world.
-const DEVICE_TYPE_MENTIONS: &[(&str, &str, usize)] = &[
-    ("src/backends/mtk/flash.rs", "ScsiTransport", 2),
-    ("src/backends/mtk/flash.rs", "SharedDevice", 2),
-    ("src/backends/pioneer/dump.rs", "ScsiTransport", 2),
-    ("src/backends/pioneer/dump.rs", "SharedDevice", 2),
-    ("src/backends/pioneer/flash.rs", "FlashTransport", 2),
-    ("src/backends/pioneer/flash.rs", "ScsiTransport", 3),
-    ("src/backends/pioneer/flash.rs", "SharedDevice", 3),
-    ("src/backends/pioneer/recovery.rs", "ScsiTransport", 2),
-    ("src/backends/pioneer/recovery.rs", "SharedDevice", 2),
-    ("src/standard.rs", "Device", 3),
-    ("src/standard.rs", "ScsiTransport", 3),
-    ("src/standard.rs", "SharedDevice", 2),
+/// Device-layer items that hold or lend a device type, as `(file, item,
+/// reason)`: a [`hiding_types`] declaration or a [`lenders`] fn (`fn <name>
+/// lends <type>`). Anything else the layer exported could carry a device type
+/// past the census; an entry that matches nothing fails, so none goes stale.
+const DEVICE_LAYER_REVIEWED: &[(&str, &str, &str)] = &[
+    (
+        "src/backend/device.rs",
+        "fn scsi lends &mut dyn ScsiDevice",
+        "DeviceAccess::scsi lends the ReadDevice or WriteDevice it holds as a \
+         ScsiDevice, so that grant's own checks still apply to every command",
+    ),
+    (
+        "src/platform/adapter.rs",
+        "struct TransportDevice",
+        "holds libfreemkv's OS transport (also named ScsiTransport, a different \
+         type) below every grant; it never leaves the platform module",
+    ),
+    (
+        "src/platform/mod.rs",
+        "fn open lends Result<Box<dyn ScsiDevice>>",
+        "opens the raw OS device for the workflows, which hand it to the engine \
+         and registry; those reach a backend only through a ReadDevice or a \
+         gates grant, and a fn holding a marker beside a raw device is refused",
+    ),
+    (
+        "src/transport.rs",
+        "fn with lends &mut dyn ScsiDevice",
+        "SharedDevice::with lends back the device it wraps (outside the layer, \
+         always a grant), never a transport or a settings Device",
+    ),
+    (
+        "src/transport.rs",
+        "struct ScsiTransport<'a, 'd>",
+        "the transport's own definition, holding the SharedDevice it adapts",
+    ),
 ];
+
+#[test]
+fn device_layer_exports_only_reviewed_device_holders() {
+    let mut found = Vec::new();
+    for s in production_sources() {
+        if !DEVICE_LAYER.iter().any(|l| s.path.starts_with(l)) {
+            continue;
+        }
+        for h in hiding_types(&s.code) {
+            // Aliases are refused outright in `device_types_are_named_only_where_reviewed`.
+            if !h.starts_with("type ") {
+                found.push((s.path.clone(), h));
+            }
+        }
+        for (name, lent) in lenders(&s.code) {
+            found.push((s.path.clone(), format!("fn {name} lends {lent}")));
+        }
+    }
+    let reviewed = |(path, item): &(String, String)| {
+        DEVICE_LAYER_REVIEWED
+            .iter()
+            .any(|(p, i, _)| p == path && i == item)
+    };
+    let unreviewed: Vec<_> = found.iter().filter(|f| !reviewed(f)).collect();
+    assert!(
+        unreviewed.is_empty(),
+        "the device layer holds or lends a device type in an unreviewed item: {unreviewed:#?}"
+    );
+    for (path, item, _) in DEVICE_LAYER_REVIEWED {
+        assert!(
+            found.iter().any(|(p, i)| p == path && i == item),
+            "stale device-layer review: {path}: {item}"
+        );
+    }
+}
+
+#[test]
+fn lenders_find_closures_and_returns_that_hand_out_a_device() {
+    let (code, _) = lex("pub fn a<R>(d: &mut dyn ScsiDevice, f: impl FnOnce(&mut ScsiTransport<'_, '_>) -> R) -> R { x }\n\
+         pub(crate) fn b<F: FnMut(&SharedDevice<'_>)>(f: F) { x }\n\
+         fn c<F>(f: F) where F: Fn(&mut Device<'_, T>) { x }\n\
+         pub fn d() -> FlashTransport<'static> { x }\n\
+         pub fn e(&self, f: impl FnOnce(&mut dyn ScsiDevice)) { x }\n\
+         pub fn reads(dev: &SharedDevice<'_>) -> Self { x }\n\
+         pub fn writer(&mut self) -> Option<&mut WriteDevice<'_>> { x }\n\
+         pub fn info(dev: &mut dyn ScsiDevice) -> Result<Identity> { x }\n\
+         fn g(f: impl FnOnce((u8, u8), &mut ScsiTransport<'_, '_>)) { x }\n");
+    let names: Vec<_> = lenders(&code)
+        .into_iter()
+        .map(|(name, lent)| format!("{name}: {lent}"))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "a: &mut ScsiTransport<>",
+            "b: &SharedDevice<>",
+            "c: &mut Device<T>",
+            "d: FlashTransport<>",
+            "e: &mut dyn ScsiDevice",
+            "g: (u8, u8), &mut ScsiTransport<>",
+        ]
+    );
+}
+
+/// Every mention of a [`HIDDEN_TYPES`] type outside the device layer, keyed by
+/// file and enclosing item (see [`item_at`]): the reviewed write executors and
+/// the standard settings reader. A new mention (an alias, enum, generic bound
+/// or wrapper the shape scans miss) fails here until reviewed and counted, and
+/// keying by item means dropping a mention from one item (a `use` replaced by
+/// a full path) frees no slot for a new one, so this list is closed-world.
+const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
+    ("src/backends/mtk/flash.rs", "fn stream", "ScsiTransport", 1),
+    ("src/backends/mtk/flash.rs", "fn stream", "SharedDevice", 1),
+    ("src/backends/mtk/flash.rs", "use", "ScsiTransport", 1),
+    ("src/backends/mtk/flash.rs", "use", "SharedDevice", 1),
+    (
+        "src/backends/pioneer/dump.rs",
+        "fn enable_logging",
+        "ScsiTransport",
+        1,
+    ),
+    (
+        "src/backends/pioneer/dump.rs",
+        "fn enable_logging",
+        "SharedDevice",
+        1,
+    ),
+    ("src/backends/pioneer/dump.rs", "use", "ScsiTransport", 1),
+    ("src/backends/pioneer/dump.rs", "use", "SharedDevice", 1),
+    (
+        "src/backends/pioneer/flash.rs",
+        "fn execute_prepared",
+        "FlashTransport",
+        1,
+    ),
+    (
+        "src/backends/pioneer/flash.rs",
+        "fn execute_prepared",
+        "ScsiTransport",
+        2,
+    ),
+    (
+        "src/backends/pioneer/flash.rs",
+        "fn execute_prepared",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/pioneer/flash.rs",
+        "struct Runtime",
+        "SharedDevice",
+        1,
+    ),
+    ("src/backends/pioneer/flash.rs", "use", "FlashTransport", 1),
+    ("src/backends/pioneer/flash.rs", "use", "ScsiTransport", 1),
+    ("src/backends/pioneer/flash.rs", "use", "SharedDevice", 1),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "fn run",
+        "ScsiTransport",
+        1,
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "fn run",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "use",
+        "ScsiTransport",
+        1,
+    ),
+    ("src/backends/pioneer/recovery.rs", "use", "SharedDevice", 1),
+    ("src/standard.rs", "fn with_device", "Device", 2),
+    ("src/standard.rs", "fn with_device", "ScsiTransport", 2),
+    ("src/standard.rs", "fn with_device", "SharedDevice", 1),
+    ("src/standard.rs", "use", "Device", 1),
+    ("src/standard.rs", "use", "ScsiTransport", 1),
+    ("src/standard.rs", "use", "SharedDevice", 1),
+];
+
+/// Item keywords whose spans key the census.
+const ITEM_KINDS: &[&str] = &[
+    "fn",
+    "struct",
+    "enum",
+    "union",
+    "impl",
+    "trait",
+    "type",
+    "use",
+    "mod",
+    "const",
+    "static",
+    "macro_rules",
+];
+
+/// Every item in lexed `code` as `(start, end, label)`: the label is `use`,
+/// `impl <header without generics>`, or `<kind> <name>`. A keyword counts only
+/// in item position (after `;`, a brace, an attribute, `pub(..)` or a
+/// qualifier), so `impl Trait` in a signature and `*const T` are not items.
+fn items(code: &str) -> Vec<(usize, usize, String)> {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = Vec::new();
+    for kind in ITEM_KINDS {
+        for at in word_hits(code, kind) {
+            let mut before = code[..at].trim_end();
+            while let Some(word) = [
+                "pub", "unsafe", "async", "const", "extern", "\"\"", "default",
+            ]
+            .iter()
+            .find(|q| before.ends_with(**q) && !before[..before.len() - q.len()].ends_with(ident))
+            {
+                before = before[..before.len() - word.len()].trim_end();
+            }
+            if !(before.is_empty() || before.ends_with([';', '{', '}', ']', ')'])) {
+                continue;
+            }
+            let rest = &code[at + kind.len()..];
+            let name: String = rest
+                .trim_start_matches([' ', '\n', '\t', '!'])
+                .chars()
+                .take_while(|&c| ident(c))
+                .collect();
+            if *kind != "impl"
+                && *kind != "use"
+                && (name.is_empty() || ["fn", "unsafe", "async", "extern"].contains(&name.as_str()))
+            {
+                continue;
+            }
+            let end = item_end(code, at, *kind == "use");
+            let label = match *kind {
+                "use" => "use".to_string(),
+                "impl" => {
+                    let head = &code[at..end];
+                    let head = &head[..head.find(['{', ';']).unwrap_or(head.len())];
+                    let head = head.split(" where ").next().unwrap_or(head);
+                    let mut flat = String::new();
+                    let mut depth = 0;
+                    let mut prev = ' ';
+                    for c in head.chars() {
+                        match c {
+                            '<' => depth += 1,
+                            '>' if prev != '-' => depth -= 1,
+                            _ if depth == 0 => flat.push(c),
+                            _ => {}
+                        }
+                        prev = c;
+                    }
+                    flat.split_whitespace().collect::<Vec<_>>().join(" ")
+                }
+                _ => format!("{kind} {name}"),
+            };
+            out.push((at, end, label));
+        }
+    }
+    out
+}
+
+/// The offset just past the item starting at `at`: its block, or its `;`
+/// outside brackets (a `use` always ends at its `;`).
+fn item_end(code: &str, at: usize, is_use: bool) -> usize {
+    let mut depth = 0i32;
+    for (off, c) in code[at..].char_indices() {
+        match c {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth -= 1,
+            ';' if depth <= 0 || is_use => return at + off + 1,
+            '{' if depth <= 0 && !is_use => return block_end(code, at + off),
+            _ => {}
+        }
+    }
+    code.len()
+}
+
+/// The label of the innermost item in `items` holding offset `at`.
+fn item_at(items: &[(usize, usize, String)], at: usize) -> String {
+    items
+        .iter()
+        .filter(|(start, end, _)| (*start..*end).contains(&at))
+        .max_by_key(|(start, _, _)| *start)
+        .map_or_else(|| "(file)".to_string(), |(_, _, label)| label.clone())
+}
+
+/// `(item, type, count)` for every [`HIDDEN_TYPES`] mention in lexed `code`.
+fn device_type_census(code: &str) -> Vec<(String, String, usize)> {
+    let items = items(code);
+    let mut out: Vec<(String, String, usize)> = Vec::new();
+    for t in HIDDEN_TYPES {
+        for at in word_hits(code, t) {
+            let item = item_at(&items, at);
+            match out.iter_mut().find(|(i, ty, _)| *i == item && ty == t) {
+                Some(entry) => entry.2 += 1,
+                None => out.push((item, t.to_string(), 1)),
+            }
+        }
+    }
+    out.sort();
+    out
+}
 
 #[test]
 fn device_types_are_named_only_where_reviewed() {
@@ -1190,20 +1911,17 @@ fn device_types_are_named_only_where_reviewed() {
     for s in production_sources() {
         if DEVICE_LAYER.iter().any(|l| s.path.starts_with(l)) {
             // The layer defines these types; an alias exported from it would carry
-            // one past the per-file count unseen.
+            // one past the census unseen.
             aliases.extend(
                 hiding_types(&s.code)
                     .into_iter()
-                    .filter(|h| h.starts_with("type ") || h.contains(" type "))
+                    .filter(|h| h.starts_with("type "))
                     .map(|h| format!("{}: {h}", s.path)),
             );
             continue;
         }
-        for t in HIDDEN_TYPES {
-            let n = word_hits(&s.code, t).len();
-            if n > 0 {
-                seen.push((s.path.clone(), t.to_string(), n));
-            }
+        for (item, t, n) in device_type_census(&s.code) {
+            seen.push((s.path.clone(), item, t, n));
         }
     }
     assert!(
@@ -1213,11 +1931,58 @@ fn device_types_are_named_only_where_reviewed() {
     seen.sort();
     let mut expected: Vec<_> = DEVICE_TYPE_MENTIONS
         .iter()
-        .map(|(p, t, n)| (p.to_string(), t.to_string(), *n))
+        .map(|(p, i, t, n)| (p.to_string(), i.to_string(), t.to_string(), *n))
         .collect();
     expected.sort();
-    assert_eq!(
-        seen, expected,
-        "device types named outside the device layer changed; review the new use, then update DEVICE_TYPE_MENTIONS"
+    let added: Vec<_> = seen.iter().filter(|r| !expected.contains(r)).collect();
+    let gone: Vec<_> = expected.iter().filter(|r| !seen.contains(r)).collect();
+    assert!(
+        added.is_empty() && gone.is_empty(),
+        "device types named outside the device layer changed; review the new use, \
+         then update DEVICE_TYPE_MENTIONS\nnew: {added:#?}\ngone: {gone:#?}"
     );
+}
+
+#[test]
+fn device_type_census_keys_by_item() {
+    let census = |src: &str| device_type_census(&lex(src).0);
+    let before = census(
+        "use pioneer_optical::device::Device;\n\
+         pub fn with<R>(f: impl FnOnce(&mut Device<'_, T>) -> R) -> R { f(&mut Device::new(t)) }\n",
+    );
+    assert_eq!(
+        before,
+        [
+            ("fn with".to_string(), "Device".to_string(), 2),
+            ("use".to_string(), "Device".to_string(), 1),
+        ]
+    );
+    // The `use` replaced by full paths pays for a new wrapper: same per-file
+    // count, different items.
+    let traded = census(
+        "pub fn with<R>(f: impl FnOnce(&mut d::Device<'_, T>) -> R) -> R { f(&mut d::Device::new(t)) }\n\
+         #[cfg(any())]\npub enum Wrap<'a, T> { D(Device<'a, T>) }\n",
+    );
+    assert_eq!(
+        traded,
+        [
+            ("enum Wrap".to_string(), "Device".to_string(), 1),
+            ("fn with".to_string(), "Device".to_string(), 2),
+        ]
+    );
+    let (code, _) = lex(
+        "impl<'a> Foo<'a> for Bar<'a> where T: X { fn m(&self) { Device } }\n\
+         pub(crate) const fn k() -> *const SharedDevice { x }\n\
+         struct S { f: fn(u8) -> u8, d: ScsiTransport<'static, 'static> }\n",
+    );
+    assert_eq!(
+        device_type_census(&code),
+        [
+            ("fn k".to_string(), "SharedDevice".to_string(), 1),
+            ("fn m".to_string(), "Device".to_string(), 1),
+            ("struct S".to_string(), "ScsiTransport".to_string(), 1),
+        ]
+    );
+    let items = items(&code);
+    assert_eq!(item_at(&items, 0), "impl Foo for Bar");
 }

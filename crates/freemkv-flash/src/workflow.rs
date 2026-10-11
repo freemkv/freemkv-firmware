@@ -232,13 +232,13 @@ pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
     let resolved = registry::resolve(dev)?;
     let identity = match &resolved {
         Some(r) => r.identity.clone(),
-        None => crate::backend::read_identity(&mut ReadDevice::new(dev, &[])),
+        None => crate::backend::read_identity(&mut ReadDevice::without_unlocks(dev)),
     };
     // Identification errors only mean "not offered": a profile never fails
     // merely because a drive is unsupported.
     let recovery = registry::backends().find_map(|b| {
         let facet = b.recovery()?;
-        let found = facet.identify(&mut ReadDevice::new(dev, b.allowed_data_out()));
+        let found = facet.identify(&mut ReadDevice::for_backend(dev, b));
         matches!(found, Ok(Some(_))).then(|| b.descriptor())
     });
     let backend = resolved.as_ref().map(|r| r.backend);
@@ -322,10 +322,7 @@ fn backup_with_replace_inner(
     let out = match out {
         Some(o) => o,
         None => {
-            let id = handler.identity(&mut ReadDevice::new(
-                dev.as_mut(),
-                handler.allowed_data_out(),
-            ));
+            let id = handler.identity(&mut ReadDevice::for_backend(dev.as_mut(), handler));
             default_backup_name(&id, handler.backup().map(|b| b.format()), dump)?
         }
     };
@@ -407,9 +404,8 @@ fn open_flash(
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
     let input_format = registry::flash_input_format(handler, &args.input, &input)?
         .context("backend reads no firmware files")?;
-    let unlocks = handler.allowed_data_out();
     let drive_model = handler
-        .identity(&mut ReadDevice::new(dev.as_mut(), unlocks))
+        .identity(&mut ReadDevice::for_backend(dev.as_mut(), handler))
         .product;
     let predump_out = args.backup.clone().or_else(|| {
         handler
@@ -570,8 +566,9 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
             let Some(facet) = backend.recovery() else {
                 continue;
             };
-            let unlocks = backend.allowed_data_out();
-            if let Some(receiver) = facet.identify(&mut ReadDevice::new(dev.as_mut(), unlocks))? {
+            if let Some(receiver) =
+                facet.identify(&mut ReadDevice::for_backend(dev.as_mut(), backend))?
+            {
                 return engine::recover_identified(
                     dev.as_mut(),
                     backend,

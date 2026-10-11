@@ -6,6 +6,7 @@
 
 use anyhow::{bail, Result};
 
+use super::Backend;
 use crate::platform::{MediumStatus, ScsiDevice};
 
 /// A data-out command a backend declares, matched by CDB and payload.
@@ -60,8 +61,21 @@ pub struct ReadDevice<'d> {
 }
 
 impl<'d> ReadDevice<'d> {
-    /// Wrap `dev`, allowing only the data-out commands in `allowed`.
-    pub fn new(dev: &'d mut dyn ScsiDevice, allowed: &'static [CdbPattern]) -> Self {
+    /// Wrap `dev` for `backend`'s read-only operations: the only data-out
+    /// allowed is the read-unlock commands it declares in
+    /// [`Backend::allowed_data_out`].
+    pub fn for_backend<B: Backend + ?Sized>(dev: &'d mut dyn ScsiDevice, backend: &B) -> Self {
+        Self::new(dev, backend.allowed_data_out())
+    }
+
+    /// Wrap `dev`, allowing no data-out at all (before a backend is known).
+    pub fn without_unlocks(dev: &'d mut dyn ScsiDevice) -> Self {
+        Self::new(dev, &[])
+    }
+
+    /// Wrap `dev`, allowing only the data-out commands in `allowed`. Private, so
+    /// a read grant never carries patterns no backend declared.
+    fn new(dev: &'d mut dyn ScsiDevice, allowed: &'static [CdbPattern]) -> Self {
         Self { dev, allowed }
     }
 

@@ -284,7 +284,7 @@ fn mtk_geometry_and_readback() {
         want.clone(),
     );
     let got = m
-        .readback(&mut ReadDevice::new(&mut dev, &[]), 0x1000, 64)
+        .readback(&mut ReadDevice::without_unlocks(&mut dev), 0x1000, 64)
         .unwrap();
     assert_eq!(got.len(), 64);
     assert_eq!(got, want);
@@ -298,13 +298,17 @@ fn mtk_envelope_plaintext_by_default() {
     let mut dev = MockScsiDevice::new();
     let image = vec![0xABu8; IMAGE_SIZE];
     let (payload, enc) = m
-        .envelope(&mut ReadDevice::new(&mut dev, &[]), &image, None)
+        .envelope(&mut ReadDevice::without_unlocks(&mut dev), &image, None)
         .unwrap();
     assert!(!enc);
     assert_eq!(payload, image);
     // Forced enc changes the bytes.
     let (enc_payload, enc_on) = m
-        .envelope(&mut ReadDevice::new(&mut dev, &[]), &image, Some(true))
+        .envelope(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            &image,
+            Some(true),
+        )
         .unwrap();
     assert!(enc_on);
     assert_ne!(enc_payload, image);
@@ -339,7 +343,7 @@ fn parse_sense_fixed_descriptor_and_short_buffers() {
 #[test]
 fn preflight_is_read_only_on_a_responsive_drive() {
     let mut dev = MockScsiDevice::new();
-    Mtk.readiness(&mut ReadDevice::new(&mut dev, &[]))
+    Mtk.readiness(&mut ReadDevice::without_unlocks(&mut dev))
         .expect("a responsive drive passes the read-only handshake");
     assert!(dev.writes.is_empty(), "preflight must issue no writes");
 }
@@ -532,7 +536,7 @@ fn short_preflight_rom_read_prevents_prepare_write() {
 fn short_firmware_report_window_is_not_fingerprinted() {
     let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), vec![0; 8]);
     assert!(Mtk
-        .post_flash_identity(&mut ReadDevice::new(&mut dev, &[]))
+        .post_flash_identity(&mut ReadDevice::without_unlocks(&mut dev))
         .is_err());
 }
 

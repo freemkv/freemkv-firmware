@@ -1235,7 +1235,7 @@ fn dump_capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
 
 /// Pioneer's flash stages with an ungated write grant and no installed backup.
 fn bundle_execute(drive: &Pioneer, dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
-    let plan = drive.plan(&mut ReadDevice::new(dev, &[]), req)?;
+    let plan = drive.plan(&mut ReadDevice::without_unlocks(dev), req)?;
     let authorized = authorize_installed(plan, None)?;
     let mut writer = crate::engine::gates::ungated_for_tests(dev);
     drive.execute(&mut writer, &authorized)

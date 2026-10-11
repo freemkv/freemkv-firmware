@@ -288,7 +288,7 @@ fn other_files_are_not_claimed_and_short_images_are_errors() {
 #[test]
 fn live_state_reads_only() {
     let mut mock = MockScsiDevice::mtk();
-    let state = live_state(&mut ReadDevice::new(&mut mock, &[]));
+    let state = live_state(&mut ReadDevice::without_unlocks(&mut mock));
     assert_eq!(field(&state.fields, "Chipset"), "MT1959");
     assert!(mock.writes.is_empty());
     assert!(Mtk.raw_capture());

@@ -19,14 +19,14 @@ fn pioneer_plan(target: Vec<u8>) -> FlashPlan {
     let req = pioneer_request(target, &PIONEER_PACKAGE, true);
     let mut dev = MockScsiDevice::new();
     Pioneer::new()
-        .plan(&mut ReadDevice::new(&mut dev, &[]), &req)
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .expect("a package plans without its drive")
 }
 
 fn authorize(plan: FlashPlan, installed: Vec<u8>) -> Result<AuthorizedPlan> {
     let mut dev = MockScsiDevice::new();
     let saved = crate::engine::gates::saved_for_tests(installed);
-    let result = Pioneer::new().authorize(&mut ReadDevice::new(&mut dev, &[]), plan, &saved);
+    let result = Pioneer::new().authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, &saved);
     assert!(dev.reads.is_empty() && dev.writes.is_empty());
     result
 }
@@ -58,7 +58,7 @@ fn flash_plan_needs_no_backup() {
     let req = mtk_request(image.clone(), true, None);
     let mut dev = Rec::new(mtk_drive());
     let plan = Mtk
-        .plan(&mut ReadDevice::new(&mut dev, &[]), &req)
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .expect("plan without a backup");
     assert!(plan.after_backup.contains(&PlanLine::Backup));
     assert_eq!(
@@ -72,7 +72,7 @@ fn flash_plan_needs_no_backup() {
     let req = pioneer_request(target, &PIONEER_PACKAGE, true);
     let mut dev = Rec::new(MockScsiDevice::new());
     Pioneer::new()
-        .plan(&mut ReadDevice::new(&mut dev, &[]), &req)
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .expect("plan without a backup");
     assert!(dev.transcript().is_empty());
 

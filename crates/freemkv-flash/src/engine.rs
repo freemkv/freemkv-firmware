@@ -60,8 +60,10 @@ pub struct InfoReport {
 /// today's order.
 pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> InfoReport {
     let describe = dev.describe();
-    let unlocks = drive.map_or(&[][..], |d| d.allowed_data_out());
-    let mut dev = ReadDevice::new(dev, unlocks);
+    let mut dev = match drive {
+        Some(d) => ReadDevice::for_backend(dev, d),
+        None => ReadDevice::without_unlocks(dev),
+    };
     let dev = &mut dev;
     let id = match drive {
         Some(drive) => drive.identity(dev),
@@ -282,8 +284,9 @@ pub fn backup_with_replace(
             out.display()
         );
     }
-    let unlocks = drive.allowed_data_out();
-    let target_model = drive.identity(&mut ReadDevice::new(dev, unlocks)).product;
+    let target_model = drive
+        .identity(&mut ReadDevice::for_backend(dev, drive))
+        .product;
     println!(
         "{} {}",
         style::bold("Backing up"),
@@ -298,14 +301,14 @@ pub fn backup_with_replace(
         // declares writes gets a write grant limited to those commands.
         (true, Some(dump), _) => {
             let bytes = if dump.writes().is_empty() {
-                dump.capture(DeviceAccess::Read(&mut ReadDevice::new(dev, unlocks)))?
+                dump.capture(DeviceAccess::Read(&mut ReadDevice::for_backend(dev, drive)))?
             } else {
                 dump.capture(DeviceAccess::Write(&mut gates::dump(dev, dump.writes())))?
             };
             (bytes, None)
         }
         (false, _, Some(facet)) => (
-            facet.capture(&mut ReadDevice::new(dev, unlocks))?,
+            facet.capture(&mut ReadDevice::for_backend(dev, drive))?,
             Some(facet),
         ),
         _ => unreachable!("capabilities checked above"),
@@ -402,12 +405,11 @@ pub fn recover_identified(
     let facet = drive
         .recovery()
         .with_context(|| format!("{} offers no recovery", drive.descriptor().id))?;
-    let unlocks = drive.allowed_data_out();
     let identify = |dev: &mut dyn ScsiDevice| -> Result<RecoveryTarget> {
         match receiver {
             Some(receiver) => Ok(receiver),
             None => facet
-                .identify(&mut ReadDevice::new(dev, unlocks))?
+                .identify(&mut ReadDevice::for_backend(dev, drive))?
                 .with_context(|| facet.unidentified()),
         }
     };
@@ -417,7 +419,7 @@ pub fn recover_identified(
         facet.recover(DeviceAccess::Write(&mut writer), &receiver, current, target)
     } else {
         let receiver = identify(dev)?;
-        let mut reader = ReadDevice::new(dev, unlocks);
+        let mut reader = ReadDevice::for_backend(dev, drive);
         facet.recover(DeviceAccess::Read(&mut reader), &receiver, current, target)
     }
 }
@@ -444,7 +446,7 @@ pub fn flash(
     }
     let saved = capture_required_backup(dev, drive, facet, &plan, req)?;
     emit_plan(&plan.after_backup, saved.summary());
-    let reader = &mut ReadDevice::new(dev, drive.allowed_data_out());
+    let reader = &mut ReadDevice::for_backend(dev, drive);
     let mut authorized = facet.authorize(reader, plan, &saved)?;
     authorized.set_backup(saved.summary());
     for warning in &authorized.warnings {
@@ -475,7 +477,7 @@ pub fn plan_flash(
     if req.execute || facet.dry_run_uses_device() {
         guard_no_medium(dev, req.execute)?;
     }
-    let plan = facet.plan(&mut ReadDevice::new(dev, drive.allowed_data_out()), req)?;
+    let plan = facet.plan(&mut ReadDevice::for_backend(dev, drive), req)?;
     emit_plan(&plan.notes, "");
     Ok(plan)
 }
@@ -509,7 +511,7 @@ fn dry_run(
     plan: &FlashPlan,
 ) -> Result<Vec<PlanLine>> {
     emit_plan(&plan.dry_run, DRY_RUN_BACKUP);
-    let tail = facet.preflight(&mut ReadDevice::new(dev, drive.allowed_data_out()), plan)?;
+    let tail = facet.preflight(&mut ReadDevice::for_backend(dev, drive), plan)?;
     emit_plan(&tail, "");
     Ok(plan
         .notes
@@ -580,11 +582,12 @@ fn capture_required_backup(
             drive.descriptor().id
         )
     })?;
-    let unlocks = drive.allowed_data_out();
     let bytes = backup
-        .capture(&mut ReadDevice::new(dev, unlocks))
+        .capture(&mut ReadDevice::for_backend(dev, drive))
         .context("pre-flash backup failed; aborting flash")?;
-    let target_model = drive.identity(&mut ReadDevice::new(dev, unlocks)).product;
+    let target_model = drive
+        .identity(&mut ReadDevice::for_backend(dev, drive))
+        .product;
     let saved_len = save_backup(out, &bytes, backup, &target_model)
         .context("pre-flash backup failed; aborting flash")?;
     // A partial capture stays saved, but cannot authorize writing a region it

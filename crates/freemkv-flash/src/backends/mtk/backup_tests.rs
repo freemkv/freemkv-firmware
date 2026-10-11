@@ -47,7 +47,7 @@ fn unknown_mt1939_build_backs_up_as_a_labelled_reconstruction() {
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(drive_read(&installed))
         .with_product("BD-RE BE14NU40");
-    let backup = capture(&mut crate::backend::ReadDevice::new(&mut dev, &[])).unwrap();
+    let backup = capture(&mut crate::backend::ReadDevice::without_unlocks(&mut dev)).unwrap();
     assert_eq!(
         backup[..layout::BOOT_PAGE.len],
         installed[..layout::BOOT_PAGE.len]
@@ -74,7 +74,7 @@ fn unknown_boot_page_is_refused() {
     let mut dev = MockScsiDevice::new().with_firmware_image(read);
     let error = format!(
         "{:#}",
-        capture(&mut crate::backend::ReadDevice::new(&mut dev, &[])).unwrap_err()
+        capture(&mut crate::backend::ReadDevice::without_unlocks(&mut dev)).unwrap_err()
     );
     assert!(error.contains("boot page"), "{error}");
 }

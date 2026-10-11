@@ -114,7 +114,7 @@ impl FlashFacet for Mtk {
                 style::human_size(plan.payload.len())
             ))
         );
-        let dev = &mut ReadDevice::new(dev, &[]);
+        let dev = &mut ReadDevice::without_unlocks(dev);
         // The drive keeps programming after the last chunk; reading back
         // earlier would surface a mid-program error on a good flash.
         self.wait_ready(dev)?;
