@@ -16,10 +16,8 @@ fn unknown_model_falls_back_to_bd_uhd_default() {
 
 #[test]
 fn longest_token_wins() {
-    // Two table tokens match this string and map to DIFFERENT media classes:
-    // "BU40N" (UhdBd, len 5) and the longer "WH16NS40" (Bd, len 8). The
-    // max_by_key tie-break must pick the longer one, so the class flips to Bd
-    // — proving selection is by token length, not by class ordering.
+    // "BU40N" (UhdBd) and the longer "WH16NS40" (Bd) both match: the longer
+    // token must win, so selection is by token length, not class ordering.
     let short = capability_for("BU40N", ChipFamily::Mt1959);
     assert_eq!(short.media_class, MediaClass::UhdBd);
     let cap = capability_for("BU40N WH16NS40", ChipFamily::Mt1959);

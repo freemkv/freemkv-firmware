@@ -1,38 +1,21 @@
-//! Flash routing decision for Pioneer drives.
+//! Flash routing for Pioneer drives: from the installed identity and the
+//! target bundle, decide between a plain flash, a cross-generation downgrade,
+//! a crossflash or a refusal. Pure classification: no device I/O.
 //!
-//! Given the drive's installed identity and the target bundle, this module
-//! decides *which* flash path applies: a plain same-model flash, a cross-generation
-//! downgrade, a crossflash, or a refusal. It is pure classification — no device
-//! I/O, no flashing, no state change.
-//!
-//! **Family gate.** Every flash is gated by a deterministic FAMILY
-//! MATCH: `family(installed Normal body)` and `family(target Normal body)`
-//! (`pioneer_optical::image`) must both profile (`Some`) and be EQUAL — equal
-//! [`FamilyKey`] means the same silicon/optical platform, i.e. crossflash
-//! compatible. Anything else is [`FlashPlan::Refused`]. The planner stays pure:
-//! the caller computes the two keys (from the pre-flash backup it already holds
-//! and from the target bundle) and passes them in [`Installed::family`] /
+//! **Family gate.** `family(installed Normal body)` and `family(target Normal
+//! body)` must both profile and be equal ([`FamilyKey`]: the same silicon and
+//! optical platform); anything else is [`FlashPlan::Refused`]. The caller
+//! computes both keys and passes them in [`Installed::family`] and
 //! [`Target::family`].
 //!
-//! **Kernel mode is not used.** The F3/F2 "kernel mode" handshake is not
-//! cold-reachable on any Pioneer BD firmware (only present at internal OEM-update
-//! phase 9, inert for flashing); a live BDR-UD04 flat-rejects a cold F3/F2 with
-//! sense 05/24/00. See [`kernel_mode_required`]. Every flash goes through the
-//! ordinary OEM-update route, whose real generation lever is the decoded-body
-//! `0xFE` marker (Site 1). A cross-generation downgrade
-//! ([`FlashPlan::KernelDowngrade`]) is executable: the §15.3 marker patch is
-//! applied to the Kernel at write time (see `execute_flash` in
-//! `crate::backends::pioneer::flash`).
+//! **Kernel mode is not used** (see [`kernel_mode_required`]). Every flash takes
+//! the ordinary OEM-update route, whose generation lever is the decoded-body
+//! `0xFE` marker. A [`FlashPlan::KernelDowngrade`] is executable: the marker
+//! patch is applied to the Kernel at write time.
 //!
-//! Gates recapped (whitepaper Ch.13/15):
-//! - **Site 1** (incoming-marker gate, newer receiver): rejects an incoming
-//!   Kernel whose decoded-body `0xFE` marker is `FF` or `00`; accepts otherwise.
-//!   This is the generation barrier a downgrade crosses.
-//! - **Site 2** (startup equality): the installed Normal/Kernel pair must agree,
-//!   so a downgrade/crossflash MUST write a self-consistent Kernel+Normal pair —
-//!   never Normal-only onto a retained newer Kernel, nor Kernel-only.
-//! - Crossflash additionally needs a family match (see above) and a full foreign
-//!   pair.
+//! Gates: Site 1 (a newer receiver rejects an incoming Kernel whose marker is
+//! `FF` or `00`: the generation barrier) and Site 2 (the installed Kernel and
+//! Normal must agree, so a downgrade or crossflash writes a consistent pair).
 
 use anyhow::{anyhow, Context, Result};
 
@@ -222,15 +205,11 @@ pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
 
 /// Whether a flash needs the vendor F3/F2 "kernel mode" unlock. Always `false`.
 ///
-/// Kernel mode is NOT needed (and not available) for Blu-ray flashing: the
-/// F3/F2 handshake is not cold-reachable on ANY Pioneer BD firmware — it exists
-/// only at internal OEM-update phase 9 and is inert for flashing — and a live
-/// BDR-UD04 flat-rejects a cold F3/F2 with SCSI sense 05/24/00. The real
-/// downgrade lever is the ordinary OEM-update route (`04/FF` entry, `07/FE`+`07/F0`
-/// transfers, `05/FF` finish) gated by the decoded-body `0xFE` generation marker
-/// (Site 1). `backup`/`dump` never use it either. The flasher issues the update
-/// session solely through `pioneer_optical::drive::enter_update`, which adds
-/// the DVR handshake only for a DVR-class drive; a BD drive never sees it.
+/// The F3/F2 handshake is not cold-reachable on any Pioneer BD firmware (a live
+/// BDR-UD04 rejects it with sense 05/24/00). Downgrades use the ordinary
+/// OEM-update route gated by the decoded-body `0xFE` marker (Site 1), and
+/// `pioneer_optical::drive::enter_update` adds the DVR handshake only for a
+/// DVR-class drive.
 pub fn kernel_mode_required(_plan: &FlashPlan) -> bool {
     false
 }
@@ -320,13 +299,9 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
         );
     };
 
-    // The OEM Normal-only tag gate: whenever the bundle has no Kernel, the
-    // installed Kernel ID tag MUST equal the incoming Normal's declared
-    // required-Kernel tag. This is the exact check Pioneer's own updater
-    // performs (`memcmp(F1+0x18, file+0xD0, 8)` → "Model name of kernel part is
-    // not matched"). A match proves the installed Kernel is the ABI generation
-    // this Normal expects; a mismatch means the user needs a Kernel+Normal
-    // package instead.
+    // OEM Normal-only gate: the installed Kernel ID tag must equal the incoming
+    // Normal's required-Kernel tag (the vendor updater's own check); a mismatch
+    // needs a Kernel+Normal package.
     if target.kernel.is_none() {
         return match (
             installed.kernel_tag.as_deref(),
@@ -343,11 +318,9 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
         };
     }
 
-    // Bundle carries BOTH a Kernel and a Normal. Pair-side consistency is a
-    // bundle-build concern (the bundle creator knows what Kernel its Normal
-    // needs); the only runtime special case is Site 1 — a new-gen receiver
-    // rejects an incoming `FF`/`00` Kernel. That's a KernelDowngrade and
-    // triggers the §15.3 patch at write time.
+    // A Kernel+Normal bundle: the only runtime special case is Site 1, where a
+    // new-generation receiver rejects an `FF`/`00` Kernel (a KernelDowngrade,
+    // patched at write time).
     let kernel = target.kernel.expect("has_kernel branch");
     if installed.receiver_new_gen.unwrap_or(false)
         && Generation::from_marker(kernel.marker).site1_rejected()
@@ -440,24 +413,13 @@ fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
     (!tag.is_empty()).then(|| tag.to_string())
 }
 
-/// Pre-flash sanity check on a BUNDLE'S own self-consistency — "did whoever
-/// built this bundle screw it up?" Independent of the drive. Runs before any
-/// gate decision, and before any write. Catches malformed / mismatched /
-/// mis-labelled bundles (hand-rolled, scripted, downloaded-corrupt) that
-/// would otherwise reach the drive and brick it.
-///
-/// What it enforces, in order:
-/// 1. Each present component (Kernel, Normal) decodes to a well-formed Pioneer
-///    envelope with a parseable header.
-/// 2. Each component declares the correct `File Type` (`Kernel` / `Normal`).
-/// 3. If both are present, both components agree on the SAT / hardware id.
-/// 4. If both are present, the Kernel's own ID tag equals the Normal's
-///    declared required-Kernel ID tag — the bundle is self-consistent (the
-///    Normal says it needs Kernel tag X, and the bundled Kernel is tag X). A
-///    mismatch is a bundler error: this bundle would land a Normal on the
-///    wrong Kernel and risk a Site-2 soft-brick.
-/// 5. Neither component has an unrecovered envelope tail (orthogonal, but we
-///    package it here so a bundle's integrity is a single call-site).
+/// Pre-flash check of a bundle's own consistency, independent of the drive and
+/// before any gate or write:
+/// 1. each present component decodes to a well-formed envelope header;
+/// 2. each declares the right `File Type` (`Kernel` / `Normal`);
+/// 3. with both present, they agree on the SAT/hardware id, and the Kernel's ID
+///    tag equals the Normal's required-Kernel tag (else a Site-2 soft-brick);
+/// 4. neither has an unrecovered envelope tail.
 pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(), String> {
     validate_component_headers(kernel, normal)?;
     ensure_no_unrecovered_tail(kernel, normal).map_err(|e| format!("malformed bundle: {e}"))?;

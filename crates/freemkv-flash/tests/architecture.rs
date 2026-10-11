@@ -1,7 +1,7 @@
-//! Source-tree tripwires for the universal-backend design
-//! (docs/design/universal-backend-gui.md). Each test scans the production
-//! code of `src/` (no `*_tests.rs` files, no `#[cfg(test)]` items) with
-//! comments and string literals removed, so prose cannot satisfy or trip it.
+//! Source-tree tripwires for the universal-backend design (tracked as
+//! `design/universal-backend-gui.md` in the repository's docs directory). Each
+//! test scans production code (no `*_tests.rs` files, no `#[cfg(test)]` items)
+//! with comments removed, so prose cannot satisfy or trip it.
 
 use std::fs;
 use std::path::{Path, PathBuf};

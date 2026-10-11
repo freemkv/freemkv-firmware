@@ -1,6 +1,7 @@
-//! Design-review tripwire: every finding from the adversarial review of
-//! docs/design/universal-backend-gui.md (v1 REFUTED, R1–R13) must be guarded by
-//! a named test. A missing test means the finding was not coded, and this fails.
+//! Design-review tripwire: every finding (R1–R13) from the adversarial review of
+//! the universal-backend design (tracked as `design/universal-backend-gui.md`
+//! in the repository's docs directory) must be guarded by a named test. A
+//! missing test means the finding was not coded, and this fails.
 
 use std::{fs, path::Path};
 
