@@ -145,14 +145,42 @@ fn exactly_one_transport_adapter_exists_in_the_flasher() {
                 stack.push(path);
             } else if path.extension().is_some_and(|e| e == "rs") {
                 let src = fs::read_to_string(&path).unwrap();
-                if production(&src).contains("impl Transport for") {
-                    impls.push(path);
+                for _ in 0..transport_impls(&production(&src)) {
+                    impls.push(path.clone());
                 }
             }
         }
     }
-    assert_eq!(impls.len(), 1, "expected one Transport adapter: {impls:?}");
-    assert!(impls[0].ends_with(ADAPTER));
+    // One impl per protocol crate's trait (Pioneer + MediaTek), both in the adapter.
+    assert_eq!(impls.len(), 2, "expected two Transport impls: {impls:?}");
+    assert!(impls.iter().all(|p| p.ends_with(ADAPTER)), "{impls:?}");
+}
+
+/// Count `impl <optional::path::>Transport[<..>] for` lines (not `ScsiTransport`).
+fn transport_impls(src: &str) -> usize {
+    src.lines()
+        .map(str::trim_start)
+        .filter(|line| line.starts_with("impl"))
+        .filter_map(|line| line.split_once(" for ").map(|(head, _)| head))
+        .filter(|head| {
+            let tr = head.rsplit(' ').next().unwrap_or("");
+            let tr = tr.split('<').next().unwrap_or("");
+            tr.rsplit("::").next() == Some("Transport")
+        })
+        .count()
+}
+
+#[test]
+fn transport_impl_matcher_sees_qualified_paths_and_ignores_lookalikes() {
+    assert_eq!(transport_impls("impl Transport for A {}"), 1);
+    assert_eq!(transport_impls("impl<'a> Transport for A<'a> {}"), 1);
+    assert_eq!(
+        transport_impls("    impl mediatek_optical::drive::Transport for A {}"),
+        1
+    );
+    assert_eq!(transport_impls("impl ScsiTransport for A {}"), 0);
+    assert_eq!(transport_impls("impl a::ScsiTransport for A {}"), 0);
+    assert_eq!(transport_impls("fn f() { /* Transport for */ }"), 0);
 }
 
 #[test]
