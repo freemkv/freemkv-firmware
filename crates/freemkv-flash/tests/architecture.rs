@@ -1402,24 +1402,204 @@ fn pioneer_optical_stays_pinned() {
     );
 }
 
-/// Every mention of a [`HIDDEN_TYPES`] type outside the device layer, per file:
-/// the reviewed write executors and the standard settings reader. A new mention
-/// (an alias, enum, generic bound or wrapper the shape scans miss) fails here
-/// until reviewed and counted, so this list is closed-world.
-const DEVICE_TYPE_MENTIONS: &[(&str, &str, usize)] = &[
-    ("src/backends/mtk/flash.rs", "ScsiTransport", 2),
-    ("src/backends/mtk/flash.rs", "SharedDevice", 2),
-    ("src/backends/pioneer/dump.rs", "ScsiTransport", 2),
-    ("src/backends/pioneer/dump.rs", "SharedDevice", 2),
-    ("src/backends/pioneer/flash.rs", "FlashTransport", 2),
-    ("src/backends/pioneer/flash.rs", "ScsiTransport", 3),
-    ("src/backends/pioneer/flash.rs", "SharedDevice", 3),
-    ("src/backends/pioneer/recovery.rs", "ScsiTransport", 2),
-    ("src/backends/pioneer/recovery.rs", "SharedDevice", 2),
-    ("src/standard.rs", "Device", 3),
-    ("src/standard.rs", "ScsiTransport", 3),
-    ("src/standard.rs", "SharedDevice", 2),
+/// Every mention of a [`HIDDEN_TYPES`] type outside the device layer, keyed by
+/// file and enclosing item (see [`item_at`]): the reviewed write executors and
+/// the standard settings reader. A new mention (an alias, enum, generic bound
+/// or wrapper the shape scans miss) fails here until reviewed and counted, and
+/// keying by item means dropping a mention from one item (a `use` replaced by
+/// a full path) frees no slot for a new one, so this list is closed-world.
+const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
+    ("src/backends/mtk/flash.rs", "fn stream", "ScsiTransport", 1),
+    ("src/backends/mtk/flash.rs", "fn stream", "SharedDevice", 1),
+    ("src/backends/mtk/flash.rs", "use", "ScsiTransport", 1),
+    ("src/backends/mtk/flash.rs", "use", "SharedDevice", 1),
+    (
+        "src/backends/pioneer/dump.rs",
+        "fn enable_logging",
+        "ScsiTransport",
+        1,
+    ),
+    (
+        "src/backends/pioneer/dump.rs",
+        "fn enable_logging",
+        "SharedDevice",
+        1,
+    ),
+    ("src/backends/pioneer/dump.rs", "use", "ScsiTransport", 1),
+    ("src/backends/pioneer/dump.rs", "use", "SharedDevice", 1),
+    (
+        "src/backends/pioneer/flash.rs",
+        "fn execute_prepared",
+        "FlashTransport",
+        1,
+    ),
+    (
+        "src/backends/pioneer/flash.rs",
+        "fn execute_prepared",
+        "ScsiTransport",
+        2,
+    ),
+    (
+        "src/backends/pioneer/flash.rs",
+        "fn execute_prepared",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/pioneer/flash.rs",
+        "struct Runtime",
+        "SharedDevice",
+        1,
+    ),
+    ("src/backends/pioneer/flash.rs", "use", "FlashTransport", 1),
+    ("src/backends/pioneer/flash.rs", "use", "ScsiTransport", 1),
+    ("src/backends/pioneer/flash.rs", "use", "SharedDevice", 1),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "fn run",
+        "ScsiTransport",
+        1,
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "fn run",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "use",
+        "ScsiTransport",
+        1,
+    ),
+    ("src/backends/pioneer/recovery.rs", "use", "SharedDevice", 1),
+    ("src/standard.rs", "fn with_device", "Device", 2),
+    ("src/standard.rs", "fn with_device", "ScsiTransport", 2),
+    ("src/standard.rs", "fn with_device", "SharedDevice", 1),
+    ("src/standard.rs", "use", "Device", 1),
+    ("src/standard.rs", "use", "ScsiTransport", 1),
+    ("src/standard.rs", "use", "SharedDevice", 1),
 ];
+
+/// Item keywords whose spans key the census.
+const ITEM_KINDS: &[&str] = &[
+    "fn",
+    "struct",
+    "enum",
+    "union",
+    "impl",
+    "trait",
+    "type",
+    "use",
+    "mod",
+    "const",
+    "static",
+    "macro_rules",
+];
+
+/// Every item in lexed `code` as `(start, end, label)`: the label is `use`,
+/// `impl <header without generics>`, or `<kind> <name>`. A keyword counts only
+/// in item position (after `;`, a brace, an attribute, `pub(..)` or a
+/// qualifier), so `impl Trait` in a signature and `*const T` are not items.
+fn items(code: &str) -> Vec<(usize, usize, String)> {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = Vec::new();
+    for kind in ITEM_KINDS {
+        for at in word_hits(code, kind) {
+            let mut before = code[..at].trim_end();
+            while let Some(word) = [
+                "pub", "unsafe", "async", "const", "extern", "\"\"", "default",
+            ]
+            .iter()
+            .find(|q| before.ends_with(**q) && !before[..before.len() - q.len()].ends_with(ident))
+            {
+                before = before[..before.len() - word.len()].trim_end();
+            }
+            if !(before.is_empty() || before.ends_with([';', '{', '}', ']', ')'])) {
+                continue;
+            }
+            let rest = &code[at + kind.len()..];
+            let name: String = rest
+                .trim_start_matches([' ', '\n', '\t', '!'])
+                .chars()
+                .take_while(|&c| ident(c))
+                .collect();
+            if *kind != "impl"
+                && *kind != "use"
+                && (name.is_empty() || ["fn", "unsafe", "async", "extern"].contains(&name.as_str()))
+            {
+                continue;
+            }
+            let end = item_end(code, at, *kind == "use");
+            let label = match *kind {
+                "use" => "use".to_string(),
+                "impl" => {
+                    let head = &code[at..end];
+                    let head = &head[..head.find(['{', ';']).unwrap_or(head.len())];
+                    let head = head.split(" where ").next().unwrap_or(head);
+                    let mut flat = String::new();
+                    let mut depth = 0;
+                    let mut prev = ' ';
+                    for c in head.chars() {
+                        match c {
+                            '<' => depth += 1,
+                            '>' if prev != '-' => depth -= 1,
+                            _ if depth == 0 => flat.push(c),
+                            _ => {}
+                        }
+                        prev = c;
+                    }
+                    flat.split_whitespace().collect::<Vec<_>>().join(" ")
+                }
+                _ => format!("{kind} {name}"),
+            };
+            out.push((at, end, label));
+        }
+    }
+    out
+}
+
+/// The offset just past the item starting at `at`: its block, or its `;`
+/// outside brackets (a `use` always ends at its `;`).
+fn item_end(code: &str, at: usize, is_use: bool) -> usize {
+    let mut depth = 0i32;
+    for (off, c) in code[at..].char_indices() {
+        match c {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth -= 1,
+            ';' if depth <= 0 || is_use => return at + off + 1,
+            '{' if depth <= 0 && !is_use => return block_end(code, at + off),
+            _ => {}
+        }
+    }
+    code.len()
+}
+
+/// The label of the innermost item in `items` holding offset `at`.
+fn item_at(items: &[(usize, usize, String)], at: usize) -> String {
+    items
+        .iter()
+        .filter(|(start, end, _)| (*start..*end).contains(&at))
+        .max_by_key(|(start, _, _)| *start)
+        .map_or_else(|| "(file)".to_string(), |(_, _, label)| label.clone())
+}
+
+/// `(item, type, count)` for every [`HIDDEN_TYPES`] mention in lexed `code`.
+fn device_type_census(code: &str) -> Vec<(String, String, usize)> {
+    let items = items(code);
+    let mut out: Vec<(String, String, usize)> = Vec::new();
+    for t in HIDDEN_TYPES {
+        for at in word_hits(code, t) {
+            let item = item_at(&items, at);
+            match out.iter_mut().find(|(i, ty, _)| *i == item && ty == t) {
+                Some(entry) => entry.2 += 1,
+                None => out.push((item, t.to_string(), 1)),
+            }
+        }
+    }
+    out.sort();
+    out
+}
 
 #[test]
 fn device_types_are_named_only_where_reviewed() {
@@ -1428,20 +1608,17 @@ fn device_types_are_named_only_where_reviewed() {
     for s in production_sources() {
         if DEVICE_LAYER.iter().any(|l| s.path.starts_with(l)) {
             // The layer defines these types; an alias exported from it would carry
-            // one past the per-file count unseen.
+            // one past the census unseen.
             aliases.extend(
                 hiding_types(&s.code)
                     .into_iter()
-                    .filter(|h| h.starts_with("type ") || h.contains(" type "))
+                    .filter(|h| h.starts_with("type "))
                     .map(|h| format!("{}: {h}", s.path)),
             );
             continue;
         }
-        for t in HIDDEN_TYPES {
-            let n = word_hits(&s.code, t).len();
-            if n > 0 {
-                seen.push((s.path.clone(), t.to_string(), n));
-            }
+        for (item, t, n) in device_type_census(&s.code) {
+            seen.push((s.path.clone(), item, t, n));
         }
     }
     assert!(
@@ -1451,11 +1628,58 @@ fn device_types_are_named_only_where_reviewed() {
     seen.sort();
     let mut expected: Vec<_> = DEVICE_TYPE_MENTIONS
         .iter()
-        .map(|(p, t, n)| (p.to_string(), t.to_string(), *n))
+        .map(|(p, i, t, n)| (p.to_string(), i.to_string(), t.to_string(), *n))
         .collect();
     expected.sort();
-    assert_eq!(
-        seen, expected,
-        "device types named outside the device layer changed; review the new use, then update DEVICE_TYPE_MENTIONS"
+    let added: Vec<_> = seen.iter().filter(|r| !expected.contains(r)).collect();
+    let gone: Vec<_> = expected.iter().filter(|r| !seen.contains(r)).collect();
+    assert!(
+        added.is_empty() && gone.is_empty(),
+        "device types named outside the device layer changed; review the new use, \
+         then update DEVICE_TYPE_MENTIONS\nnew: {added:#?}\ngone: {gone:#?}"
     );
+}
+
+#[test]
+fn device_type_census_keys_by_item() {
+    let census = |src: &str| device_type_census(&lex(src).0);
+    let before = census(
+        "use pioneer_optical::device::Device;\n\
+         pub fn with<R>(f: impl FnOnce(&mut Device<'_, T>) -> R) -> R { f(&mut Device::new(t)) }\n",
+    );
+    assert_eq!(
+        before,
+        [
+            ("fn with".to_string(), "Device".to_string(), 2),
+            ("use".to_string(), "Device".to_string(), 1),
+        ]
+    );
+    // The `use` replaced by full paths pays for a new wrapper: same per-file
+    // count, different items.
+    let traded = census(
+        "pub fn with<R>(f: impl FnOnce(&mut d::Device<'_, T>) -> R) -> R { f(&mut d::Device::new(t)) }\n\
+         #[cfg(any())]\npub enum Wrap<'a, T> { D(Device<'a, T>) }\n",
+    );
+    assert_eq!(
+        traded,
+        [
+            ("enum Wrap".to_string(), "Device".to_string(), 1),
+            ("fn with".to_string(), "Device".to_string(), 2),
+        ]
+    );
+    let (code, _) = lex(
+        "impl<'a> Foo<'a> for Bar<'a> where T: X { fn m(&self) { Device } }\n\
+         pub(crate) const fn k() -> *const SharedDevice { x }\n\
+         struct S { f: fn(u8) -> u8, d: ScsiTransport<'static, 'static> }\n",
+    );
+    assert_eq!(
+        device_type_census(&code),
+        [
+            ("fn k".to_string(), "SharedDevice".to_string(), 1),
+            ("fn m".to_string(), "Device".to_string(), 1),
+            ("struct S".to_string(), "ScsiTransport".to_string(), 1),
+        ]
+    );
+    let items = items(&code);
+    assert_eq!(item_at(&items, 0), "impl Foo for Bar");
 }
