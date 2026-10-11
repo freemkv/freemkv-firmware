@@ -175,34 +175,34 @@ fn list_inner() -> Result<()> {
 }
 
 /// Capture a backend backup or a salvage dump.
-pub fn backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Result<()> {
-    backup_with_replace(device, out, recover, false)
+pub fn backup(device: Option<&str>, out: Option<PathBuf>, dump: bool) -> Result<()> {
+    backup_with_replace(device, out, dump, false)
 }
 
 /// Capture to a save-dialog destination; replacement requires explicit caller consent.
 pub fn backup_with_replace(
     device: Option<&str>,
     out: Option<PathBuf>,
-    recover: bool,
+    dump: bool,
     replace: bool,
 ) -> Result<()> {
     crate::diagnostics::run("backup/dump", || {
-        backup_with_replace_inner(device, out, recover, replace)
+        backup_with_replace_inner(device, out, dump, replace)
     })
 }
 
 fn backup_with_replace_inner(
     device: Option<&str>,
     out: Option<PathBuf>,
-    recover: bool,
+    dump: bool,
     replace: bool,
 ) -> Result<()> {
     crate::diagnostics::record(format!(
-        "backup options: device={device:?} output={out:?} recover={recover} replace={replace}"
+        "backup options: device={device:?} output={out:?} dump={dump} replace={replace}"
     ));
     // Dump may enable RAM-only logging after capture; backup needs only reads.
     let selector = resolve_device(device)?;
-    let mut dev = if recover {
+    let mut dev = if dump {
         platform::open(&selector, true).or_else(|_| platform::open(&selector, false))?
     } else {
         platform::open(&selector, false)?
@@ -226,7 +226,7 @@ fn backup_with_replace_inner(
             let extension = handler
                 .backup_extension()
                 .context("backend has no backup format")?;
-            if recover && handler.dump_is_raw() {
+            if dump && handler.dump_is_raw() {
                 // A raw dump is a single flat memory image, not a backup archive.
                 PathBuf::from(format!("{s}.dump.bin"))
             } else {
@@ -236,7 +236,7 @@ fn backup_with_replace_inner(
             }
         }
     };
-    engine::backup_with_replace(dev.as_mut(), handler.as_ref(), &out, recover, replace)
+    engine::backup_with_replace(dev.as_mut(), handler.as_ref(), &out, dump, replace)
 }
 
 /// Validate and execute the shared flash workflow.

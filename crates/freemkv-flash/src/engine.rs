@@ -204,9 +204,9 @@ pub fn backup(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
     out: &Path,
-    recover: bool,
+    dump: bool,
 ) -> Result<()> {
-    backup_with_replace(dev, drive, out, recover, false)
+    backup_with_replace(dev, drive, out, dump, false)
 }
 
 /// Capture a backup/dump and optionally replace a destination confirmed by the caller.
@@ -215,7 +215,7 @@ pub fn backup_with_replace(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
     out: &Path,
-    recover: bool,
+    dump: bool,
     replace: bool,
 ) -> Result<()> {
     if !drive.capabilities().backup {
@@ -239,14 +239,14 @@ pub fn backup_with_replace(
             out.display()
         ))
     );
-    // `recover` (the `dump` command) uses the family's salvage capture (never
-    // kernel mode). Families without a distinct dump capture a normal backup.
-    let bytes = if recover {
+    // The `dump` command uses the family's salvage capture (never kernel
+    // mode). Families without a distinct dump capture a normal backup.
+    let bytes = if dump {
         drive.capture_dump(dev)?
     } else {
         drive.capture_backup(dev)?
     };
-    let raw_dump = recover && drive.dump_is_raw();
+    let raw_dump = dump && drive.dump_is_raw();
     let saved_len = if raw_dump {
         // A raw memory image is saved verbatim as ONE file: it is not a backup
         // archive, so only require that something was read.

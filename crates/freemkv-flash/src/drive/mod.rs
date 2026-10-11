@@ -306,8 +306,8 @@ pub struct FlashRequest {
 ///
 /// `info` (read-only identify/classify) is safe for every classified family;
 /// `backup` is a complete or candidate backup capture; `flash` is the WRITE
-/// path; `recover` is a deeper salvage backup. Today: MTK info+backup+flash,
-/// Pioneer info+backup+flash+recover, Unknown info only.
+/// path; `deep_salvage` marks a dump that is a deeper salvage read. Today: MTK
+/// info+backup+flash, Pioneer info+backup+flash+deep salvage, Unknown info only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capabilities {
     /// Read-only identify/classify (`info`) is available. Safe for any
@@ -317,22 +317,20 @@ pub struct Capabilities {
     pub backup: bool,
     /// The WRITE path (`flash`) is implemented and may execute.
     pub flash: bool,
-    /// A distinct deeper-read `recover` capture exists (a slower, retrying,
-    /// instability-tolerant salvage read). Families without it treat `recover`
-    /// as an ordinary backup.
-    pub recover: bool,
+    /// The `dump` is a deeper salvage read (slower, retrying, tolerant of an
+    /// unstable drive) rather than an ordinary backup.
+    pub deep_salvage: bool,
 }
 
 impl Capabilities {
     /// Every standard capability on (MTK's proven live backup-and-flash path).
-    /// MTK has no distinct deeper recover: its backup is already a complete,
-    /// verified image, so `recover` falls back to a normal backup.
+    /// MTK has no deep salvage: its backup is already a complete, verified image.
     pub const fn all() -> Self {
         Self {
             info: true,
             backup: true,
             flash: true,
-            recover: false,
+            deep_salvage: false,
         }
     }
 }
@@ -690,7 +688,7 @@ macro_rules! unsupported_drive_family {
                     info: true,
                     backup: false,
                     flash: false,
-                    recover: false,
+                    deep_salvage: false,
                 }
             }
             fn image_size(&self) -> usize {

@@ -823,7 +823,7 @@ impl DriveFamily for Pioneer {
             flash: true,
             // A per-component capture: if a region read fails, `dump` can salvage
             // it with a deeper, instability-tolerant read.
-            recover: true,
+            deep_salvage: true,
         }
     }
     fn read_full_image(&self, _dev: &mut dyn ScsiDevice) -> Result<FullImage> {
