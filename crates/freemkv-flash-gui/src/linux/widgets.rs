@@ -6,9 +6,7 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
 
-use crate::ui::{
-    self, ButtonStyle, Card, CardBody, MediaRow, Node, NodeKind, Row, SettingValue, Tri,
-};
+use crate::ui::{self, ButtonStyle, Card, CardBody, MediaRow, Node, NodeKind, Tri};
 
 /// A left-aligned, wrapping label with libadwaita style classes.
 pub fn label(text: &str, classes: &[&str]) -> gtk::Label {
@@ -132,15 +130,8 @@ fn card_group(card: &Card) -> adw::PreferencesGroup {
     }
     match &card.body {
         CardBody::Rows(rows) => {
-            for row in rows {
-                match row {
-                    Row::Group(name) => {
-                        let l = label(name, &["heading"]);
-                        l.set_margin_top(6);
-                        g.add(&l);
-                    }
-                    Row::Pair(l, v) => g.add(&property(l, v)),
-                }
+            for (l, v) in rows {
+                g.add(&property(l, v));
             }
         }
         CardBody::Media { left, right } => {
@@ -150,43 +141,6 @@ fn card_group(card: &Card) -> adw::PreferencesGroup {
             g.set_header_suffix(Some(&header));
             for r in left.iter().chain(right) {
                 g.add(&media_row(r));
-            }
-        }
-        CardBody::Settings(settings) => {
-            for s in settings {
-                let row = adw::ActionRow::builder()
-                    .title(s.title.as_str())
-                    .use_markup(false)
-                    .build();
-                if !s.notes.is_empty() {
-                    row.set_subtitle(&s.notes.join("\n"));
-                }
-                match &s.value {
-                    SettingValue::Toggle(on) => row.add_suffix(&tick(
-                        Some(ui::SETTING_ENABLED),
-                        if *on { Tri::Yes } else { Tri::No },
-                    )),
-                    SettingValue::Choices(choices) => {
-                        let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-                        let mut group: Option<gtk::CheckButton> = None;
-                        for (text, selected) in choices {
-                            let r = gtk::CheckButton::with_label(text);
-                            if let Some(first) = &group {
-                                r.set_group(Some(first));
-                            } else {
-                                group = Some(r.clone());
-                            }
-                            r.set_active(*selected);
-                            r.set_sensitive(false);
-                            r.set_tooltip_text(Some(ui::SETTING_HINT));
-                            b.append(&r);
-                        }
-                        row.add_suffix(&b);
-                    }
-                    SettingValue::Text(t) => row.add_suffix(&gtk::Label::new(Some(t))),
-                    SettingValue::None => {}
-                }
-                g.add(&row);
             }
         }
     }

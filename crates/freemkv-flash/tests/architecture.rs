@@ -522,28 +522,7 @@ const VENDOR_NAMES: &[&str] = &["pioneer", "mediatek", "mtk", "mt1959", "mt1939"
 
 /// Front-end exceptions: `(file, exact identifier or string literal, reason)`.
 /// An entry that matches nothing fails the test, so the list cannot go stale.
-const VENDOR_ALLOWLIST: &[(&str, &str, &str)] = &[
-    (
-        "freemkv-flash-gui/src/ui.rs",
-        "pioneer",
-        "TEMPORARY: the backup name guesses the format from the drive label",
-    ),
-    (
-        "freemkv-flash-gui/src/ui.rs",
-        "PIONEER",
-        "TEMPORARY: the backup name guesses the format from the drive label",
-    ),
-    (
-        "freemkv-flash-gui/src/ui.rs",
-        "Pioneer identity",
-        "TEMPORARY: cards are grouped by label instead of by report group",
-    ),
-    (
-        "freemkv-flash-gui/src/ui.rs",
-        "pioneer.analysis.semantic_coverage",
-        "TEMPORARY: the inspect tree filters one backend's standing caveat by code",
-    ),
-];
+const VENDOR_ALLOWLIST: &[(&str, &str, &str)] = &[];
 
 /// The GUI crate's non-test sources plus the CLI's `main.rs` and `workflow.rs`,
 /// as `(label, source)`.

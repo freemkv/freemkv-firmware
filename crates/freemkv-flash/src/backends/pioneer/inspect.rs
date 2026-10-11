@@ -101,6 +101,7 @@ fn analyze(
                     ],
                     regions: Vec::new(),
                     diagnostics: vec![format!("{error:#}")],
+                    standing: Vec::new(),
                 });
                 continue;
             }
@@ -196,6 +197,10 @@ fn analyze(
                 .iter()
                 .map(|d| format!("{} ({})", d.message, d.code))
                 .collect(),
+            standing: (analysis.diagnostics.iter().enumerate())
+                .filter(|(_, d)| d.code == SEMANTIC_COVERAGE)
+                .map(|(i, _)| i)
+                .collect(),
         });
         report.analyses.push(comparison_input(&analysis));
     }
@@ -233,6 +238,9 @@ fn signature_label(status: pioneer_optical::envelope::SignatureStatus) -> &'stat
     }
 }
 
+/// The analyser's standing note that unrecognized fields stay raw bytes.
+const SEMANTIC_COVERAGE: &str = "pioneer.analysis.semantic_coverage";
+
 fn comparison_input(
     analysis: &pioneer_optical::analysis::FirmwareAnalysis<'_>,
 ) -> crate::inspection::comparison::FirmwareAnalysis {
@@ -249,7 +257,7 @@ fn comparison_input(
         complete: analysis
             .diagnostics
             .iter()
-            .all(|d| d.code == "pioneer.analysis.semantic_coverage"),
+            .all(|d| d.code == SEMANTIC_COVERAGE),
         regions: analysis
             .regions
             .iter()

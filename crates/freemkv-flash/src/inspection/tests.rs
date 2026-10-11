@@ -282,3 +282,39 @@ fn every_inspected_region_has_a_role() {
     }
     assert!(inspected >= 2, "{inspected}");
 }
+
+#[test]
+fn findings_leave_out_standing_caveats() {
+    let component = ComponentView {
+        name: "Normal".into(),
+        fields: Vec::new(),
+        regions: Vec::new(),
+        diagnostics: vec!["a".into(), "standing".into(), "b".into()],
+        standing: vec![1],
+    };
+    assert_eq!(component.findings().collect::<Vec<_>>(), ["a", "b"]);
+    let json = serde_json::to_string(&component).unwrap();
+    assert!(
+        !json.contains("\"standing\":"),
+        "the export schema is unchanged"
+    );
+}
+
+#[test]
+fn the_pioneer_coverage_note_is_a_standing_caveat() {
+    let report =
+        inspect_bytes("a.tar".into(), &package("1.00", false), &Control::default()).unwrap();
+    let normal = report
+        .components
+        .iter()
+        .find(|c| c.name == "Normal")
+        .unwrap();
+    let standing: Vec<_> = normal
+        .standing
+        .iter()
+        .map(|&i| &normal.diagnostics[i])
+        .collect();
+    assert_eq!(standing.len(), 1, "{:?}", normal.diagnostics);
+    assert!(standing[0].contains("semantic_coverage"));
+    assert!(normal.findings().all(|d| !d.contains("semantic_coverage")));
+}

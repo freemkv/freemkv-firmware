@@ -5,10 +5,18 @@ use crate::backend::{
     Match, ReadDevice, UNKNOWN_FAMILY,
 };
 pub use crate::backend::{AuthorizedPlan, Confirm};
+/// Inspection inputs and results, so a front-end needs only this module and
+/// [`crate::report`] to run Inspect and Compare.
+pub use crate::inspection::{
+    ComparisonReport, ComponentView, Control, Field, HardwareFamily, Inspection, Source,
+};
 use crate::manifest::FlashMode;
+/// The event stream every workflow writes to, which a front-end subscribes to.
+pub use crate::output::{capture_events, Event};
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// One optical drive, discovered even when its tray is empty.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,6 +60,21 @@ pub fn drives() -> Vec<DriveChoice> {
             path: d.path,
         })
         .collect()
+}
+
+/// [`drives`] with a diagnostic log, as a front-end's discovery.
+pub fn discover() -> Vec<DriveChoice> {
+    crate::diagnostics::run("drive discovery", || Ok(drives())).unwrap_or_default()
+}
+
+/// Inspect a firmware file, a retained analysis or a live drive capture.
+pub fn inspect(source: &Source, control: &Control) -> Result<Arc<Inspection>> {
+    crate::inspection::inspect(source, control)
+}
+
+/// Compare two sources region by region.
+pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonReport> {
+    crate::inspection::compare(a, b, control)
 }
 
 /// Flash options shared by both front-ends. Defaults are a backed-up dry run.

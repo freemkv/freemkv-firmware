@@ -1,5 +1,6 @@
 use super::*;
-use crate::ui::{App, Pick};
+use crate::ui::{App, Pick, Profile};
+use freemkv_flash::report::{Group, Row};
 use freemkv_flash::workflow::DriveChoice;
 
 fn drive(path: &str, label: &str) -> DriveChoice {
@@ -10,10 +11,15 @@ fn drive(path: &str, label: &str) -> DriveChoice {
     }
 }
 
+/// A shell over a model whose jobs are recorded, its drive offering every task.
 fn shell(drives: Vec<DriveChoice>) -> Shell {
     let mut app = App::with_drives(drives);
     app.dry_run = Some(Vec::new());
-    Shell::new(app, &egui::Context::default())
+    let mut shell = Shell::new(app, &egui::Context::default());
+    if shell.app.profile_worker.is_some() {
+        shell.app.answer_profile(Ok(Profile::every_task()));
+    }
+    shell
 }
 
 /// Every text shape the shell paints, and whether it lies fully inside its clip rect.
@@ -55,7 +61,7 @@ fn shows(text: &[(String, bool)], want: &str) -> bool {
 fn backup_and_flash_controls_are_visible_and_do_not_show_info_results() {
     let mut s = shell(vec![drive("test", "Optical drive")]);
     s.app.flash_input = Some("firmware.bin".into());
-    s.app.fields = vec![("Manufacturer".into(), "OLD INFO RESULT".into())];
+    s.app.rows = vec![Row::gui("test", "Manufacturer", "OLD INFO RESULT".into())];
     s.app.status = "Drive information complete".into();
     for (task, controls) in [
         (Task::Backup, vec!["Save backup…"]),
@@ -89,11 +95,12 @@ fn backup_and_flash_controls_are_visible_and_do_not_show_info_results() {
 #[test]
 fn long_results_fit_the_original_window_without_resizing() {
     let mut s = shell(vec![drive("ioreg:123", "PIONEER BDR-UD04")]);
-    s.app.fields = (0..40)
+    s.app.rows = (0..40)
         .map(|n| {
-            (
-                format!("Field {n}"),
-                "long firmware information ".repeat(20),
+            Row::gui(
+                "test",
+                &format!("Field {n}"),
+                "long firmware information ".repeat(20).into(),
             )
         })
         .collect();
@@ -194,12 +201,12 @@ fn confirmation_window_shows_the_gate_texts() {
 }
 
 /// Mirrors the old info card renderer checks over the model's cards.
-fn card_text(fields: &[(&str, &str)], width: f32) -> Vec<String> {
-    let fields: Vec<_> = fields
+fn card_text(fields: &[(&str, &str, Group)], width: f32) -> Vec<String> {
+    let rows: Vec<_> = fields
         .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .map(|(k, v, g)| Row::gui("test", k, (*v).into()).in_group(*g))
         .collect();
-    let cards = crate::ui::info_cards(&fields, None);
+    let cards = crate::ui::info_cards(&rows);
     let ctx = egui::Context::default();
     let mut text = Vec::new();
     for _ in 0..3 {
@@ -228,18 +235,23 @@ fn card_text(fields: &[(&str, &str)], width: f32) -> Vec<String> {
 #[test]
 fn information_cards_render_in_narrow_and_wide_layouts() {
     let fields = [
-        ("Model", "BDR-XD08U"),
-        ("Kernel type", "ID69"),
-        ("CD-R", "Read: Yes    Write: Yes"),
-        ("DVD region", "2"),
-        ("Quiet Drive", "Quiet"),
-        ("Saved Quiet Drive", "Performance"),
-        ("PureRead", "Master"),
-        ("Firmware update", "Supported"),
+        ("Model", "BDR-XD08U", Group::General),
+        ("Kernel type", "ID69", Group::Additional),
+        ("CD-R", "Read: Yes    Write: Yes", Group::Media),
+        ("DVD region", "2", Group::Region),
+        ("Quiet Drive", "Quiet", Group::Settings),
+        ("Saved Quiet Drive", "Performance", Group::Settings),
+        ("PureRead", "Master", Group::Settings),
+        ("Firmware update", "Supported", Group::Operations),
     ];
     for width in [680.0, 880.0] {
         let text = card_text(&fields, width);
-        for want in ["Current settings · read only", "Master", "Kernel", "R/W"] {
+        for want in [
+            "Current settings · read only",
+            "Master",
+            "Kernel type",
+            "R/W",
+        ] {
             assert!(
                 text.iter().any(|t| t == want),
                 "{want} at {width}: {text:?}"

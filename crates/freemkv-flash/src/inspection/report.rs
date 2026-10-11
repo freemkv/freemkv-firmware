@@ -108,6 +108,20 @@ pub struct ComponentView {
     pub regions: Vec<RegionView>,
     /// Nonfatal limitations.
     pub diagnostics: Vec<String>,
+    /// Indexes into `diagnostics` of the analyser's standing caveats, true of
+    /// every file it reads; summary views may leave them out.
+    #[serde(skip)]
+    pub standing: Vec<usize>,
+}
+impl ComponentView {
+    /// The diagnostics about this component, without the standing caveats.
+    pub fn findings(&self) -> impl Iterator<Item = &String> {
+        self.diagnostics
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !self.standing.contains(i))
+            .map(|(_, d)| d)
+    }
 }
 /// Live facts, captured separately from firmware-file contents.
 #[derive(Clone, Debug, Serialize)]

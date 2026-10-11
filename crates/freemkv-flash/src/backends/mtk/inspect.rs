@@ -270,6 +270,7 @@ fn analyze(source: String, image: &[u8], chip: &ChipInfo, control: &Control) -> 
             fields,
             regions,
             diagnostics,
+            standing: Vec::new(),
         }],
         missing_components: Vec::new(),
         live: None,
