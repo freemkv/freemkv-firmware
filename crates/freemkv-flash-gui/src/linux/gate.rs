@@ -99,7 +99,9 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     run.unticked = Some(!ack.is_active());
     run.confirm_before = confirm.as_ref().map(|b| b.is_sensitive());
     if tick {
-        ack.set_active(true);
+        // As a click does: GTK's own activate signal toggles the box and runs the shell's
+        // toggled handler.
+        WidgetExt::activate(&ack);
         settle(SETTLE);
         let acked = shell.view().confirm.is_some_and(|v| v.ack_checked);
         run.ticked = Some((acked, confirm.as_ref().map(|b| b.is_sensitive())));

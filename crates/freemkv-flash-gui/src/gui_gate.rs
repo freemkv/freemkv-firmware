@@ -402,11 +402,14 @@ pub struct SheetRun {
     pub unticked: Option<bool>,
     /// The Confirm control was enabled on opening; `None` when it could not be found.
     pub confirm_before: Option<bool>,
-    /// After ticking the risk box through its widget: the model's acknowledgement and
-    /// whether the Confirm control was enabled. `None` when the box was not ticked.
+    /// After ticking the risk box through its widget's click path: the model's
+    /// acknowledgement and whether the Confirm control was enabled. `None` when the box was
+    /// not ticked.
     pub ticked: Option<(bool, Option<bool>)>,
-    /// After that tick, the box's state as the shell reads it back from the toolkit (on
-    /// Windows, as the task dialog reported it). `None` when not ticked or unreadable.
+    /// After that tick, made the way a user makes it (AppKit `performClick:`, GTK's
+    /// `activate` signal, the task dialog's `TDM_CLICK_VERIFICATION`), the box's state as
+    /// the shell reads it back from the toolkit (on Windows, as the task dialog reported
+    /// it). `None` when not ticked or unreadable.
     pub box_reads_ticked: Option<bool>,
     /// After Cancel through its widget, the model withdrew the request and the sheet closed.
     pub closed: bool,
@@ -451,9 +454,12 @@ pub fn sheet_checks(g: &mut Gate, first: &SheetRun, reopened: &SheetRun) {
         state(after),
     );
     g.check(
-        "box-reads-ticked-after-tick",
+        "clicked-box-reads-ticked",
         first.box_reads_ticked == Some(true),
-        seen(first.box_reads_ticked, "ticked", "unticked"),
+        format!(
+            "after a click through the toolkit the box reads {}",
+            seen(first.box_reads_ticked, "ticked", "unticked")
+        ),
     );
     g.check("sheet-closes-on-cancel", first.closed, "first opening");
     g.check("sheet-reopens", reopened.opened, "after Cancel");
