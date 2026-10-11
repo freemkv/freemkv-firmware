@@ -302,9 +302,14 @@ pub struct Gate {
 }
 
 impl Gate {
+    /// Record a check. A failure is also printed at once, so it shows even when the app
+    /// dies before it writes the report.
     pub fn check(&mut self, name: &str, ok: bool, detail: impl AsRef<str>) {
-        self.checks
-            .push((ok, format!("{name} — {}", detail.as_ref())));
+        let line = format!("{name} — {}", detail.as_ref());
+        if !ok {
+            eprintln!("GATE FAIL {line}");
+        }
+        self.checks.push((ok, line));
     }
 
     /// Whether every check passed; a gate that checked nothing has not passed.

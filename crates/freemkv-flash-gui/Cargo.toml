@@ -46,8 +46,8 @@ objc2-app-kit = { optional = true, version = "0.3", features = [
   "NSRunningApplication", "NSTextView", "NSText", "NSAlert", "NSSegmentedControl",
   "NSSegmentedCell", "NSPasteboard", "NSAppearance", "NSParagraphStyle", "NSTextContainer",
   "NSTextStorage", "NSLayoutManager", "NSAttributedString", "NSSplitView", "block2",
-  # The debug-only GUI gate: window captures and its run-loop pump.
-  "NSBitmapImageRep", "NSImageRep", "NSEvent",
+  # The debug-only GUI gate: window captures, its run-loop pump and its Escape key event.
+  "NSBitmapImageRep", "NSImageRep", "NSEvent", "NSGraphicsContext",
 ] }
 objc2-foundation = { optional = true, version = "0.3", features = [
   "NSString", "NSGeometry", "NSArray", "NSObjCRuntime", "NSNotification", "NSDate",

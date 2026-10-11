@@ -1,7 +1,8 @@
 //! qa's GUI gate on the AppKit shell (`crate::gui_gate`), run by a debug build with
 //! `FREEMKV_FLASH_GATE=<dir>` once the window is up: every tab through `send`, checked in
 //! the segmented control and in a capture (`cacheDisplayInRect:`) of the real window, then
-//! a file picker dismissed with Escape (the main window must survive it), then
+//! a file picker dismissed through its own `cancel:` and a real Escape key event delivered
+//! to the main window (the main window must survive both), then
 //! the flash confirmation sheet driven through its own checkbox and Cancel button. Writes
 //! `<dir>/gate.txt` and a PNG per tab and sheet, and exits with the verdict.
 
@@ -9,10 +10,13 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use objc2::{DefinedClass, MainThreadOnly};
-use objc2_app_kit::{NSApplication, NSBitmapFormat, NSEventMask, NSView, NSWindow};
-use objc2_foundation::{NSDate, NSDefaultRunLoopMode};
+use objc2_app_kit::{
+    NSApplication, NSBitmapFormat, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSMenu,
+    NSView, NSWindow,
+};
+use objc2_foundation::{NSArray, NSDate, NSDefaultRunLoopMode, NSPoint};
 
-use super::Controller;
+use super::{ns, Controller};
 use crate::gui_gate::{self, Capture, Gate, Order, Region, SheetRun, TabRun};
 use crate::ui::{Input, Pick, Task};
 
@@ -133,8 +137,9 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     run
 }
 
-/// Open the flash file picker and press Escape in it: the picker must close and the main
-/// window must stay up (Escape once closed the window and quit the app).
+/// Open the flash file picker and cancel it through the panel's own `cancel:`: the picker
+/// must close and the main window must stay up (Escape once closed the window and quit the
+/// app). Then press Escape in the main window itself.
 fn escape_closes_only_the_picker(c: &Controller, g: &mut Gate) {
     let Some(main) = c.ivars().window.borrow().clone() else {
         return;
@@ -154,8 +159,8 @@ fn escape_closes_only_the_picker(c: &Controller, g: &mut Gate) {
     let Some(picker) = picker else {
         return;
     };
-    // The panel runs out of process, so a synthetic key event never reaches it; Escape
-    // there sends the panel `cancel:`, which is sent here directly.
+    // A synthetic key event did not reach the panel in testing, so the gate sends the
+    // panel's own `cancel:`.
     unsafe {
         let _: () = objc2::msg_send![&*picker, cancel: Option::<&objc2::runtime::AnyObject>::None];
     }
@@ -164,12 +169,12 @@ fn escape_closes_only_the_picker(c: &Controller, g: &mut Gate) {
         settle(c, Duration::from_millis(100));
     }
     g.check(
-        "escape-closes-picker",
+        "picker-cancel-closes-picker",
         main.attachedSheet().is_none(),
-        "cancel: (Escape) in the picker",
+        "the panel's cancel:",
     );
     g.check(
-        "main-window-survives-escape",
+        "main-window-survives-picker-cancel",
         main.isVisible() && c.view().confirm.is_none(),
         if main.isVisible() {
             "visible"
@@ -177,6 +182,103 @@ fn escape_closes_only_the_picker(c: &Controller, g: &mut Gate) {
             "closed"
         },
     );
+    escape_key_leaves_main_window(c, &main, g);
+}
+
+/// Press Escape in the main window itself: no menu item may take a bare Escape, and a real
+/// Escape key event (keyCode 53) must leave the window up, the app running and the model
+/// unchanged. The window is made key and first responder, and the event goes through the
+/// window's `sendEvent:` (key-down and key-up), its `keyDown:`, the key bindings
+/// (`interpretKeyEvents:`), and its views' and the main menu's key equivalents. In testing,
+/// with the gate's app inactive, `sendEvent:` and `keyDown:` did not bring a
+/// `cancelOperation:` to the controller (the window's and the app's delegate); the key
+/// bindings did.
+fn escape_key_leaves_main_window(c: &Controller, main: &NSWindow, g: &mut Gate) {
+    let app = NSApplication::sharedApplication(c.mtm());
+    let bare = app
+        .mainMenu()
+        .map(|m| bare_escape_items(&m))
+        .unwrap_or_default();
+    g.check(
+        "no-bare-escape-menu-item",
+        bare.is_empty(),
+        if bare.is_empty() {
+            "none".into()
+        } else {
+            bare.join(", ")
+        },
+    );
+    let (Some(down), Some(up)) = (
+        escape(main, NSEventType::KeyDown),
+        escape(main, NSEventType::KeyUp),
+    ) else {
+        g.check("escape-key-leaves-main-window", false, "no key event");
+        return;
+    };
+    let before = c.view();
+    let responder = main.firstResponder();
+    main.makeKeyWindow();
+    main.makeFirstResponder(None);
+    main.sendEvent(&down);
+    main.sendEvent(&up);
+    let key = main.isKeyWindow();
+    main.keyDown(&down);
+    main.interpretKeyEvents(&NSArray::from_slice(&[&*down]));
+    let by_view = main.performKeyEquivalent(&down);
+    let by_menu = app
+        .mainMenu()
+        .is_some_and(|m| m.performKeyEquivalent(&down));
+    settle(c, SETTLE);
+    main.makeFirstResponder(responder.as_deref());
+    let visible = main.isVisible();
+    let unchanged = c.view() == before;
+    g.check(
+        "escape-key-leaves-main-window",
+        visible && app.isRunning() && unchanged,
+        format!(
+            "window {}, model {}, key window {key}, key equivalent taken by views {by_view}, \
+             by menu {by_menu}",
+            if visible { "visible" } else { "closed" },
+            if unchanged { "unchanged" } else { "changed" },
+        ),
+    );
+}
+
+/// An Escape key event of type `kind` addressed to `window`.
+fn escape(window: &NSWindow, kind: NSEventType) -> Option<objc2::rc::Retained<NSEvent>> {
+    let esc = ns("\u{1b}");
+    NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+        kind,
+        NSPoint::new(0.0, 0.0),
+        NSEventModifierFlags::empty(),
+        0.0,
+        window.windowNumber(),
+        None,
+        &esc,
+        &esc,
+        false,
+        53,
+    )
+}
+
+/// The titles of `menu`'s items, submenus included, whose key equivalent is Escape with
+/// no Command, Option or Control modifier.
+fn bare_escape_items(menu: &NSMenu) -> Vec<String> {
+    let chord = NSEventModifierFlags::Command
+        | NSEventModifierFlags::Option
+        | NSEventModifierFlags::Control;
+    let mut out = Vec::new();
+    for item in menu.itemArray().iter() {
+        if item.keyEquivalent().to_string() == "\u{1b}"
+            && !item.keyEquivalentModifierMask().intersects(chord)
+        {
+            out.push(item.title().to_string());
+        }
+        if let Some(sub) = item.submenu() {
+            out.extend(bare_escape_items(&sub));
+        }
+    }
+    out
 }
 
 fn closed(c: &Controller, main: &NSWindow) -> bool {
