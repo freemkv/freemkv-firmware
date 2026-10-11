@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Desktop UI for freemkv-flash: a neutral model with native (AppKit, Win32) and egui shells"
+description = "Desktop UI for freemkv-flash: a neutral model with native (AppKit, Win32, GTK4) and egui shells"
 build = "build.rs"
 
 [[bin]]
@@ -16,11 +16,11 @@ path = "src/main.rs"
 
 [features]
 default = ["native"]
-# The native shell for each OS: AppKit on macOS, Win32 (winsafe) on Windows. Every other
-# target uses the egui shell.
+# The native shell for each OS: AppKit on macOS, Win32 (winsafe) on Windows, GTK4 +
+# libadwaita on glibc Linux. Linux musl and every other target use the egui shell.
 # Toolkit crates are pinned like freemkv's `gui` feature.
 native = ["dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:block2",
-          "dep:winsafe"]
+          "dep:winsafe", "dep:gtk4", "dep:libadwaita"]
 
 [dependencies]
 freemkv-flash = { path = "../freemkv-flash" }
@@ -60,6 +60,14 @@ block2 = { version = "=0.6", optional = true }
 # `=`: pre-1.0 and it breaks its API between releases, so upgrade deliberately.
 [target.'cfg(target_os = "windows")'.dependencies]
 winsafe = { optional = true, version = "=0.0.29", features = ["gui", "shell"] }
+
+# ── Linux native shell (GTK4 + libadwaita) ────────────────────────────────
+# PINNED with `=`, as in freemkv. GATED on `target_env = "gnu"`: GTK4 needs the glibc
+# runtime and cannot link against musl, so the musl builds keep the egui shell. The
+# features match freemkv's floor (GTK 4.10, libadwaita 1.4: Ubuntu 24.04 and later).
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+gtk4 = { optional = true, version = "=0.9", features = ["v4_10"] }
+libadwaita = { optional = true, version = "=0.7", features = ["v1_4"] }
 
 # On a Windows host build, embed the freemkv .ico and the application manifest.
 # No-op when building on macOS/Linux (guarded by cfg(windows) in build.rs).
