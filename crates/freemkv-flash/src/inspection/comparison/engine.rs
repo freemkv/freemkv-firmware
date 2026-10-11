@@ -111,7 +111,7 @@ pub struct Comparison {
 impl FirmwareAnalysis {
     /// Compare logical regions, aligning moved byte runs without ignoring
     /// constants or unresolved address operands. Different families are allowed.
-    pub fn compare(
+    pub(in crate::inspection) fn compare(
         &self,
         other: &FirmwareAnalysis,
         options: Options,

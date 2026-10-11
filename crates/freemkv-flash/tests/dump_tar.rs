@@ -1,7 +1,7 @@
 //! Interoperability proof for the `backup` subcommand's tar format: a full
 //! encode → decode round-trip over every member, asserting the bytes survive.
 
-use freemkv_flash::drive::mtk::UserDump;
+use freemkv_flash::backends::mtk::UserDump;
 
 #[test]
 fn round_trip_synthetic_dump() {

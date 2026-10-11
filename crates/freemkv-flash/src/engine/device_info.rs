@@ -1,7 +1,7 @@
 //! Presentation of pioneer-optical's read-only live snapshot for both front-ends.
 use crate::{
-    drive::transport::{ScsiTransport, SharedDevice},
     platform::ScsiDevice,
+    transport::{ScsiTransport, SharedDevice},
 };
 use pioneer_optical::{
     device::{
@@ -190,7 +190,7 @@ pub(super) fn show(dev: &mut dyn ScsiDevice, pioneer: bool) {
             );
             field(
                 "DVD region",
-                crate::inspection::pioneer::dvd_region_label(rpc),
+                crate::backends::pioneer::inspect::dvd_region_label(rpc),
             );
             field(
                 "User changes remaining",

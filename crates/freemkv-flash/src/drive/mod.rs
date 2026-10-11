@@ -19,11 +19,7 @@ use anyhow::{bail, Context, Result};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
-pub mod fw_ident;
-pub mod mtk;
-pub mod pioneer;
-/// The single `Transport` adapter between `ScsiDevice` and `pioneer_optical::drive`.
-pub mod transport;
+use crate::backends::{mtk, pioneer};
 
 pub use mtk::UserDump;
 
@@ -646,7 +642,10 @@ pub trait FirmwareBackend: Sync {
 
     /// Identify the installed firmware (read-only) by reading the two readable
     /// firmware-code windows and matching the built-in catalog. Default: none.
-    fn firmware_report(&self, _dev: &mut dyn ScsiDevice) -> Result<Option<fw_ident::FwReport>> {
+    fn firmware_report(
+        &self,
+        _dev: &mut dyn ScsiDevice,
+    ) -> Result<Option<crate::backends::mtk::fw_ident::FwReport>> {
         Ok(None)
     }
 

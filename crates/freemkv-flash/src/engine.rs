@@ -21,7 +21,7 @@ use crate::style;
 pub(crate) mod backup;
 pub(crate) mod device_info;
 #[cfg(test)]
-use crate::drive::mtk::backup::BackupArtifact;
+use crate::backends::mtk::backup::BackupArtifact;
 use backup::save_backup;
 
 /// Run the `info` command: identify + classify (read-only).

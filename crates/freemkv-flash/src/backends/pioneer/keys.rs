@@ -12,7 +12,7 @@
 //! to several controller ids with different keys) cannot be silently resolved.
 //!
 //! Loaded lazily and only when needed (a Pioneer flash), mirroring
-//! `crate::drive::pioneer::k` / `crate::drive::pioneer::n`, so the MTK path and startup pay
+//! `crate::backends::pioneer::k` / `crate::backends::pioneer::n`, so the MTK path and startup pay
 //! nothing.
 
 use std::collections::HashMap;
@@ -121,7 +121,7 @@ pub fn lookup(controller_id: u16) -> Option<&'static KeyEntry> {
     table().get(&controller_id)
 }
 
-pub use crate::drive::pioneer::flash_plan::controller_id_from_sat;
+pub use crate::backends::pioneer::flash_plan::controller_id_from_sat;
 
 #[cfg(test)]
 #[path = "keys_tests.rs"]

@@ -22,9 +22,10 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::drive::mtk::{cdb, CHUNK, IMAGE_SIZE};
 use crate::drive::FullImage;
 use crate::platform::ScsiDevice;
+use mediatek_optical::cdb::{self, CHUNK};
+use mediatek_optical::layout::IMAGE_SIZE;
 
 /// A `(mode, buffer-id)` READ BUFFER channel to try.
 struct Channel {

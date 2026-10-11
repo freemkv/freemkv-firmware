@@ -1,9 +1,9 @@
 //! Unit tests for [`super`] (the generic engine: flash flow + safety gate).
 
 use super::*;
-use crate::drive::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
-use crate::drive::mtk::file_info::{classify_file, CmacSummary};
-use crate::drive::mtk::{
+use crate::backends::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
+use crate::backends::mtk::file_info::{classify_file, CmacSummary};
+use crate::backends::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
     ROM_1F0000_OFFSET,
 };
@@ -69,7 +69,7 @@ fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
 
 /// The stored boot page every cataloged MT1959 build shares.
 pub(crate) fn stored_boot_page() -> &'static [u8] {
-    crate::drive::mtk::oem::catalog()
+    crate::backends::mtk::oem::catalog()
         .default_for(mediatek_optical::Chip::Mt1959)
         .expect("MT1959 default")
         .boot_page()
@@ -216,7 +216,7 @@ fn pioneer_offline_plan_does_not_gate_on_marketing_model() {
 
 #[test]
 fn pioneer_offline_plan_rejects_malformed_envelope_without_device_io() {
-    let mut image = vec![0u8; crate::drive::pioneer::IMAGE_MIN];
+    let mut image = vec![0u8; crate::backends::pioneer::IMAGE_MIN];
     let header = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nThis is microcode file.\r\nID : PIONEER BD-RW   BDR-212.\r\nRevision Level : 1.05 .\r\n";
     image[..header.len()].copy_from_slice(header);
     let mut req = bin_req(image, false);
@@ -563,7 +563,7 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
         .collect();
     // A 0.10.x archive restores as its OEM-format rebuild, never the raw capture.
     let expected =
-        mediatek_optical::oem::rebuild(&backup_firmware(), crate::drive::mtk::oem::catalog())
+        mediatek_optical::oem::rebuild(&backup_firmware(), crate::backends::mtk::oem::catalog())
             .unwrap()
             .image;
     assert_eq!(streamed, expected);
@@ -1469,7 +1469,7 @@ fn legacy_backup_member_names_are_sanitized_in_errors() {
         tar.append(&header, &[0u8][..]).unwrap();
         tar.finish().unwrap();
     }
-    let err = crate::drive::mtk::backup::BackupArtifact::from_tar_bytes(&out, IMAGE_SIZE)
+    let err = crate::backends::mtk::backup::BackupArtifact::from_tar_bytes(&out, IMAGE_SIZE)
         .err()
         .expect("must fail");
     let text = format!("{err:#}");

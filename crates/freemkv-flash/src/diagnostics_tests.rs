@@ -51,7 +51,7 @@ fn operation_log_includes_output_native_warning_and_full_error_chain() {
 
 #[test]
 fn metadata_log_records_sizes_bytes_headers_and_validation_decisions() {
-    use crate::drive::mtk::{Acquire, FEATURE_SERIAL};
+    use crate::backends::mtk::{Acquire, FEATURE_SERIAL};
     use crate::platform::MockScsiDevice;
     let path = Arc::new(Mutex::new(None));
     let captured = path.clone();

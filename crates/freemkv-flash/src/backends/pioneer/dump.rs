@@ -214,7 +214,7 @@ pub fn capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
                     .into()
             }
             Some(layout) => {
-                use crate::drive::transport::{ScsiTransport, SharedDevice};
+                use crate::transport::{ScsiTransport, SharedDevice};
                 let shared = SharedDevice::new(dev);
                 match pioneer_optical::logging::set_logging_ram(
                     &mut ScsiTransport::flash(&shared),

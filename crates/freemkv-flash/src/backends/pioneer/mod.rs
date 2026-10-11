@@ -10,41 +10,32 @@ use pioneer_optical::Role;
 use std::borrow::Cow;
 
 #[cfg(test)]
-use super::Identity;
-use super::{Capabilities, DriveFamily, Family, FullImage};
+use crate::drive::Identity;
+use crate::drive::{Capabilities, DriveFamily, Family, FullImage};
 use crate::platform::ScsiDevice;
 
 /// Offline reconstruction of Pioneer backup candidates from captured images.
-#[path = "pioneer/backup.rs"]
 pub mod backup;
 /// Read-only validation of extractor-produced Pioneer firmware bundles.
-#[path = "pioneer/bundle.rs"]
 pub mod bundle;
 /// Address-oriented Pioneer diagnostic captures.
-#[path = "pioneer/dump.rs"]
 pub mod dump;
 /// `info <file>` for Pioneer bundles and the offline transfer plan.
-#[path = "pioneer/file_info.rs"]
 pub mod file_info;
 /// Live Pioneer OEM flash executor — crate-private so the gate chain in `engine`
 /// (--execute/--i-understand-risk, tray guard, backup-first) cannot be bypassed.
-#[path = "pioneer/flash.rs"]
 pub(crate) mod flash;
-#[path = "pioneer/flash_plan.rs"]
 pub mod flash_plan;
+/// Pioneer inspect provider for `inspection`: package analysis and live drive state.
+pub(crate) mod inspect;
 /// Embedded OEM kernel label/key table (k.bin), loaded lazily for Pioneer.
-#[path = "pioneer/k.rs"]
 pub(crate) mod k;
 /// Historical OEM control-key test oracles, excluded from production.
 #[cfg(test)]
-#[path = "pioneer/keys.rs"]
 pub(crate) mod keys;
 /// Embedded OEM normal seed/signature table (n.bin), loaded lazily for Pioneer.
-#[path = "pioneer/n.rs"]
 pub(crate) mod n;
-#[path = "pioneer/recovery.rs"]
 pub(crate) mod recovery;
-#[path = "pioneer/transfer.rs"]
 pub mod transfer;
 
 // ---- Protocol constants -----------------------------------------------------
@@ -111,7 +102,7 @@ fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
 /// Validate a Normal envelope without marketing-model or revision restrictions.
 pub fn validate_normal_envelope(envelope: &[u8]) -> Result<()> {
     check_normal_size(envelope)?;
-    crate::drive::pioneer::flash_plan::validate_bundle(None, Some(envelope))
+    crate::backends::pioneer::flash_plan::validate_bundle(None, Some(envelope))
         .map_err(anyhow::Error::msg)?;
     use pioneer_optical::envelope::signature::{verify_normal_signature, SignatureCheck};
     match verify_normal_signature(envelope) {
@@ -128,7 +119,7 @@ fn validate_header_chain(
     backup: Option<&[u8]>,
     force: bool,
 ) -> Result<()> {
-    use crate::drive::pioneer::flash_plan::validate_component_headers;
+    use crate::backends::pioneer::flash_plan::validate_component_headers;
     validate_component_headers(kernel, Some(normal)).map_err(anyhow::Error::msg)?;
     if kernel.is_some() {
         return Ok(());
@@ -189,7 +180,7 @@ pub struct OemTransfer<'a> {
 fn validate_kernel_normal(kernel: &[u8], normal: &[u8]) -> Result<()> {
     check_normal_size(kernel)?;
     check_normal_size(normal)?;
-    crate::drive::pioneer::flash_plan::validate_bundle(Some(kernel), Some(normal))
+    crate::backends::pioneer::flash_plan::validate_bundle(Some(kernel), Some(normal))
         .map_err(anyhow::Error::msg)?;
     pioneer_optical::envelope::Update::load(kernel, normal)?;
     Ok(())
@@ -233,7 +224,7 @@ pub(crate) fn classify_flash_input(input: &[u8]) -> Result<FlashComponents> {
     if parse_banner(input).is_some() {
         return Ok((None, Some(input.to_vec())));
     }
-    let bundle = crate::drive::pioneer::bundle::Bundle::from_tar_bytes(input)
+    let bundle = crate::backends::pioneer::bundle::Bundle::from_tar_bytes(input)
         .context("flash input is neither a valid Pioneer bundle nor a Normal .enc")?;
     let find = |role| {
         bundle
@@ -243,8 +234,8 @@ pub(crate) fn classify_flash_input(input: &[u8]) -> Result<FlashComponents> {
             .map(|c| c.bytes.clone())
     };
     Ok((
-        find(crate::drive::pioneer::bundle::Role::Kernel),
-        find(crate::drive::pioneer::bundle::Role::Main),
+        find(crate::backends::pioneer::bundle::Role::Kernel),
+        find(crate::backends::pioneer::bundle::Role::Main),
     ))
 }
 
@@ -299,8 +290,8 @@ pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Str
 /// flash as plain; the backup + gates still protect the drive).
 pub(crate) fn installed_facts(
     backup: Option<&[u8]>,
-) -> Option<crate::drive::pioneer::flash_plan::Installed> {
-    use crate::drive::pioneer::flash_plan::{FwDate, Installed};
+) -> Option<crate::backends::pioneer::flash_plan::Installed> {
+    use crate::backends::pioneer::flash_plan::{FwDate, Installed};
     let (installed_kernel, installed_normal) = classify_flash_input(backup?).ok()?;
     let header = |b: &Option<Vec<u8>>| {
         b.as_deref()
@@ -310,7 +301,7 @@ pub(crate) fn installed_facts(
     let ninfo = header(&installed_normal);
     // Controller id from the Normal (preferred) or Kernel header.
     let controller_id = ninfo.as_ref().or(kinfo.as_ref()).and_then(|h| {
-        crate::drive::pioneer::flash_plan::controller_id_from_sat(&h.hardware_version)
+        crate::backends::pioneer::flash_plan::controller_id_from_sat(&h.hardware_version)
     })?;
     let normal_date = ninfo
         .as_ref()
@@ -319,11 +310,11 @@ pub(crate) fn installed_facts(
     let receiver_new_gen = installed_kernel
         .as_deref()
         .and_then(pioneer_optical::envelope::decode_envelope)
-        .and_then(|d| crate::drive::pioneer::k::receiver_generation(&d.image));
+        .and_then(|d| crate::backends::pioneer::k::receiver_generation(&d.image));
     // Installed family: profile the decoded installed Normal body (the same
     // decode used for the target, so the two keys are directly comparable).
     let family = installed_normal.as_deref().and_then(|n| {
-        crate::drive::pioneer::flash_plan::normal_family_with_kernel(
+        crate::backends::pioneer::flash_plan::normal_family_with_kernel(
             n,
             installed_kernel.as_deref()?,
         )
@@ -347,7 +338,7 @@ pub(crate) fn installed_facts(
     })
 }
 
-/// Route the installed firmware against the target ([`crate::drive::pioneer::flash_plan`])
+/// Route the installed firmware against the target ([`crate::backends::pioneer::flash_plan`])
 /// and return the plan. The installed facts come from the just-captured pre-flash
 /// backup (the planner stays pure; the family keys are computed here, where the
 /// backup bytes are in hand). `recover` uses the recover plan (family gate only);
@@ -359,8 +350,8 @@ pub(crate) fn resolve_flash_plan(
     normal: Option<&[u8]>,
     recover: bool,
     force: bool,
-) -> Result<crate::drive::pioneer::flash_plan::FlashPlan> {
-    use crate::drive::pioneer::flash_plan::{
+) -> Result<crate::backends::pioneer::flash_plan::FlashPlan> {
+    use crate::backends::pioneer::flash_plan::{
         decide_recover_plan, normal_family_with_kernel, target_from_components,
     };
 
@@ -393,11 +384,11 @@ pub(crate) fn resolve_flash_plan(
 /// Pure routing core of [`resolve_flash_plan`]: no installed facts means the
 /// installed family is unknown, so the family gate refuses (or `force` overrides).
 fn plan_for(
-    installed: Option<&crate::drive::pioneer::flash_plan::Installed>,
-    target: &crate::drive::pioneer::flash_plan::Target,
+    installed: Option<&crate::backends::pioneer::flash_plan::Installed>,
+    target: &crate::backends::pioneer::flash_plan::Target,
     force: bool,
-) -> crate::drive::pioneer::flash_plan::FlashPlan {
-    use crate::drive::pioneer::flash_plan::{decide_flash_plan, Installed};
+) -> crate::backends::pioneer::flash_plan::FlashPlan {
+    use crate::backends::pioneer::flash_plan::{decide_flash_plan, Installed};
     match installed {
         Some(inst) => decide_flash_plan(inst, target, force),
         None => {
@@ -443,8 +434,8 @@ fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
 }
 
 /// Whether the plan (or a `Forced` plan's inner plan) is `KernelDowngrade`.
-fn plan_is_downgrade(plan: &crate::drive::pioneer::flash_plan::FlashPlan) -> bool {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+fn plan_is_downgrade(plan: &crate::backends::pioneer::flash_plan::FlashPlan) -> bool {
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     match plan {
         FlashPlan::KernelDowngrade => true,
         FlashPlan::Forced(inner) => plan_is_downgrade(inner),
@@ -457,11 +448,11 @@ fn plan_is_downgrade(plan: &crate::drive::pioneer::flash_plan::FlashPlan) -> boo
 /// route. The library prepares any temporary marker patch and pristine restore
 /// before entry. The bundle executor verifies both passes before reporting
 /// success. No plan requires kernel mode
-/// ([`crate::drive::pioneer::flash_plan::kernel_mode_required`]).
+/// ([`crate::backends::pioneer::flash_plan::kernel_mode_required`]).
 pub(crate) fn check_plan_executable(
-    plan: &crate::drive::pioneer::flash_plan::FlashPlan,
+    plan: &crate::backends::pioneer::flash_plan::FlashPlan,
 ) -> Result<()> {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     match plan {
         FlashPlan::Plain | FlashPlan::KernelCrossflash => Ok(()),
         FlashPlan::Forced(inner) => {
@@ -537,8 +528,8 @@ impl DriveFamily for Pioneer {
     fn probe(
         &self,
         dev: &mut dyn ScsiDevice,
-        identity: &super::Identity,
-    ) -> Result<Option<super::ProbeEvidence>> {
+        identity: &crate::drive::Identity,
+    ) -> Result<Option<crate::drive::ProbeEvidence>> {
         let pioneer_model = identity
             .product
             .split_whitespace()
@@ -551,13 +542,13 @@ impl DriveFamily for Pioneer {
         Ok((identity.vendor.eq_ignore_ascii_case("PIONEER")
             && pioneer_model
             && read_buffer_f1_ok(dev))
-        .then_some(super::ProbeEvidence {
+        .then_some(crate::drive::ProbeEvidence {
             family: Family::Pioneer,
             backend_name: self.backend_name(),
             discriminator: "PIONEER BDR/BDC/DVR INQUIRY + READ BUFFER 02/F1 hardware",
         }))
     }
-    fn offline_plan(&self, req: &super::FlashRequest) -> Option<Result<()>> {
+    fn offline_plan(&self, req: &crate::drive::FlashRequest) -> Option<Result<()>> {
         // On --execute the live bundle executor owns the flow (engine gates it);
         // offline_plan only serves the dry run.
         if req.execute {
@@ -582,7 +573,7 @@ impl DriveFamily for Pioneer {
             Ok((kernel, normal)) => (kernel.is_some(), normal.is_some()),
             Err(_) => (false, true),
         };
-        let roles = crate::drive::pioneer::backup::component_roles(backup);
+        let roles = crate::backends::pioneer::backup::component_roles(backup);
         let has = |role: &str| roles.iter().any(|(r, _)| r == role);
         for (writes, role, label) in [
             (writes_normal, "main", "Normal"),
@@ -601,7 +592,7 @@ impl DriveFamily for Pioneer {
     fn flash_bundle(
         &self,
         dev: &mut dyn ScsiDevice,
-        req: &super::FlashRequest,
+        req: &crate::drive::FlashRequest,
         installed_backup: Option<&[u8]>,
     ) -> Option<Result<()>> {
         if !req.execute {
@@ -626,7 +617,7 @@ impl DriveFamily for Pioneer {
 
             // An image with an unrecoverable envelope tail is never flashed — not
             // even with --force or --recover.
-            crate::drive::pioneer::flash_plan::ensure_no_unrecovered_tail(
+            crate::backends::pioneer::flash_plan::ensure_no_unrecovered_tail(
                 kernel.as_deref(),
                 Some(normal),
             )?;
@@ -640,7 +631,7 @@ impl DriveFamily for Pioneer {
             // Normal's required-Kernel tag, unrecovered envelope tail) BEFORE
             // any planning or writes. Even `--force` would still be flashing
             // garbage; a broken bundle never has a legitimate path.
-            crate::drive::pioneer::flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
+            crate::backends::pioneer::flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
                 .map_err(|e| anyhow!("{e}"))?;
 
             let receiver = installed_receiver(installed_backup)?;
@@ -650,16 +641,16 @@ impl DriveFamily for Pioneer {
                         kernel.as_deref().expect("selected Kernel"),
                         normal,
                     )
-                    .map_err(crate::drive::pioneer::flash::preparation_error)?;
+                    .map_err(crate::backends::pioneer::flash::preparation_error)?;
                     (
                         Some(if req.force {
                             receiver
                                 .prepare_without_family_check(target)
-                                .map_err(crate::drive::pioneer::flash::preparation_error)?
+                                .map_err(crate::backends::pioneer::flash::preparation_error)?
                         } else {
                             receiver
                                 .prepare(target)
-                                .map_err(crate::drive::pioneer::flash::preparation_error)?
+                                .map_err(crate::backends::pioneer::flash::preparation_error)?
                         }),
                         None,
                     )
@@ -669,11 +660,11 @@ impl DriveFamily for Pioneer {
                     Some(if req.force {
                         receiver
                             .prepare_normal_without_family_check(normal)
-                            .map_err(crate::drive::pioneer::flash::preparation_error)?
+                            .map_err(crate::backends::pioneer::flash::preparation_error)?
                     } else {
                         receiver
                             .prepare_normal(normal)
-                            .map_err(crate::drive::pioneer::flash::preparation_error)?
+                            .map_err(crate::backends::pioneer::flash::preparation_error)?
                     }),
                 ),
             };
@@ -685,7 +676,7 @@ impl DriveFamily for Pioneer {
                 req.force,
             )?;
             check_plan_executable(&plan)?;
-            debug_assert!(!crate::drive::pioneer::flash_plan::kernel_mode_required(
+            debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
                 &plan
             ));
 
@@ -698,11 +689,18 @@ impl DriveFamily for Pioneer {
             // Summarize what will be written and what is missing, then confirm.
             confirm_proceed(&flash_summary(kernel.as_deref(), Some(normal)))?;
             let prepared = match (&prepared, &normal_only) {
-                (Some(plan), None) => crate::drive::pioneer::flash::PreparedFlash::Complete(plan),
-                (None, Some(plan)) => crate::drive::pioneer::flash::PreparedFlash::Normal(plan),
+                (Some(plan), None) => {
+                    crate::backends::pioneer::flash::PreparedFlash::Complete(plan)
+                }
+                (None, Some(plan)) => crate::backends::pioneer::flash::PreparedFlash::Normal(plan),
                 _ => unreachable!("one prepared plan selected"),
             };
-            crate::drive::pioneer::flash::execute_prepared(dev, prepared, req.recover, req.force)?;
+            crate::backends::pioneer::flash::execute_prepared(
+                dev,
+                prepared,
+                req.recover,
+                req.force,
+            )?;
             println!(
                 "{}",
                 crate::style::green("flash complete; drive returned ready.")
@@ -712,7 +710,7 @@ impl DriveFamily for Pioneer {
             // sees exactly what landed without a separate `info` invocation.
             // Non-fatal: a transient post-boot read error is a warning, not a
             // flash failure (the write already committed).
-            match crate::drive::transport::identify(dev) {
+            match crate::transport::identify(dev) {
                 Ok(ident) => println!("{}", post_flash_line(&ident)),
                 Err(e) => eprintln!(
                     "{}",
@@ -730,10 +728,10 @@ impl DriveFamily for Pioneer {
     fn backup_extension(&self) -> Option<&'static str> {
         Some("tar")
     }
-    fn backup_kind(&self) -> super::BackupKind {
+    fn backup_kind(&self) -> crate::drive::BackupKind {
         // The advisory is decided per-capture in `backup_notice`, not statically:
         // a byte-exact OEM capture gets no warning.
-        super::BackupKind {
+        crate::drive::BackupKind {
             infix: "candidate",
             notice: None,
         }
@@ -742,7 +740,7 @@ impl DriveFamily for Pioneer {
         file_info::describe(image)
     }
 
-    fn classify_input(&self, path: &std::path::Path, bytes: &[u8]) -> super::InputKind {
+    fn classify_input(&self, path: &std::path::Path, bytes: &[u8]) -> crate::drive::InputKind {
         // A `.tar` that fails to parse still routes to the bundle path, which
         // reports the specific package-parse error.
         if bundle::Bundle::from_tar_bytes(bytes).is_ok()
@@ -750,9 +748,9 @@ impl DriveFamily for Pioneer {
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
         {
-            super::InputKind::PioneerBundle
+            crate::drive::InputKind::PioneerBundle
         } else {
-            super::InputKind::Bin
+            crate::drive::InputKind::Bin
         }
     }
 
@@ -796,9 +794,9 @@ impl DriveFamily for Pioneer {
         })())
     }
 
-    fn backup_notice(&self, bytes: &[u8]) -> super::BackupNotice {
-        use super::BackupNotice;
-        let components = crate::drive::pioneer::backup::component_roles(bytes);
+    fn backup_notice(&self, bytes: &[u8]) -> crate::drive::BackupNotice {
+        use crate::drive::BackupNotice;
+        let components = crate::backends::pioneer::backup::component_roles(bytes);
         let kernel = components.iter().find(|(role, _)| *role == "kernel");
         let normal = components.iter().find(|(role, _)| *role == "main");
         // Partial capture: one region could not be read. Name what was saved and
@@ -818,7 +816,7 @@ impl DriveFamily for Pioneer {
             }
             _ => {}
         }
-        let p = crate::drive::pioneer::backup::package_provenance(bytes);
+        let p = crate::backends::pioneer::backup::package_provenance(bytes);
         if p.kernel_generation_patched {
             return BackupNotice::Unverified(format!(
                 "OEM kernel — generation patched. Captured kernel bytes are preserved. Normal: {}.",
@@ -854,19 +852,19 @@ impl DriveFamily for Pioneer {
     fn capture_backup(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         // Dump the live H8/SAT image regions and re-wrap them as byte-exact OEM
         // envelopes where recognized, else zero-sentinel. Read-only: no write.
-        crate::drive::pioneer::backup::capture_signed_candidate(dev)
+        crate::backends::pioneer::backup::capture_signed_candidate(dev)
     }
     fn dump_is_raw(&self) -> bool {
         true
     }
     fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
-        crate::drive::pioneer::dump::capture(dev)
+        crate::backends::pioneer::dump::capture(dev)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
         // Per-component structural/codec/signature checks; accepts 1 or 2
         // components (a partial capture still yields a valid single-component
         // archive).
-        crate::drive::pioneer::backup::validate_envelope_package(bytes, target_model)?;
+        crate::backends::pioneer::backup::validate_envelope_package(bytes, target_model)?;
         Ok(bytes.to_vec())
     }
     fn capabilities(&self) -> Capabilities {
@@ -938,13 +936,13 @@ impl DriveFamily for Pioneer {
 mod tests;
 
 #[cfg(test)]
-#[path = "pioneer/oem_reference_tests.rs"]
+#[path = "oem_reference_tests.rs"]
 mod oem_reference_tests;
 #[cfg(test)]
 use oem_reference_tests::*;
 
 #[cfg(test)]
-#[path = "pioneer/matrix_tests.rs"]
+#[path = "matrix_tests.rs"]
 mod matrix_tests;
 
 fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
@@ -960,5 +958,5 @@ fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
 }
 
 #[cfg(test)]
-#[path = "pioneer/prepared_tests.rs"]
+#[path = "prepared_tests.rs"]
 mod prepared_tests;

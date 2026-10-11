@@ -4,9 +4,9 @@ use pioneer_optical::receiver::PreparedUpdate;
 const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 
 fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
-    crate::drive::pioneer::flash::execute_prepared(
+    crate::backends::pioneer::flash::execute_prepared(
         dev,
-        crate::drive::pioneer::flash::PreparedFlash::Complete(plan),
+        crate::backends::pioneer::flash::PreparedFlash::Complete(plan),
         false,
         false,
     )

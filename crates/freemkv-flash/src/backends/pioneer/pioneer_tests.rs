@@ -93,14 +93,14 @@ fn flash_cdbs_match_the_proven_bytes() {
 /// as the flasher now does — descriptor + per-tag key, little-endian.
 fn table_control(controller_id: u16, tag: &str) -> [u8; 0x100] {
     let row =
-        crate::drive::pioneer::keys::lookup(controller_id).expect("controller id in key table");
+        crate::backends::pioneer::keys::lookup(controller_id).expect("controller id in key table");
     row.control_payload(row.key_for_tag(tag).expect("tag present"))
 }
 
 /// The UD04 crossflash/autoflasher control: descriptor + the model's unmatched-
 /// tag fallback key (the crossflash path bypasses the per-destination dispatcher).
 fn ud04_fallback_control() -> [u8; 0x100] {
-    let row = crate::drive::pioneer::keys::lookup(0x8A10).expect("0x8A10 in key table");
+    let row = crate::backends::pioneer::keys::lookup(0x8A10).expect("0x8A10 in key table");
     row.control_payload(row.fallback)
 }
 
@@ -433,7 +433,7 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
     );
 
     // The decision layer routes the real controller ids to a kernel-mode path.
-    use crate::drive::pioneer::flash_plan::{
+    use crate::backends::pioneer::flash_plan::{
         decide_flash_plan, FamilyKey, FlashPlan, Installed, Target,
     };
     let ud03_installed = Installed {
@@ -445,8 +445,8 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
     };
     let ud04_target = Target {
         controller_id: 0x8A10, // BDR-UD04
-        normal: Some(crate::drive::pioneer::flash_plan::ComponentInfo { date: None }),
-        kernel: Some(crate::drive::pioneer::flash_plan::KernelInfo {
+        normal: Some(crate::backends::pioneer::flash_plan::ComponentInfo { date: None }),
+        kernel: Some(crate::backends::pioneer::flash_plan::KernelInfo {
             date: None,
             marker: 0x01,
         }),
@@ -683,7 +683,7 @@ fn installed_facts_from_header_only_normal_backup() {
 
 #[test]
 fn check_plan_executable_covers_every_variant() {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     // All executable plans — including a cross-generation downgrade, which the
     // executor now handles via the §15.3 marker patch when the Kernel is written.
     assert!(check_plan_executable(&FlashPlan::Plain).is_ok());
@@ -703,10 +703,12 @@ fn facts(
     family: Option<&str>,
     date: &str,
 ) -> (
-    crate::drive::pioneer::flash_plan::Installed,
-    crate::drive::pioneer::flash_plan::Target,
+    crate::backends::pioneer::flash_plan::Installed,
+    crate::backends::pioneer::flash_plan::Target,
 ) {
-    use crate::drive::pioneer::flash_plan::{ComponentInfo, FamilyKey, FwDate, Installed, Target};
+    use crate::backends::pioneer::flash_plan::{
+        ComponentInfo, FamilyKey, FwDate, Installed, Target,
+    };
     let fam = family.map(FamilyKey::new);
     (
         Installed {
@@ -733,14 +735,14 @@ fn facts(
 
 #[test]
 fn plan_for_same_family_newer_normal_only_is_plain() {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     let (inst, tgt) = facts(Some("f1"), "22/06/01");
     assert_eq!(plan_for(Some(&inst), &tgt, false), FlashPlan::Plain);
 }
 
 #[test]
 fn plan_for_family_mismatch_is_refused_then_forced() {
-    use crate::drive::pioneer::flash_plan::{FamilyKey, FlashPlan};
+    use crate::backends::pioneer::flash_plan::{FamilyKey, FlashPlan};
     let (inst, mut tgt) = facts(Some("f1"), "22/06/01");
     tgt.family = Some(FamilyKey::new("f2"));
     assert!(matches!(
@@ -755,7 +757,7 @@ fn plan_for_family_mismatch_is_refused_then_forced() {
 
 #[test]
 fn plan_for_unknown_installed_is_refused_unless_forced() {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     // No backup -> installed family unknown -> fail closed (not "plain").
     let (_, tgt) = facts(Some("f1"), "22/06/01");
     assert!(matches!(plan_for(None, &tgt, false), FlashPlan::Refused(_)));
@@ -767,7 +769,7 @@ fn plan_for_unknown_installed_is_refused_unless_forced() {
 
 #[test]
 fn plan_for_same_model_normal_only_tag_mismatch_is_refused() {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     // Normal-only target whose required-Kernel tag differs from the drive's
     // installed Kernel tag — gate 2 refuses (date direction is irrelevant).
     let (inst, mut tgt) = facts(Some("f1"), "20/01/01");
@@ -780,7 +782,7 @@ fn plan_for_same_model_normal_only_tag_mismatch_is_refused() {
 
 #[test]
 fn resolve_flash_plan_unprofilable_header_only_normal_is_refused_unless_forced() {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     // A header-only Normal does not decode to a profilable body: both families
     // are None, so the gate refuses; --force overrides; --recover refuses too
     // unless forced.
@@ -873,7 +875,7 @@ fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
     }
     let mut dev = Mem::default();
     let dump = Pioneer::new().capture_dump(&mut dev, true).unwrap();
-    assert!(crate::drive::pioneer::dump::directory(&dump)
+    assert!(crate::backends::pioneer::dump::directory(&dump)
         .unwrap()
         .is_some());
     assert_eq!(dump[0x1234], (0x1234 % 251) as u8);
@@ -949,7 +951,7 @@ fn untrusted_text_is_sanitized_before_printing() {
 
 #[test]
 fn forced_warning_does_not_claim_a_family_bypass_for_the_unknown_tag_case() {
-    use crate::drive::pioneer::flash_plan::FlashPlan;
+    use crate::backends::pioneer::flash_plan::FlashPlan;
     // Same family, installed Kernel tag unreadable: Forced(Plain) via --force.
     let (mut inst, tgt) = facts(Some("f1"), "22/06/01");
     inst.kernel_tag = None;
@@ -1161,7 +1163,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
         .unwrap();
         validate_kernel_normal(&pair.kernel, &pair.normal).unwrap();
         generic_normal_transcript(&pair.normal).unwrap();
-        crate::drive::pioneer::file_info::plan_offline(
+        crate::backends::pioneer::file_info::plan_offline(
             &pair.normal,
             crate::drive::InputKind::Bin,
             "UNLISTED DEVICE",
@@ -1270,7 +1272,7 @@ fn only_pioneer_refuses_public_force_and_points_at_recover() {
         .force_refusal()
         .expect("Pioneer refuses --force");
     assert!(refusal.contains("recover --current"), "{refusal}");
-    assert!(crate::drive::mtk::Mtk.force_refusal().is_none());
+    assert!(crate::backends::mtk::Mtk.force_refusal().is_none());
 }
 
 #[test]
@@ -1342,7 +1344,7 @@ fn recover_without_current_never_reads_firmware_from_an_unrecognized_drive() {
 #[test]
 fn mediatek_has_no_recovery_path() {
     let mut dev = MockScsiDevice::new();
-    assert!(crate::drive::mtk::Mtk
+    assert!(crate::backends::mtk::Mtk
         .recover(&mut dev, Some(&[1, 2, 3]), &[4, 5, 6], true)
         .is_none());
     assert!(dev.reads.is_empty() && dev.writes.is_empty());

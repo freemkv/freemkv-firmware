@@ -368,7 +368,7 @@ fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
         updating: true,
         ..Default::default()
     };
-    crate::drive::pioneer::Pioneer::new()
+    crate::backends::pioneer::Pioneer::new()
         .recover(&mut dry, Some(&current), &target, false)
         .expect("Pioneer has a recovery path")
         .unwrap();
@@ -379,7 +379,7 @@ fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
         updating: true,
         ..Default::default()
     };
-    crate::drive::pioneer::Pioneer::new()
+    crate::backends::pioneer::Pioneer::new()
         .recover(&mut live, Some(&current), &target, true)
         .expect("Pioneer has a recovery path")
         .unwrap();

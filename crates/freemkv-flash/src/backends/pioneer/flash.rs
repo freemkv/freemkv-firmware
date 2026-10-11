@@ -4,11 +4,11 @@
 //! ordering, revision gating, transfer chunks, settle timing and readiness.
 
 #[cfg(test)]
-use crate::drive::pioneer::FLASH_CHUNK;
+use crate::backends::pioneer::FLASH_CHUNK;
 
-use crate::drive::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use crate::platform::ScsiDevice;
 use crate::style;
+use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use anyhow::{anyhow, bail, Context, Result};
 use pioneer_optical::drive::{UpdateError, UpdateOptions, UpdateRuntime};
 use pioneer_optical::receiver::{
@@ -88,7 +88,7 @@ pub(crate) fn execute_prepared(
         device: &shared,
         recover,
         force,
-        family_known: crate::drive::pioneer::flash_plan::normal_family(normal).is_some(),
+        family_known: crate::backends::pioneer::flash_plan::normal_family(normal).is_some(),
     };
     match plan {
         PreparedFlash::Complete(plan) => plan.flash(io, &mut runtime),

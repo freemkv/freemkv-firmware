@@ -2,8 +2,7 @@
 //! belong to provider libraries; no update session is entered here.
 mod capture;
 mod compare_report;
-mod comparison;
-pub(crate) mod pioneer;
+pub(crate) mod comparison;
 mod report;
 pub use report::*;
 
@@ -44,7 +43,7 @@ impl Control {
     pub fn cancelled(&self) -> bool {
         self.0.load(Ordering::Relaxed)
     }
-    fn check(&self) -> Result<()> {
+    pub(crate) fn check(&self) -> Result<()> {
         if self.cancelled() {
             Err(InspectionError::Cancelled.into())
         } else {
@@ -126,7 +125,7 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned();
-            pioneer::inspect_file(name, &bytes, control)
+            crate::backends::pioneer::inspect::inspect_file(name, &bytes, control)
         }
         Source::Drive { device, capture } => {
             let selector = workflow::resolve_device(Some(device))?;
@@ -142,7 +141,7 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 return Err(InspectionError::UnsupportedFormat(family.to_string()).into());
             }
             control.check()?;
-            let state = pioneer::live_state(&mut dev);
+            let state = crate::backends::pioneer::inspect::live_state(&mut dev);
             let handler = drive::for_family(family);
             engine::backup_with_replace(&mut dev, handler.as_ref(), capture, false, false, false)?;
             drop(opened);

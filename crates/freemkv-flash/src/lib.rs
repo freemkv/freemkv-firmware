@@ -6,7 +6,7 @@
 //!   [`platform::MockScsiDevice`] for host-independent tests.
 //! * [`drive`] — chip-family classification ([`drive::Family`],
 //!   [`drive::classify`]) and the per-family command trait
-//!   ([`drive::DriveFamily`]); [`drive::mtk`] is the only fully-implemented one.
+//!   ([`drive::DriveFamily`]); [`backends`] holds the protocol implementations.
 //! * [`engine`] — the generic, chip-agnostic `info`/`backup`/`flash` orchestration
 //!   that drives a [`drive::DriveFamily`] through its trait primitives.
 //!
@@ -20,6 +20,7 @@ pub mod output;
 
 pub mod diagnostics;
 
+pub mod backends;
 pub mod cmac;
 pub mod drive;
 pub mod engine;
@@ -32,6 +33,8 @@ pub mod manifest;
 pub mod platform;
 pub mod probe;
 pub mod style;
+/// The single `Transport` adapter between `ScsiDevice` and the protocol crates.
+pub mod transport;
 pub mod workflow;
 
 /// Compute the CRC32 (IEEE) of a byte slice.

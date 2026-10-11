@@ -39,9 +39,10 @@ use anyhow::{anyhow, bail, Context, Result};
 pub(crate) mod backup;
 pub(crate) mod crossflash;
 pub(crate) mod file_info;
+pub mod fw_ident;
 pub mod oem;
 
-use super::{Capabilities, DriveFamily, Family};
+use crate::drive::{Capabilities, DriveFamily, Family};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
@@ -310,7 +311,10 @@ impl UserDump {
                 "inq.bin" => &mut inq,
                 "fd_fwdate.bin" => &mut fd_fwdate,
                 "fd_sn.bin" => &mut fd_sn,
-                other => bail!("unexpected dump member '{}'", super::sanitize_ascii(other)),
+                other => bail!(
+                    "unexpected dump member '{}'",
+                    crate::drive::sanitize_ascii(other)
+                ),
             };
             if slot.is_some() {
                 bail!("duplicate dump member '{name}'");
@@ -365,12 +369,12 @@ impl UserDump {
     /// Decoded serial number, if the descriptor parses. Sanitized for display
     /// (a malicious/garbled drive cannot inject terminal escapes).
     pub fn serial(&self) -> Option<String> {
-        parse_field_descriptor(&self.fd_sn).map(|d| super::sanitize_ascii(&d.ascii))
+        parse_field_descriptor(&self.fd_sn).map(|d| crate::drive::sanitize_ascii(&d.ascii))
     }
 
     /// Decoded firmware date, if the descriptor parses.
     pub fn fw_date(&self) -> Option<String> {
-        parse_field_descriptor(&self.fd_fwdate).map(|d| super::sanitize_ascii(&d.ascii))
+        parse_field_descriptor(&self.fd_fwdate).map(|d| crate::drive::sanitize_ascii(&d.ascii))
     }
 
     /// Write the dump as a `.tar` with compatible member names/order.
@@ -421,7 +425,7 @@ impl UserDump {
                 bail!(
                     "tar member '{}' declares {declared} bytes (> {READ_TAR_MEMBER_CAP} cap); \
                      refusing to allocate a buffer this large before the length gate runs",
-                    super::sanitize_ascii(&name)
+                    crate::drive::sanitize_ascii(&name)
                 );
             }
             // Read into a capacity-hinted buffer; `take` bounds the actual
@@ -435,7 +439,7 @@ impl UserDump {
             if data.len() > READ_TAR_MEMBER_CAP {
                 bail!(
                     "tar member '{}' body exceeded the {READ_TAR_MEMBER_CAP}-byte cap",
-                    super::sanitize_ascii(&name)
+                    crate::drive::sanitize_ascii(&name)
                 );
             }
             let canonical = MEMBER_NAMES
@@ -443,7 +447,10 @@ impl UserDump {
                 .copied()
                 .find(|m| *m == name)
                 .with_context(|| {
-                    format!("unexpected dump member '{}'", super::sanitize_ascii(&name))
+                    format!(
+                        "unexpected dump member '{}'",
+                        crate::drive::sanitize_ascii(&name)
+                    )
                 })?;
             members.push((canonical, data));
         }
@@ -990,24 +997,24 @@ impl DriveFamily for Mtk {
     fn probe(
         &self,
         dev: &mut dyn ScsiDevice,
-        identity: &super::Identity,
-    ) -> Result<Option<super::ProbeEvidence>> {
+        identity: &crate::drive::Identity,
+    ) -> Result<Option<crate::drive::ProbeEvidence>> {
         // A Pioneer INQUIRY is enough to rule out MT19xx. Do not issue MTK
         // vendor ROM reads at this unrelated controller.
         if identity.vendor.eq_ignore_ascii_case("PIONEER") {
             return Ok(None);
         }
-        Ok(
-            (get_config_is_mtk(dev) && has_mt19_banner(dev)).then_some(super::ProbeEvidence {
+        Ok((get_config_is_mtk(dev) && has_mt19_banner(dev)).then_some(
+            crate::drive::ProbeEvidence {
                 family: Family::Mtk,
                 backend_name: self.backend_name(),
                 discriminator: "MMC 0x010C + MT19 boot ROM banner",
-            }),
-        )
+            },
+        ))
     }
 
-    fn identity(&self, dev: &mut dyn ScsiDevice) -> super::Identity {
-        let mut identity = super::read_identity(dev);
+    fn identity(&self, dev: &mut dyn ScsiDevice) -> crate::drive::Identity {
+        let mut identity = crate::drive::read_identity(dev);
         identity.banner = read_mt19_banner(dev);
         identity
     }
@@ -1016,7 +1023,7 @@ impl DriveFamily for Mtk {
         Some("bin")
     }
 
-    fn backup_notice(&self, bytes: &[u8]) -> super::BackupNotice {
+    fn backup_notice(&self, bytes: &[u8]) -> crate::drive::BackupNotice {
         backup::notice(bytes)
     }
 
@@ -1038,8 +1045,8 @@ impl DriveFamily for Mtk {
         }
     }
 
-    fn classify_input(&self, path: &std::path::Path, _bytes: &[u8]) -> super::InputKind {
-        super::sniff_input(path)
+    fn classify_input(&self, path: &std::path::Path, _bytes: &[u8]) -> crate::drive::InputKind {
+        crate::drive::sniff_input(path)
     }
 
     fn verification_ranges(&self, image: &[u8]) -> Result<Vec<(usize, usize)>> {
@@ -1143,7 +1150,7 @@ impl DriveFamily for Mtk {
         Capabilities::all()
     }
 
-    fn read_full_image(&self, dev: &mut dyn ScsiDevice) -> Result<super::FullImage> {
+    fn read_full_image(&self, dev: &mut dyn ScsiDevice) -> Result<crate::drive::FullImage> {
         // The MTK full-image read (mode6/buf0 sweep) lives in `probe`; this trait
         // method is the entry point the engine calls.
         crate::probe::read_full_image(dev)
@@ -1152,7 +1159,7 @@ impl DriveFamily for Mtk {
     fn read_surface_map(
         &self,
         dev: &mut dyn ScsiDevice,
-        ident: &super::Identity,
+        ident: &crate::drive::Identity,
         image: &[u8],
         gaps: &[(usize, usize)],
     ) -> Result<Option<(String, String)>> {
@@ -1274,7 +1281,7 @@ impl DriveFamily for Mtk {
     fn firmware_report(
         &self,
         dev: &mut dyn ScsiDevice,
-    ) -> Result<Option<crate::drive::fw_ident::FwReport>> {
+    ) -> Result<Option<crate::backends::mtk::fw_ident::FwReport>> {
         // The two firmware-code windows a live drive exposes (rom_1F0000 is
         // per-unit calibration and deliberately excluded from the fingerprint).
         let rom_003000 = Acquire::ReadBuffer {
@@ -1287,7 +1294,7 @@ impl DriveFamily for Mtk {
             len: ROM_1EC000_LEN,
         }
         .run(dev)?;
-        Ok(Some(crate::drive::fw_ident::report(
+        Ok(Some(crate::backends::mtk::fw_ident::report(
             &rom_003000,
             &rom_1ec000,
         )))
@@ -1304,7 +1311,7 @@ impl DriveFamily for Mtk {
         _mode: FlashMode,
         progress: &mut dyn FnMut(usize),
     ) -> Result<()> {
-        use crate::drive::transport::{mtk_err, ScsiTransport, SharedDevice};
+        use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
         let shared = SharedDevice::new(dev);
         {
             let mut transport = ScsiTransport::flash(&shared);

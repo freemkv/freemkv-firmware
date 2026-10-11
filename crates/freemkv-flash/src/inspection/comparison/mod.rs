@@ -11,20 +11,20 @@ pub(super) use engine::ChangeKind;
 use std::ops::Range;
 
 #[derive(Clone, Debug)]
-pub(super) struct Identity {
+pub(crate) struct Identity {
     pub component: String,
     pub sha256: String,
     pub family: Option<String>,
     pub family_scheme: String,
 }
 #[derive(Clone, Debug)]
-pub(super) struct FirmwareAnalysis {
+pub(crate) struct FirmwareAnalysis {
     pub identity: Identity,
     pub regions: Vec<Region>,
     pub complete: bool,
 }
 #[derive(Clone, Debug)]
-pub(super) struct Region {
+pub(crate) struct Region {
     pub id: usize,
     pub name: String,
     pub address: Option<u64>,
@@ -45,18 +45,18 @@ impl Region {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Representation {
+pub(crate) enum Representation {
     Decoded,
     Expanded,
 }
 #[derive(Clone, Debug)]
-pub(super) struct Reference {
+pub(crate) struct Reference {
     pub instruction: Range<usize>,
     pub operand: Range<usize>,
     pub target: u64,
 }
 #[derive(Clone, Debug)]
-pub(super) struct Table {
+pub(crate) struct Table {
     pub format: String,
     pub record_width: usize,
     pub records: Vec<String>,

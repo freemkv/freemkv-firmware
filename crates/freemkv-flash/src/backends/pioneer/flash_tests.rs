@@ -1,5 +1,5 @@
 use super::*;
-use crate::drive::pioneer::{transfer, CONTROL_LEN};
+use crate::backends::pioneer::{transfer, CONTROL_LEN};
 use pioneer_optical::drive::{execute_update, UpdateTransfer};
 
 #[test]
@@ -52,7 +52,7 @@ fn execute_flash(
     let shared = SharedDevice::new(dev);
     let class = resolve_class(
         transport::identify_on(&shared),
-        crate::drive::pioneer::flash_plan::normal_family(normal).is_some(),
+        crate::backends::pioneer::flash_plan::normal_family(normal).is_some(),
         recover,
     )?;
     let mut port = ScsiTransport::flash(&shared);
@@ -89,9 +89,9 @@ fn bd_inquiry(alloc: usize, revision: &[u8; 4]) -> Vec<u8> {
 /// The 0x8A10 (UD04) OEM control buffer, built generically from the embedded
 /// key table exactly as the live flasher does for the self/GENERAL path.
 fn ud04_control() -> [u8; CONTROL_LEN] {
-    let row = crate::drive::pioneer::keys::lookup(0x8A10).expect("0x8A10 in key table");
+    let row = crate::backends::pioneer::keys::lookup(0x8A10).expect("0x8A10 in key table");
     let key = row
-        .key_for_tag(crate::drive::pioneer::keys::DEFAULT_TAG)
+        .key_for_tag(crate::backends::pioneer::keys::DEFAULT_TAG)
         .expect("GENERAL key");
     row.control_payload(key)
 }

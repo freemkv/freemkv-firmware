@@ -24,10 +24,10 @@ use std::rc::Rc;
 use anyhow::{bail, Result};
 use sha2::{Digest, Sha256};
 
-use crate::drive::mtk::{Mtk, CHUNK, IMAGE_SIZE, ROM_1EC000_OFFSET};
+use crate::backends::mtk::{Mtk, CHUNK, IMAGE_SIZE, ROM_1EC000_OFFSET};
 // COMPAT: the module path differs in the 0.11.2 baseline copy of this file.
-use crate::drive::pioneer::flash_plan;
-use crate::drive::pioneer::Pioneer;
+use crate::backends::pioneer::flash_plan;
+use crate::backends::pioneer::Pioneer;
 use crate::drive::{DriveFamily, FlashRequest, InputKind};
 use crate::manifest::FlashMode;
 use crate::output::{capture_events, Event};
@@ -475,7 +475,7 @@ fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
 ///
 /// COMPAT: the only line that names the catalog; the 0.11.2 baseline differs.
 fn mtk_boot_page() -> Vec<u8> {
-    crate::drive::mtk::oem::catalog()
+    crate::backends::mtk::oem::catalog()
         .default_for(mediatek_optical::Chip::Mt1959)
         .expect("MT1959 default")
         .boot_page()
@@ -1981,7 +1981,7 @@ fn header_only_kernel(sat: &str, kernel_tag: &str) -> Vec<u8> {
 
 #[test]
 fn golden_pioneer_plan_and_gates() {
-    use crate::drive::pioneer::{check_plan_executable, resolve_flash_plan};
+    use crate::backends::pioneer::{check_plan_executable, resolve_flash_plan};
     let mut g = Golden::default();
 
     // resolve_flash_plan / check_plan_executable over installed x target x flags.

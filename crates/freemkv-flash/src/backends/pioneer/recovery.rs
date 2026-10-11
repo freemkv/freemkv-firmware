@@ -1,7 +1,7 @@
 //! Recovery with user-supplied receiver evidence, no implicit firmware reads.
-use crate::drive::pioneer::classify_flash_input;
-use crate::drive::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
+use crate::backends::pioneer::classify_flash_input;
 use crate::platform::ScsiDevice;
+use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use anyhow::{bail, ensure, Context, Result};
 use pioneer_optical::{cdb, envelope::Update, image::ReceiverControl, Identity, Role};
 use std::time::Duration;

@@ -2,7 +2,7 @@
 //!
 //! This is the flash analogue of the modify tool's per-chipset lever set: a
 //! single generic engine drives whichever [`crate::flashset::FlashInstructionSet`] the detected
-//! chipset selects. It never replaces the proven [`crate::drive::mtk`] execution
+//! chipset selects. It never replaces the proven [`crate::backends::mtk`] execution
 //! path — instead [`crate::flashset::FlashInstructionSet::mt1959`] describes that path
 //! *declaratively*, and the golden CDB KAT in `flashset_tests` proves the
 //! declarative form renders **byte-identical** CDBs to the live `mtk` builders,
@@ -225,7 +225,7 @@ const MT1959_STEPS: &[FlashStep] = &[
 
 impl FlashInstructionSet {
     /// The proven MediaTek MT1959 recipe (the hardware-executed path). The golden
-    /// KAT asserts these steps render byte-identical to `drive::mtk`'s builders.
+    /// KAT asserts these steps render byte-identical to `backends::mtk`'s builders.
     pub const fn mt1959() -> Self {
         FlashInstructionSet {
             name: "MediaTek MT19xx (proven on MT1959)",

@@ -1,11 +1,11 @@
 //! Golden CDB KAT + catalog invariants for [`super`].
 //!
 //! The golden KAT pins the declarative MT1959 recipe to the byte-for-byte output
-//! of the live `drive::mtk` CDB builders — so the declarative catalog can never
+//! of the live `backends::mtk` CDB builders — so the declarative catalog can never
 //! drift from the proven, hardware-executed path.
 
 use super::*;
-use crate::drive::mtk;
+use crate::backends::mtk;
 
 fn step(label: &str) -> &'static FlashStep {
     FlashInstructionSet::mt1959()

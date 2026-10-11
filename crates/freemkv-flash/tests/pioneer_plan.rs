@@ -1,7 +1,7 @@
 //! Device-free Pioneer planning regressions; no extra public CLI command.
 
-use freemkv_flash::drive::pioneer::bundle::{Bundle, Role};
-use freemkv_flash::drive::pioneer::file_info::plan_offline as plan_pioneer_offline;
+use freemkv_flash::backends::pioneer::bundle::{Bundle, Role};
+use freemkv_flash::backends::pioneer::file_info::plan_offline as plan_pioneer_offline;
 use freemkv_flash::drive::InputKind;
 use sha2::{Digest, Sha256};
 use std::process::Command;
@@ -51,7 +51,8 @@ fn supplied_ud04_kernel_and_normal_plan_matches_autoflasher_path() {
         .find(|c| c.role == Role::Main)
         .unwrap();
     let steps =
-        freemkv_flash::drive::pioneer::offline_pair_data_out(&kernel.bytes, &normal.bytes).unwrap();
+        freemkv_flash::backends::pioneer::offline_pair_data_out(&kernel.bytes, &normal.bytes)
+            .unwrap();
     assert_eq!(steps.len(), 64);
     let mut digest = Sha256::new();
     for step in &steps {

@@ -22,7 +22,7 @@ fn patched_oem_backup_preserves_body_and_original_receiver_when_configured() {
     assert!(provenance.kernel_generation_patched);
     // The planner must not confuse our patched marker with a newer receiver.
     assert_eq!(
-        crate::drive::pioneer::k::receiver_generation(&decoded.image),
+        crate::backends::pioneer::k::receiver_generation(&decoded.image),
         Some(false)
     );
 }
@@ -567,7 +567,7 @@ fn oem_pair_rebuilds_from_decoded_images_when_configured() {
         "OEM kernel must be recognized as byte-exact"
     );
     let normal_in_table =
-        crate::drive::pioneer::n::lookup(&format!("{:x}", Sha256::digest(&n.image))).is_some();
+        crate::backends::pioneer::n::lookup(&format!("{:x}", Sha256::digest(&n.image))).is_some();
     assert_eq!(
         prov.normal_oem, normal_in_table,
         "normal_oem must reflect the pioneer_n table"
@@ -1098,7 +1098,7 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
         .find(|c| c.role == Role::Main)
         .unwrap();
     let candidate_steps =
-        crate::drive::pioneer::offline_pair_data_out(&kernel.bytes, &normal.bytes).unwrap();
+        crate::backends::pioneer::offline_pair_data_out(&kernel.bytes, &normal.bytes).unwrap();
     if let Ok(path) = std::env::var("PIONEER_UD04_AUTOFLASHER_BUNDLE_FIXTURE") {
         let original_bytes = std::fs::read(path).unwrap();
         validate_envelope_package(&original_bytes, "BD-RW BDR-UD04").unwrap();
@@ -1148,7 +1148,7 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
             &normal.bytes[0x1f0..0x200],
             &original_normal.bytes[0x1f0..0x200]
         );
-        let original_steps = crate::drive::pioneer::offline_pair_data_out(
+        let original_steps = crate::backends::pioneer::offline_pair_data_out(
             &original_kernel.bytes,
             &original_normal.bytes,
         )
@@ -1169,8 +1169,8 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
     let output =
         std::env::temp_dir().join(format!("ud04-signed-candidate-{}.tar", std::process::id()));
     let _ = std::fs::remove_file(&output);
-    let drive = crate::drive::pioneer::Pioneer::new();
-    crate::drive::pioneer::file_info::plan_offline(
+    let drive = crate::backends::pioneer::Pioneer::new();
+    crate::backends::pioneer::file_info::plan_offline(
         &candidate,
         crate::drive::InputKind::PioneerBundle,
         "BD-RW BDR-UD04",
@@ -1347,7 +1347,8 @@ fn unknown_kernel_geometry_stops_before_any_normal_read() {
 
 #[test]
 fn invalid_normal_keeps_verified_kernel_but_cannot_be_full_rollback() {
-    use crate::drive::{pioneer::Pioneer, FirmwareBackend};
+    use crate::backends::pioneer::Pioneer;
+    use crate::drive::FirmwareBackend;
     let (kernel, mut normal) = bounded_backup_fixture();
     let valid =
         construct_signed_candidate(&kernel, &normal, "PIONEER BD-RW   BDR-UD04", "1.14").unwrap();

@@ -8,7 +8,7 @@ use std::io::Read;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-use crate::drive::pioneer::parse_banner;
+use crate::backends::pioneer::parse_banner;
 
 const MAX_COMPONENT: u64 = 8 << 20;
 

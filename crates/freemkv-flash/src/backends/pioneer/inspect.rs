@@ -1,5 +1,5 @@
 //! Pioneer adapter. All decoding and content comparison lives in Optical.
-use super::*;
+use crate::inspection::*;
 use anyhow::{Context, Result};
 use pioneer_optical::{
     analysis::{Observer, Options},
@@ -29,11 +29,11 @@ impl Observer for Progress<'_> {
     }
 }
 
-pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> Result<Inspection> {
+pub(crate) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> Result<Inspection> {
     if pioneer_optical::envelope::header_info(bytes).is_some() {
         return Err(InspectionError::PackageRequired.into());
     }
-    let bundle = match crate::drive::pioneer::bundle::Bundle::from_backup_tar_bytes(bytes) {
+    let bundle = match crate::backends::pioneer::bundle::Bundle::from_backup_tar_bytes(bytes) {
         Ok(bundle) => bundle,
         Err(error) => {
             // Recognized archive corruption must not become “unsupported.”
@@ -52,7 +52,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
     let kernel = bundle
         .components
         .iter()
-        .find(|c| c.role == crate::drive::pioneer::bundle::Role::Kernel)
+        .find(|c| c.role == crate::backends::pioneer::bundle::Role::Kernel)
         .and_then(|c| Envelope::load(&c.bytes).ok());
     let mut report = Inspection {
         schema: 1,
@@ -67,7 +67,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
     };
     for component in &bundle.components {
         control.check()?;
-        let decoded = if component.role == crate::drive::pioneer::bundle::Role::Kernel {
+        let decoded = if component.role == crate::backends::pioneer::bundle::Role::Kernel {
             Envelope::load(&component.bytes).context("Kernel could not be decoded")
         } else if let Some(kernel) = &kernel {
             Envelope::load_with_kernel(&component.bytes, kernel)
@@ -80,7 +80,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
             Ok(envelope) => envelope,
             Err(error) => {
                 report.components.push(ComponentView {
-                    name: if component.role == crate::drive::pioneer::bundle::Role::Kernel {
+                    name: if component.role == crate::backends::pioneer::bundle::Role::Kernel {
                         "Kernel"
                     } else {
                         "Normal"
@@ -200,7 +200,7 @@ pub(super) fn inspect_file(source: String, bytes: &[u8], control: &Control) -> R
     Ok(report)
 }
 
-pub(super) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState {
+pub(crate) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState {
     let mut state = LiveState {
         captured_at: SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -272,8 +272,10 @@ fn signature_label(status: pioneer_optical::envelope::SignatureStatus) -> &'stat
 
 fn comparison_input(
     analysis: &pioneer_optical::analysis::FirmwareAnalysis<'_>,
-) -> comparison::FirmwareAnalysis {
-    use comparison::{FirmwareAnalysis, Identity, Reference, Region, Representation, Table};
+) -> crate::inspection::comparison::FirmwareAnalysis {
+    use crate::inspection::comparison::{
+        FirmwareAnalysis, Identity, Reference, Region, Representation, Table,
+    };
     FirmwareAnalysis {
         identity: Identity {
             component: analysis.identity.component.clone(),

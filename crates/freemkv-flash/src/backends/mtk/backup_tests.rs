@@ -1,7 +1,7 @@
 //! Unit tests for [`super`] (MediaTek backup capture, notice and validation).
 
 use super::*;
-use crate::drive::mtk::{Mtk, IMAGE_SIZE};
+use crate::backends::mtk::{Mtk, IMAGE_SIZE};
 use crate::platform::MockScsiDevice;
 use mediatek_optical::{layout, Chip};
 

@@ -11,7 +11,7 @@ pub struct Field {
     pub value: String,
 }
 impl Field {
-    pub(super) fn new(label: impl Into<String>, value: impl ToString) -> Self {
+    pub(crate) fn new(label: impl Into<String>, value: impl ToString) -> Self {
         Self {
             label: label.into(),
             value: value.to_string(),
@@ -100,7 +100,7 @@ pub struct Inspection {
     /// Drive state exists only for live capture.
     pub live: Option<LiveState>,
     #[serde(skip)]
-    pub(super) analyses: Vec<super::comparison::FirmwareAnalysis>,
+    pub(crate) analyses: Vec<super::comparison::FirmwareAnalysis>,
 }
 impl Inspection {
     /// Logical region data for bounded hex/detail rendering, never encrypted offsets.
