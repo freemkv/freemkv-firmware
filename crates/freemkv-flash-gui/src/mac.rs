@@ -10,6 +10,10 @@
 //! place controls are written, and it computes nothing — it compares the new view with what
 //! it last drew and rebuilds only the parts that changed.
 
+// qa's GUI gate (`FREEMKV_FLASH_GATE`), a debug-build hook.
+#[cfg(debug_assertions)]
+mod gate;
+
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -523,6 +527,9 @@ struct Ivars {
     an_actions: RefCell<Option<Retained<Stack>>>,
     an_shown: RefCell<Option<Arc<AnalysisView>>>,
     timer: RefCell<Option<Retained<NSTimer>>>,
+    /// The GUI gate's directory, when a debug build runs the gate.
+    #[cfg(debug_assertions)]
+    gate: RefCell<Option<std::path::PathBuf>>,
 }
 
 define_class!(
@@ -613,6 +620,15 @@ define_class!(
         fn on_tick(&self, _s: Option<&AnyObject>) {
             let fx = self.with_app(|a| a.poll());
             self.perform(fx);
+        }
+
+        #[cfg(debug_assertions)]
+        #[unsafe(method(onGate:))]
+        fn on_gate(&self, _s: Option<&AnyObject>) {
+            let dir = self.ivars().gate.borrow().clone();
+            if let Some(dir) = dir {
+                gate::run(self, &dir);
+            }
         }
     }
 );
@@ -1551,13 +1567,22 @@ fn activate_app(app: &NSApplication) {
 /// Run the AppKit shell until the window closes.
 pub fn run() {
     let mtm = MainThreadMarker::new().expect("the AppKit shell runs on the main thread");
+    #[cfg(debug_assertions)]
+    let (model, gate) = crate::gui_gate::model_or(ui::App::new);
+    #[cfg(not(debug_assertions))]
+    let (model, gate) = (ui::App::new(), None::<std::path::PathBuf>);
     let app = NSApplication::sharedApplication(mtm);
-    app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+    // The gate runs unattended: no Dock icon, and it never takes focus.
+    app.setActivationPolicy(if gate.is_some() {
+        NSApplicationActivationPolicy::Accessory
+    } else {
+        NSApplicationActivationPolicy::Regular
+    });
     build_menus(mtm, &app);
 
     let window = new_window(mtm, "freemkv Firmware Utility", W, H);
     window.setContentMinSize(NSSize::new(760.0, 640.0));
-    let c = Controller::new(mtm, ui::App::new());
+    let c = Controller::new(mtm, model);
     *c.ivars().window.borrow_mut() = Some(window.clone());
     app.setDelegate(Some(ProtocolObject::from_ref(&*c)));
     window.setDelegate(Some(ProtocolObject::from_ref(&*c)));
@@ -1566,7 +1591,19 @@ pub fn run() {
     c.perform(fx);
 
     window.center();
-    window.makeKeyAndOrderFront(None);
-    activate_app(&app);
+    if gate.is_none() {
+        window.makeKeyAndOrderFront(None);
+        activate_app(&app);
+    } else {
+        window.orderFront(None);
+    }
+    #[cfg(debug_assertions)]
+    if gate.is_some() {
+        *c.ivars().gate.borrow_mut() = gate;
+        // Once the run loop is up and the window has drawn.
+        let _: () = unsafe {
+            msg_send![&*c, performSelector: sel!(onGate:), withObject: None::<&AnyObject>, afterDelay: 0.5f64]
+        };
+    }
     app.run();
 }

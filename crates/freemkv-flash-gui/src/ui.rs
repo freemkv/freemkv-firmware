@@ -591,6 +591,10 @@ pub struct App {
     pub(crate) info_result: bool,
     pub(crate) rx: Option<Receiver<Msg>>,
     waker: Option<Waker>,
+    /// qa's GUI gate (`gui_gate`): refuse every job, profile read and drive scan, so the gate's
+    /// synthetic drive can never reach a device. Debug builds only.
+    #[cfg(debug_assertions)]
+    pub(crate) inert: bool,
     /// Test seam: record jobs instead of running them, keeping the worker's sender.
     #[cfg(test)]
     pub(crate) dry_run: Option<Vec<(String, String, Job)>>,
@@ -652,6 +656,8 @@ impl App {
             info_result: false,
             rx: None,
             waker: None,
+            #[cfg(debug_assertions)]
+            inert: false,
             #[cfg(test)]
             dry_run: None,
             #[cfg(test)]
@@ -669,6 +675,10 @@ impl App {
     /// Read the selected drive's profile on a worker; the drive bar shows
     /// `PROBING` and the controls lock until it arrives.
     fn start_profile(&mut self) -> Vec<Effect> {
+        #[cfg(debug_assertions)]
+        if self.inert {
+            return Vec::new();
+        }
         self.profile_rx = None;
         if !self.selected() {
             self.profile = ProfileState::NoDrive;
@@ -739,6 +749,10 @@ impl App {
     }
 
     fn discover(&mut self) {
+        #[cfg(debug_assertions)]
+        if self.inert {
+            return;
+        }
         // Tests must not enumerate the host's real drives.
         #[cfg(test)]
         if self.dry_run.is_some() {
@@ -1155,6 +1169,11 @@ impl App {
     }
 
     pub(crate) fn start_job(&mut self, label: &str, device: String, job: Job) -> Vec<Effect> {
+        #[cfg(debug_assertions)]
+        if self.inert {
+            self.log.push(format!("{label}: not run by the GUI gate."));
+            return Vec::new();
+        }
         if self.running() {
             return Vec::new();
         }

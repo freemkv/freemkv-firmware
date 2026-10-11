@@ -11,6 +11,10 @@
 #[cfg(test)]
 mod architecture_tests;
 mod egui_shell;
+// qa's GUI gate (`FREEMKV_FLASH_GATE`): debug builds only, so a shipped binary has no hook.
+#[cfg(debug_assertions)]
+#[cfg_attr(not(feature = "native"), allow(dead_code))]
+mod gui_gate;
 #[cfg(all(feature = "native", target_os = "linux", target_env = "gnu"))]
 mod linux;
 #[cfg(all(feature = "native", target_os = "macos"))]
