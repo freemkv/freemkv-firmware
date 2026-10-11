@@ -1,4 +1,12 @@
 use super::*;
+use freemkv_flash::backend::{
+    Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, Descriptor, FileFormat,
+    FlashFacet, FlashPlan, FlashRequest, FormatRole, Identity, Match, PlanLine, ReadDevice,
+    SavedBackup, WriteDevice,
+};
+use freemkv_flash::manifest::FlashMode;
+use freemkv_flash::platform::MockScsiDevice;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 fn drive(path: &str, name: &str, label: &str) -> DriveChoice {
     DriveChoice {
@@ -92,18 +100,16 @@ fn last_job(app: &App) -> &(String, String, Job) {
         .expect("a job was started")
 }
 
-/// Flash now runs the read-only plan first; let it pass with `plan` so the
-/// confirmation opens.
+/// Flash now runs the read-only plan first; let it pass, which starts the
+/// backup-and-authorize job.
 fn plan_passes(app: &mut App) {
     let (label, _, job) = last_job(app);
     assert_eq!(label, "Flash plan");
     assert!(matches!(job, Job::PlanFlash(o) if !o.acknowledged_risk));
-    let worker = app.worker.take().unwrap();
-    worker
-        .send(Msg::Plan(vec!["== flash plan ==".into(), String::new()]))
-        .unwrap();
-    worker.send(Msg::Done(Ok(()))).unwrap();
-    app.poll();
+    finish(app, Ok(()));
+    let (label, _, job) = last_job(app);
+    assert_eq!(label, "Firmware update");
+    assert!(matches!(job, Job::Flash(o) if o.execute));
 }
 
 /// One GUI result row, as the workflows publish it.
@@ -351,75 +357,281 @@ fn flash_starts_with_a_firmware_chooser() {
     )));
 }
 
-#[test]
-fn flash_requires_fresh_acknowledgement_and_explicit_confirmation() {
-    let mut app = one_drive();
-    app.task = Task::Flash;
+/// A flash backend that authorizes with a generation-barrier warning and
+/// records whether it wrote.
+struct SheetBackend {
+    confirmation: Option<&'static str>,
+    executed: AtomicBool,
+}
+
+static SHEET_FORMAT: FileFormat = FileFormat {
+    id: "sheet-image",
+    label: "Sheet test image",
+    extensions: &["bin"],
+    role: FormatRole::Image,
+};
+
+static SHEET_DESCRIPTOR: Descriptor = Descriptor {
+    id: BackendId("sheet-test"),
+    display_name: "Sheet test",
+    flash_summary: None,
+    formats: &[],
+};
+
+const BARRIER: &str = "downgrade crosses the generation barrier";
+
+impl Backend for SheetBackend {
+    fn descriptor(&self) -> &'static Descriptor {
+        &SHEET_DESCRIPTOR
+    }
+    fn probe(&self, _: &mut ReadDevice<'_>, _: &Identity) -> anyhow::Result<Option<Match>> {
+        Ok(None)
+    }
+    fn backup(&self) -> Option<&dyn BackupFacet> {
+        Some(self)
+    }
+    fn flash(&self) -> Option<&dyn FlashFacet> {
+        Some(self)
+    }
+}
+
+impl BackupFacet for SheetBackend {
+    fn format(&self) -> BackupFormat {
+        BackupFormat {
+            extension: "bin",
+            infix: "backup",
+        }
+    }
+    fn capture(&self, _: &mut ReadDevice<'_>) -> anyhow::Result<Vec<u8>> {
+        Ok(vec![1, 2, 3])
+    }
+    fn notice(&self, _: &[u8]) -> BackupNotice {
+        BackupNotice::None
+    }
+    fn validate(&self, bytes: &[u8], _: &str) -> anyhow::Result<Vec<u8>> {
+        Ok(bytes.to_vec())
+    }
+}
+
+impl FlashFacet for SheetBackend {
+    fn plan(&self, _: &mut ReadDevice<'_>, _: &FlashRequest) -> anyhow::Result<FlashPlan> {
+        let mut plan = FlashPlan::new(());
+        plan.after_backup = vec![
+            PlanLine::Header("== flash plan ==".into()),
+            PlanLine::Backup,
+        ];
+        Ok(plan)
+    }
+    fn authorize(
+        &self,
+        _: &mut ReadDevice<'_>,
+        plan: FlashPlan,
+        _: &SavedBackup,
+    ) -> anyhow::Result<AuthorizedPlan> {
+        let mut authorized = AuthorizedPlan::new(plan, ());
+        authorized.warnings = vec![BARRIER.into()];
+        authorized.confirmation = self.confirmation.map(str::to_owned);
+        Ok(authorized)
+    }
+    fn execute(&self, _: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> anyhow::Result<()> {
+        self.executed.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+/// A flash job played by the real engine over a mock drive, answering
+/// through the GUI's sheet.
+struct Flashing {
+    backend: Arc<SheetBackend>,
+    backup: PathBuf,
+    done: Receiver<Result<(), String>>,
+}
+
+impl Flashing {
+    fn executed(&self) -> bool {
+        self.backend.executed.load(Ordering::SeqCst)
+    }
+
+    /// The engine's result, once the worker has finished.
+    fn result(&self) -> Result<(), String> {
+        self.done
+            .recv_timeout(Duration::from_secs(20))
+            .expect("the flash worker finished")
+    }
+
+    /// The worker is still waiting on the sheet.
+    fn waiting(&self) -> bool {
+        self.done.recv_timeout(Duration::from_millis(200)).is_err()
+    }
+}
+
+/// Press Flash now on `app`, let the plan pass, and run the backup-and-
+/// authorize job until its sheet opens.
+fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flashing {
     app.flash_input = Some("firmware.bin".into());
-    app.risk_ack = true;
-    assert_eq!(app.dispatch(Input::FlashNow), [Effect::StartTicking]);
-    assert!(app.view().confirm.is_none(), "the plan runs before consent");
-    plan_passes(&mut app);
-    assert!(!app.running(), "a passing plan only opens the confirmation");
-    let confirm = app.view().confirm.expect("confirmation sheet");
+    app.dispatch(Input::FlashNow);
+    plan_passes(app);
+    let worker = app.worker.take().expect("the flash job's worker");
+    let backend = Arc::new(SheetBackend {
+        confirmation,
+        executed: AtomicBool::new(false),
+    });
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let backup = std::env::temp_dir().join(format!(
+        "freemkv-gui-sheet-{}-{}.bin",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::SeqCst)
+    ));
+    let (done_tx, done) = mpsc::channel();
+    let (engine_backend, out) = (backend.clone(), backup.clone());
+    std::thread::spawn(move || {
+        let request = FlashRequest {
+            input: Vec::new(),
+            input_format: &SHEET_FORMAT,
+            mode: FlashMode::Full,
+            execute: true,
+            acknowledged_risk: true,
+            enc_override: None,
+            drive_model: "TEST".into(),
+            verbose: false,
+            predump_out: Some(out),
+        };
+        let events = worker.clone();
+        let mut sheet = SheetConfirm {
+            tx: worker.clone(),
+            waker: None,
+        };
+        let result = workflow::capture_events(
+            move |event| {
+                let _ = events.send(Msg::Event(event));
+            },
+            || {
+                let mut dev = MockScsiDevice::new();
+                freemkv_flash::engine::flash(&mut dev, &*engine_backend, &request, &mut sheet)
+            },
+        )
+        .map_err(|e| format!("{e:#}"));
+        let _ = worker.send(Msg::Done(result.clone()));
+        let _ = done_tx.send(result);
+    });
+    let start = Instant::now();
+    while app.pending.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(20), "{:?}", app.log);
+        std::thread::sleep(Duration::from_millis(10));
+        app.poll();
+    }
+    Flashing {
+        backend,
+        backup,
+        done,
+    }
+}
+
+#[test]
+fn execute_never_runs_without_confirm_after_authorize() {
+    let mut app = one_drive();
+    // No confirmation text: the CLI would not ask, the GUI's sheet still does.
+    let flashing = flash_until_sheet(&mut app, None);
+    assert!(app.running(), "the job waits on the sheet");
+    assert!(flashing.waiting() && !flashing.executed());
+    assert!(app.dispatch(Input::Confirm).is_empty());
+    assert!(
+        flashing.waiting() && !flashing.executed(),
+        "no tick, no write"
+    );
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::Confirm);
+    assert!(app.pending.is_none());
+    assert_eq!(flashing.result(), Ok(()));
+    assert!(flashing.executed());
+    let start = Instant::now();
+    while app.running() {
+        assert!(start.elapsed() < Duration::from_secs(20));
+        app.poll();
+    }
+    assert_eq!(app.status, "Firmware update complete");
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
+fn cancel_at_the_sheet_writes_nothing_and_keeps_the_backup() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet(&mut app, Some("This will flash: TEST"));
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::CancelConfirm);
+    assert!(app.view().confirm.is_none() && !app.risk_ack);
+    let error = flashing.result().unwrap_err();
+    assert!(error.contains("aborted at confirmation"), "{error}");
+    assert!(!flashing.executed(), "a cancelled sheet wrote");
+    assert_eq!(std::fs::read(&flashing.backup).unwrap(), [1, 2, 3]);
+    let start = Instant::now();
+    while app.running() {
+        assert!(start.elapsed() < Duration::from_secs(20));
+        app.poll();
+    }
+    assert_eq!(app.status, "Firmware update cancelled");
+    assert_eq!(app.failure, None);
+    assert_eq!(app.log.last().map(String::as_str), Some(CANCELLED));
+    assert_eq!(app.dry_run.as_ref().unwrap().len(), 2, "plan, then flash");
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
+fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet(&mut app, Some("This will flash: TEST"));
+    let confirm = app.view().confirm.expect("the flash sheet");
+    assert_eq!(confirm.title, "Confirm flash");
+    assert_eq!(confirm.warnings, [BARRIER]);
+    assert_eq!(confirm.prompt.as_deref(), Some("This will flash: TEST"));
+    let saved = format!("backup: saved {} (3 bytes)", flashing.backup.display());
     assert_eq!(
         confirm.details,
         [
-            "Drive: drive-a  Drive A",
-            "Image: firmware.bin",
-            "== flash plan =="
+            "Drive: drive-a  Drive A".to_string(),
+            "Image: firmware.bin".into(),
+            "== flash plan ==".into(),
+            saved,
         ]
     );
-    assert_eq!(confirm.title, "Confirm flash");
     assert_eq!(confirm.danger, FLASH_DANGER);
-    assert_eq!(confirm.ack_text, RISK_ACK);
-    assert_eq!(confirm.note, Some(BACKUP_NOTE));
-    assert_eq!(confirm.warning, None);
-    assert!(!confirm.ack_checked, "consent never carries over");
-    assert!(!confirm.confirm.enabled);
+    assert_eq!(confirm.note, Some(BACKUP_KEPT));
     assert_eq!(confirm.confirm.text, "Flash now");
-    assert!(!app.view().controls_enabled);
-
-    assert!(
-        app.dispatch(Input::Confirm).is_empty(),
-        "no consent, no flash"
-    );
-    assert!(!app.running() && app.pending.is_some());
-
-    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
-    assert!(app.view().confirm.unwrap().confirm.enabled);
-    assert_eq!(app.dispatch(Input::Confirm), [Effect::StartTicking]);
-    assert!(app.pending.is_none() && app.running());
-    let (label, device, job) = last_job(&app);
-    assert_eq!(
-        (label.as_str(), device.as_str()),
-        ("Firmware update", "drive-a")
-    );
-    let Job::Flash(options) = job else {
-        panic!("expected a flash job")
-    };
-    assert!(options.execute && options.acknowledged_risk);
-    assert_eq!(options.input, PathBuf::from("firmware.bin"));
-}
-
-#[test]
-fn cancelled_confirmation_runs_nothing_and_clears_consent() {
-    let mut app = one_drive();
-    app.flash_input = Some("firmware.bin".into());
-    app.dispatch(Input::FlashNow);
-    plan_passes(&mut app);
-    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    assert!(!app.view().controls_enabled && !app.view().can_close);
     app.dispatch(Input::CancelConfirm);
-    assert!(app.view().confirm.is_none() && !app.risk_ack && !app.running());
-    assert!(app.dispatch(Input::Confirm).is_empty());
-    assert_eq!(app.dry_run.as_ref().unwrap().len(), 1, "only the plan ran");
+    let _ = flashing.result();
+    let _ = std::fs::remove_file(&flashing.backup);
 }
 
 #[test]
-fn a_refused_plan_opens_no_confirmation() {
+fn the_confirm_button_is_gated_by_the_tick() {
+    let mut app = one_drive();
+    app.risk_ack = true;
+    let flashing = flash_until_sheet(&mut app, None);
+    let confirm = app.view().confirm.unwrap();
+    assert!(!confirm.ack_checked, "the tick resets when the sheet opens");
+    assert!(!confirm.confirm.enabled);
+    assert!(app.dispatch(Input::Confirm).is_empty());
+    assert!(app.pending.is_some() && flashing.waiting());
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm.ack_checked && confirm.confirm.enabled);
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, false));
+    assert!(!app.view().confirm.unwrap().confirm.enabled);
+    app.dispatch(Input::CancelConfirm);
+    assert!(flashing.result().is_err() && !flashing.executed());
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
+fn a_failed_plan_shows_no_sheet() {
     let mut app = one_drive();
     app.flash_input = Some("firmware.bin".into());
     app.dispatch(Input::FlashNow);
+    assert!(
+        app.view().confirm.is_none(),
+        "the plan runs before any sheet"
+    );
     finish(
         &mut app,
         Err("image fails its AES-CMAC integrity check".into()),
@@ -429,8 +641,13 @@ fn a_refused_plan_opens_no_confirmation() {
         app.failure.as_deref(),
         Some("image fails its AES-CMAC integrity check")
     );
+    assert!(!app.running());
     assert!(app.dispatch(Input::Confirm).is_empty());
-    assert_eq!(app.dry_run.as_ref().unwrap().len(), 1, "only the plan ran");
+    assert_eq!(
+        app.dry_run.as_ref().unwrap().len(),
+        1,
+        "no backup after a failed plan"
+    );
 }
 
 #[test]
@@ -447,26 +664,35 @@ fn flash_needs_a_selected_drive() {
     app.flash_input = Some("firmware.bin".into());
     assert!(!button(&app.view(), "Flash now").enabled);
     app.dispatch(Input::FlashNow);
-    assert!(app.pending.is_none());
+    assert!(app.pending.is_none() && !app.running());
 }
 
 #[test]
-fn confirmation_freezes_target_and_requires_fresh_consent() {
+fn flash_target_is_frozen_when_flash_now_is_pressed() {
     let mut app = ready(vec![
         drive("drive-a", "drive-a", "Drive A"),
         drive("drive-b", "drive-b", "Drive B"),
     ]);
     app.flash_input = Some("firmware.bin".into());
-    app.risk_ack = true;
     app.dispatch(Input::FlashNow);
     app.dispatch(Input::SelectDrive(1));
     plan_passes(&mut app);
     app.dispatch(Input::SelectDrive(1));
     app.dispatch(Input::Refresh);
-    assert_eq!(app.device, "drive-a", "drive bar is locked under the sheet");
-    assert_eq!(app.pending.as_ref().unwrap().device, "drive-a");
+    assert_eq!(
+        app.device, "drive-a",
+        "drive bar is locked during the flash"
+    );
+    let (_, device, _) = last_job(&app);
+    assert_eq!(device, "drive-a");
+    let worker = app.worker.clone().unwrap();
+    let (reply, _answer) = mpsc::channel();
+    worker
+        .send(Msg::Authorized(FlashSheet::default(), reply))
+        .unwrap();
+    app.poll();
+    assert_eq!(app.pending.as_ref().unwrap().target.device, "drive-a");
     assert!(!app.risk_ack);
-    assert!(!app.running());
 }
 
 #[test]
@@ -485,12 +711,18 @@ fn drive_choice_and_confirmation_show_the_os_name_of_identical_drives() {
     app.flash_input = Some("firmware.bin".into());
     app.dispatch(Input::FlashNow);
     plan_passes(&mut app);
+    let (reply, _answer) = mpsc::channel();
+    let worker = app.worker.clone().unwrap();
+    worker
+        .send(Msg::Authorized(FlashSheet::default(), reply))
+        .unwrap();
+    app.poll();
     let confirm = app.view().confirm.unwrap();
     assert_eq!(
         confirm.details[0],
         "Drive: E:  HL-DT-ST BD-RE BU40N (rev 1.04)"
     );
-    assert_eq!(app.pending.as_ref().unwrap().device, r"\\.\CdRom1");
+    assert_eq!(app.pending.as_ref().unwrap().target.device, r"\\.\CdRom1");
 }
 
 // ── recovery ──────────────────────────────────────────────────────────────
@@ -543,8 +775,8 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.dispatch(Input::Recover);
     let confirm = app.view().confirm.unwrap();
     assert_eq!(confirm.title, "Confirm recovery");
-    assert_eq!(confirm.warning, Some(FORCE_WARNING));
-    assert_eq!(confirm.note, None);
+    assert_eq!(confirm.warnings, [FORCE_WARNING]);
+    assert_eq!((confirm.prompt, confirm.note), (None, None));
     assert_eq!(confirm.confirm.text, "Recover");
     assert!(confirm
         .details

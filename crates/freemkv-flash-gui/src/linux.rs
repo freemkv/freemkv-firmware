@@ -667,8 +667,11 @@ impl Shell {
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 10);
         extra.append(&widgets::label(c.danger, &["error"]));
-        if let Some(w) = c.warning {
+        for w in &c.warnings {
             extra.append(&widgets::label(w, &["warning"]));
+        }
+        if let Some(p) = &c.prompt {
+            extra.append(&widgets::label(p, &["heading"]));
         }
         if let Some(n) = c.note {
             extra.append(&widgets::label(n, &[]));

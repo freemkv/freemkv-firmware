@@ -497,6 +497,7 @@ pub struct AuthorizedPlan {
     pub warnings: Vec<String>,
     /// What the user confirms; `None` needs no further confirmation.
     pub confirmation: Option<String>,
+    backup: String,
     state: Box<dyn Any + Send>,
 }
 
@@ -507,8 +508,19 @@ impl AuthorizedPlan {
             plan,
             warnings: Vec::new(),
             confirmation: None,
+            backup: String::new(),
             state: Box::new(state),
         }
+    }
+
+    /// The `backup:` summary of the saved pre-flash backup, which the engine
+    /// fills in once the backend has authorized the plan.
+    pub fn backup(&self) -> &str {
+        &self.backup
+    }
+
+    pub(crate) fn set_backup(&mut self, summary: &str) {
+        self.backup = summary.to_string();
     }
 
     /// The backend state, when this authorization was made by that backend.
@@ -523,6 +535,12 @@ impl AuthorizedPlan {
 pub trait Confirm {
     /// Whether to write. The engine has already shown the warnings and text.
     fn confirm(&mut self, plan: &AuthorizedPlan) -> Result<bool>;
+    /// Whether to be asked about every authorized flash, including one whose
+    /// backend words no confirmation (a GUI's sheet). The CLI asks only when
+    /// there is text.
+    fn asks_every_flash(&self) -> bool {
+        false
+    }
 }
 
 /// Firmware update in two read-only stages, then the write.

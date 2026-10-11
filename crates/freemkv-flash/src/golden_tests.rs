@@ -511,7 +511,7 @@ fn recover_via(
     crate::engine::recover(dev, &Pioneer::new(), current, target, execute, true)
 }
 
-/// The engine's flash with consent collected up front, as the GUI gives it.
+/// The engine's flash with consent collected up front.
 fn engine_flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
     crate::engine::flash(dev, drive, req, &mut crate::workflow::Preconfirmed)
 }

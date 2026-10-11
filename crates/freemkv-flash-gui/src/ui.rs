@@ -18,7 +18,8 @@ use std::time::{Duration, Instant};
 
 use freemkv_flash::report::{self, Group};
 use freemkv_flash::workflow::{
-    self, Control, CurrentFirmware, DriveChoice, Event, FlashOptions, RecoveryOptions, Source,
+    self, AuthorizedPlan, Control, CurrentFirmware, DriveChoice, Event, FlashOptions, FlashSheet,
+    RecoveryOptions, Source,
 };
 
 use crate::ops::{self, Job, Request, ResultView};
@@ -32,7 +33,11 @@ pub const FLASH_DANGER: &str =
 pub const RISK_ACK: &str = "I understand and want to update this drive";
 /// Under the progress bar while a job runs.
 pub const KEEP_CONNECTED: &str = "Keep the drive connected and powered until this finishes.";
-const BACKUP_NOTE: &str = "A validated pre-flash backup will be saved before writing.";
+/// On the flash sheet: the backup is already saved, and cancelling is safe.
+pub const BACKUP_KEPT: &str =
+    "The pre-flash backup is saved. Cancel keeps it and writes nothing to the drive.";
+const CANCELLED: &str =
+    "Cancelled at the confirmation: nothing was written; the pre-flash backup is kept.";
 const WORKER_PANIC: &str = "Operation worker failed unexpectedly. If flashing was underway, the drive state is uncertain; keep the backup and inspect the drive before retrying.";
 const WORKER_GONE: &str = "The worker stopped before reporting a result. If a flash was underway, inspect the drive before retrying.";
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
@@ -425,7 +430,10 @@ pub struct Confirm {
     pub title: &'static str,
     pub details: Vec<String>,
     pub danger: &'static str,
-    pub warning: Option<&'static str>,
+    /// Cautions: a flash's authorization warnings, or the Recovery warning.
+    pub warnings: Vec<String>,
+    /// The backend's own confirmation text, when it words one.
+    pub prompt: Option<String>,
     pub note: Option<&'static str>,
     pub ack_text: &'static str,
     pub ack_checked: bool,
@@ -509,20 +517,38 @@ impl Node {
 pub(crate) enum Msg {
     Event(Event),
     Analysis(ResultView),
-    /// A flash plan, read-only and made before any backup.
-    Plan(Vec<String>),
+    /// A flash passed every gate after its backup; the worker waits for the
+    /// sheet's answer on the sender before writing.
+    Authorized(FlashSheet, Sender<bool>),
     Done(Result<(), String>),
 }
 
-/// A confirmation in progress: the target is frozen when the sheet opens. A
-/// flash shows its plan, made before the sheet opened.
+/// The drive and input an operation was started for, frozen when the user
+/// pressed Flash now or Recover.
 #[derive(Clone, Debug)]
-pub(crate) struct Pending {
+pub(crate) struct Target {
     pub(crate) device: String,
     pub(crate) label: String,
     pub(crate) options: FlashOptions,
-    pub(crate) current: Option<CurrentFirmware>,
-    pub(crate) plan: Vec<String>,
+}
+
+/// What a confirmation sheet asks.
+#[derive(Clone, Debug)]
+pub(crate) enum Sheet {
+    /// Recovery, asked before its job starts.
+    Recovery(CurrentFirmware),
+    /// An authorized flash; its worker waits on `reply`.
+    Flash {
+        sheet: FlashSheet,
+        reply: Sender<bool>,
+    },
+}
+
+/// A confirmation in progress.
+#[derive(Clone, Debug)]
+pub(crate) struct Pending {
+    pub(crate) target: Target,
+    pub(crate) sheet: Sheet,
 }
 
 /// Called from the worker after each event so an event-driven shell repaints.
@@ -552,8 +578,13 @@ pub struct App {
     pub(crate) action: String,
     pub(crate) risk_ack: bool,
     pub(crate) pending: Option<Pending>,
-    /// A flash whose read-only plan is running; its sheet opens when it passes.
-    pub(crate) planning: Option<Pending>,
+    /// A flash whose read-only plan is running; its backup starts when it passes.
+    pub(crate) planning: Option<Target>,
+    /// A flash whose backup and authorization are running; its sheet opens
+    /// when the worker reports the authorized plan.
+    pub(crate) flashing: Option<Target>,
+    /// The user cancelled the flash sheet; the job's refusal is not a failure.
+    pub(crate) cancelled: bool,
     pub(crate) log: Vec<String>,
     pub(crate) diagnostic_log: Option<PathBuf>,
     pub(crate) diagnostics_open: bool,
@@ -615,6 +646,8 @@ impl App {
             risk_ack: false,
             pending: None,
             planning: None,
+            flashing: None,
+            cancelled: false,
             log: vec!["Ready. Select an optical drive and choose an action.".into()],
             diagnostic_log: None,
             diagnostics_open: false,
@@ -822,16 +855,23 @@ impl App {
                 } else {
                     CurrentFirmware::File(self.recovery_current.clone().unwrap_or_default())
                 };
-                let options = FlashOptions {
+                let target = self.target(FlashOptions {
                     input: self.recovery_input.clone().unwrap_or_default(),
                     execute: true,
                     ..Default::default()
-                };
-                self.ask(options, Some(current));
+                });
+                self.ask(target, Sheet::Recovery(current));
             }
             Input::Confirm => return self.confirm(),
             Input::CancelConfirm => {
-                self.pending = None;
+                if let Some(Pending {
+                    sheet: Sheet::Flash { reply, .. },
+                    ..
+                }) = self.pending.take()
+                {
+                    self.cancelled = true;
+                    let _ = reply.send(false);
+                }
                 self.risk_ack = false;
             }
             Input::RunAnalysis if !self.busy() => return self.run_analysis(),
@@ -995,58 +1035,83 @@ impl App {
             && (self.recovery_read || self.recovery_current.is_some())
     }
 
-    /// Open the confirmation for a frozen target; consent always starts unticked.
-    fn ask(&mut self, mut options: FlashOptions, current: Option<CurrentFirmware>) {
+    /// The selected drive and `options`, frozen; consent always starts unticked.
+    fn target(&self, mut options: FlashOptions) -> Target {
         options.acknowledged_risk = false;
-        self.risk_ack = false;
-        self.pending = Some(Pending {
+        Target {
             device: self.device.clone(),
             label: self.device_label(),
             options,
-            current,
-            plan: Vec::new(),
-        });
+        }
+    }
+
+    /// Open a confirmation sheet; its risk box is always unticked on opening.
+    fn ask(&mut self, target: Target, sheet: Sheet) {
+        self.risk_ack = false;
+        self.pending = Some(Pending { target, sheet });
     }
 
     /// A flash first runs its read-only plan (no backup, no writes) for the
-    /// frozen target; the confirmation opens only when the plan passes.
-    fn plan_flash(&mut self, mut options: FlashOptions) -> Vec<Effect> {
-        options.acknowledged_risk = false;
-        let target = Pending {
-            device: self.device.clone(),
-            label: self.device_label(),
-            options: options.clone(),
-            current: None,
-            plan: Vec::new(),
-        };
-        let effects = self.start_job("Flash plan", target.device.clone(), Job::PlanFlash(options));
+    /// frozen target; a failed plan ends there.
+    fn plan_flash(&mut self, options: FlashOptions) -> Vec<Effect> {
+        let target = self.target(options);
+        let job = Job::PlanFlash(target.options.clone());
+        let effects = self.start_job("Flash plan", target.device.clone(), job);
         if !effects.is_empty() {
             self.planning = Some(target);
         }
         effects
     }
 
+    /// The plan passed: back up and authorize, keeping the plan's log. The
+    /// worker writes only after the sheet's Confirm, which needs the risk box,
+    /// so the request carries the acknowledgement the sheet collects.
+    fn back_up_and_authorize(&mut self, target: Target) -> Vec<Effect> {
+        let mut options = target.options.clone();
+        options.acknowledged_risk = true;
+        let log = std::mem::take(&mut self.log);
+        let effects = self.start_job(
+            "Firmware update",
+            target.device.clone(),
+            Job::Flash(options),
+        );
+        self.log.splice(0..0, log);
+        if !effects.is_empty() {
+            self.flashing = Some(target);
+        }
+        effects
+    }
+
     fn confirm(&mut self) -> Vec<Effect> {
-        if !self.risk_ack || self.running() {
+        if !self.risk_ack {
             return Vec::new();
         }
-        let Some(pending) = self.pending.take() else {
-            return Vec::new();
-        };
-        let mut options = pending.options;
-        options.acknowledged_risk = self.risk_ack;
-        match pending.current {
-            Some(current) => {
+        match self.pending.take() {
+            Some(Pending {
+                sheet: Sheet::Flash { reply, .. },
+                ..
+            }) => {
+                self.risk_ack = false;
+                let _ = reply.send(true);
+                Vec::new()
+            }
+            Some(Pending {
+                target,
+                sheet: Sheet::Recovery(current),
+            }) if !self.running() => {
                 let job = Job::Recovery(RecoveryOptions {
                     device: None,
-                    input: options.input,
+                    input: target.options.input,
                     current,
                     execute: true,
-                    acknowledged_risk: self.risk_ack,
+                    acknowledged_risk: true,
                 });
-                self.start_job("Recovery", pending.device, job)
+                self.start_job("Recovery", target.device, job)
             }
-            None => self.start_job("Firmware update", pending.device, Job::Flash(options)),
+            other => {
+                self.pending = other;
+                Vec::new()
+            }
         }
     }
 
@@ -1115,6 +1180,7 @@ impl App {
     pub fn poll(&mut self) -> Vec<Effect> {
         let profiled = self.poll_profile();
         let mut finished = false;
+        let mut planned = None;
         if let Some(rx) = self.rx.take() {
             loop {
                 match rx.try_recv() {
@@ -1123,20 +1189,21 @@ impl App {
                         self.set_analysis(Some(result));
                         self.analysis_open = true;
                     }
-                    Ok(Msg::Plan(lines)) => {
-                        if let Some(planning) = &mut self.planning {
-                            planning.plan = lines;
+                    Ok(Msg::Authorized(sheet, reply)) => match self.flashing.clone() {
+                        Some(target) => self.ask(target, Sheet::Flash { sheet, reply }),
+                        None => {
+                            let _ = reply.send(false);
                         }
-                    }
+                    },
                     Ok(Msg::Done(result)) => {
-                        if let Some(target) = self.planning.take() {
-                            if result.is_ok() {
-                                self.risk_ack = false;
-                                self.pending = Some(target);
-                            }
-                        }
+                        planned = self.planning.take().filter(|_| result.is_ok());
+                        self.end_flash();
+                        let cancelled = std::mem::take(&mut self.cancelled);
                         match &result {
                             Ok(()) => self.status = format!("{} complete", self.action),
+                            Err(_) if cancelled => {
+                                self.status = format!("{} cancelled", self.action)
+                            }
                             Err(error) => {
                                 self.status = format!("{} could not finish", self.action);
                                 self.failure = Some(error.clone());
@@ -1144,6 +1211,7 @@ impl App {
                         }
                         self.log.push(match result {
                             Ok(()) => "✓ done.".into(),
+                            Err(_) if cancelled => CANCELLED.into(),
                             Err(e) => format!("✗ error: {e}"),
                         });
                         finished = true;
@@ -1152,6 +1220,7 @@ impl App {
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.planning = None;
+                        self.end_flash();
                         self.status = "Operation interrupted".into();
                         self.failure = Some(WORKER_GONE.into());
                         self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
@@ -1164,6 +1233,9 @@ impl App {
                 self.rx = Some(rx);
             }
         }
+        if let Some(target) = planned {
+            self.back_up_and_authorize(target);
+        }
         let due = self.diagnostic_checked.is_none_or(|checked| {
             finished || (self.running() && checked.elapsed() >= DIAGNOSTIC_REFRESH)
         });
@@ -1174,6 +1246,21 @@ impl App {
             vec![Effect::StopTicking]
         } else {
             Vec::new()
+        }
+    }
+
+    /// A flash job ended: its sheet, if still open, has no one to answer.
+    fn end_flash(&mut self) {
+        self.flashing = None;
+        if matches!(
+            self.pending,
+            Some(Pending {
+                sheet: Sheet::Flash { .. },
+                ..
+            })
+        ) {
+            self.pending = None;
+            self.risk_ack = false;
         }
     }
 
@@ -1516,18 +1603,23 @@ impl App {
     }
 
     fn confirm_view(&self, pending: &Pending) -> Confirm {
-        let recovery = pending.current.is_some();
         let mut details = vec![
-            format!("Drive: {}", pending.label),
-            format!("Image: {}", pending.options.input.display()),
+            format!("Drive: {}", pending.target.label),
+            format!("Image: {}", pending.target.options.input.display()),
         ];
-        if let Some(current) = &pending.current {
-            details.push(match current {
-                CurrentFirmware::File(path) => format!("Current: {}", path.display()),
-                CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
-            });
-        }
-        details.extend(pending.plan.iter().filter(|l| !l.is_empty()).cloned());
+        let (recovery, warnings, prompt) = match &pending.sheet {
+            Sheet::Recovery(current) => {
+                details.push(match current {
+                    CurrentFirmware::File(path) => format!("Current: {}", path.display()),
+                    CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
+                });
+                (true, vec![FORCE_WARNING.to_string()], None)
+            }
+            Sheet::Flash { sheet, .. } => {
+                details.extend(sheet.plan.iter().cloned());
+                (false, sheet.warnings.clone(), sheet.confirmation.clone())
+            }
+        };
         Confirm {
             title: if recovery {
                 "Confirm recovery"
@@ -1536,8 +1628,9 @@ impl App {
             },
             details,
             danger: FLASH_DANGER,
-            warning: recovery.then_some(FORCE_WARNING),
-            note: (!recovery).then_some(BACKUP_NOTE),
+            warnings,
+            prompt,
+            note: (!recovery).then_some(BACKUP_KEPT),
             ack_text: RISK_ACK,
             ack_checked: self.risk_ack,
             confirm: Button::primary(
@@ -1597,9 +1690,11 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
                 event_wake();
             },
             || {
-                if let Job::PlanFlash(options) = &job {
-                    let _ = tx.send(Msg::Plan(ops::plan_flash(device, options)?));
-                } else if let Some(result) = ops::execute(device, &job)? {
+                let mut sheet = SheetConfirm {
+                    tx: tx.clone(),
+                    waker: waker.clone(),
+                };
+                if let Some(result) = ops::execute(device, &job, &mut sheet)? {
                     let _ = tx.send(Msg::Analysis(result));
                 }
                 anyhow::Ok(())
@@ -1612,6 +1707,34 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
     };
     let _ = tx.send(Msg::Done(result));
     wake();
+}
+
+/// The worker's side of the flash sheet: hand the authorized plan to the
+/// model and wait for its answer. A model that is gone answers no.
+pub(crate) struct SheetConfirm {
+    pub(crate) tx: Sender<Msg>,
+    pub(crate) waker: Option<Waker>,
+}
+
+impl workflow::Confirm for SheetConfirm {
+    fn confirm(&mut self, plan: &AuthorizedPlan) -> anyhow::Result<bool> {
+        let (reply, answer) = mpsc::channel();
+        if self
+            .tx
+            .send(Msg::Authorized(FlashSheet::of(plan), reply))
+            .is_err()
+        {
+            return Ok(false);
+        }
+        if let Some(wake) = &self.waker {
+            wake();
+        }
+        Ok(answer.recv().unwrap_or(false))
+    }
+
+    fn asks_every_flash(&self) -> bool {
+        true
+    }
 }
 
 fn report_text(result: &ResultView) -> String {

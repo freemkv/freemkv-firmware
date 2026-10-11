@@ -1475,10 +1475,15 @@ impl Shell {
             self.confirming.set(false);
             return;
         };
-        let content = format!("{}\n\n{}", c.details.join("\n"), c.danger);
-        let footer = [c.warning, c.note]
-            .into_iter()
-            .flatten()
+        let mut content = format!("{}\n\n{}", c.details.join("\n"), c.danger);
+        if let Some(prompt) = &c.prompt {
+            content.push_str(&format!("\n\n{prompt}"));
+        }
+        let footer = c
+            .warnings
+            .iter()
+            .map(String::as_str)
+            .chain(c.note)
             .collect::<Vec<_>>()
             .join("\n\n");
         let me = self.clone();

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use freemkv_flash::workflow::{
-    self, ComparisonReport, Control, DriveChoice, DriveProfile, FlashOptions, Inspection,
+    self, ComparisonReport, Confirm, Control, DriveChoice, DriveProfile, FlashOptions, Inspection,
     RecoveryOptions, Source,
 };
 
@@ -106,8 +106,13 @@ pub enum Job {
     Recovery(RecoveryOptions),
 }
 
-/// Run the same operation as the matching CLI command; an analysis returns its result.
-pub fn execute(device: &str, job: &Job) -> anyhow::Result<Option<ResultView>> {
+/// Run the same operation as the matching CLI command; an analysis returns
+/// its result. `confirm` answers an authorized flash before it writes.
+pub fn execute(
+    device: &str,
+    job: &Job,
+    confirm: &mut dyn Confirm,
+) -> anyhow::Result<Option<ResultView>> {
     match job {
         Job::Analysis { request, control } => return analyze(request, control).map(Some),
         Job::Info => workflow::info(Some(device)),
@@ -123,23 +128,18 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<Option<ResultView>> {
             options.device = Some(device.to_string());
             workflow::recover(options)
         }
-        Job::PlanFlash(options) => plan_flash(device, options).map(drop),
-        // The user confirmed the plan before this job started; the backend's
-        // confirmation text after `authorize` is logged, not asked again.
+        Job::PlanFlash(options) => {
+            let mut options = options.clone();
+            options.device = Some(device.to_string());
+            workflow::plan_flash(&options).map(drop)
+        }
         Job::Flash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
-            workflow::flash(options, &mut workflow::Preconfirmed)
+            workflow::flash(options, confirm)
         }
     }?;
     Ok(None)
-}
-
-/// The flash plan for `device`: the dry run's checks and plan, as text.
-pub fn plan_flash(device: &str, options: &FlashOptions) -> anyhow::Result<Vec<String>> {
-    let mut options = options.clone();
-    options.device = Some(device.to_string());
-    workflow::plan_flash(&options)
 }
 
 #[cfg(test)]

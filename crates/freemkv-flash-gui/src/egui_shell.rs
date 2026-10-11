@@ -503,8 +503,11 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
             for line in current {
                 ui.label(line);
             }
-            if let Some(w) = c.warning {
+            for w in &c.warnings {
                 ui.colored_label(CAUTION, w);
+            }
+            if let Some(p) = &c.prompt {
+                ui.strong(p);
             }
             if let Some(n) = c.note {
                 ui.label(n);

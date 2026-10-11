@@ -16,7 +16,11 @@ fn enumerate_does_not_panic() {
 /// path the GUI's worker thread runs, minus the stdout capture.
 #[test]
 fn info_job_on_missing_device_errs_without_panic() {
-    let res = execute("/dev/freemkv-flash-gui-no-such-device", &Job::Info);
+    let res = execute(
+        "/dev/freemkv-flash-gui-no-such-device",
+        &Job::Info,
+        &mut freemkv_flash::workflow::Preconfirmed,
+    );
     assert!(res.is_err(), "expected an open error");
 }
 

@@ -412,12 +412,45 @@ fn open_flash(
     Ok((dev, handler, req))
 }
 
-/// Consent a front-end collected before the job started (the GUI's sheet).
+/// Consent given before the flash started: every confirmation is answered yes.
 pub struct Preconfirmed;
 
 impl Confirm for Preconfirmed {
     fn confirm(&mut self, _plan: &AuthorizedPlan) -> Result<bool> {
         Ok(true)
+    }
+}
+
+/// What a front-end shows when it asks to confirm an authorized flash.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FlashSheet {
+    /// The authorized plan as text, with the saved backup's `backup:` line.
+    pub plan: Vec<String>,
+    /// Cautions from authorization (e.g. a generation barrier).
+    pub warnings: Vec<String>,
+    /// What the user confirms, when the backend words it.
+    pub confirmation: Option<String>,
+}
+
+impl FlashSheet {
+    /// The sheet for `plan`, rendered as the CLI shows it before its prompt.
+    pub fn of(plan: &AuthorizedPlan) -> Self {
+        let text: Vec<String> = plan
+            .plan
+            .after_backup
+            .iter()
+            .map(|line| engine::render_plan_line(line, plan.backup()))
+            .collect();
+        Self {
+            plan: text
+                .iter()
+                .flat_map(|t| t.lines())
+                .filter(|l| !l.trim().is_empty())
+                .map(str::to_owned)
+                .collect(),
+            warnings: plan.warnings.clone(),
+            confirmation: plan.confirmation.clone(),
+        }
     }
 }
 

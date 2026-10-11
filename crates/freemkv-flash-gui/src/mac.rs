@@ -1247,9 +1247,16 @@ impl Controller {
         let danger = wrapping(mtm, c.danger, width);
         danger.setTextColor(Some(&NSColor::systemRedColor()));
         acc.addArrangedSubview(&danger);
-        if let Some(w) = c.warning {
+        for w in &c.warnings {
             let l = wrapping(mtm, w, width);
             l.setTextColor(Some(&NSColor::systemOrangeColor()));
+            acc.addArrangedSubview(&l);
+        }
+        if let Some(p) = &c.prompt {
+            let l = wrapping(mtm, p, width);
+            l.setFont(Some(
+                &NSFont::boldSystemFontOfSize(NSFont::systemFontSize()),
+            ));
             acc.addArrangedSubview(&l);
         }
         if let Some(n) = c.note {

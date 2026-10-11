@@ -445,15 +445,17 @@ pub fn flash(
     let saved = capture_required_backup(dev, drive, facet, &plan, req)?;
     emit_plan(&plan.after_backup, saved.summary());
     let reader = &mut ReadDevice::new(dev, drive.allowed_data_out());
-    let authorized = facet.authorize(reader, plan, &saved)?;
+    let mut authorized = facet.authorize(reader, plan, &saved)?;
+    authorized.set_backup(saved.summary());
     for warning in &authorized.warnings {
         eprintln!("{}", style::amber(warning));
     }
     if let Some(text) = &authorized.confirmation {
         println!("{}", style::bold(text));
-        if !confirm.confirm(&authorized)? {
-            bail!("flash aborted at confirmation prompt");
-        }
+    }
+    let ask = authorized.confirmation.is_some() || confirm.asks_every_flash();
+    if ask && !confirm.confirm(&authorized)? {
+        bail!("flash aborted at confirmation prompt");
     }
     // The last tray check sits right before the first write: the backup and
     // the confirmation left a window for a disc to be loaded.
