@@ -653,13 +653,24 @@ fn knock(cdb: &[u8], data: &[u8]) -> bool {
 /// twin (`0x10`) writes nonvolatile settings with the same CDB.
 const LOGGING_SET_RAM: u8 = 0x12;
 
-/// The diagnostic control envelope with the RAM-only logging command: `group`,
-/// `LOGGING_SET_RAM`, mask-supplied flag `1`, the 4-byte mask, zero padding.
+/// `logging::discover` reads the group per drive from a dispatch-table entry
+/// and only accepts entries whose group byte is at least `0x80` (UD04: `0x93`).
+const LOGGING_GROUPS: std::ops::RangeInclusive<u8> = 0x80..=0xff;
+
+/// `logging::LoggingLayout::bit`, the CDB arrival bit. The dump only enables
+/// logging, so the mask it sends (the drive's mask OR this bit) always has it.
+const LOGGING_ARRIVAL_BIT: u32 = 0x0004_0000;
+
+/// The diagnostic control envelope with the RAM-only logging command: a
+/// dispatcher `group`, `LOGGING_SET_RAM`, mask-supplied flag `1`, the 4-byte
+/// mask with the arrival bit set, zero padding.
 fn ram_logging_switch(cdb: &[u8], data: &[u8]) -> bool {
     cdb == pioneer_optical::cdb::write_diagnostic_control()
         && data.len() == pioneer_optical::cdb::DIAGNOSTIC_CONTROL_LEN as usize
+        && LOGGING_GROUPS.contains(&data[0])
         && data[1] == LOGGING_SET_RAM
         && data[2] == 1
+        && u32::from_be_bytes([data[3], data[4], data[5], data[6]]) & LOGGING_ARRIVAL_BIT != 0
         && data[7..].iter().all(|&b| b == 0)
 }
 

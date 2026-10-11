@@ -447,13 +447,56 @@ const DEVICE_LAYER: &[&str] = &[
     "src/inspection/capture.rs",
 ];
 
-/// What sends a write to the drive: the strict data-out path, the flash
-/// transport, and the vendor crates' update-session entry.
+/// What sends a write to the drive: both raw data-out calls, both transport
+/// constructors (every vendor-crate call needs one), and the vendor crates'
+/// data-out entry points. pioneer-optical: `drive::enter_update` (its
+/// `Session::write`/`finish`), `drive::execute_update`, `drive::diagnostic_memory`,
+/// `logging::set_logging_ram`/`_persistent`, `receiver::Prepared*::flash` (via a
+/// `FlashTransport`) and `device::Device::set`. mediatek-optical:
+/// `drive::enter_update` (its `Session::write`/`finish`).
 const WRITE_MARKERS: &[&str] = &[
+    ".command_out(",
     ".command_out_strict(",
     "ScsiTransport::flash(",
+    "ScsiTransport::reads(",
     "drive::enter_update(",
+    "execute_update(",
+    "diagnostic_memory(",
+    "set_logging_",
+    "FlashTransport",
+    "Device::new(",
+    "Device::with_settings_codec(",
 ];
+
+/// Device parameters that carry a runtime grant: writes through them are
+/// checked by the handle, so a fn taking one may hold a write marker.
+const GATED_HANDLES: &[&str] = &["WriteDevice", "ReadDevice", "DeviceAccess"];
+
+/// Raw device parameters: a write marker beside one bypasses every grant.
+const RAW_HANDLES: &[&str] = &[
+    "dyn ScsiDevice",
+    "&ScsiTransport",
+    "&mut ScsiTransport",
+    ": ScsiTransport",
+    "&SharedDevice",
+    "&mut SharedDevice",
+    ": SharedDevice",
+];
+
+/// Whether a write issuer with these parameters writes outside every grant.
+fn ungranted(params: &str) -> bool {
+    !GATED_HANDLES.iter().any(|h| params.contains(h))
+        || RAW_HANDLES.iter().any(|h| params.contains(h))
+}
+
+/// Whether `body` holds `marker`; a marker starting with an identifier must
+/// start a word, so `ReadDevice::new(` is not `Device::new(`.
+fn has_marker(body: &str, marker: &str) -> bool {
+    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let word = marker.as_bytes().first().is_some_and(|&b| is_ident(b));
+    body.match_indices(marker)
+        .any(|(at, _)| !word || at == 0 || !is_ident(body.as_bytes()[at - 1]))
+}
 
 /// `(name, parameters)` of every fn in `code` whose body issues a write.
 fn write_issuers(code: &str) -> Vec<(String, String)> {
@@ -490,7 +533,7 @@ fn write_issuers(code: &str) -> Vec<(String, String)> {
             continue;
         }
         let body = &tail[brace..block_end(tail, brace)];
-        if WRITE_MARKERS.iter().any(|m| body.contains(m)) {
+        if WRITE_MARKERS.iter().any(|m| has_marker(body, m)) {
             out.push((name, params.to_string()));
         }
     }
@@ -506,7 +549,7 @@ fn write_issuers_take_the_write_grant() {
             continue;
         }
         for (name, params) in write_issuers(&s.code) {
-            if !params.contains("WriteDevice") || params.contains("dyn ScsiDevice") {
+            if ungranted(&params) {
                 problems.push(format!(
                     "{}: fn {name}({params}) writes without a grant",
                     s.path
@@ -517,7 +560,14 @@ fn write_issuers_take_the_write_grant() {
     }
     assert!(problems.is_empty(), "{problems:#?}");
     // The scan must still see the known executors, or it proves nothing.
-    for known in ["execute_prepared", "run", "stream", "enable_logging"] {
+    for known in [
+        "execute_prepared",
+        "run",
+        "stream",
+        "enable_logging",
+        "capture",
+        "with_device",
+    ] {
         assert!(
             issuers.iter().any(|n| n == known),
             "{known} not scanned: {issuers:?}"
@@ -531,14 +581,22 @@ fn write_issuer_scan_reads_signatures_and_bodies() {
         "fn a(dev: &mut dyn ScsiDevice) { dev.command_out_strict(c, d); }\n\
          fn b(dev: &mut WriteDevice<'_>, f: impl Fn(u8)) { ScsiTransport::flash(&s); }\n\
          fn c(dev: &mut dyn ScsiDevice) { dev.command_in(c, 0); }\n\
-         trait T { fn d(&self); }\n",
+         trait T { fn d(&self); }\n\
+         fn e(dev: &mut dyn ScsiDevice) { dev.command_out(c, d); }\n\
+         fn f(mut a: DeviceAccess<'_, '_>) { a.scsi().command_out(k, &[]); }\n\
+         fn g(t: &mut ScsiTransport<'_, '_>) { logging::set_logging_ram(t, l, true); }\n\
+         fn h(dev: &mut dyn ScsiDevice) { ReadDevice::new(dev, &[]); }\n\
+         fn i(dev: &mut ReadDevice<'_>) { Device::new(&mut ScsiTransport::reads(&s)); }\n",
     ));
     let found = write_issuers(&code);
-    assert_eq!(found.len(), 2, "{found:?}");
-    assert_eq!(found[0].0, "a");
-    assert!(found[0].1.contains("dyn ScsiDevice"));
-    assert_eq!(found[1].0, "b");
-    assert!(found[1].1.contains("WriteDevice"));
+    let names: Vec<&str> = found.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["a", "b", "e", "f", "g", "i"], "{found:?}");
+    let refused: Vec<&str> = found
+        .iter()
+        .filter(|(_, params)| ungranted(params))
+        .map(|(n, _)| n.as_str())
+        .collect();
+    assert_eq!(refused, ["a", "e", "g"], "{found:?}");
 }
 
 // ---------------------------------------------------------------------------

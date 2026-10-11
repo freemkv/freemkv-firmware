@@ -163,10 +163,12 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
     let mut run = SheetRun {
         opened: dialog.IsWindowVisible(),
         // A task dialog draws its verification box itself (no Button window to read), so
-        // "unticked" is its creation flags plus the model's acknowledgement.
-        unticked: Some(
-            !super::confirm_flags().has(co::TDF::VERIFICATION_FLAG_CHECKED) && !c.ack_checked,
-        ),
+        // "unticked" is its creation flags, the state it last reported and the model.
+        unticked: Some(gui_gate::task_dialog_unticked(
+            super::confirm_flags().has(co::TDF::VERIFICATION_FLAG_CHECKED),
+            me.risk_box.get(),
+            c.ack_checked,
+        )),
         confirm_before: confirm.as_ref().map(|b| b.IsWindowEnabled()),
         ..Default::default()
     };

@@ -515,3 +515,12 @@ fn flatten_reveals_black_text_on_a_transparent_background() {
     assert!(shot.has_ink(shot.full()));
     assert_eq!(shot.px, [128, 128, 128, 255, 0, 0, 0, 255]);
 }
+
+#[test]
+fn a_task_dialog_box_is_unticked_only_when_nothing_ticked_it() {
+    assert!(task_dialog_unticked(false, false, false));
+    // Ticked by its creation flags, by a reported click of any cause, or in the model.
+    assert!(!task_dialog_unticked(true, false, false));
+    assert!(!task_dialog_unticked(false, true, false));
+    assert!(!task_dialog_unticked(false, false, true));
+}

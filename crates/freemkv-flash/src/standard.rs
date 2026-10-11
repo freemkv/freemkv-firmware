@@ -7,7 +7,7 @@
 use pioneer_optical::device::info::{Information, Media};
 use pioneer_optical::device::Device;
 
-use crate::platform::ScsiDevice;
+use crate::backend::ReadDevice;
 use crate::report::{Group, Row, Value};
 use crate::transport::{ScsiTransport, SharedDevice};
 
@@ -29,7 +29,7 @@ pub(crate) fn reads() -> usize {
 }
 
 /// Read the snapshot: exactly today's `Device::info()` command sequence.
-pub fn read(dev: &mut dyn ScsiDevice) -> StandardInfo {
+pub fn read(dev: &mut ReadDevice<'_>) -> StandardInfo {
     #[cfg(test)]
     READS.with(|r| r.set(r.get() + 1));
     with_device(dev, |device| StandardInfo {
@@ -37,9 +37,10 @@ pub fn read(dev: &mut dyn ScsiDevice) -> StandardInfo {
     })
 }
 
-/// Run `f` with a read-only pioneer-optical device over `dev`.
+/// Run `f` with a pioneer-optical device over `dev`, whose grant refuses the
+/// settings writes `Device::set` would send.
 pub fn with_device<R>(
-    dev: &mut dyn ScsiDevice,
+    dev: &mut ReadDevice<'_>,
     f: impl FnOnce(&mut Device<'_, ScsiTransport<'_, '_>>) -> R,
 ) -> R {
     let shared = SharedDevice::new(dev);
@@ -119,7 +120,7 @@ impl StandardInfo {
 }
 
 /// Read the DVD region state (REPORT KEY) and render it.
-pub fn region_rows(dev: &mut dyn ScsiDevice) -> Vec<Row> {
+pub fn region_rows(dev: &mut ReadDevice<'_>) -> Vec<Row> {
     let region = with_device(dev, |d| d.get(pioneer_optical::device::DvdRegion));
     let rows = match region {
         Ok(rpc) => vec![

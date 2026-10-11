@@ -404,6 +404,14 @@ pub struct SheetRun {
     pub closed: bool,
 }
 
+/// Whether a task dialog's verification box is unticked: its creation flags leave it
+/// unticked, the dialog has reported no tick since it was created (it reports every change,
+/// however caused, and offers no query), and the model holds no acknowledgement.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn task_dialog_unticked(flag_checked: bool, reported_checked: bool, acked: bool) -> bool {
+    !flag_checked && !reported_checked && !acked
+}
+
 /// The confirmation's checks: opened unticked with Confirm disabled, Confirm enabled by the
 /// tick and only then, closed by Cancel, and reopened unticked and disabled again.
 pub fn sheet_checks(g: &mut Gate, first: &SheetRun, reopened: &SheetRun) {
