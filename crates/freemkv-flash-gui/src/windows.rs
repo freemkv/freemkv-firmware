@@ -45,6 +45,13 @@ const IDM_SELECT_ALL: u16 = 2005;
 
 // The confirmation's buttons, clear of the common dialog ids.
 const TD_CONFIRM: u16 = 1001;
+/// The confirmation's task-dialog flags. No `VERIFICATION_FLAG_CHECKED`: the risk box opens
+/// unticked, which the qa gate checks against these flags.
+pub(crate) fn confirm_flags() -> co::TDF {
+    co::TDF::ALLOW_DIALOG_CANCELLATION
+        | co::TDF::CALLBACK_TIMER
+        | co::TDF::POSITION_RELATIVE_TO_WINDOW
+}
 const TD_CANCEL: u16 = 1002;
 const TDM_CLICK_BUTTON: u32 = 0x0400 + 102;
 const TDM_ENABLE_BUTTON: u32 = 0x0400 + 111;
@@ -1493,9 +1500,7 @@ impl Shell {
         let me = self.clone();
         let cfg = w::TASKDIALOGCONFIG {
             hwnd_parent: Some(self.wnd.hwnd()),
-            flags: co::TDF::ALLOW_DIALOG_CANCELLATION
-                | co::TDF::CALLBACK_TIMER
-                | co::TDF::POSITION_RELATIVE_TO_WINDOW,
+            flags: confirm_flags(),
             window_title: Some(c.title),
             main_icon: w::IconIdTd::Td(co::TD_ICON::WARNING),
             main_instruction: Some(c.title),

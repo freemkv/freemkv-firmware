@@ -21,7 +21,6 @@ use crate::ui::{Input, Task};
 /// One shot: start the gate once the window is shown and painted.
 const TIMER_GATE: usize = 9;
 const TDM_CLICK_VERIFICATION: u32 = 0x0400 + 113;
-const BM_GETCHECK: u32 = 0x00F0;
 /// `PrintWindow`: draw the full content, DirectComposition included.
 const PW_RENDERFULLCONTENT: u32 = 2;
 /// How long a step lets the window lay out and paint before it looks.
@@ -161,10 +160,13 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
         return false;
     };
     let confirm = button(dialog, &c.confirm.text);
-    let ack = button(dialog, c.ack_text);
     let mut run = SheetRun {
         opened: dialog.IsWindowVisible(),
-        unticked: ack.as_ref().map(|b| send_raw(b, BM_GETCHECK, 0, 0) == 0),
+        // A task dialog draws its verification box itself (no Button window to read), so
+        // "unticked" is its creation flags plus the model's acknowledgement.
+        unticked: Some(
+            !super::confirm_flags().has(co::TDF::VERIFICATION_FLAG_CHECKED) && !c.ack_checked,
+        ),
         confirm_before: confirm.as_ref().map(|b| b.IsWindowEnabled()),
         ..Default::default()
     };
