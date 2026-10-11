@@ -491,10 +491,9 @@ fn conformance_probe_rejects_unknown_mmc_drive() {
                     &identity,
                 )
                 .unwrap();
-            let undeclared = dev
-                .writes
-                .iter()
-                .any(|(cdb, _)| !crate::backend::device::declared(backend.allowed_data_out(), cdb));
+            let undeclared = dev.writes.iter().any(|(cdb, data)| {
+                !crate::backend::device::declared(backend.allowed_data_out(), cdb, data)
+            });
             assert!(!undeclared, "{id}: probe sent undeclared data-out");
             found
         };

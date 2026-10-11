@@ -1,32 +1,56 @@
 //! Read-only device handles. A backend's read-only operations receive a
 //! [`ReadDevice`], which refuses every data-out command except the read-unlock
-//! commands the backend declares. Writable handles come only from the engine's
-//! gates (`engine::gates::WriteDevice`).
+//! commands the backend declares, and every zero-length data-in except the
+//! read-safe no-data commands in `NO_DATA_READS`. Writable handles come only
+//! from the engine's gates (`engine::gates::WriteDevice`).
 
 use anyhow::{bail, Result};
 
 use crate::platform::{MediumStatus, ScsiDevice};
 
-/// A data-out command a backend declares, matched by CDB.
+/// A data-out command a backend declares, matched by CDB and payload.
 pub struct CdbPattern {
     /// What the command is, for refusals and reviews.
     pub label: &'static str,
-    /// Whether a CDB is this command.
-    pub matches: fn(&[u8]) -> bool,
+    /// Whether a CDB and its data-out payload are this command. Commands that
+    /// share a CDB and differ only in payload must be told apart here.
+    pub matches: fn(cdb: &[u8], data: &[u8]) -> bool,
 }
 
-/// Whether `cdb` matches any of `patterns`.
-pub(crate) fn declared(patterns: &[CdbPattern], cdb: &[u8]) -> bool {
-    patterns.iter().any(|p| (p.matches)(cdb))
+/// Whether `cdb` with payload `data` matches any of `patterns`.
+pub(crate) fn declared(patterns: &[CdbPattern], cdb: &[u8], data: &[u8]) -> bool {
+    patterns.iter().any(|p| (p.matches)(cdb, data))
 }
 
 /// The refusal for an undeclared data-out command.
 pub(crate) fn refuse(cdb: &[u8]) -> anyhow::Error {
-    let hex: String = cdb.iter().map(|b| format!("{b:02x}")).collect();
     anyhow::anyhow!(
-        "refused data-out command {hex}: a read-only operation may only send its \
-         backend's declared read-unlock commands"
+        "refused data-out command {}: a read-only operation may only send its \
+         backend's declared read-unlock commands",
+        hex(cdb)
     )
+}
+
+/// Opcodes a limited handle may issue as a zero-length data-in. The MediaTek
+/// transport sends no-data commands that way, so an unlisted opcode (PREPARE,
+/// COMMIT) is refused. Derived from every zero-length command the flasher
+/// sends: only TEST UNIT READY (the MediaTek sequences, recovery, readiness).
+pub(crate) const NO_DATA_READS: &[u8] = &[0x00];
+
+/// Refuse a zero-length data-in whose opcode is not in [`NO_DATA_READS`].
+pub(crate) fn check_no_data(cdb: &[u8], alloc_len: usize) -> Result<()> {
+    if alloc_len == 0 && !cdb.first().is_some_and(|op| NO_DATA_READS.contains(op)) {
+        bail!(
+            "refused no-data command {}: a read-only operation may only send \
+             TEST UNIT READY without a data phase",
+            hex(cdb)
+        );
+    }
+    Ok(())
+}
+
+fn hex(cdb: &[u8]) -> String {
+    cdb.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// A device lent to a read-only operation.
@@ -41,8 +65,8 @@ impl<'d> ReadDevice<'d> {
         Self { dev, allowed }
     }
 
-    fn check(&self, cdb: &[u8]) -> Result<()> {
-        if !declared(self.allowed, cdb) {
+    fn check(&self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        if !declared(self.allowed, cdb, data) {
             bail!(refuse(cdb));
         }
         Ok(())
@@ -51,16 +75,17 @@ impl<'d> ReadDevice<'d> {
 
 impl ScsiDevice for ReadDevice<'_> {
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
+        check_no_data(cdb, alloc_len)?;
         self.dev.command_in(cdb, alloc_len)
     }
 
     fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        self.check(cdb)?;
+        self.check(cdb, data)?;
         self.dev.command_out(cdb, data)
     }
 
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        self.check(cdb)?;
+        self.check(cdb, data)?;
         self.dev.command_out_strict(cdb, data)
     }
 

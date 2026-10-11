@@ -630,20 +630,38 @@ impl Backend for Pioneer {
 /// sends.
 static READ_UNLOCK: &[CdbPattern] = &[CdbPattern {
     label: "read-unlock knock",
-    matches: |cdb| cdb == pioneer_optical::cdb::knock(),
+    matches: knock,
 }];
 
 /// What a dump may send: the read unlock and the RAM-only logging switch.
 static DUMP_WRITES: &[CdbPattern] = &[
     CdbPattern {
         label: "read-unlock knock",
-        matches: |cdb| cdb == pioneer_optical::cdb::knock(),
+        matches: knock,
     },
     CdbPattern {
         label: "RAM logging switch",
-        matches: |cdb| cdb == pioneer_optical::cdb::write_diagnostic_control(),
+        matches: ram_logging_switch,
     },
 ];
+
+fn knock(cdb: &[u8], data: &[u8]) -> bool {
+    cdb == pioneer_optical::cdb::knock() && data.is_empty()
+}
+
+/// `pioneer_optical::logging`'s private RAM-only set command; its persistent
+/// twin (`0x10`) writes nonvolatile settings with the same CDB.
+const LOGGING_SET_RAM: u8 = 0x12;
+
+/// The diagnostic control envelope with the RAM-only logging command: `group`,
+/// `LOGGING_SET_RAM`, mask-supplied flag `1`, the 4-byte mask, zero padding.
+fn ram_logging_switch(cdb: &[u8], data: &[u8]) -> bool {
+    cdb == pioneer_optical::cdb::write_diagnostic_control()
+        && data.len() == pioneer_optical::cdb::DIAGNOSTIC_CONTROL_LEN as usize
+        && data[1] == LOGGING_SET_RAM
+        && data[2] == 1
+        && data[7..].iter().all(|&b| b == 0)
+}
 
 impl FileFacet for Pioneer {
     /// A parsed package or envelope header is structural; any other tar

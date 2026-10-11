@@ -78,7 +78,7 @@ static ROGUE: Descriptor = Descriptor {
 
 static KNOCK_ONLY: &[CdbPattern] = &[CdbPattern {
     label: "read-unlock knock",
-    matches: |c| c == cdb::knock(),
+    matches: |c, d| c == cdb::knock() && d.is_empty(),
 }];
 
 impl Backend for RogueDump {
@@ -139,5 +139,63 @@ fn dump_writes_limited_to_declared_patterns() {
     assert!(mock
         .writes
         .iter()
-        .all(|(c, _)| crate::backend::device::declared(declared, c)));
+        .all(|(c, d)| crate::backend::device::declared(declared, c, d)));
+}
+
+/// A diagnostic control envelope for `pioneer_optical::logging`: `command`
+/// `0x12` sets the RAM mask, `0x10` the persistent one.
+fn logging_payload(command: u8) -> Vec<u8> {
+    let mut data = vec![0u8; cdb::DIAGNOSTIC_CONTROL_LEN as usize];
+    data[..7].copy_from_slice(&[0x31, command, 1, 0, 0x04, 0, 0]);
+    data
+}
+
+#[test]
+fn dump_grant_refuses_persistent_logging_payload() {
+    // Same CDB, different payload: only the RAM-only switch may pass.
+    let writes = Pioneer::new().dump().unwrap().writes();
+    let control = cdb::write_diagnostic_control();
+    let mut mock = MockScsiDevice::new();
+    {
+        let mut writer = dump(&mut mock, writes);
+        let error = writer
+            .command_out(&control, &logging_payload(0x10))
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("refused data-out"),
+            "{error:#}"
+        );
+        assert!(writer.command_out(&control, &[]).is_err());
+        assert!(writer.command_out(&cdb::knock(), &[0; 4]).is_err());
+        writer
+            .command_out(&control, &logging_payload(0x12))
+            .unwrap();
+        writer.command_out(&cdb::knock(), &[]).unwrap();
+    }
+    assert_eq!(
+        mock.writes,
+        [
+            (control.to_vec(), logging_payload(0x12)),
+            (cdb::knock().to_vec(), Vec::new())
+        ]
+    );
+}
+
+#[test]
+fn dump_grant_refuses_zero_length_session_commands() {
+    // A limited grant applies the read handle's no-data allowlist too.
+    use crate::backends::mtk::cdb as mtk;
+    let mut mock = MockScsiDevice::mtk();
+    {
+        let mut writer = dump(&mut mock, KNOCK_ONLY);
+        assert!(writer.command_in(&mtk::enter_update(), 0).is_err());
+        assert!(writer.command_in(&mtk::finish(), 0).is_err());
+        writer.command_in(&mtk::test_unit_ready(), 0).unwrap();
+    }
+    assert_eq!(mock.reads, [mtk::test_unit_ready().to_vec()]);
+    // A full grant is the flash path's business, not this check's.
+    let mut mock = MockScsiDevice::mtk();
+    ungated_for_tests(&mut mock)
+        .command_in(&mtk::enter_update(), 0)
+        .unwrap();
 }
