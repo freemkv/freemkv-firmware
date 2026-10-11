@@ -146,6 +146,10 @@ pub struct Inspection {
     pub sha256: String,
     /// Hardware compatibility family, when derivable.
     pub family: Option<HardwareFamily>,
+    /// Whether the provider derives hardware families at all. When it does
+    /// not, reports omit the family line rather than call a known file Unknown.
+    #[serde(skip)]
+    pub derives_family: bool,
     /// Firmware components.
     pub components: Vec<ComponentView>,
     /// Expected components absent from this source; never silently synthesized.
@@ -177,16 +181,24 @@ impl Inspection {
     pub fn json(&self) -> anyhow::Result<String> {
         Ok(serde_json::to_string_pretty(self)?)
     }
-    /// Forum-friendly text, with hardware family first.
+    /// The hardware family line's value, or `None` when the provider derives
+    /// no families.
+    pub fn family_line(&self) -> Option<String> {
+        match &self.family {
+            Some(f) => Some(format!("{} ({})", f.id, f.scheme)),
+            None => self.derives_family.then(|| "Unknown".into()),
+        }
+    }
+    /// Forum-friendly text, with hardware family first when the provider
+    /// derives one.
     pub fn text(&self) -> String {
-        let mut out = format!(
-            "Hardware family: {}\nSource: {}\nSHA-256: {}\n",
-            self.family
-                .as_ref()
-                .map_or("Unknown".into(), |f| format!("{} ({})", f.id, f.scheme)),
-            self.source,
-            self.sha256
-        );
+        let mut out = self
+            .family_line()
+            .map_or_else(String::new, |f| format!("Hardware family: {f}\n"));
+        out.push_str(&format!(
+            "Source: {}\nSHA-256: {}\n",
+            self.source, self.sha256
+        ));
         if let Some(live) = &self.live {
             out.push_str(&format!(
                 "Drive capture: {} Unix seconds\n",
@@ -333,20 +345,25 @@ impl ComparisonReport {
             .filter(|r| !r.expected && r.differs())
             .count()
     }
-    /// Forum-friendly summary, family relationship first.
+    /// Forum-friendly summary, family relationship first when either
+    /// provider derives families.
     pub fn text(&self) -> String {
-        let mut out = format!(
-            "Hardware family: {:?}\nA: {} — {}\nB: {} — {}\n",
-            self.family,
-            self.left.source,
-            self.left_family
-                .as_ref()
-                .map_or("Unknown", |f| f.id.as_str()),
-            self.right.source,
-            self.right_family
-                .as_ref()
-                .map_or("Unknown", |f| f.id.as_str())
-        );
+        let mut out = if self.left.derives_family || self.right.derives_family {
+            format!(
+                "Hardware family: {:?}\nA: {} — {}\nB: {} — {}\n",
+                self.family,
+                self.left.source,
+                self.left_family
+                    .as_ref()
+                    .map_or("Unknown", |f| f.id.as_str()),
+                self.right.source,
+                self.right_family
+                    .as_ref()
+                    .map_or("Unknown", |f| f.id.as_str())
+            )
+        } else {
+            format!("A: {}\nB: {}\n", self.left.source, self.right.source)
+        };
         for s in &self.sections {
             out.push_str(&format!("\n{}\n", s.name));
             for finding in &s.summary {

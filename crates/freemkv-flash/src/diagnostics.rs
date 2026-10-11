@@ -108,7 +108,7 @@ fn system_details() -> String {
     {
         use std::os::windows::process::CommandExt;
         let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
-        return match std::process::Command::new(PathBuf::from(root).join("System32/cmd.exe"))
+        match std::process::Command::new(PathBuf::from(root).join("System32/cmd.exe"))
             .args(["/d", "/c", "ver"])
             .creation_flags(0x08000000)
             .output()
@@ -118,14 +118,18 @@ fn system_details() -> String {
                 String::from_utf8_lossy(&output.stdout).trim()
             ),
             Err(error) => format!("Windows version unavailable: {error}"),
-        };
+        }
     }
     #[cfg(target_os = "macos")]
-    return std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist")
-        .unwrap_or_else(|error| format!("system version unavailable: {error}"));
+    {
+        std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist")
+            .unwrap_or_else(|error| format!("system version unavailable: {error}"))
+    }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    return std::fs::read_to_string("/etc/os-release")
-        .unwrap_or_else(|error| format!("system version unavailable: {error}"));
+    {
+        std::fs::read_to_string("/etc/os-release")
+            .unwrap_or_else(|error| format!("system version unavailable: {error}"))
+    }
 }
 
 fn create_log(directory: &Path, application: &str) -> io::Result<(PathBuf, Log)> {
@@ -327,7 +331,7 @@ pub(crate) fn macos_open_failure() {
     }
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", all(test, unix)))]
 fn bounded_output(
     command: &mut std::process::Command,
     budget: std::time::Duration,

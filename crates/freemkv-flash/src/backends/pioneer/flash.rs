@@ -6,7 +6,7 @@
 #[cfg(test)]
 use crate::backends::pioneer::FLASH_CHUNK;
 
-use crate::platform::ScsiDevice;
+use crate::backend::WriteDevice;
 use crate::style;
 use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use anyhow::{anyhow, bail, Context, Result};
@@ -44,7 +44,7 @@ pub(crate) enum PreparedFlash<'a> {
     Normal(&'a PreparedNormal),
 }
 
-pub(crate) fn execute_prepared(dev: &mut dyn ScsiDevice, plan: PreparedFlash<'_>) -> Result<()> {
+pub(crate) fn execute_prepared(dev: &mut WriteDevice<'_>, plan: PreparedFlash<'_>) -> Result<()> {
     let shared = SharedDevice::new(dev);
     let mut reads = ScsiTransport::reads(&shared);
     let mut writes = ScsiTransport::flash(&shared);

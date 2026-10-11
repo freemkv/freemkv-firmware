@@ -5,7 +5,7 @@ const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 
 fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
     crate::backends::pioneer::flash::execute_prepared(
-        dev,
+        &mut crate::engine::gates::ungated_for_tests(dev),
         crate::backends::pioneer::flash::PreparedFlash::Complete(plan),
     )
 }

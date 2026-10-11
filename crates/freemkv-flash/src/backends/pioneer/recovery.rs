@@ -1,4 +1,5 @@
 //! Recovery with user-supplied receiver evidence, no implicit firmware reads.
+use crate::backend::WriteDevice;
 use crate::backends::pioneer::classify_flash_input;
 use crate::platform::ScsiDevice;
 use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
@@ -73,11 +74,11 @@ impl Plan {
         Ok(Self { control, target })
     }
 
-    pub(crate) fn execute(&self, dev: &mut dyn ScsiDevice) -> Result<()> {
+    pub(crate) fn execute(&self, dev: &mut WriteDevice<'_>) -> Result<()> {
         self.run(dev, &mut |duration| std::thread::sleep(duration))
     }
 
-    fn run(&self, dev: &mut dyn ScsiDevice, sleep: &mut impl FnMut(Duration)) -> Result<()> {
+    fn run(&self, dev: &mut WriteDevice<'_>, sleep: &mut impl FnMut(Duration)) -> Result<()> {
         let identity = identify_receiver(dev)?;
         let class = identity.class().context("unsupported recovery dialect")?;
         crate::diagnostics::record(format!("Recovery receiver: product={} revision={} platform={} kernel_tag={} normal_tag={} code={}", identity.product(), identity.revision(), identity.platform(), identity.kernel_tag(), identity.normal_tag(), identity.code()));

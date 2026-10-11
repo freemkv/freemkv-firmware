@@ -1916,7 +1916,11 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
     let mut nodes = Vec::new();
     let heading = match result {
         ResultView::Inspect(report) => {
-            nodes.push(Node::text(&report.source));
+            // A provider that derives no family is headed by its source.
+            let family = report.family_line().is_some();
+            if family {
+                nodes.push(Node::text(&report.source));
+            }
             if let Some(live) = &report.live {
                 nodes.push(Node::text(format!(
                     "Drive state captured at {} (Unix seconds)",
@@ -1937,7 +1941,11 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                 }));
             }
             nodes.extend(report.components.iter().map(component_node));
-            format!("Hardware family: {}", family_id(&report.family))
+            if family {
+                format!("Hardware family: {}", family_id(&report.family))
+            } else {
+                report.source.clone()
+            }
         }
         ResultView::Compare(report) => {
             nodes.push(Node::text(format!(

@@ -6,13 +6,13 @@
 //! |---|---|
 //! | `flash` | `--execute`, risk acknowledgement, a saved pre-flash backup; the caller checks the tray twice and runs `authorize` first |
 //! | `recovery` | `--execute` and risk acknowledgement; no tray check and no backup, by design |
-//! | `dump` | the dump command itself; limited to the dump's declared commands |
+//! | `dump` | the dump command itself; limited to the dump's declared commands (CDB and payload) and the read-safe no-data commands |
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 
-use crate::backend::device::{declared, refuse, CdbPattern};
+use crate::backend::device::{check_no_data, declared, refuse, CdbPattern};
 use crate::backend::FlashRequest;
 use crate::platform::{MediumStatus, ScsiDevice};
 
@@ -113,9 +113,9 @@ pub(crate) fn saved_for_tests(bytes: Vec<u8>) -> SavedBackup {
 }
 
 impl WriteDevice<'_> {
-    fn check(&self, cdb: &[u8]) -> Result<()> {
+    fn check(&self, cdb: &[u8], data: &[u8]) -> Result<()> {
         match self.limit {
-            Some(limit) if !declared(limit, cdb) => Err(refuse(cdb)),
+            Some(limit) if !declared(limit, cdb, data) => Err(refuse(cdb)),
             _ => Ok(()),
         }
     }
@@ -123,16 +123,20 @@ impl WriteDevice<'_> {
 
 impl ScsiDevice for WriteDevice<'_> {
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
+        // A limited (dump) grant is read-only beyond its declared commands.
+        if self.limit.is_some() {
+            check_no_data(cdb, alloc_len)?;
+        }
         self.dev.command_in(cdb, alloc_len)
     }
 
     fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        self.check(cdb)?;
+        self.check(cdb, data)?;
         self.dev.command_out(cdb, data)
     }
 
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        self.check(cdb)?;
+        self.check(cdb, data)?;
         self.dev.command_out_strict(cdb, data)
     }
 

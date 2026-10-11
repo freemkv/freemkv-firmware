@@ -246,7 +246,7 @@ pub(crate) fn validate(bytes: &[u8], target_model: &str, expected_size: usize) -
 /// The flashable image inside a backup: an OEM-format `.bin`, or the raw
 /// capture of a 0.10.x archive rebuilt the same way, so its read-back boot page
 /// is never written to flash.
-fn backup_image(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+pub(super) fn backup_image(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
     if bytes.len() == expected_size {
         return Ok(bytes.to_vec());
     }

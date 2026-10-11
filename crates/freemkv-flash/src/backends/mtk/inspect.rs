@@ -5,7 +5,7 @@
 //! per-unit regions the drive writes for itself.
 use std::ops::Range;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use mediatek_optical::image::{cmac, detect_chip, is_drive_read, is_uhd, ChipInfo};
 use mediatek_optical::{layout, oem};
 use sha2::{Digest, Sha256};
@@ -25,6 +25,9 @@ impl InspectFacet for Mtk {
         bytes: &[u8],
         control: &Control,
     ) -> Option<Result<Inspection>> {
+        if super::is_legacy_archive(bytes) {
+            return Some(inspect_legacy(source, bytes, control));
+        }
         inspect_file(source, bytes, control)
     }
 
@@ -51,6 +54,23 @@ pub(crate) fn inspect_file(
         )));
     }
     Some(analyze(source, bytes, &chip, control))
+}
+
+/// Inspect a 0.10.x backup archive as the image Flash would write from it
+/// (the archived capture, rebuilt), under the archive's own digest.
+fn inspect_legacy(source: String, archive: &[u8], control: &Control) -> Result<Inspection> {
+    let image = super::backup::backup_image(archive, IMAGE_SIZE)?;
+    let mut inspection = inspect_file(source, &image, control)
+        .context("the archived firmware names no MediaTek MT19xx chip")??;
+    inspection.sha256 = format!("{:x}", Sha256::digest(archive));
+    inspection.components[0].fields.insert(
+        0,
+        Field::new(
+            "Container",
+            "0.10.x backup archive (image rebuilt as Flash writes it)",
+        ),
+    );
+    Ok(inspection)
 }
 
 /// One region before ids are assigned.
@@ -264,7 +284,9 @@ fn analyze(source: String, image: &[u8], chip: &ChipInfo, control: &Control) -> 
         application_version: env!("CARGO_PKG_VERSION"),
         source,
         sha256: sha256.clone(),
+        // A chip generation is a chipset label, not a compatibility family.
         family: None,
+        derives_family: false,
         components: vec![ComponentView {
             name: COMPONENT.into(),
             fields,
