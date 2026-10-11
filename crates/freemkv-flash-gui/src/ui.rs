@@ -1312,7 +1312,14 @@ impl App {
     pub(crate) fn event(&mut self, event: Event) {
         match event {
             Event::Message(line) => self.log.push(line),
-            Event::Progress { label, done, total } => self.progress = Some((label, done, total)),
+            Event::Progress { label, done, total } => {
+                // Large regions report only through the bar; log each phase once so the
+                // activity log names it ("  reading normal...") like the small ones.
+                if self.progress.as_ref().is_none_or(|(l, _, _)| *l != label) {
+                    self.log.push(format!("  {label}..."));
+                }
+                self.progress = Some((label, done, total));
+            }
             Event::Report(report) => {
                 for row in report.rows {
                     match row.gui_label.as_deref() {

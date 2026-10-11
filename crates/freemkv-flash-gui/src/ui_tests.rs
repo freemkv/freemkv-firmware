@@ -1419,3 +1419,27 @@ fn byte_counts_read_naturally() {
     assert_eq!(byte_count(10), "10 bytes");
     assert_eq!(byte_count(2048), "2.0 KiB");
 }
+
+#[test]
+fn each_progress_phase_is_logged_once() {
+    let mut app = one_drive();
+    let progress = |label: &str, done| Event::Progress {
+        label: label.into(),
+        done,
+        total: 100,
+    };
+    for e in [
+        progress("reading normal", 10),
+        progress("reading normal", 90),
+        progress("verifying normal", 50),
+        progress("verifying normal", 100),
+    ] {
+        app.event(e);
+    }
+    let phases: Vec<_> = app
+        .log
+        .iter()
+        .filter(|l| l.ends_with("normal..."))
+        .collect();
+    assert_eq!(phases, ["  reading normal...", "  verifying normal..."]);
+}
