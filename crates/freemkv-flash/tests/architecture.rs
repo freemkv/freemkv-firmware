@@ -50,39 +50,81 @@ fn production_sources() -> Vec<Source> {
     out
 }
 
-/// The source with every `#[cfg(test)]` item removed: a block, or an item,
-/// field or statement that ends at a `;` or `,` outside brackets before any `{`.
+/// The source with every `#[cfg(test)]` item removed. An item with a body ends
+/// at its block; one without (a statement, a field, a `mod x;`) at the first
+/// `;` outside brackets, or `,` outside brackets and generics, or where its
+/// enclosing list closes. Comments and literals are skipped, so a `#[cfg(test)]`
+/// in a doc comment strips nothing and a `;` in a string ends nothing.
 fn without_test_items(src: &str) -> String {
+    const ATTR: &str = "#[cfg(test)]";
+    let b: Vec<char> = src.chars().collect();
+    let attr: Vec<char> = ATTR.chars().collect();
     let mut out = String::new();
-    let mut rest = src;
-    while let Some(i) = rest.find("#[cfg(test)]") {
-        out.push_str(&rest[..i]);
-        let after = &rest[i + "#[cfg(test)]".len()..];
-        let mut nesting = 0i32;
-        let mut end = after.len();
-        let mut prev = ' ';
-        for (off, c) in after.char_indices() {
-            match c {
-                '(' | '[' => nesting += 1,
-                '<' if prev != '-' && prev != '=' => nesting += 1,
-                ')' | ']' => nesting -= 1,
-                '>' if prev != '-' && prev != '=' => nesting -= 1,
-                ';' | ',' if nesting <= 0 => {
-                    end = off + 1;
-                    break;
-                }
-                '{' => {
-                    end = block_end(after, off);
-                    break;
-                }
-                _ => {}
-            }
-            prev = c;
+    let mut i = 0;
+    while i < b.len() {
+        if let Some((end, _)) = literal_at(&b, i) {
+            out.extend(&b[i..end]);
+            i = end;
+        } else if b[i..].starts_with(&attr) {
+            i = test_item_end(&b, i + attr.len());
+        } else {
+            out.push(b[i]);
+            i += 1;
         }
-        rest = &after[end..];
     }
-    out.push_str(rest);
     out
+}
+
+/// The index just past the item that starts at `start` (after its
+/// `#[cfg(test)]`). `<` counts as a bracket only when it opens generics
+/// (`Option<`, `::<`), never as a comparison (`1 < 2`).
+fn test_item_end(b: &[char], start: usize) -> usize {
+    let (mut depth, mut angle) = (0i32, 0i32);
+    let mut i = start;
+    while i < b.len() {
+        if let Some((end, _)) = literal_at(b, i) {
+            i = end;
+            continue;
+        }
+        let prev = if i > 0 { b[i - 1] } else { ' ' };
+        match b[i] {
+            '(' | '[' => depth += 1,
+            ')' | ']' | '}' if depth == 0 => return i,
+            ')' | ']' => depth -= 1,
+            '<' if prev.is_alphanumeric() || prev == '_' || prev == ':' => angle += 1,
+            '>' if angle > 0 && !matches!(prev, '-' | '=' | ' ') => angle -= 1,
+            ';' if depth == 0 => return i + 1,
+            ',' if depth == 0 && angle == 0 => return i + 1,
+            '{' if depth == 0 => return literal_block_end(b, i),
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
+}
+
+/// The index just past the `}` matching the `{` at `open`, skipping literals.
+fn literal_block_end(b: &[char], open: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < b.len() {
+        if let Some((end, _)) = literal_at(b, i) {
+            i = end;
+            continue;
+        }
+        match b[i] {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
 }
 
 /// The offset just past the `}` matching the `{` at `open`.
@@ -103,6 +145,97 @@ fn block_end(text: &str, open: usize) -> usize {
     text.len()
 }
 
+/// A comment, string or char literal in source.
+enum Literal {
+    Comment,
+    Str(String),
+    Char,
+}
+
+/// The comment or literal starting at `b[i]`, with the index just past it:
+/// `//` and nested `/* */` comments; `"…"`, `b"…"` and `c"…"` strings;
+/// `r"…"`, `r#"…"#`, `br"…"`, `br#"…"#`, `cr"…"` and `cr#"…"#` raw strings;
+/// and `'x'`, `'\''` and `b'x'` char literals (a lifetime `'a` is code).
+fn literal_at(b: &[char], i: usize) -> Option<(usize, Literal)> {
+    let at = |k: usize| b.get(k).copied();
+    let starts_token = !ident_char(b, i);
+    match (at(i)?, at(i + 1)) {
+        ('/', Some('/')) => {
+            let end = (i..b.len()).find(|&k| b[k] == '\n').unwrap_or(b.len());
+            Some((end, Literal::Comment))
+        }
+        ('/', Some('*')) => {
+            let (mut depth, mut k) = (0, i);
+            while k < b.len() {
+                if b[k] == '/' && at(k + 1) == Some('*') {
+                    depth += 1;
+                    k += 2;
+                } else if b[k] == '*' && at(k + 1) == Some('/') {
+                    depth -= 1;
+                    k += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    k += 1;
+                }
+            }
+            Some((k.min(b.len()), Literal::Comment))
+        }
+        ('"', _) => Some(quoted(b, i + 1)),
+        ('b' | 'c', Some('"')) if starts_token => Some(quoted(b, i + 2)),
+        ('r', Some('"' | '#')) if starts_token => raw(b, i + 1),
+        ('b' | 'c', Some('r')) if starts_token => raw(b, i + 2),
+        ('b', Some('\'')) if starts_token => Some((char_end(b, i + 1), Literal::Char)),
+        ('\'', _) if is_char_literal(b, i) => Some((char_end(b, i), Literal::Char)),
+        _ => None,
+    }
+}
+
+/// The escaped string whose contents start at `b[i]`.
+fn quoted(b: &[char], mut i: usize) -> (usize, Literal) {
+    let mut s = String::new();
+    while i < b.len() && b[i] != '"' {
+        if b[i] == '\\' {
+            s.push(b[i]);
+            i += 1;
+        }
+        if i < b.len() {
+            s.push(b[i]);
+        }
+        i += 1;
+    }
+    ((i + 1).min(b.len()), Literal::Str(s))
+}
+
+/// The raw string whose `#`s or opening quote start at `b[i]`; `None` for a raw
+/// identifier (`r#match`) or a plain identifier.
+fn raw(b: &[char], i: usize) -> Option<(usize, Literal)> {
+    let hashes = b[i..].iter().take_while(|&&c| c == '#').count();
+    if b.get(i + hashes) != Some(&'"') {
+        return None;
+    }
+    let open = i + hashes + 1;
+    let closes = |k: usize| b[k] == '"' && (1..=hashes).all(|h| b.get(k + h) == Some(&'#'));
+    let close = (open..b.len()).find(|&k| closes(k)).unwrap_or(b.len());
+    let end = (close + 1 + hashes).min(b.len());
+    Some((end, Literal::Str(b[open..close].iter().collect())))
+}
+
+/// The index just past the char literal whose opening quote is `b[i]`.
+fn char_end(b: &[char], i: usize) -> usize {
+    let mut k = i + 1;
+    if b.get(k) == Some(&'\\') {
+        k += 2;
+    } else {
+        k += 1;
+    }
+    while k < b.len() && b[k] != '\'' {
+        k += 1;
+    }
+    (k + 1).min(b.len())
+}
+
 /// Split Rust source into code (comments, strings and char literals replaced
 /// by spaces) and the contents of its string literals.
 fn lex(src: &str) -> (String, Vec<String>) {
@@ -110,78 +243,22 @@ fn lex(src: &str) -> (String, Vec<String>) {
     let (mut code, mut strings) = (String::new(), Vec::new());
     let mut i = 0;
     while i < b.len() {
-        let c = b[i];
-        let next = b.get(i + 1).copied();
-        if c == '/' && next == Some('/') {
-            while i < b.len() && b[i] != '\n' {
-                i += 1;
-            }
-        } else if c == '/' && next == Some('*') {
-            let mut depth = 0;
-            while i < b.len() {
-                if b[i] == '/' && b.get(i + 1) == Some(&'*') {
-                    depth += 1;
-                    i += 2;
-                } else if b[i] == '*' && b.get(i + 1) == Some(&'/') {
-                    depth -= 1;
-                    i += 2;
-                    if depth == 0 {
-                        break;
+        match literal_at(&b, i) {
+            Some((end, literal)) => {
+                match literal {
+                    Literal::Comment => code.push(' '),
+                    Literal::Str(s) => {
+                        strings.push(s);
+                        code.push_str(" \"\" ");
                     }
-                } else {
-                    i += 1;
+                    Literal::Char => code.push_str(" ' ' "),
                 }
+                i = end;
             }
-            code.push(' ');
-        } else if c == 'r' && matches!(next, Some('"') | Some('#')) && !ident_char(&b, i) {
-            let mut j = i + 1;
-            let mut hashes = 0;
-            while b.get(j) == Some(&'#') {
-                hashes += 1;
-                j += 1;
-            }
-            if b.get(j) != Some(&'"') {
-                code.push(c);
-                i += 1;
-                continue;
-            }
-            let close: String = std::iter::once('"')
-                .chain("#".repeat(hashes).chars())
-                .collect();
-            let rest: String = b[j + 1..].iter().collect();
-            let end = rest.find(&close).unwrap_or(rest.len());
-            strings.push(rest[..end].to_string());
-            i = j + 1 + rest[..end].chars().count() + close.chars().count();
-            code.push_str(" \"\" ");
-        } else if c == '"' {
-            let mut s = String::new();
-            i += 1;
-            while i < b.len() && b[i] != '"' {
-                if b[i] == '\\' {
-                    s.push(b[i]);
-                    i += 1;
-                }
-                if i < b.len() {
-                    s.push(b[i]);
-                }
+            None => {
+                code.push(b[i]);
                 i += 1;
             }
-            i += 1;
-            strings.push(s);
-            code.push_str(" \"\" ");
-        } else if c == '\'' && is_char_literal(&b, i) {
-            i += 1;
-            if b[i] == '\\' {
-                i += 1;
-            }
-            while i < b.len() && b[i] != '\'' {
-                i += 1;
-            }
-            i += 1;
-            code.push_str(" ' ' ");
-        } else {
-            code.push(c);
-            i += 1;
         }
     }
     (code, strings)
@@ -191,6 +268,8 @@ fn ident_char(b: &[char], i: usize) -> bool {
     i > 0 && (b[i - 1].is_alphanumeric() || b[i - 1] == '_')
 }
 
+/// Whether the `'` at `b[i]` opens a char literal rather than a lifetime: an
+/// escape follows, or a single char and a closing quote.
 fn is_char_literal(b: &[char], i: usize) -> bool {
     matches!(
         (b.get(i + 1), b.get(i + 2)),
@@ -362,6 +441,75 @@ fn scanner_sees_through_comments_and_strings() {
         "S {\n\ng: C }"
     );
     assert!(Path::new(&root()).join("src/lib.rs").exists());
+}
+
+#[test]
+fn lexer_ends_every_literal_form_where_it_ends() {
+    let (code, strings) = lex(r##"let a = b"\""; m_byte
+        let b = br"\"; m_raw_byte
+        let c = br#"x"y"#; m_raw_byte_hash
+        let d = c"\""; m_c_str
+        let e = cr"\"; m_raw_c
+        let f = cr#"\"#; m_raw_c_hash
+        let g = b'"'; m_byte_char
+        let h = '"'; m_char
+        let i = '\''; m_escaped_char
+        fn j<'a>(x: &'a u8) -> &'a u8 { m_lifetime }
+        let k = r#match; m_raw_ident
+        let l = r"\"; m_raw"##);
+    for marker in [
+        "m_byte",
+        "m_raw_byte",
+        "m_raw_byte_hash",
+        "m_c_str",
+        "m_raw_c",
+        "m_raw_c_hash",
+        "m_byte_char",
+        "m_char",
+        "m_escaped_char",
+        "m_lifetime",
+        "match",
+        "m_raw",
+    ] {
+        assert_eq!(word_hits(&code, marker).len(), 1, "{marker} hidden: {code}");
+    }
+    assert_eq!(
+        strings,
+        [r#"\""#, r"\", r#"x"y"#, r#"\""#, r"\", r"\", r"\"]
+    );
+}
+
+#[test]
+fn test_items_end_where_they_end() {
+    // A comparison is not a generic bracket.
+    assert_eq!(
+        without_test_items("#[cfg(test)]\nlet _p = 1 < 2;\nm1 { }"),
+        "\nm1 { }"
+    );
+    assert_eq!(
+        without_test_items("#[cfg(test)]\nconst X: bool = 3 > 2 && 1 < 2;\nfn m2() {}"),
+        "\nfn m2() {}"
+    );
+    // A `;` or `}` in a literal, or the attribute in a comment, ends nothing.
+    assert_eq!(
+        without_test_items("#[cfg(test)]\nconst S: &str = \"};\";\nm3"),
+        "\nm3"
+    );
+    let doc = "/// #[cfg(test)]\nfn m4() {}";
+    assert_eq!(without_test_items(doc), doc);
+    // A field: generics hold commas; the last field ends at the closing brace.
+    assert_eq!(
+        without_test_items("S {\n#[cfg(test)]\nf: HashMap<A, B>,\nm5: C }"),
+        "S {\n\nm5: C }"
+    );
+    assert_eq!(
+        without_test_items("S { a: A,\n#[cfg(test)]\ng: Vec<Vec<u8>> }\nm6"),
+        "S { a: A,\n}\nm6"
+    );
+    assert_eq!(
+        without_test_items("#[cfg(test)]\n#[path = \"x_tests.rs\"]\nmod tests;\nm7"),
+        "\nm7"
+    );
 }
 
 // ---------------------------------------------------------------------------
