@@ -2601,8 +2601,28 @@ const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7"];
 
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
 /// that cannot be read is refused before the backup; P2, the last tray check
-/// runs after the confirmation.
-const PIONEER_REASONS: &[&str] = &["P1", "P2"];
+/// runs after the confirmation; P3, a refusal no longer carries
+/// [`RECOVER_HINT`].
+const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3"];
+
+/// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
+/// v0.11.2 could not reach that flash mode either: its CLI and GUI always
+/// passed `force: false`.
+const RECOVER_HINT: &str = " (a guess is only made under --recover, for a recognised BD family)";
+
+/// Whether `ops` only drop [`RECOVER_HINT`]: each `-` line holds the hint and
+/// the matching `+` line is the same line without it. Nothing else may
+/// differ, so the device commands are identical.
+fn only_recover_hint_dropped(ops: &[String]) -> bool {
+    let (old, new): (Vec<&String>, Vec<&String>) = ops.iter().partition(|op| op.starts_with('-'));
+    !old.is_empty()
+        && old.len() == new.len()
+        && old.iter().zip(&new).all(|(o, n)| {
+            n.starts_with('+')
+                && o.contains(RECOVER_HINT)
+                && o[1..].replace(RECOVER_HINT, "") == n[1..]
+        })
+}
 
 /// Split a golden file into `(scenario title, lines)` sections.
 fn sections(text: &str) -> Vec<(String, Vec<String>)> {
@@ -2769,6 +2789,13 @@ fn golden_parity_with_0_11_2() {
                 {
                     problems.push(format!(
                         "{kind} {file} :: {title}: reason must be from {reasons_allowed:?}, got {reasons:?}"
+                    ));
+                }
+                if reasons.iter().any(|r| r == "P3")
+                    && (reasons.len() != 1 || !only_recover_hint_dropped(ops))
+                {
+                    problems.push(format!(
+                        "{kind} {file} :: {title}: P3 allows only dropping {RECOVER_HINT:?} from a line, nothing else"
                     ));
                 }
                 for op in ops {
