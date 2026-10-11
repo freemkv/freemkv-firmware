@@ -545,13 +545,13 @@ fn refusal(f: &Issuer) -> Option<&'static str> {
     if generic {
         return Some("takes a generic Transport/ScsiDevice");
     }
-    if RAW_HANDLES.iter().any(|h| f.params.contains(h)) {
+    let params = strip_paths(&f.params);
+    if RAW_HANDLES.iter().any(|h| params.contains(h)) {
         return Some("takes a raw device beside its grant");
     }
     if f.writes {
         // A path-qualified grant (`&mut gates::WriteDevice`) counts; a DeviceAccess does
         // not, so a write sits in a function that takes the WriteDevice itself.
-        let params = strip_paths(&f.params);
         let write_grant = params.contains("&mut WriteDevice") || params.contains(": WriteDevice");
         return (!write_grant).then_some("writes without a WriteDevice");
     }
@@ -679,8 +679,10 @@ fn write_issuers(code: &str) -> Vec<Issuer> {
             continue;
         }
         let body = &tail[brace..block_end(tail, brace)];
-        let settings_write =
-            SETTINGS_DEVICE.iter().any(|m| has_marker(body, m)) && body.contains(".set(");
+        // A helper handed the vendor settings `Device` counts too: `fn f(d: &mut Device<..>)`.
+        let settings_device = SETTINGS_DEVICE.iter().any(|m| has_marker(body, m))
+            || has_marker(&strip_paths(params), "Device<");
+        let settings_write = settings_device && body.contains(".set(");
         let writes = settings_write || WRITE_MARKERS.iter().any(|m| has_marker(body, m));
         if writes || READ_MARKERS.iter().any(|m| has_marker(body, m)) {
             out.push(Issuer {
@@ -824,10 +826,16 @@ fn write_markers_need_the_write_grant() {
          fn x(dev: &mut ReadDevice<'_>) { dev.command_out(&knock(), &[]); }\n\
          fn y(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d.set(QuietMode, v, p)); }\n\
          fn z(dev: &mut gates::WriteDevice<'_>) { drive::execute_update(t); }\n\
-         fn q(dev: &mut ReadDevice<'_>) { Device::with_settings_codec(t, c).query(); }\n",
+         fn q(dev: &mut ReadDevice<'_>) { Device::with_settings_codec(t, c).query(); }\n\
+         fn h(d: &mut pioneer_optical::device::Device<'_, T>) { d.set(QuietMode, v, p); }\n\
+         fn p(t: &mut crate::transport::ScsiTransport<'_, '_>, w: &mut WriteDevice<'_>) { ScsiTransport::flash(&s); }\n\
+         fn o(r: &mut ReadDevice<'_>) { r.set_timeout(t); }\n",
     );
-    assert_eq!(names, ["r", "s", "t", "u", "v", "w", "x", "y", "z", "q"]);
-    assert_eq!(refused, ["r", "s", "t", "u", "v", "y"]);
+    assert_eq!(
+        names,
+        ["r", "s", "t", "u", "v", "w", "x", "y", "z", "q", "h", "p"]
+    );
+    assert_eq!(refused, ["r", "s", "t", "u", "v", "y", "h", "p"]);
     assert_eq!(
         strip_paths("a: &mut gates::WriteDevice<'_>"),
         "a: &mut WriteDevice<'_>"
