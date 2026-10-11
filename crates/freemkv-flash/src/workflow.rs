@@ -199,6 +199,24 @@ pub struct DriveProfile {
     pub flash_formats: &'static [crate::backend::FileFormat],
 }
 
+/// Every file-name ending a registered backend reads, for open-file pickers.
+pub fn file_extensions() -> Vec<&'static str> {
+    extensions(registry::backends().flat_map(|b| b.descriptor().formats))
+}
+
+/// The distinct endings of `formats`, in first-seen order.
+pub fn extensions<'a>(
+    formats: impl IntoIterator<Item = &'a crate::backend::FileFormat>,
+) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    for e in formats.into_iter().flat_map(|f| f.extensions) {
+        if !out.contains(e) {
+            out.push(*e);
+        }
+    }
+    out
+}
+
 /// Probe `device` read-only and ask every recovery backend whether it knows
 /// the receiver. An unsupported drive is a profile, not an error.
 pub fn profile(device: &str) -> Result<DriveProfile> {

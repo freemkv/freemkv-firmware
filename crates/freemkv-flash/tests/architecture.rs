@@ -1,5 +1,4 @@
-//! Source-tree tripwires for the universal-backend design (tracked as
-//! `design/universal-backend-gui.md` in the repository's docs directory). Each
+//! Source-tree tripwires for the 0.12 universal-backend design. Each
 //! test scans production code (no `*_tests.rs` files, no `#[cfg(test)]` items)
 //! with comments removed, so prose cannot satisfy or trip it.
 

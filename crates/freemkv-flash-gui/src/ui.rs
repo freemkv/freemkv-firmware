@@ -91,6 +91,8 @@ pub(crate) struct Profile {
     /// The suggested backup and dump file names, from the backup format.
     pub(crate) backup_name: Option<String>,
     pub(crate) dump_name: Option<String>,
+    /// File endings a flash to this drive accepts.
+    pub(crate) flash_extensions: Vec<&'static str>,
 }
 
 /// Where the selected drive's profile stands.
@@ -122,21 +124,12 @@ pub enum Pick {
     ReportJson,
 }
 
-/// A file-type filter for an open panel.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A file-type filter for an open panel; endings come from the backends.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileFilter {
     pub name: &'static str,
-    pub extensions: &'static [&'static str],
+    pub extensions: Vec<&'static str>,
 }
-
-const FIRMWARE_FILTER: FileFilter = FileFilter {
-    name: "Firmware",
-    extensions: &["tar", "enc", "bin"],
-};
-const FLASH_FILTER: FileFilter = FileFilter {
-    name: "Firmware or backup",
-    extensions: &["bin", "enc", "tar"],
-};
 
 /// Work only a shell can do; the shell performs it and reports back through `Input`.
 #[derive(Clone, Debug, PartialEq)]
@@ -921,9 +914,22 @@ impl App {
         }
         match pick {
             Pick::CheckFile => open(None),
-            Pick::FlashFirmware => open(Some(FLASH_FILTER)),
+            Pick::FlashFirmware => {
+                let extensions = self
+                    .ready_profile()
+                    .map(|p| p.flash_extensions.clone())
+                    .filter(|e| !e.is_empty())
+                    .unwrap_or_else(workflow::file_extensions);
+                open(Some(FileFilter {
+                    name: "Firmware or backup",
+                    extensions,
+                }))
+            }
             Pick::RecoveryCurrent | Pick::RecoveryInput | Pick::AnalysisFile(_) => {
-                open(Some(FIRMWARE_FILTER))
+                open(Some(FileFilter {
+                    name: "Firmware",
+                    extensions: workflow::file_extensions(),
+                }))
             }
             Pick::Backup | Pick::Dump if self.selected() => {
                 let profile = self.ready_profile();

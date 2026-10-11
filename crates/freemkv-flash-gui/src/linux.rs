@@ -338,7 +338,7 @@ impl Shell {
         if let Some(f) = filter {
             let ff = gtk::FileFilter::new();
             ff.set_name(Some(f.name));
-            for e in f.extensions {
+            for e in &f.extensions {
                 ff.add_suffix(e);
             }
             let filters = gio::ListStore::new::<gtk::FileFilter>();

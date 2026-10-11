@@ -27,6 +27,7 @@ impl Profile {
             inspect: true,
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
+            flash_extensions: vec!["bin"],
         }
     }
 }
@@ -339,7 +340,10 @@ fn flash_starts_with_a_firmware_chooser() {
         app.dispatch(Input::Choose(Pick::FlashFirmware)),
         [Effect::OpenFile {
             pick: Pick::FlashFirmware,
-            filter: Some(FLASH_FILTER)
+            filter: Some(FileFilter {
+                name: "Firmware or backup",
+                extensions: vec!["bin"],
+            })
         }]
     );
     app.dispatch(Input::Chosen(

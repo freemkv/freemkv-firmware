@@ -96,7 +96,7 @@ impl Shell {
                 Effect::OpenFile { pick, filter } => {
                     let mut dialog = rfd::FileDialog::new();
                     if let Some(f) = filter {
-                        dialog = dialog.add_filter(f.name, f.extensions);
+                        dialog = dialog.add_filter(f.name, &f.extensions);
                     }
                     if let Some(path) = dialog.pick_file() {
                         self.send(ctx, Input::Chosen(pick, path));
