@@ -20,6 +20,8 @@ use anyhow::{anyhow, bail, Context, Result};
 pub(crate) mod backup;
 pub(crate) mod crossflash;
 pub(crate) mod file_info;
+#[cfg(test)]
+pub(crate) mod fixture;
 mod flash;
 pub mod fw_ident;
 pub(crate) mod inspect;

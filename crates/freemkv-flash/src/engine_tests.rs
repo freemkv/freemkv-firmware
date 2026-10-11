@@ -72,6 +72,7 @@ fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
     assert_eq!(img.len(), IMAGE_SIZE);
     img[..0x400].copy_from_slice(stored_boot_page());
     stamp_descriptor(&mut img, model);
+    crate::backends::mtk::fixture::stamp(&mut img, &crate::backends::mtk::fixture::BU3);
     let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
     crate::cmac::resign(&img).expect("resign a well-formed image")
 }
@@ -1164,6 +1165,7 @@ fn chip_gate_refuses_cross_generation_images() {
     let mut img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let d = ROM_1EC000_OFFSET as usize;
     img[d + 0x34..d + 0x3E].copy_from_slice(b"MTEKMT1939");
+    crate::backends::mtk::fixture::stamp(&mut img, &crate::backends::mtk::fixture::JB7);
     let img = crate::cmac::resign(&img).unwrap();
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
@@ -1346,11 +1348,20 @@ fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
 /// banner at 0x3000 reads `banner`: real ASUS BW-16D1HT parts are MT1939
 /// silicon (tag) with an `MT1959 Boot` banner.
 fn chip_image(model: &str, tag: Option<&[u8; 10]>, banner: &[u8]) -> Vec<u8> {
+    use crate::backends::mtk::fixture;
     let mut img = make_flashable(vec![0u8; IMAGE_SIZE], model);
     let d = ROM_1EC000_OFFSET as usize;
     img[d + 0x34..d + 0x3E].fill(0);
+    // The hardware record repeats the tag: an untagged image has none.
+    img[fixture::RECORD_AREA..fixture::RECORD_AREA + 0x100].fill(0);
     if let Some(tag) = tag {
         img[d + 0x34..d + 0x3E].copy_from_slice(tag);
+        let board = if tag == b"MTEKMT1939" {
+            fixture::JB8
+        } else {
+            fixture::BU3
+        };
+        fixture::stamp(&mut img, &board);
     }
     img[0x3000..0x3020].fill(0);
     img[0x3000..0x3000 + banner.len()].copy_from_slice(banner);

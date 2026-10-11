@@ -18,6 +18,12 @@ fn stored_image(chip: &[u8; 10], model: &str, code: u8) -> Vec<u8> {
     img[d + 0x08..d + 0x18].fill(b' ');
     img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
     img[d + 0x34..d + 0x3E].copy_from_slice(chip);
+    let board = if chip == b"MTEKMT1939" {
+        crate::backends::mtk::fixture::JB7
+    } else {
+        crate::backends::mtk::fixture::BU3
+    };
+    crate::backends::mtk::fixture::stamp(&mut img, &board);
     let t = cmac::TABLE_OFFSET;
     for i in 0..cmac::ENTRY_COUNT {
         img[t + i * cmac::ENTRY_SIZE..t + (i + 1) * cmac::ENTRY_SIZE].fill(0xFF);

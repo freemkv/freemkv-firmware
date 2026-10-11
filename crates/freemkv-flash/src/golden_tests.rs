@@ -24,6 +24,7 @@ use std::rc::Rc;
 use anyhow::{bail, Result};
 use sha2::{Digest, Sha256};
 
+use crate::backends::mtk::fixture;
 use crate::backends::mtk::{Mtk, CHUNK, IMAGE_SIZE, ROM_1EC000_OFFSET};
 // COMPAT: the module path differs in the 0.11.2 baseline copy of this file.
 use crate::backend::{Backend, FlashRequest};
@@ -584,6 +585,7 @@ fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
     assert_eq!(img.len(), IMAGE_SIZE);
     img[..0x400].copy_from_slice(&mtk_boot_page());
     stamp_descriptor(&mut img, model);
+    fixture::stamp(&mut img, &fixture::BU3);
     let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
     crate::cmac::resign(&img).expect("resign a well-formed image")
 }
@@ -637,6 +639,12 @@ fn stored_image(chip: &[u8; 10], model: &str, code: u8) -> Vec<u8> {
     img[d + 0x08..d + 0x18].fill(b' ');
     img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
     img[d + 0x34..d + 0x3E].copy_from_slice(chip);
+    let board = if chip == b"MTEKMT1939" {
+        fixture::JB7
+    } else {
+        fixture::BU3
+    };
+    fixture::stamp(&mut img, &board);
     let t = 0x10400usize;
     for i in 0..16 {
         img[t + i * 28..t + (i + 1) * 28].fill(0xFF);
@@ -2597,7 +2605,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// Reasons a MediaTek line may differ from v0.11.2. `tests/golden/v0.11.2/`
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
-const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7"];
+const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"];
 
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
 /// that cannot be read is refused before the backup; P2, the last tray check

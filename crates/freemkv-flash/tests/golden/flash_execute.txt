@@ -222,7 +222,7 @@ warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relyin
 verifying...
   flash complete ........... 60 KiB of integrity-protected regions verified
   Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
-firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
+firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
 --- events (221) ---
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
@@ -444,7 +444,7 @@ MSG      warning: post-settle REQUEST SENSE returned an unparseable 16-byte repl
 MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
-MSG      firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
+MSG      firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
 --- scsi transcript (785) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
@@ -968,11 +968,11 @@ MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 OUTS cdb=3b01000000000000000b0000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
+OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
 OUTS cdb=3b0600004000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b0600008000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b060000c000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
-OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
+OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
 OUTS cdb=3b0600014000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b0600018000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b060001c000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
@@ -1091,7 +1091,7 @@ OUTS cdb=3b06001dc000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d71003
 OUTS cdb=3b06001e0000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001e4000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001e8000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
-OUTS cdb=3b06001ec000004000000000 len=16384 sha256=58b65b0e2b6e1358a272cc43c82fc5552c0f6f43c9f546ff958d4d1e38eb3e9f -> ok
+OUTS cdb=3b06001ec000004000000000 len=16384 sha256=feefb47a844959e6e5d0d040b6876750936cf8a3812a68148c2677f9c85dc7bb -> ok
 OUTS cdb=3b06001f0000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001f4000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001f8000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
@@ -1231,11 +1231,11 @@ IN   cdb=3c06001f800000400000 alloc=16384 -> ok 16384
 IN   cdb=3c06001fc00000400000 alloc=16384 -> ok 16384
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
-saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
+saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 image chunks streamed: 128 x 16384 bytes
 
 === MTK execute: read-back mismatch ===
-result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
+result: ERR read-back verify FAILED at 0x01105E: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61346 of 61440 protected bytes differ).
 --- text (218) ---
 reading drive memory: 0%
 reading drive memory: 1%
@@ -2197,11 +2197,11 @@ MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 OUTS cdb=3b01000000000000000b0000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
+OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
 OUTS cdb=3b0600004000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b0600008000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b060000c000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
-OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
+OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
 OUTS cdb=3b0600014000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b0600018000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b060001c000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
@@ -2320,7 +2320,7 @@ OUTS cdb=3b06001dc000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d71003
 OUTS cdb=3b06001e0000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001e4000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001e8000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
-OUTS cdb=3b06001ec000004000000000 len=16384 sha256=58b65b0e2b6e1358a272cc43c82fc5552c0f6f43c9f546ff958d4d1e38eb3e9f -> ok
+OUTS cdb=3b06001ec000004000000000 len=16384 sha256=feefb47a844959e6e5d0d040b6876750936cf8a3812a68148c2677f9c85dc7bb -> ok
 OUTS cdb=3b06001f0000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001f4000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 OUTS cdb=3b06001f8000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
@@ -2458,7 +2458,7 @@ IN   cdb=3c06001f000000400000 alloc=16384 -> ok 16384
 IN   cdb=3c06001f400000400000 alloc=16384 -> ok 16384
 IN   cdb=3c06001f800000400000 alloc=16384 -> ok 16384
 IN   cdb=3c06001fc00000400000 alloc=16384 -> ok 16384
-saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
+saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 
 === MTK execute: restore the saved .tar ===
 result: OK
@@ -2684,7 +2684,7 @@ warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relyin
 verifying...
   flash complete ........... 60 KiB of integrity-protected regions verified
   Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
-firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
+firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
 --- events (222) ---
 MSG      == reflash backup firmware (per-unit data retained as reference) ==
 PROGRESS reading drive memory 4096/2097152
@@ -2907,7 +2907,7 @@ MSG      warning: post-settle REQUEST SENSE returned an unparseable 16-byte repl
 MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
-MSG      firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
+MSG      firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
 --- scsi transcript (785) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
@@ -3431,11 +3431,11 @@ MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 OUTS cdb=3b01000000000000000b0000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-OUTS cdb=3b0600000000004000000000 len=16384 sha256=a4cb3cc52bb7eb6b5653aa3ae08de21602c9e35b2554c26e436da86f17db43bf -> ok
+OUTS cdb=3b0600000000004000000000 len=16384 sha256=6d0a58a40c8d493d1e4020bf2df55806488f025a07b38762237be67ee64747e4 -> ok
 OUTS cdb=3b0600004000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
 OUTS cdb=3b0600008000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
 OUTS cdb=3b060000c000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
-OUTS cdb=3b0600010000004000000000 len=16384 sha256=b9e553f7d1a5cc04a848712b55885a676f216144d11abac0a94d2c73c01522d3 -> ok
+OUTS cdb=3b0600010000004000000000 len=16384 sha256=68d92d5c5b65aedc61a89cfe676c675767aa16e1e8aa5aaa56e828a951959db2 -> ok
 OUTS cdb=3b0600014000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
 OUTS cdb=3b0600018000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
 OUTS cdb=3b060001c000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
@@ -3554,7 +3554,7 @@ OUTS cdb=3b06001dc000004000000000 len=16384 sha256=0fbba07a833d4dcfc7024eaf31366
 OUTS cdb=3b06001e0000004000000000 len=16384 sha256=e27ad5db9f4e06f6a09e6b0971c55781bfe8fc756c295bf34ae91da23547354f -> ok
 OUTS cdb=3b06001e4000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
 OUTS cdb=3b06001e8000004000000000 len=16384 sha256=6eec8c356c635ec60225964f4ace5e59154b4838c89ce5f856562de28c41f20d -> ok
-OUTS cdb=3b06001ec000004000000000 len=16384 sha256=f8846a808bf17f1a19139cd36056f4734cd592a72e8ac5d1e68c5f36e298ad9a -> ok
+OUTS cdb=3b06001ec000004000000000 len=16384 sha256=320980d032fd165b9a762570769c1b62231cefbc3d85f9aff7795747e5f2abab -> ok
 OUTS cdb=3b06001f0000004000000000 len=16384 sha256=9aa032aaba4c15f57f7b6e5c8e5e713c8da4f92a6ff9f9066336f78c9ff3b66e -> ok
 OUTS cdb=3b06001f4000004000000000 len=16384 sha256=0fbba07a833d4dcfc7024eaf313661a0ba8f80a05c6d29b8801c612e10e60dee -> ok
 OUTS cdb=3b06001f8000004000000000 len=16384 sha256=0fbba07a833d4dcfc7024eaf313661a0ba8f80a05c6d29b8801c612e10e60dee -> ok
@@ -3694,7 +3694,7 @@ IN   cdb=3c06001f800000400000 alloc=16384 -> ok 16384
 IN   cdb=3c06001fc00000400000 alloc=16384 -> ok 16384
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
-saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
+saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 
 === MTK execute: no risk acknowledgement ===
 result: ERR SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)

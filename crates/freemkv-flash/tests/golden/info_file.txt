@@ -110,9 +110,9 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_flashable.bin
 size: 2 MiB
-sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
+sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
 chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-banner: <none>
+banner: MT1959 Boot BU5
 descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 capability: BD/UHD, region-lockable, AACS content
 flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -123,12 +123,12 @@ MSG      file: <TMP>/info-file/mtk_flashable.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_flashable.bin
 FIELD    Size = 2 MiB
-MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
+MSG      sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = <unknown>
 MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-MSG      banner: <none>
+MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 MSG      capability: BD/UHD, region-lockable, AACS content
 MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -141,9 +141,9 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_bad_cmac.bin
 size: 2 MiB
-sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
+sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
 chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-banner: <none>
+banner: MT1959 Boot BU5
 descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 capability: BD/UHD, region-lockable, AACS content
 flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -154,12 +154,12 @@ MSG      file: <TMP>/info-file/mtk_bad_cmac.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_bad_cmac.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
+MSG      sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = <unknown>
 MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-MSG      banner: <none>
+MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 MSG      capability: BD/UHD, region-lockable, AACS content
 MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -218,9 +218,9 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_drive_read_backup.bin
 size: 2 MiB
-sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
+sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
 chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-banner: ��������������
+banner: MT1959 Boot BU5
 descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 capability: BD/UHD, region-lockable, AACS content
 flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -231,12 +231,12 @@ MSG      file: <TMP>/info-file/mtk_drive_read_backup.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_drive_read_backup.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
+MSG      sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = ����
 MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-MSG      banner: ��������������
+MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 MSG      capability: BD/UHD, region-lockable, AACS content
 MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -249,9 +249,9 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_mt1959_stored.bin
 size: 2 MiB
-sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
+sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
 chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-banner: ��������������
+banner: MT1959 Boot BU5
 descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 capability: BD/UHD, region-lockable, AACS content
 flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -262,12 +262,12 @@ MSG      file: <TMP>/info-file/mtk_mt1959_stored.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_mt1959_stored.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
+MSG      sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = ����
 MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-MSG      banner: ��������������
+MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 MSG      capability: BD/UHD, region-lockable, AACS content
 MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
@@ -280,9 +280,9 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_mt1939_stored.bin
 size: 2 MiB
-sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
+sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
 chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
-banner: ������������������
+banner: MT1939 Boot Code
 descriptor: vendor='��������' model='BD-RE BE14NU40' rev='����'
 capability: BD, region-lockable, AACS content
 flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
@@ -293,12 +293,12 @@ MSG      file: <TMP>/info-file/mtk_mt1939_stored.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_mt1939_stored.bin
 FIELD    Size = 2 MiB
-MSG      sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
+MSG      sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
 FIELD    Chipset = MT1939
 FIELD    Model = BD-RE BE14NU40
 FIELD    Firmware version = ����
 MSG      chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
-MSG      banner: ������������������
+MSG      banner: MT1939 Boot Code
 MSG      descriptor: vendor='��������' model='BD-RE BE14NU40' rev='����'
 MSG      capability: BD, region-lockable, AACS content
 MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
