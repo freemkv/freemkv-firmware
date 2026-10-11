@@ -559,7 +559,7 @@ fn details_reuse_probe_data_without_repeat_reads() {
 
     // The backend's own rows issue only their own reads.
     let mut snapshot_dev = pioneer_with(b"", b"SN1", b"SAT 8A10");
-    let standard = crate::standard::read(&mut snapshot_dev);
+    let standard = crate::standard::read(&mut ReadDevice::new(&mut snapshot_dev, &[]));
     let read = crate::backend::InfoSoFar {
         standard: &standard,
         settings: None,
