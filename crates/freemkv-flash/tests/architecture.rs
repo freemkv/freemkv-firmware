@@ -585,6 +585,39 @@ fn write_device_constructed_only_in_engine_gates() {
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
+/// A read grant's data-out patterns come only from `Backend::allowed_data_out`
+/// (`ReadDevice::new` is private), so only a registered backend may declare
+/// them: no other module implements `Backend` or `allowed_data_out`.
+#[test]
+fn read_grant_patterns_come_only_from_backends() {
+    let mut problems = Vec::new();
+    let mut backends = 0;
+    for s in production_sources() {
+        let backend_module = s.path.starts_with("src/backends/");
+        for at in word_hits(&s.code, "allowed_data_out") {
+            let defines = s.code[..at].trim_end().ends_with("fn");
+            if defines && !backend_module && s.path != "src/backend/mod.rs" {
+                problems.push(format!("{}: defines allowed_data_out", s.path));
+            }
+        }
+        for at in word_hits(&s.code, "impl") {
+            let end = s.code[at..]
+                .find(['{', ';'])
+                .map_or(s.code.len(), |e| at + e);
+            let head = strip_paths(&s.code[at..end]);
+            let words: Vec<&str> = head.split_whitespace().collect();
+            if words.windows(2).any(|w| w == ["Backend", "for"]) {
+                backends += 1;
+                if !backend_module {
+                    problems.push(format!("{}: implements Backend", s.path));
+                }
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert!(backends >= 2, "the scan found {backends} Backend impls");
+}
+
 /// The SCSI device layer: the trait, its implementations and wrappers, and
 /// the transport bridge. Everything above it writes through a grant.
 const DEVICE_LAYER: &[&str] = &[
@@ -600,7 +633,10 @@ const DEVICE_LAYER: &[&str] = &[
 /// pioneer-optical: `drive::enter_update` (its `Session::write`/`finish`),
 /// `drive::execute_update`, `drive::diagnostic_memory` (writes on `Data::Out`),
 /// `logging::set_logging_ram`/`_persistent`, `receiver::Prepared*::flash` (via a
-/// `FlashTransport`) and the settings writer `device::Device::set`.
+/// `FlashTransport`) and the settings writers `device::Device::set` and
+/// `device::Writable::write` (implemented by `QuietDrive`, `PureRead` and
+/// `DvdRegion`; `Device::write_setting` is crate-private, and the device and
+/// settings modules have no `set_*` setters).
 /// mediatek-optical: `drive::enter_update` (its `Session::write`/`finish`).
 const WRITE_MARKERS: &[&str] = &[
     ".command_out_strict(",
@@ -611,24 +647,32 @@ const WRITE_MARKERS: &[&str] = &[
     "set_logging_",
     "FlashTransport",
     "Device::set(",
+    "Writable",
 ];
 
 /// What reaches the drive but may run under a read grant: the read transport,
-/// a settings device over it, and the lenient data-out used for the read knock.
+/// a settings device over it (or lent by `standard::with_device`), and the
+/// lenient data-out used for the read knock.
 const READ_MARKERS: &[&str] = &[
     ".command_out(",
     "ScsiTransport::reads(",
     "Device::new(",
     "Device::with_settings_codec(",
+    "with_device(",
 ];
 
-/// What opens a settings device; with a `.set(` in the same function, that is a
-/// settings write whichever way `set` is spelled.
+/// What opens a settings device; with a [`SETTINGS_WRITES`] form in the same
+/// function, that is a settings write whichever way it is spelled.
 const SETTINGS_DEVICE: &[&str] = &[
     "Device::new(",
     "Device::with_settings_codec(",
     "with_device(",
 ];
+
+/// The settings-write calls on a pioneer-optical `Device`, matched after
+/// [`tighten`]: `d.set(..)`, `Device::set(..)`, `QuietDrive.write(d, ..)`,
+/// `Writable::write(..)`.
+const SETTINGS_WRITES: &[&str] = &[".set(", "::set(", ".write(", "::write(", "Writable"];
 
 /// The vendor write functions, which production code names only by path so
 /// the markers above see every call.
@@ -781,6 +825,26 @@ fn normalise(code: &str) -> String {
     out
 }
 
+/// `code` with whitespace removed except between two identifier characters,
+/// where one space stays: `d . set (` reads `d.set(`.
+fn tighten(code: &str) -> String {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(code.len());
+    let mut gap = false;
+    for c in code.chars() {
+        if c.is_whitespace() {
+            gap = true;
+            continue;
+        }
+        if gap && ident(c) && out.chars().next_back().is_some_and(ident) {
+            out.push(' ');
+        }
+        gap = false;
+        out.push(c);
+    }
+    out
+}
+
 /// Every fn in lexed `code` whose body holds a write or read marker.
 fn write_issuers(code: &str) -> Vec<Issuer> {
     let code = normalise(code);
@@ -826,13 +890,17 @@ fn write_issuers(code: &str) -> Vec<Issuer> {
         if tail.find(';').is_some_and(|semi| semi < brace) {
             continue;
         }
-        let body = &tail[brace..block_end(tail, brace)];
-        // A helper handed the vendor settings `Device` counts too: `fn f(d: &mut Device<..>)`.
-        let settings_device = SETTINGS_DEVICE.iter().any(|m| has_marker(body, m))
-            || has_marker(&strip_paths(params), "Device<");
-        let settings_write = settings_device && body.contains(".set(");
-        let writes = settings_write || WRITE_MARKERS.iter().any(|m| has_marker(body, m));
-        if writes || READ_MARKERS.iter().any(|m| has_marker(body, m)) {
+        let body = tighten(&tail[brace..block_end(tail, brace)]);
+        // A helper handed the vendor settings `Device` counts too, whether as a
+        // parameter, a returned closure's argument or a typed closure argument.
+        let signature = tighten(&strip_paths(&after_name[..brace + close]));
+        let settings_device = SETTINGS_DEVICE.iter().any(|m| has_marker(&body, m))
+            || has_marker(&signature, "Device<")
+            || has_marker(&strip_paths(&body), "Device<");
+        let settings_write =
+            settings_device && SETTINGS_WRITES.iter().any(|m| has_marker(&body, m));
+        let writes = settings_write || WRITE_MARKERS.iter().any(|m| has_marker(&body, m));
+        if writes || READ_MARKERS.iter().any(|m| has_marker(&body, m)) {
             out.push(Issuer {
                 name,
                 generics: generics.to_string(),
@@ -1051,6 +1119,28 @@ fn write_markers_need_the_write_grant() {
         strip_paths("&mut crate::engine::gates::WriteDevice"),
         "&mut WriteDevice"
     );
+}
+
+#[test]
+fn settings_writes_through_a_lent_device_need_the_write_grant() {
+    let (names, refused) = scan(
+        "fn a(dev: &mut ReadDevice<'_>) {\n\
+             crate::standard::with_device(dev, |d| QuietDrive.write(d, QuietMode::Quiet, Persistence::Saved));\n\
+         }\n\
+         fn b(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d . set (QuietDrive, v, p)); }\n\
+         fn c(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d\n.set(QuietDrive, v, p)); }\n\
+         fn d(dev: &mut ReadDevice<'_>) { with_device(dev, |d| Writable::write(&PureRead, d, v, p)); }\n\
+         fn e(dev: &mut ReadDevice<'_>) { with_device(dev, |d| <DvdRegion as W>::write(&DvdRegion, d, v, p)); }\n\
+         fn f() -> impl FnOnce(&mut Device<'_, ScsiTransport<'_, '_>>) { |d| { d.set(QuietDrive, v, p); } }\n\
+         fn g(dev: &mut ReadDevice<'_>) { let w = |d: &mut device::Device<'_, T>| d.set(q, v, p); go(dev, w); }\n\
+         fn h(o: &Opened) { with_device(&mut ReadDevice::without_unlocks(o.raw()), |d| d.info()); }\n\
+         fn i(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d.get(DvdRegion)); }\n\
+         fn j(dev: &mut ReadDevice<'_>) { standard::with_device(dev, |d| d.settings()); }\n",
+    );
+    assert_eq!(names, ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]);
+    assert_eq!(refused, ["a", "b", "c", "d", "e", "f", "g", "h"]);
+    assert_eq!(tighten("d . set (q,\n v)"), "d.set(q,v)");
+    assert_eq!(tighten("pub fn  a"), "pub fn a");
 }
 
 #[test]
