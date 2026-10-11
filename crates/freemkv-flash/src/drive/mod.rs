@@ -6,11 +6,12 @@
 //! rejects overlap; [`for_family`] keeps the older workflow API operational.
 //!
 //! A [`FirmwareBackend`] exposes protocol capabilities — identity, backup
-//! capture, input validation, and flash open/chunk/close/read-back steps. It does no file
-//! I/O and prints nothing. The generic orchestration (reading the input file,
-//! the pre-flash backup, the dry-run plan, the streaming loop, verification, and
-//! the safety gate) lives once in [`crate::engine`] and drives any family
-//! through this trait. Only [`mtk`] has a proven live backup-and-flash path;
+//! capture, input validation, and `flash_stream` (which owns the whole update
+//! session) with optional read-back. It does no file I/O; only `describe_file`,
+//! `print_device_info` and `print_flash_notes` may print. The generic
+//! orchestration (reading the input file, the pre-flash backup, the dry-run
+//! plan, verification, and the safety gate) lives once in [`crate::engine`]
+//! and drives any family through this trait. Only [`mtk`] has a proven live backup-and-flash path;
 //! other candidates can classify but fail closed on writes.
 
 use anyhow::{bail, Context, Result};
@@ -210,6 +211,12 @@ pub fn backends() -> impl Iterator<Item = &'static dyn FirmwareBackend> {
     BACKENDS.iter().map(|registered| registered.prototype)
 }
 
+/// Backends in file-identification order (not probe order).
+// Pioneer's structural tar parse must precede MediaTek's whole-file `MTEKMT19dd` search.
+pub(crate) fn file_backends() -> impl Iterator<Item = &'static dyn FirmwareBackend> {
+    [&PIONEER_BACKEND as &dyn FirmwareBackend, &MTK_BACKEND].into_iter()
+}
+
 /// Run every registered, read-only protocol probe. Ambiguous matches fail
 /// closed rather than allowing registry order to select a writer.
 pub fn resolve_backend(dev: &mut dyn ScsiDevice) -> Result<Option<BackendMatch>> {
@@ -304,8 +311,9 @@ pub struct FlashRequest {
 
 /// A firmware command protocol's primitives.
 ///
-/// Every method is a protocol operation — no file I/O, no printing. The
-/// generic [`crate::engine`] composes these into the `info` / `backup` / `flash`
+/// Every method is a protocol operation — no file I/O. Only `describe_file`,
+/// `print_device_info` and `print_flash_notes` print. The generic
+/// [`crate::engine`] composes these into the `info` / `backup` / `flash`
 /// commands. A new family only has to supply its own CDBs; the engine loop is
 /// unchanged.
 /// The three user-facing capabilities a backend may offer, as one declarative
@@ -504,7 +512,7 @@ pub trait FirmwareBackend: Sync {
     fn recover(
         &self,
         _dev: &mut dyn ScsiDevice,
-        _current: Option<Vec<u8>>,
+        _current: Option<&[u8]>,
         _target: &[u8],
         _execute: bool,
     ) -> Option<Result<()>> {

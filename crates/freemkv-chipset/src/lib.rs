@@ -23,7 +23,8 @@ pub const BANNER_OFFSET: usize = mediatek_optical::layout::BANNER.start;
 pub const DESCRIPTOR_OFFSET: usize = mediatek_optical::layout::DESCRIPTOR.start;
 
 /// Detect the chip family + model/rev from `image`; see
-/// [`mediatek_optical::image::detect_chip`].
+/// [`mediatek_optical::image::detect_chip`], which holds the rationale (the
+/// identity tag is authoritative; banner and `+0x50` are display-only).
 pub fn detect_chip(image: &[u8]) -> anyhow::Result<ChipInfo> {
     Ok(mediatek_optical::image::detect_chip(image)?)
 }

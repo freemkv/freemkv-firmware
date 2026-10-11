@@ -119,7 +119,10 @@ impl BackupArtifact {
                 .context("non-UTF8 backup member")?
                 .to_owned();
             if entry.size() > expected_size as u64 + 4096 {
-                bail!("backup member {name} exceeds size limit");
+                bail!(
+                    "backup member {} exceeds size limit",
+                    crate::drive::sanitize_ascii(&name)
+                );
             }
             let mut data = Vec::new();
             entry.read_to_end(&mut data)?;
@@ -132,7 +135,10 @@ impl BackupArtifact {
                 "firmware.bin" if firmware.is_none() => firmware = Some(data),
                 "rom_003000.bin" | "rom_1EC000.bin" | "rom_1F0000.bin" | "inq.bin"
                 | "fd_fwdate.bin" | "fd_sn.bin" => regions.push((name, data)),
-                _ => bail!("unexpected or duplicate backup member {name}"),
+                _ => bail!(
+                    "unexpected or duplicate backup member {}",
+                    crate::drive::sanitize_ascii(&name)
+                ),
             }
         }
         let manifest = manifest.context("missing backup.toml")?;

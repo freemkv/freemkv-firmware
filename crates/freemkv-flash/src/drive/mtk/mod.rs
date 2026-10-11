@@ -1,9 +1,10 @@
 //! MediaTek MT1959 / MT1939 drive family — the only fully-implemented family.
 //!
-//! One file, all MTK commands: identity/dump reads, the WRITE BUFFER flash
-//! sequence, the enc transport envelope, and the per-unit tar model. The generic
-//! orchestration that drives these lives in [`crate::engine`]; this module is
-//! pure chip primitives (CDBs + framing), no file I/O and no printing.
+//! The MTK backend: identity/dump reads, the flash session, the enc transport
+//! envelope, and the per-unit tar model. CDB construction lives in
+//! `mediatek_optical`; backup, crossflash and file-report logic are submodules.
+//! The generic orchestration lives in [`crate::engine`]. Only `describe_file`,
+//! `print_device_info` and `print_flash_notes` print.
 //!
 //! ## flash is a DUMB verbatim writer
 //! The flasher writes the given image to the drive **verbatim** and never
@@ -867,8 +868,13 @@ fn read_chip_sources(
 ) {
     let tag = read_exact_retry(dev, ROM_1EC000_OFFSET, ROM_1EC000_LEN)
         .and_then(|d| mediatek_optical::Chip::from_tag(&d));
-    let banner = read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN)
-        .and_then(|b| mediatek_optical::Chip::from_banner(&b));
+    // The banner is only consulted when the descriptor carries no tag.
+    let banner = if tag.is_some() {
+        None
+    } else {
+        read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN)
+            .and_then(|b| mediatek_optical::Chip::from_banner(&b))
+    };
     (tag, banner)
 }
 
@@ -1211,20 +1217,11 @@ impl DriveFamily for Mtk {
             }
             std::thread::sleep(Duration::from_millis(500));
         }
-        // Post-settle sense check. `flash_close`'s REQUEST SENSE fires BEFORE
-        // this wait, i.e. against a still-programming drive whose sense is
-        // transient (mid-program). A hardware fault that only manifests after
-        // programming completes would not be caught by that early check —
-        // catch it here, on the settled drive, where the sense reflects the
-        // final flash outcome. Same "hard fail keys" list as `flash_close`
-        // (MEDIUM 0x3, HARDWARE 0x4, ABORTED 0xB); every other key here is
-        // benign (drive settled Ok but had a stale UNIT ATTENTION etc.).
-        //
-        // If the sense query itself errors or returns unparseable bytes,
-        // WARN — silently swallowing the failure would narrow the backstop
-        // back down to relying on downstream read-back verify alone, and the
-        // operator has no way to know that happened. Matches the sibling
-        // `flash_close` behaviour on unparseable sense.
+        // Post-settle sense check on the settled drive, where the sense reflects
+        // the final flash outcome. The fatal-sense policy (MEDIUM 0x3, HARDWARE
+        // 0x4, ABORTED 0xB; every other key benign) is shared with
+        // `post_commit_status`. A failing or unparseable sense query WARNs
+        // rather than being swallowed, as `post_commit_status` does.
         let sense = match dev.command_in(&cdb::request_sense(), cdb::REQUEST_SENSE_LEN) {
             Ok(b) => b,
             Err(e) => {
@@ -1314,8 +1311,9 @@ impl DriveFamily for Mtk {
             let mut session = mediatek_optical::drive::enter_update(&mut transport)
                 .map_err(mtk_err)
                 .context(
-                    "MediaTek preflight/prepare failed before any firmware data was sent; the drive \
-                     may be in update mode — power-cycle it before retrying",
+                    "MediaTek PROBE, TEST UNIT READY or PREPARE failed before any firmware data was \
+                     sent; if PREPARE was reached the drive may be in update mode — power-cycle \
+                     it before retrying",
                 )?;
             let mut sent = 0usize;
             for piece in payload.chunks(CHUNK) {

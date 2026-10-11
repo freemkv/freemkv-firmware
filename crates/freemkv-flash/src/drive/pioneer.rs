@@ -516,9 +516,9 @@ fn confirm_with(summary: &str, is_tty: bool, reader: &mut impl std::io::BufRead)
 // ---- The Pioneer DriveFamily impl ------------------------------------------
 
 /// Pioneer OEM protocol backend: identity, byte-exact OEM backup capture, and a
-/// gated live OEM write (Normal-only) via [`DriveFamily::flash_bundle`]. The
-/// image-chunk `flash_open/chunk/close` methods stay fail-closed and unused —
-/// Pioneer's live write goes through `flash_bundle`, not that path.
+/// gated live OEM write (Normal-only) via [`DriveFamily::flash_bundle`]. It
+/// relies on the trait's fail-closed `flash_stream`/`readback` defaults and
+/// flashes only through `flash_bundle`.
 #[derive(Default)]
 pub struct Pioneer;
 
@@ -763,19 +763,23 @@ impl DriveFamily for Pioneer {
     fn recover(
         &self,
         dev: &mut dyn ScsiDevice,
-        current: Option<Vec<u8>>,
+        current: Option<&[u8]>,
         target: &[u8],
         execute: bool,
     ) -> Option<Result<()>> {
         Some((|| {
             recovery::identify_receiver(dev)?;
-            let current = match current {
+            let captured;
+            let current: &[u8] = match current {
                 Some(bytes) => bytes,
-                None => self.capture_backup(dev).context(
-                    "cannot read Current firmware; supply a Current firmware file instead",
-                )?,
+                None => {
+                    captured = self.capture_backup(dev).context(
+                        "cannot read Current firmware; supply a Current firmware file instead",
+                    )?;
+                    &captured
+                }
             };
-            let plan = recovery::Plan::prepare(&current, target)?;
+            let plan = recovery::Plan::prepare(current, target)?;
             crate::output::field(
                 "Recovery",
                 "No automatic backup; compatibility policy bypassed",
@@ -867,7 +871,7 @@ impl DriveFamily for Pioneer {
     }
     fn capabilities(&self) -> Capabilities {
         // Identity, OEM backup, and a gated live OEM write (via flash_bundle)
-        // are implemented; the image-chunk flash_open/chunk/close stay off.
+        // are implemented; image streaming stays on the fail-closed defaults.
         Capabilities {
             info: true,
             backup: true,

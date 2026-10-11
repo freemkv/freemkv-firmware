@@ -1,6 +1,6 @@
 //! Family-neutral backup publishing: validate, write, read back, and publish a
 //! backup without ever replacing an existing file. Each backend owns its own
-//! format (`drive::mtk::backup`, `pioneer_backup`).
+//! format (`drive::mtk::backup`, `drive::pioneer::backup`).
 
 use std::io::Write;
 use std::path::Path;
