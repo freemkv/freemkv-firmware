@@ -8,6 +8,8 @@
 // On Windows, don't spawn a console window alongside the GUI in release builds.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+#[cfg(test)]
+mod architecture_tests;
 mod egui_shell;
 #[cfg(all(feature = "native", target_os = "linux", target_env = "gnu"))]
 mod linux;
