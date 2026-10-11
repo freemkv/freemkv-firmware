@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Desktop UI for freemkv-flash: a neutral model with native (macOS) and egui shells"
+description = "Desktop UI for freemkv-flash: a neutral model with native (AppKit, Win32) and egui shells"
 build = "build.rs"
 
 [[bin]]
@@ -16,9 +16,11 @@ path = "src/main.rs"
 
 [features]
 default = ["native"]
-# The native shell where one exists (AppKit on macOS); other OSes use the egui shell. Toolkit
-# crates are pinned like freemkv's `gui` feature.
-native = ["dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:block2"]
+# The native shell for each OS: AppKit on macOS, Win32 (winsafe) on Windows. Every other
+# target uses the egui shell.
+# Toolkit crates are pinned like freemkv's `gui` feature.
+native = ["dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:block2",
+          "dep:winsafe"]
 
 [dependencies]
 freemkv-flash = { path = "../freemkv-flash" }
@@ -53,7 +55,13 @@ objc2-foundation = { optional = true, version = "0.3", features = [
 # The confirmation sheet's completion handler. PINNED with `=`, as freemkv does.
 block2 = { version = "=0.6", optional = true }
 
-# On a Windows host build, embed the freemkv .ico as the executable icon.
+# ── Windows native shell ──────────────────────────────────────────────────
+# `winsafe`: safe Win32 with no dependencies; every control is the OS's own. PINNED with
+# `=`: pre-1.0 and it breaks its API between releases, so upgrade deliberately.
+[target.'cfg(target_os = "windows")'.dependencies]
+winsafe = { optional = true, version = "=0.0.29", features = ["gui", "shell"] }
+
+# On a Windows host build, embed the freemkv .ico and the application manifest.
 # No-op when building on macOS/Linux (guarded by cfg(windows) in build.rs).
 [build-dependencies]
 winresource = "0.1"
