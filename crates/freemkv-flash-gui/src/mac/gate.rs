@@ -182,13 +182,19 @@ fn capture(v: &NSView) -> Option<Capture> {
             p.rotate_left(1);
         }
     }
-    Some(Capture {
+    let mut shot = Capture {
         width: w as i32,
         height: h as i32,
         px,
         order: Order::Rgba,
         bottom_up: false,
-    })
+    };
+    // Transparent pixels would read as black and hide light-mode text; grey suits both modes.
+    let premultiplied = !rep
+        .bitmapFormat()
+        .contains(NSBitmapFormat::AlphaNonpremultiplied);
+    shot.flatten([128, 128, 128], premultiplied);
+    Some(shot)
 }
 
 /// Where `part` sits in a capture of `root`.

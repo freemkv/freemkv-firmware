@@ -499,3 +499,19 @@ fn the_gate_source_calls_no_workflow() {
         }
     }
 }
+
+#[test]
+fn flatten_reveals_black_text_on_a_transparent_background() {
+    // One transparent pixel and one opaque black text pixel: identical RGB until flattened.
+    let mut shot = Capture {
+        width: 2,
+        height: 1,
+        px: vec![0, 0, 0, 0, 0, 0, 0, 255],
+        order: Order::Rgba,
+        bottom_up: false,
+    };
+    assert!(!shot.has_ink(shot.full()));
+    shot.flatten([128, 128, 128], true);
+    assert!(shot.has_ink(shot.full()));
+    assert_eq!(shot.px, [128, 128, 128, 255, 0, 0, 0, 255]);
+}

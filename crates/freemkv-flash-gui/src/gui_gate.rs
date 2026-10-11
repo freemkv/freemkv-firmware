@@ -237,6 +237,24 @@ impl Capture {
         false
     }
 
+    /// Composite a capture with alpha onto an opaque `bg`, so text drawn on a transparent
+    /// window background stays visible whichever appearance (light or dark) drew it.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub fn flatten(&mut self, bg: [u8; 3], premultiplied: bool) {
+        for p in self.px.as_chunks_mut::<4>().0 {
+            let a = u16::from(p[3]);
+            for (c, b) in p[..3].iter_mut().zip(bg) {
+                let ink = if premultiplied {
+                    u16::from(*c)
+                } else {
+                    u16::from(*c) * a / 255
+                };
+                *c = (ink + u16::from(b) * (255 - a) / 255).min(255) as u8;
+            }
+            p[3] = 255;
+        }
+    }
+
     /// Top-down RGBA rows, opaque: what a PNG of the capture holds.
     pub fn rgba(&self) -> Vec<u8> {
         let stride = self.width.max(0) as usize * 4;
