@@ -1,0 +1,407 @@
+
+=== Pioneer execute: Kernel+Normal update ===
+result: OK
+--- text (12) ---
+Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+backup: saved <TMP>/pioneer-execute/backup_0.tar (146432 bytes)
+This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
+
+EXECUTING flash — do not power off or disconnect the drive...
+  update mode entered
+flash complete; drive returned ready.
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+--- events (12) ---
+MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+MSG      backup: saved <TMP>/pioneer-execute/backup_0.tar (146432 bytes)
+MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
+MSG      
+MSG      EXECUTING flash — do not power off or disconnect the drive...
+MSG        update mode entered
+MSG      flash complete; drive returned ready.
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+--- scsi transcript (47) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUTS cdb=3b04ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
+OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
+OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
+OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
+OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
+OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=4a000000100000000800 alloc=8 -> ok 8
+IN   cdb=000000000000 alloc=0 -> ok 0
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
+
+=== Pioneer execute: Kernel+Normal update with kernel restoration pass ===
+result: OK
+--- text (17) ---
+Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+backup: saved <TMP>/pioneer-execute/backup_1.tar (146432 bytes)
+WARNING: this flash crosses the firmware generation barrier. The Kernel generation marker is patched temporarily for the first update. A second update restores the unmodified OEM Kernel, and readback must verify it before success is reported. Keep the pre-flash backup and dump until both updates complete.
+This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
+
+EXECUTING flash — do not power off or disconnect the drive...
+  update mode entered
+restoring the unmodified target Kernel
+
+EXECUTING flash — do not power off or disconnect the drive...
+  update mode entered
+flash complete; drive returned ready.
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+--- events (17) ---
+MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+MSG      backup: saved <TMP>/pioneer-execute/backup_1.tar (146432 bytes)
+MSG      WARNING: this flash crosses the firmware generation barrier. The Kernel generation marker is patched temporarily for the first update. A second update restores the unmodified OEM Kernel, and readback must verify it before success is reported. Keep the pre-flash backup and dump until both updates complete.
+MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
+MSG      
+MSG      EXECUTING flash — do not power off or disconnect the drive...
+MSG        update mode entered
+MSG      restoring the unmodified target Kernel
+MSG      
+MSG      EXECUTING flash — do not power off or disconnect the drive...
+MSG        update mode entered
+MSG      flash complete; drive returned ready.
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+--- scsi transcript (69) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUTS cdb=3b04ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+OUTS cdb=3b07fe00000000800000 len=32768 sha256=c0a16b5e48c7b204741c44fa37f58d6402a2828c64c1aa21a96f3c2e884a1897 -> ok
+OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
+OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
+OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
+OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
+OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=4a000000100000000800 alloc=8 -> ok 8
+IN   cdb=000000000000 alloc=0 -> ok 0
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUTS cdb=3b04ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
+OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
+OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
+OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
+OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
+OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=4a000000100000000800 alloc=8 -> ok 8
+IN   cdb=000000000000 alloc=0 -> ok 0
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
+
+=== Pioneer execute: Normal-only update ===
+result: OK
+--- text (12) ---
+Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+backup: saved <TMP>/pioneer-execute/backup_2.tar (146432 bytes)
+This will flash: NORMAL only — no Kernel in the package
+
+EXECUTING flash — do not power off or disconnect the drive...
+  update mode entered
+flash complete; drive returned ready.
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+--- events (12) ---
+MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+MSG      backup: saved <TMP>/pioneer-execute/backup_2.tar (146432 bytes)
+MSG      This will flash: NORMAL only — no Kernel in the package
+MSG      
+MSG      EXECUTING flash — do not power off or disconnect the drive...
+MSG        update mode entered
+MSG      flash complete; drive returned ready.
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+--- scsi transcript (40) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUTS cdb=3b04ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
+OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
+OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
+OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=4a000000100000000800 alloc=8 -> ok 8
+IN   cdb=000000000000 alloc=0 -> ok 0
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
+
+=== Pioneer execute: Normal for another Kernel tag, refused after the backup ===
+result: ERR malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
+--- text (6) ---
+Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+backup: saved <TMP>/pioneer-execute/backup_3.tar (146432 bytes)
+--- events (6) ---
+MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+MSG      backup: saved <TMP>/pioneer-execute/backup_3.tar (146432 bytes)
+--- scsi transcript (23) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
+
+=== Pioneer execute: disc inserted after the backup ===
+result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
+--- text (5) ---
+Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+--- events (5) ---
+MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+MSG        reading kernel...
+MSG        verifying kernel...
+--- scsi transcript (23) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> DiscPresent
+saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
+
+=== Pioneer CLI execute: stdin is not a TTY ===
+result: OK
+--- terminal (13) ---
+Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
+Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
+  reading kernel...
+  verifying kernel...
+backup: saved <TMP>/pioneer-cli-non-tty/backup.tar (146432 bytes)
+This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
+stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
+
+EXECUTING flash — do not power off or disconnect the drive...
+  update mode entered
+flash complete; drive returned ready.
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+--- scsi transcript (47) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000000400 alloc=4 -> ok 4
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=120000006000 alloc=96 -> ok 96
+MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUTS cdb=3b04ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=120000006000 alloc=96 -> ok 96
+OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
+OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
+OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
+OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
+OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
+OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=4a000000100000000800 alloc=8 -> ok 8
+IN   cdb=000000000000 alloc=0 -> ok 0
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
