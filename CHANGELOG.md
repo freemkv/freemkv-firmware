@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-10
+
+### MediaTek
 - Fix MediaTek backups on MT1939 drives (LG BH14NS40/BE14NU40 and others), which
   failed with "unrecognized boot page" and so blocked every MT1939 flash. A drive
   read's boot page is now recognized generically (it mirrors the image's page at
@@ -18,21 +21,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contents and labelled as a reconstruction. Per-drive regions no longer take
   BU40N contents on every drive.
 - Always check that an image's chip (MT1959 vs MT1939) matches the drive's,
-  including forced flashes, using the drive's identity descriptor (the boot
-  banner can name the wrong generation). Previously this ran only with
-  crossflash.
+  using the drive's identity descriptor (the boot banner can name the wrong
+  generation). Previously this ran only with crossflash.
 - Refuse to flash a raw drive read (such as a `dump` output): its boot page is
-  the read-back copy and would not start the drive. Without `--force`, an
-  image's boot page must be one a known OEM build stores.
+  the read-back copy and would not start the drive. An image's boot page must
+  be one a known OEM build stores.
 - `info` names the drive's chipset; the MediaTek recipe reads "MT19xx (proven
   on MT1959)".
 - `info <file>` reports a corrupt MediaTek integrity table as INVALID instead
   of unsigned, and drive- and file-derived text is sanitized before it reaches
   the terminal.
-- Move the MediaTek protocol into the new `mediatek-optical` crate, mirroring
-  `pioneer-optical`. The flasher engine no longer contains family-specific code:
-  file reports, crossflash notes, vendor `info` fields, input classification
-  and recovery are backend hooks.
+- Inspect and Compare support MediaTek images and drive reads, naming the exact
+  OEM build when it is in the catalog.
+- The MediaTek protocol lives in the new `mediatek-optical` crate (0.5.0 on
+  crates.io), mirroring `pioneer-optical`.
+
+### Native GUI
+- The flash GUI is native on every OS: AppKit on macOS, Win32 common controls
+  on Windows and GTK4/libadwaita on Linux (glibc). All three draw one
+  platform-neutral model, so behaviour and wording match; musl Linux and
+  `--egui` keep the egui window over the same model.
+- Flash now runs a read-only plan, takes the pre-flash backup and authorizes
+  the plan against it, and only then asks for confirmation, showing the
+  authorized plan and any warnings. Nothing is written until you confirm;
+  cancelling keeps the backup.
+- The confirmation needs a deliberate click: its button stays disabled until
+  the risk box is ticked, the tick resets each time, and Enter or Escape
+  cancel. The target drive cannot change while it is open.
+- The drive bar shows what the drive offers, and tabs follow it. Recovery is
+  offered for an unsupported drive when a backend recognizes its receiver.
+- Backup and dump files are named as the CLI names them, and file pickers list
+  the formats the drive accepts.
+
+### Backends
+- One backend contract for every drive family: each backend declares what it
+  can do (backup, dump, flash, recovery, inspect) and the CLI and GUI follow
+  those capabilities, so adding a backend needs no front-end changes.
+- Flashing runs in two read-only stages around the pre-flash backup before any
+  write. Writes go only through a handle the engine grants after a saved backup
+  or an acknowledged recovery; reads refuse any undeclared write command.
+- One file recognizer serves flash, `check`, `info <file>` and Inspect; a file
+  two backends claim equally is an error instead of a guess.
+- Compare labels each region's role and counts only unexpected differences:
+  per-drive data (revocation lists, settings, calibration) and the read-back
+  boot page are expected to differ.
+- Removed the unreachable force, skip-backup and recover-flash paths.
 
 ## [0.11.2] - 2026-10-09
 
