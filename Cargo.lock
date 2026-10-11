@@ -2071,8 +2071,9 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "mediatek-optical"
-version = "0.1.0"
-source = "git+https://github.com/MattJackson/mediatek-optical?rev=727309cea76e86955090ae6ff0c41a69a05219a1#727309cea76e86955090ae6ff0c41a69a05219a1"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03188e8c5fb85d92b34106aa0831b1eba4afd4ae806e2d531b586c9ebe140eb"
 dependencies = [
  "aes",
  "cmac",
