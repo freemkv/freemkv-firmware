@@ -7,12 +7,18 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Minimal cross-platform desktop UI for freemkv-flash (drive info / dump / flash)"
+description = "Desktop UI for freemkv-flash: a neutral model with native (macOS) and egui shells"
 build = "build.rs"
 
 [[bin]]
 name = "freemkv-flash-gui"
 path = "src/main.rs"
+
+[features]
+default = ["native"]
+# The native shell where one exists (AppKit on macOS); other OSes use the egui shell. Toolkit
+# crates are pinned like freemkv's `gui` feature.
+native = ["dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:block2"]
 
 [dependencies]
 freemkv-flash = { path = "../freemkv-flash" }
@@ -25,6 +31,27 @@ eframe = "0.35"
 image = { version = "0.25", default-features = false, features = ["png"] }
 # Native "open file" / "save file" dialogs on every platform.
 rfd = "0.17"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", optional = true }
+objc2-app-kit = { optional = true, version = "0.3", features = [
+  "NSApplication", "NSWindow", "NSView", "NSControl", "NSButton", "NSButtonCell",
+  "NSTextField", "NSTextFieldCell", "NSPopUpButton", "NSMenu", "NSMenuItem", "NSResponder",
+  "NSProgressIndicator", "NSBox", "NSOutlineView", "NSTableView", "NSTableColumn",
+  "NSScrollView", "NSClipView", "NSOpenPanel", "NSSavePanel", "NSPanel", "NSGraphics",
+  "NSCell", "NSActionCell", "NSStackView", "NSGridView", "NSLayoutConstraint",
+  "NSLayoutAnchor", "NSUserInterfaceLayout", "NSFont", "NSColor", "NSImage",
+  "NSRunningApplication", "NSTextView", "NSText", "NSAlert", "NSSegmentedControl",
+  "NSSegmentedCell", "NSPasteboard", "NSAppearance", "NSParagraphStyle", "NSTextContainer",
+  "NSTextStorage", "NSLayoutManager", "NSAttributedString", "NSSplitView", "block2",
+] }
+objc2-foundation = { optional = true, version = "0.3", features = [
+  "NSString", "NSGeometry", "NSArray", "NSObjCRuntime", "NSNotification", "NSDate",
+  "NSTimer", "NSRunLoop", "NSURL", "NSValue", "NSDictionary", "NSEnumerator", "NSError",
+  "NSRange", "NSAttributedString", "NSBundle", "NSThread", "NSProcessInfo",
+] }
+# The confirmation sheet's completion handler. PINNED with `=`, as freemkv does.
+block2 = { version = "=0.6", optional = true }
 
 # On a Windows host build, embed the freemkv .ico as the executable icon.
 # No-op when building on macOS/Linux (guarded by cfg(windows) in build.rs).

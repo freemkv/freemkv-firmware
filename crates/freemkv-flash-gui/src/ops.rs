@@ -2,6 +2,9 @@
 //! Output is delivered through a scoped callback on every operating system.
 
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use freemkv_flash::inspection::{self, ComparisonReport, Control, Inspection, Source};
 
 #[cfg(test)]
 use freemkv_flash::{drive::Family, platform};
@@ -12,25 +15,36 @@ pub fn enumerate() -> Vec<freemkv_flash::workflow::DriveChoice> {
         .unwrap_or_default()
 }
 
+/// An Inspect or Compare request.
+#[derive(Clone)]
+pub enum Request {
+    Inspect(Source),
+    Compare(Source, Source),
+}
+
+/// A finished Inspect or Compare.
+#[derive(Debug)]
+pub enum ResultView {
+    Inspect(Arc<Inspection>),
+    Compare(ComparisonReport),
+}
+
+/// Run an analysis through the shared inspection workflow.
+pub fn analyze(request: &Request, control: &Control) -> anyhow::Result<ResultView> {
+    match request {
+        Request::Inspect(source) => inspection::inspect(source, control).map(ResultView::Inspect),
+        Request::Compare(a, b) => inspection::compare(a, b, control).map(ResultView::Compare),
+    }
+}
+
 /// Application operations. Both front-ends use the same workflow for each.
 #[derive(Clone)]
 pub enum Job {
     Info,
-    Analysis {
-        request: crate::analysis_ui::Request,
-        control: freemkv_flash::inspection::Control,
-    },
-    InfoFile {
-        input: PathBuf,
-    },
-    Backup {
-        out: PathBuf,
-        replace: bool,
-    },
-    Dump {
-        out: PathBuf,
-        replace: bool,
-    },
+    Analysis { request: Request, control: Control },
+    InfoFile { input: PathBuf },
+    Backup { out: PathBuf, replace: bool },
+    Dump { out: PathBuf, replace: bool },
     Flash(freemkv_flash::workflow::FlashOptions),
     Recovery(freemkv_flash::workflow::RecoveryOptions),
 }
@@ -40,10 +54,9 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
     use freemkv_flash::workflow;
     match job {
         Job::Analysis { request, control } => {
-            let report = crate::analysis_ui::execute(request, control)?;
-            let text = match report {
-                crate::analysis_ui::ResultView::Inspect(r) => r.text(),
-                crate::analysis_ui::ResultView::Compare(r) => r.text(),
+            let text = match analyze(request, control)? {
+                ResultView::Inspect(r) => r.text(),
+                ResultView::Compare(r) => r.text(),
             };
             freemkv_flash::output::field("Analysis", text);
             Ok(())
