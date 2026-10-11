@@ -463,12 +463,24 @@ const WRITE_MARKERS: &[&str] = &[
     "set_logging_",
     "FlashTransport",
     "Device::set(",
-    "Device::with_settings_codec(",
 ];
 
 /// What reaches the drive but may run under a read grant: the read transport,
 /// a settings device over it, and the lenient data-out used for the read knock.
-const READ_MARKERS: &[&str] = &[".command_out(", "ScsiTransport::reads(", "Device::new("];
+const READ_MARKERS: &[&str] = &[
+    ".command_out(",
+    "ScsiTransport::reads(",
+    "Device::new(",
+    "Device::with_settings_codec(",
+];
+
+/// What opens a settings device; with a `.set(` in the same function, that is a
+/// settings write whichever way `set` is spelled.
+const SETTINGS_DEVICE: &[&str] = &[
+    "Device::new(",
+    "Device::with_settings_codec(",
+    "with_device(",
+];
 
 /// The vendor write functions, which production code names only by path so
 /// the markers above see every call.
@@ -519,8 +531,6 @@ struct Issuer {
     bounds: String,
     /// The body holds a write marker, not only read markers.
     writes: bool,
-    /// The body takes the Write arm of a `DeviceAccess`.
-    write_arm: bool,
 }
 
 /// Why `f` reaches the drive outside its grant, if it does.
@@ -539,13 +549,27 @@ fn refusal(f: &Issuer) -> Option<&'static str> {
         return Some("takes a raw device beside its grant");
     }
     if f.writes {
-        let write_grant =
-            f.params.contains("&mut WriteDevice") || f.params.contains(": WriteDevice");
-        let access = f.params.contains("DeviceAccess") && f.write_arm;
-        return (!write_grant && !access).then_some("writes without a WriteDevice");
+        // A path-qualified grant (`&mut gates::WriteDevice`) counts; a DeviceAccess does
+        // not, so a write sits in a function that takes the WriteDevice itself.
+        let params = strip_paths(&f.params);
+        let write_grant = params.contains("&mut WriteDevice") || params.contains(": WriteDevice");
+        return (!write_grant).then_some("writes without a WriteDevice");
     }
     (!GATED_HANDLES.iter().any(|h| f.params.contains(h)))
         .then_some("reaches the drive without a grant")
+}
+
+/// `s` with module paths dropped (`gates::WriteDevice` → `WriteDevice`).
+fn strip_paths(s: &str) -> String {
+    let mut out = String::new();
+    for (i, part) in s.split("::").enumerate() {
+        if i > 0 {
+            let keep = out.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+            out.truncate(keep.len());
+        }
+        out.push_str(part);
+    }
+    out
 }
 
 /// Whether `body` holds `marker`; a marker starting with an identifier must
@@ -655,7 +679,9 @@ fn write_issuers(code: &str) -> Vec<Issuer> {
             continue;
         }
         let body = &tail[brace..block_end(tail, brace)];
-        let writes = WRITE_MARKERS.iter().any(|m| has_marker(body, m));
+        let settings_write =
+            SETTINGS_DEVICE.iter().any(|m| has_marker(body, m)) && body.contains(".set(");
+        let writes = settings_write || WRITE_MARKERS.iter().any(|m| has_marker(body, m));
         if writes || READ_MARKERS.iter().any(|m| has_marker(body, m)) {
             out.push(Issuer {
                 name,
@@ -663,7 +689,6 @@ fn write_issuers(code: &str) -> Vec<Issuer> {
                 params: params.to_string(),
                 bounds: tail[1..brace].to_string(),
                 writes,
-                write_arm: body.contains("DeviceAccess::Write(") || body.contains(".writer()"),
             });
         }
     }
@@ -796,10 +821,21 @@ fn write_markers_need_the_write_grant() {
          fn u(a: &mut DeviceAccess<'_, '_>) { if let Some(w) = a.writer() { w.command_out_strict(c, d); } }\n\
          fn v(dev: &mut ReadDevice<'_>) { Device::set(&mut d, q, v); }\n\
          fn w(dev: &mut WriteDevice<'_>) { drive::enter_update(&mut t, c, k); }\n\
-         fn x(dev: &mut ReadDevice<'_>) { dev.command_out(&knock(), &[]); }\n",
+         fn x(dev: &mut ReadDevice<'_>) { dev.command_out(&knock(), &[]); }\n\
+         fn y(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d.set(QuietMode, v, p)); }\n\
+         fn z(dev: &mut gates::WriteDevice<'_>) { drive::execute_update(t); }\n\
+         fn q(dev: &mut ReadDevice<'_>) { Device::with_settings_codec(t, c).query(); }\n",
     );
-    assert_eq!(names, ["r", "s", "t", "u", "v", "w", "x"]);
-    assert_eq!(refused, ["r", "s", "v"]);
+    assert_eq!(names, ["r", "s", "t", "u", "v", "w", "x", "y", "z", "q"]);
+    assert_eq!(refused, ["r", "s", "t", "u", "v", "y"]);
+    assert_eq!(
+        strip_paths("a: &mut gates::WriteDevice<'_>"),
+        "a: &mut WriteDevice<'_>"
+    );
+    assert_eq!(
+        strip_paths("&mut crate::engine::gates::WriteDevice"),
+        "&mut WriteDevice"
+    );
 }
 
 #[test]
