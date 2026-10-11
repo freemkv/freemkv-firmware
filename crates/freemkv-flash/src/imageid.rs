@@ -1,28 +1,20 @@
 //! Drive-family identification for a firmware IMAGE (signature-driven).
 //!
-//! `freemkv-flash` is the generic flasher for many drive families, but the
-//! shared [`freemkv_chipset`] kernel only knows MediaTek `MTEKMT19xx` silicon.
-//! Every other family in our firmware hoard (Pioneer, legacy Hitachi-LG,
-//! Renesas, MediaTek bridge dumps, encrypted MediaTek envelopes, and ASCII
-//! Intel-HEX images) therefore fell through `info` as "not a recognizable
-//! MT19xx image". This module closes that gap: it tries each known family's
-//! **in-image magic / signature** in turn and returns a structured
-//! [`ImageIdentity`](crate::imageid::ImageIdentity) — never keying on the filename.
+//! The shared [`freemkv_chipset`] kernel knows only MediaTek `MTEKMT19xx`
+//! silicon. This module tries each other known family's **in-image magic or
+//! signature** in turn and returns an
+//! [`ImageIdentity`](crate::imageid::ImageIdentity), never keying on the
+//! filename. It labels families the flasher does not support and never selects
+//! behaviour; it lives here because only the flash tool owns the brand
+//! [`crate::flashset::CATALOG`].
 //!
-//! It lives here (not in `freemkv-chipset`) on purpose: `freemkv-chipset` is the
-//! *shared* step-1 identity both the modify and flash tools must agree on, kept
-//! deliberately MTK-only and dependency-light. Only the flash tool needs to
-//! classify the whole hoard, and only it owns the brand [`crate::flashset::CATALOG`]
-//! this wires into, so multi-family identification belongs on the flash side.
-//!
-//! Fingerprints (sources: sweeps of our firmware corpus):
-//! * MT19xx — delegated to [`freemkv_chipset::detect_chip`] (unchanged);
-//! * MediaTek encrypted envelope — a constant 16-byte header on the otherwise
-//!   opaque HL-DT-ST distribution images (no plaintext tag/banner);
-//! * Pioneer — `****` + `"Pioneer Corporation"` (raw), or the stable zlib
-//!   deflate prefix of the packaged updater;
-//! * 0x418000 (4 292 608-byte) full-flash dumps — split by the `"Hitachi-LG"`
-//!   ASCII marker and the big-endian word at offset 4;
+//! Fingerprints:
+//! * MT19xx — delegated to [`freemkv_chipset::detect_chip`];
+//! * MediaTek encrypted envelope — a constant 16-byte header;
+//! * Pioneer — `****` + `"Pioneer Corporation"` (raw), or the zlib prefix of
+//!   the packaged updater;
+//! * 0x418000-byte full-flash dumps — split by the `"Hitachi-LG"` marker and
+//!   the big-endian word at offset 4;
 //! * Intel-HEX — the leading `:NNAAAATT…` record.
 
 use crate::flashset::{brand_recipe, FlashStatus};

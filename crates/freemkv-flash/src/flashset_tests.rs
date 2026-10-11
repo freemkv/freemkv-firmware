@@ -1,11 +1,11 @@
 //! Golden CDB KAT + catalog invariants for [`super`].
 //!
 //! The golden KAT pins the declarative MT1959 recipe to the byte-for-byte output
-//! of the live `drive::mtk` CDB builders — so the declarative catalog can never
+//! of the live `backends::mtk` CDB builders — so the declarative catalog can never
 //! drift from the proven, hardware-executed path.
 
 use super::*;
-use crate::drive::mtk;
+use crate::backends::mtk;
 
 fn step(label: &str) -> &'static FlashStep {
     FlashInstructionSet::mt1959()
@@ -54,7 +54,6 @@ fn golden_cdb_kat_readback_matches_mtk_read_buffer() {
 #[test]
 fn mt1959_recipe_shape_is_executable_and_verbatim() {
     let s = FlashInstructionSet::mt1959();
-    assert_eq!(s.family, Family::Mtk);
     assert_eq!(s.transport, Transport::Spti);
     assert_eq!(s.write_opcode, 0x3B);
     assert!(!s.host_side_key, "MT1959 needs no host-side key");
@@ -65,10 +64,14 @@ fn mt1959_recipe_shape_is_executable_and_verbatim() {
 }
 
 #[test]
-fn for_family_only_mtk_has_an_executable_set() {
-    assert!(FlashInstructionSet::for_family(Family::Mtk).is_some());
-    assert!(FlashInstructionSet::for_family(Family::Pioneer).is_none());
-    assert!(FlashInstructionSet::for_family(Family::Unknown).is_none());
+fn info_flash_lines_come_from_the_executable_sets() {
+    // Only MediaTek has an executable set; its descriptor states that set.
+    let set = FlashInstructionSet::mt1959();
+    assert_eq!(
+        mtk::DESCRIPTOR.flash_summary,
+        Some(format!("{} — {}", set.name, set.status.label()).as_str())
+    );
+    assert_eq!(crate::backends::pioneer::DESCRIPTOR.flash_summary, None);
 }
 
 #[test]

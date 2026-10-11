@@ -1,0 +1,1242 @@
+//! Unit tests for the Pioneer OEM protocol (offline OEM protocol plan,
+//! backup and live flash gated off).
+
+use super::*;
+// Independent byte-level oracle for the transcript KATs (the code under test
+// builds its CDBs with the pioneer-optical builders).
+use crate::manifest::FlashMode;
+use crate::platform::MockScsiDevice;
+
+fn pioneer_corpus_root() -> std::path::PathBuf {
+    std::env::var_os("FWEXT_HOARD")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .ancestors()
+                .nth(4)
+                .expect("freemkv-flash crate must be inside the freemkv checkout")
+                .join("firmware-extractor/hoard")
+        })
+}
+
+// ---- Proven CDB layouts (byte-for-byte) -------------------------------------
+
+// ---- classify → no restorable dump ------------------------------------------
+
+#[test]
+fn pioneer_classifies_and_flashes_only_as_a_bundle() {
+    let mut dev = MockScsiDevice::pioneer();
+    let resolved = crate::backend::registry::resolve(&mut dev)
+        .unwrap()
+        .unwrap();
+    assert_eq!(resolved.matched.backend, DESCRIPTOR.id);
+    assert!(dev.writes.is_empty());
+    // Its dry run plans from the file alone.
+    assert!(!Pioneer::new().flash().unwrap().dry_run_uses_device());
+}
+
+// ---- Pioneer flash primitives (unit-level, no live drive) -------------------
+
+#[test]
+fn ud04_kernel_key_lookup_returns_oem_memory_order() {
+    let k = key_for("PIONEER BD-RW   BDR-UD04").expect("UD04 key present");
+    assert_eq!(k.key, 0xFD23_6642);
+    assert_eq!(k.layout, KeyLayout::Array);
+    // Case + whitespace insensitivity.
+    assert!(key_for("pioneer   bdr-ud04  ").is_some());
+    // Unknown model → no key.
+    assert!(key_for("PIONEER BD-RW BDR-FAKE99").is_none());
+}
+
+#[test]
+fn banner_parses_ud04_1_11eu_header() {
+    // Reconstruct the plaintext banner shape (matches the on-disk BDR-UD04
+    // 1.11EU header). All fields must round-trip through `parse_banner`.
+    let mut hdr = Vec::new();
+    hdr.extend_from_slice(PIONEER_MAGIC);
+    hdr.extend_from_slice(
+        b"    \r\nThis is microcode file.  \r\nID : PIONEER BD-RW   BDR-UD04.\
+          \r\nRevision Level : 1.11 .\r\nHardware Version : SAT 8A10.\r\n\
+          Destination : GENERAL.\r\nFile Type : Normal.\r\n",
+    );
+    let b = parse_banner(&hdr).expect("banner parses");
+    assert_eq!(b.model, "BDR-UD04");
+    assert_eq!(b.revision, "1.11");
+    assert_eq!(b.hardware, "SAT 8A10");
+    assert_eq!(b.destination, "GENERAL");
+    assert_eq!(b.file_type, "Normal");
+}
+
+#[test]
+fn flash_cdbs_match_the_proven_bytes() {
+    assert_eq!(
+        cdb_wb_flash_entry(),
+        [0x3B, 0x04, 0xFF, 0, 0, 0, 0, 1, 0, 0],
+    );
+    assert_eq!(
+        cdb_wb_flash_chunk(0x8000, 0x8000),
+        [0x3B, 0x07, 0xF0, 0x00, 0x80, 0x00, 0x00, 0x80, 0x00, 0]
+    );
+    assert_eq!(
+        cdb_wb_flash_chunk(0x1D0000, 0x7000),
+        [0x3B, 0x07, 0xF0, 0x1D, 0, 0, 0, 0x70, 0, 0]
+    );
+    assert_eq!(
+        cdb_wb_flash_finish(),
+        [0x3B, 0x05, 0xFF, 0, 0, 0, 0, 1, 0, 0]
+    );
+}
+
+/// Build an OEM control buffer generically from the embedded key table, exactly
+/// as the flasher now does — descriptor + per-tag key, little-endian.
+fn table_control(controller_id: u16, tag: &str) -> [u8; 0x100] {
+    let row =
+        crate::backends::pioneer::keys::lookup(controller_id).expect("controller id in key table");
+    row.control_payload(row.key_for_tag(tag).expect("tag present"))
+}
+
+/// The UD04 crossflash/autoflasher control: descriptor + the model's unmatched-
+/// tag fallback key (the crossflash path bypasses the per-destination dispatcher).
+fn ud04_fallback_control() -> [u8; 0x100] {
+    let row = crate::backends::pioneer::keys::lookup(0x8A10).expect("0x8A10 in key table");
+    row.control_payload(row.fallback)
+}
+
+#[test]
+fn ud04_oem_control_payload_matches_full_static_construction() {
+    use sha2::{Digest, Sha256};
+
+    // Generic table build (GENERAL tag) == the old hand-baked UD04 payload.
+    let payload = table_control(0x8A10, "GENERAL");
+    assert_eq!(payload.len(), 256);
+    assert_eq!(&payload[..16], b"PIONEER BDR-US04");
+    assert_eq!(&payload[16..20], &[0x42, 0x66, 0x23, 0xFD]);
+    assert!(payload[20..].iter().all(|&b| b == 0));
+    assert_eq!(
+        format!("{:x}", Sha256::digest(payload)),
+        "b2d58e59403a858c7be55b6726ee816741f4783f40fabd0cc64b120ebf525020"
+    );
+}
+
+#[test]
+fn ud04_autoflasher_gui_control_matches_selected_x86_branch() {
+    use sha2::{Digest, Sha256};
+
+    // Generic table build (fallback key) == the old hand-baked autoflasher payload.
+    let payload = ud04_fallback_control();
+    assert_eq!(&payload[..16], b"PIONEER BDR-US04");
+    assert_eq!(&payload[16..20], &[0x9A, 0x78, 0x23, 0x61]);
+    assert!(payload[20..].iter().all(|&b| b == 0));
+    assert_eq!(
+        format!("{:x}", Sha256::digest(payload)),
+        "3e74c9e08362f509603b4fa8e5d8f88d47be9f3ee64ce215c6f9e1f25614e204"
+    );
+    assert_ne!(payload, table_control(0x8A10, "GENERAL"));
+}
+
+#[test]
+fn s09_v130_control_payload_has_updater_descriptor_not_envelope_model() {
+    use sha2::{Digest, Sha256};
+    // Generic table build (ID43 destination tag) == the old hand-baked S09 payload.
+    let payload = table_control(0x8600, "ID43");
+    assert_eq!(&payload[..16], b"PIONEER  BDR-209");
+    assert_eq!(&payload[16..20], &[0x98, 0x2B, 0x1F, 0xCE]);
+    assert!(payload[20..].iter().all(|&b| b == 0));
+    assert_eq!(payload.len(), 0x100);
+    assert_eq!(
+        format!("{:x}", Sha256::digest(payload)),
+        "6588a8422698617330e1845086d1f9008167c3cd7e0d131458830ed18d61b621"
+    );
+}
+
+#[test]
+fn s09_v130_real_oem_envelope_transcript() {
+    use sha2::{Digest, Sha256};
+    let path = pioneer_corpus_root().join("models/BDR-S09/firmware/1.30EU/BDR-S09_FW130EU.enc");
+    if !path.exists() {
+        return;
+    }
+    let image = std::fs::read(path).unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&image)),
+        OemUpdateProfile::S09V130Normal
+            .evidence()
+            .reference_envelope_sha256
+    );
+    assert_eq!(
+        select_oem_profile("PIONEER BD-RW   BDR-S09", &image).unwrap(),
+        OemUpdateProfile::S09V130Normal
+    );
+    assert!(select_oem_profile("BDR-209", &image).is_err());
+    let mut wrong_hardware = image.clone();
+    let hardware = b"SAT 8600";
+    let offset = wrong_hardware
+        .windows(hardware.len())
+        .position(|w| w == hardware)
+        .unwrap();
+    wrong_hardware[offset + 7] = b'1';
+    assert!(select_oem_profile("BDR-S09", &wrong_hardware).is_err());
+    let mut wrong_revision = image.clone();
+    let revision = b"1.30";
+    let offset = wrong_revision
+        .windows(revision.len())
+        .position(|w| w == revision)
+        .unwrap();
+    wrong_revision[offset + 3] = b'1';
+    assert!(select_oem_profile("BDR-S09", &wrong_revision).is_err());
+    assert_eq!(
+        OemUpdateProfile::S09V130Normal.envelope_evidence(&image),
+        EnvelopeEvidence::ExactOemReference
+    );
+    let transfers = offline_oem_transcript(OemUpdateProfile::S09V130Normal, &image).unwrap();
+    assert_eq!(transfers.len(), 61);
+    assert_eq!(transfers[0].data.as_ref(), table_control(0x8600, "ID43"));
+    assert_eq!(transfers[59].cdb, cdb_wb_flash_chunk(0x1D0000, 0x900));
+    assert_eq!(transfers[59].data.as_ref(), &image[0x1D0000..]);
+    let mut digest = Sha256::new();
+    for transfer in &transfers[1..60] {
+        digest.update(&transfer.data);
+    }
+    assert_eq!(
+        format!("{:x}", digest.finalize()),
+        format!("{:x}", Sha256::digest(image))
+    );
+}
+
+#[test]
+fn s09_aeu_updater_shares_the_audited_normal_transfer_profile() {
+    let evidence = OemUpdateProfile::S09V130Normal.evidence();
+    assert_eq!(
+        evidence.alternate_updater_sha256,
+        Some("2869613b666f20c6c404e2fbabc98a525888c3676da106154e20476d934bdea6")
+    );
+    assert_eq!(
+        evidence.reference_envelope_sha256,
+        "7f391cf35bc727bbefc97b3b27786283a6e8e5ca1d82f71dc57c78633843c59f"
+    );
+}
+
+#[test]
+fn ud04_offline_transcript_matches_oem_cdb_and_payload_shape() {
+    // A real UD04 self-flash Normal is GENERAL-destination; the control key is
+    // looked up by that OEM tag. (The synthetic helper uses TEST to mark a
+    // not-OEM candidate; patch it to GENERAL so the key resolves.)
+    let mut image = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    let old = b"Destination : TEST.";
+    let new = b"Destination : GENERAL.\r\nFile Type : Normal.\r\n";
+    let i = image.windows(old.len()).position(|w| w == old).unwrap();
+    image[i..i + new.len()].copy_from_slice(new);
+    assert_eq!(
+        OemUpdateProfile::Ud04V111Normal.envelope_evidence(&image),
+        EnvelopeEvidence::UncertifiedCandidate
+    );
+    let transfers = offline_oem_transcript(OemUpdateProfile::Ud04V111Normal, &image).unwrap();
+    assert_eq!(transfers.len(), 61); // entry + 59 chunks + finish
+    assert_eq!(transfers[0].stage, TransferStage::Entry);
+    assert_eq!(transfers[0].cdb, [0x3B, 0x04, 0xFF, 0, 0, 0, 0, 1, 0, 0]);
+    assert_eq!(transfers[0].data.as_ref(), table_control(0x8A10, "GENERAL"));
+    assert_eq!(transfers[1].stage, TransferStage::Normal);
+    assert_eq!(transfers[1].cdb, [0x3B, 0x07, 0xF0, 0, 0, 0, 0, 0x80, 0, 0]);
+    assert_eq!(transfers[1].data.as_ref(), &image[..0x8000]);
+    assert_eq!(
+        transfers[59].cdb,
+        [0x3B, 0x07, 0xF0, 0x1D, 0, 0, 0, 0x70, 0, 0]
+    );
+    assert_eq!(transfers[59].data.as_ref(), &image[0x1D0000..]);
+    assert_eq!(transfers[60].stage, TransferStage::Finish);
+    assert_eq!(transfers[60].cdb, [0x3B, 0x05, 0xFF, 0, 0, 0, 0, 1, 0, 0]);
+    assert_eq!(
+        transfers[60].data.as_ref(),
+        table_control(0x8A10, "GENERAL")
+    );
+    let assembled: Vec<u8> = transfers[1..60]
+        .iter()
+        .flat_map(|transfer| transfer.data.iter().copied())
+        .collect();
+    assert_eq!(assembled, image);
+}
+
+#[test]
+fn ud04_offline_transcript_rejects_other_model_and_unaligned_size() {
+    let other = synthetic_pioneer_image("BDR-212", 0x1D7000);
+    assert!(offline_oem_transcript(OemUpdateProfile::Ud04V111Normal, &other).is_err());
+    let unaligned = synthetic_pioneer_image("BDR-UD04", 0x1D7001);
+    assert!(offline_oem_transcript(OemUpdateProfile::Ud04V111Normal, &unaligned).is_err());
+}
+
+#[test]
+fn ud04_profile_selection_requires_drive_and_envelope_structure() {
+    let mut image = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    assert!(select_oem_profile("BDR-212", &image).is_err());
+    assert!(select_oem_profile("BDR-UD04", &image).is_err()); // TEST destination
+    let old = b"Destination : TEST.";
+    let new = b"Destination : GENERAL.\r\nFile Type : Normal.\r\n";
+    let i = image.windows(old.len()).position(|w| w == old).unwrap();
+    image[i..i + new.len()].copy_from_slice(new);
+    assert_eq!(
+        select_oem_profile("PIONEER BD-RW   BDR-UD04", &image).unwrap(),
+        OemUpdateProfile::Ud04V111Normal
+    );
+    assert_eq!(
+        OemUpdateProfile::Ud04V111Normal.evidence().components,
+        UpdateComponents::NormalOnly
+    );
+}
+
+#[test]
+fn ud04_local_oem_envelope_transcript_when_configured() {
+    use sha2::{Digest, Sha256};
+    let Ok(path) = std::env::var("PIONEER_UD04_ENC_FIXTURE") else {
+        return;
+    };
+    let image = std::fs::read(path).unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&image)),
+        "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6"
+    );
+    let transfers = offline_oem_transcript(OemUpdateProfile::Ud04V111Normal, &image).unwrap();
+    assert_eq!(
+        OemUpdateProfile::Ud04V111Normal.envelope_evidence(&image),
+        EnvelopeEvidence::ExactOemReference
+    );
+    assert_eq!(
+        select_oem_profile("BDR-UD04", &image).unwrap(),
+        OemUpdateProfile::Ud04V111Normal
+    );
+    assert_eq!(transfers.len(), 61);
+    let mut digest = Sha256::new();
+    for transfer in &transfers[1..60] {
+        digest.update(&transfer.data);
+    }
+    assert_eq!(
+        format!("{:x}", digest.finalize()),
+        format!("{:x}", Sha256::digest(image))
+    );
+}
+
+/// Golden KAT for `offline_pair_data_out`: the exact Kernel+Normal linear-FE
+/// transcript of a UD03->UD04 crossflash or UD04 full-pair downgrade, from the
+/// real UD04 1.14 pair in the hoard (skipped when the corpus is absent). The
+/// components stream unmodified, so `KernelDowngrade` and `KernelCrossflash`
+/// share these bytes.
+const UD04_LINEAR_FE_GOLDEN: &str =
+    "112c6a26ceaf04144711f3409a608b28224e8e46fe6ae05288270756fa647cc8";
+
+#[test]
+fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
+    use sha2::{Digest, Sha256};
+
+    let tar = pioneer_corpus_root()
+        .join("pioneer/BDR-UD04/SAT-8A10/1.14/pioneer_autoflasher_UD03-UD04.zip.firmware.tar");
+    let Ok(bytes) = std::fs::read(&tar) else {
+        eprintln!(
+            "SKIP: autoflasher UD04 1.14 bundle not in hoard ({}) — cannot run KAT",
+            tar.display()
+        );
+        return;
+    };
+    // Read the two `.enc` members straight from the tar (the hoard manifest
+    // carries fields the strict Bundle parser rejects, and we only want bytes).
+    let member = |suffix: &str| -> Vec<u8> {
+        let mut archive = tar::Archive::new(std::io::Cursor::new(&bytes));
+        for entry in archive.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            let path = entry.path().unwrap().to_string_lossy().into_owned();
+            if path.ends_with(suffix) {
+                let mut buf = Vec::new();
+                std::io::Read::read_to_end(&mut entry, &mut buf).unwrap();
+                return buf;
+            }
+        }
+        panic!("tar member ending in {suffix} not found");
+    };
+    let kernel_bytes = member("S8A10000.100.enc");
+    let normal_bytes = member("S8A10001.114.enc");
+
+    // Anchor to the exact OEM component bytes.
+    assert_eq!(
+        kernel_bytes.len(),
+        0x11200,
+        "UD04 1.14 Kernel envelope length"
+    );
+    assert_eq!(
+        normal_bytes.len(),
+        0x1d7700,
+        "UD04 1.14 Normal envelope length"
+    );
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&kernel_bytes)),
+        "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83",
+        "UD04 1.14 Kernel is the audited OEM resource"
+    );
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&normal_bytes)),
+        "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+        "UD04 1.14 Normal is the audited OEM resource"
+    );
+
+    let kernel = &kernel_bytes;
+    let normal = &normal_bytes;
+    let transfers = offline_pair_data_out(kernel, normal).unwrap();
+
+    // Structure: Entry + 3 FE kernel slices + 59 F0 normal chunks + Finish.
+    assert_eq!(transfers.len(), 1 + 3 + 59 + 1, "transfer count");
+    assert_eq!(transfers.first().unwrap().stage, TransferStage::Entry);
+    assert_eq!(transfers.first().unwrap().cdb[..3], [0x3b, 0x04, 0xff]);
+    assert_eq!(transfers.last().unwrap().stage, TransferStage::Finish);
+    assert_eq!(transfers.last().unwrap().cdb[..3], [0x3b, 0x05, 0xff]);
+    let fe: Vec<&OemTransfer> = transfers
+        .iter()
+        .filter(|t| t.stage == TransferStage::KernelFe)
+        .collect();
+    let f0: Vec<&OemTransfer> = transfers
+        .iter()
+        .filter(|t| t.stage == TransferStage::Normal)
+        .collect();
+    assert_eq!(fe.len(), 3, "FE kernel slice count");
+    assert_eq!(f0.len(), 59, "F0 normal chunk count");
+    assert!(fe.iter().all(|t| t.cdb[..3] == [0x3b, 0x07, 0xfe]));
+    assert!(f0.iter().all(|t| t.cdb[..3] == [0x3b, 0x07, 0xf0]));
+
+    // Payloads are byte-exact: FE reproduces the whole Kernel, F0 the whole Normal.
+    let fe_bytes: Vec<u8> = fe.iter().flat_map(|t| t.data.iter().copied()).collect();
+    let f0_bytes: Vec<u8> = f0.iter().flat_map(|t| t.data.iter().copied()).collect();
+    assert_eq!(
+        &fe_bytes, kernel,
+        "FE payload reproduces the Kernel unmodified"
+    );
+    assert_eq!(
+        &f0_bytes, normal,
+        "F0 payload reproduces the Normal unmodified"
+    );
+
+    // Golden digest over the full transcript (stage tag + CDB + data) pins the
+    // exact wire output: control header, chunk offsets, and framing all included.
+    let mut h = Sha256::new();
+    for t in &transfers {
+        h.update([t.stage as u8]);
+        h.update(t.cdb);
+        h.update(t.data.as_ref());
+    }
+    assert_eq!(
+        format!("{:x}", h.finalize()),
+        UD04_LINEAR_FE_GOLDEN,
+        "crossflash/downgrade transcript wire bytes drifted"
+    );
+
+    // The decision layer routes the real controller ids to a kernel-mode path.
+    use crate::backends::pioneer::flash_plan::{
+        decide_flash_plan, FamilyKey, FlashPlan, Installed, Target,
+    };
+    let ud03_installed = Installed {
+        controller_id: 0x8510, // BDR-UD03 v1
+        receiver_new_gen: Some(true),
+        normal_date: None,
+        family: Some(FamilyKey::new("f1")),
+        kernel_tag: None,
+    };
+    let ud04_target = Target {
+        controller_id: 0x8A10, // BDR-UD04
+        normal: Some(crate::backends::pioneer::flash_plan::ComponentInfo { date: None }),
+        kernel: Some(crate::backends::pioneer::flash_plan::KernelInfo {
+            date: None,
+            marker: 0x01,
+        }),
+        family: Some(FamilyKey::new("f1")),
+        required_kernel_tag: None,
+    };
+    assert_eq!(
+        decide_flash_plan(&ud03_installed, &ud04_target),
+        FlashPlan::KernelCrossflash,
+        "UD03 (0x8510) -> UD04 (0x8A10) in the same family is a crossflash"
+    );
+}
+
+#[test]
+fn preflight_refuses_arbitrary_bytes() {
+    let img = vec![0u8; IMAGE_MIN + 1];
+    let id = Identity {
+        vendor: "PIONEER".into(),
+        product: "BDR-UD04".into(),
+        revision: "1.14".into(),
+        banner: None,
+    };
+    let e = preflight(&img, &id, false).unwrap_err().to_string();
+    assert!(e.contains("Pioneer magic"), "actual: {e}");
+}
+
+#[test]
+fn preflight_refuses_when_size_out_of_range() {
+    let mut img = Vec::new();
+    img.extend_from_slice(PIONEER_MAGIC);
+    let id = Identity {
+        vendor: "PIONEER".into(),
+        product: "BDR-UD04".into(),
+        revision: "1.14".into(),
+        banner: None,
+    };
+    let e = preflight(&img, &id, false).unwrap_err().to_string();
+    assert!(
+        e.contains("outside the plausible Pioneer range"),
+        "actual: {e}"
+    );
+}
+
+#[test]
+fn preflight_refuses_mismatched_model_without_crossflash() {
+    let img = synthetic_pioneer_image("BDR-212", 0x0011_0000);
+    let id = Identity {
+        vendor: "PIONEER".into(),
+        product: "BDR-UD04".into(),
+        revision: "1.14".into(),
+        banner: None,
+    };
+    let e = preflight(&img, &id, false).unwrap_err().to_string();
+    assert!(e.contains("does not match"), "actual: {e}");
+    // With crossflash allowed, it moves past the model check and now hits the
+    // key gate for BDR-UD04 — that succeeds → preflight OK.
+    let ok = preflight(&img, &id, true).unwrap();
+    assert_eq!(ok.key.key, 0xFD23_6642);
+}
+
+#[test]
+fn preflight_refuses_when_no_key_on_file() {
+    let img = synthetic_pioneer_image("BDR-FAKE99", 0x0011_0000);
+    let id = Identity {
+        vendor: "PIONEER".into(),
+        product: "BDR-FAKE99".into(),
+        revision: "9.99".into(),
+        banner: None,
+    };
+    let e = preflight(&img, &id, false).unwrap_err().to_string();
+    assert!(e.contains("no kernel key on file"), "actual: {e}");
+}
+
+// ---- Generalized flash selection + confirm prompt --------------------------
+
+#[test]
+fn decide_flash_selects_path_and_refuses_kernel_only() {
+    assert_eq!(
+        decide_flash(true, true).unwrap(),
+        FlashSelection::KernelAndNormal
+    );
+    assert_eq!(
+        decide_flash(false, true).unwrap(),
+        FlashSelection::NormalOnly
+    );
+    let e = decide_flash(true, false).unwrap_err().to_string();
+    assert!(
+        e.contains("kernel-only flash is not yet supported"),
+        "actual: {e}"
+    );
+    assert!(decide_flash(false, false).is_err());
+}
+
+#[test]
+fn classify_bare_normal_enc_is_normal_only_and_junk_is_refused() {
+    let img = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    let (kernel, normal) = classify_flash_input(&img).unwrap();
+    assert!(kernel.is_none());
+    assert_eq!(normal.as_deref(), Some(img.as_slice()));
+    // Neither a Pioneer banner nor a valid bundle => refused, never
+    // reinterpreted as a raw envelope.
+    assert!(classify_flash_input(b"not a pioneer image or tar").is_err());
+}
+
+#[test]
+fn flash_summary_names_components_and_a_missing_kernel() {
+    let normal = synthetic_pioneer_image("BDR-UD04", 0x1D7000);
+    assert_eq!(
+        flash_summary(None, Some(&normal)),
+        "This will flash: NORMAL only — no Kernel in the package"
+    );
+    let both = flash_summary(Some(&normal), Some(&normal));
+    assert!(
+        both.starts_with("This will flash: KERNEL (rev "),
+        "actual: {both}"
+    );
+    assert!(both.contains("+ NORMAL (rev "), "actual: {both}");
+}
+
+fn synthetic_pioneer_image(model: &str, len: usize) -> Vec<u8> {
+    let mut img = vec![0u8; len];
+    let header = format!(
+        "********  Copyright(c) 2000 Pioneer Corporation  ********     \r\n\
+         This is microcode file.  \r\n\
+         ID : PIONEER BD-RW   {model}.\r\n\
+         Revision Level : 9.99 .\r\n\
+         Hardware Version : SAT 8A10.\r\n\
+         Destination : TEST.\r\n\
+         File Type : Normal.\r\n"
+    );
+    let bytes = header.as_bytes();
+    img[..bytes.len()].copy_from_slice(bytes);
+    img
+}
+
+// ---------------------------------------------------------------------------
+// Flash-routing wiring (installed_facts / resolve_kernel_mode / gating)
+// ---------------------------------------------------------------------------
+
+/// A header-only Normal envelope (no body) whose banner + fields parse via both
+/// `parse_banner` and `pioneer_optical::envelope::header_info`. Good enough to route a plain
+/// flash; it carries no decodable body (so no Kernel marker).
+fn header_only_normal(sat: &str, date: &str) -> Vec<u8> {
+    let mut img = vec![0u8; 0x200];
+    let header = format!(
+        "********  Copyright(c) 2000 Pioneer Corporation  ********\r\n\
+         ID : PIONEER BD-RW   BDR-UD04\r\n\
+         Revision Level : 1.11\r\n\
+         Hardware Version : {sat}\r\n\
+         Destination : GENERAL\r\n\
+         Generated Date : {date}\r\n\
+         Kernel Version : ID58\r\n\
+         File Type : Normal\r\n"
+    );
+    let bytes = header.as_bytes();
+    img[..bytes.len()].copy_from_slice(bytes);
+    img
+}
+
+#[test]
+fn installed_facts_none_without_backup() {
+    assert!(installed_facts(None).is_none());
+}
+
+#[test]
+fn installed_facts_from_header_only_normal_backup() {
+    let backup = header_only_normal("SAT 8A10", "22/01/01");
+    let facts = installed_facts(Some(&backup)).expect("resolves controller id + date");
+    assert_eq!(facts.controller_id, 0x8A10);
+    assert!(facts.normal_date.is_some());
+    // No Kernel in the backup -> receiver generation unknown.
+    assert_eq!(facts.receiver_new_gen, None);
+}
+
+#[test]
+fn routing_warnings_cover_every_variant() {
+    use crate::backends::pioneer::flash_plan::FlashPlan as Route;
+    // Every executable route; a generation-barrier downgrade carries its caution.
+    assert!(routing_warnings(&Route::Plain).unwrap().is_empty());
+    assert!(routing_warnings(&Route::KernelCrossflash)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        routing_warnings(&Route::KernelDowngrade).unwrap(),
+        [DOWNGRADE_WARNING]
+    );
+    // A refusal always aborts.
+    assert!(routing_warnings(&Route::Refused("x".into())).is_err());
+}
+
+/// Injected installed/target facts for the family-match routing tests.
+fn facts(
+    family: Option<&str>,
+    date: &str,
+) -> (
+    crate::backends::pioneer::flash_plan::Installed,
+    crate::backends::pioneer::flash_plan::Target,
+) {
+    use crate::backends::pioneer::flash_plan::{
+        ComponentInfo, FamilyKey, FwDate, Installed, Target,
+    };
+    let fam = family.map(FamilyKey::new);
+    (
+        Installed {
+            controller_id: 0x8A10,
+            receiver_new_gen: Some(true),
+            normal_date: FwDate::parse("22/01/01"),
+            family: fam.clone(),
+            // Shared tag so the gate-2 Normal-only tag check lands on Plain
+            // in the happy-path routing fixture; override to None/different
+            // on tests that specifically exercise tag refusal.
+            kernel_tag: Some("ID58".to_string()),
+        },
+        Target {
+            controller_id: 0x8A10,
+            normal: Some(ComponentInfo {
+                date: FwDate::parse(date),
+            }),
+            kernel: None,
+            family: fam,
+            required_kernel_tag: Some("ID58".to_string()),
+        },
+    )
+}
+
+#[test]
+fn plan_for_same_family_newer_normal_only_is_plain() {
+    use crate::backends::pioneer::flash_plan::FlashPlan;
+    let (inst, tgt) = facts(Some("f1"), "22/06/01");
+    assert_eq!(plan_for(Some(&inst), &tgt), FlashPlan::Plain);
+}
+
+#[test]
+fn plan_for_family_mismatch_is_refused() {
+    use crate::backends::pioneer::flash_plan::{FamilyKey, FlashPlan};
+    let (inst, mut tgt) = facts(Some("f1"), "22/06/01");
+    tgt.family = Some(FamilyKey::new("f2"));
+    assert!(matches!(
+        plan_for(Some(&inst), &tgt),
+        FlashPlan::Refused(r) if r.contains("family mismatch")
+    ));
+}
+
+#[test]
+fn plan_for_unknown_installed_is_refused() {
+    use crate::backends::pioneer::flash_plan::FlashPlan;
+    // No backup -> installed family unknown -> fail closed (not "plain").
+    let (_, tgt) = facts(Some("f1"), "22/06/01");
+    assert!(matches!(plan_for(None, &tgt), FlashPlan::Refused(_)));
+}
+
+#[test]
+fn plan_for_same_model_normal_only_tag_mismatch_is_refused() {
+    use crate::backends::pioneer::flash_plan::FlashPlan;
+    // Normal-only target whose required-Kernel tag differs from the drive's
+    // installed Kernel tag — gate 2 refuses (date direction is irrelevant).
+    let (inst, mut tgt) = facts(Some("f1"), "20/01/01");
+    tgt.required_kernel_tag = Some("ID81".to_string());
+    assert!(matches!(
+        plan_for(Some(&inst), &tgt),
+        FlashPlan::Refused(r) if r.contains("ID81") && r.contains("ID58")
+    ));
+}
+
+#[test]
+fn resolve_flash_plan_unprofilable_header_only_normal_is_refused() {
+    use crate::backends::pioneer::flash_plan::FlashPlan;
+    // A header-only Normal does not decode to a profilable body: both families
+    // are None, so the gate refuses.
+    let installed = header_only_normal("SAT 8A10", "22/01/01");
+    let target = header_only_normal("SAT 8A10", "22/06/01");
+    let refused = resolve_flash_plan(Some(&installed), None, Some(&target)).unwrap();
+    assert!(matches!(refused, FlashPlan::Refused(_)));
+}
+
+#[test]
+fn dump_is_raw_and_never_issues_kernel_mode_commands() {
+    use crate::platform::ScsiDevice;
+    // Short replies must never trigger F3/F2 kernel-mode commands.
+    #[derive(Default)]
+    struct Probe {
+        cdbs: Vec<Vec<u8>>,
+    }
+    impl ScsiDevice for Probe {
+        fn command_in(&mut self, cdb: &[u8], _alloc: usize) -> anyhow::Result<Vec<u8>> {
+            self.cdbs.push(cdb.to_vec());
+            Ok(vec![0u8; 2])
+        }
+        fn command_out(&mut self, cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            self.cdbs.push(cdb.to_vec());
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "probe".into()
+        }
+    }
+    assert!(Pioneer::new().dump().is_some());
+    let mut dev = Probe::default();
+    let _ = dump_capture(&mut dev);
+    assert!(!dev
+        .cdbs
+        .iter()
+        .any(|c| c.get(2) == Some(&0xF3) || c.get(2) == Some(&0xF2)));
+}
+
+#[test]
+fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
+    use crate::platform::ScsiDevice;
+    // Memory-backed drive: B0 reads return an address-derived pattern; INQUIRY and
+    // the F1 identity are zeros. Capture still preserves mapped memory without
+    // issuing kernel-mode commands.
+    #[derive(Default)]
+    struct Mem {
+        kernel_mode_cdbs: usize,
+    }
+    impl ScsiDevice for Mem {
+        fn command_in(&mut self, cdb: &[u8], alloc: usize) -> anyhow::Result<Vec<u8>> {
+            if cdb.get(2) == Some(&0xF3) || cdb.get(2) == Some(&0xF2) {
+                self.kernel_mode_cdbs += 1;
+            }
+            if cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xB0) {
+                let off = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+                if off >= pioneer_optical::cdb::READ_CEILING as usize {
+                    return Err(anyhow::Error::new(crate::platform::ScsiSenseError::new(
+                        0x05,
+                        0x24,
+                        0x00,
+                        "past the read end",
+                    )));
+                }
+                return Ok((0..alloc).map(|i| ((off + i) % 251) as u8).collect());
+            }
+            Ok(vec![0u8; alloc])
+        }
+        fn command_out(&mut self, cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+            if cdb.get(2) == Some(&0xF3) || cdb.get(2) == Some(&0xF2) {
+                self.kernel_mode_cdbs += 1;
+            }
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "mem".into()
+        }
+    }
+    let mut dev = Mem::default();
+    let dump = dump_capture(&mut dev).unwrap();
+    assert!(crate::backends::pioneer::dump::directory(&dump)
+        .unwrap()
+        .is_some());
+    assert_eq!(dump[0x1234], (0x1234 % 251) as u8);
+    assert_eq!(dump[0x5F_FFFF], (0x5F_FFFF % 251) as u8);
+    assert_eq!(dump[0xC0_22FF], (0x88_02FF % 251) as u8);
+    assert_eq!(dev.kernel_mode_cdbs, 0);
+}
+
+fn bundle_req(input: Vec<u8>) -> crate::backend::FlashRequest {
+    crate::backend::FlashRequest {
+        input,
+        input_format: &ENVELOPE,
+        mode: FlashMode::Full,
+        execute: true,
+        acknowledged_risk: true,
+        enc_override: None,
+        drive_model: "BD-RW BDR-UD04".into(),
+        verbose: false,
+        predump_out: None,
+    }
+}
+
+#[test]
+fn bundle_refuses_bad_sized_normal_before_entering_update_mode() {
+    let drive = Pioneer::new();
+    for len in [IMAGE_MAX + 0x100, IMAGE_MIN - 0x100, IMAGE_MIN + 1] {
+        let mut normal = header_only_normal("SAT 8A10", "22/01/01");
+        normal.resize(len, 0);
+        let mut dev = MockScsiDevice::pioneer();
+        dev.writes.clear();
+        let err = bundle_execute(&drive, &mut dev, &bundle_req(normal)).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("256-byte aligned"),
+            "len {len:#x}: {err:#}"
+        );
+        assert!(dev.writes.is_empty(), "len {len:#x}: update mode entered");
+    }
+}
+
+#[test]
+fn untrusted_text_is_sanitized_before_printing() {
+    // Post-flash identity readback: drive-supplied INQUIRY bytes carry an ESC.
+    let mut inquiry = vec![b' '; 36];
+    inquiry[8..15].copy_from_slice(b"PIONEER");
+    inquiry[16..20].copy_from_slice(b"BD\x1b[");
+    inquiry[32..36].copy_from_slice(b"1\x1b[2");
+    let ident = pioneer_optical::Identity::parse(&inquiry, &[b' '; 48]).expect("identity");
+    let line = post_flash_line(&ident);
+    assert!(!line.contains('\x1b'), "{line:?}");
+
+    // flash_summary: a hostile Revision Level in an envelope header.
+    let mut env = header_only_normal("SAT 8A10", "22/01/01");
+    let pos = env
+        .windows(14)
+        .position(|w| w == b"Revision Level")
+        .unwrap();
+    let at = pos + b"Revision Level : ".len();
+    env[at + 1] = 0x1b;
+    let summary = flash_summary(None, Some(&env));
+    assert!(!summary.contains('\x1b'), "{summary:?}");
+}
+
+#[test]
+fn installed_patched_backup_is_not_a_newer_receiver_when_configured() {
+    let Ok(path) = std::env::var("PIONEER_PATCHED_BACKUP_FIXTURE") else {
+        return;
+    };
+    let bytes = std::fs::read(path).unwrap();
+    assert_eq!(
+        installed_facts(Some(&bytes)).unwrap().receiver_new_gen,
+        Some(false)
+    );
+}
+
+#[test]
+fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
+    let Some(root) = std::env::var_os("PIONEER_GENERIC_CORPUS") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(root);
+    for (kernel, normal) in [
+        (
+            "8800__1.54EU__S8800600.154.enc.bin",
+            "8800__1.54EU__S8800601.154.enc.bin",
+        ),
+        (
+            "8801__1.54EU__S8801600.154.enc.bin",
+            "8801__1.54EU__S8801601.154.enc.bin",
+        ),
+    ] {
+        let kernel = std::fs::read(root.join(kernel)).unwrap();
+        let normal = std::fs::read(root.join(normal)).unwrap();
+        validate_kernel_normal(&kernel, &normal).unwrap();
+        validate_normal_envelope(&normal).unwrap();
+        let mut damaged = normal.clone();
+        let end = damaged.len() - 32;
+        damaged[end] ^= 1;
+        assert!(validate_kernel_normal(&kernel, &damaged).is_err());
+    }
+}
+
+#[test]
+fn installed_receiver_requires_a_backup() {
+    assert!(installed_receiver(None)
+        .unwrap_err()
+        .to_string()
+        .contains("backup is required"));
+}
+
+#[test]
+fn live_control_preserves_typed_decode_cause_without_entering_update() {
+    let backup = header_only_normal("SAT TEST", "26/10/07");
+    let error = installed_receiver(Some(&backup)).unwrap_err();
+    assert!(error
+        .downcast_ref::<pioneer_optical::envelope::DecodeError>()
+        .is_some());
+    let message = format!("{error:#}");
+    assert!(message.contains("installed Normal cannot be decoded for receiver control"));
+    assert!(message.contains("unsupported firmware envelope layout"));
+}
+
+#[test]
+fn generic_receiver_matrix_when_configured() {
+    let Some(root) = std::env::var_os("PIONEER_GENERIC_MATRIX") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(root);
+    let mut count = 0;
+    for entry in std::fs::read_dir(&root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "kernel") {
+            continue;
+        }
+        let kernel = std::fs::read(&path).unwrap();
+        let normal = std::fs::read(path.with_extension("normal")).unwrap();
+        if pioneer_optical::envelope::signature::verify_normal_signature(&normal)
+            == pioneer_optical::envelope::signature::SignatureCheck::Invalid
+        {
+            assert!(
+                validate_kernel_normal(&kernel, &normal).is_err(),
+                "invalid signature accepted"
+            );
+            continue;
+        }
+        validate_kernel_normal(&kernel, &normal)
+            .unwrap_or_else(|e| panic!("{}: {e:#}", path.display()));
+        validate_normal_envelope(&normal)
+            .unwrap_or_else(|e| panic!("{} Normal-only: {e:#}", path.display()));
+        let decoded_kernel = pioneer_optical::envelope::decode_envelope(&kernel).unwrap();
+        let decoded_normal =
+            pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &decoded_kernel)
+                .unwrap();
+        assert!(
+            Receiver::detect(&decoded_normal).is_ok(),
+            "{} receiver word",
+            path.display()
+        );
+        count += 1;
+    }
+    assert!(
+        count >= 2,
+        "configured matrix must contain multiple receivers"
+    );
+}
+
+#[test]
+fn pairing_failure_precedes_body_decode() {
+    let envelope = |kind: &str, tag: &str| {
+        let mut bytes = vec![0u8; 0x1000];
+        let header = format!("********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   NEW-DRIVE\r\nRevision Level : 1.00\r\nHardware Version : SAT 8800\r\nKernel Version : {tag}\r\nDestination : GENERAL\r\nFile Type : {kind}\r\n");
+        bytes[..header.len()].copy_from_slice(header.as_bytes());
+        bytes
+    };
+    let kernel = envelope("Kernel", "ID60");
+    let normal = envelope("Normal", "ID43");
+    let mut archive = tar::Builder::new(Vec::new());
+    for (name, bytes) in [("kernel.enc", &kernel), ("normal.enc", &normal)] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, name, bytes.as_slice())
+            .unwrap();
+    }
+    let input = archive.into_inner().unwrap();
+    let mut request = bundle_req(input);
+    request.input_format = &PACKAGE;
+    let mut dev = MockScsiDevice::new();
+    let error = bundle_execute(&Pioneer::new(), &mut dev, &request).unwrap_err();
+    assert!(error.to_string().contains("required-Kernel tag"), "{error}");
+    assert!(dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
+    // The header chain is a pre-backup plan check.
+    let Err(error) = execute_plan(&request.input) else {
+        panic!("a mismatched header chain was planned");
+    };
+    assert!(error.to_string().contains("required-Kernel tag"), "{error}");
+    assert!(!error.to_string().contains("decode"));
+}
+
+#[test]
+fn transfer_size_bounds_are_protocol_bounds_not_one_drive_size() {
+    for len in [0x11200, 0x20000, 0x1d7700, 0x250000, 0x600000] {
+        assert!(check_normal_size(&vec![0; len]).is_ok());
+    }
+    assert!(check_normal_size(&[0; 0x201]).is_err());
+    assert!(check_normal_size(&[]).is_err());
+}
+
+#[test]
+fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
+    use pioneer_optical::envelope::builder::{
+        encode_encrypted_pair, BuildInputs, KernelBuild, NormalSignature,
+    };
+    use pioneer_optical::envelope::signature::SigningKey;
+    fn checksum(bytes: &mut [u8], at: usize) {
+        bytes[at..at + 4].fill(0);
+        let sum = bytes.as_chunks::<4>().0.iter().fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
+        });
+        bytes[at..at + 4].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+    }
+    let mut kernel = vec![0; 0x10000];
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
+    kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
+    kernel[0x100..0x114].copy_from_slice(&[
+        0x7a, 0x20, 0, 0, 1, 0, 0x47, 12, 0x7a, 0x20, 0, 0, 2, 0, 0x47, 4, 1, 0xf0, 0x65, 5,
+    ]);
+    checksum(&mut kernel, 0xff00);
+    let mut scalar = [0; 20];
+    scalar[19] = 5;
+    let signer = SigningKey::from_bytes(scalar).unwrap();
+    for len in [0x2000usize, 0x3000, 0x8000] {
+        let mut normal = vec![0; len];
+        normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
+        normal[20..24].copy_from_slice(&(len as u32).to_be_bytes());
+        normal[0x400..0x41e].copy_from_slice(&[
+            0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 0x16, 0x79, 1, 0, 0x10, 1, 0, 0x6f, 0x70, 0,
+            0x74, 0x5d, 0x40, 0x7a, 0x20, 1, 2, 3, 4, 0x58, 0x60, 5, 0xba,
+        ]);
+        checksum(&mut normal, len - 4);
+        let pair = encode_encrypted_pair(
+            &BuildInputs {
+                kernel_image: &kernel,
+                normal_image: &normal,
+                envelope_id: "PIONEER BDR-TEST",
+                normal_revision: "9.99",
+                normal_date: "26/10/05",
+                kernel: KernelBuild::from_seed(7),
+                normal_key_seed: 11,
+            },
+            NormalSignature::Sign(&signer),
+        )
+        .unwrap();
+        validate_kernel_normal(&pair.kernel, &pair.normal).unwrap();
+        generic_normal_transcript(&pair.normal).unwrap();
+        crate::backends::pioneer::file_info::plan_offline(
+            &pair.normal,
+            &ENVELOPE,
+            "UNLISTED DEVICE",
+            false,
+        )
+        .unwrap();
+        let mut archive = tar::Builder::new(Vec::new());
+        for (name, bytes) in [("kernel.enc", &pair.kernel), ("normal.enc", &pair.normal)] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            archive
+                .append_data(&mut header, name, bytes.as_slice())
+                .unwrap();
+        }
+        let captured = archive.into_inner().unwrap();
+        let receiver = installed_receiver(Some(&captured)).unwrap();
+        receiver
+            .prepare_normal_without_family_check(&pair.normal)
+            .unwrap();
+        let control = receiver.entry_control(&normal[..16]).unwrap();
+        assert_eq!(&control[..16], &normal[..16]);
+        assert_eq!(
+            &control[16..20],
+            &[1, 2, 3, 4],
+            "captured receiver key must be used without a fallback"
+        );
+        let mut damaged = pair.normal;
+        let last = damaged.len() - 4;
+        damaged[last] ^= 1;
+        assert!(validate_kernel_normal(&pair.kernel, &damaged).is_err());
+    }
+}
+
+// ---- `info` presentation order and snapshot cost ----------------------------
+
+#[test]
+fn info_prints_pioneer_identity_before_region_and_reads_snapshot_once() {
+    use std::{cell::RefCell, rc::Rc};
+    let mut dev = MockScsiDevice::pioneer();
+    let drive = Pioneer::new();
+    let labels = Rc::new(RefCell::new(Vec::<String>::new()));
+    let sink = labels.clone();
+    crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Report(report) = event {
+                for (label, _) in report.gui_fields() {
+                    sink.borrow_mut().push(label);
+                }
+            }
+        },
+        || crate::engine::info(&mut dev, Some(&drive)).expect("info"),
+    );
+    let labels = labels.borrow();
+    let at = |names: &[&str]| {
+        labels
+            .iter()
+            .position(|l| names.contains(&l.as_str()))
+            .unwrap_or_else(|| panic!("none of {names:?} in {labels:?}"))
+    };
+    let interface = at(&["Interface type"]);
+    let identity = at(&["Hardware type", "Pioneer identity"]);
+    let region = at(&["RPC scheme", "DVD region"]);
+    let quiet = at(&["Quiet Drive"]);
+    assert!(
+        interface < identity && identity < region && region < quiet,
+        "unexpected order: {labels:?}"
+    );
+    // MODE SENSE(10) page 0x2A is read only by the pioneer-optical snapshot.
+    let snapshots = dev
+        .reads
+        .iter()
+        .filter(|c| c.first() == Some(&0x5A) && c.get(2) == Some(&0x2A))
+        .count();
+    assert_eq!(snapshots, 1, "Device::info() must run once per `info`");
+}
+
+// ---- input classification, recover hook ------------------------------------
+
+fn envelope_tar() -> Vec<u8> {
+    let envelope = |kind: &str| {
+        let mut bytes = vec![0u8; 0x1000];
+        let header = format!("********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   NEW-DRIVE\r\nRevision Level : 1.00\r\nHardware Version : SAT 8800\r\nKernel Version : ID60\r\nDestination : GENERAL\r\nFile Type : {kind}\r\n");
+        bytes[..header.len()].copy_from_slice(header.as_bytes());
+        bytes
+    };
+    let mut archive = tar::Builder::new(Vec::new());
+    for (name, bytes) in [
+        ("kernel.enc", envelope("Kernel")),
+        ("normal.enc", envelope("Normal")),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, name, bytes.as_slice())
+            .unwrap();
+    }
+    archive.into_inner().unwrap()
+}
+
+#[test]
+fn classify_input_routes_by_content_then_extension() {
+    use std::path::Path;
+    let tar = envelope_tar();
+    assert!(bundle::Bundle::from_tar_bytes(&tar).is_ok());
+    let pioneer = Pioneer::new();
+    // A valid bundle is recognized by content, whatever it is named.
+    assert_eq!(pioneer.classify_input(Path::new("fw.bin"), &tar), &PACKAGE);
+    // A broken .tar still routes to the bundle path for the specific error.
+    assert_eq!(
+        pioneer.classify_input(Path::new("x.TAR"), b"garbage"),
+        &PACKAGE
+    );
+    assert_eq!(
+        pioneer.classify_input(Path::new("x.bin"), b"garbage"),
+        &ENVELOPE
+    );
+}
+
+#[test]
+fn recover_on_a_non_pioneer_drive_errors_without_any_io_beyond_identity() {
+    let (current, target) = (envelope_tar(), envelope_tar());
+    let mut dev = MockScsiDevice::new();
+    let err = crate::engine::recover(
+        &mut dev,
+        &Pioneer::new(),
+        Some(&current),
+        &target,
+        true,
+        true,
+    )
+    .unwrap_err();
+    assert!(
+        format!("{err:#}").contains("No firmware written")
+            || format!("{err:#}").contains("no firmware written"),
+        "{err:#}"
+    );
+    assert!(dev.writes.is_empty(), "wrote to an unrecognized drive");
+    // Pioneer firmware reads are READ BUFFER (3C) with mode 2 and buffer id B0.
+    assert!(
+        dev.reads
+            .iter()
+            .all(|c| !(c.first() == Some(&0x3C) && c.get(1).map(|m| m & 0x1f) == Some(0x02))),
+        "read firmware memory before identifying the receiver: {:02x?}",
+        dev.reads
+    );
+}
+
+#[test]
+fn recover_without_current_never_reads_firmware_from_an_unrecognized_drive() {
+    let mut dev = MockScsiDevice::new();
+    let err = crate::engine::recover(
+        &mut dev,
+        &Pioneer::new(),
+        None,
+        &envelope_tar(),
+        false,
+        false,
+    )
+    .unwrap_err();
+    assert!(
+        format!("{err:#}")
+            .to_lowercase()
+            .contains("no firmware written"),
+        "{err:#}"
+    );
+    assert!(dev.writes.is_empty());
+    assert!(
+        dev.reads.iter().all(|c| c.first() != Some(&0x3C)),
+        "backup capture ran before the receiver check: {:02x?}",
+        dev.reads
+    );
+}
+
+#[test]
+fn mediatek_has_no_recovery_path() {
+    assert!(crate::backends::mtk::Mtk.recovery().is_none());
+}
+
+/// Pioneer's dump with an ungated write grant, as the old raw-device API ran it.
+fn dump_capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    let mut writer = crate::engine::gates::ungated_for_tests(dev);
+    DumpFacet::capture(&Pioneer::new(), DeviceAccess::Write(&mut writer))
+}
+
+/// Pioneer's flash stages with an ungated write grant and no installed backup.
+fn bundle_execute(drive: &Pioneer, dev: &mut dyn ScsiDevice, req: &FlashRequest) -> Result<()> {
+    let plan = drive.plan(&mut ReadDevice::new(dev, &[]), req)?;
+    let authorized = authorize_installed(plan, None)?;
+    let mut writer = crate::engine::gates::ungated_for_tests(dev);
+    drive.execute(&mut writer, &authorized)
+}

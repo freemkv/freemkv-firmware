@@ -1,23 +1,23 @@
 //! Family-neutral backup publishing: validate, write, read back, and publish a
 //! backup without ever replacing an existing file. Each backend owns its own
-//! format (`drive::mtk::backup`, `drive::pioneer::backup`).
+//! format (`backends::mtk::backup`, `backends::pioneer::backup`).
 
 use std::io::Write;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
-use crate::drive::DriveFamily;
+use crate::backend::BackupFacet;
 
 pub(super) fn save_backup(
     path: &Path,
     bytes: &[u8],
-    drive: &dyn DriveFamily,
+    facet: &dyn BackupFacet,
     target_model: &str,
 ) -> Result<usize> {
     save_validated(path, bytes, |candidate| {
-        drive
-            .validate_backup(candidate, target_model)
+        facet
+            .validate(candidate, target_model)
             .map(|_| ())
             .context("validating rollback archive")
     })

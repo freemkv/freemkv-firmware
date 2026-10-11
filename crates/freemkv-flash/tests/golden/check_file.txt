@@ -1,0 +1,638 @@
+
+=== check_file pioneer_bundle_header_only.tar ===
+result: OK
+--- text (13) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/pioneer_bundle_header_only.tar
+size: 10 KiB
+sha256: e2894d927eeda5e4aac01a69b7adf88331f12f153b3d8d2242a8afc9ffec2d0a
+family: Pioneer
+firmware model: NEW-DRIVE
+hardware: SAT 8800
+components: 2
+kernel: Not recognized OEM
+component: Kernel kernel.enc (4096 bytes)
+component: Main normal.enc (4096 bytes)
+flash: live OEM write (gated: --execute --i-understand-risk, backup-first)
+Diagnostic log saved: <LOG>
+--- events (16) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/pioneer_bundle_header_only.tar
+MSG      size: 10 KiB
+FIELD    File = <TMP>/check-file/pioneer_bundle_header_only.tar
+FIELD    Size = 10 KiB
+MSG      sha256: e2894d927eeda5e4aac01a69b7adf88331f12f153b3d8d2242a8afc9ffec2d0a
+MSG      family: Pioneer
+MSG      firmware model: NEW-DRIVE
+MSG      hardware: SAT 8800
+MSG      components: 2
+MSG      kernel: Not recognized OEM
+MSG      component: Kernel kernel.enc (4096 bytes)
+MSG      component: Main normal.enc (4096 bytes)
+MSG      flash: live OEM write (gated: --execute --i-understand-risk, backup-first)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file pioneer_bundle_signed_pair.tar ===
+result: OK
+--- text (13) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/pioneer_bundle_signed_pair.tar
+size: 143 KiB
+sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
+family: Pioneer
+firmware model: BDR-TEST
+hardware: SAT FFFE
+components: 2
+kernel: Not recognized OEM
+component: Kernel kernel.enc (70144 bytes)
+component: Main normal.enc (74240 bytes)
+flash: live OEM write (gated: --execute --i-understand-risk, backup-first)
+Diagnostic log saved: <LOG>
+--- events (16) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/pioneer_bundle_signed_pair.tar
+MSG      size: 143 KiB
+FIELD    File = <TMP>/check-file/pioneer_bundle_signed_pair.tar
+FIELD    Size = 143 KiB
+MSG      sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
+MSG      family: Pioneer
+MSG      firmware model: BDR-TEST
+MSG      hardware: SAT FFFE
+MSG      components: 2
+MSG      kernel: Not recognized OEM
+MSG      component: Kernel kernel.enc (70144 bytes)
+MSG      component: Main normal.enc (74240 bytes)
+MSG      flash: live OEM write (gated: --execute --i-understand-risk, backup-first)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file pioneer_bundle_mtek_tag.tar ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/pioneer_bundle_mtek_tag.tar
+size: 1.84 MiB
+sha256: af57d37db98ad7b6bf03c0762636a45f3a533a2a274e58d63b2cdc15decf3cbe
+family: Pioneer
+firmware model: BDR-UD04
+hardware: SAT 8A10
+components: 1
+kernel: Not recognized OEM
+component: Main components/normal.enc (1929216 bytes)
+flash: live OEM write (gated: --execute --i-understand-risk, backup-first)
+Diagnostic log saved: <LOG>
+--- events (15) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/pioneer_bundle_mtek_tag.tar
+MSG      size: 1.84 MiB
+FIELD    File = <TMP>/check-file/pioneer_bundle_mtek_tag.tar
+FIELD    Size = 1.84 MiB
+MSG      sha256: af57d37db98ad7b6bf03c0762636a45f3a533a2a274e58d63b2cdc15decf3cbe
+MSG      family: Pioneer
+MSG      firmware model: BDR-UD04
+MSG      hardware: SAT 8A10
+MSG      components: 1
+MSG      kernel: Not recognized OEM
+MSG      component: Main components/normal.enc (1929216 bytes)
+MSG      flash: live OEM write (gated: --execute --i-understand-risk, backup-first)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file pioneer_normal_ud04.bin ===
+result: OK
+--- text (9) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/pioneer_normal_ud04.bin
+size: 1.84 MiB
+sha256: e53acb10e840e2295bfee695f3646775bec6a6b4e2b7afba7dd87431bb09ee8f
+family: Pioneer
+descriptor: model='4.Revision Level : 9.99 .Har' rev='9.99 .'
+flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (12) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/pioneer_normal_ud04.bin
+MSG      size: 1.84 MiB
+FIELD    File = <TMP>/check-file/pioneer_normal_ud04.bin
+FIELD    Size = 1.84 MiB
+MSG      sha256: e53acb10e840e2295bfee695f3646775bec6a6b4e2b7afba7dd87431bb09ee8f
+MSG      family: Pioneer
+MSG      descriptor: model='4.Revision Level : 9.99 .Har' rev='9.99 .'
+MSG      flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mtk_flashable.bin ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mtk_flashable.bin
+size: 2 MiB
+sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
+chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+banner: <none>
+descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+capability: BD/UHD, region-lockable, AACS content
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+integrity: valid (1 CMAC regions OK)
+built for: <unknown> BD-RE BU40N (MT1959)
+Diagnostic log saved: <LOG>
+--- events (19) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mtk_flashable.bin
+MSG      size: 2 MiB
+FIELD    File = <TMP>/check-file/mtk_flashable.bin
+FIELD    Size = 2 MiB
+MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
+FIELD    Chipset = MT1959
+FIELD    Model = BD-RE BU40N
+FIELD    Firmware version = <unknown>
+MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      banner: <none>
+MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+MSG      capability: BD/UHD, region-lockable, AACS content
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Integrity = valid (1 CMAC regions OK)
+MSG      integrity: valid (1 CMAC regions OK)
+MSG      built for: <unknown> BD-RE BU40N (MT1959)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mtk_bad_cmac.bin ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mtk_bad_cmac.bin
+size: 2 MiB
+sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
+chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+banner: <none>
+descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+capability: BD/UHD, region-lockable, AACS content
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+integrity: INVALID (0/1 CMAC regions OK — corrupt or unsigned edit)
+built for: <unknown> BD-RE BU40N (MT1959)
+Diagnostic log saved: <LOG>
+--- events (19) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mtk_bad_cmac.bin
+MSG      size: 2 MiB
+FIELD    File = <TMP>/check-file/mtk_bad_cmac.bin
+FIELD    Size = 2 MiB
+MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
+FIELD    Chipset = MT1959
+FIELD    Model = BD-RE BU40N
+FIELD    Firmware version = <unknown>
+MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      banner: <none>
+MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+MSG      capability: BD/UHD, region-lockable, AACS content
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Integrity = INVALID (0/1 CMAC regions OK — corrupt or unsigned edit)
+MSG      integrity: INVALID (0/1 CMAC regions OK — corrupt or unsigned edit)
+MSG      built for: <unknown> BD-RE BU40N (MT1959)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mtk_unsigned.bin ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mtk_unsigned.bin
+size: 2 MiB
+sha256: 1778b3ed7796dad5553929eb37c3f42050a1eb645b67142e92722680be86698b
+chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+banner: <none>
+descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+capability: BD/UHD, region-lockable, AACS content
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+integrity: no signed CMAC table (unsigned or non-standard image)
+built for: <unknown> BD-RE BU40N (MT1959)
+Diagnostic log saved: <LOG>
+--- events (19) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mtk_unsigned.bin
+MSG      size: 2 MiB
+FIELD    File = <TMP>/check-file/mtk_unsigned.bin
+FIELD    Size = 2 MiB
+MSG      sha256: 1778b3ed7796dad5553929eb37c3f42050a1eb645b67142e92722680be86698b
+FIELD    Chipset = MT1959
+FIELD    Model = BD-RE BU40N
+FIELD    Firmware version = <unknown>
+MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      banner: <none>
+MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+MSG      capability: BD/UHD, region-lockable, AACS content
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
+MSG      integrity: no signed CMAC table (unsigned or non-standard image)
+MSG      built for: <unknown> BD-RE BU40N (MT1959)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file zeros_2mib.bin ===
+result: OK
+--- text (6) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/zeros_2mib.bin
+size: 2 MiB
+sha256: 5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee
+image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+Diagnostic log saved: <LOG>
+--- events (9) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/zeros_2mib.bin
+MSG      size: 2 MiB
+FIELD    File = <TMP>/check-file/zeros_2mib.bin
+FIELD    Size = 2 MiB
+MSG      sha256: 5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee
+MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mtk_drive_read_backup.bin ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mtk_drive_read_backup.bin
+size: 2 MiB
+sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
+chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+banner: ��������������
+descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
+capability: BD/UHD, region-lockable, AACS content
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+integrity: valid (1 CMAC regions OK)
+built for: �������� BD-RE BU40N (MT1959)
+Diagnostic log saved: <LOG>
+--- events (19) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mtk_drive_read_backup.bin
+MSG      size: 2 MiB
+FIELD    File = <TMP>/check-file/mtk_drive_read_backup.bin
+FIELD    Size = 2 MiB
+MSG      sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
+FIELD    Chipset = MT1959
+FIELD    Model = BD-RE BU40N
+FIELD    Firmware version = ����
+MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      banner: ��������������
+MSG      descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
+MSG      capability: BD/UHD, region-lockable, AACS content
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Integrity = valid (1 CMAC regions OK)
+MSG      integrity: valid (1 CMAC regions OK)
+MSG      built for: �������� BD-RE BU40N (MT1959)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mtk_mt1959_stored.bin ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mtk_mt1959_stored.bin
+size: 2 MiB
+sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
+chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+banner: ��������������
+descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
+capability: BD/UHD, region-lockable, AACS content
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+integrity: valid (1 CMAC regions OK)
+built for: �������� BD-RE BU40N (MT1959)
+Diagnostic log saved: <LOG>
+--- events (19) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mtk_mt1959_stored.bin
+MSG      size: 2 MiB
+FIELD    File = <TMP>/check-file/mtk_mt1959_stored.bin
+FIELD    Size = 2 MiB
+MSG      sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
+FIELD    Chipset = MT1959
+FIELD    Model = BD-RE BU40N
+FIELD    Firmware version = ����
+MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      banner: ��������������
+MSG      descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
+MSG      capability: BD/UHD, region-lockable, AACS content
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Integrity = valid (1 CMAC regions OK)
+MSG      integrity: valid (1 CMAC regions OK)
+MSG      built for: �������� BD-RE BU40N (MT1959)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mtk_mt1939_stored.bin ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mtk_mt1939_stored.bin
+size: 2 MiB
+sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
+chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
+banner: ������������������
+descriptor: vendor='��������' model='BD-RE BE14NU40' rev='����'
+capability: BD, region-lockable, AACS content
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
+integrity: valid (1 CMAC regions OK)
+built for: �������� BD-RE BE14NU40 (MT1939)
+Diagnostic log saved: <LOG>
+--- events (19) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mtk_mt1939_stored.bin
+MSG      size: 2 MiB
+FIELD    File = <TMP>/check-file/mtk_mt1939_stored.bin
+FIELD    Size = 2 MiB
+MSG      sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
+FIELD    Chipset = MT1939
+FIELD    Model = BD-RE BE14NU40
+FIELD    Firmware version = ����
+MSG      chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
+MSG      banner: ������������������
+MSG      descriptor: vendor='��������' model='BD-RE BE14NU40' rev='����'
+MSG      capability: BD, region-lockable, AACS content
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
+FIELD    Integrity = valid (1 CMAC regions OK)
+MSG      integrity: valid (1 CMAC regions OK)
+MSG      built for: �������� BD-RE BE14NU40 (MT1939)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mtk_legacy_0_10_backup.tar ===
+result: OK
+--- text (12) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mtk_legacy_0_10_backup.tar
+size: 2.07 MiB
+sha256: 089adb0d6f547aa75c5b6e5dc10716ae6985c95e6216a2242b2ee7b781789c5d
+chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+banner: <none>
+descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
+capability: BD/UHD, region-lockable, AACS content
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+integrity: no signed CMAC table (unsigned or non-standard image)
+built for: <unknown> <unknown> (MT1959)
+Diagnostic log saved: <LOG>
+--- events (19) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mtk_legacy_0_10_backup.tar
+MSG      size: 2.07 MiB
+FIELD    File = <TMP>/check-file/mtk_legacy_0_10_backup.tar
+FIELD    Size = 2.07 MiB
+MSG      sha256: 089adb0d6f547aa75c5b6e5dc10716ae6985c95e6216a2242b2ee7b781789c5d
+FIELD    Chipset = MT1959
+FIELD    Model = <unknown>
+FIELD    Firmware version = <unknown>
+MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      banner: <none>
+MSG      descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
+MSG      capability: BD/UHD, region-lockable, AACS content
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
+MSG      integrity: no signed CMAC table (unsigned or non-standard image)
+MSG      built for: <unknown> <unknown> (MT1959)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file pioneer_signed_normal.enc ===
+result: OK
+--- text (9) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/pioneer_signed_normal.enc
+size: 72.5 KiB
+sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+family: Pioneer
+descriptor: model='unknown (not in image)' rev='1.00'
+flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (12) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/pioneer_signed_normal.enc
+MSG      size: 72.5 KiB
+FIELD    File = <TMP>/check-file/pioneer_signed_normal.enc
+FIELD    Size = 72.5 KiB
+MSG      sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+MSG      family: Pioneer
+MSG      descriptor: model='unknown (not in image)' rev='1.00'
+MSG      flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file pioneer_raw_header.bin ===
+result: OK
+--- text (9) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/pioneer_raw_header.bin
+size: 512 B
+sha256: dbdf864e499b047073051db6d780c4c79edb7a204cc492a839b48adaf5c5ac56
+family: Pioneer
+descriptor: model='BDR-212' rev='1.05'
+flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (12) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/pioneer_raw_header.bin
+MSG      size: 512 B
+FIELD    File = <TMP>/check-file/pioneer_raw_header.bin
+FIELD    Size = 512 B
+MSG      sha256: dbdf864e499b047073051db6d780c4c79edb7a204cc492a839b48adaf5c5ac56
+MSG      family: Pioneer
+MSG      descriptor: model='BDR-212' rev='1.05'
+MSG      flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file pioneer_packed.bin ===
+result: OK
+--- text (10) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/pioneer_packed.bin
+size: 4 KiB
+sha256: 3ef1173bbcb158289ca857327671b22a5b9f1469529085c587cdc3061bf8f751
+family: Pioneer
+descriptor: model='unknown (not in image)' rev='unknown'
+          updater-packaged (zlib); model/rev in the sibling .fw.json
+flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (13) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/pioneer_packed.bin
+MSG      size: 4 KiB
+FIELD    File = <TMP>/check-file/pioneer_packed.bin
+FIELD    Size = 4 KiB
+MSG      sha256: 3ef1173bbcb158289ca857327671b22a5b9f1469529085c587cdc3061bf8f751
+MSG      family: Pioneer
+MSG      descriptor: model='unknown (not in image)' rev='unknown'
+MSG                updater-packaged (zlib); model/rev in the sibling .fw.json
+MSG      flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mediatek_encrypted_envelope.bin ===
+result: OK
+--- text (10) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mediatek_encrypted_envelope.bin
+size: 8 KiB
+sha256: 09ffd09d2bb8cbfcef62ca474ec3a5b3776b5fd25b9e23a51bdd65b4fc0883d0
+family: MediaTek (encrypted image)
+descriptor: model='unknown (not in image)' rev='unknown'
+          encrypted distribution envelope; model/rev not extractable
+flash: identify-only — not flashable by this tool
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (13) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mediatek_encrypted_envelope.bin
+MSG      size: 8 KiB
+FIELD    File = <TMP>/check-file/mediatek_encrypted_envelope.bin
+FIELD    Size = 8 KiB
+MSG      sha256: 09ffd09d2bb8cbfcef62ca474ec3a5b3776b5fd25b9e23a51bdd65b4fc0883d0
+MSG      family: MediaTek (encrypted image)
+MSG      descriptor: model='unknown (not in image)' rev='unknown'
+MSG                encrypted distribution envelope; model/rev not extractable
+MSG      flash: identify-only — not flashable by this tool
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file lg_legacy_dump.bin ===
+result: OK
+--- text (9) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/lg_legacy_dump.bin
+size: 4.09 MiB
+sha256: f1e81d812a59d29f28e66756b0a570d4b532fe3dd873969085126cb29bdf8c34
+family: Hitachi-LG (legacy)
+descriptor: model='HL-DT-STBD-RE  GGW-H20N' rev='y217.08.06.09a'
+flash: identify-only — not flashable by this tool (catalogued LG recipe: WRITE BUFFER (MTK lineage; == MT1959 handshake) — catalog-only; not executed by freemkv-flash)
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (12) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/lg_legacy_dump.bin
+MSG      size: 4.09 MiB
+FIELD    File = <TMP>/check-file/lg_legacy_dump.bin
+FIELD    Size = 4.09 MiB
+MSG      sha256: f1e81d812a59d29f28e66756b0a570d4b532fe3dd873969085126cb29bdf8c34
+MSG      family: Hitachi-LG (legacy)
+MSG      descriptor: model='HL-DT-STBD-RE  GGW-H20N' rev='y217.08.06.09a'
+MSG      flash: identify-only — not flashable by this tool (catalogued LG recipe: WRITE BUFFER (MTK lineage; == MT1959 handshake) — catalog-only; not executed by freemkv-flash)
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file renesas_dump.bin ===
+result: OK
+--- text (10) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/renesas_dump.bin
+size: 4.09 MiB
+sha256: fe15c0b8d5483ddc5987a18717389090f33170668326bb9bba4c5a2416dd00b6
+family: Renesas
+descriptor: model='unknown (not in image)' rev='unknown'
+          scrambled dump; model/rev not extractable
+flash: identify-only — not flashable by this tool
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (13) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/renesas_dump.bin
+MSG      size: 4.09 MiB
+FIELD    File = <TMP>/check-file/renesas_dump.bin
+FIELD    Size = 4.09 MiB
+MSG      sha256: fe15c0b8d5483ddc5987a18717389090f33170668326bb9bba4c5a2416dd00b6
+MSG      family: Renesas
+MSG      descriptor: model='unknown (not in image)' rev='unknown'
+MSG                scrambled dump; model/rev not extractable
+MSG      flash: identify-only — not flashable by this tool
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file mediatek_bridge_dump.bin ===
+result: OK
+--- text (10) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/mediatek_bridge_dump.bin
+size: 4.09 MiB
+sha256: e27912810e5c9c5335d2a8d19333aaa8415c998f3b606191dffc8702c68bbef4
+family: MediaTek (external bridge)
+descriptor: model='unknown (not in image)' rev='unknown'
+          scrambled bridge dump; model/rev not extractable
+flash: identify-only — not flashable by this tool (catalogued Asus recipe: WRITE BUFFER (UHD recipe == MT1959 handshake) — catalog-only; not executed by freemkv-flash)
+integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+Diagnostic log saved: <LOG>
+--- events (13) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/mediatek_bridge_dump.bin
+MSG      size: 4.09 MiB
+FIELD    File = <TMP>/check-file/mediatek_bridge_dump.bin
+FIELD    Size = 4.09 MiB
+MSG      sha256: e27912810e5c9c5335d2a8d19333aaa8415c998f3b606191dffc8702c68bbef4
+MSG      family: MediaTek (external bridge)
+MSG      descriptor: model='unknown (not in image)' rev='unknown'
+MSG                scrambled bridge dump; model/rev not extractable
+MSG      flash: identify-only — not flashable by this tool (catalogued Asus recipe: WRITE BUFFER (UHD recipe == MT1959 handshake) — catalog-only; not executed by freemkv-flash)
+MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC table)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file garbage.bin ===
+result: OK
+--- text (6) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/garbage.bin
+size: 37 B
+sha256: a552e4e0d78112be611b1be78487595efc5690afc29fd57dd2d0fff41ef33777
+image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+Diagnostic log saved: <LOG>
+--- events (9) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/garbage.bin
+MSG      size: 37 B
+FIELD    File = <TMP>/check-file/garbage.bin
+FIELD    Size = 37 B
+MSG      sha256: a552e4e0d78112be611b1be78487595efc5690afc29fd57dd2d0fff41ef33777
+MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file empty.bin ===
+result: OK
+--- text (6) ---
+Diagnostic log: <LOG>
+file: <TMP>/check-file/empty.bin
+size: 0 B
+sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+Diagnostic log saved: <LOG>
+--- events (9) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      file: <TMP>/check-file/empty.bin
+MSG      size: 0 B
+FIELD    File = <TMP>/check-file/empty.bin
+FIELD    Size = 0 B
+MSG      sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+MSG      Diagnostic log saved: <LOG>
+
+=== check_file missing file ===
+result: ERR reading firmware image <TMP>/check-file/does-not-exist.bin: No such file or directory (os error 2)
+--- text (2) ---
+Diagnostic log: <LOG>
+Diagnostic log saved: <LOG>
+--- events (3) ---
+FIELD    Diagnostic log = <LOG>
+MSG      Diagnostic log: <LOG>
+MSG      Diagnostic log saved: <LOG>

@@ -4,7 +4,7 @@
 //! update entry / transfer / finish, the DVR handshake) is issued by
 //! `pioneer_optical`, and every MediaTek command (identity, memory reads, the
 //! flash session) by `mediatek_optical`. The flasher's only contact with those
-//! sequences is the one `Transport` adapter, `src/drive/transport.rs`, which
+//! sequences is the one `Transport` adapter, `src/transport.rs`, which
 //! forwards the crates' CDBs untouched and so itself carries no opcode literals.
 //!
 //! This scans the production code of every Pioneer and MediaTek backend source
@@ -17,7 +17,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ADAPTER: &str = "src/drive/transport.rs";
+const ADAPTER: &str = "src/transport.rs";
 
 fn backend_sources(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
@@ -116,7 +116,7 @@ fn no_backend_source_contains_a_write_or_read_buffer_opcode() {
         "scanner must cover the adapter"
     );
     assert!(
-        files.iter().any(|f| f.ends_with("src/drive/mtk/mod.rs")),
+        files.iter().any(|f| f.ends_with("src/backends/mtk/mod.rs")),
         "scanner must cover the MediaTek backend"
     );
     let mut offenders = Vec::new();

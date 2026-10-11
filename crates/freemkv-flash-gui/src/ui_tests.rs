@@ -1,4 +1,12 @@
 use super::*;
+use freemkv_flash::backend::{
+    Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, Descriptor, FileFormat,
+    FlashFacet, FlashPlan, FlashRequest, FormatRole, Identity, Match, PlanLine, ReadDevice,
+    SavedBackup, WriteDevice,
+};
+use freemkv_flash::manifest::FlashMode;
+use freemkv_flash::platform::MockScsiDevice;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 fn drive(path: &str, name: &str, label: &str) -> DriveChoice {
     DriveChoice {
@@ -8,15 +16,53 @@ fn drive(path: &str, name: &str, label: &str) -> DriveChoice {
     }
 }
 
-/// A model with one drive whose jobs are recorded, not run.
+impl Profile {
+    /// A drive that offers every task.
+    pub(crate) fn every_task() -> Self {
+        Self {
+            chips: ["Test family", "Backup", "Dump", "Flash", "Recovery"]
+                .map(String::from)
+                .to_vec(),
+            tasks: vec![Task::Backup, Task::Dump, Task::Flash, Task::Recovery],
+            inspect: true,
+            backup_name: Some("DRIVE_1.00.backup.bin".into()),
+            dump_name: Some("DRIVE_1.00.dump.bin".into()),
+            flash_extensions: vec!["bin"],
+        }
+    }
+}
+
+impl App {
+    /// Answer the pending profile read, as its worker would.
+    pub(crate) fn answer_profile(&mut self, profile: Result<Profile, String>) {
+        let worker = self.profile_worker.take().expect("a profile read");
+        worker.send(profile).unwrap();
+        self.poll();
+    }
+}
+
+/// A model whose jobs and profile reads are recorded, not run.
 fn dry(drives: Vec<DriveChoice>) -> App {
     let mut app = App::with_drives(drives);
     app.dry_run = Some(Vec::new());
     app
 }
 
+/// `dry`, with the selected drive's profile read and offering every task.
+fn ready(drives: Vec<DriveChoice>) -> App {
+    let mut app = dry(drives);
+    app.start();
+    app.answer_profile(Ok(Profile::every_task()));
+    app
+}
+
 fn one_drive() -> App {
-    dry(vec![drive("drive-a", "drive-a", "Drive A")])
+    ready(vec![drive("drive-a", "drive-a", "Drive A")])
+}
+
+/// One GUI report row in `group`.
+fn row(label: &str, value: &str, group: Group) -> report::Row {
+    report::Row::gui("test", label, value.into()).in_group(group)
 }
 
 /// Every button in the panel, flattened.
@@ -53,6 +99,25 @@ fn last_job(app: &App) -> &(String, String, Job) {
         .unwrap()
         .last()
         .expect("a job was started")
+}
+
+/// Flash now runs the read-only plan first; let it pass, which starts the
+/// backup-and-authorize job.
+fn plan_passes(app: &mut App) {
+    let (label, _, job) = last_job(app);
+    assert_eq!(label, "Flash plan");
+    assert!(matches!(job, Job::PlanFlash(o) if !o.acknowledged_risk));
+    finish(app, Ok(()));
+    let (label, _, job) = last_job(app);
+    assert_eq!(label, "Firmware update");
+    assert!(matches!(job, Job::Flash(o) if o.execute));
+}
+
+/// One GUI result row, as the workflows publish it.
+fn field_event(label: &str, value: &str) -> Event {
+    freemkv_flash::output::Event::Report(
+        freemkv_flash::report::Row::gui("field", label, value.into()).into(),
+    )
 }
 
 fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
@@ -96,24 +161,96 @@ fn tabs_and_drive_bar_lock_while_a_job_runs() {
     assert_eq!(app.task, Task::Info, "tab switch ignored while running");
 }
 
-#[test]
-fn capabilities_hook_disables_tasks_outside_the_profile() {
-    let mut app = one_drive();
-    app.set_capabilities(Capabilities {
-        tasks: vec![Task::Info, Task::Backup],
-    });
+fn enabled_tabs(app: &App) -> Vec<Task> {
     let view = app.view();
-    let enabled: Vec<_> = view
-        .tabs
+    view.tabs
         .iter()
         .filter(|t| t.enabled)
         .map(|t| t.task)
-        .collect();
-    assert_eq!(enabled, [Task::Info, Task::Backup]);
+        .collect()
+}
+
+#[test]
+fn tabs_come_from_the_drive_profile() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
+    assert_eq!(app.start(), [Effect::StartTicking]);
+    assert_eq!(app.view().drives.chips, [PROBING]);
+    assert!(enabled_tabs(&app).is_empty(), "controls lock while probing");
+    app.dispatch(Input::SelectTask(Task::Inspect));
+    assert_eq!(app.task, Task::Info, "no tab switch while probing");
+
+    let backup_only = Profile {
+        chips: vec!["Family".into(), "Backup".into()],
+        tasks: vec![Task::Backup],
+        ..Profile::default()
+    };
+    app.answer_profile(Ok(backup_only));
+    assert_eq!(app.view().drives.chips, ["Family", "Backup"]);
+    assert_eq!(
+        enabled_tabs(&app),
+        [Task::Info, Task::Inspect, Task::Compare, Task::Backup]
+    );
     app.dispatch(Input::SelectTask(Task::Flash));
     assert_eq!(app.task, Task::Info);
     app.dispatch(Input::SelectTask(Task::Backup));
     assert_eq!(app.task, Task::Backup);
+}
+
+#[test]
+fn recovery_is_offered_for_an_unsupported_identified_drive() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
+    app.start();
+    app.answer_profile(Ok(Profile {
+        chips: vec!["Unsupported".into(), "Recovery (Family)".into()],
+        tasks: vec![Task::Recovery],
+        ..Profile::default()
+    }));
+    assert_eq!(
+        enabled_tabs(&app),
+        [Task::Info, Task::Inspect, Task::Compare, Task::Recovery]
+    );
+    app.dispatch(Input::SelectTask(Task::Recovery));
+    assert_eq!(app.task, Task::Recovery);
+}
+
+#[test]
+fn a_new_profile_without_the_current_task_falls_back_to_info() {
+    let mut app = ready(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
+    app.dispatch(Input::SelectTask(Task::Flash));
+    assert_eq!(app.dispatch(Input::SelectDrive(1)), [Effect::StartTicking]);
+    app.answer_profile(Ok(Profile::default()));
+    assert_eq!(app.task, Task::Info);
+    assert_eq!(
+        enabled_tabs(&app),
+        [Task::Info, Task::Inspect, Task::Compare]
+    );
+}
+
+#[test]
+fn a_failed_profile_is_shown_and_logged() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
+    app.start();
+    assert_eq!(
+        {
+            let worker = app.profile_worker.take().unwrap();
+            worker.send(Err("permission denied".into())).unwrap();
+            app.poll()
+        },
+        [Effect::StopTicking]
+    );
+    assert_eq!(app.view().drives.chips, ["Profile unavailable"]);
+    assert!(app.log.iter().any(|l| l.ends_with("permission denied")));
+    assert_eq!(
+        enabled_tabs(&app),
+        [Task::Info, Task::Inspect, Task::Compare]
+    );
+}
+
+#[test]
+fn refresh_reads_the_profile_again() {
+    let mut app = one_drive();
+    app.dispatch(Input::Refresh);
+    assert!(app.profile_worker.is_some(), "refresh re-reads the profile");
 }
 
 #[test]
@@ -141,14 +278,15 @@ fn no_drive_cannot_start_drive_jobs() {
     assert!(app.dispatch(Input::ReadInfo).is_empty());
     assert!(!app.running());
     assert_eq!(app.log.last().unwrap(), "No optical drive selected.");
+    assert_eq!(app.view().drives.chips, Vec::<String>::new());
     app.dispatch(Input::SelectTask(Task::Backup));
+    assert_eq!(app.task, Task::Info, "no drive, no backup tab");
     assert!(app.dispatch(Input::Choose(Pick::Backup)).is_empty());
-    assert!(!button(&app.view(), "Save backup…").enabled);
 }
 
 #[test]
-fn backup_and_dump_ask_for_a_destination_then_run() {
-    let mut app = dry(vec![drive("p", "disk4", "PIONEER BD-RW BDR-XD08")]);
+fn backup_and_dump_names_come_from_the_profile() {
+    let mut app = ready(vec![drive("p", "disk4", "Drive")]);
     app.dispatch(Input::SelectTask(Task::Backup));
     assert!(has_text(
         &app.view(),
@@ -158,7 +296,7 @@ fn backup_and_dump_ask_for_a_destination_then_run() {
         app.dispatch(Input::Choose(Pick::Backup)),
         [Effect::SaveFile {
             pick: Pick::Backup,
-            file_name: "backup.tar".into()
+            file_name: "DRIVE_1.00.backup.bin".into()
         }]
     );
     app.dispatch(Input::SelectTask(Task::Dump));
@@ -166,7 +304,7 @@ fn backup_and_dump_ask_for_a_destination_then_run() {
         app.dispatch(Input::Choose(Pick::Dump)),
         [Effect::SaveFile {
             pick: Pick::Dump,
-            file_name: "dump.bin".into()
+            file_name: "DRIVE_1.00.dump.bin".into()
         }]
     );
     let out = std::env::temp_dir().join("freemkv-gui-model-no-such-dump.bin");
@@ -175,12 +313,18 @@ fn backup_and_dump_ask_for_a_destination_then_run() {
     assert_eq!((label.as_str(), device.as_str()), ("Raw dump", "p"));
     assert!(matches!(job, Job::Dump { out: o, replace: false } if *o == out));
 
-    let mut other = dry(vec![drive("h", "disk5", "HL-DT-ST BD-RE")]);
-    other.dispatch(Input::SelectTask(Task::Backup));
+    let mut other = dry(vec![drive("h", "disk5", "Other drive")]);
+    other.start();
+    other.answer_profile(Ok(Profile {
+        tasks: vec![Task::Backup],
+        backup_name: Some("Other_2.00.candidate.tar".into()),
+        ..Profile::default()
+    }));
     assert!(matches!(
         &other.dispatch(Input::Choose(Pick::Backup))[..],
-        [Effect::SaveFile { file_name, .. }] if file_name == "backup.bin"
+        [Effect::SaveFile { file_name, .. }] if file_name == "Other_2.00.candidate.tar"
     ));
+    assert!(other.dispatch(Input::Choose(Pick::Dump)).is_empty());
 }
 
 // ── flash: acknowledgement and confirmation ───────────────────────────────
@@ -196,7 +340,10 @@ fn flash_starts_with_a_firmware_chooser() {
         app.dispatch(Input::Choose(Pick::FlashFirmware)),
         [Effect::OpenFile {
             pick: Pick::FlashFirmware,
-            filter: Some(FLASH_FILTER)
+            filter: Some(FileFilter {
+                name: "Firmware or backup",
+                extensions: vec!["bin"],
+            })
         }]
     );
     app.dispatch(Input::Chosen(
@@ -214,57 +361,297 @@ fn flash_starts_with_a_firmware_chooser() {
     )));
 }
 
-#[test]
-fn flash_requires_fresh_acknowledgement_and_explicit_confirmation() {
-    let mut app = one_drive();
-    app.task = Task::Flash;
+/// A flash backend that authorizes with a generation-barrier warning and
+/// records whether it wrote.
+struct SheetBackend {
+    confirmation: Option<&'static str>,
+    executed: AtomicBool,
+}
+
+static SHEET_FORMAT: FileFormat = FileFormat {
+    id: "sheet-image",
+    label: "Sheet test image",
+    extensions: &["bin"],
+    role: FormatRole::Image,
+};
+
+static SHEET_DESCRIPTOR: Descriptor = Descriptor {
+    id: BackendId("sheet-test"),
+    display_name: "Sheet test",
+    flash_summary: None,
+    formats: &[],
+};
+
+const BARRIER: &str = "downgrade crosses the generation barrier";
+
+impl Backend for SheetBackend {
+    fn descriptor(&self) -> &'static Descriptor {
+        &SHEET_DESCRIPTOR
+    }
+    fn probe(&self, _: &mut ReadDevice<'_>, _: &Identity) -> anyhow::Result<Option<Match>> {
+        Ok(None)
+    }
+    fn backup(&self) -> Option<&dyn BackupFacet> {
+        Some(self)
+    }
+    fn flash(&self) -> Option<&dyn FlashFacet> {
+        Some(self)
+    }
+}
+
+impl BackupFacet for SheetBackend {
+    fn format(&self) -> BackupFormat {
+        BackupFormat {
+            extension: "bin",
+            infix: "backup",
+        }
+    }
+    fn capture(&self, _: &mut ReadDevice<'_>) -> anyhow::Result<Vec<u8>> {
+        Ok(vec![1, 2, 3])
+    }
+    fn notice(&self, _: &[u8]) -> BackupNotice {
+        BackupNotice::None
+    }
+    fn validate(&self, bytes: &[u8], _: &str) -> anyhow::Result<Vec<u8>> {
+        Ok(bytes.to_vec())
+    }
+}
+
+impl FlashFacet for SheetBackend {
+    fn plan(&self, _: &mut ReadDevice<'_>, _: &FlashRequest) -> anyhow::Result<FlashPlan> {
+        let mut plan = FlashPlan::new(());
+        plan.after_backup = vec![
+            PlanLine::Header("== flash plan ==".into()),
+            PlanLine::Backup,
+        ];
+        Ok(plan)
+    }
+    fn authorize(
+        &self,
+        _: &mut ReadDevice<'_>,
+        plan: FlashPlan,
+        _: &SavedBackup,
+    ) -> anyhow::Result<AuthorizedPlan> {
+        let mut authorized = AuthorizedPlan::new(plan, ());
+        authorized.warnings = vec![BARRIER.into()];
+        authorized.confirmation = self.confirmation.map(str::to_owned);
+        Ok(authorized)
+    }
+    fn execute(&self, _: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> anyhow::Result<()> {
+        self.executed.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+/// A flash job played by the real engine over a mock drive, answering
+/// through the GUI's sheet.
+struct Flashing {
+    backend: Arc<SheetBackend>,
+    backup: PathBuf,
+    done: Receiver<Result<(), String>>,
+}
+
+impl Flashing {
+    fn executed(&self) -> bool {
+        self.backend.executed.load(Ordering::SeqCst)
+    }
+
+    /// The engine's result, once the worker has finished.
+    fn result(&self) -> Result<(), String> {
+        self.done
+            .recv_timeout(Duration::from_secs(20))
+            .expect("the flash worker finished")
+    }
+
+    /// The worker is still waiting on the sheet.
+    fn waiting(&self) -> bool {
+        self.done.recv_timeout(Duration::from_millis(200)).is_err()
+    }
+}
+
+/// Press Flash now on `app`, let the plan pass, and run the backup-and-
+/// authorize job until its sheet opens.
+fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flashing {
     app.flash_input = Some("firmware.bin".into());
-    app.risk_ack = true;
-    assert!(app.dispatch(Input::FlashNow).is_empty());
-    assert!(!app.running(), "Flash now only opens the confirmation");
-    let confirm = app.view().confirm.expect("confirmation sheet");
-    assert_eq!(confirm.title, "Confirm flash");
-    assert_eq!(confirm.danger, FLASH_DANGER);
-    assert_eq!(confirm.ack_text, RISK_ACK);
-    assert_eq!(confirm.note, Some(BACKUP_NOTE));
-    assert_eq!(confirm.warning, None);
-    assert!(!confirm.ack_checked, "consent never carries over");
-    assert!(!confirm.confirm.enabled);
-    assert_eq!(confirm.confirm.text, "Flash now");
-    assert!(!app.view().controls_enabled);
-
-    assert!(
-        app.dispatch(Input::Confirm).is_empty(),
-        "no consent, no flash"
-    );
-    assert!(!app.running() && app.pending.is_some());
-
-    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
-    assert!(app.view().confirm.unwrap().confirm.enabled);
-    assert_eq!(app.dispatch(Input::Confirm), [Effect::StartTicking]);
-    assert!(app.pending.is_none() && app.running());
-    let (label, device, job) = last_job(&app);
-    assert_eq!(
-        (label.as_str(), device.as_str()),
-        ("Firmware update", "drive-a")
-    );
-    let Job::Flash(options) = job else {
-        panic!("expected a flash job")
-    };
-    assert!(options.execute && options.acknowledged_risk && !options.force);
-    assert_eq!(options.input, PathBuf::from("firmware.bin"));
+    app.dispatch(Input::FlashNow);
+    plan_passes(app);
+    let worker = app.worker.take().expect("the flash job's worker");
+    let backend = Arc::new(SheetBackend {
+        confirmation,
+        executed: AtomicBool::new(false),
+    });
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let backup = std::env::temp_dir().join(format!(
+        "freemkv-gui-sheet-{}-{}.bin",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::SeqCst)
+    ));
+    let (done_tx, done) = mpsc::channel();
+    let (engine_backend, out) = (backend.clone(), backup.clone());
+    std::thread::spawn(move || {
+        let request = FlashRequest {
+            input: Vec::new(),
+            input_format: &SHEET_FORMAT,
+            mode: FlashMode::Full,
+            execute: true,
+            acknowledged_risk: true,
+            enc_override: None,
+            drive_model: "TEST".into(),
+            verbose: false,
+            predump_out: Some(out),
+        };
+        let events = worker.clone();
+        let mut sheet = SheetConfirm {
+            tx: worker.clone(),
+            waker: None,
+        };
+        let result = workflow::capture_events(
+            move |event| {
+                let _ = events.send(Msg::Event(event));
+            },
+            || {
+                let mut dev = MockScsiDevice::new();
+                freemkv_flash::engine::flash(&mut dev, &*engine_backend, &request, &mut sheet)
+            },
+        )
+        .map_err(|e| format!("{e:#}"));
+        let _ = worker.send(Msg::Done(result.clone()));
+        let _ = done_tx.send(result);
+    });
+    let start = Instant::now();
+    while app.pending.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(20), "{:?}", app.log);
+        std::thread::sleep(Duration::from_millis(10));
+        app.poll();
+    }
+    Flashing {
+        backend,
+        backup,
+        done,
+    }
 }
 
 #[test]
-fn cancelled_confirmation_runs_nothing_and_clears_consent() {
+fn execute_never_runs_without_confirm_after_authorize() {
+    let mut app = one_drive();
+    // No confirmation text: the CLI would not ask, the GUI's sheet still does.
+    let flashing = flash_until_sheet(&mut app, None);
+    assert!(app.running(), "the job waits on the sheet");
+    assert!(flashing.waiting() && !flashing.executed());
+    assert!(app.dispatch(Input::Confirm).is_empty());
+    assert!(
+        flashing.waiting() && !flashing.executed(),
+        "no tick, no write"
+    );
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::Confirm);
+    assert!(app.pending.is_none());
+    assert_eq!(flashing.result(), Ok(()));
+    assert!(flashing.executed());
+    let start = Instant::now();
+    while app.running() {
+        assert!(start.elapsed() < Duration::from_secs(20));
+        app.poll();
+    }
+    assert_eq!(app.status, "Firmware update complete");
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
+fn cancel_at_the_sheet_writes_nothing_and_keeps_the_backup() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet(&mut app, Some("This will flash: TEST"));
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::CancelConfirm);
+    assert!(app.view().confirm.is_none() && !app.risk_ack);
+    let error = flashing.result().unwrap_err();
+    assert!(error.contains("aborted at confirmation"), "{error}");
+    assert!(!flashing.executed(), "a cancelled sheet wrote");
+    assert_eq!(std::fs::read(&flashing.backup).unwrap(), [1, 2, 3]);
+    let start = Instant::now();
+    while app.running() {
+        assert!(start.elapsed() < Duration::from_secs(20));
+        app.poll();
+    }
+    assert_eq!(app.status, "Firmware update cancelled");
+    assert_eq!(app.failure, None);
+    assert_eq!(app.log.last().map(String::as_str), Some(CANCELLED));
+    assert_eq!(app.dry_run.as_ref().unwrap().len(), 2, "plan, then flash");
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
+fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet(&mut app, Some("This will flash: TEST"));
+    let confirm = app.view().confirm.expect("the flash sheet");
+    assert_eq!(confirm.title, "Confirm flash");
+    assert_eq!(confirm.warnings, [BARRIER]);
+    assert_eq!(confirm.prompt.as_deref(), Some("This will flash: TEST"));
+    let saved = format!("backup: saved {} (3 bytes)", flashing.backup.display());
+    assert_eq!(
+        confirm.details,
+        [
+            "Drive: drive-a  Drive A".to_string(),
+            "Image: firmware.bin".into(),
+            "== flash plan ==".into(),
+            saved,
+        ]
+    );
+    assert_eq!(confirm.danger, FLASH_DANGER);
+    assert_eq!(confirm.note, Some(BACKUP_KEPT));
+    assert_eq!(confirm.confirm.text, "Flash now");
+    assert!(!app.view().controls_enabled && !app.view().can_close);
+    app.dispatch(Input::CancelConfirm);
+    let _ = flashing.result();
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
+fn the_confirm_button_is_gated_by_the_tick() {
+    let mut app = one_drive();
+    app.risk_ack = true;
+    let flashing = flash_until_sheet(&mut app, None);
+    let confirm = app.view().confirm.unwrap();
+    assert!(!confirm.ack_checked, "the tick resets when the sheet opens");
+    assert!(!confirm.confirm.enabled);
+    assert!(app.dispatch(Input::Confirm).is_empty());
+    assert!(app.pending.is_some() && flashing.waiting());
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm.ack_checked && confirm.confirm.enabled);
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, false));
+    assert!(!app.view().confirm.unwrap().confirm.enabled);
+    app.dispatch(Input::CancelConfirm);
+    assert!(flashing.result().is_err() && !flashing.executed());
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
+fn a_failed_plan_shows_no_sheet() {
     let mut app = one_drive();
     app.flash_input = Some("firmware.bin".into());
     app.dispatch(Input::FlashNow);
-    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
-    app.dispatch(Input::CancelConfirm);
-    assert!(app.view().confirm.is_none() && !app.risk_ack && !app.running());
+    assert!(
+        app.view().confirm.is_none(),
+        "the plan runs before any sheet"
+    );
+    finish(
+        &mut app,
+        Err("image fails its AES-CMAC integrity check".into()),
+    );
+    assert!(app.view().confirm.is_none() && app.pending.is_none());
+    assert_eq!(
+        app.failure.as_deref(),
+        Some("image fails its AES-CMAC integrity check")
+    );
+    assert!(!app.running());
     assert!(app.dispatch(Input::Confirm).is_empty());
-    assert!(app.dry_run.as_ref().unwrap().is_empty());
+    assert_eq!(
+        app.dry_run.as_ref().unwrap().len(),
+        1,
+        "no backup after a failed plan"
+    );
 }
 
 #[test]
@@ -281,46 +668,65 @@ fn flash_needs_a_selected_drive() {
     app.flash_input = Some("firmware.bin".into());
     assert!(!button(&app.view(), "Flash now").enabled);
     app.dispatch(Input::FlashNow);
-    assert!(app.pending.is_none());
+    assert!(app.pending.is_none() && !app.running());
 }
 
 #[test]
-fn confirmation_freezes_target_and_requires_fresh_consent() {
-    let mut app = dry(vec![
+fn flash_target_is_frozen_when_flash_now_is_pressed() {
+    let mut app = ready(vec![
         drive("drive-a", "drive-a", "Drive A"),
         drive("drive-b", "drive-b", "Drive B"),
     ]);
     app.flash_input = Some("firmware.bin".into());
-    app.risk_ack = true;
     app.dispatch(Input::FlashNow);
     app.dispatch(Input::SelectDrive(1));
+    plan_passes(&mut app);
+    app.dispatch(Input::SelectDrive(1));
     app.dispatch(Input::Refresh);
-    assert_eq!(app.device, "drive-a", "drive bar is locked under the sheet");
-    assert_eq!(app.pending.as_ref().unwrap().device, "drive-a");
+    assert_eq!(
+        app.device, "drive-a",
+        "drive bar is locked during the flash"
+    );
+    let (_, device, _) = last_job(&app);
+    assert_eq!(device, "drive-a");
+    let worker = app.worker.clone().unwrap();
+    let (reply, _answer) = mpsc::channel();
+    worker
+        .send(Msg::Authorized(FlashSheet::default(), reply))
+        .unwrap();
+    app.poll();
+    assert_eq!(app.pending.as_ref().unwrap().target.device, "drive-a");
     assert!(!app.risk_ack);
-    assert!(!app.running());
 }
 
 #[test]
 fn drive_choice_and_confirmation_show_the_os_name_of_identical_drives() {
     let label = "HL-DT-ST BD-RE BU40N (rev 1.04)";
-    let mut app = dry(vec![
+    let mut app = ready(vec![
         drive(r"\\.\CdRom0", "D:", label),
         drive(r"\\.\CdRom1", "E:", label),
     ]);
     app.dispatch(Input::SelectDrive(1));
+    app.answer_profile(Ok(Profile::every_task()));
     assert_eq!(app.device_label(), "E:  HL-DT-ST BD-RE BU40N (rev 1.04)");
     let bar = app.view().drives;
     assert_eq!(bar.selected, Some(1));
     assert_eq!(bar.items[1].tooltip, r"\\.\CdRom1");
     app.flash_input = Some("firmware.bin".into());
     app.dispatch(Input::FlashNow);
+    plan_passes(&mut app);
+    let (reply, _answer) = mpsc::channel();
+    let worker = app.worker.clone().unwrap();
+    worker
+        .send(Msg::Authorized(FlashSheet::default(), reply))
+        .unwrap();
+    app.poll();
     let confirm = app.view().confirm.unwrap();
     assert_eq!(
         confirm.details[0],
         "Drive: E:  HL-DT-ST BD-RE BU40N (rev 1.04)"
     );
-    assert_eq!(app.pending.as_ref().unwrap().device, r"\\.\CdRom1");
+    assert_eq!(app.pending.as_ref().unwrap().target.device, r"\\.\CdRom1");
 }
 
 // ── recovery ──────────────────────────────────────────────────────────────
@@ -373,8 +779,8 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.dispatch(Input::Recover);
     let confirm = app.view().confirm.unwrap();
     assert_eq!(confirm.title, "Confirm recovery");
-    assert_eq!(confirm.warning, Some(FORCE_WARNING));
-    assert_eq!(confirm.note, None);
+    assert_eq!(confirm.warnings, [FORCE_WARNING]);
+    assert_eq!((confirm.prompt, confirm.note), (None, None));
     assert_eq!(confirm.confirm.text, "Recover");
     assert!(confirm
         .details
@@ -466,29 +872,21 @@ fn completion_is_not_misreported_as_worker_disconnection() {
 }
 
 #[test]
-fn events_fill_fields_settings_log_and_diagnostic_path() {
+fn events_fill_rows_log_and_diagnostic_path() {
     let mut app = one_drive();
-    app.event(Event::Field {
-        label: "Model".into(),
-        value: "BDR-UD04".into(),
-    });
-    app.event(Event::Field {
-        label: "Diagnostic log".into(),
-        value: "/tmp/diagnostic.log".into(),
-    });
+    app.event(field_event("Model", "BDR-UD04"));
+    app.event(field_event("Diagnostic log", "/tmp/diagnostic.log"));
     app.event(Event::Message("hello".into()));
-    assert_eq!(app.fields, [("Model".into(), "BDR-UD04".into())]);
+    app.event(Event::Report(
+        report::Row::cli("cli", "cli only", "x".into()).into(),
+    ));
+    let labels: Vec<_> = app.rows.iter().map(|r| r.gui_label.clone()).collect();
+    assert_eq!(labels, [Some("Model".to_string())]);
     assert_eq!(
         app.diagnostic_log,
         Some(PathBuf::from("/tmp/diagnostic.log"))
     );
     assert_eq!(app.log.last().unwrap(), "hello");
-    use freemkv_flash::output::device_settings::{Codec, VendorF4};
-    let mut response = [0u8; 256];
-    response[..4].copy_from_slice(&[255, 255, 2, 2]);
-    let settings = VendorF4.decode(&response).unwrap();
-    app.event(Event::DeviceSettings(settings));
-    assert_eq!(app.device_settings, Some(settings));
 }
 
 #[test]
@@ -498,10 +896,7 @@ fn results_belong_to_the_task_that_produced_them() {
     app.worker
         .clone()
         .unwrap()
-        .send(Msg::Event(Event::Field {
-            label: "Model".into(),
-            value: "OLD INFO RESULT".into(),
-        }))
+        .send(Msg::Event(field_event("Model", "OLD INFO RESULT")))
         .unwrap();
     finish(&mut app, Ok(()));
     assert!(!app.view().results.unwrap().cards.is_empty());
@@ -517,10 +912,10 @@ fn non_info_results_are_plain_fields() {
     let mut app = one_drive();
     app.task = Task::Backup;
     app.result_task = Task::Backup;
-    app.fields = vec![("Backup".into(), "/tmp/b.tar".into())];
+    app.rows = vec![row("Backup", "/tmp/b.tar", Group::General)];
     let results = app.view().results.unwrap();
     assert!(results.cards.is_empty());
-    assert_eq!(results.fields, app.fields);
+    assert_eq!(results.fields, [("Backup".into(), "/tmp/b.tar".into())]);
 }
 
 #[test]
@@ -537,12 +932,13 @@ fn refresh_removes_disconnected_selection_and_its_consent() {
 
 #[test]
 fn selecting_another_drive_clears_its_results() {
-    let mut app = dry(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
-    app.fields = vec![("Model".into(), "A".into())];
+    let mut app = ready(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
+    app.rows = vec![row("Model", "A", Group::General)];
     app.failure = Some("old".into());
     app.dispatch(Input::SelectDrive(1));
     assert_eq!(app.device, "b");
-    assert!(app.fields.is_empty() && app.failure.is_none());
+    assert!(app.rows.is_empty() && app.failure.is_none());
+    app.answer_profile(Ok(Profile::every_task()));
     app.dispatch(Input::SelectDrive(7));
     assert_eq!(app.device, "b", "an out-of-range index is ignored");
 }
@@ -707,6 +1103,152 @@ fn only_one_compare_side_may_be_a_live_drive() {
 }
 
 #[test]
+fn capture_as_backup_follows_every_live_source() {
+    let mut app = one_drive();
+    app.dispatch(Input::SelectTask(Task::Inspect));
+    let check = |app: &App| {
+        app.view().panel.iter().find_map(|i| match i {
+            Item::Check {
+                id: CheckId::CaptureAsBackup,
+                checked,
+                ..
+            } => Some(*checked),
+            _ => None,
+        })
+    };
+    assert_eq!(check(&app), Some(false));
+    app.dispatch(Input::Chosen(Pick::AnalysisDrive(0), "/tmp/cap.bin".into()));
+    assert!(matches!(
+        &app.sources[0],
+        Some(Source::Drive {
+            as_backup: false,
+            ..
+        })
+    ));
+    app.dispatch(Input::SetCheck(CheckId::CaptureAsBackup, true));
+    assert_eq!(check(&app), Some(true));
+    assert!(matches!(
+        &app.sources[0],
+        Some(Source::Drive {
+            as_backup: true,
+            ..
+        })
+    ));
+    assert!(has_text(
+        &app.view(),
+        "drive-a → capture /tmp/cap.bin (as a backup)"
+    ));
+}
+
+/// Inspect the committed MediaTek fixture after `edit`, via a temporary file.
+fn mtk_inspection(name: &str, edit: impl FnOnce(&mut [u8])) -> Arc<workflow::Inspection> {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../freemkv-flash/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+    let mut bytes = std::fs::read(fixture).unwrap();
+    edit(&mut bytes);
+    let path = std::env::temp_dir().join(format!("freemkv-gui-{}-{name}", std::process::id()));
+    std::fs::write(&path, &bytes).unwrap();
+    let result = workflow::inspect(&Source::File(path.clone()), &Control::default());
+    let _ = std::fs::remove_file(&path);
+    result.unwrap()
+}
+
+/// The "Changes by region" rows of a comparison tree, plus its text lines.
+fn compare_tree(
+    report: workflow::ComparisonReport,
+) -> (Vec<String>, Vec<Vec<String>>, Vec<String>) {
+    let tree = analysis_tree(&ResultView::Compare(report));
+    let texts = tree
+        .nodes
+        .iter()
+        .filter_map(|n| match &n.kind {
+            NodeKind::Text(t) => Some(t.clone()),
+            _ => None,
+        })
+        .collect();
+    fn find(nodes: &[Node]) -> Option<(Vec<String>, Vec<Vec<String>>)> {
+        nodes.iter().find_map(|n| match &n.kind {
+            NodeKind::Table { header, rows } => Some((header.clone(), rows.clone())),
+            _ => find(&n.children),
+        })
+    }
+    let (header, rows) = find(&tree.nodes).expect("a region table");
+    (header, rows, texts)
+}
+
+#[test]
+fn compare_tree_marks_expected_and_unexpected_differences() {
+    // Two drive reads of one build: boot mirror in the boot page, own calibration.
+    let read = |unit: u8, code: bool| {
+        move |b: &mut [u8]| {
+            b.copy_within(0x1_0000..0x1_0400, 0);
+            b[0x1f_0010] = unit;
+            if code {
+                b[0x1_2345] ^= 1;
+            }
+        }
+    };
+    let a = mtk_inspection("a.bin", read(1, false));
+    let b = mtk_inspection("b.bin", read(2, false));
+    let report =
+        freemkv_flash::inspection::compare_inspections(a.clone(), b, &Control::default()).unwrap();
+    let (header, rows, texts) = compare_tree(report);
+    assert_eq!(header[1], "Role");
+    assert_eq!(header.last().unwrap(), "Verdict");
+    let calibration = rows.iter().find(|r| r[0] == "Calibration").unwrap();
+    assert_eq!(
+        (calibration[1].as_str(), calibration[5].as_str()),
+        ("Per-unit", "Expected")
+    );
+    assert!(rows
+        .iter()
+        .filter(|r| r[0] != "Calibration")
+        .all(|r| r[5] == "None"));
+    assert!(
+        texts.iter().any(|t| t == "No unexpected differences."),
+        "{texts:?}"
+    );
+
+    let c = mtk_inspection("c.bin", read(2, true));
+    let (_, rows, texts) = compare_tree(
+        freemkv_flash::inspection::compare_inspections(a, c, &Control::default()).unwrap(),
+    );
+    let code = rows.iter().find(|r| r[5] == "Unexpected").unwrap();
+    assert_eq!(
+        (code[0].as_str(), code[1].as_str()),
+        ("Integrity-covered code 0", "Code")
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|t| t == "Unexpected differences in 1 region."),
+        "{texts:?}"
+    );
+}
+
+#[test]
+fn inspect_tree_shows_each_region_role() {
+    let tree = analysis_tree(&ResultView::Inspect(mtk_inspection("s.bin", |_| {})));
+    let firmware = tree
+        .nodes
+        .iter()
+        .find(|n| n.kind == NodeKind::Section("Firmware".into()))
+        .unwrap();
+    let boot = firmware
+        .children
+        .iter()
+        .find(|n| n.kind == NodeKind::Section("Boot page".into()))
+        .unwrap();
+    assert_eq!(
+        boot.children[0].kind,
+        NodeKind::Field {
+            label: "Role:".into(),
+            value: "Code".into()
+        }
+    );
+}
+
+#[test]
 fn report_actions_need_a_result() {
     let mut app = one_drive();
     assert!(app.dispatch(Input::Choose(Pick::ReportText)).is_empty());
@@ -717,36 +1259,20 @@ fn report_actions_need_a_result() {
 
 // ── drive information cards ───────────────────────────────────────────────
 
-fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
-    list.iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
-        .collect()
-}
-
 #[test]
-fn region_and_saved_settings_are_not_misclassified_as_media() {
-    assert_eq!(section("DVD region"), 3);
-    assert_eq!(section("DVD-R DL"), 2);
-    assert_eq!(section("Saved Quiet Drive"), 4);
-    assert_eq!(section("Firmware version"), 1);
-    assert_eq!(section("Firmware type"), 1);
-    assert_eq!(section("Model"), 0);
-}
-
-#[test]
-fn information_cards_group_order_and_columns() {
-    let fields = pairs(&[
-        ("Model", "BDR-XD08U"),
-        ("Firmware version", "1.10"),
-        ("Kernel type", "ID69"),
-        ("Product code", "XYZ"),
-        ("CD-R", "Read: Yes    Write: Yes"),
-        ("BD-ROM", "Read: Yes    Write: No"),
-        ("DVD region", "2"),
-        ("Quiet Drive", "Quiet"),
-        ("Firmware update", "Supported"),
-    ]);
-    let cards = info_cards(&fields, None);
+fn information_cards_follow_report_groups_in_report_order() {
+    let rows = [
+        row("Model", "BDR-XD08U", Group::General),
+        row("Firmware version", "1.10", Group::General),
+        row("Kernel type", "ID69", Group::Additional),
+        row("Product code", "XYZ", Group::Additional),
+        row("CD-R", "Read: Yes    Write: Yes", Group::Media),
+        row("BD-ROM", "Read: Yes    Write: No", Group::Media),
+        row("DVD region", "2", Group::Region),
+        row("Quiet Drive", "Quiet (active and saved)", Group::Settings),
+        row("Firmware update", "Supported", Group::Operations),
+    ];
+    let cards = info_cards(&rows);
     let titles: Vec<_> = cards.iter().map(|c| (c.title, c.column)).collect();
     assert_eq!(
         titles,
@@ -760,19 +1286,26 @@ fn information_cards_group_order_and_columns() {
         ]
     );
     assert_eq!(cards[3].subtitle, Some("Current settings · read only"));
-    let CardBody::Rows(rows) = &cards[1].body else {
-        panic!("rows")
+    let pairs = |list: &[(&str, &str)]| {
+        list.iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect::<Vec<_>>()
     };
     assert_eq!(
-        rows,
-        &[
-            Row::Group("Device"),
-            Row::Pair("Product code".into(), "XYZ".into()),
-            Row::Group("Kernel"),
-            Row::Pair("Kernel type".into(), "ID69".into()),
-            Row::Group("Normal"),
-            Row::Pair("Firmware version".into(), "1.10".into()),
-        ]
+        cards[0].body,
+        CardBody::Rows(pairs(&[
+            ("Model", "BDR-XD08U"),
+            ("Firmware version", "1.10")
+        ]))
+    );
+    assert_eq!(
+        cards[1].body,
+        CardBody::Rows(pairs(&[("Kernel type", "ID69"), ("Product code", "XYZ")])),
+        "rows keep the producer's order"
+    );
+    assert_eq!(
+        cards[3].body,
+        CardBody::Rows(pairs(&[("Quiet Drive", "Quiet (active and saved)")]))
     );
     let CardBody::Media { left, right } = &cards[4].body else {
         panic!("media")
@@ -784,14 +1317,29 @@ fn information_cards_group_order_and_columns() {
 }
 
 #[test]
-fn info_results_become_cards_only_with_a_model() {
+fn info_results_become_cards_only_after_reading_drive_information() {
     let mut app = one_drive();
-    app.fields = pairs(&[("Model", "BDR"), ("Firmware update", "Supported")]);
+    app.dispatch(Input::ReadInfo);
+    let worker = app.worker.clone().unwrap();
+    for event in [
+        field_event("Model", "BDR"),
+        Event::Report(row("Firmware update", "Supported", Group::Operations).into()),
+    ] {
+        worker.send(Msg::Event(event)).unwrap();
+    }
+    finish(&mut app, Ok(()));
     assert_eq!(app.view().results.unwrap().cards.len(), 2);
-    app.fields = pairs(&[("File", "ok")]);
+
+    app.dispatch(Input::Chosen(Pick::CheckFile, "/fw/a.bin".into()));
+    app.worker
+        .clone()
+        .unwrap()
+        .send(Msg::Event(field_event("File", "/fw/a.bin")))
+        .unwrap();
+    finish(&mut app, Ok(()));
     let results = app.view().results.unwrap();
     assert!(results.cards.is_empty());
-    assert_eq!(results.fields.len(), 1);
+    assert_eq!(results.fields, [("File".into(), "/fw/a.bin".into())]);
 }
 
 #[test]
@@ -818,47 +1366,40 @@ fn media_visibility_requires_a_positive_capability() {
 
 #[test]
 fn empty_media_card_is_hidden_and_other_information_survives() {
-    let fields = pairs(&[
-        ("Model", "PIONEER"),
-        ("BD-R XL", "Read: Unknown    Write: Unknown"),
-        ("LabelFlash", "Unknown"),
-    ]);
-    let cards = info_cards(&fields, None);
+    let rows = [
+        row("Model", "Drive", Group::General),
+        row("BD-R XL", "Read: Unknown    Write: Unknown", Group::Media),
+        row("LabelFlash", "Unknown", Group::Media),
+    ];
+    let cards = info_cards(&rows);
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0].title, "General information");
     assert_eq!(
         cards[0].body,
-        CardBody::Rows(vec![Row::Pair("Model".into(), "PIONEER".into())])
+        CardBody::Rows(vec![("Model".into(), "Drive".into())])
     );
 }
 
 #[test]
-fn settings_render_from_codec_descriptors_without_unsupported_children() {
-    use freemkv_flash::output::device_settings::{Codec, VendorF4};
-    let mut response = [0u8; 256];
-    response[..2].fill(255);
-    response[2] = 2;
-    response[3] = 2;
-    response[43] = 1;
-    response[45] = 1;
-    response[49] = 4; // Must remain hidden when PureRead support is zero.
-    let settings = VendorF4.decode(&response).unwrap();
-    let cards = info_cards(&[], Some(&settings));
-    assert_eq!(cards.len(), 1);
-    assert_eq!(cards[0].title, "Device settings");
-    let CardBody::Settings(views) = &cards[0].body else {
-        panic!("settings")
+fn inspect_tree_leaves_out_standing_caveats() {
+    let component = workflow::ComponentView {
+        name: "Normal".into(),
+        fields: Vec::new(),
+        regions: Vec::new(),
+        diagnostics: vec!["finding".into(), "standing caveat".into()],
+        standing: vec![1],
     };
-    assert!(views.iter().all(|v| !v.title.contains("PureRead")));
-    let SettingValue::Choices(choices) = &views[0].value else {
-        panic!("choices: {views:?}")
-    };
-    let saved: Vec<_> = choices
+    let node = component_node(&component);
+    assert_eq!(node.kind, NodeKind::Section("Normal".into()));
+    let texts: Vec<_> = node
+        .children
         .iter()
-        .filter(|(t, _)| t == "Quiet · saved")
+        .filter_map(|n| match &n.kind {
+            NodeKind::Text(t) => Some(t.as_str()),
+            _ => None,
+        })
         .collect();
-    assert_eq!(saved.len(), 1);
-    assert!(choices.iter().any(|(t, _)| t == "Persistent quiet"));
+    assert_eq!(texts, ["finding"]);
 }
 
 #[test]

@@ -4,15 +4,60 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use freemkv_flash::inspection::{self, ComparisonReport, Control, Inspection, Source};
+use freemkv_flash::workflow::{
+    self, ComparisonReport, Confirm, Control, DriveChoice, DriveProfile, FlashOptions, Inspection,
+    RecoveryOptions, Source,
+};
 
-#[cfg(test)]
-use freemkv_flash::{drive::Family, platform};
+use crate::ui::{Profile, Task};
 
 /// Enumerate the same optical drives shown by the CLI, including empty trays.
-pub fn enumerate() -> Vec<freemkv_flash::workflow::DriveChoice> {
-    freemkv_flash::diagnostics::run("GUI discovery", || Ok(freemkv_flash::workflow::drives()))
-        .unwrap_or_default()
+pub fn enumerate() -> Vec<DriveChoice> {
+    workflow::discover()
+}
+
+/// Read `device`'s profile: what it is and what the tool can do with it.
+pub fn profile(device: &str) -> anyhow::Result<Profile> {
+    workflow::profile(device).map(|p| profile_view(&p))
+}
+
+/// The GUI's view of a profile. The family name comes from the backend's
+/// descriptor; Recovery is offered whenever a backend identified the receiver.
+pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
+    let caps = &p.capabilities;
+    let family = p.backend.as_ref().map(|(d, _)| d);
+    let mut chips = vec![family.map_or("Unsupported", |d| d.display_name).to_string()];
+    let mut tasks = Vec::new();
+    for (offered, task) in [
+        (caps.backup, Task::Backup),
+        (caps.dump, Task::Dump),
+        (caps.flash, Task::Flash),
+    ] {
+        if offered {
+            chips.push(task.title().into());
+            tasks.push(task);
+        }
+    }
+    if let Some(recovery) = p.recovery {
+        chips.push(match family {
+            Some(d) if d.id == recovery.id => Task::Recovery.title().into(),
+            _ => format!("{} ({})", Task::Recovery.title(), recovery.display_name),
+        });
+        tasks.push(Task::Recovery);
+    }
+    let name = |dump: bool| {
+        workflow::default_backup_name(&p.identity, p.backup_format, dump)
+            .ok()
+            .map(|path| path.display().to_string())
+    };
+    Profile {
+        chips,
+        tasks,
+        inspect: caps.inspect,
+        backup_name: caps.backup.then(|| name(false)).flatten(),
+        dump_name: caps.dump.then(|| name(true)).flatten(),
+        flash_extensions: workflow::extensions(p.flash_formats),
+    }
 }
 
 /// An Inspect or Compare request.
@@ -32,8 +77,8 @@ pub enum ResultView {
 /// Run an analysis through the shared inspection workflow.
 pub fn analyze(request: &Request, control: &Control) -> anyhow::Result<ResultView> {
     match request {
-        Request::Inspect(source) => inspection::inspect(source, control).map(ResultView::Inspect),
-        Request::Compare(a, b) => inspection::compare(a, b, control).map(ResultView::Compare),
+        Request::Inspect(source) => workflow::inspect(source, control).map(ResultView::Inspect),
+        Request::Compare(a, b) => workflow::compare(a, b, control).map(ResultView::Compare),
     }
 }
 
@@ -41,26 +86,36 @@ pub fn analyze(request: &Request, control: &Control) -> anyhow::Result<ResultVie
 #[derive(Clone)]
 pub enum Job {
     Info,
-    Analysis { request: Request, control: Control },
-    InfoFile { input: PathBuf },
-    Backup { out: PathBuf, replace: bool },
-    Dump { out: PathBuf, replace: bool },
-    Flash(freemkv_flash::workflow::FlashOptions),
-    Recovery(freemkv_flash::workflow::RecoveryOptions),
+    Analysis {
+        request: Request,
+        control: Control,
+    },
+    InfoFile {
+        input: PathBuf,
+    },
+    Backup {
+        out: PathBuf,
+        replace: bool,
+    },
+    Dump {
+        out: PathBuf,
+        replace: bool,
+    },
+    /// The read-only flash plan shown before consent; no backup, no writes.
+    PlanFlash(FlashOptions),
+    Flash(FlashOptions),
+    Recovery(RecoveryOptions),
 }
 
-/// Run the same operation as the matching CLI command.
-pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
-    use freemkv_flash::workflow;
+/// Run the same operation as the matching CLI command; an analysis returns
+/// its result. `confirm` answers an authorized flash before it writes.
+pub fn execute(
+    device: &str,
+    job: &Job,
+    confirm: &mut dyn Confirm,
+) -> anyhow::Result<Option<ResultView>> {
     match job {
-        Job::Analysis { request, control } => {
-            let text = match analyze(request, control)? {
-                ResultView::Inspect(r) => r.text(),
-                ResultView::Compare(r) => r.text(),
-            };
-            freemkv_flash::output::field("Analysis", text);
-            Ok(())
-        }
+        Job::Analysis { request, control } => return analyze(request, control).map(Some),
         Job::Info => workflow::info(Some(device)),
         Job::InfoFile { input } => workflow::check_file(input),
         Job::Backup { out, replace } => {
@@ -74,18 +129,18 @@ pub fn execute(device: &str, job: &Job) -> anyhow::Result<()> {
             options.device = Some(device.to_string());
             workflow::recover(options)
         }
+        Job::PlanFlash(options) => {
+            let mut options = options.clone();
+            options.device = Some(device.to_string());
+            workflow::plan_flash(&options).map(drop)
+        }
         Job::Flash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
-            workflow::flash(options)
+            workflow::flash(options, confirm)
         }
-    }
-}
-
-/// Stream the shared workflow's information, warnings and progress on every OS.
-#[cfg(test)]
-pub fn capture_lines<R>(f: impl FnOnce() -> R, on_line: impl FnMut(String) + 'static) -> R {
-    freemkv_flash::output::capture(on_line, f)
+    }?;
+    Ok(None)
 }
 
 #[cfg(test)]

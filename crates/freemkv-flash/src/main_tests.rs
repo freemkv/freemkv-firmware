@@ -30,7 +30,6 @@ fn check_file_needs_no_drive_and_flash_keeps_safety_gates() {
     {
         Some(Command::Flash(a)) => {
             let options: freemkv_flash::workflow::FlashOptions = a.into();
-            assert!(!options.force);
             assert!(!options.execute);
             assert!(!options.acknowledged_risk);
         }

@@ -72,6 +72,26 @@ fn every_shell_renders_only_the_ui_model() {
     );
 }
 
+/// The model reaches the core only through `workflow` and `report` (design §3).
+#[test]
+fn gui_model_imports_only_workflow_and_report() {
+    let mut hits = Vec::new();
+    for (file, src) in MODEL {
+        for (n, line) in code(src) {
+            for (at, _) in line.match_indices("freemkv_flash::") {
+                let rest = &line[at + "freemkv_flash::".len()..];
+                if !(rest.starts_with("workflow") || rest.starts_with("report")) {
+                    hits.push(format!("{file}:{n}: {line}"));
+                }
+            }
+        }
+    }
+    assert!(
+        hits.is_empty(),
+        "the GUI model may import only freemkv_flash::{{workflow, report}}: {hits:#?}"
+    );
+}
+
 #[test]
 fn every_shell_source_is_scanned() {
     let listed: Vec<&str> = SHELLS.iter().chain(MODEL).map(|(f, _)| *f).collect();

@@ -9,7 +9,7 @@ use eframe::egui;
 
 use crate::ui::{
     AnalysisView, Button, ButtonStyle, Card, CardBody, Confirm, Diagnostics, Effect, Input, Item,
-    MediaRow, Node, NodeKind, Results, Row, SettingValue, Status, Task, Tri, View, SETTING_HINT,
+    MediaRow, Node, NodeKind, Results, Status, Task, Tri, View,
 };
 
 const CAUTION: egui::Color32 = egui::Color32::from_rgb(160, 70, 0);
@@ -77,9 +77,12 @@ pub struct Shell {
 
 impl Shell {
     pub fn new(mut app: crate::ui::App, ctx: &egui::Context) -> Self {
-        let ctx = ctx.clone();
-        app.set_waker(Arc::new(move || ctx.request_repaint()));
-        Self { app }
+        let waker = ctx.clone();
+        app.set_waker(Arc::new(move || waker.request_repaint()));
+        let effects = app.start();
+        let mut shell = Self { app };
+        shell.perform(ctx, effects);
+        shell
     }
 
     fn send(&mut self, ctx: &egui::Context, input: Input) {
@@ -93,7 +96,7 @@ impl Shell {
                 Effect::OpenFile { pick, filter } => {
                     let mut dialog = rfd::FileDialog::new();
                     if let Some(f) = filter {
-                        dialog = dialog.add_filter(f.name, f.extensions);
+                        dialog = dialog.add_filter(f.name, &f.extensions);
                     }
                     if let Some(path) = dialog.pick_file() {
                         self.send(ctx, Input::Chosen(pick, path));
@@ -248,6 +251,17 @@ fn drive_bar(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
                     });
                 button(ui, &bar.refresh, out);
             });
+            if !bar.chips.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    for chip in &bar.chips {
+                        egui::Frame::new()
+                            .fill(ui.visuals().faint_bg_color)
+                            .corner_radius(8.0)
+                            .inner_margin(egui::Margin::symmetric(8, 2))
+                            .show(ui, |ui| ui.small(chip));
+                    }
+                });
+            }
         });
 }
 
@@ -411,17 +425,9 @@ fn card_ui(ui: &mut egui::Ui, card: &Card) {
                     .spacing([12.0, 4.0])
                     .max_col_width((ui.available_width() - 16.0) / 2.0)
                     .show(ui, |ui| {
-                        for row in rows {
-                            match row {
-                                Row::Group(g) => {
-                                    ui.strong(*g);
-                                    ui.label("");
-                                }
-                                Row::Pair(label, value) => {
-                                    ui.label(label);
-                                    ui.add(egui::Label::new(value).wrap().selectable(true));
-                                }
-                            }
+                        for (label, value) in rows {
+                            ui.label(label);
+                            ui.add(egui::Label::new(value).wrap().selectable(true));
                             ui.end_row();
                         }
                     });
@@ -435,44 +441,6 @@ fn card_ui(ui: &mut egui::Ui, card: &Card) {
                     });
                 } else {
                     media_column(ui, left.iter().chain(right), 0);
-                }
-            }
-            CardBody::Settings(settings) => {
-                for s in settings {
-                    ui.strong(&s.title);
-                    match &s.value {
-                        SettingValue::Toggle(on) => {
-                            let mut on = *on;
-                            ui.add_enabled(
-                                false,
-                                egui::Checkbox::new(&mut on, crate::ui::SETTING_ENABLED),
-                            );
-                        }
-                        SettingValue::Choices(choices) => {
-                            egui::Grid::new(("setting_choices", &s.title))
-                                .num_columns(2)
-                                .show(ui, |ui| {
-                                    for (i, (text, selected)) in choices.iter().enumerate() {
-                                        ui.add_enabled(
-                                            false,
-                                            egui::RadioButton::new(*selected, text),
-                                        )
-                                        .on_disabled_hover_text(SETTING_HINT);
-                                        if i % 2 == 1 {
-                                            ui.end_row();
-                                        }
-                                    }
-                                });
-                        }
-                        SettingValue::Text(t) => {
-                            ui.label(t);
-                        }
-                        SettingValue::None => {}
-                    }
-                    for note in &s.notes {
-                        ui.label(note);
-                    }
-                    ui.add_space(8.0);
                 }
             }
         }
@@ -535,8 +503,11 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
             for line in current {
                 ui.label(line);
             }
-            if let Some(w) = c.warning {
+            for w in &c.warnings {
                 ui.colored_label(CAUTION, w);
+            }
+            if let Some(p) = &c.prompt {
+                ui.strong(p);
             }
             if let Some(n) = c.note {
                 ui.label(n);

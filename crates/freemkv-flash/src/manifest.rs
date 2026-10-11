@@ -1,7 +1,7 @@
 //! Flash mode enum.
 //!
 //! Defines [`FlashMode`], the streaming mode shared by the CLI, the engine,
-//! and the per-family [`crate::drive::DriveFamily`] trait.
+//! and the per-family [`crate::backend::Backend`] trait.
 
 use serde::{Deserialize, Serialize};
 

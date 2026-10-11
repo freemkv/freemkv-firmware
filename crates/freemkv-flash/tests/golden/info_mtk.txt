@@ -1,0 +1,259 @@
+
+=== MTK info: mock exposing a drive-read firmware image ===
+result: OK
+--- text (34) ---
+device: mock://in-memory
+inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
+banner: <none>
+family: MediaTek MT19xx (live backup + flash supported)
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+Serial number: Not reported
+Buffer size: Not reported
+Loader type: Not reported
+Interface type: Not reported
+CD-ROM: Read: Unknown    Write: No
+CD-R: Read: Unknown    Write: Unknown
+CD-RW: Read: Unknown    Write: Unknown
+DVD-ROM: Read: Unknown    Write: No
+DVD-R: Read: Unknown    Write: Unknown
+DVD-R DL: Read: Unknown    Write: Unknown
+DVD-RW: Read: Unknown    Write: Unknown
+DVD+R: Read: Unknown    Write: Unknown
+DVD+R DL: Read: Unknown    Write: Unknown
+DVD+RW: Read: Unknown    Write: Unknown
+DVD+RW DL: Read: Unknown    Write: Unknown
+DVD-RAM: Read: Unknown    Write: Unknown
+BD-ROM: Read: Unknown    Write: No
+BD-R: Read: Unknown    Write: Unknown
+BD-R XL: Read: Unknown    Write: Unknown
+BD-RE: Read: Unknown    Write: Unknown
+BD-RE XL: Read: Unknown    Write: Unknown
+HD DVD-ROM: Read: Unknown    Write: No
+HD DVD-R: Read: Unknown    Write: Unknown
+HD DVD-RAM: Read: Unknown    Write: Unknown
+HD DVD-RW: Read: Unknown    Write: Unknown
+DVD region: Invalid or incomplete response
+chipset: MT1959
+firmware: unknown (unrecognized — not in the built-in catalog)
+          fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
+--- events (67) ---
+MSG      device: mock://in-memory
+FIELD    Manufacturer = HL-DT-ST
+FIELD    Model = BD-RE BU40N
+FIELD    Firmware version = 1.00
+FIELD    Drive family = MediaTek MT19xx
+MSG      inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
+MSG      banner: <none>
+FIELD    Backup = Supported
+FIELD    Firmware update = Supported
+MSG      family: MediaTek MT19xx (live backup + flash supported)
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Serial number = Not reported
+MSG      Serial number: Not reported
+FIELD    Buffer size = Not reported
+MSG      Buffer size: Not reported
+FIELD    Loader type = Not reported
+MSG      Loader type: Not reported
+FIELD    Interface type = Not reported
+MSG      Interface type: Not reported
+FIELD    CD-ROM = Read: Unknown    Write: No
+MSG      CD-ROM: Read: Unknown    Write: No
+FIELD    CD-R = Read: Unknown    Write: Unknown
+MSG      CD-R: Read: Unknown    Write: Unknown
+FIELD    CD-RW = Read: Unknown    Write: Unknown
+MSG      CD-RW: Read: Unknown    Write: Unknown
+FIELD    DVD-ROM = Read: Unknown    Write: No
+MSG      DVD-ROM: Read: Unknown    Write: No
+FIELD    DVD-R = Read: Unknown    Write: Unknown
+MSG      DVD-R: Read: Unknown    Write: Unknown
+FIELD    DVD-R DL = Read: Unknown    Write: Unknown
+MSG      DVD-R DL: Read: Unknown    Write: Unknown
+FIELD    DVD-RW = Read: Unknown    Write: Unknown
+MSG      DVD-RW: Read: Unknown    Write: Unknown
+FIELD    DVD+R = Read: Unknown    Write: Unknown
+MSG      DVD+R: Read: Unknown    Write: Unknown
+FIELD    DVD+R DL = Read: Unknown    Write: Unknown
+MSG      DVD+R DL: Read: Unknown    Write: Unknown
+FIELD    DVD+RW = Read: Unknown    Write: Unknown
+MSG      DVD+RW: Read: Unknown    Write: Unknown
+FIELD    DVD+RW DL = Read: Unknown    Write: Unknown
+MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+FIELD    DVD-RAM = Read: Unknown    Write: Unknown
+MSG      DVD-RAM: Read: Unknown    Write: Unknown
+FIELD    BD-ROM = Read: Unknown    Write: No
+MSG      BD-ROM: Read: Unknown    Write: No
+FIELD    BD-R = Read: Unknown    Write: Unknown
+MSG      BD-R: Read: Unknown    Write: Unknown
+FIELD    BD-R XL = Read: Unknown    Write: Unknown
+MSG      BD-R XL: Read: Unknown    Write: Unknown
+FIELD    BD-RE = Read: Unknown    Write: Unknown
+MSG      BD-RE: Read: Unknown    Write: Unknown
+FIELD    BD-RE XL = Read: Unknown    Write: Unknown
+MSG      BD-RE XL: Read: Unknown    Write: Unknown
+FIELD    HD DVD-ROM = Read: Unknown    Write: No
+MSG      HD DVD-ROM: Read: Unknown    Write: No
+FIELD    HD DVD-R = Read: Unknown    Write: Unknown
+MSG      HD DVD-R: Read: Unknown    Write: Unknown
+FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
+MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
+MSG      HD DVD-RW: Read: Unknown    Write: Unknown
+FIELD    DVD region = Invalid or incomplete response
+MSG      DVD region: Invalid or incomplete response
+FIELD    Chipset = MT1959
+MSG      chipset: MT1959
+MSG      firmware: unknown (unrecognized — not in the built-in catalog)
+MSG                fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
+--- scsi transcript (22) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=5a082a00000000020000 alloc=512 -> ok 512
+IN   cdb=46020000000000010c00 alloc=268 -> ok 268
+IN   cdb=46020001000000010c00 alloc=268 -> ok 268
+IN   cdb=46020003000000010c00 alloc=268 -> ok 268
+IN   cdb=4602001f000000010c00 alloc=268 -> ok 268
+IN   cdb=4602002a000000010c00 alloc=268 -> ok 268
+IN   cdb=4602002b000000010c00 alloc=268 -> ok 268
+IN   cdb=4602003a000000010c00 alloc=268 -> ok 268
+IN   cdb=4602003b000000010c00 alloc=268 -> ok 268
+IN   cdb=46020040000000010c00 alloc=268 -> ok 268
+IN   cdb=46020041000000010c00 alloc=268 -> ok 268
+IN   cdb=46020050000000010c00 alloc=268 -> ok 268
+IN   cdb=46020051000000010c00 alloc=268 -> ok 268
+IN   cdb=46020108000000010c00 alloc=268 -> ok 268
+IN   cdb=4602010c000000010c00 alloc=268 -> ok 268
+IN   cdb=a40000000000000000080800 alloc=8 -> ok 8
+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+
+=== MTK info: classify-only mock (MockScsiDevice::mtk) ===
+result: OK
+--- text (34) ---
+device: mock://in-memory
+inquiry: vendor='' product='' rev=''
+banner: MT1959 Boot BU5
+family: MediaTek MT19xx (live backup + flash supported)
+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+Serial number: Not reported
+Buffer size: Not reported
+Loader type: Not reported
+Interface type: Not reported
+CD-ROM: Read: Unknown    Write: No
+CD-R: Read: Unknown    Write: Unknown
+CD-RW: Read: Unknown    Write: Unknown
+DVD-ROM: Read: Unknown    Write: No
+DVD-R: Read: Unknown    Write: Unknown
+DVD-R DL: Read: Unknown    Write: Unknown
+DVD-RW: Read: Unknown    Write: Unknown
+DVD+R: Read: Unknown    Write: Unknown
+DVD+R DL: Read: Unknown    Write: Unknown
+DVD+RW: Read: Unknown    Write: Unknown
+DVD+RW DL: Read: Unknown    Write: Unknown
+DVD-RAM: Read: Unknown    Write: Unknown
+BD-ROM: Read: Unknown    Write: No
+BD-R: Read: Unknown    Write: Unknown
+BD-R XL: Read: Unknown    Write: Unknown
+BD-RE: Read: Unknown    Write: Unknown
+BD-RE XL: Read: Unknown    Write: Unknown
+HD DVD-ROM: Read: Unknown    Write: No
+HD DVD-R: Read: Unknown    Write: Unknown
+HD DVD-RAM: Read: Unknown    Write: Unknown
+HD DVD-RW: Read: Unknown    Write: Unknown
+DVD region: Invalid or incomplete response
+chipset: MT1959
+firmware: unknown (unrecognized — not in the built-in catalog)
+          fingerprint fe47043787640c7d3f50b7a8e13ae22b07fc74f41826cb532effebf110816305
+--- events (67) ---
+MSG      device: mock://in-memory
+FIELD    Manufacturer = 
+FIELD    Model = 
+FIELD    Firmware version = 
+FIELD    Drive family = MediaTek MT19xx
+MSG      inquiry: vendor='' product='' rev=''
+MSG      banner: MT1959 Boot BU5
+FIELD    Backup = Supported
+FIELD    Firmware update = Supported
+MSG      family: MediaTek MT19xx (live backup + flash supported)
+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+FIELD    Serial number = Not reported
+MSG      Serial number: Not reported
+FIELD    Buffer size = Not reported
+MSG      Buffer size: Not reported
+FIELD    Loader type = Not reported
+MSG      Loader type: Not reported
+FIELD    Interface type = Not reported
+MSG      Interface type: Not reported
+FIELD    CD-ROM = Read: Unknown    Write: No
+MSG      CD-ROM: Read: Unknown    Write: No
+FIELD    CD-R = Read: Unknown    Write: Unknown
+MSG      CD-R: Read: Unknown    Write: Unknown
+FIELD    CD-RW = Read: Unknown    Write: Unknown
+MSG      CD-RW: Read: Unknown    Write: Unknown
+FIELD    DVD-ROM = Read: Unknown    Write: No
+MSG      DVD-ROM: Read: Unknown    Write: No
+FIELD    DVD-R = Read: Unknown    Write: Unknown
+MSG      DVD-R: Read: Unknown    Write: Unknown
+FIELD    DVD-R DL = Read: Unknown    Write: Unknown
+MSG      DVD-R DL: Read: Unknown    Write: Unknown
+FIELD    DVD-RW = Read: Unknown    Write: Unknown
+MSG      DVD-RW: Read: Unknown    Write: Unknown
+FIELD    DVD+R = Read: Unknown    Write: Unknown
+MSG      DVD+R: Read: Unknown    Write: Unknown
+FIELD    DVD+R DL = Read: Unknown    Write: Unknown
+MSG      DVD+R DL: Read: Unknown    Write: Unknown
+FIELD    DVD+RW = Read: Unknown    Write: Unknown
+MSG      DVD+RW: Read: Unknown    Write: Unknown
+FIELD    DVD+RW DL = Read: Unknown    Write: Unknown
+MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+FIELD    DVD-RAM = Read: Unknown    Write: Unknown
+MSG      DVD-RAM: Read: Unknown    Write: Unknown
+FIELD    BD-ROM = Read: Unknown    Write: No
+MSG      BD-ROM: Read: Unknown    Write: No
+FIELD    BD-R = Read: Unknown    Write: Unknown
+MSG      BD-R: Read: Unknown    Write: Unknown
+FIELD    BD-R XL = Read: Unknown    Write: Unknown
+MSG      BD-R XL: Read: Unknown    Write: Unknown
+FIELD    BD-RE = Read: Unknown    Write: Unknown
+MSG      BD-RE: Read: Unknown    Write: Unknown
+FIELD    BD-RE XL = Read: Unknown    Write: Unknown
+MSG      BD-RE XL: Read: Unknown    Write: Unknown
+FIELD    HD DVD-ROM = Read: Unknown    Write: No
+MSG      HD DVD-ROM: Read: Unknown    Write: No
+FIELD    HD DVD-R = Read: Unknown    Write: Unknown
+MSG      HD DVD-R: Read: Unknown    Write: Unknown
+FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
+MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
+MSG      HD DVD-RW: Read: Unknown    Write: Unknown
+FIELD    DVD region = Invalid or incomplete response
+MSG      DVD region: Invalid or incomplete response
+FIELD    Chipset = MT1959
+MSG      chipset: MT1959
+MSG      firmware: unknown (unrecognized — not in the built-in catalog)
+MSG                fingerprint fe47043787640c7d3f50b7a8e13ae22b07fc74f41826cb532effebf110816305
+--- scsi transcript (23) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=120000006000 alloc=96 -> ok 96
+IN   cdb=5a082a00000000020000 alloc=512 -> ok 512
+IN   cdb=46020000000000010c00 alloc=268 -> ok 268
+IN   cdb=46020001000000010c00 alloc=268 -> ok 268
+IN   cdb=46020003000000010c00 alloc=268 -> ok 268
+IN   cdb=4602001f000000010c00 alloc=268 -> ok 268
+IN   cdb=4602002a000000010c00 alloc=268 -> ok 268
+IN   cdb=4602002b000000010c00 alloc=268 -> ok 268
+IN   cdb=4602003a000000010c00 alloc=268 -> ok 268
+IN   cdb=4602003b000000010c00 alloc=268 -> ok 268
+IN   cdb=46020040000000010c00 alloc=268 -> ok 268
+IN   cdb=46020041000000010c00 alloc=268 -> ok 268
+IN   cdb=46020050000000010c00 alloc=268 -> ok 268
+IN   cdb=46020051000000010c00 alloc=268 -> ok 268
+IN   cdb=46020108000000010c00 alloc=268 -> ok 268
+IN   cdb=4602010c000000010c00 alloc=268 -> ok 28
+IN   cdb=a40000000000000000080800 alloc=8 -> ok 8
+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256

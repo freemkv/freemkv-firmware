@@ -2,7 +2,7 @@
 //!
 //! This is the flash analogue of the modify tool's per-chipset lever set: a
 //! single generic engine drives whichever [`crate::flashset::FlashInstructionSet`] the detected
-//! chipset selects. It never replaces the proven [`crate::drive::mtk`] execution
+//! chipset selects. It never replaces the proven [`crate::backends::mtk`] execution
 //! path — instead [`crate::flashset::FlashInstructionSet::mt1959`] describes that path
 //! *declaratively*, and the golden CDB KAT in `flashset_tests` proves the
 //! declarative form renders **byte-identical** CDBs to the live `mtk` builders,
@@ -14,8 +14,6 @@
 //! firmware-image RE and the XFlash oracle — never DVDFab or forum models).
 //! Every recipe has `host_side_key = false`: no brand needs a host secret, so a
 //! generic verbatim writer is never crypto-blocked.
-
-use crate::drive::Family;
 
 /// How CDBs reach the drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,8 +140,6 @@ impl FlashStep {
 pub struct FlashInstructionSet {
     /// Human name (`"MediaTek MT19xx (proven on MT1959)"`).
     pub name: &'static str,
-    /// The silicon family this set drives.
-    pub family: Family,
     /// How CDBs are delivered.
     pub transport: Transport,
     /// The firmware-write opcode (e.g. `0x3B` WRITE BUFFER).
@@ -225,26 +221,15 @@ const MT1959_STEPS: &[FlashStep] = &[
 
 impl FlashInstructionSet {
     /// The proven MediaTek MT1959 recipe (the hardware-executed path). The golden
-    /// KAT asserts these steps render byte-identical to `drive::mtk`'s builders.
+    /// KAT asserts these steps render byte-identical to `backends::mtk`'s builders.
     pub const fn mt1959() -> Self {
         FlashInstructionSet {
             name: "MediaTek MT19xx (proven on MT1959)",
-            family: Family::Mtk,
             transport: Transport::Spti,
             write_opcode: 0x3B,
             host_side_key: false,
             status: FlashStatus::Executable,
             steps: MT1959_STEPS,
-        }
-    }
-
-    /// The instruction set for a classified drive [`Family`]. MTK returns the
-    /// executable MT1959 recipe; other silicon families have no executable set
-    /// yet (their brand recipes live in [`crate::flashset::CATALOG`], catalog-only).
-    pub fn for_family(family: Family) -> Option<Self> {
-        match family {
-            Family::Mtk => Some(Self::mt1959()),
-            _ => None,
         }
     }
 }

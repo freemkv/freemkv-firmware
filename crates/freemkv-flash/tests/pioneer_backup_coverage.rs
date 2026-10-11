@@ -1,12 +1,10 @@
 //! Opt-in offline census of the public backup path. Never opens a device.
 use anyhow::{bail, Context, Result};
 use freemkv_flash::{
-    drive::{
-        self,
-        pioneer::{
-            backup as pioneer_backup,
-            bundle::{Bundle, Role},
-        },
+    backend::registry,
+    backends::pioneer::{
+        self, backup as pioneer_backup,
+        bundle::{Bundle, Role},
     },
     engine,
     platform::{ScsiDevice, ScsiSenseError},
@@ -159,12 +157,12 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
         kernel_bytes: 0,
         normal_bytes: 0,
     };
-    let found = drive::resolve_backend(&mut r)?.context("backend not recognized")?;
-    if found.evidence.family != drive::Family::Pioneer {
+    let found = registry::resolve(&mut r)?.context("backend not recognized")?;
+    if found.matched.backend != pioneer::DESCRIPTOR.id {
         bail!("wrong backend");
     }
-    let backend = drive::pioneer::Pioneer::new();
-    let result = engine::backup(&mut r, &backend, output, false, false);
+    let backend = pioneer::Pioneer::new();
+    let result = engine::backup(&mut r, &backend, output, false);
     if let Err(e) = result {
         assert!(!output.exists(), "failed backup left output");
         return Err(e);
@@ -330,7 +328,7 @@ fn replay_serves_map_probe_and_boundary_reads_with_real_ceiling_sense() -> Resul
     assert_eq!(replay.knocks, 1);
     for _ in 0..2 {
         assert_eq!(
-            freemkv_flash::drive::transport::read_memory_exact(&mut replay, KERNEL_BASE as u32, 4)?,
+            freemkv_flash::transport::read_memory_exact(&mut replay, KERNEL_BASE as u32, 4)?,
             [0xa5; 4]
         );
     }

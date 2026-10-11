@@ -52,12 +52,10 @@ fn package(revision: &str, change: bool) -> Vec<u8> {
 #[test]
 fn inspection_and_compare_share_decoded_content_and_ignore_envelope_headers() {
     let a = Arc::new(
-        pioneer::inspect_file("a.tar".into(), &package("1.00", false), &Control::default())
-            .unwrap(),
+        inspect_bytes("a.tar".into(), &package("1.00", false), &Control::default()).unwrap(),
     );
     let b = Arc::new(
-        pioneer::inspect_file("b.tar".into(), &package("2.00", false), &Control::default())
-            .unwrap(),
+        inspect_bytes("b.tar".into(), &package("2.00", false), &Control::default()).unwrap(),
     );
     let result = compare_inspections(a.clone(), b, &Control::default()).unwrap();
     assert_eq!(result.family, FamilyRelationship::Unknown);
@@ -75,7 +73,7 @@ fn inspection_and_compare_share_decoded_content_and_ignore_envelope_headers() {
     assert!(Arc::ptr_eq(&a, &retained));
     assert!(!a.json().unwrap().contains("analyses"));
     let c = Arc::new(
-        pioneer::inspect_file("c.tar".into(), &package("1.00", true), &Control::default()).unwrap(),
+        inspect_bytes("c.tar".into(), &package("1.00", true), &Control::default()).unwrap(),
     );
     assert!(compare_inspections(a, c, &Control::default())
         .unwrap()
@@ -93,7 +91,7 @@ fn rpc_reads_state_without_any_write_and_failure_is_optional() {
         |c| c == pioneer_optical::rpc::report_key(),
         vec![0, 6, 0, 0, 0x64, 0xfd, 1, 0],
     );
-    let state = pioneer::live_state(&mut dev);
+    let state = crate::backends::pioneer::inspect::live_state(&mut dev);
     assert!(state
         .fields
         .iter()
@@ -105,22 +103,21 @@ fn rpc_reads_state_without_any_write_and_failure_is_optional() {
     assert!(dev.writes.is_empty());
     assert_eq!(dev.reads.len(), 1);
     let mut dev = MockScsiDevice::new().on_fail(|_| true, "unsupported");
-    let state = pioneer::live_state(&mut dev);
+    let state = crate::backends::pioneer::inspect::live_state(&mut dev);
     assert_eq!(state.diagnostics.len(), 1);
     assert!(state.fields.is_empty());
     assert!(dev.writes.is_empty());
 }
 #[test]
 fn unsupported_and_corrupt_inputs_have_different_errors() {
-    let error =
-        pioneer::inspect_file("unknown.bin".into(), b"unknown", &Control::default()).unwrap_err();
+    let error = inspect_bytes("unknown.bin".into(), b"unknown", &Control::default()).unwrap_err();
     assert!(matches!(
         error.downcast_ref::<InspectionError>(),
         Some(InspectionError::UnrecognizedFormat)
     ));
     let mut broken = package("1.00", false);
     broken[0] = 0;
-    let error = pioneer::inspect_file("bad.tar".into(), &broken, &Control::default()).unwrap_err();
+    let error = inspect_bytes("bad.tar".into(), &broken, &Control::default()).unwrap_err();
     assert!(error.downcast_ref::<InspectionError>().is_none());
 }
 #[test]
@@ -135,6 +132,7 @@ fn cancellation_and_two_drives_stop_before_io() {
     let source = Source::Drive {
         device: "not-a-drive".into(),
         capture: "not-a-file".into(),
+        as_backup: false,
     };
     assert!(matches!(
         compare(&source, &source, &Control::default())
@@ -147,11 +145,10 @@ fn cancellation_and_two_drives_stop_before_io() {
 #[test]
 fn comparison_summary_is_readable_and_details_remain_in_json() {
     let a = Arc::new(
-        pioneer::inspect_file("a.tar".into(), &package("1.00", false), &Control::default())
-            .unwrap(),
+        inspect_bytes("a.tar".into(), &package("1.00", false), &Control::default()).unwrap(),
     );
     let b = Arc::new(
-        pioneer::inspect_file("b.tar".into(), &package("2.00", true), &Control::default()).unwrap(),
+        inspect_bytes("b.tar".into(), &package("2.00", true), &Control::default()).unwrap(),
     );
     let result = compare_inspections(a.clone(), b, &Control::default()).unwrap();
     let text = result.text();
@@ -180,6 +177,8 @@ fn comparison_summary_is_readable_and_details_remain_in_json() {
 fn partial_summary_never_claims_only_relocation_changes() {
     let regions = vec![RegionSummary {
         name: "Main firmware".into(),
+        role: RegionRole::Code,
+        expected: false,
         left_changed: 0,
         right_changed: 0,
         unresolved: true,
@@ -198,7 +197,7 @@ fn partial_summary_never_claims_only_relocation_changes() {
 #[test]
 fn absent_kernel_is_visible_in_inspection_and_comparison() {
     let a = Arc::new(
-        pioneer::inspect_file(
+        inspect_bytes(
             "normal-only.tar".into(),
             &package("1.00", false),
             &Control::default(),
@@ -222,7 +221,7 @@ fn absent_kernel_is_visible_in_inspection_and_comparison() {
 #[test]
 fn dvd_region_label_follows_the_mask_not_the_type_code() {
     let label = |b4: u8, mask: u8| {
-        pioneer::dvd_region_label(
+        crate::inspection::dvd_region_label(
             pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, b4, mask, 1, 0]).unwrap(),
         )
     };
@@ -231,4 +230,91 @@ fn dvd_region_label_follows_the_mask_not_the_type_code() {
     assert_eq!(label(0x2d, 0xff), "Not set");
     assert_eq!(label(0x64, 0xfd), "2");
     assert_eq!(label(0x64, 0xfa), "1, 3");
+}
+
+/// One real input per backend with an inspect facet. A backend added to the
+/// registry without one fails the conformance test below.
+fn inspect_fixtures(id: &str) -> Vec<(&'static str, Vec<u8>)> {
+    match id {
+        "pioneer-oem" => vec![("package.tar", package("1.00", false))],
+        "mtk19xx" => {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+            let stored = std::fs::read(path).unwrap();
+            let mut read = stored.clone();
+            read.copy_within(0x1_0000..0x1_0400, 0);
+            vec![("stored.bin", stored), ("read.bin", read)]
+        }
+        other => panic!("backend {other} inspects firmware but has no inspect fixture here"),
+    }
+}
+
+#[test]
+fn every_inspected_region_has_a_role() {
+    let mut inspected = 0;
+    for backend in registry::backends() {
+        let Some(facet) = backend.inspect() else {
+            continue;
+        };
+        for (name, bytes) in inspect_fixtures(backend.descriptor().id.0) {
+            let inspection = facet
+                .inspect(name.into(), &bytes, &Control::default())
+                .unwrap_or_else(|| panic!("{name} not recognized"))
+                .unwrap();
+            let views: Vec<_> = inspection
+                .components
+                .iter()
+                .flat_map(|c| &c.regions)
+                .collect();
+            let compared: Vec<_> = inspection
+                .analyses
+                .iter()
+                .flat_map(|a| &a.regions)
+                .collect();
+            assert!(!views.is_empty(), "{name}: no regions");
+            assert_eq!(views.len(), compared.len(), "{name}");
+            for (view, region) in views.iter().zip(&compared) {
+                assert_ne!(view.role, RegionRole::Unknown, "{name}: {}", view.name);
+                assert_eq!(view.role, region.role, "{name}: {}", view.name);
+            }
+            inspected += 1;
+        }
+    }
+    assert!(inspected >= 2, "{inspected}");
+}
+
+#[test]
+fn findings_leave_out_standing_caveats() {
+    let component = ComponentView {
+        name: "Normal".into(),
+        fields: Vec::new(),
+        regions: Vec::new(),
+        diagnostics: vec!["a".into(), "standing".into(), "b".into()],
+        standing: vec![1],
+    };
+    assert_eq!(component.findings().collect::<Vec<_>>(), ["a", "b"]);
+    let json = serde_json::to_string(&component).unwrap();
+    assert!(
+        !json.contains("\"standing\":"),
+        "the export schema is unchanged"
+    );
+}
+
+#[test]
+fn the_pioneer_coverage_note_is_a_standing_caveat() {
+    let report =
+        inspect_bytes("a.tar".into(), &package("1.00", false), &Control::default()).unwrap();
+    let normal = report
+        .components
+        .iter()
+        .find(|c| c.name == "Normal")
+        .unwrap();
+    let standing: Vec<_> = normal
+        .standing
+        .iter()
+        .map(|&i| &normal.diagnostics[i])
+        .collect();
+    assert_eq!(standing.len(), 1, "{:?}", normal.diagnostics);
+    assert!(standing[0].contains("semantic_coverage"));
+    assert!(normal.findings().all(|d| !d.contains("semantic_coverage")));
 }

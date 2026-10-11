@@ -1,8 +1,8 @@
 //! Device-free Pioneer planning regressions; no extra public CLI command.
 
-use freemkv_flash::drive::pioneer::bundle::{Bundle, Role};
-use freemkv_flash::drive::pioneer::file_info::plan_offline as plan_pioneer_offline;
-use freemkv_flash::drive::InputKind;
+use freemkv_flash::backends::pioneer::bundle::{Bundle, Role};
+use freemkv_flash::backends::pioneer::file_info::plan_offline as plan_pioneer_offline;
+use freemkv_flash::backends::pioneer::PACKAGE;
 use sha2::{Digest, Sha256};
 use std::process::Command;
 
@@ -30,7 +30,7 @@ fn audited_normal_bundle_still_plans_without_a_device() {
     let Some(bytes) = configured_bundle("PIONEER_UD04_BUNDLE_FIXTURE") else {
         return;
     };
-    plan_pioneer_offline(&bytes, InputKind::PioneerBundle, "BDR-UD04", false, false).unwrap();
+    plan_pioneer_offline(&bytes, &PACKAGE, "BDR-UD04", false).unwrap();
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn supplied_ud04_kernel_and_normal_plan_matches_autoflasher_path() {
     let Some(bytes) = configured_bundle("PIONEER_UD04_AUTOFLASHER_BUNDLE_FIXTURE") else {
         return;
     };
-    plan_pioneer_offline(&bytes, InputKind::PioneerBundle, "BDR-UD04", false, false).unwrap();
+    plan_pioneer_offline(&bytes, &PACKAGE, "BDR-UD04", false).unwrap();
     let bundle = Bundle::from_tar_bytes(&bytes).unwrap();
     let kernel = bundle
         .components
@@ -51,7 +51,8 @@ fn supplied_ud04_kernel_and_normal_plan_matches_autoflasher_path() {
         .find(|c| c.role == Role::Main)
         .unwrap();
     let steps =
-        freemkv_flash::drive::pioneer::offline_pair_data_out(&kernel.bytes, &normal.bytes).unwrap();
+        freemkv_flash::backends::pioneer::offline_pair_data_out(&kernel.bytes, &normal.bytes)
+            .unwrap();
     assert_eq!(steps.len(), 64);
     let mut digest = Sha256::new();
     for step in &steps {
@@ -67,12 +68,9 @@ fn supplied_ud04_kernel_and_normal_plan_matches_autoflasher_path() {
 #[test]
 fn audited_single_updater_bundle_plans_and_dual_variant_fails_closed() {
     if let Some(bytes) = configured_bundle("PIONEER_BOUNDED_SINGLE_BUNDLE_FIXTURE") {
-        plan_pioneer_offline(&bytes, InputKind::PioneerBundle, "BDR-212M", false, false).unwrap();
+        plan_pioneer_offline(&bytes, &PACKAGE, "BDR-212M", false).unwrap();
     }
     if let Some(bytes) = configured_bundle("PIONEER_BOUNDED_DUAL_BUNDLE_FIXTURE") {
-        assert!(
-            plan_pioneer_offline(&bytes, InputKind::PioneerBundle, "BDR-209", false, false,)
-                .is_err()
-        );
+        assert!(plan_pioneer_offline(&bytes, &PACKAGE, "BDR-209", false).is_err());
     }
 }

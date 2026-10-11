@@ -233,7 +233,7 @@ fn run_at_named<T>(
     ));
     record(system_details());
     if let Some(path) = &path {
-        crate::output::field("Diagnostic log", path.display().to_string());
+        crate::output::field("Diagnostic log", path.clone());
         eprintln!("Diagnostic log: {}", path.display());
     }
     let subscriber = tracing_subscriber::fmt()

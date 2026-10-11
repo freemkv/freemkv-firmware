@@ -1,10 +1,22 @@
 //! Shared application workflows for the CLI and desktop front-end.
 
-use crate::drive::{self, Family, FlashRequest};
+use crate::backend::{
+    registry, unsupported_family_error, Backend, BackendId, Capabilities, Descriptor, FlashRequest,
+    Match, ReadDevice, UNKNOWN_FAMILY,
+};
+pub use crate::backend::{AuthorizedPlan, Confirm};
+/// Inspection inputs and results, so a front-end needs only this module and
+/// [`crate::report`] to run Inspect and Compare.
+pub use crate::inspection::{
+    ComparisonReport, ComponentView, Control, Field, HardwareFamily, Inspection, Source,
+};
 use crate::manifest::FlashMode;
+/// The event stream every workflow writes to, which a front-end subscribes to.
+pub use crate::output::{capture_events, Event};
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// One optical drive, discovered even when its tray is empty.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,8 +62,23 @@ pub fn drives() -> Vec<DriveChoice> {
         .collect()
 }
 
+/// [`drives`] with a diagnostic log, as a front-end's discovery.
+pub fn discover() -> Vec<DriveChoice> {
+    crate::diagnostics::run("drive discovery", || Ok(drives())).unwrap_or_default()
+}
+
+/// Inspect a firmware file, a retained analysis or a live drive capture.
+pub fn inspect(source: &Source, control: &Control) -> Result<Arc<Inspection>> {
+    crate::inspection::inspect(source, control)
+}
+
+/// Compare two sources region by region.
+pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonReport> {
+    crate::inspection::compare(a, b, control)
+}
+
 /// Flash options shared by both front-ends. Defaults are a backed-up dry run.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FlashOptions {
     /// Optional device selector; omission selects the sole attached drive.
     pub device: Option<String>,
@@ -63,21 +90,6 @@ pub struct FlashOptions {
     pub execute: bool,
     /// Explicit acknowledgement of the flash risk.
     pub acknowledged_risk: bool,
-    /// Override compatibility and recovery gates; skip pre-flash backup entirely.
-    pub force: bool,
-}
-
-impl Default for FlashOptions {
-    fn default() -> Self {
-        Self {
-            device: None,
-            input: PathBuf::new(),
-            backup: None,
-            execute: false,
-            acknowledged_risk: false,
-            force: false,
-        }
-    }
 }
 
 /// Inspect a local firmware file without drive discovery or transport access.
@@ -104,9 +116,8 @@ fn info_inner(target: Option<&str>) -> Result<()> {
     }
     let selector = resolve_device(target)?;
     let mut dev = platform::open(&selector, false)?;
-    let family = resolved_family(dev.as_mut())?;
-    let handler = drive::for_family(family);
-    engine::info(dev.as_mut(), handler.as_ref())
+    let backend = resolved_backend(dev.as_mut())?;
+    engine::info(dev.as_mut(), backend)
 }
 
 /// Turn an optional user selector into a concrete device selector.
@@ -149,28 +160,109 @@ fn is_firmware_file(target: &str) -> bool {
 }
 
 /// Resolve the backend registry while preserving probe and ambiguity errors.
-fn resolved_family(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    Ok(drive::resolve_backend(dev)?
-        .map(|matched| matched.evidence.family)
-        .unwrap_or(Family::Unknown))
+fn resolved_backend(dev: &mut dyn platform::ScsiDevice) -> Result<Option<&'static dyn Backend>> {
+    Ok(registry::resolve(dev)?.map(|resolved| resolved.backend))
+}
+
+/// Resolve a backend that offers `capability`, else the unsupported error.
+fn resolve_capable(
+    dev: &mut dyn platform::ScsiDevice,
+    capability: fn(&Capabilities) -> bool,
+) -> Result<&'static dyn Backend> {
+    match resolved_backend(dev)? {
+        Some(backend) if capability(&Capabilities::of(backend)) => Ok(backend),
+        Some(backend) => Err(unsupported_family_error(backend.descriptor().display_name)),
+        None => Err(unsupported_family_error(UNKNOWN_FAMILY)),
+    }
 }
 
 /// Resolve a backend with a supported flash operation.
-pub fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    let family = resolved_family(dev)?;
-    if !drive::for_family(family).capabilities().flash {
-        return Err(drive::unsupported_family_error(family));
-    }
-    Ok(family)
+pub fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<BackendId> {
+    Ok(resolve_capable(dev, |c| c.flash)?.descriptor().id)
 }
 
-/// Classify a drive for a backend's backup path.
-fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    let family = resolved_family(dev)?;
-    if !drive::for_family(family).capabilities().backup {
-        return Err(drive::unsupported_family_error(family));
+/// What a drive is and what the tool can do with it.
+#[derive(Debug)]
+pub struct DriveProfile {
+    /// Device-reported identity.
+    pub identity: crate::backend::Identity,
+    /// The backend whose probe matched, and its evidence.
+    pub backend: Option<(&'static Descriptor, Match)>,
+    /// The backend that identified the receiver for recovery; offered even
+    /// when no probe matched.
+    pub recovery: Option<&'static Descriptor>,
+    /// What the matched backend offers.
+    pub capabilities: Capabilities,
+    /// How a backup is named, when one can be captured.
+    pub backup_format: Option<crate::backend::BackupFormat>,
+    /// The file formats a flash accepts.
+    pub flash_formats: &'static [crate::backend::FileFormat],
+}
+
+/// Every file-name ending a registered backend reads, for open-file pickers.
+pub fn file_extensions() -> Vec<&'static str> {
+    extensions(registry::backends().flat_map(|b| b.descriptor().formats))
+}
+
+/// The distinct endings of `formats`, in first-seen order.
+pub fn extensions<'a>(
+    formats: impl IntoIterator<Item = &'a crate::backend::FileFormat>,
+) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    for e in formats.into_iter().flat_map(|f| f.extensions) {
+        if !out.contains(e) {
+            out.push(*e);
+        }
     }
-    Ok(family)
+    out
+}
+
+/// Probe `device` read-only and ask every recovery backend whether it knows
+/// the receiver. An unsupported drive is a profile, not an error.
+pub fn profile(device: &str) -> Result<DriveProfile> {
+    crate::diagnostics::run("profile", || {
+        let selector = resolve_device(Some(device))?;
+        let mut dev = platform::open(&selector, false)?;
+        profile_on(dev.as_mut())
+    })
+}
+
+/// [`profile`] on an open device.
+pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
+    let resolved = registry::resolve(dev)?;
+    let identity = match &resolved {
+        Some(r) => r.identity.clone(),
+        None => crate::backend::read_identity(&mut ReadDevice::new(dev, &[])),
+    };
+    // Identification errors only mean "not offered": a profile never fails
+    // merely because a drive is unsupported.
+    let recovery = registry::backends().find_map(|b| {
+        let facet = b.recovery()?;
+        let found = facet.identify(&mut ReadDevice::new(dev, b.allowed_data_out()));
+        matches!(found, Ok(Some(_))).then(|| b.descriptor())
+    });
+    let backend = resolved.as_ref().map(|r| r.backend);
+    Ok(DriveProfile {
+        identity,
+        capabilities: backend.map_or(Capabilities::NONE, Capabilities::of),
+        backup_format: backend.and_then(|b| b.backup()).map(|b| b.format()),
+        flash_formats: match backend {
+            Some(b) if b.flash().is_some() => b.descriptor().formats,
+            _ => &[],
+        },
+        backend: resolved.map(|r| (r.backend.descriptor(), r.matched)),
+        recovery,
+    })
+}
+
+/// The drive's `info` rows, without showing them.
+pub fn details(device: &str) -> Result<crate::report::Report> {
+    crate::diagnostics::run("details", || {
+        let selector = resolve_device(Some(device))?;
+        let mut dev = platform::open(&selector, false)?;
+        let backend = resolved_backend(dev.as_mut())?;
+        Ok(engine::info_report(dev.as_mut(), backend).report)
+    })
 }
 
 /// Print the optical drives, by the name or id every operation accepts.
@@ -190,118 +282,143 @@ fn list_inner() -> Result<()> {
 }
 
 /// Capture a backend backup or a salvage dump.
-pub fn backup(device: Option<&str>, out: Option<PathBuf>, recover: bool) -> Result<()> {
-    backup_with_replace(device, out, recover, false)
+pub fn backup(device: Option<&str>, out: Option<PathBuf>, dump: bool) -> Result<()> {
+    backup_with_replace(device, out, dump, false)
 }
 
 /// Capture to a save-dialog destination; replacement requires explicit caller consent.
 pub fn backup_with_replace(
     device: Option<&str>,
     out: Option<PathBuf>,
-    recover: bool,
+    dump: bool,
     replace: bool,
 ) -> Result<()> {
     crate::diagnostics::run("backup/dump", || {
-        backup_with_replace_inner(device, out, recover, replace)
+        backup_with_replace_inner(device, out, dump, replace)
     })
 }
 
 fn backup_with_replace_inner(
     device: Option<&str>,
     out: Option<PathBuf>,
-    recover: bool,
+    dump: bool,
     replace: bool,
 ) -> Result<()> {
     crate::diagnostics::record(format!(
-        "backup options: device={device:?} output={out:?} recover={recover} replace={replace}"
+        "backup options: device={device:?} output={out:?} dump={dump} replace={replace}"
     ));
     // Dump may enable RAM-only logging after capture; backup needs only reads.
     let selector = resolve_device(device)?;
-    let mut dev = if recover {
+    let mut dev = if dump {
         platform::open(&selector, true).or_else(|_| platform::open(&selector, false))?
     } else {
         platform::open(&selector, false)?
     };
-    let family = classify_for_backup(dev.as_mut())?;
-    let handler = drive::for_family(family);
+    let handler = if dump {
+        resolve_capable(dev.as_mut(), |c| c.dump)?
+    } else {
+        resolve_capable(dev.as_mut(), |c| c.backup)?
+    };
     let out = match out {
         Some(o) => o,
         None => {
-            let id = handler.identity(dev.as_mut());
-            let s: String = format!("{}_{}", id.product, id.revision)
-                .chars()
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
-                        c
-                    } else {
-                        '_'
-                    }
-                })
-                .collect();
-            let extension = handler
-                .backup_extension()
-                .context("backend has no backup format")?;
-            if recover && handler.dump_is_raw() {
-                // A raw dump is a single flat memory image, not a backup archive.
-                PathBuf::from(format!("{s}.dump.bin"))
-            } else {
-                // Filename infix (`backup` / `candidate`) comes from the backend,
-                // so the CLI names no chipset.
-                PathBuf::from(format!("{s}.{}.{extension}", handler.backup_kind().infix))
-            }
+            let id = handler.identity(&mut ReadDevice::new(
+                dev.as_mut(),
+                handler.allowed_data_out(),
+            ));
+            default_backup_name(&id, handler.backup().map(|b| b.format()), dump)?
         }
     };
-    engine::backup_with_replace(
-        dev.as_mut(),
-        handler.as_ref(),
-        &out,
-        recover,
-        recover,
-        replace,
-    )
+    engine::backup_with_replace(dev.as_mut(), handler, &out, dump, replace)
 }
 
-/// Validate and execute the shared flash workflow.
-pub fn flash(args: FlashOptions) -> Result<()> {
-    crate::diagnostics::run("flash", || flash_inner(args))
+/// The default backup or dump file name: `<model>_<rev>.<infix>.<extension>`
+/// from the backend's format, or `<model>_<rev>.dump.bin` for a raw dump (a
+/// flat memory image, not a backup archive). The name carries no chipset.
+pub fn default_backup_name(
+    id: &crate::backend::Identity,
+    format: Option<crate::backend::BackupFormat>,
+    dump: bool,
+) -> Result<PathBuf> {
+    let stem: String = format!("{}_{}", id.product, id.revision)
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    match format {
+        _ if dump => Ok(PathBuf::from(format!("{stem}.dump.bin"))),
+        Some(format) => Ok(PathBuf::from(format!(
+            "{stem}.{}.{}",
+            format.infix, format.extension
+        ))),
+        None => bail!("backend has no backup format"),
+    }
 }
 
-fn flash_inner(args: FlashOptions) -> Result<()> {
+/// Validate and execute the shared flash workflow. `confirm` answers the
+/// backend's confirmation once the backup is saved and every installed-firmware
+/// gate has passed.
+pub fn flash(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<()> {
+    crate::diagnostics::run("flash", || flash_inner(args, confirm))
+}
+
+fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<()> {
     crate::diagnostics::record(format!(
-        "flash options: input={:?} backup={:?} execute={} acknowledged_risk={} force={}",
-        args.input, args.backup, args.execute, args.acknowledged_risk, args.force
+        "flash options: input={:?} backup={:?} execute={} acknowledged_risk={}",
+        args.input, args.backup, args.execute, args.acknowledged_risk
     ));
     if args.execute && !args.acknowledged_risk {
         bail!("refusing to flash without acknowledging the risk");
     }
+    let (mut dev, handler, req) = open_flash(&args)?;
+    engine::flash(dev.as_mut(), handler, &req, confirm)
+}
 
+/// The read-only first stage for a front-end to show before asking for
+/// consent: the dry run's checks and plan as text. Needs no backup.
+pub fn plan_flash(args: &FlashOptions) -> Result<Vec<String>> {
+    crate::diagnostics::run("flash plan", || {
+        let args = FlashOptions {
+            execute: false,
+            ..args.clone()
+        };
+        let (mut dev, handler, req) = open_flash(&args)?;
+        engine::preview_flash(dev.as_mut(), handler, &req)
+    })
+}
+
+/// Open the drive, resolve its flash backend and build the request.
+fn open_flash(
+    args: &FlashOptions,
+) -> Result<(
+    Box<dyn platform::ScsiDevice>,
+    &'static dyn Backend,
+    FlashRequest,
+)> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
-    let family = classify_gated(dev.as_mut())?;
-    let handler = drive::for_family(family);
-    if args.force {
-        if let Some(reason) = handler.force_refusal() {
-            bail!("{reason}");
-        }
-    }
-    let input_kind = handler.classify_input(&args.input, &input);
-
-    let drive_model = handler.identity(dev.as_mut()).product;
-    let predump_out = if args.force {
-        None
-    } else {
-        args.backup.clone().or_else(|| {
-            handler
-                .backup_extension()
-                .and_then(|ext| default_backup_path(&args.input, ext))
-        })
-    };
-
+    let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
+    let input_format = registry::flash_input_format(handler, &args.input, &input)?
+        .context("backend reads no firmware files")?;
+    let unlocks = handler.allowed_data_out();
+    let drive_model = handler
+        .identity(&mut ReadDevice::new(dev.as_mut(), unlocks))
+        .product;
+    let predump_out = args.backup.clone().or_else(|| {
+        handler
+            .backup()
+            .and_then(|b| default_backup_path(&args.input, b.format().extension))
+    });
     let req = FlashRequest {
         input,
-        input_kind,
+        input_format,
         mode: FlashMode::Full,
         execute: args.execute,
         acknowledged_risk: args.acknowledged_risk,
@@ -309,12 +426,50 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
         drive_model,
         verbose: false,
         predump_out,
-        allow_crossflash: args.force,
-        skip_backup: false,
-        recover: args.force,
-        force: args.force,
     };
-    engine::flash(dev.as_mut(), handler.as_ref(), &req)
+    Ok((dev, handler, req))
+}
+
+/// Consent given before the flash started: every confirmation is answered yes.
+pub struct Preconfirmed;
+
+impl Confirm for Preconfirmed {
+    fn confirm(&mut self, _plan: &AuthorizedPlan) -> Result<bool> {
+        Ok(true)
+    }
+}
+
+/// What a front-end shows when it asks to confirm an authorized flash.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FlashSheet {
+    /// The authorized plan as text, with the saved backup's `backup:` line.
+    pub plan: Vec<String>,
+    /// Cautions from authorization (e.g. a generation barrier).
+    pub warnings: Vec<String>,
+    /// What the user confirms, when the backend words it.
+    pub confirmation: Option<String>,
+}
+
+impl FlashSheet {
+    /// The sheet for `plan`, rendered as the CLI shows it before its prompt.
+    pub fn of(plan: &AuthorizedPlan) -> Self {
+        let text: Vec<String> = plan
+            .plan
+            .after_backup
+            .iter()
+            .map(|line| engine::render_plan_line(line, plan.backup()))
+            .collect();
+        Self {
+            plan: text
+                .iter()
+                .flat_map(|t| t.lines())
+                .filter(|l| !l.trim().is_empty())
+                .map(str::to_owned)
+                .collect(),
+            warnings: plan.warnings.clone(),
+            confirmation: plan.confirmation.clone(),
+        }
+    }
 }
 
 /// Read a firmware input file with a hard size cap, so a huge file or an endless
@@ -408,16 +563,27 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         };
         let selector = resolve_device(args.device.as_deref())?;
         let mut dev = platform::open(&selector, args.execute)?;
-        // Recovery serves drives too damaged to classify, so it does not run the
-        // protocol probe: each backend with a recovery path checks the receiver
-        // itself.
-        for backend in drive::backends() {
-            if let Some(result) =
-                backend.recover(dev.as_mut(), supplied.as_deref(), &target, args.execute)
-            {
-                return result;
+        // Recovery serves drives too damaged to classify: no protocol probe,
+        // each recovery backend identifies the receiver itself.
+        let mut refusal = None;
+        for backend in registry::backends() {
+            let Some(facet) = backend.recovery() else {
+                continue;
+            };
+            let unlocks = backend.allowed_data_out();
+            if let Some(receiver) = facet.identify(&mut ReadDevice::new(dev.as_mut(), unlocks))? {
+                return engine::recover_identified(
+                    dev.as_mut(),
+                    backend,
+                    Some(receiver),
+                    supplied.as_deref(),
+                    &target,
+                    args.execute,
+                    args.acknowledged_risk,
+                );
             }
+            refusal.get_or_insert(facet.unidentified());
         }
-        bail!("no protocol backend offers recovery for this drive")
+        bail!(refusal.unwrap_or("no protocol backend offers recovery for this drive"))
     })
 }

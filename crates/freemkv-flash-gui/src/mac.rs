@@ -37,8 +37,7 @@ use objc2_foundation::{
 
 use crate::ui::{
     self, AnalysisView, Button, ButtonStyle, Card, CardBody, CheckId, Confirm, Diagnostics,
-    DriveItem, Effect, Input, Item, MediaRow, Node, NodeKind, Results, Row, SettingValue, Status,
-    Task, Tri, View,
+    DriveItem, Effect, Input, Item, MediaRow, Node, NodeKind, Results, Status, Task, Tri, View,
 };
 
 const W: f64 = 900.0;
@@ -487,6 +486,7 @@ struct Ivars {
     app: RefCell<Option<ui::App>>,
     window: RefCell<Option<Retained<NSWindow>>>,
     drive_popup: RefCell<Option<Retained<NSPopUpButton>>>,
+    drive_chips: RefCell<Option<Retained<NSTextField>>>,
     refresh: RefCell<Option<Retained<NSButton>>>,
     tabs: RefCell<Option<Retained<NSSegmentedControl>>>,
     panel: RefCell<Option<Retained<Stack>>>,
@@ -840,6 +840,8 @@ impl Controller {
         bar.addArrangedSubview(&refresh);
         root.addArrangedSubview(&bar);
         fill(&root, &bar, 2.0 * PAD);
+        let chips = small(mtm, "", 600.0);
+        root.addArrangedSubview(&chips);
 
         // Task switcher.
         let titles: Vec<_> = v.tabs.iter().map(|t| ns(t.title)).collect();
@@ -910,6 +912,7 @@ impl Controller {
 
         let iv = self.ivars();
         *iv.drive_popup.borrow_mut() = Some(popup);
+        *iv.drive_chips.borrow_mut() = Some(chips);
         *iv.refresh.borrow_mut() = Some(refresh);
         *iv.tabs.borrow_mut() = Some(tabs);
         *iv.panel.borrow_mut() = Some(panel);
@@ -981,20 +984,12 @@ impl Controller {
         match &card.body {
             CardBody::Rows(rows) => {
                 let g = grid(mtm);
-                for row in rows {
-                    match row {
-                        Row::Group(name) => grid_row(
-                            &g,
-                            &[view_of(&bold(mtm, name)), NSGridCell::emptyContentView(mtm)],
-                        ),
-                        Row::Pair(l, v) => {
-                            let name = label(mtm, l);
-                            name.setTextColor(Some(&NSColor::secondaryLabelColor()));
-                            let value = wrapping(mtm, v, 220.0);
-                            value.setSelectable(true);
-                            grid_row(&g, &[view_of(&name), view_of(&value)]);
-                        }
-                    }
+                for (l, v) in rows {
+                    let name = label(mtm, l);
+                    name.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                    let value = wrapping(mtm, v, 220.0);
+                    value.setSelectable(true);
+                    grid_row(&g, &[view_of(&name), view_of(&value)]);
                 }
                 inner.addArrangedSubview(&g);
             }
@@ -1007,58 +1002,6 @@ impl Controller {
                     }
                 }
                 inner.addArrangedSubview(&cols);
-            }
-            CardBody::Settings(settings) => {
-                for s in settings {
-                    inner.addArrangedSubview(&bold(mtm, &s.title));
-                    match &s.value {
-                        SettingValue::Toggle(on) => {
-                            let c = unsafe {
-                                NSButton::checkboxWithTitle_target_action(
-                                    &ns(ui::SETTING_ENABLED),
-                                    None,
-                                    None,
-                                    mtm,
-                                )
-                            };
-                            c.setState(isize::from(*on));
-                            c.setEnabled(false);
-                            inner.addArrangedSubview(&c);
-                        }
-                        SettingValue::Choices(choices) => {
-                            let g = grid(mtm);
-                            for pair in choices.chunks(2) {
-                                let mut cells: Vec<Retained<NSView>> = pair
-                                    .iter()
-                                    .map(|(text, selected)| {
-                                        let r = unsafe {
-                                            NSButton::radioButtonWithTitle_target_action(
-                                                &ns(text),
-                                                None,
-                                                None,
-                                                mtm,
-                                            )
-                                        };
-                                        r.setState(isize::from(*selected));
-                                        r.setEnabled(false);
-                                        r.setToolTip(Some(&ns(ui::SETTING_HINT)));
-                                        view_of(&r)
-                                    })
-                                    .collect();
-                                if cells.len() == 1 {
-                                    cells.push(NSGridCell::emptyContentView(mtm));
-                                }
-                                grid_row(&g, &cells);
-                            }
-                            inner.addArrangedSubview(&g);
-                        }
-                        SettingValue::Text(t) => inner.addArrangedSubview(&label(mtm, t)),
-                        SettingValue::None => {}
-                    }
-                    for n in &s.notes {
-                        inner.addArrangedSubview(&small(mtm, n, 360.0));
-                    }
-                }
             }
         }
         if let Some(cv) = b.contentView() {
@@ -1168,6 +1111,10 @@ impl Controller {
             return;
         };
         let bar = &v.drives;
+        if let Some(chips) = iv.drive_chips.borrow().as_ref() {
+            chips.setStringValue(&ns(&bar.chips.join("  ·  ")));
+            chips.setHidden(bar.chips.is_empty());
+        }
         if iv.drives_shown.borrow().as_ref() != Some(&bar.items) {
             // Items go in through the menu: `addItemWithTitle` would merge equal titles.
             popup.removeAllItems();
@@ -1300,9 +1247,16 @@ impl Controller {
         let danger = wrapping(mtm, c.danger, width);
         danger.setTextColor(Some(&NSColor::systemRedColor()));
         acc.addArrangedSubview(&danger);
-        if let Some(w) = c.warning {
+        for w in &c.warnings {
             let l = wrapping(mtm, w, width);
             l.setTextColor(Some(&NSColor::systemOrangeColor()));
+            acc.addArrangedSubview(&l);
+        }
+        if let Some(p) = &c.prompt {
+            let l = wrapping(mtm, p, width);
+            l.setFont(Some(
+                &NSFont::boldSystemFontOfSize(NSFont::systemFontSize()),
+            ));
             acc.addArrangedSubview(&l);
         }
         if let Some(n) = c.note {
@@ -1608,7 +1562,8 @@ pub fn run() {
     app.setDelegate(Some(ProtocolObject::from_ref(&*c)));
     window.setDelegate(Some(ProtocolObject::from_ref(&*c)));
     c.build(&window);
-    c.render();
+    let fx = c.with_app(|a| a.start());
+    c.perform(fx);
 
     window.center();
     window.makeKeyAndOrderFront(None);

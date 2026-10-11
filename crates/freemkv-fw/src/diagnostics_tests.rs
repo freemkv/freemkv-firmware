@@ -7,9 +7,11 @@ fn failed_authoring_operation_has_named_log_with_image_evidence() {
     let captured = path.clone();
     let result = capture_events(
         move |event| {
-            if let Event::Field { label, value } = event {
-                if label == "Diagnostic log" {
-                    *captured.lock().unwrap() = Some(std::path::PathBuf::from(value));
+            if let Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(std::path::PathBuf::from(value));
+                    }
                 }
             }
         },

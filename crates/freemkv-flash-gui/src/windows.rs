@@ -19,8 +19,7 @@ use winsafe::{self as w, co, gui, msg, prelude::*};
 
 use crate::ui::{
     self, AnalysisView, Button, ButtonStyle, CardBody, CheckId, Confirm, Diagnostics, DriveItem,
-    Effect, Input, Item, MediaRow, Node, NodeKind, Results, Row, SettingValue, Status, Task, Tri,
-    View,
+    Effect, Input, Item, MediaRow, Node, NodeKind, Results, Status, Task, Tri, View,
 };
 use crate::win_layout::{self as lay, Column, Line, Rect, Scale};
 
@@ -546,6 +545,7 @@ struct Shell {
     drive_label: gui::Label,
     drives: gui::ComboBox,
     refresh: Bound,
+    drive_chips: gui::Label,
     tabs: gui::Tab,
 
     // The task form's pools.
@@ -674,6 +674,7 @@ impl Shell {
             },
         );
         let refresh = Bound::new(&wnd, s);
+        let drive_chips = label(&wnd, one_line, none);
         let tabs = gui::Tab::new(
             &wnd,
             gui::TabOpts {
@@ -761,6 +762,7 @@ impl Shell {
             drive_label,
             drives,
             refresh,
+            drive_chips,
             tabs,
             texts: Rc::new(texts),
             lines: Rc::new(lines),
@@ -960,6 +962,7 @@ impl Shell {
     fn render_drives(&self, v: &View) {
         let bar = &v.drives;
         set_text(&self.drive_label, bar.label);
+        set_text(&self.drive_chips, &bar.chips.join("  \u{b7}  "));
         let changed = self.memo.borrow().drives.as_ref() != Some(&bar.items);
         if changed {
             self.drives.items().delete_all();
@@ -1125,6 +1128,12 @@ impl Shell {
                 ..combo
             },
         );
+        if v.drives.chips.is_empty() {
+            show(&self.drive_chips, false);
+        } else {
+            self.tone(&self.drive_chips, Tone::Secondary);
+            put(&self.drive_chips, col.take(s.px(lay::LINE_H)));
+        }
         col.space(s.px(4));
         put(&self.tabs, col.take(s.px(lay::ROW_H)));
         col.space(s.px(4));
@@ -1466,10 +1475,15 @@ impl Shell {
             self.confirming.set(false);
             return;
         };
-        let content = format!("{}\n\n{}", c.details.join("\n"), c.danger);
-        let footer = [c.warning, c.note]
-            .into_iter()
-            .flatten()
+        let mut content = format!("{}\n\n{}", c.details.join("\n"), c.danger);
+        if let Some(prompt) = &c.prompt {
+            content.push_str(&format!("\n\n{prompt}"));
+        }
+        let footer = c
+            .warnings
+            .iter()
+            .map(String::as_str)
+            .chain(c.note)
             .collect::<Vec<_>>()
             .join("\n\n");
         let me = self.clone();
@@ -1673,7 +1687,8 @@ impl Shell {
                     me.tabs.items().add(tab.title);
                 }
             }
-            me.render();
+            let fx = me.app.borrow_mut().start();
+            me.perform(fx);
             Ok(0)
         });
         let me = self.clone();
@@ -1779,35 +1794,10 @@ impl Shell {
 fn card_rows(body: &CardBody) -> Vec<(String, String)> {
     let mut out = Vec::new();
     match body {
-        CardBody::Rows(rows) => {
-            for row in rows {
-                match row {
-                    Row::Group(g) => out.push(((*g).to_string(), String::new())),
-                    Row::Pair(l, v) => out.push((l.clone(), v.clone())),
-                }
-            }
-        }
+        CardBody::Rows(rows) => out.extend(rows.iter().cloned()),
         CardBody::Media { left, right } => {
             for r in left.iter().chain(right) {
                 out.push((r.label.clone(), media_ticks(r)));
-            }
-        }
-        CardBody::Settings(settings) => {
-            for s in settings {
-                let value = match &s.value {
-                    SettingValue::Toggle(on) => format!("{} {}", glyph(*on), ui::SETTING_ENABLED),
-                    SettingValue::Choices(choices) => choices
-                        .iter()
-                        .map(|(t, on)| format!("{} {t}", if *on { '\u{25C9}' } else { '\u{25CB}' }))
-                        .collect::<Vec<_>>()
-                        .join("    "),
-                    SettingValue::Text(t) => t.clone(),
-                    SettingValue::None => String::new(),
-                };
-                out.push((s.title.clone(), value));
-                for n in &s.notes {
-                    out.push((String::new(), n.clone()));
-                }
             }
         }
     }

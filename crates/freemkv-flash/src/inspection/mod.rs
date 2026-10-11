@@ -2,12 +2,12 @@
 //! belong to provider libraries; no update session is entered here.
 mod capture;
 mod compare_report;
-mod comparison;
-pub(crate) mod pioneer;
+pub(crate) mod comparison;
 mod report;
 pub use report::*;
 
-use crate::{drive, engine, platform, workflow};
+use crate::backend::{registry, ReadDevice};
+use crate::{engine, platform, workflow};
 use anyhow::{Context, Result};
 use std::{
     path::PathBuf,
@@ -28,8 +28,10 @@ pub enum Source {
     Drive {
         /// Device selector accepted by the regular backup workflow.
         device: String,
-        /// New backup path; existing files are never overwritten.
+        /// New capture path; existing files are never overwritten.
         capture: PathBuf,
+        /// Save a backup even where the backend's capture is a raw read.
+        as_backup: bool,
     },
 }
 /// Cooperative cancellation shared with a GUI worker.
@@ -44,7 +46,7 @@ impl Control {
     pub fn cancelled(&self) -> bool {
         self.0.load(Ordering::Relaxed)
     }
-    fn check(&self) -> Result<()> {
+    pub(crate) fn check(&self) -> Result<()> {
         if self.cancelled() {
             Err(InspectionError::Cancelled.into())
         } else {
@@ -126,25 +128,31 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned();
-            pioneer::inspect_file(name, &bytes, control)
+            inspect_bytes(name, &bytes, control)
         }
-        Source::Drive { device, capture } => {
+        Source::Drive {
+            device,
+            capture,
+            as_backup,
+        } => {
             let selector = workflow::resolve_device(Some(device))?;
             let mut opened = platform::open(&selector, false)?;
             let mut dev = capture::CancellableDevice {
                 device: opened.as_mut(),
                 control,
             };
-            let resolved = drive::resolve_backend(&mut dev)?
-                .context("Drive protocol could not be identified")?;
-            let family = resolved.evidence.family;
-            if family != drive::Family::Pioneer {
-                return Err(InspectionError::UnsupportedFormat(family.to_string()).into());
-            }
+            let backend = registry::resolve(&mut dev)?
+                .context("Drive protocol could not be identified")?
+                .backend;
+            let Some(provider) = backend.inspect() else {
+                let family = backend.descriptor().display_name;
+                return Err(InspectionError::UnsupportedFormat(family.into()).into());
+            };
             control.check()?;
-            let state = pioneer::live_state(&mut dev);
-            let handler = drive::for_family(family);
-            engine::backup_with_replace(&mut dev, handler.as_ref(), capture, false, false, false)?;
+            let state =
+                provider.live_state(&mut ReadDevice::new(&mut dev, backend.allowed_data_out()));
+            let raw = provider.raw_capture() && !as_backup;
+            engine::backup_with_replace(&mut dev, backend, capture, raw, false)?;
             drop(opened);
             control.check()?;
             let mut inspection = inspect_inner(&Source::File(capture.clone()), control)?;
@@ -152,6 +160,26 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
             Ok(inspection)
         }
     }
+}
+/// Inspect file bytes with the inspector of the backend the registry's one
+/// recognizer picks; otherwise report the file as unrecognized or as a family
+/// without an inspector.
+fn inspect_bytes(name: String, bytes: &[u8], control: &Control) -> Result<Inspection> {
+    if let Some((backend, _)) = registry::recognize(bytes)? {
+        if let Some(inspection) = backend
+            .inspect()
+            .and_then(|i| i.inspect(name.clone(), bytes, control))
+        {
+            return inspection;
+        }
+    }
+    let identity = crate::imageid::identify(bytes);
+    Err(if identity.family == crate::imageid::ImageFamily::Unknown {
+        InspectionError::UnrecognizedFormat
+    } else {
+        InspectionError::UnsupportedFormat(identity.family.label().into())
+    }
+    .into())
 }
 /// Compare two sources, with files validated before any live capture.
 pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonReport> {

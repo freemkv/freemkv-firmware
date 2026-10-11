@@ -101,6 +101,7 @@ pub(crate) struct Shell {
     drives: gtk::DropDown,
     drive_list: gtk::StringList,
     refresh: gtk::Button,
+    drive_chips: gtk::Label,
     tabs: Vec<gtk::ToggleButton>,
     panel: gtk::Box,
 
@@ -171,6 +172,8 @@ fn build_ui(gapp: &adw::Application) {
     bar.append(&drives);
     bar.append(&refresh);
     root.append(&bar);
+    let drive_chips = widgets::label("", &["caption", "dim-label"]);
+    root.append(&drive_chips);
 
     // Task switcher: a linked row of toggle buttons, the GNOME segmented control.
     let switcher = gtk::Box::new(gtk::Orientation::Horizontal, 0);
@@ -240,6 +243,7 @@ fn build_ui(gapp: &adw::Application) {
         drives,
         drive_list,
         refresh,
+        drive_chips,
         tabs,
         panel,
         status_box,
@@ -260,7 +264,8 @@ fn build_ui(gapp: &adw::Application) {
     });
     shell.install_actions(gapp, refresh_action);
     shell.connect();
-    shell.render();
+    let fx = shell.app.borrow_mut().start();
+    shell.perform(fx);
     window.present();
 }
 
@@ -333,7 +338,7 @@ impl Shell {
         if let Some(f) = filter {
             let ff = gtk::FileFilter::new();
             ff.set_name(Some(f.name));
-            for e in f.extensions {
+            for e in &f.extensions {
                 ff.add_suffix(e);
             }
             let filters = gio::ListStore::new::<gtk::FileFilter>();
@@ -469,6 +474,8 @@ impl Shell {
     fn render_drives(self: &Rc<Self>, v: &View) {
         let bar = &v.drives;
         self.drive_label.set_label(bar.label);
+        self.drive_chips.set_label(&bar.chips.join("  \u{b7}  "));
+        self.drive_chips.set_visible(!bar.chips.is_empty());
         if self.memo.borrow().drives.as_ref() != Some(&bar.items) {
             let texts: Vec<&str> = if bar.items.is_empty() {
                 vec![bar.placeholder]
@@ -660,8 +667,11 @@ impl Shell {
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 10);
         extra.append(&widgets::label(c.danger, &["error"]));
-        if let Some(w) = c.warning {
+        for w in &c.warnings {
             extra.append(&widgets::label(w, &["warning"]));
+        }
+        if let Some(p) = &c.prompt {
+            extra.append(&widgets::label(p, &["heading"]));
         }
         if let Some(n) = c.note {
             extra.append(&widgets::label(n, &[]));
