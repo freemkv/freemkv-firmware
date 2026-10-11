@@ -57,6 +57,11 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
         backup_name: caps.backup.then(|| name(false)).flatten(),
         dump_name: caps.dump.then(|| name(true)).flatten(),
         flash_extensions: workflow::extensions(p.flash_formats),
+        notes: p
+            .recovery_errors
+            .iter()
+            .map(|e| format!("Recovery not offered: could not identify the receiver ({e})"))
+            .collect(),
     }
 }
 

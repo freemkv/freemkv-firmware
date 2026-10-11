@@ -936,3 +936,18 @@ fn every_0_11_2_tab_is_offered_for_a_pioneer_drive() {
     );
     assert_eq!(app.view().drives.chips[0], "Pioneer");
 }
+
+/// 0.11.2 showed why Recovery could not start when pressed; 0.12 hides the tab
+/// instead, so the reason must reach the activity log.
+#[test]
+fn a_failed_recovery_identify_is_logged() {
+    let mut profile = pioneer_profile();
+    profile.recovery = None;
+    profile.recovery_errors = vec!["Pioneer: vendor identity read failed".into()];
+    let view = crate::ops::profile_view(&profile);
+    assert!(!view.tasks.contains(&Task::Recovery));
+    assert_eq!(
+        view.notes,
+        ["Recovery not offered: could not identify the receiver (Pioneer: vendor identity read failed)"]
+    );
+}

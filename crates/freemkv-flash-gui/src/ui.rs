@@ -93,6 +93,8 @@ pub(crate) struct Profile {
     pub(crate) dump_name: Option<String>,
     /// File endings a flash to this drive accepts.
     pub(crate) flash_extensions: Vec<&'static str>,
+    /// Lines for the activity log, e.g. why Recovery is not offered.
+    pub(crate) notes: Vec<String>,
 }
 
 /// Where the selected drive's profile stands.
@@ -712,7 +714,10 @@ impl App {
     /// Apply a finished profile; a task the drive no longer offers falls back to Info.
     pub(crate) fn set_profile(&mut self, profile: Result<Profile, String>) {
         self.profile = match profile {
-            Ok(profile) => ProfileState::Ready(profile),
+            Ok(profile) => {
+                self.log.extend(profile.notes.iter().cloned());
+                ProfileState::Ready(profile)
+            }
             Err(error) => {
                 self.log
                     .push(format!("Could not read the drive's profile: {error}"));

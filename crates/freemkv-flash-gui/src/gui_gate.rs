@@ -96,6 +96,7 @@ pub fn fixture() -> App {
         backup_name: Some("GATE_1.00.backup.bin".into()),
         dump_name: Some("GATE_1.00.dump.bin".into()),
         flash_extensions: vec!["bin"],
+        notes: Vec::new(),
     });
     for (pick, file) in [
         (Pick::FlashFirmware, "gate-firmware.bin"),

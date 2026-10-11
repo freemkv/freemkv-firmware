@@ -197,6 +197,9 @@ pub struct DriveProfile {
     pub backup_format: Option<crate::backend::BackupFormat>,
     /// The file formats a flash accepts.
     pub flash_formats: &'static [crate::backend::FileFormat],
+    /// Why a recovery backend could not identify the receiver, when one tried
+    /// and failed (not offered is not an error; the reason is still shown).
+    pub recovery_errors: Vec<String>,
 }
 
 /// Every file-name ending a registered backend reads, for open-file pickers.
@@ -236,10 +239,17 @@ pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
     };
     // Identification errors only mean "not offered": a profile never fails
     // merely because a drive is unsupported.
+    let mut recovery_errors = Vec::new();
     let recovery = registry::backends().find_map(|b| {
         let facet = b.recovery()?;
-        let found = facet.identify(&mut ReadDevice::for_backend(dev, b));
-        matches!(found, Ok(Some(_))).then(|| b.descriptor())
+        match facet.identify(&mut ReadDevice::for_backend(dev, b)) {
+            Ok(Some(_)) => Some(b.descriptor()),
+            Ok(None) => None,
+            Err(e) => {
+                recovery_errors.push(format!("{}: {e:#}", b.descriptor().display_name));
+                None
+            }
+        }
     });
     let backend = resolved.as_ref().map(|r| r.backend);
     Ok(DriveProfile {
@@ -251,6 +261,11 @@ pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
             _ => &[],
         },
         backend: resolved.map(|r| (r.backend.descriptor(), r.matched)),
+        recovery_errors: if recovery.is_some() {
+            Vec::new()
+        } else {
+            recovery_errors
+        },
         recovery,
     })
 }

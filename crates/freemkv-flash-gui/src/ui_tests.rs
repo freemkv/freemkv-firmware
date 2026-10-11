@@ -28,6 +28,7 @@ impl Profile {
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
             flash_extensions: vec!["bin"],
+            notes: Vec::new(),
         }
     }
 }
@@ -1442,4 +1443,18 @@ fn each_progress_phase_is_logged_once() {
         .filter(|l| l.ends_with("normal..."))
         .collect();
     assert_eq!(phases, ["  reading normal...", "  verifying normal..."]);
+}
+
+#[test]
+fn profile_notes_reach_the_activity_log() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
+    app.start();
+    app.answer_profile(Ok(Profile {
+        notes: vec!["Recovery not offered: could not identify the receiver (x)".into()],
+        ..Profile::every_task()
+    }));
+    assert!(app
+        .log
+        .iter()
+        .any(|l| l == "Recovery not offered: could not identify the receiver (x)"));
 }
