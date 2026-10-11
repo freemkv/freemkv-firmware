@@ -161,3 +161,126 @@ fn the_gui_gate_is_compiled_out_of_release_builds() {
         }
     }
 }
+
+/// Each native shell with its gate.
+const GATED_SHELLS: &[(&str, &str, &str)] = &[
+    (
+        "mac.rs",
+        include_str!("mac.rs"),
+        include_str!("mac/gate.rs"),
+    ),
+    (
+        "windows.rs",
+        include_str!("windows.rs"),
+        include_str!("windows/gate.rs"),
+    ),
+    (
+        "linux.rs",
+        include_str!("linux.rs"),
+        include_str!("linux/gate.rs"),
+    ),
+];
+
+/// The identifiers `src` names as words.
+fn words(src: &str) -> impl Iterator<Item = (usize, &str)> {
+    let mut start = None;
+    src.char_indices()
+        .chain(std::iter::once((src.len(), ' ')))
+        .filter_map(move |(i, c)| {
+            if c.is_alphanumeric() || c == '_' {
+                start.get_or_insert(i);
+                None
+            } else {
+                start.take().map(|s| (s, &src[s..i]))
+            }
+        })
+}
+
+/// How each gate reaches its shell's state: `me.x` / `shell.x` (Windows, GTK) and
+/// `c.ivars().x` (AppKit).
+const SHELL_RECEIVERS: &[&str] = &["me.", "shell.", "self.", "ivars()."];
+
+/// Shell state only its gate reads: a field the gate reaches on its shell, declared in the
+/// shell (`field: …` at the start of a line) and only ever written there (`.field.set(`).
+fn gate_only_fields(shell: &str, gate: &str) -> Vec<String> {
+    let gate_code: String = code(gate).map(|(_, l)| format!("{l}\n")).collect();
+    let shell_code: String = code(shell).map(|(_, l)| format!("{l}\n")).collect();
+    let mut out: Vec<String> = Vec::new();
+    for (at, field) in words(&gate_code) {
+        let before = &gate_code[..at];
+        let on_shell = SHELL_RECEIVERS.iter().any(|r| {
+            before.ends_with(r)
+                && !before[..before.len() - r.len()]
+                    .ends_with(|c: char| c.is_alphanumeric() || c == '_')
+        });
+        let reached = on_shell && !gate_code[at + field.len()..].starts_with('(');
+        if !reached || out.iter().any(|f| f == field) {
+            continue;
+        }
+        let declared = code(shell).any(|(_, l)| l.starts_with(&format!("{field}:")));
+        let dotted = format!(".{field}");
+        let reads = shell_code.match_indices(&dotted).any(|(i, _)| {
+            let rest = &shell_code[i + dotted.len()..];
+            let whole = !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_');
+            whole && !rest.starts_with(".set(")
+        });
+        if declared && !reads {
+            out.push(field.to_string());
+        }
+    }
+    out
+}
+
+/// The lines of `src` that name `field` without a `#[cfg(debug_assertions)]` among the
+/// attributes and comments directly above them.
+fn unguarded(src: &str, field: &str) -> Vec<usize> {
+    let lines: Vec<&str> = src.lines().map(str::trim_start).collect();
+    code(src)
+        .filter(|(_, l)| words(l).any(|(_, w)| w == field))
+        .filter(|&(n, _)| {
+            !lines[..n - 1]
+                .iter()
+                .rev()
+                .take_while(|l| l.starts_with("#[") || l.starts_with("//"))
+                .any(|l| l.starts_with("#[cfg(debug_assertions)]"))
+        })
+        .map(|(n, _)| n)
+        .collect()
+}
+
+/// State only the gate reads is compiled out of release builds with it.
+#[test]
+fn gate_only_state_is_compiled_out_of_release_builds() {
+    let lf = |s: &str| s.replace("\r\n", "\n");
+    let mut found = Vec::new();
+    let mut hits = Vec::new();
+    for (file, shell, gate) in GATED_SHELLS {
+        let shell = lf(shell);
+        for field in gate_only_fields(&shell, &lf(gate)) {
+            for n in unguarded(&shell, &field) {
+                hits.push(format!("{file}:{n}: {field}"));
+            }
+            found.push(format!("{file}: {field}"));
+        }
+    }
+    assert!(
+        hits.is_empty(),
+        "gate-only state outside cfg(debug_assertions): {hits:#?}"
+    );
+    // The scan must still see the one known gate-only field, or it proves nothing.
+    assert!(
+        found.iter().any(|f| f == "windows.rs: risk_box"),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn gate_only_scan_reads_declarations_reads_and_guards() {
+    let shell = "struct S {\n    /// doc\n    #[cfg(debug_assertions)]\n    a: Cell<bool>,\n    \
+                 b: Cell<bool>,\n    c: Cell<bool>,\n}\nfn f(s: &S) {\n    #[cfg(debug_assertions)]\n    \
+                 s.a.set(true);\n    s.b.set(true);\n    s.c.set(s.c.get());\n}\n";
+    let gate = "fn g(me: &S) { me.a.get(); me.b.get(); me.c.get(); me.view(); }";
+    assert_eq!(gate_only_fields(shell, gate), ["a", "b"]);
+    assert!(unguarded(shell, "a").is_empty());
+    assert_eq!(unguarded(shell, "b"), [5, 11]);
+}

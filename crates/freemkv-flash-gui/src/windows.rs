@@ -593,7 +593,9 @@ struct Shell {
     painting: Rc<Cell<bool>>,
     confirming: Rc<Cell<bool>>,
     /// The confirmation's risk box as its dialog last reported it: cleared on creation, then
-    /// every verification click, whatever caused it. The qa gate reads it.
+    /// every verification click, whatever caused it. Only the qa gate reads it, so debug
+    /// builds only.
+    #[cfg(debug_assertions)]
     risk_box: Rc<Cell<bool>>,
 }
 
@@ -803,6 +805,7 @@ impl Shell {
             dpi: Rc::new(Cell::new(s.dpi())),
             painting: Rc::new(Cell::new(false)),
             confirming: Rc::new(Cell::new(false)),
+            #[cfg(debug_assertions)]
             risk_box: Rc::new(Cell::new(false)),
         }
     }
@@ -1548,6 +1551,7 @@ impl Shell {
         }
         match tdn {
             w::Tdn::Created => {
+                #[cfg(debug_assertions)]
                 self.risk_box.set(false);
                 send_raw(
                     hwnd,
@@ -1557,6 +1561,7 @@ impl Shell {
                 );
             }
             w::Tdn::VerificationClicked(on) => {
+                #[cfg(debug_assertions)]
                 self.risk_box.set(on);
                 let _ = self
                     .app
