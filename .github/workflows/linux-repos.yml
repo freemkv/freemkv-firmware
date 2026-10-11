@@ -158,7 +158,7 @@ jobs:
         run: |
           set -euo pipefail
           dnf -y -q install rpm-build rpm-sign zstd python3 gnupg2
-          python3 packaging/rpm/deb2rpm.py --output out debs/*.deb
+          python3 packaging/rpm/deb2rpm.py --output out --floor gtk4=4.10 --floor libadwaita=1.4 debs/*.deb
           for r in out/*.rpm; do echo "== $r"; rpm -qp --info "$r" | sed -n '1,4p'; rpm -qp --requires "$r"; rpm -qpl "$r"; done
       - name: Sign
         env:
@@ -212,7 +212,7 @@ jobs:
           useradd --create-home builder
           install -d -o builder out
           chown -R builder debs
-          runuser -u builder -- python3 packaging/arch/deb2pkg.py --output out debs/*.deb
+          runuser -u builder -- python3 packaging/arch/deb2pkg.py --output out --floor gtk4=4.10 --floor libadwaita=1.4 debs/*.deb
           for p in out/*.pkg.tar.zst; do echo "== $p"; pacman -Qip "$p"; pacman -Qlp "$p"; done
       - name: Sign
         env:

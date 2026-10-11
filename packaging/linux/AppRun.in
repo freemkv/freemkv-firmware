@@ -5,6 +5,11 @@
 #   ./@TOOL@-x86_64-linux.AppImage --help
 # A symlink to the AppImage named @TOOL@ or @TOOL@-gui always runs that binary.
 HERE="$(dirname "$(readlink -f "$0")")"
+# A custom AppRun does not get linuxdeploy's hooks for free: source them, so a
+# GTK app finds its bundled schemas and loaders (the gtk plugin writes one).
+for hook in "$HERE"/apprun-hooks/*.sh; do
+  if [ -f "$hook" ]; then . "$hook"; fi
+done
 case "$(basename "${ARGV0:-$0}")" in
   @TOOL@-gui) exec "$HERE/usr/bin/@TOOL@-gui" "$@" ;;
   @TOOL@) exec "$HERE/usr/libexec/@TOOL@" "$@" ;;

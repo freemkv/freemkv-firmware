@@ -1,68 +1,45 @@
-//! Cross-platform desktop interface to the shared freemkv-flash workflows.
-//! Drive discovery, operations, safety policy and progress match the CLI.
+//! Desktop interface to the shared freemkv-flash workflows.
+//!
+//! `ui` is the platform-neutral model; each shell only draws its view and forwards input.
+//! macOS runs the native AppKit shell (`mac`), Windows the Win32 shell (`windows`) and glibc
+//! Linux the GTK4 shell (`linux`); any other target, and `--egui` anywhere, runs the egui
+//! shell over the same model.
 
 // On Windows, don't spawn a console window alongside the GUI in release builds.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-mod analysis_ui;
-mod app;
-mod info_ui;
+mod egui_shell;
+#[cfg(all(feature = "native", target_os = "linux", target_env = "gnu"))]
+mod linux;
+#[cfg(all(feature = "native", target_os = "macos"))]
+mod mac;
 mod ops;
-
-use eframe::egui;
-
-/// Decode the bundled freemkv PNG into an egui window icon.
-fn load_icon() -> Option<egui::IconData> {
-    let bytes = include_bytes!("../assets/freemkv.png");
-    let img = image::load_from_memory(bytes).ok()?.into_rgba8();
-    let (width, height) = img.dimensions();
-    Some(egui::IconData {
-        rgba: img.into_raw(),
-        width,
-        height,
-    })
-}
+mod ui;
+// Toolkit-free and built everywhere so its tests run on every host; only Windows uses it.
+#[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
+mod win_layout;
+#[cfg(all(feature = "native", target_os = "windows"))]
+mod windows;
 
 fn main() -> eframe::Result<()> {
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_title(format!(
-            "freemkv Firmware Utility {}",
-            env!("CARGO_PKG_VERSION")
-        ))
-        .with_inner_size([900.0, 760.0])
-        .with_min_inner_size([720.0, 610.0])
-        .with_resizable(true);
-    if let Some(icon) = load_icon() {
-        viewport = viewport.with_icon(std::sync::Arc::new(icon));
+    #[cfg(all(feature = "native", target_os = "macos"))]
+    if !std::env::args().any(|a| a == "--egui") {
+        mac::run();
+        return Ok(());
     }
-
-    let native_options = eframe::NativeOptions {
-        viewport,
-        ..Default::default()
-    };
-
-    eframe::run_native(
-        "freemkv-flash",
-        native_options,
-        Box::new(|cc| {
-            configure_style(&cc.egui_ctx);
-            Ok(Box::new(app::FlashApp::new()))
-        }),
-    )
-}
-
-/// One shared appearance for Windows, Linux and macOS; native window chrome
-/// and file dialogs are supplied by the platform. Tests use this same setup.
-fn configure_style(ctx: &egui::Context) {
-    ctx.set_theme(egui::Theme::Light);
-    ctx.style_mut_of(egui::Theme::Light, |style| {
-        style.spacing.item_spacing = egui::vec2(10.0, 8.0);
-        style.spacing.button_padding = egui::vec2(12.0, 7.0);
-        style
-            .text_styles
-            .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
-        style
-            .text_styles
-            .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
-    });
+    #[cfg(all(feature = "native", target_os = "windows"))]
+    if !std::env::args().any(|a| a == "--egui") {
+        windows::run();
+        return Ok(());
+    }
+    // GTK's status is the process's: a failed GTK/libadwaita start must not exit 0.
+    #[cfg(all(feature = "native", target_os = "linux", target_env = "gnu"))]
+    if !std::env::args().any(|a| a == "--egui") {
+        let code = linux::run();
+        if code != 0 {
+            std::process::exit(code);
+        }
+        return Ok(());
+    }
+    egui_shell::run()
 }

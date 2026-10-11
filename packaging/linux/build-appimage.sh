@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Build one tool's AppImage: the glibc eframe/egui desktop app plus its static
-# CLI, mirroring freemkv's appimage.yml (linuxdeploy, pinned by the caller).
-# eframe dlopens GL/EGL, X11/Wayland and xkbcommon from the host at run time,
-# and linuxdeploy's excludelist keeps those out anyway, so unlike freemkv's GTK
-# AppImage there is no toolkit to bundle -- just the two binaries.
+# Build one tool's AppImage: the glibc desktop app plus its static CLI, mirroring
+# freemkv's appimage.yml (linuxdeploy, pinned by the caller). A GUI that links
+# GTK4 (the flash GUI's native shell) gets linuxdeploy's gtk plugin, as freemkv's
+# AppImage does, which bundles the GTK4/libadwaita runtime; the plugin script must
+# sit beside linuxdeploy. An eframe/egui GUI (fw) dlopens GL/EGL, X11/Wayland and
+# xkbcommon from the host, so there is nothing to bundle but the two binaries.
 #
 # Run from the repository root:
 #   LINUXDEPLOY=/path/to/linuxdeploy-<arch>.AppImage \
@@ -31,10 +32,13 @@ convert "crates/$tool-gui/assets/freemkv.png" -resize 256x256 "$icons/$id.png"
 sed "s/@TOOL@/$tool/g" packaging/linux/AppRun.in > "$work/AppRun"
 chmod 755 "$work/AppRun"
 
+plugins=()
+if readelf -dW "$gui" | grep -Fq 'libgtk-4.so'; then plugins=(--plugin gtk); fi
+
 (
   cd "$work"
   APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$arch" LDAI_OUTPUT="$name" OUTPUT="$name" \
-    "$linuxdeploy" --appdir AppDir \
+    "$linuxdeploy" --appdir AppDir "${plugins[@]}" \
       --executable "AppDir/usr/bin/$tool-gui" \
       --desktop-file "AppDir/usr/share/applications/$id.desktop" \
       --icon-file "AppDir/usr/share/icons/hicolor/256x256/apps/$id.png" \

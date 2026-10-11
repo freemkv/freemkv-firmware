@@ -96,6 +96,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+      # The flash GUI's native Linux shell (gtk4/libadwaita) probes pkg-config at build time.
+      - name: Install GTK4 + libadwaita development headers
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
       - run: cargo test --release --tests
 
   # clippy's output is target-dependent: cfg-gated code only gets linted on the
@@ -117,6 +124,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+      - name: Install GTK4 + libadwaita development headers
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
   # Windows compiles the tests but does not run them. The value is codegen: the
