@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 REQ = re.compile(
     r"SCSI request: device=\S+ cdb=\[([0-9a-f, ]+)\] direction=(\w+) requested=(\d+)"
@@ -58,10 +59,16 @@ def transcript(log_path):
 def run(binary, args, cwd):
     """Run one step; return (exit code, stdout+stderr, diagnostic log path)."""
     os.makedirs(cwd, exist_ok=True)
-    p = subprocess.run(
-        [binary] + args, cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True, text=True
-    )
-    text = p.stdout + p.stderr
+    # Another app (a ripper polling for discs) can hold the drive for a moment;
+    # nothing was sent when the open fails, so retry before judging the step.
+    for _ in range(10):
+        p = subprocess.run(
+            [binary] + args, cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True, text=True
+        )
+        text = p.stdout + p.stderr
+        if "already open by another process" not in text:
+            break
+        time.sleep(3)
     logs = [m.group(1).strip() for m in map(LOG.search, text.splitlines()) if m]
     return p.returncode, text, logs[-1] if logs else None
 
