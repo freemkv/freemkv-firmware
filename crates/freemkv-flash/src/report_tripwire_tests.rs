@@ -662,14 +662,26 @@ fn one_recognizer_serves_flash_check_and_inspect() {
             &crate::inspection::Source::File(path.clone()),
             &crate::inspection::Control::default(),
         );
-        if backend_id == "pioneer-oem" {
-            assert!(inspected.is_ok(), "{name}: {:?}", inspected.err());
-        } else {
-            let error = format!("{:#}", inspected.unwrap_err());
-            assert!(
-                !error.contains("firmware package"),
-                "{name} reached the Pioneer inspector: {error}"
-            );
+        match (backend_id, format, inspected) {
+            ("pioneer-oem", _, inspected) => {
+                assert!(inspected.is_ok(), "{name}: {:?}", inspected.err())
+            }
+            (_, "mtk-image", Ok(inspection)) => {
+                let chip = inspection.components[0]
+                    .fields
+                    .iter()
+                    .any(|f| f.label == "Chip");
+                assert!(chip, "{name} reached the wrong inspector: {inspection:?}");
+            }
+            (_, "mtk-image", Err(e)) => panic!("{name}: {e:#}"),
+            (_, _, Ok(_)) => {}
+            (_, _, Err(e)) => {
+                let error = format!("{e:#}");
+                assert!(
+                    !error.contains("firmware package"),
+                    "{name} reached the Pioneer inspector: {error}"
+                );
+            }
         }
     }
     // check / info <file>: the recognized backend describes the file.
