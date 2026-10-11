@@ -1,6 +1,12 @@
 use super::*;
 use crate::platform::ScsiSenseError;
 
+fn capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+    super::capture(DeviceAccess::Write(
+        &mut crate::engine::gates::ungated_for_tests(dev),
+    ))
+}
+
 struct Device {
     reads: Vec<Vec<u8>>,
     disconnect: bool,

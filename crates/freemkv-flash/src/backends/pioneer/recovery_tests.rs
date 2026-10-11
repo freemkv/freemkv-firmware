@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::gates::ungated_for_tests;
 use pioneer_optical::envelope::{
     builder::{encode_encrypted_pair, BuildInputs, KernelBuild, NormalSignature},
     signature::SigningKey,
@@ -156,7 +157,8 @@ fn kernel_recovery_writes_both_components_without_entry_or_firmware_reads() {
         updating: true,
         ..Default::default()
     };
-    plan.run(&mut drive, &mut |_| {}).unwrap();
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
     assert_eq!(drive.writes.first().unwrap().0[2], 0xfe);
     assert_eq!(
         drive
@@ -183,7 +185,8 @@ fn kernel_recovery_writes_both_components_without_entry_or_firmware_reads() {
 fn normal_recovery_enters_first_and_uses_supplied_receiver_control() {
     let plan = recovery_plan();
     let mut drive = Drive::default();
-    plan.run(&mut drive, &mut |_| {}).unwrap();
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
     assert_eq!(
         drive.writes[0],
         (cdb::enter_update().to_vec(), plan.control.to_vec())
@@ -198,7 +201,9 @@ fn failed_write_stops_without_retry_or_finish() {
         fail_write: Some(2),
         ..Default::default()
     };
-    assert!(plan.run(&mut drive, &mut |_| {}).is_err());
+    assert!(plan
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .is_err());
     assert_eq!(drive.attempts, 2);
     assert!(!drive.finished);
 }
@@ -210,7 +215,9 @@ fn remaining_in_kernel_is_not_reported_as_success() {
         stuck: true,
         ..Default::default()
     };
-    let error = plan.run(&mut drive, &mut |_| {}).unwrap_err();
+    let error = plan
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap_err();
     assert!(error.to_string().contains("return to normal mode"));
 }
 #[test]
@@ -230,7 +237,8 @@ fn supplied_real_recovery_packages_prepare_and_transfer_without_reads() {
         updating: true,
         ..Default::default()
     };
-    plan.run(&mut drive, &mut |_| {}).unwrap();
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
 }
 
 #[test]
@@ -256,7 +264,9 @@ fn entry_failure_never_sends_components() {
         fail_write: Some(1),
         ..Default::default()
     };
-    let error = recovery_plan().run(&mut drive, &mut |_| {}).unwrap_err();
+    let error = recovery_plan()
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap_err();
     assert!(error.to_string().contains("update entry failed"));
     assert_eq!(drive.attempts, 1);
     assert!(drive.writes.is_empty());
@@ -331,7 +341,9 @@ fn wrong_drive_and_short_identity_fail_before_vendor_commands_or_writes() {
         };
         // This same eligibility check is used by the workflow before reads/dry-run.
         assert!(identify_receiver(&mut drive).is_err());
-        let error = plan.run(&mut drive, &mut |_| {}).unwrap_err();
+        let error = plan
+            .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+            .unwrap_err();
         assert!(
             error.to_string().contains("No firmware written")
                 || error.to_string().contains("no firmware written")
@@ -352,7 +364,9 @@ fn unsupported_pioneer_dialect_fails_before_update_entry() {
         vendor_reads: 0,
         writes: 0,
     };
-    let error = recovery_plan().run(&mut drive, &mut |_| {}).unwrap_err();
+    let error = recovery_plan()
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap_err();
     assert!(error.to_string().contains("update dialect"));
     assert_eq!(drive.vendor_reads, 1);
     assert_eq!(drive.writes, 0);

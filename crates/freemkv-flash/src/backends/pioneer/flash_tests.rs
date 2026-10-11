@@ -1,5 +1,6 @@
 use super::*;
 use crate::backends::pioneer::{transfer, CONTROL_LEN};
+use crate::platform::ScsiDevice;
 use pioneer_optical::drive::{execute_update, UpdateTransfer};
 
 #[test]

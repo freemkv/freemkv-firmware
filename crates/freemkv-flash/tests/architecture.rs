@@ -437,6 +437,110 @@ fn write_device_constructed_only_in_engine_gates() {
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
+/// The SCSI device layer: the trait, its implementations and wrappers, and
+/// the transport bridge. Everything above it writes through a grant.
+const DEVICE_LAYER: &[&str] = &[
+    "src/platform/",
+    "src/transport.rs",
+    "src/backend/device.rs",
+    "src/engine/gates.rs",
+    "src/inspection/capture.rs",
+];
+
+/// What sends a write to the drive: the strict data-out path, the flash
+/// transport, and the vendor crates' update-session entry.
+const WRITE_MARKERS: &[&str] = &[
+    ".command_out_strict(",
+    "ScsiTransport::flash(",
+    "drive::enter_update(",
+];
+
+/// `(name, parameters)` of every fn in `code` whose body issues a write.
+fn write_issuers(code: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for at in word_hits(code, "fn") {
+        let rest = &code[at + 2..];
+        let name: String = rest
+            .trim_start()
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let Some(open) = rest.find('(') else { continue };
+        let mut depth = 0usize;
+        let mut close = rest.len();
+        for (off, c) in rest[open..].char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = open + off;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let params = &rest[open + 1..close];
+        let tail = &rest[close..];
+        let Some(brace) = tail.find('{') else {
+            continue;
+        };
+        if tail.find(';').is_some_and(|semi| semi < brace) {
+            continue;
+        }
+        let body = &tail[brace..block_end(tail, brace)];
+        if WRITE_MARKERS.iter().any(|m| body.contains(m)) {
+            out.push((name, params.to_string()));
+        }
+    }
+    out
+}
+
+#[test]
+fn write_issuers_take_the_write_grant() {
+    let sources = production_sources();
+    let (mut problems, mut issuers) = (Vec::new(), Vec::new());
+    for s in &sources {
+        if DEVICE_LAYER.iter().any(|layer| s.path.starts_with(layer)) {
+            continue;
+        }
+        for (name, params) in write_issuers(&s.code) {
+            if !params.contains("WriteDevice") || params.contains("dyn ScsiDevice") {
+                problems.push(format!(
+                    "{}: fn {name}({params}) writes without a grant",
+                    s.path
+                ));
+            }
+            issuers.push(name);
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+    // The scan must still see the known executors, or it proves nothing.
+    for known in ["execute_prepared", "run", "stream", "enable_logging"] {
+        assert!(
+            issuers.iter().any(|n| n == known),
+            "{known} not scanned: {issuers:?}"
+        );
+    }
+}
+
+#[test]
+fn write_issuer_scan_reads_signatures_and_bodies() {
+    let (code, _) = lex(&without_test_items(
+        "fn a(dev: &mut dyn ScsiDevice) { dev.command_out_strict(c, d); }\n\
+         fn b(dev: &mut WriteDevice<'_>, f: impl Fn(u8)) { ScsiTransport::flash(&s); }\n\
+         fn c(dev: &mut dyn ScsiDevice) { dev.command_in(c, 0); }\n\
+         trait T { fn d(&self); }\n",
+    ));
+    let found = write_issuers(&code);
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert_eq!(found[0].0, "a");
+    assert!(found[0].1.contains("dyn ScsiDevice"));
+    assert_eq!(found[1].0, "b");
+    assert!(found[1].1.contains("WriteDevice"));
+}
+
 // ---------------------------------------------------------------------------
 // R5: "recover" means only the Recovery facet
 // ---------------------------------------------------------------------------

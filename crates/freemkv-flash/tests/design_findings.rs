@@ -51,6 +51,10 @@ const REQUIRED: &[(&str, &str)] = &[
         "R2 runtime write gate",
         "dump_grant_refuses_zero_length_session_commands",
     ),
+    (
+        "R2 runtime write gate",
+        "write_issuers_take_the_write_grant",
+    ),
     ("R3 standard info scope", "info_transcript_matches_0_11_2"),
     (
         "R3 standard info scope",

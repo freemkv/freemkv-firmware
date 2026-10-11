@@ -1,5 +1,6 @@
 //! One-file diagnostic capture: address-aligned memory, responses, directory and footer.
 
+use crate::backend::{DeviceAccess, WriteDevice};
 use crate::platform::{sense_triplet, ScsiDevice};
 use anyhow::{ensure, Context, Result};
 use pioneer_optical::diagnostic::{self, ReadSurface};
@@ -165,8 +166,10 @@ fn hex(b: &[u8]) -> String {
 }
 
 /// Capture mapped Pioneer read surfaces. Unavailable reads are zero-filled and
-/// recorded. Logging is enabled last, only when firmware discovery succeeds.
-pub fn capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
+/// recorded. Logging is enabled last, only under a write grant and only when
+/// firmware discovery succeeds.
+pub fn capture(mut access: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
+    let dev = access.scsi();
     let mut c = Capture { bytes: vec![0; RESPONSES], stopped: false, directory: Directory {
         format_version: 1, tool_version: env!("CARGO_PKG_VERSION"),
         started_unix: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
@@ -213,23 +216,10 @@ pub fn capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
                 "skipped: temporary logging capability not found unambiguously in captured firmware"
                     .into()
             }
-            Some(layout) => {
-                use crate::transport::{ScsiTransport, SharedDevice};
-                let shared = SharedDevice::new(dev);
-                match pioneer_optical::logging::set_logging_ram(
-                    &mut ScsiTransport::flash(&shared),
-                    layout,
-                    true,
-                ) {
-                    Ok(()) => format!(
-                        "enabled in RAM; mask address {:#x}, group {:#x}, bit {:#x}",
-                        layout.mask_address(),
-                        layout.group(),
-                        layout.bit()
-                    ),
-                    Err(e) => format!("skipped: {e}; current state not verified"),
-                }
-            }
+            Some(layout) => match access.writer() {
+                Some(writer) => enable_logging(writer, layout),
+                None => "skipped: no write grant".into(),
+            },
         };
     }
     crate::output::field("Drive logging", &c.directory.logging);
@@ -237,6 +227,28 @@ pub fn capture(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         crate::output::field("Dump", "partial capture; failures recorded in directory");
     }
     c.finish()
+}
+
+/// Switch on RAM-only CDB arrival logging; the outcome is the directory note.
+fn enable_logging(
+    dev: &mut WriteDevice<'_>,
+    layout: pioneer_optical::logging::LoggingLayout,
+) -> String {
+    use crate::transport::{ScsiTransport, SharedDevice};
+    let shared = SharedDevice::new(dev);
+    match pioneer_optical::logging::set_logging_ram(
+        &mut ScsiTransport::flash(&shared),
+        layout,
+        true,
+    ) {
+        Ok(()) => format!(
+            "enabled in RAM; mask address {:#x}, group {:#x}, bit {:#x}",
+            layout.mask_address(),
+            layout.group(),
+            layout.bit()
+        ),
+        Err(e) => format!("skipped: {e}; current state not verified"),
+    }
 }
 
 /// Validate the footer/directory checksum and return the capture directory.

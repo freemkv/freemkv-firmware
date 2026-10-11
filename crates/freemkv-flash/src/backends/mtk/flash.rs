@@ -302,7 +302,7 @@ impl Mtk {
     /// commit trailer. The drive programs when the last chunk lands.
     pub(crate) fn stream(
         &self,
-        dev: &mut dyn ScsiDevice,
+        dev: &mut WriteDevice<'_>,
         payload: &[u8],
         progress: &mut dyn FnMut(usize),
     ) -> Result<()> {

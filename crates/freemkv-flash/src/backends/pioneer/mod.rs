@@ -804,8 +804,8 @@ impl DumpFacet for Pioneer {
         DUMP_WRITES
     }
 
-    fn capture(&self, mut dev: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
-        crate::backends::pioneer::dump::capture(dev.scsi())
+    fn capture(&self, dev: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
+        crate::backends::pioneer::dump::capture(dev)
     }
 }
 
