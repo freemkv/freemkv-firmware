@@ -146,14 +146,8 @@ fn pioneer_confirmation_text_is_returned_not_prompted() {
         crate::engine::flash(d, &Confirming, &confirming_request(), &mut front_end)
     });
     assert_eq!(outcome.result, "ERR flash aborted at confirmation prompt");
-    assert_eq!(
-        front_end.0,
-        [Some("Proceed with the test write?".to_string())]
-    );
-    assert!(outcome
-        .text
-        .iter()
-        .any(|l| l == "Proceed with the test write?"));
+    assert_eq!(front_end.0, [Some(CONFIRM_TEXT.to_string())]);
+    assert!(outcome.text.iter().any(|l| l == CONFIRM_TEXT));
     assert!(
         transcript.iter().all(|l| !l.starts_with("OUT")),
         "{transcript:#?}"
@@ -404,6 +398,44 @@ fn mtk_execute_prints_plan_after_backup_summary() {
     assert!(backup < text_index(&outcome, "EXECUTING flash"));
 }
 
+// ---- the CLI prompt, recorded against v0.11.2 --------------------------------
+
+/// The confirmation text the prompt goldens show (a Pioneer package summary).
+const CONFIRM_TEXT: &str = "This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)";
+
+/// The CLI's prompt core with the terminal check and input scripted.
+struct Scripted {
+    is_tty: bool,
+    input: &'static str,
+}
+
+impl Confirm for Scripted {
+    fn confirm(&mut self, _plan: &AuthorizedPlan) -> Result<bool> {
+        let mut reader = self.input.as_bytes();
+        crate::output::confirm_with(self.is_tty, &mut reader)
+    }
+}
+
+/// The engine showing a confirmation and the CLI answering it, TTY and not.
+#[test]
+fn golden_pioneer_confirm_prompt() {
+    let mut g = Golden::default();
+    for (title, is_tty, input) in [
+        ("Pioneer prompt: stdin is not a TTY", false, ""),
+        ("Pioneer prompt: TTY answers y", true, "y\n"),
+        ("Pioneer prompt: TTY answers yes", true, "YES\n"),
+        ("Pioneer prompt: TTY answers n", true, "n\n"),
+        ("Pioneer prompt: TTY input ends", true, ""),
+    ] {
+        let mut dev = MockScsiDevice::echoing();
+        let mut cli = Scripted { is_tty, input };
+        let outcome =
+            run(|| crate::engine::flash(&mut dev, &Confirming, &confirming_request(), &mut cli));
+        g.case(title, &outcome, None);
+    }
+    check("pioneer_confirm_prompt", g);
+}
+
 // ---- a minimal backend for engine-order checks ------------------------------
 
 fn confirming_request() -> FlashRequest {
@@ -474,7 +506,7 @@ macro_rules! test_backend {
                 _: &SavedBackup,
             ) -> Result<AuthorizedPlan> {
                 let mut authorized = AuthorizedPlan::new(plan, ());
-                authorized.confirmation = Some("Proceed with the test write?".into());
+                authorized.confirmation = Some(CONFIRM_TEXT.into());
                 Ok(authorized)
             }
             fn execute(&self, dev: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> Result<()> {

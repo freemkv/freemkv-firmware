@@ -165,8 +165,10 @@ fn run(op: impl FnOnce() -> Result<()>) -> Outcome {
                     done.saturating_mul(100) / total.max(1)
                 ));
             }
-            Event::Field { label, value } => {
-                ev.borrow_mut().push(format!("FIELD    {label} = {value}"));
+            Event::Report(report) => {
+                for (label, value) in report.gui_fields() {
+                    ev.borrow_mut().push(format!("FIELD    {label} = {value}"));
+                }
             }
             Event::DeviceSettings(_) => ev.borrow_mut().push("SETTINGS (present)".to_string()),
         },
@@ -2394,3 +2396,7 @@ fn golden_parity_with_0_11_2() {
 #[cfg(test)]
 #[path = "flash_tripwire_tests.rs"]
 mod flash_tripwires;
+
+#[cfg(test)]
+#[path = "report_tripwire_tests.rs"]
+mod report_tripwires;

@@ -147,7 +147,7 @@ impl Plan {
                         && !id.revision().starts_with("000")
                         && !id.normal_tag().is_empty()
                     {
-                        crate::output::field("Recovery", format!("Firmware transferred; normal mode reported (revision {}). No firmware readback performed.", id.revision()));
+                        crate::output::field("Recovery", crate::report::Value::text(&format!("Firmware transferred; normal mode reported (revision {}). No firmware readback performed.", id.revision())));
                         return Ok(());
                     }
                 }
@@ -160,8 +160,17 @@ impl Plan {
     }
 }
 
+/// The refusal for a drive that is not a Pioneer receiver.
+pub(crate) const NOT_A_RECEIVER: &str = "Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written";
+
 /// Check protocol eligibility before firmware reads, even for a dry run.
 pub(crate) fn identify_receiver(dev: &mut dyn ScsiDevice) -> Result<Identity> {
+    find_receiver(dev)?.context(NOT_A_RECEIVER)
+}
+
+/// [`identify_receiver`], with a drive that is not a Pioneer optical drive
+/// as `None` (read-only: INQUIRY, then the vendor identity).
+pub(crate) fn find_receiver(dev: &mut dyn ScsiDevice) -> Result<Option<Identity>> {
     let inquiry = dev
         .command_in(
             &cdb::inquiry(pioneer_optical::INQUIRY_LEN as u8),
@@ -172,8 +181,9 @@ pub(crate) fn identify_receiver(dev: &mut dyn ScsiDevice) -> Result<Identity> {
         inquiry.len() >= pioneer_optical::INQUIRY_LEN,
         "Recovery received a truncated drive identity; no firmware written"
     );
-    ensure!(inquiry[0] & 0x1f == 5 && &inquiry[8..16] == b"PIONEER ",
-        "Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written");
+    if inquiry[0] & 0x1f != 5 || &inquiry[8..16] != b"PIONEER " {
+        return Ok(None);
+    }
     let vendor = dev
         .command_in(&cdb::vendor_identity(), pioneer_optical::IDENTITY_LEN)
         .context("Recovery could not read the Pioneer receiver identity; no firmware written")?;
@@ -183,7 +193,7 @@ pub(crate) fn identify_receiver(dev: &mut dyn ScsiDevice) -> Result<Identity> {
         identity.class().is_some(),
         "Recovery does not support this receiver's update dialect; no firmware written"
     );
-    Ok(identity)
+    Ok(Some(identity))
 }
 
 fn in_update_mode(id: &Identity) -> bool {

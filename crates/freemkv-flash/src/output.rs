@@ -22,13 +22,9 @@ pub enum Event {
         /// Bytes in this phase.
         total: usize,
     },
-    /// A labeled result for the information panel.
-    Field {
-        /// Human-readable name.
-        label: String,
-        /// Display value.
-        value: String,
-    },
+    /// Result rows for the information panel; the GUI shows the rows that
+    /// have a GUI label.
+    Report(crate::report::Report),
 }
 
 type Sink = Box<dyn FnMut(Event)>;
@@ -46,7 +42,7 @@ pub fn capture<R>(mut sink: impl FnMut(String) + 'static, operation: impl FnOnce
                 "{label}: {}%",
                 done.saturating_mul(100) / total.max(1)
             )),
-            Event::Field { .. } | Event::DeviceSettings(_) => {}
+            Event::Report(_) | Event::DeviceSettings(_) => {}
         },
         operation,
     )
@@ -82,12 +78,10 @@ pub fn publish(event: Event) -> bool {
     })
 }
 
-/// Publish a result field for graphical presentation.
-pub fn field(label: impl Into<String>, value: impl Into<String>) {
-    publish(Event::Field {
-        label: label.into(),
-        value: value.into(),
-    });
+/// Publish one GUI-only result row.
+pub fn field(label: impl AsRef<str>, value: impl Into<crate::report::Value>) {
+    let row = crate::report::Row::gui("field", label.as_ref(), value.into());
+    publish(Event::Report(row.into()));
 }
 
 /// Emit text to the active diagnostic log and GUI sink or terminal stream.
@@ -131,6 +125,26 @@ macro_rules! print {
 }
 macro_rules! eprint {
     ($($arg:tt)*) => { $crate::output::emit(format_args!($($arg)*), false, true) };
+}
+
+/// Render a report: GUI rows go to the front-end as [`Event::Report`]s and
+/// CLI rows are printed, interleaved in row order.
+pub fn show(report: &crate::report::Report) {
+    let mut gui = crate::report::Report::default();
+    for row in &report.rows {
+        if row.gui_label.is_some() {
+            gui.rows.push(row.clone());
+        }
+        if let Some(line) = row.cli_line() {
+            if !gui.rows.is_empty() {
+                publish(Event::Report(std::mem::take(&mut gui)));
+            }
+            println!("{line}");
+        }
+    }
+    if !gui.rows.is_empty() {
+        publish(Event::Report(gui));
+    }
 }
 
 /// The CLI's confirmation. On a terminal, require `y`/`yes`; when stdin is

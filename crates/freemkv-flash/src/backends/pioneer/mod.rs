@@ -11,9 +11,9 @@ use std::borrow::Cow;
 
 use crate::backend::{
     AuthorizedPlan, Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, CdbPattern,
-    Descriptor, DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat, FlashFacet,
-    FlashPlan, FlashRequest, FormatRole, Identity, InspectFacet, Match, PlanLine, ReadDevice,
-    RecoveryFacet, SavedBackup, WriteDevice,
+    Confidence, Descriptor, DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat,
+    FlashFacet, FlashPlan, FlashRequest, FormatRole, Identity, InspectFacet, Match, PlanLine,
+    ReadDevice, Recognized, RecoveryFacet, RecoveryTarget, SavedBackup, SettingsFacet, WriteDevice,
 };
 use crate::platform::ScsiDevice;
 
@@ -21,6 +21,8 @@ use crate::platform::ScsiDevice;
 pub mod backup;
 /// Read-only validation of extractor-produced Pioneer firmware bundles.
 pub mod bundle;
+/// Pioneer's `info` rows and read-only settings.
+mod details;
 /// Address-oriented Pioneer diagnostic captures.
 pub mod dump;
 /// `info <file>` for Pioneer bundles and the offline transfer plan.
@@ -619,6 +621,9 @@ impl Backend for Pioneer {
     fn inspect(&self) -> Option<&dyn InspectFacet> {
         Some(self)
     }
+    fn settings(&self) -> Option<&dyn SettingsFacet> {
+        Some(self)
+    }
 }
 
 /// The memory-read unlock (no data phase), the one data-out a Pioneer read
@@ -641,7 +646,32 @@ static DUMP_WRITES: &[CdbPattern] = &[
 ];
 
 impl FileFacet for Pioneer {
-    fn describe(&self, image: &[u8]) -> Option<Result<()>> {
+    /// A parsed package or envelope header is structural; any other tar
+    /// archive is a heuristic claim, so a damaged package is still reported
+    /// as one.
+    fn recognize(&self, bytes: &[u8]) -> Option<Recognized> {
+        let structural = |format| {
+            Some(Recognized {
+                format,
+                confidence: Confidence::Structural,
+            })
+        };
+        if bundle::Bundle::from_tar_bytes(bytes).is_ok()
+            || bundle::Bundle::from_backup_tar_bytes(bytes).is_ok()
+        {
+            return structural(&PACKAGE);
+        }
+        if parse_banner(bytes).is_some() || pioneer_optical::envelope::header_info(bytes).is_some()
+        {
+            return structural(&ENVELOPE);
+        }
+        (bytes.get(257..262) == Some(b"ustar")).then_some(Recognized {
+            format: &PACKAGE,
+            confidence: Confidence::Heuristic,
+        })
+    }
+
+    fn describe(&self, image: &[u8], _recognized: &Recognized) -> Option<Result<()>> {
         file_info::describe(image)
     }
 
@@ -662,12 +692,6 @@ impl FileFacet for Pioneer {
     fn claims_by_name(&self, path: &std::path::Path) -> Option<&'static FileFormat> {
         let name = path.file_name()?.to_str()?.to_ascii_lowercase();
         (name.ends_with(".firmware.tar") || name.ends_with(".installer.tar")).then_some(&PACKAGE)
-    }
-}
-
-impl DetailsFacet for Pioneer {
-    fn vendor_snapshot(&self) -> bool {
-        true
     }
 }
 
@@ -832,13 +856,29 @@ impl FlashFacet for Pioneer {
 }
 
 impl RecoveryFacet for Pioneer {
+    fn identify(&self, dev: &mut ReadDevice<'_>) -> Result<Option<RecoveryTarget>> {
+        Ok(recovery::find_receiver(dev)?.map(|id| {
+            let label = format!(
+                "{} {}",
+                crate::style::printable(id.product()),
+                crate::style::printable(id.revision())
+            );
+            RecoveryTarget::new(label, ())
+        }))
+    }
+
+    fn unidentified(&self) -> &'static str {
+        recovery::NOT_A_RECEIVER
+    }
+
     fn recover(
         &self,
         mut dev: DeviceAccess<'_, '_>,
+        receiver: &RecoveryTarget,
         current: Option<&[u8]>,
         target: &[u8],
     ) -> Result<()> {
-        recovery::identify_receiver(dev.scsi())?;
+        receiver.state::<()>()?;
         let captured;
         let current: &[u8] = match current {
             Some(bytes) => bytes,

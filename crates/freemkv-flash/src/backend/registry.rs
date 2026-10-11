@@ -8,7 +8,9 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
-use super::{read_identity, Backend, FileFormat, Identity, Match, ReadDevice};
+use super::{
+    read_identity, Backend, Confidence, FileFormat, Identity, Match, ReadDevice, Recognized,
+};
 use crate::backends::{mtk, pioneer};
 use crate::platform::ScsiDevice;
 
@@ -18,18 +20,9 @@ static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 /// Probe order.
 static BACKENDS: [&'static dyn Backend; 2] = [&MTK, &PIONEER];
 
-/// File-identification order. Pioneer's structural tar parse must precede
-/// MediaTek's whole-file `MTEKMT19dd` search.
-static FILE_ORDER: [&'static dyn Backend; 2] = [&PIONEER, &MTK];
-
 /// Every registered protocol backend, in probe order.
 pub fn backends() -> impl Iterator<Item = &'static dyn Backend> {
     BACKENDS.iter().copied()
-}
-
-/// Backends in file-identification order (not probe order).
-pub fn file_backends() -> impl Iterator<Item = &'static dyn Backend> {
-    FILE_ORDER.iter().copied()
 }
 
 /// A unique backend match, with device identity kept separate from the
@@ -74,21 +67,59 @@ pub fn resolve(dev: &mut dyn ScsiDevice) -> Result<Option<Resolved>> {
     }))
 }
 
+/// The one recognizer: which backend's format `bytes` are. A structural claim
+/// beats heuristic ones; two structural claims, or two heuristic claims with
+/// no structural one, are an ambiguous file.
+pub fn recognize(bytes: &[u8]) -> Result<Option<(&'static dyn Backend, Recognized)>> {
+    recognize_among(backends(), bytes)
+}
+
+/// [`recognize`] over an explicit backend list.
+pub fn recognize_among<B: Backend + ?Sized + 'static>(
+    candidates: impl IntoIterator<Item = &'static B>,
+    bytes: &[u8],
+) -> Result<Option<(&'static B, Recognized)>> {
+    let claims: Vec<(&'static B, Recognized)> = candidates
+        .into_iter()
+        .filter_map(|b| Some((b, b.files()?.recognize(bytes)?)))
+        .collect();
+    let structural: Vec<_> = claims
+        .iter()
+        .filter(|(_, r)| r.confidence == Confidence::Structural)
+        .collect();
+    let pick = match (structural.as_slice(), claims.as_slice()) {
+        ([one], _) => Some(**one),
+        ([], []) => None,
+        ([], [one]) => Some(*one),
+        _ => {
+            let names: Vec<_> = claims
+                .iter()
+                .map(|(b, r)| format!("{} ({})", r.format.label, b.descriptor().id))
+                .collect();
+            bail!("ambiguous file: it matches {}", names.join(" and "))
+        }
+    };
+    Ok(pick)
+}
+
 /// The format of a flash input bound for `backend`'s drive, if it reads files.
-/// A file named for another backend's format is that format whichever drive is
-/// attached (the engine then refuses it); otherwise the drive's backend
-/// classifies it.
+/// A recognized file is its recognized format whichever drive is attached (the
+/// engine then refuses a foreign one). Otherwise a file named for another
+/// backend's format is that format, else the drive's backend names it.
 pub fn flash_input_format(
     backend: &dyn Backend,
     path: &Path,
     bytes: &[u8],
-) -> Option<&'static FileFormat> {
+) -> Result<Option<&'static FileFormat>> {
+    if let Some((_, recognized)) = recognize(bytes)? {
+        return Ok(Some(recognized.format));
+    }
     let id = backend.descriptor().id;
     let foreign = backends()
         .filter(|other| other.descriptor().id != id)
         .filter_map(|other| other.files())
         .find_map(|files| files.claims_by_name(path));
-    foreign.or_else(|| backend.files().map(|f| f.classify_input(path, bytes)))
+    Ok(foreign.or_else(|| backend.files().map(|f| f.classify_input(path, bytes))))
 }
 
 #[cfg(test)]

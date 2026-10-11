@@ -119,10 +119,8 @@ fn classify_unknown_when_010c_matches_but_mt19_banner_absent() {
     let mut fd = vec![0u8; 28];
     fd[8] = 0x01;
     fd[9] = 0x0C;
-    // Only the 0x010C echo is wired; the 0x003000 boot-ROM read falls to the
-    // mock's zero-fill default, so `has_mt19_banner` sees no `MT19` substring
-    // and returns false. Without the banner gate this would incorrectly
-    // classify MTK.
+    // Only 0x010C is wired; the zero-filled boot ROM has no `MT19` banner, so
+    // the banner gate keeps this drive unclassified.
     let mut dev = MockScsiDevice::new().on(
         |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
         fd,
@@ -215,7 +213,7 @@ fn classify_unknown_when_no_discriminator() {
 #[test]
 fn flash_input_formats_follow_the_drive_and_foreign_package_names() {
     let path = std::path::Path::new;
-    let format = |b: &dyn Backend, p| flash_input_format(b, path(p), b"").unwrap().id;
+    let format = |b: &dyn Backend, p| flash_input_format(b, path(p), b"").unwrap().unwrap().id;
     assert_eq!(format(&MTK, "dump.tar"), "mtk-legacy-tar");
     assert_eq!(format(&MTK, "fw.bin"), "mtk-image");
     assert_eq!(format(&MTK, "image"), "mtk-image");
@@ -317,19 +315,4 @@ fn truncated_feature_header_is_not_protocol_evidence() {
 fn truncated_boot_rom_is_not_protocol_evidence() {
     let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), b"MT1959".to_vec());
     assert!(!mtk::has_mt19_banner(&mut dev));
-}
-
-#[test]
-fn file_identification_covers_every_registered_backend_once() {
-    // `info <file>` keeps its own order (structural parsers first); a backend
-    // added to the registry but not to that order would never describe files.
-    let mut registered: Vec<_> = backends().map(|b| b.descriptor().id.0).collect();
-    let mut for_files: Vec<_> = file_backends().map(|b| b.descriptor().id.0).collect();
-    registered.sort_unstable();
-    for_files.sort_unstable();
-    assert_eq!(for_files, registered);
-    assert_eq!(
-        file_backends().next().map(|b| b.descriptor().id.0),
-        Some("pioneer-oem")
-    );
 }

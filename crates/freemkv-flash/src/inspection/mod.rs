@@ -154,10 +154,11 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
         }
     }
 }
-/// Inspect file bytes with the first backend that recognizes them; otherwise
-/// report the file as unrecognized or as a family without an inspector.
+/// Inspect file bytes with the inspector of the backend the registry's one
+/// recognizer picks; otherwise report the file as unrecognized or as a family
+/// without an inspector.
 fn inspect_bytes(name: String, bytes: &[u8], control: &Control) -> Result<Inspection> {
-    for backend in registry::file_backends() {
+    if let Some((backend, _)) = registry::recognize(bytes)? {
         if let Some(inspection) = backend
             .inspect()
             .and_then(|i| i.inspect(name.clone(), bytes, control))

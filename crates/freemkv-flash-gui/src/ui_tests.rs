@@ -69,6 +69,13 @@ fn plan_passes(app: &mut App) {
     app.poll();
 }
 
+/// One GUI result row, as the workflows publish it.
+fn field_event(label: &str, value: &str) -> Event {
+    freemkv_flash::output::Event::Report(
+        freemkv_flash::report::Row::gui("field", label, value.into()).into(),
+    )
+}
+
 fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
     app.worker.take().unwrap().send(Msg::Done(result)).unwrap();
     app.poll()
@@ -514,14 +521,8 @@ fn completion_is_not_misreported_as_worker_disconnection() {
 #[test]
 fn events_fill_fields_settings_log_and_diagnostic_path() {
     let mut app = one_drive();
-    app.event(Event::Field {
-        label: "Model".into(),
-        value: "BDR-UD04".into(),
-    });
-    app.event(Event::Field {
-        label: "Diagnostic log".into(),
-        value: "/tmp/diagnostic.log".into(),
-    });
+    app.event(field_event("Model", "BDR-UD04"));
+    app.event(field_event("Diagnostic log", "/tmp/diagnostic.log"));
     app.event(Event::Message("hello".into()));
     assert_eq!(app.fields, [("Model".into(), "BDR-UD04".into())]);
     assert_eq!(
@@ -544,10 +545,7 @@ fn results_belong_to_the_task_that_produced_them() {
     app.worker
         .clone()
         .unwrap()
-        .send(Msg::Event(Event::Field {
-            label: "Model".into(),
-            value: "OLD INFO RESULT".into(),
-        }))
+        .send(Msg::Event(field_event("Model", "OLD INFO RESULT")))
         .unwrap();
     finish(&mut app, Ok(()));
     assert!(!app.view().results.unwrap().cards.is_empty());

@@ -15,13 +15,14 @@ use sha2::{Digest, Sha256};
 
 use crate::backend::{
     read_identity, Backend, BackupNotice, Capabilities, Confirm, DeviceAccess, FlashFacet,
-    FlashPlan, FlashRequest, PlanLine, ReadDevice, SavedBackup, UNKNOWN_FAMILY,
+    FlashPlan, FlashRequest, InfoSoFar, PlanLine, ReadDevice, RecoveryTarget, SavedBackup,
+    UNKNOWN_FAMILY,
 };
 use crate::platform::{MediumStatus, ScsiDevice};
+use crate::report::{Group, Report, Row, Slot, Span, Tone, Value};
 use crate::style;
 
 pub(crate) mod backup;
-pub(crate) mod device_info;
 pub mod gates;
 #[cfg(test)]
 use crate::backends::mtk::backup::BackupArtifact;
@@ -30,7 +31,35 @@ use backup::save_backup;
 /// Run the `info` command: identify + classify (read-only). `drive` is the
 /// matched backend, or `None` for a drive no backend recognizes.
 pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Result<()> {
-    println!("{}", style::kv("device", &dev.describe()));
+    let info = info_report(dev, drive);
+    let (before, after) = info.report.rows.split_at(info.settings_at);
+    crate::output::show(&Report {
+        rows: before.to_vec(),
+    });
+    if let Some(settings) = info.settings {
+        crate::output::publish(crate::output::Event::DeviceSettings(settings));
+    }
+    crate::output::show(&Report {
+        rows: after.to_vec(),
+    });
+    Ok(())
+}
+
+/// A drive's `info` rows, without showing them.
+pub struct InfoReport {
+    /// Every row, in display order.
+    pub report: Report,
+    /// The drive settings the backend read, when it reads any.
+    pub settings: Option<crate::output::device_settings::Settings>,
+    /// Index of the first row after the settings were read.
+    pub settings_at: usize,
+}
+
+/// Build the `info` report (read-only): the identity header, the standard
+/// snapshot, and the backend's rows at their slots, issuing today's reads in
+/// today's order.
+pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> InfoReport {
+    let describe = dev.describe();
     let unlocks = drive.map_or(&[][..], |d| d.allowed_data_out());
     let mut dev = ReadDevice::new(dev, unlocks);
     let dev = &mut dev;
@@ -39,102 +68,111 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Result<()>
         None => read_identity(dev),
     };
     let family = drive.map_or(UNKNOWN_FAMILY, |d| d.descriptor().display_name);
-    crate::output::field("Manufacturer", style::printable(&id.vendor));
-    crate::output::field("Model", style::printable(&id.product));
-    crate::output::field("Firmware version", style::printable(&id.revision));
-    crate::output::field("Drive family", family);
-    println!(
-        "{}",
-        style::kv(
-            "inquiry",
-            &format!(
-                "vendor='{}' product='{}' rev='{}'",
-                style::printable(&id.vendor),
-                style::printable(&id.product),
-                style::printable(&id.revision)
-            )
-        )
-    );
-    println!(
-        "{}",
-        style::kv(
-            "banner",
-            &id.banner
-                .as_deref()
-                .map(style::printable)
-                .unwrap_or_else(|| "<none>".to_string())
-        )
-    );
-    // What the backend's facets offer; the headline is which of backup/flash
-    // are live.
     let caps = drive.map_or(Capabilities::NONE, Capabilities::of);
-    crate::output::field(
-        "Backup",
-        if caps.backup {
-            "Supported"
-        } else {
-            "Unavailable"
-        },
-    );
-    crate::output::field(
-        "Firmware update",
-        if caps.flash {
-            "Supported"
-        } else {
-            "Unavailable"
-        },
-    );
-    let capability = match (caps.backup, caps.flash) {
-        (_, true) => style::green("live backup + flash supported"),
-        (true, false) => style::amber("live backup supported; live flash unavailable"),
-        (false, false) => style::amber("live backup/flash unavailable"),
+    let supported = |on: bool| Value::text(if on { "Supported" } else { "Unavailable" });
+    let (tone, capability) = match (caps.backup, caps.flash) {
+        (_, true) => (Tone::Ok, "live backup + flash supported"),
+        (true, false) => (Tone::Warn, "live backup supported; live flash unavailable"),
+        (false, false) => (Tone::Warn, "live backup/flash unavailable"),
     };
-    println!(
-        "{}",
-        style::kv("family", &format!("{family} ({capability})"))
-    );
-    // Show the flash line only when a runnable recipe exists for this family;
-    // the capability label above already states flash availability otherwise.
+    let mut rows = vec![
+        Row::cli("device", "device", Value::text(&describe)),
+        Row::gui("vendor", "Manufacturer", Value::text(&id.vendor)),
+        Row::gui("product", "Model", Value::text(&id.product)),
+        Row::gui("revision", "Firmware version", Value::text(&id.revision)),
+        Row::gui("family", "Drive family", Value::text(family)),
+        Row::cli(
+            "inquiry",
+            "inquiry",
+            Value::text(&format!(
+                "vendor='{}' product='{}' rev='{}'",
+                id.vendor, id.product, id.revision
+            )),
+        ),
+        Row::cli(
+            "banner",
+            "banner",
+            Value::text(id.banner.as_deref().unwrap_or("<none>")),
+        ),
+        Row::gui("backup", "Backup", supported(caps.backup)).in_group(Group::Operations),
+        Row::gui("flash", "Firmware update", supported(caps.flash)).in_group(Group::Operations),
+        Row::cli(
+            "capability",
+            "family",
+            Value::Styled(vec![
+                Span::new(Tone::Plain, &format!("{family} (")),
+                Span::new(tone, capability),
+                Span::new(Tone::Plain, ")"),
+            ]),
+        ),
+    ];
+    // The flash line appears only when the backend has a runnable recipe.
     if let Some(summary) = drive.and_then(|d| d.descriptor().flash_summary) {
-        println!("{}", style::kv("flash", summary));
+        rows.push(Row::cli("flash_summary", "flash", Value::text(summary)));
     }
     let details = drive.and_then(|d| d.details());
-    device_info::show(dev, details.is_some_and(|d| d.vendor_snapshot()));
-    let Some(details) = details else {
-        return Ok(());
-    };
-    details.print_fields(dev);
-    // Best-effort firmware identification (read-only). `info` never aborts, so a
-    // read failure here is simply omitted.
-    if let Ok(Some(r)) = details.post_flash_identity(dev) {
-        match r.matched {
-            Some((desc, source)) => {
-                println!("{}", style::kv("firmware", desc));
-                if !source.is_empty() {
-                    println!(
-                        "{}",
-                        style::dim_line(&format!("          original image: {source}"))
-                    );
-                }
-            }
-            None => println!(
-                "{}",
-                style::kv(
-                    "firmware",
-                    &format!(
-                        "{} {}",
-                        style::printable(r.descriptor.as_deref().unwrap_or("unknown")),
-                        style::amber("(unrecognized — not in the built-in catalog)")
-                    )
-                )
-            ),
+    let slot = |slot: Slot, dev: &mut ReadDevice<'_>, read: &InfoSoFar<'_>, rows: &mut Vec<Row>| {
+        if let Some(details) = details {
+            rows.extend(details.rows(dev, read, slot));
         }
-        println!(
-            "{}",
-            style::dim_line(&format!("          fingerprint {}", r.fingerprint))
-        );
+    };
+    let standard = crate::standard::read(dev);
+    let mut read = InfoSoFar {
+        standard: &standard,
+        settings: None,
+    };
+    slot(Slot::AfterIdentity, dev, &read, &mut rows);
+    rows.extend(standard.interface_rows());
+    slot(Slot::AfterInterface, dev, &read, &mut rows);
+    rows.extend(standard.media_rows());
+    slot(Slot::AfterMedia, dev, &read, &mut rows);
+    rows.extend(crate::standard::region_rows(dev));
+    let settings = drive.and_then(|d| d.settings()).map(|s| s.read(dev));
+    read.settings = settings.as_ref();
+    let settings_at = rows.len();
+    slot(Slot::AfterRegion, dev, &read, &mut rows);
+    slot(Slot::End, dev, &read, &mut rows);
+    // Best-effort firmware identification; `info` never aborts on it.
+    if let Some(Ok(Some(r))) = details.map(|d| d.post_flash_identity(dev)) {
+        rows.extend(firmware_rows(&r));
     }
-    Ok(())
+    InfoReport {
+        report: Report { rows },
+        settings: settings.and_then(Result::ok),
+        settings_at,
+    }
+}
+
+/// The CLI's installed-firmware lines.
+fn firmware_rows(r: &crate::backend::FirmwareReport) -> Vec<Row> {
+    let dim = |text: String| {
+        Row::line(
+            "firmware_detail",
+            Value::Styled(vec![Span::new(Tone::Dim, &text)]),
+        )
+    };
+    let mut rows = Vec::new();
+    match r.matched {
+        Some((desc, source)) => {
+            rows.push(Row::cli("firmware", "firmware", Value::text(desc)));
+            if !source.is_empty() {
+                rows.push(dim(format!("          original image: {source}")));
+            }
+        }
+        None => rows.push(Row::cli(
+            "firmware",
+            "firmware",
+            Value::Styled(vec![
+                Span::new(
+                    Tone::Plain,
+                    &format!("{} ", r.descriptor.as_deref().unwrap_or("unknown")),
+                ),
+                Span::new(Tone::Warn, "(unrecognized — not in the built-in catalog)"),
+            ]),
+        )),
+    }
+    rows.push(dim(format!("          fingerprint {}", r.fingerprint)));
+    rows
 }
 
 /// Run the `info` command on a firmware FILE (read-only) — the file-side twin of
@@ -147,7 +185,7 @@ pub fn info_file(path: &Path) -> Result<()> {
         .with_context(|| format!("reading firmware image {}", path.display()))?;
     println!("{}", style::kv("file", &path.display().to_string()));
     println!("{}", style::kv("size", &style::human_size(image.len())));
-    crate::output::field("File", path.display().to_string());
+    crate::output::field("File", path.to_path_buf());
     crate::output::field("Size", style::human_size(image.len()));
     let mut hasher = Sha256::new();
     hasher.update(&image);
@@ -158,8 +196,11 @@ pub fn info_file(path: &Path) -> Result<()> {
         .collect();
     println!("{}", style::kv("sha256", &sha));
 
-    for backend in crate::backend::registry::file_backends() {
-        if let Some(report) = backend.files().and_then(|f| f.describe(&image)) {
+    if let Some((backend, recognized)) = crate::backend::registry::recognize(&image)? {
+        if let Some(report) = backend
+            .files()
+            .and_then(|f| f.describe(&image, &recognized))
+        {
             return report;
         }
     }
@@ -289,7 +330,7 @@ pub fn backup_with_replace(
             &format!("{:x}", Sha256::digest(&bytes))
         )
     );
-    crate::output::field("Saved to", out.display().to_string());
+    crate::output::field("Saved to", out.to_path_buf());
     println!(
         "{} {}",
         style::green("wrote"),
@@ -336,15 +377,48 @@ pub fn recover(
     execute: bool,
     acknowledged_risk: bool,
 ) -> Result<()> {
+    recover_identified(
+        dev,
+        drive,
+        None,
+        current,
+        target,
+        execute,
+        acknowledged_risk,
+    )
+}
+
+/// [`recover`] for a receiver already identified (`receiver`), or identified
+/// here when `None`. The recovery grant is checked before any I/O.
+pub fn recover_identified(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    receiver: Option<RecoveryTarget>,
+    current: Option<&[u8]>,
+    target: &[u8],
+    execute: bool,
+    acknowledged_risk: bool,
+) -> Result<()> {
     let facet = drive
         .recovery()
         .with_context(|| format!("{} offers no recovery", drive.descriptor().id))?;
+    let unlocks = drive.allowed_data_out();
+    let identify = |dev: &mut dyn ScsiDevice| -> Result<RecoveryTarget> {
+        match receiver {
+            Some(receiver) => Ok(receiver),
+            None => facet
+                .identify(&mut ReadDevice::new(dev, unlocks))?
+                .with_context(|| facet.unidentified()),
+        }
+    };
     if execute {
         let mut writer = gates::recovery(dev, execute, acknowledged_risk)?;
-        facet.recover(DeviceAccess::Write(&mut writer), current, target)
+        let receiver = identify(&mut writer)?;
+        facet.recover(DeviceAccess::Write(&mut writer), &receiver, current, target)
     } else {
-        let mut reader = ReadDevice::new(dev, drive.allowed_data_out());
-        facet.recover(DeviceAccess::Read(&mut reader), current, target)
+        let receiver = identify(dev)?;
+        let mut reader = ReadDevice::new(dev, unlocks);
+        facet.recover(DeviceAccess::Read(&mut reader), &receiver, current, target)
     }
 }
 

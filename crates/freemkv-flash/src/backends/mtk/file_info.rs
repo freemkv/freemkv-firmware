@@ -92,8 +92,8 @@ pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
         style::printable(ident_or_unknown(&chip.rev)),
     );
     crate::output::field("Chipset", chip.family.label());
-    crate::output::field("Model", model.clone());
-    crate::output::field("Firmware version", rev.clone());
+    crate::output::field("Model", crate::report::Value::text(&model));
+    crate::output::field("Firmware version", crate::report::Value::text(&rev));
     let conf = match chip.confidence {
         freemkv_chipset::Confidence::TagString => "identity string",
         freemkv_chipset::Confidence::BannerFallback => "banner (fallback)",

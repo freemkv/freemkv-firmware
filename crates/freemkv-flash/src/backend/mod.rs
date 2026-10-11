@@ -19,6 +19,7 @@ use anyhow::{Context, Result};
 use crate::inspection::{Control, Inspection, LiveState};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
+use crate::report::{Row, Slot};
 
 pub mod device;
 pub mod registry;
@@ -337,14 +338,41 @@ pub trait Backend: Sync + 'static {
     fn inspect(&self) -> Option<&dyn InspectFacet> {
         None
     }
+    /// Read-only drive settings.
+    fn settings(&self) -> Option<&dyn SettingsFacet> {
+        None
+    }
+}
+
+/// How a file was recognized. A structural match (a parsed container or exact
+/// layout) beats a heuristic one (a pattern search).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Confidence {
+    /// The bytes parse as this format.
+    Structural,
+    /// A signature was found in the bytes.
+    Heuristic,
+}
+
+/// A backend's claim on a file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Recognized {
+    /// The format the bytes are.
+    pub format: &'static FileFormat,
+    /// How sure the backend is.
+    pub confidence: Confidence,
 }
 
 /// File recognition and description.
 pub trait FileFacet {
-    /// Print the `info <file>` / `check` report, or `None` when the bytes are
-    /// not this backend's format. Read-only.
-    fn describe(&self, bytes: &[u8]) -> Option<Result<()>>;
-    /// The format of a flash input for this backend's drive.
+    /// This backend's claim on `bytes`, if any. The registry resolves claims
+    /// once for flash input, `check`, `info <file>` and inspection.
+    fn recognize(&self, bytes: &[u8]) -> Option<Recognized>;
+    /// Print the `info <file>` / `check` report for a file this backend
+    /// recognized, or `None` to leave it to the generic report. Read-only.
+    fn describe(&self, bytes: &[u8], recognized: &Recognized) -> Option<Result<()>>;
+    /// The format of a flash input no backend recognizes, by its name, so the
+    /// drive's flash path reports the specific parse error.
     fn classify_input(&self, path: &Path, bytes: &[u8]) -> &'static FileFormat;
     /// A format of this backend that the file name alone identifies, whichever
     /// drive the file is meant for.
@@ -353,19 +381,31 @@ pub trait FileFacet {
     }
 }
 
+/// What `info` has already read when it asks a backend for its rows.
+pub struct InfoSoFar<'a> {
+    /// The standard snapshot.
+    pub standard: &'a crate::standard::StandardInfo,
+    /// The backend's settings read, once the region rows are done.
+    pub settings: Option<&'a Result<crate::output::device_settings::Settings>>,
+}
+
 /// Vendor details for `info`.
 pub trait DetailsFacet {
-    /// Print vendor fields after the standard snapshot.
-    fn print_fields(&self, _dev: &mut ReadDevice<'_>) {}
+    /// The backend's rows at `slot`. Anything already in `read` is reused,
+    /// never read again.
+    fn rows(&self, _dev: &mut ReadDevice<'_>, _read: &InfoSoFar<'_>, _slot: Slot) -> Vec<Row> {
+        Vec::new()
+    }
     /// The installed firmware's identity (also the post-flash check).
     fn post_flash_identity(&self, _dev: &mut ReadDevice<'_>) -> Result<Option<FirmwareReport>> {
         Ok(None)
     }
-    /// Whether the shared snapshot shows its vendor identity and settings
-    /// sections for this backend's drives.
-    fn vendor_snapshot(&self) -> bool {
-        false
-    }
+}
+
+/// Drive settings, read-only.
+pub trait SettingsFacet {
+    /// Read the drive's settings.
+    fn read(&self, dev: &mut ReadDevice<'_>) -> Result<crate::output::device_settings::Settings>;
 }
 
 /// Backup capture.
@@ -515,13 +555,43 @@ pub trait FlashFacet {
     fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<()>;
 }
 
+/// A receiver a recovery backend identified, with what it read.
+pub struct RecoveryTarget {
+    /// The receiver as identified, for front-ends and diagnostics.
+    pub label: String,
+    state: Box<dyn Any + Send>,
+}
+
+impl RecoveryTarget {
+    /// A target carrying `state` for the backend's own `recover`.
+    pub fn new(label: String, state: impl Any + Send) -> Self {
+        Self {
+            label,
+            state: Box::new(state),
+        }
+    }
+
+    /// The backend state, when this target was identified by that backend.
+    pub fn state<T: 'static>(&self) -> Result<&T> {
+        self.state
+            .downcast_ref()
+            .context("recovery target was identified by another backend")
+    }
+}
+
 /// Recovery without automatic backups or installed-versus-target policy.
 pub trait RecoveryFacet {
-    /// Check the receiver, prepare the transfer from `current` (read from the
-    /// drive when `None`) and `target`, and write it when given a write grant.
+    /// Read-only, with no protocol probe (the drive may be too damaged to
+    /// classify): `Some` when this is a receiver this backend recovers.
+    fn identify(&self, dev: &mut ReadDevice<'_>) -> Result<Option<RecoveryTarget>>;
+    /// The refusal when [`RecoveryFacet::identify`] finds no receiver.
+    fn unidentified(&self) -> &'static str;
+    /// Prepare the transfer from `current` (read from the drive when `None`)
+    /// and `target`, and write it when given a write grant.
     fn recover(
         &self,
         dev: DeviceAccess<'_, '_>,
+        receiver: &RecoveryTarget,
         current: Option<&[u8]>,
         target: &[u8],
     ) -> Result<()>;

@@ -43,6 +43,12 @@ scenario that set it was dropped from both sets:
 
 * flash_dry_run.txt: `Pioneer dry run: bundle with crossflash`
 
+**Added scenarios.** `pioneer_confirm_prompt.txt` (phase 4) covers the CLI
+confirmation prompt, TTY and not. Its baseline was recorded at the v0.11.2 tag
+with the same harness, driving v0.11.2's `confirm_with` (made `pub(crate)` in
+the throwaway worktree, a visibility-only COMPAT change); the current file
+drives `engine::flash` and the CLI's prompt core and is byte-identical.
+
 Regenerate the skeleton after an intentional change with
 `FREEMKV_BLESS_INTENDED=1 cargo test -p freemkv-flash golden_parity`, then set
 the `reason:` of any `UNCLASSIFIED` section by hand.

@@ -1091,8 +1091,10 @@ fn info_prints_pioneer_identity_before_region_and_reads_snapshot_once() {
     let sink = labels.clone();
     crate::output::capture_events(
         move |event| {
-            if let crate::output::Event::Field { label, .. } = event {
-                sink.borrow_mut().push(label);
+            if let crate::output::Event::Report(report) = event {
+                for (label, _) in report.gui_fields() {
+                    sink.borrow_mut().push(label);
+                }
             }
         },
         || crate::engine::info(&mut dev, Some(&drive)).expect("info"),

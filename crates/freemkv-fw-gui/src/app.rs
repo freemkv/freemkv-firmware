@@ -116,9 +116,11 @@ impl FwApp {
                 .unwrap_or_default();
         }
         for event in events.lock().unwrap().drain(..) {
-            if let freemkv_flash::output::Event::Field { label, value } = event {
-                if label == "Diagnostic log" {
-                    self.diagnostic_log = Some(value.into());
+            if let freemkv_flash::output::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        self.diagnostic_log = Some(value.into());
+                    }
                 }
             }
         }
@@ -190,11 +192,13 @@ impl FwApp {
                         freemkv_flash::output::Event::Progress { label, done, total } => {
                             self.progress = Some((label, done, total))
                         }
-                        freemkv_flash::output::Event::Field { label, value } => {
-                            if label == "Diagnostic log" {
-                                self.diagnostic_log = Some(value.clone().into());
+                        freemkv_flash::output::Event::Report(report) => {
+                            for (label, value) in report.gui_fields() {
+                                if label == "Diagnostic log" {
+                                    self.diagnostic_log = Some(value.clone().into());
+                                }
+                                self.fields.push((label, value))
                             }
-                            self.fields.push((label, value))
                         }
                     },
                     Ok(Msg::Done(result)) => {

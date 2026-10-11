@@ -666,8 +666,12 @@ impl App {
         self.refresh(drives);
         for event in events.lock().unwrap().drain(..) {
             match event {
-                Event::Field { label, value } if label == DIAGNOSTIC_FIELD => {
-                    self.diagnostic_log = Some(value.into());
+                Event::Report(report) => {
+                    for (label, value) in report.gui_fields() {
+                        if label == DIAGNOSTIC_FIELD {
+                            self.diagnostic_log = Some(value.into());
+                        }
+                    }
                 }
                 Event::Message(line) => self.log.push(line),
                 _ => {}
@@ -1098,10 +1102,15 @@ impl App {
             Event::DeviceSettings(settings) => self.device_settings = Some(settings),
             Event::Message(line) => self.log.push(line),
             Event::Progress { label, done, total } => self.progress = Some((label, done, total)),
-            Event::Field { label, value } if label == DIAGNOSTIC_FIELD => {
-                self.diagnostic_log = Some(value.into());
+            Event::Report(report) => {
+                for (label, value) in report.gui_fields() {
+                    if label == DIAGNOSTIC_FIELD {
+                        self.diagnostic_log = Some(value.into());
+                    } else {
+                        self.fields.push((label, value));
+                    }
+                }
             }
-            Event::Field { label, value } => self.fields.push((label, value)),
         }
     }
 

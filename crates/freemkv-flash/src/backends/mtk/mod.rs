@@ -972,6 +972,34 @@ fn post_commit_status(dev: &mut dyn ScsiDevice) -> Result<()> {
     Ok(())
 }
 
+/// Whether `bytes` are a tar holding only 0.10.x backup members.
+fn is_legacy_archive(bytes: &[u8]) -> bool {
+    if bytes.get(257..262) != Some(b"ustar") {
+        return false;
+    }
+    let mut archive = tar::Archive::new(bytes);
+    let Ok(entries) = archive.entries() else {
+        return false;
+    };
+    let mut names = 0;
+    for entry in entries {
+        let Some(name) = entry
+            .ok()
+            .and_then(|e| Some(e.path().ok()?.to_str()?.to_string()))
+        else {
+            return false;
+        };
+        if !(MEMBER_NAMES.contains(&name.as_str())
+            || name == "backup.toml"
+            || name == "firmware.bin")
+        {
+            return false;
+        }
+        names += 1;
+    }
+    names > 0
+}
+
 // ---- The MTK family ---------------------------------------------------------
 
 /// A full MediaTek firmware image (a vendor update or a freemkv backup `.bin`).
@@ -1044,7 +1072,23 @@ impl Backend for Mtk {
 }
 
 impl FileFacet for Mtk {
-    fn describe(&self, image: &[u8]) -> Option<Result<()>> {
+    /// A tar of exactly the 0.10.x backup members is structural; a MediaTek
+    /// chip signature found anywhere else is heuristic.
+    fn recognize(&self, bytes: &[u8]) -> Option<crate::backend::Recognized> {
+        use crate::backend::{Confidence, Recognized};
+        if is_legacy_archive(bytes) {
+            return Some(Recognized {
+                format: &LEGACY_TAR,
+                confidence: Confidence::Structural,
+            });
+        }
+        file_info::classify_file(bytes).chip.map(|_| Recognized {
+            format: &IMAGE,
+            confidence: Confidence::Heuristic,
+        })
+    }
+
+    fn describe(&self, image: &[u8], _: &crate::backend::Recognized) -> Option<Result<()>> {
         file_info::describe(image)
     }
 
@@ -1057,10 +1101,23 @@ impl FileFacet for Mtk {
 }
 
 impl DetailsFacet for Mtk {
-    fn print_fields(&self, dev: &mut ReadDevice<'_>) {
+    fn rows(
+        &self,
+        dev: &mut ReadDevice<'_>,
+        _read: &crate::backend::InfoSoFar<'_>,
+        slot: crate::report::Slot,
+    ) -> Vec<crate::report::Row> {
+        if slot != crate::report::Slot::End {
+            return Vec::new();
+        }
         let chip = read_chip(dev).map_or("Not reported", |c| c.label());
-        crate::output::field("Chipset", chip);
-        println!("{}", crate::style::kv("chipset", chip));
+        let value = crate::report::Value::text(chip);
+        vec![crate::report::Row::new(
+            "chipset",
+            Some("Chipset"),
+            Some("chipset"),
+            value,
+        )]
     }
 
     fn post_flash_identity(&self, dev: &mut ReadDevice<'_>) -> Result<Option<FirmwareReport>> {

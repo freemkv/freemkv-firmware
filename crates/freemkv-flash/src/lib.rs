@@ -32,6 +32,8 @@ pub mod inspection;
 pub mod manifest;
 pub mod platform;
 pub mod probe;
+pub mod report;
+pub mod standard;
 pub mod style;
 pub mod transport;
 pub mod workflow;

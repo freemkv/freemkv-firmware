@@ -1265,9 +1265,13 @@ fn describe_never_prints_escape_sequences_from_the_image() {
     hostile[d + 0x08..d + 0x08 + 4].copy_from_slice(b"\x1b[2J");
     let hostile = crate::cmac::resign(&hostile).unwrap();
     let out = captured_output(|| {
-        FileFacet::describe(&Mtk, &hostile)
-            .expect("recognized")
-            .unwrap();
+        FileFacet::describe(
+            &Mtk,
+            &hostile,
+            &FileFacet::recognize(&Mtk, &hostile).unwrap(),
+        )
+        .expect("recognized")
+        .unwrap();
     });
     assert!(out.contains("Chipset"), "not described: {out}");
     assert!(!out.contains('\x1b') && !out.contains("\\u{1b}"), "{out:?}");

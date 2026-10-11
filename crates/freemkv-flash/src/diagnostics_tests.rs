@@ -9,9 +9,11 @@ fn operation_log_includes_output_native_warning_and_full_error_chain() {
         std::env::temp_dir().join(format!("freemkv-diagnostics-test-{}", std::process::id()));
     let result: Result<()> = crate::output::capture_events(
         move |event| {
-            if let crate::output::Event::Field { label, value } = event {
-                if label == "Diagnostic log" {
-                    *captured.lock().unwrap() = Some(PathBuf::from(value));
+            if let crate::output::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(PathBuf::from(value));
+                    }
                 }
             }
         },
@@ -58,9 +60,11 @@ fn metadata_log_records_sizes_bytes_headers_and_validation_decisions() {
     let directory = std::env::temp_dir().join("freemkv-metadata-log-test");
     crate::output::capture_events(
         move |event| {
-            if let crate::output::Event::Field { label, value } = event {
-                if label == "Diagnostic log" {
-                    *captured.lock().unwrap() = Some(PathBuf::from(value));
+            if let crate::output::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(PathBuf::from(value));
+                    }
                 }
             }
         },
@@ -148,9 +152,11 @@ fn panic_closes_the_log_and_records_unknown_outcome() {
     let directory = std::env::temp_dir().join("freemkv-diagnostics-panic-test");
     crate::output::capture_events(
         move |event| {
-            if let crate::output::Event::Field { label, value } = event {
-                if label == "Diagnostic log" {
-                    *captured.lock().unwrap() = Some(PathBuf::from(value));
+            if let crate::output::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(PathBuf::from(value));
+                    }
                 }
             }
         },

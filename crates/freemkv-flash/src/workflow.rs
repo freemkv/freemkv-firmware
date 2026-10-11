@@ -1,8 +1,8 @@
 //! Shared application workflows for the CLI and desktop front-end.
 
 use crate::backend::{
-    registry, unsupported_family_error, Backend, BackendId, Capabilities, FlashRequest, ReadDevice,
-    UNKNOWN_FAMILY,
+    registry, unsupported_family_error, Backend, BackendId, Capabilities, Descriptor, FlashRequest,
+    Match, ReadDevice, UNKNOWN_FAMILY,
 };
 pub use crate::backend::{AuthorizedPlan, Confirm};
 use crate::manifest::FlashMode;
@@ -158,6 +158,72 @@ pub fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<BackendId> {
     Ok(resolve_capable(dev, |c| c.flash)?.descriptor().id)
 }
 
+/// What a drive is and what the tool can do with it.
+#[derive(Debug)]
+pub struct DriveProfile {
+    /// Device-reported identity.
+    pub identity: crate::backend::Identity,
+    /// The backend whose probe matched, and its evidence.
+    pub backend: Option<(&'static Descriptor, Match)>,
+    /// The backend that identified the receiver for recovery; offered even
+    /// when no probe matched.
+    pub recovery: Option<&'static Descriptor>,
+    /// What the matched backend offers.
+    pub capabilities: Capabilities,
+    /// How a backup is named, when one can be captured.
+    pub backup_format: Option<crate::backend::BackupFormat>,
+    /// The file formats a flash accepts.
+    pub flash_formats: &'static [crate::backend::FileFormat],
+}
+
+/// Probe `device` read-only and ask every recovery backend whether it knows
+/// the receiver. An unsupported drive is a profile, not an error.
+pub fn profile(device: &str) -> Result<DriveProfile> {
+    crate::diagnostics::run("profile", || {
+        let selector = resolve_device(Some(device))?;
+        let mut dev = platform::open(&selector, false)?;
+        profile_on(dev.as_mut())
+    })
+}
+
+/// [`profile`] on an open device.
+pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
+    let resolved = registry::resolve(dev)?;
+    let identity = match &resolved {
+        Some(r) => r.identity.clone(),
+        None => crate::backend::read_identity(&mut ReadDevice::new(dev, &[])),
+    };
+    // Identification errors only mean "not offered": a profile never fails
+    // merely because a drive is unsupported.
+    let recovery = registry::backends().find_map(|b| {
+        let facet = b.recovery()?;
+        let found = facet.identify(&mut ReadDevice::new(dev, b.allowed_data_out()));
+        matches!(found, Ok(Some(_))).then(|| b.descriptor())
+    });
+    let backend = resolved.as_ref().map(|r| r.backend);
+    Ok(DriveProfile {
+        identity,
+        capabilities: backend.map_or(Capabilities::NONE, Capabilities::of),
+        backup_format: backend.and_then(|b| b.backup()).map(|b| b.format()),
+        flash_formats: match backend {
+            Some(b) if b.flash().is_some() => b.descriptor().formats,
+            _ => &[],
+        },
+        backend: resolved.map(|r| (r.backend.descriptor(), r.matched)),
+        recovery,
+    })
+}
+
+/// The drive's `info` rows, without showing them.
+pub fn details(device: &str) -> Result<crate::report::Report> {
+    crate::diagnostics::run("details", || {
+        let selector = resolve_device(Some(device))?;
+        let mut dev = platform::open(&selector, false)?;
+        let backend = resolved_backend(dev.as_mut())?;
+        Ok(engine::info_report(dev.as_mut(), backend).report)
+    })
+}
+
 /// Print the optical drives, by the name or id every operation accepts.
 pub fn list() -> Result<()> {
     crate::diagnostics::run("list", list_inner)
@@ -298,7 +364,7 @@ fn open_flash(
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
-    let input_format = registry::flash_input_format(handler, &args.input, &input)
+    let input_format = registry::flash_input_format(handler, &args.input, &input)?
         .context("backend reads no firmware files")?;
     let unlocks = handler.allowed_data_out();
     let drive_model = handler
@@ -423,19 +489,27 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         };
         let selector = resolve_device(args.device.as_deref())?;
         let mut dev = platform::open(&selector, args.execute)?;
-        // Recovery serves drives too damaged to classify, so it does not run the
-        // protocol probe: each backend with a recovery path checks the receiver
-        // itself.
-        let Some(backend) = registry::backends().find(|b| b.recovery().is_some()) else {
-            bail!("no protocol backend offers recovery for this drive")
-        };
-        engine::recover(
-            dev.as_mut(),
-            backend,
-            supplied.as_deref(),
-            &target,
-            args.execute,
-            args.acknowledged_risk,
-        )
+        // Recovery serves drives too damaged to classify: no protocol probe,
+        // each recovery backend identifies the receiver itself.
+        let mut refusal = None;
+        for backend in registry::backends() {
+            let Some(facet) = backend.recovery() else {
+                continue;
+            };
+            let unlocks = backend.allowed_data_out();
+            if let Some(receiver) = facet.identify(&mut ReadDevice::new(dev.as_mut(), unlocks))? {
+                return engine::recover_identified(
+                    dev.as_mut(),
+                    backend,
+                    Some(receiver),
+                    supplied.as_deref(),
+                    &target,
+                    args.execute,
+                    args.acknowledged_risk,
+                );
+            }
+            refusal.get_or_insert(facet.unidentified());
+        }
+        bail!(refusal.unwrap_or("no protocol backend offers recovery for this drive"))
     })
 }
