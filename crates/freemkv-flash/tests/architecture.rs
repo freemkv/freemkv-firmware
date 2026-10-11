@@ -51,41 +51,57 @@ fn production_sources() -> Vec<Source> {
     out
 }
 
-/// The source with every `#[cfg(test)]` item removed (a block, or an item that
-/// ends at a `;` before any `{`).
+/// The source with every `#[cfg(test)]` item removed: a block, or an item,
+/// field or statement that ends at a `;` or `,` outside brackets before any `{`.
 fn without_test_items(src: &str) -> String {
     let mut out = String::new();
     let mut rest = src;
     while let Some(i) = rest.find("#[cfg(test)]") {
         out.push_str(&rest[..i]);
         let after = &rest[i + "#[cfg(test)]".len()..];
-        let end = match (after.find('{'), after.find(';')) {
-            (Some(b), Some(s)) if s < b => s + 1,
-            (Some(b), _) => {
-                let mut depth = 0usize;
-                let mut end = after.len();
-                for (off, c) in after[b..].char_indices() {
-                    match c {
-                        '{' => depth += 1,
-                        '}' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                end = b + off + 1;
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
+        let mut nesting = 0i32;
+        let mut end = after.len();
+        let mut prev = ' ';
+        for (off, c) in after.char_indices() {
+            match c {
+                '(' | '[' => nesting += 1,
+                '<' if prev != '-' && prev != '=' => nesting += 1,
+                ')' | ']' => nesting -= 1,
+                '>' if prev != '-' && prev != '=' => nesting -= 1,
+                ';' | ',' if nesting <= 0 => {
+                    end = off + 1;
+                    break;
                 }
-                end
+                '{' => {
+                    end = block_end(after, off);
+                    break;
+                }
+                _ => {}
             }
-            (None, Some(s)) => s + 1,
-            (None, None) => after.len(),
-        };
+            prev = c;
+        }
         rest = &after[end..];
     }
     out.push_str(rest);
     out
+}
+
+/// The offset just past the `}` matching the `{` at `open`.
+fn block_end(text: &str, open: usize) -> usize {
+    let mut depth = 0usize;
+    for (off, c) in text[open..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return open + off + 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    text.len()
 }
 
 /// Split Rust source into code (comments, strings and char literals replaced
@@ -342,6 +358,10 @@ fn scanner_sees_through_comments_and_strings() {
         without_test_items("a\n#[cfg(test)]\nmod t { fn x() {} }\nb"),
         "a\n\nb"
     );
+    assert_eq!(
+        without_test_items("S {\n#[cfg(test)]\nf: Option<(A, B)>,\ng: C }"),
+        "S {\n\ng: C }"
+    );
     assert!(Path::new(&root()).join("src/lib.rs").exists());
 }
 
@@ -491,6 +511,120 @@ fn core_modules_name_no_backend() {
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+// ---------------------------------------------------------------------------
+// R9: front-end code names no vendor; that wording comes from descriptors
+// ---------------------------------------------------------------------------
+
+/// Vendor and chip-family names, matched case-insensitively.
+const VENDOR_NAMES: &[&str] = &["pioneer", "mediatek", "mtk", "mt1959", "mt1939"];
+
+/// Front-end exceptions: `(file, exact identifier or string literal, reason)`.
+/// An entry that matches nothing fails the test, so the list cannot go stale.
+const VENDOR_ALLOWLIST: &[(&str, &str, &str)] = &[
+    (
+        "freemkv-flash-gui/src/ui.rs",
+        "pioneer",
+        "TEMPORARY: the backup name guesses the format from the drive label",
+    ),
+    (
+        "freemkv-flash-gui/src/ui.rs",
+        "PIONEER",
+        "TEMPORARY: the backup name guesses the format from the drive label",
+    ),
+    (
+        "freemkv-flash-gui/src/ui.rs",
+        "Pioneer identity",
+        "TEMPORARY: cards are grouped by label instead of by report group",
+    ),
+    (
+        "freemkv-flash-gui/src/ui.rs",
+        "pioneer.analysis.semantic_coverage",
+        "TEMPORARY: the inspect tree filters one backend's standing caveat by code",
+    ),
+];
+
+/// The GUI crate's non-test sources plus the CLI's `main.rs` and `workflow.rs`,
+/// as `(label, source)`.
+fn front_end_sources() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for file in ["src/main.rs", "src/workflow.rs"] {
+        let src = fs::read_to_string(root().join(file)).unwrap();
+        out.push((format!("freemkv-flash/{file}"), src));
+    }
+    let gui = root().join("../freemkv-flash-gui/src");
+    let mut stack = vec![gui.clone()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                stack.push(path);
+            } else if name.ends_with(".rs") && !name.ends_with("_tests.rs") {
+                let rel = path.strip_prefix(&gui).unwrap().to_string_lossy();
+                let label = format!("freemkv-flash-gui/src/{}", rel.replace('\\', "/"));
+                out.push((label, fs::read_to_string(&path).unwrap()));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Every identifier and string literal in the code of `src` (comments and
+/// `#[cfg(test)]` items removed) that contains a vendor name.
+fn vendor_mentions(src: &str) -> Vec<String> {
+    let (code, strings) = lex(&without_test_items(src));
+    let named = |text: &str| {
+        let lower = text.to_ascii_lowercase();
+        VENDOR_NAMES.iter().any(|v| lower.contains(v))
+    };
+    let identifiers = code
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|word| named(word))
+        .map(str::to_string);
+    let literals = strings.into_iter().filter(|s| named(s));
+    identifiers.chain(literals).collect()
+}
+
+#[test]
+fn cli_and_gui_text_name_no_vendor() {
+    let sources = front_end_sources();
+    assert!(
+        sources.iter().any(|(f, _)| f.ends_with("gui/src/ui.rs")),
+        "the GUI sources were not found"
+    );
+    let mut used = vec![false; VENDOR_ALLOWLIST.len()];
+    let mut problems = Vec::new();
+    for (file, src) in &sources {
+        for mention in vendor_mentions(src) {
+            let allowed = VENDOR_ALLOWLIST
+                .iter()
+                .position(|(f, text, _)| f == file && *text == mention);
+            match allowed {
+                Some(i) => used[i] = true,
+                None => problems.push(format!("{file}: {mention:?}")),
+            }
+        }
+    }
+    for (entry, used) in VENDOR_ALLOWLIST.iter().zip(used) {
+        if !used {
+            problems.push(format!("stale allowlist entry: {entry:?}"));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "front-end code names a vendor; take the wording from the backend's \
+         Descriptor or Report instead:\n{problems:#?}"
+    );
+}
+
+#[test]
+fn vendor_scan_skips_comments_and_tests() {
+    let src = "/// Pioneer help\nfn a() { let mtk_x = \"MediaTek\"; } // MT1959\n\
+               #[cfg(test)]\nmod t { fn b() { \"Pioneer\"; } }\n";
+    assert_eq!(vendor_mentions(src), ["mtk_x", "MediaTek"]);
 }
 
 // ---------------------------------------------------------------------------
