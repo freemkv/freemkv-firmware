@@ -11,6 +11,9 @@
 //! rebuilds only what changed, and `painting` keeps the signals its writes emit from being
 //! mistaken for the user.
 
+// qa's GUI gate (`FREEMKV_FLASH_GATE`), a debug-build hook.
+#[cfg(debug_assertions)]
+mod gate;
 mod widgets;
 
 use std::cell::{Cell, RefCell};
@@ -234,8 +237,12 @@ fn build_ui(gapp: &adw::Application) {
     window.set_content(Some(&toolbar));
 
     let refresh_action = gio::SimpleAction::new("refresh", None);
+    #[cfg(debug_assertions)]
+    let (model, gate) = crate::gui_gate::model_or(ui::App::new);
+    #[cfg(not(debug_assertions))]
+    let model = ui::App::new();
     let shell = Rc::new(Shell {
-        app: RefCell::new(ui::App::new()),
+        app: RefCell::new(model),
         window: window.clone(),
         title,
         refresh_action: refresh_action.clone(),
@@ -267,6 +274,10 @@ fn build_ui(gapp: &adw::Application) {
     let fx = shell.app.borrow_mut().start();
     shell.perform(fx);
     window.present();
+    #[cfg(debug_assertions)]
+    if let Some(dir) = gate {
+        gate::start(&shell, dir);
+    }
 }
 
 /// The hamburger menu: the window's commands, Quit last (GNOME convention).

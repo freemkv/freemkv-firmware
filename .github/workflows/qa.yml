@@ -189,3 +189,75 @@ jobs:
           set -euo pipefail
           export FREEMKV_FW_CORPUS="$PWD/crates/freemkv-fw/tests/fixtures"
           cargo test -p freemkv-fw --test corpus_create_verify -- --nocapture
+
+  # The desktop app checks itself on every OS it ships a native shell for: a debug build
+  # (the only one with the FREEMKV_FLASH_GATE hook) starts on a synthetic drive, never real
+  # hardware, walks every tab, opens and cancels the flash confirmation twice and reads its
+  # Confirm button from the native widget, checks its captures for ink, and writes gate.txt
+  # and a PNG per tab (tests/gui_gate.py). Linux runs under Xvfb and a private D-Bus session.
+  gui-gate:
+    needs: resolve-msrv
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            runner: ubuntu-24.04
+            bin: freemkv-flash-gui
+          - os: windows
+            runner: windows-latest
+            bin: freemkv-flash-gui.exe
+          - os: macos
+            runner: macos-latest
+            bin: freemkv-flash-gui
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: freemkv-firmware
+          persist-credentials: false
+      - name: Toolchain (the MSRV)
+        env:
+          TC: ${{ needs.resolve-msrv.outputs.v }}
+        run: |
+          rustup toolchain install "$TC" --profile minimal --no-self-update
+          rustup default "$TC"
+      - name: Install GTK4, libadwaita and a virtual display (Linux)
+        if: matrix.os == 'linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev xvfb xauth dbus
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: freemkv-firmware
+          key: gui-gate
+      - name: Build the debug GUI with its gate hook
+        run: cargo build --locked -p freemkv-flash-gui --features native
+      - name: GUI gate
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          py=$(command -v python3 || command -v python)
+          out="$RUNNER_TEMP/gui-gate"
+          app="target/debug/${{ matrix.bin }}"
+          if [ "${{ matrix.os }}" = linux ]; then
+            dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1200x24' \
+              "$py" tests/gui_gate.py "$app" "$out"
+          else
+            "$py" tests/gui_gate.py "$app" "$out"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: gui-gate-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/gui-gate/*.png
+            ${{ runner.temp }}/gui-gate/gate.txt
+            ${{ runner.temp }}/gui-gate/panic.txt
+          if-no-files-found: warn

@@ -5,15 +5,19 @@
 const MODEL: &[(&str, &str)] = &[
     ("ui.rs", include_str!("ui.rs")),
     ("ops.rs", include_str!("ops.rs")),
+    ("gui_gate.rs", include_str!("gui_gate.rs")),
 ];
 
 const SHELLS: &[(&str, &str)] = &[
     ("egui_shell.rs", include_str!("egui_shell.rs")),
     ("mac.rs", include_str!("mac.rs")),
+    ("mac/gate.rs", include_str!("mac/gate.rs")),
     ("windows.rs", include_str!("windows.rs")),
+    ("windows/gate.rs", include_str!("windows/gate.rs")),
     ("win_layout.rs", include_str!("win_layout.rs")),
     ("linux.rs", include_str!("linux.rs")),
     ("linux/widgets.rs", include_str!("linux/widgets.rs")),
+    ("linux/gate.rs", include_str!("linux/gate.rs")),
 ];
 
 const TOOLKITS: &[&str] = &[
@@ -97,7 +101,7 @@ fn every_shell_source_is_scanned() {
     let listed: Vec<&str> = SHELLS.iter().chain(MODEL).map(|(f, _)| *f).collect();
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut missing = Vec::new();
-    for sub in ["", "linux"] {
+    for sub in ["", "linux", "mac", "windows"] {
         let Ok(entries) = std::fs::read_dir(dir.join(sub)) else {
             continue;
         };
@@ -118,4 +122,39 @@ fn every_shell_source_is_scanned() {
         missing.is_empty(),
         "new GUI source files must be listed as MODEL or SHELLS: {missing:?}"
     );
+}
+
+/// The GUI gate is a debug-only hook: the model's module and each shell's gate are
+/// compiled out of release builds.
+#[test]
+fn the_gui_gate_is_compiled_out_of_release_builds() {
+    let main = include_str!("main.rs");
+    assert!(
+        main.contains("#[cfg(debug_assertions)]\n#[cfg_attr(not(feature = \"native\"), allow(dead_code))]\nmod gui_gate;"),
+        "main.rs must declare gui_gate under cfg(debug_assertions)"
+    );
+    for (file, src) in [
+        ("mac.rs", include_str!("mac.rs")),
+        ("windows.rs", include_str!("windows.rs")),
+        ("linux.rs", include_str!("linux.rs")),
+    ] {
+        assert!(
+            src.contains("#[cfg(debug_assertions)]\nmod gate;"),
+            "{file} must declare its gate under cfg(debug_assertions)"
+        );
+        for (n, line) in code(src) {
+            if line.contains("gui_gate::") || line.contains("gate::") {
+                let before: Vec<&str> = src.lines().take(n - 1).collect();
+                let guarded = before
+                    .iter()
+                    .rev()
+                    .take(12)
+                    .any(|l| l.contains("cfg(debug_assertions)"));
+                assert!(
+                    guarded,
+                    "{file}:{n}: a gate call outside cfg(debug_assertions)"
+                );
+            }
+        }
+    }
 }

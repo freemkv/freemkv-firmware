@@ -11,6 +11,10 @@
 //! Every handler goes through `send`; `render` is the only place controls are written, and
 //! it computes nothing. Geometry comes from `win_layout`, DPI-aware (PerMonitorV2).
 
+// qa's GUI gate (`FREEMKV_FLASH_GATE`), a debug-build hook.
+#[cfg(debug_assertions)]
+mod gate;
+
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -1529,6 +1533,10 @@ impl Shell {
                 .confirm
                 .is_some_and(|c: Confirm| c.confirm.enabled)
         };
+        #[cfg(debug_assertions)]
+        if matches!(tdn, w::Tdn::Timer(_)) && gate::probe(self, hwnd) {
+            return co::HRESULT::S_OK;
+        }
         match tdn {
             w::Tdn::Created => {
                 send_raw(
@@ -1875,8 +1883,16 @@ fn add_children(parent: &gui::TreeViewItem<()>, kids: &[Node]) {
 pub fn run() {
     // The file dialogs are COM objects: the apartment lives as long as the app.
     let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
-    let shell = Shell::new(ui::App::new());
+    #[cfg(debug_assertions)]
+    let (model, gate) = crate::gui_gate::model_or(ui::App::new);
+    #[cfg(not(debug_assertions))]
+    let model = ui::App::new();
+    let shell = Shell::new(model);
     shell.events();
+    #[cfg(debug_assertions)]
+    if let Some(dir) = gate {
+        gate::install(&shell, dir);
+    }
     if let Err(e) = shell.wnd.run_main(None) {
         let _ = w::HWND::NULL.MessageBox(&e.to_string(), "freemkv", co::MB::ICONERROR);
     }
