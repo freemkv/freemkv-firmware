@@ -290,3 +290,19 @@ fn live_state_reads_only() {
     assert!(mock.writes.is_empty());
     assert!(Mtk.raw_capture());
 }
+
+#[test]
+fn text_omits_the_family_line_mediatek_does_not_derive() {
+    // A chip generation is not a compatibility family, so no family line at
+    // all rather than "Unknown" for a recognized image.
+    let mut inspection = inspect("stock.bin", &stock());
+    assert!(inspection.family.is_none() && !inspection.derives_family);
+    let text = inspection.text();
+    assert!(text.starts_with("Source: stock.bin\nSHA-256: "), "{text}");
+    assert!(!text.contains("Hardware family"), "{text}");
+    // A provider that derives families still reports an unknown one.
+    inspection.derives_family = true;
+    assert!(inspection
+        .text()
+        .starts_with("Hardware family: Unknown\nSource: stock.bin\n"));
+}

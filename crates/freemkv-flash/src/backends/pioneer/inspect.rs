@@ -66,6 +66,7 @@ fn analyze(
         source,
         sha256: format!("{:x}", Sha256::digest(bytes)),
         family: None,
+        derives_family: true,
         components: Vec::new(),
         missing_components: Vec::new(),
         live: None,

@@ -1249,6 +1249,17 @@ fn inspect_tree_shows_each_region_role() {
 }
 
 #[test]
+fn inspect_heading_is_the_source_when_no_family_is_derived() {
+    let tree = analysis_tree(&ResultView::Inspect(mtk_inspection("h.bin", |_| {})));
+    assert!(tree.heading.ends_with("h.bin"), "{}", tree.heading);
+    assert!(!tree.heading.contains("Hardware family"));
+    assert!(!tree
+        .nodes
+        .iter()
+        .any(|n| n.kind == NodeKind::Text(tree.heading.clone())));
+}
+
+#[test]
 fn report_actions_need_a_result() {
     let mut app = one_drive();
     assert!(app.dispatch(Input::Choose(Pick::ReportText)).is_empty());

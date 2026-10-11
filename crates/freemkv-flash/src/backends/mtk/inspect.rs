@@ -284,7 +284,9 @@ fn analyze(source: String, image: &[u8], chip: &ChipInfo, control: &Control) -> 
         application_version: env!("CARGO_PKG_VERSION"),
         source,
         sha256: sha256.clone(),
+        // A chip generation is a chipset label, not a compatibility family.
         family: None,
+        derives_family: false,
         components: vec![ComponentView {
             name: COMPONENT.into(),
             fields,

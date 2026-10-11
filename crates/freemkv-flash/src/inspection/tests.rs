@@ -206,6 +206,10 @@ fn absent_kernel_is_visible_in_inspection_and_comparison() {
     );
     assert_eq!(a.missing_components, ["Kernel"]);
     assert!(a.text().contains("Kernel: Not included"));
+    // Pioneer derives families: without a Kernel the family is Unknown.
+    assert!(a
+        .text()
+        .starts_with("Hardware family: Unknown\nSource: normal-only.tar\n"));
     let result = compare_inspections(a.clone(), a, &Control::default()).unwrap();
     let kernel = result.sections.iter().find(|s| s.name == "Kernel").unwrap();
     assert!(kernel
