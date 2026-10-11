@@ -143,6 +143,8 @@ pub enum Effect {
 pub enum CheckId {
     RecoveryReadFromDrive,
     RiskAck,
+    /// Save a live analysis capture as a backup rather than a raw read.
+    CaptureAsBackup,
 }
 
 /// One side of a comparison.
@@ -547,6 +549,7 @@ pub struct App {
     pub(crate) recovery_input: Option<PathBuf>,
     pub(crate) recovery_current: Option<PathBuf>,
     pub(crate) recovery_read: bool,
+    pub(crate) capture_as_backup: bool,
     pub(crate) sources: [Option<Source>; 2],
     pub(crate) analysis: Option<ResultView>,
     pub(crate) analysis_tree: Option<Arc<AnalysisView>>,
@@ -596,6 +599,7 @@ impl App {
             recovery_input: None,
             recovery_current: None,
             recovery_read: false,
+            capture_as_backup: false,
             sources: [None, None],
             analysis: None,
             analysis_tree: None,
@@ -714,6 +718,19 @@ impl App {
                 self.recovery_read = on;
             }
             Input::SetCheck(CheckId::RiskAck, on) if self.pending.is_some() => self.risk_ack = on,
+            Input::SetCheck(CheckId::CaptureAsBackup, on) if !self.busy() => {
+                self.capture_as_backup = on;
+                let mut changed = false;
+                for slot in &mut self.sources {
+                    if let Some(Source::Drive { as_backup, .. }) = slot {
+                        changed |= *as_backup != on;
+                        *as_backup = on;
+                    }
+                }
+                if changed {
+                    self.set_analysis(None);
+                }
+            }
             Input::ReadInfo if !self.busy() => {
                 return self.start_job("Drive information", self.device.clone(), Job::Info);
             }
@@ -867,6 +884,7 @@ impl App {
                     Source::Drive {
                         device,
                         capture: path,
+                        as_backup: self.capture_as_backup,
                     },
                 );
             }
@@ -1285,13 +1303,25 @@ impl App {
             });
             items.push(Item::Note(match &self.sources[i] {
                 Some(Source::File(p)) => p.display().to_string(),
-                Some(Source::Drive { device, capture }) => {
-                    format!("{device} → capture {}", capture.display())
-                }
+                Some(Source::Drive {
+                    device,
+                    capture,
+                    as_backup,
+                }) => format!(
+                    "{device} → capture {}{}",
+                    capture.display(),
+                    if *as_backup { " (as a backup)" } else { "" }
+                ),
                 Some(Source::Analyzed(a)) => format!("Retained analysis: {}", a.source),
                 None => "Choose a firmware file or drive.".into(),
             }));
         }
+        items.push(Item::Check {
+            id: CheckId::CaptureAsBackup,
+            text: "Save a drive capture as a backup".into(),
+            checked: self.capture_as_backup,
+            enabled,
+        });
         let ready = self.sources[0].is_some() && (!compare || self.sources[1].is_some());
         items.push(Item::Buttons {
             label: None,

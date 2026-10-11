@@ -494,4 +494,9 @@ pub trait InspectFacet {
     ) -> Option<Result<Inspection>>;
     /// The live drive state shown beside a captured inspection.
     fn live_state(&self, dev: &mut ReadDevice<'_>) -> LiveState;
+    /// Whether a live capture saves the raw drive read (the dump) rather than
+    /// a backup. A raw read keeps the per-unit data a backup resets.
+    fn raw_capture(&self) -> bool {
+        false
+    }
 }

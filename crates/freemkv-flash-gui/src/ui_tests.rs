@@ -707,6 +707,150 @@ fn only_one_compare_side_may_be_a_live_drive() {
 }
 
 #[test]
+fn capture_as_backup_follows_every_live_source() {
+    let mut app = one_drive();
+    app.dispatch(Input::SelectTask(Task::Inspect));
+    let check = |app: &App| {
+        app.view().panel.iter().find_map(|i| match i {
+            Item::Check {
+                id: CheckId::CaptureAsBackup,
+                checked,
+                ..
+            } => Some(*checked),
+            _ => None,
+        })
+    };
+    assert_eq!(check(&app), Some(false));
+    app.dispatch(Input::Chosen(Pick::AnalysisDrive(0), "/tmp/cap.bin".into()));
+    assert!(matches!(
+        &app.sources[0],
+        Some(Source::Drive {
+            as_backup: false,
+            ..
+        })
+    ));
+    app.dispatch(Input::SetCheck(CheckId::CaptureAsBackup, true));
+    assert_eq!(check(&app), Some(true));
+    assert!(matches!(
+        &app.sources[0],
+        Some(Source::Drive {
+            as_backup: true,
+            ..
+        })
+    ));
+    assert!(has_text(
+        &app.view(),
+        "drive-a → capture /tmp/cap.bin (as a backup)"
+    ));
+}
+
+/// Inspect the committed MediaTek fixture after `edit`, via a temporary file.
+fn mtk_inspection(name: &str, edit: impl FnOnce(&mut [u8])) -> Arc<inspection::Inspection> {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../freemkv-flash/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+    let mut bytes = std::fs::read(fixture).unwrap();
+    edit(&mut bytes);
+    let path = std::env::temp_dir().join(format!("freemkv-gui-{}-{name}", std::process::id()));
+    std::fs::write(&path, &bytes).unwrap();
+    let result = inspection::inspect(&Source::File(path.clone()), &Control::default());
+    let _ = std::fs::remove_file(&path);
+    result.unwrap()
+}
+
+/// The "Changes by region" rows of a comparison tree, plus its text lines.
+fn compare_tree(
+    report: inspection::ComparisonReport,
+) -> (Vec<String>, Vec<Vec<String>>, Vec<String>) {
+    let tree = analysis_tree(&ResultView::Compare(report));
+    let texts = tree
+        .nodes
+        .iter()
+        .filter_map(|n| match &n.kind {
+            NodeKind::Text(t) => Some(t.clone()),
+            _ => None,
+        })
+        .collect();
+    fn find(nodes: &[Node]) -> Option<(Vec<String>, Vec<Vec<String>>)> {
+        nodes.iter().find_map(|n| match &n.kind {
+            NodeKind::Table { header, rows } => Some((header.clone(), rows.clone())),
+            _ => find(&n.children),
+        })
+    }
+    let (header, rows) = find(&tree.nodes).expect("a region table");
+    (header, rows, texts)
+}
+
+#[test]
+fn compare_tree_marks_expected_and_unexpected_differences() {
+    // Two drive reads of one build: boot mirror in the boot page, own calibration.
+    let read = |unit: u8, code: bool| {
+        move |b: &mut [u8]| {
+            b.copy_within(0x1_0000..0x1_0400, 0);
+            b[0x1f_0010] = unit;
+            if code {
+                b[0x1_2345] ^= 1;
+            }
+        }
+    };
+    let a = mtk_inspection("a.bin", read(1, false));
+    let b = mtk_inspection("b.bin", read(2, false));
+    let report = inspection::compare_inspections(a.clone(), b, &Control::default()).unwrap();
+    let (header, rows, texts) = compare_tree(report);
+    assert_eq!(header[1], "Role");
+    assert_eq!(header.last().unwrap(), "Verdict");
+    let calibration = rows.iter().find(|r| r[0] == "Calibration").unwrap();
+    assert_eq!(
+        (calibration[1].as_str(), calibration[5].as_str()),
+        ("Per-unit", "Expected")
+    );
+    assert!(rows
+        .iter()
+        .filter(|r| r[0] != "Calibration")
+        .all(|r| r[5] == "None"));
+    assert!(
+        texts.iter().any(|t| t == "No unexpected differences."),
+        "{texts:?}"
+    );
+
+    let c = mtk_inspection("c.bin", read(2, true));
+    let (_, rows, texts) =
+        compare_tree(inspection::compare_inspections(a, c, &Control::default()).unwrap());
+    let code = rows.iter().find(|r| r[5] == "Unexpected").unwrap();
+    assert_eq!(
+        (code[0].as_str(), code[1].as_str()),
+        ("Integrity-covered code 0", "Code")
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|t| t == "Unexpected differences in 1 region."),
+        "{texts:?}"
+    );
+}
+
+#[test]
+fn inspect_tree_shows_each_region_role() {
+    let tree = analysis_tree(&ResultView::Inspect(mtk_inspection("s.bin", |_| {})));
+    let firmware = tree
+        .nodes
+        .iter()
+        .find(|n| n.kind == NodeKind::Section("Firmware".into()))
+        .unwrap();
+    let boot = firmware
+        .children
+        .iter()
+        .find(|n| n.kind == NodeKind::Section("Boot page".into()))
+        .unwrap();
+    assert_eq!(
+        boot.children[0].kind,
+        NodeKind::Field {
+            label: "Role:".into(),
+            value: "Code".into()
+        }
+    );
+}
+
+#[test]
 fn report_actions_need_a_result() {
     let mut app = one_drive();
     assert!(app.dispatch(Input::Choose(Pick::ReportText)).is_empty());

@@ -28,8 +28,10 @@ pub enum Source {
     Drive {
         /// Device selector accepted by the regular backup workflow.
         device: String,
-        /// New backup path; existing files are never overwritten.
+        /// New capture path; existing files are never overwritten.
         capture: PathBuf,
+        /// Save a backup even where the backend's capture is a raw read.
+        as_backup: bool,
     },
 }
 /// Cooperative cancellation shared with a GUI worker.
@@ -128,7 +130,11 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 .into_owned();
             inspect_bytes(name, &bytes, control)
         }
-        Source::Drive { device, capture } => {
+        Source::Drive {
+            device,
+            capture,
+            as_backup,
+        } => {
             let selector = workflow::resolve_device(Some(device))?;
             let mut opened = platform::open(&selector, false)?;
             let mut dev = capture::CancellableDevice {
@@ -145,7 +151,8 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
             control.check()?;
             let state =
                 provider.live_state(&mut ReadDevice::new(&mut dev, backend.allowed_data_out()));
-            engine::backup_with_replace(&mut dev, backend, capture, false, false)?;
+            let raw = provider.raw_capture() && !as_backup;
+            engine::backup_with_replace(&mut dev, backend, capture, raw, false)?;
             drop(opened);
             control.check()?;
             let mut inspection = inspect_inner(&Source::File(capture.clone()), control)?;

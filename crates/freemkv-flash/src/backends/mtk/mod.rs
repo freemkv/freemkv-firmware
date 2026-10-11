@@ -40,6 +40,7 @@ pub(crate) mod backup;
 pub(crate) mod crossflash;
 pub(crate) mod file_info;
 pub mod fw_ident;
+pub(crate) mod inspect;
 pub mod oem;
 
 use crate::backend::{
@@ -1058,6 +1059,9 @@ impl Backend for Mtk {
         Some(self)
     }
     fn flash(&self) -> Option<&dyn FlashFacet> {
+        Some(self)
+    }
+    fn inspect(&self) -> Option<&dyn crate::backend::InspectFacet> {
         Some(self)
     }
 }

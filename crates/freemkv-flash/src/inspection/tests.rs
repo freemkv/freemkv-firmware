@@ -132,6 +132,7 @@ fn cancellation_and_two_drives_stop_before_io() {
     let source = Source::Drive {
         device: "not-a-drive".into(),
         capture: "not-a-file".into(),
+        as_backup: false,
     };
     assert!(matches!(
         compare(&source, &source, &Control::default())
@@ -229,4 +230,55 @@ fn dvd_region_label_follows_the_mask_not_the_type_code() {
     assert_eq!(label(0x2d, 0xff), "Not set");
     assert_eq!(label(0x64, 0xfd), "2");
     assert_eq!(label(0x64, 0xfa), "1, 3");
+}
+
+/// One real input per backend with an inspect facet. A backend added to the
+/// registry without one fails the conformance test below.
+fn inspect_fixtures(id: &str) -> Vec<(&'static str, Vec<u8>)> {
+    match id {
+        "pioneer-oem" => vec![("package.tar", package("1.00", false))],
+        "mtk19xx" => {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+            let stored = std::fs::read(path).unwrap();
+            let mut read = stored.clone();
+            read.copy_within(0x1_0000..0x1_0400, 0);
+            vec![("stored.bin", stored), ("read.bin", read)]
+        }
+        other => panic!("backend {other} inspects firmware but has no inspect fixture here"),
+    }
+}
+
+#[test]
+fn every_inspected_region_has_a_role() {
+    let mut inspected = 0;
+    for backend in registry::backends() {
+        let Some(facet) = backend.inspect() else {
+            continue;
+        };
+        for (name, bytes) in inspect_fixtures(backend.descriptor().id.0) {
+            let inspection = facet
+                .inspect(name.into(), &bytes, &Control::default())
+                .unwrap_or_else(|| panic!("{name} not recognized"))
+                .unwrap();
+            let views: Vec<_> = inspection
+                .components
+                .iter()
+                .flat_map(|c| &c.regions)
+                .collect();
+            let compared: Vec<_> = inspection
+                .analyses
+                .iter()
+                .flat_map(|a| &a.regions)
+                .collect();
+            assert!(!views.is_empty(), "{name}: no regions");
+            assert_eq!(views.len(), compared.len(), "{name}");
+            for (view, region) in views.iter().zip(&compared) {
+                assert_ne!(view.role, RegionRole::Unknown, "{name}: {}", view.name);
+                assert_eq!(view.role, region.role, "{name}: {}", view.name);
+            }
+            inspected += 1;
+        }
+    }
+    assert!(inspected >= 2, "{inspected}");
 }
