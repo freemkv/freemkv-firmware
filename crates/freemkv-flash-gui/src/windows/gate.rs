@@ -177,6 +177,7 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
         pump(150);
         let acked = me.view().confirm.is_some_and(|v| v.ack_checked);
         run.ticked = Some((acked, confirm.as_ref().map(|b| b.IsWindowEnabled())));
+        run.box_reads_ticked = Some(me.risk_box.get());
     }
     let shot = capture(dialog);
     let raw = unsafe { w::HWND::from_ptr(dialog.ptr()) };

@@ -103,6 +103,7 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
         settle(SETTLE);
         let acked = shell.view().confirm.is_some_and(|v| v.ack_checked);
         run.ticked = Some((acked, confirm.as_ref().map(|b| b.is_sensitive())));
+        run.box_reads_ticked = Some(ack.is_active());
     }
     let name = if tick { "sheet" } else { "sheet-reopened" };
     g.save(dir, name, capture(&root).as_ref());

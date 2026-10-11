@@ -104,6 +104,7 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             settle(c, SETTLE);
             let acked = c.view().confirm.is_some_and(|v| v.ack_checked);
             run.ticked = Some((acked, confirm.as_ref().map(|b| b.isEnabled())));
+            run.box_reads_ticked = Some(ack.state() == 1);
         }
     }
     let name = if tick { "sheet" } else { "sheet-reopened" };

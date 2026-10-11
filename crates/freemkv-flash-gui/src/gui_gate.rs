@@ -400,6 +400,9 @@ pub struct SheetRun {
     /// After ticking the risk box through its widget: the model's acknowledgement and
     /// whether the Confirm control was enabled. `None` when the box was not ticked.
     pub ticked: Option<(bool, Option<bool>)>,
+    /// After that tick, the box's state as the shell reads it back from the toolkit (on
+    /// Windows, as the task dialog reported it). `None` when not ticked or unreadable.
+    pub box_reads_ticked: Option<bool>,
     /// After Cancel through its widget, the model withdrew the request and the sheet closed.
     pub closed: bool,
 }
@@ -441,6 +444,11 @@ pub fn sheet_checks(g: &mut Gate, first: &SheetRun, reopened: &SheetRun) {
         "confirm-enabled-after-tick",
         after == Some(true),
         state(after),
+    );
+    g.check(
+        "box-reads-ticked-after-tick",
+        first.box_reads_ticked == Some(true),
+        seen(first.box_reads_ticked, "ticked", "unticked"),
     );
     g.check("sheet-closes-on-cancel", first.closed, "first opening");
     g.check("sheet-reopens", reopened.opened, "after Cancel");

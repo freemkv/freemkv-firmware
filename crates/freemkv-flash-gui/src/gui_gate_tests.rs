@@ -325,10 +325,12 @@ fn good_sheets() -> (SheetRun, SheetRun) {
         unticked: Some(true),
         confirm_before: Some(false),
         ticked: Some((true, Some(true))),
+        box_reads_ticked: Some(true),
         closed: true,
     };
     let reopened = SheetRun {
         ticked: None,
+        box_reads_ticked: None,
         ..first.clone()
     };
     (first, reopened)
@@ -345,13 +347,21 @@ fn a_sheet_that_gates_confirm_passes() {
     let (first, reopened) = good_sheets();
     let g = sheet_verdict(&first, &reopened);
     assert!(g.passed(), "{}", g.report());
-    assert_eq!(g.report().lines().count(), 11);
+    assert_eq!(g.report().lines().count(), 12);
 }
 
 #[test]
 fn every_sheet_fault_fails_the_gate() {
     let (good, reopened) = good_sheets();
-    let faults: [(&str, SheetRun, SheetRun); 9] = [
+    let faults: [(&str, SheetRun, SheetRun); 10] = [
+        (
+            "the box does not read back as ticked",
+            SheetRun {
+                box_reads_ticked: Some(false),
+                ..good.clone()
+            },
+            reopened.clone(),
+        ),
         ("never opened", SheetRun::default(), reopened.clone()),
         (
             "confirm enabled before the tick",
