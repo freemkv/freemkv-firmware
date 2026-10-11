@@ -332,3 +332,18 @@ fn truncated_boot_rom_is_not_protocol_evidence() {
     let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), b"MT1959".to_vec());
     assert!(!mtk::has_mt19_banner(&mut dev));
 }
+
+#[test]
+fn file_identification_covers_every_registered_backend_once() {
+    // `info <file>` keeps its own order (structural parsers first); a backend
+    // added to the registry but not to that order would never describe files.
+    let mut registered: Vec<_> = backends().map(|b| b.backend_name()).collect();
+    let mut for_files: Vec<_> = file_backends().map(|b| b.backend_name()).collect();
+    registered.sort_unstable();
+    for_files.sort_unstable();
+    assert_eq!(for_files, registered);
+    assert_eq!(
+        file_backends().next().map(|b| b.family()),
+        Some(Family::Pioneer)
+    );
+}
