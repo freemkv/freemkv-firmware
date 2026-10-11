@@ -582,12 +582,6 @@ fn non_mtk_family_reports_full_image_unsupported_not_panic() {
         err.to_string().contains("not supported"),
         "expected an unsupported-family error, got: {err}"
     );
-    // The read-surface map default is simply "no map" (None), also non-panicking.
-    let id = drive.identity(&mut dev);
-    let map = drive
-        .read_surface_map(&mut dev, &id, &[], &[])
-        .expect("default surface map must not error");
-    assert!(map.is_none(), "a family with no map returns None");
 }
 
 /// A minimal fixed-format REQUEST SENSE payload carrying `key`.

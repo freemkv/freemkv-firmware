@@ -1142,23 +1142,6 @@ impl DriveFamily for Mtk {
         crate::probe::read_full_image(dev)
     }
 
-    fn read_surface_map(
-        &self,
-        dev: &mut dyn ScsiDevice,
-        ident: &crate::drive::Identity,
-        image: &[u8],
-        gaps: &[(usize, usize)],
-    ) -> Result<Option<(String, String)>> {
-        let map_ident = crate::probe::MapIdent {
-            vendor: ident.vendor.as_str(),
-            product: ident.product.as_str(),
-            revision: ident.revision.as_str(),
-            banner: ident.banner.as_deref(),
-        };
-        let (json, md) = crate::probe::build_map(dev, &map_ident, image, gaps)?;
-        Ok(Some((json, md)))
-    }
-
     fn image_size(&self) -> usize {
         IMAGE_SIZE
     }

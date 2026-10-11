@@ -310,3 +310,31 @@ fn scanner_sees_through_comments_and_strings() {
     );
     assert!(Path::new(&root()).join("src/lib.rs").exists());
 }
+
+// ---------------------------------------------------------------------------
+// R5: read_surface_map had no caller and is deleted with its map builder
+// ---------------------------------------------------------------------------
+
+#[test]
+fn read_surface_map_is_gone() {
+    let sources = production_sources();
+    let mut problems = Vec::new();
+    for word in [
+        "read_surface_map",
+        "build_map",
+        "MapIdent",
+        "analyze_command_table",
+    ] {
+        for s in &sources {
+            if !word_hits(&s.code, word).is_empty() {
+                problems.push(format!("{}: `{word}`", s.path));
+            }
+        }
+    }
+    for s in &sources {
+        if s.strings.iter().any(|l| l.contains("map.json")) {
+            problems.push(format!("{}: writes a map.json", s.path));
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}

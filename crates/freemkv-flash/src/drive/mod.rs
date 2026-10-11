@@ -564,22 +564,6 @@ pub trait FirmwareBackend: Sync {
         ))
     }
 
-    /// Build the read-surface map (`map.json` + `map.md`) for the `dump`
-    /// everything-tar, from an ALREADY-READ `image` and its `gaps` (from
-    /// [`Self::read_full_image`]) plus the `ident` header. Read-only.
-    ///
-    /// Default: `Ok(None)` — a family with no surface map simply omits it from
-    /// the dump tar.
-    fn read_surface_map(
-        &self,
-        _dev: &mut dyn ScsiDevice,
-        _ident: &Identity,
-        _image: &[u8],
-        _gaps: &[(usize, usize)],
-    ) -> Result<Option<(String, String)>> {
-        Ok(None)
-    }
-
     /// Full firmware image size in bytes (e.g. 2 MiB).
     fn image_size(&self) -> usize;
 
