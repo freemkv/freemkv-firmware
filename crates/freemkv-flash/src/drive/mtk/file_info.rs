@@ -15,7 +15,7 @@ pub(crate) enum CmacSummary {
 }
 
 /// What `info` reports for a firmware FILE. Kept separate from the printing in
-/// [`info_file`] so the classification can be unit-tested without capturing
+/// [`crate::engine::info_file`] so the classification can be unit-tested without capturing
 /// stdout. Uses the SAME [`freemkv_chipset::detect_chip`] the flash cross-gate
 /// uses, so `info <file>` and the flash `image-matches-drive` gate never
 /// disagree on a family.
