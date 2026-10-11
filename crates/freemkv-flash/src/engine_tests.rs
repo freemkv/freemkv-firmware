@@ -84,11 +84,20 @@ fn is_stream_write(cdb: &[u8]) -> bool {
     cdb.first() == Some(&0x3B) && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
 }
 
-/// A banner or descriptor read: the only reads the chip gate issues.
+/// The READ BUFFER length, big-endian 24-bit at `cdb[6..9]`.
+fn read_len(cdb: &[u8]) -> Option<u32> {
+    let b = cdb.get(6..9)?;
+    Some(u32::from_be_bytes([0, b[0], b[1], b[2]]))
+}
+
+/// A banner or descriptor read at its exact identity length: the only reads
+/// the chip gate issues. A firmware chunk at the same offset does not match.
 fn is_identity_read(cdb: &[u8]) -> bool {
     is_mode6_read(cdb)
-        && (cdb.get(3..6) == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
-            || cdb.get(3..6) == Some(&offset_bytes(0x3000)[..]))
+        && ((cdb.get(3..6) == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
+            && read_len(cdb) == Some(ROM_1EC000_LEN))
+            || (cdb.get(3..6) == Some(&offset_bytes(0x3000)[..])
+                && read_len(cdb) == Some(ROM_003000_LEN)))
 }
 
 fn is_mode6_read(cdb: &[u8]) -> bool {
@@ -1117,6 +1126,8 @@ fn existing_preflash_destination_fails_before_capturing_the_drive() {
         dev.reads.iter().all(|c| is_identity_read(c)),
         "do not spend minutes reading before finding a path collision"
     );
+    // Two identity windows, each read at most twice (one retry).
+    assert!(dev.reads.len() <= 4, "{} reads", dev.reads.len());
     assert!(dev.writes.is_empty());
 }
 
@@ -1192,6 +1203,7 @@ fn force_waives_model_identity_but_keeps_input_structure_checks() {
         .is_ok());
     // --force reads only the drive's identity, for the chip gate.
     assert!(dev.reads.iter().all(|c| is_identity_read(c)));
+    assert!(!dev.reads.is_empty() && dev.reads.len() <= 4);
     assert!(Mtk
         .validate_forced_image(&mut dev, b"not a firmware image")
         .is_err());
@@ -1490,4 +1502,63 @@ fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
         banner_reads, 0,
         "banner read issued despite a descriptor tag"
     );
+}
+
+/// A flashable image whose descriptor carries `tag` (or none) and whose boot
+/// banner at 0x3000 reads `banner`: real ASUS BW-16D1HT parts are MT1939
+/// silicon (tag) with an `MT1959 Boot` banner.
+fn chip_image(model: &str, tag: Option<&[u8; 10]>, banner: &[u8]) -> Vec<u8> {
+    let mut img = make_flashable(vec![0u8; IMAGE_SIZE], model);
+    let d = ROM_1EC000_OFFSET as usize;
+    img[d + 0x34..d + 0x3E].fill(0);
+    if let Some(tag) = tag {
+        img[d + 0x34..d + 0x3E].copy_from_slice(tag);
+    }
+    img[0x3000..0x3020].fill(0);
+    img[0x3000..0x3000 + banner.len()].copy_from_slice(banner);
+    crate::cmac::resign(&img).unwrap()
+}
+
+fn mt1939_drive() -> MockScsiDevice {
+    MockScsiDevice::new().with_firmware_image(chip_image(
+        "BD-RE BU40N",
+        Some(b"MTEKMT1939"),
+        b"MT1959 Boot JB8",
+    ))
+}
+
+#[test]
+fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
+    let mt1939 = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1959 Boot JB8");
+    let mut dev = mt1939_drive();
+    Mtk.validate_image(&mut dev, &mt1939, "BD-RE BU40N", false)
+        .unwrap();
+    Mtk.validate_forced_image(&mut dev, &mt1939).unwrap();
+
+    let mt1959 = chip_image("BD-RE BU40N", Some(b"MTEKMT1959"), b"MT1959 Boot JB8");
+    let normal = Mtk
+        .validate_image(&mut dev, &mt1959, "BD-RE BU40N", false)
+        .unwrap_err();
+    assert!(format!("{normal:#}").contains("MT1959"), "{normal:#}");
+    assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");
+    let forced = Mtk.validate_forced_image(&mut dev, &mt1959).unwrap_err();
+    assert!(format!("{forced:#}").contains("MT1939"), "{forced:#}");
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn chip_gate_banner_fallback_only_serves_untagged_images() {
+    let untagged = chip_image("BD-RE BU40N", None, b"MT1939 Boot");
+    let mut banner_only =
+        MockScsiDevice::new().with_firmware_image(chip_image("BD-RE BU40N", None, b"MT1939 Boot"));
+    Mtk.validate_forced_image(&mut banner_only, &untagged)
+        .unwrap();
+
+    // A tagged image needs the drive's descriptor: a banner alone is refused.
+    let tagged = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1939 Boot");
+    let err = Mtk
+        .validate_forced_image(&mut banner_only, &tagged)
+        .unwrap_err();
+    assert!(err.to_string().contains("identity descriptor"), "{err}");
+    assert!(banner_only.writes.is_empty());
 }

@@ -1238,3 +1238,112 @@ fn info_prints_pioneer_identity_before_region_and_reads_snapshot_once() {
         .count();
     assert_eq!(snapshots, 1, "Device::info() must run once per `info`");
 }
+
+// ---- force refusal, input classification, recover hook ----------------------
+
+fn envelope_tar() -> Vec<u8> {
+    let envelope = |kind: &str| {
+        let mut bytes = vec![0u8; 0x1000];
+        let header = format!("********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   NEW-DRIVE\r\nRevision Level : 1.00\r\nHardware Version : SAT 8800\r\nKernel Version : ID60\r\nDestination : GENERAL\r\nFile Type : {kind}\r\n");
+        bytes[..header.len()].copy_from_slice(header.as_bytes());
+        bytes
+    };
+    let mut archive = tar::Builder::new(Vec::new());
+    for (name, bytes) in [
+        ("kernel.enc", envelope("Kernel")),
+        ("normal.enc", envelope("Normal")),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, name, bytes.as_slice())
+            .unwrap();
+    }
+    archive.into_inner().unwrap()
+}
+
+#[test]
+fn only_pioneer_refuses_public_force_and_points_at_recover() {
+    let refusal = Pioneer::new()
+        .force_refusal()
+        .expect("Pioneer refuses --force");
+    assert!(refusal.contains("recover --current"), "{refusal}");
+    assert!(crate::drive::mtk::Mtk.force_refusal().is_none());
+}
+
+#[test]
+fn classify_input_routes_by_content_then_extension() {
+    use crate::drive::InputKind;
+    use std::path::Path;
+    let tar = envelope_tar();
+    assert!(bundle::Bundle::from_tar_bytes(&tar).is_ok());
+    let pioneer = Pioneer::new();
+    // A valid bundle is recognized by content, whatever it is named.
+    assert_eq!(
+        pioneer.classify_input(Path::new("fw.bin"), &tar),
+        InputKind::PioneerBundle
+    );
+    // A broken .tar still routes to the bundle path for the specific error.
+    assert_eq!(
+        pioneer.classify_input(Path::new("x.TAR"), b"garbage"),
+        InputKind::PioneerBundle
+    );
+    assert_eq!(
+        pioneer.classify_input(Path::new("x.bin"), b"garbage"),
+        InputKind::Bin
+    );
+}
+
+#[test]
+fn recover_on_a_non_pioneer_drive_errors_without_any_io_beyond_identity() {
+    let (current, target) = (envelope_tar(), envelope_tar());
+    let mut dev = MockScsiDevice::new();
+    let result = Pioneer::new().recover(&mut dev, Some(&current), &target, true);
+    let err = result.expect("Pioneer has a recovery path").unwrap_err();
+    assert!(
+        format!("{err:#}").contains("No firmware written")
+            || format!("{err:#}").contains("no firmware written"),
+        "{err:#}"
+    );
+    assert!(dev.writes.is_empty(), "wrote to an unrecognized drive");
+    // Pioneer firmware reads are READ BUFFER (3C) with mode 2 and buffer id B0.
+    assert!(
+        dev.reads
+            .iter()
+            .all(|c| !(c.first() == Some(&0x3C) && c.get(1).map(|m| m & 0x1f) == Some(0x02))),
+        "read firmware memory before identifying the receiver: {:02x?}",
+        dev.reads
+    );
+}
+
+#[test]
+fn recover_without_current_never_reads_firmware_from_an_unrecognized_drive() {
+    let mut dev = MockScsiDevice::new();
+    let err = Pioneer::new()
+        .recover(&mut dev, None, &envelope_tar(), false)
+        .unwrap()
+        .unwrap_err();
+    assert!(
+        format!("{err:#}")
+            .to_lowercase()
+            .contains("no firmware written"),
+        "{err:#}"
+    );
+    assert!(dev.writes.is_empty());
+    assert!(
+        dev.reads.iter().all(|c| c.first() != Some(&0x3C)),
+        "backup capture ran before the receiver check: {:02x?}",
+        dev.reads
+    );
+}
+
+#[test]
+fn mediatek_has_no_recovery_path() {
+    let mut dev = MockScsiDevice::new();
+    assert!(crate::drive::mtk::Mtk
+        .recover(&mut dev, Some(&[1, 2, 3]), &[4, 5, 6], true)
+        .is_none());
+    assert!(dev.reads.is_empty() && dev.writes.is_empty());
+}

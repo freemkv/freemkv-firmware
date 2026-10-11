@@ -357,3 +357,31 @@ fn unsupported_pioneer_dialect_fails_before_update_entry() {
     assert_eq!(drive.vendor_reads, 1);
     assert_eq!(drive.writes, 0);
 }
+
+#[test]
+fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
+    use crate::drive::DriveFamily;
+    let current = archive(&fixture_pair(false, 1), false);
+    let target = archive(&fixture_pair(false, 0), false);
+
+    let mut dry = Drive {
+        updating: true,
+        ..Default::default()
+    };
+    crate::drive::pioneer::Pioneer::new()
+        .recover(&mut dry, Some(&current), &target, false)
+        .expect("Pioneer has a recovery path")
+        .unwrap();
+    assert_eq!(dry.attempts, 0, "dry run wrote to the drive");
+    assert!(dry.writes.is_empty());
+
+    let mut live = Drive {
+        updating: true,
+        ..Default::default()
+    };
+    crate::drive::pioneer::Pioneer::new()
+        .recover(&mut live, Some(&current), &target, true)
+        .expect("Pioneer has a recovery path")
+        .unwrap();
+    assert!(live.finished && !live.writes.is_empty());
+}

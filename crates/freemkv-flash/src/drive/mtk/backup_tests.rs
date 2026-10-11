@@ -54,10 +54,13 @@ fn unknown_mt1939_build_backs_up_as_a_labelled_reconstruction() {
     );
     // Code is the installed firmware's; no per-unit byte survives.
     assert_eq!(backup[0x2_0000..0x1D_0000], installed[0x2_0000..0x1D_0000]);
-    for range in layout::DRIVE_WRITTEN {
-        assert!(!backup[range.start..range.start + 16]
-            .iter()
-            .all(|&b| b == 0x52));
+    let defaults = super::super::oem::catalog()
+        .default_for(Chip::Mt1939)
+        .unwrap();
+    for (range, want) in layout::DRIVE_WRITTEN.iter().zip(defaults.regions()) {
+        let got = &backup[range.start..range.start + range.len];
+        assert!(!layout::is_erased(got));
+        assert!(got == &want[..], "region at {:#x} differs", range.start);
     }
     assert!(matches!(notice(&backup), BackupNotice::Unverified(_)));
     validate(&backup, "BD-RE BE14NU40", IMAGE_SIZE).unwrap();
