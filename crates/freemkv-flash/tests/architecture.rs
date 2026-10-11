@@ -958,11 +958,21 @@ fn tighten(code: &str) -> String {
     out
 }
 
-/// Every fn in lexed `code` whose body holds a write or read marker.
-fn write_issuers(code: &str) -> Vec<Issuer> {
-    let code = normalise(code);
+/// A fn with a body in normalised code.
+struct FnItem {
+    name: String,
+    /// The `<...>` after the name, the parameters, and everything between `)`
+    /// and the body (return type and `where` clause).
+    generics: String,
+    params: String,
+    bounds: String,
+    body: String,
+}
+
+/// Every fn with a body in [`normalise`]d `code`.
+fn fn_items(code: &str) -> Vec<FnItem> {
     let mut out = Vec::new();
-    for at in word_hits(&code, "fn") {
+    for at in word_hits(code, "fn") {
         let rest = code[at + 2..].trim_start();
         let name: String = rest
             .chars()
@@ -1003,10 +1013,28 @@ fn write_issuers(code: &str) -> Vec<Issuer> {
         if tail.find(';').is_some_and(|semi| semi < brace) {
             continue;
         }
-        let body = tighten(&tail[brace..block_end(tail, brace)]);
+        out.push(FnItem {
+            name,
+            generics: generics.to_string(),
+            params: params.to_string(),
+            bounds: tail[1..brace].to_string(),
+            body: tail[brace..block_end(tail, brace)].to_string(),
+        });
+    }
+    out
+}
+
+/// Every fn in lexed `code` whose body holds a write or read marker.
+fn write_issuers(code: &str) -> Vec<Issuer> {
+    let mut out = Vec::new();
+    for f in fn_items(&normalise(code)) {
+        let body = tighten(&f.body);
         // A helper handed the vendor settings `Device` counts too, whether as a
         // parameter, a returned closure's argument or a typed closure argument.
-        let signature = tighten(&strip_paths(&after_name[..brace + close]));
+        let signature = tighten(&strip_paths(&format!(
+            "{}({}){}",
+            f.generics, f.params, f.bounds
+        )));
         let settings_device = SETTINGS_DEVICE.iter().any(|m| has_marker(&body, m))
             || has_marker(&signature, "Device<")
             || has_marker(&strip_paths(&body), "Device<");
@@ -1015,12 +1043,58 @@ fn write_issuers(code: &str) -> Vec<Issuer> {
         let writes = settings_write || WRITE_MARKERS.iter().any(|m| has_marker(&body, m));
         if writes || READ_MARKERS.iter().any(|m| has_marker(&body, m)) {
             out.push(Issuer {
-                name,
-                generics: generics.to_string(),
-                params: params.to_string(),
-                bounds: tail[1..brace].to_string(),
+                name: f.name,
+                generics: f.generics,
+                params: f.params,
+                bounds: f.bounds,
                 writes,
             });
+        }
+    }
+    out
+}
+
+/// What a fn in lexed `code` lends: the [`HIDDEN_TYPES`] or `dyn ScsiDevice`
+/// named in a closure parameter's arguments (`impl FnOnce(&mut X)`, `F:
+/// Fn(X)`) or in its return type, as `(name, lent text)`. Every fn counts,
+/// whatever its visibility: a trait method needs no `pub`.
+fn lenders(code: &str) -> Vec<(String, String)> {
+    let lent = |s: &str| {
+        HIDDEN_TYPES.iter().any(|t| !word_hits(s, t).is_empty()) || s.contains("dyn ScsiDevice")
+    };
+    let mut out = Vec::new();
+    for f in fn_items(&normalise(code)) {
+        let sig = format!("{} {} {}", f.generics, f.params, f.bounds);
+        let mut handed = Vec::new();
+        for closure in ["Fn", "FnMut", "FnOnce"] {
+            for at in word_hits(&sig, closure) {
+                let rest = &sig[at + closure.len()..];
+                if rest.starts_with('(') {
+                    let mut depth = 0i32;
+                    let close = rest
+                        .char_indices()
+                        .find(|&(_, c)| {
+                            depth += match c {
+                                '(' => 1,
+                                ')' => -1,
+                                _ => 0,
+                            };
+                            depth == 0
+                        })
+                        .map_or(rest.len(), |(i, _)| i);
+                    handed.push(rest[1..close].to_string());
+                }
+            }
+        }
+        let ret = f.bounds.split(" where ").next().unwrap_or("");
+        if let Some((_, ret)) = ret.split_once("->") {
+            handed.push(ret.trim().to_string());
+        }
+        for h in handed.into_iter().filter(|h| lent(h)) {
+            out.push((
+                f.name.clone(),
+                h.split_whitespace().collect::<Vec<_>>().join(" "),
+            ));
         }
     }
     out
@@ -1074,18 +1148,29 @@ fn hiding_types(code: &str) -> Vec<String> {
             out.push(flat(stmt));
         }
     }
-    for at in word_hits(code, "struct") {
-        let rest = &code[at..];
-        let end = match (rest.find('{'), rest.find(';')) {
-            (Some(b), Some(semi)) if b < semi => block_end(rest, b),
-            (Some(b), None) => block_end(rest, b),
-            (_, Some(semi)) => semi,
-            (None, None) => rest.len(),
-        };
-        let decl = &rest[..end.min(rest.len())];
-        let head = decl.find(['{', '(']).unwrap_or(decl.len());
-        if names(&decl[head..]) {
-            out.push(flat(&decl[..head]));
+    for kind in ["struct", "enum", "union"] {
+        for at in word_hits(code, kind) {
+            let rest = &code[at..];
+            let end = match (rest.find('{'), rest.find(';')) {
+                (Some(b), Some(semi)) if b < semi => block_end(rest, b),
+                (Some(b), None) => block_end(rest, b),
+                (_, Some(semi)) => semi,
+                (None, None) => rest.len(),
+            };
+            let decl = &rest[..end.min(rest.len())];
+            let head = decl.find(['{', '(']).unwrap_or(decl.len());
+            // Everything after the name, so a generic default hides nothing.
+            let name_end = kind.len()
+                + decl[kind.len()..]
+                    .find(|c: char| !(c.is_whitespace()))
+                    .unwrap_or(0);
+            let name_end = name_end
+                + decl[name_end..]
+                    .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .unwrap_or(decl.len() - name_end);
+            if names(&decl[name_end..]) {
+                out.push(flat(&decl[..head]));
+            }
         }
     }
     out
@@ -1318,7 +1403,10 @@ fn hiding_types_are_refused() {
          struct Holder<'a> { inner: &'a mut FlashTransport<'a> }\n\
          type Bytes = Vec<u8>;\n\
          struct Plain { n: u32, dev: ReadDeviceInfo }\n\
-         struct Unit;\n");
+         struct Unit;\n\
+         pub enum Hide<'a> { T(ScsiTransport<'a, 'a>), N }\n\
+         struct Defaulted<T = SharedDevice<'static>> { t: T }\n\
+         enum Plain2 { A, B(u8) }\n");
     assert_eq!(
         hiding_types(&code),
         [
@@ -1326,6 +1414,8 @@ fn hiding_types_are_refused() {
             "type T = crate::transport::SharedDevice<'static>",
             "struct Wrap",
             "struct Holder<'a>",
+            "struct Defaulted<T = SharedDevice<'static>>",
+            "enum Hide<'a>",
         ]
     );
 }
@@ -1512,6 +1602,106 @@ fn pioneer_optical_stays_pinned() {
     assert!(
         line.contains("version = \"=0.12.4\""),
         "pioneer-optical must stay pinned to =0.12.4: {line}"
+    );
+}
+
+/// Device-layer items that hold or lend a device type, as `(file, item,
+/// reason)`: a [`hiding_types`] declaration or a [`lenders`] fn (`fn <name>
+/// lends <type>`). Anything else the layer exported could carry a device type
+/// past the census; an entry that matches nothing fails, so none goes stale.
+const DEVICE_LAYER_REVIEWED: &[(&str, &str, &str)] = &[
+    (
+        "src/backend/device.rs",
+        "fn scsi lends &mut dyn ScsiDevice",
+        "DeviceAccess::scsi lends the ReadDevice or WriteDevice it holds as a \
+         ScsiDevice, so that grant's own checks still apply to every command",
+    ),
+    (
+        "src/platform/adapter.rs",
+        "struct TransportDevice",
+        "holds libfreemkv's OS transport (also named ScsiTransport, a different \
+         type) below every grant; it never leaves the platform module",
+    ),
+    (
+        "src/platform/mod.rs",
+        "fn open lends Result<Box<dyn ScsiDevice>>",
+        "opens the raw OS device for the workflows, which hand it to the engine \
+         and registry; those reach a backend only through a ReadDevice or a \
+         gates grant, and a fn holding a marker beside a raw device is refused",
+    ),
+    (
+        "src/transport.rs",
+        "fn with lends &mut dyn ScsiDevice",
+        "SharedDevice::with lends back the device it wraps (outside the layer, \
+         always a grant), never a transport or a settings Device",
+    ),
+    (
+        "src/transport.rs",
+        "struct ScsiTransport<'a, 'd>",
+        "the transport's own definition, holding the SharedDevice it adapts",
+    ),
+];
+
+#[test]
+fn device_layer_exports_only_reviewed_device_holders() {
+    let mut found = Vec::new();
+    for s in production_sources() {
+        if !DEVICE_LAYER.iter().any(|l| s.path.starts_with(l)) {
+            continue;
+        }
+        for h in hiding_types(&s.code) {
+            // Aliases are refused outright in `device_types_are_named_only_where_reviewed`.
+            if !h.starts_with("type ") {
+                found.push((s.path.clone(), h));
+            }
+        }
+        for (name, lent) in lenders(&s.code) {
+            found.push((s.path.clone(), format!("fn {name} lends {lent}")));
+        }
+    }
+    let reviewed = |(path, item): &(String, String)| {
+        DEVICE_LAYER_REVIEWED
+            .iter()
+            .any(|(p, i, _)| p == path && i == item)
+    };
+    let unreviewed: Vec<_> = found.iter().filter(|f| !reviewed(f)).collect();
+    assert!(
+        unreviewed.is_empty(),
+        "the device layer holds or lends a device type in an unreviewed item: {unreviewed:#?}"
+    );
+    for (path, item, _) in DEVICE_LAYER_REVIEWED {
+        assert!(
+            found.iter().any(|(p, i)| p == path && i == item),
+            "stale device-layer review: {path}: {item}"
+        );
+    }
+}
+
+#[test]
+fn lenders_find_closures_and_returns_that_hand_out_a_device() {
+    let (code, _) = lex("pub fn a<R>(d: &mut dyn ScsiDevice, f: impl FnOnce(&mut ScsiTransport<'_, '_>) -> R) -> R { x }\n\
+         pub(crate) fn b<F: FnMut(&SharedDevice<'_>)>(f: F) { x }\n\
+         fn c<F>(f: F) where F: Fn(&mut Device<'_, T>) { x }\n\
+         pub fn d() -> FlashTransport<'static> { x }\n\
+         pub fn e(&self, f: impl FnOnce(&mut dyn ScsiDevice)) { x }\n\
+         pub fn reads(dev: &SharedDevice<'_>) -> Self { x }\n\
+         pub fn writer(&mut self) -> Option<&mut WriteDevice<'_>> { x }\n\
+         pub fn info(dev: &mut dyn ScsiDevice) -> Result<Identity> { x }\n\
+         fn g(f: impl FnOnce((u8, u8), &mut ScsiTransport<'_, '_>)) { x }\n");
+    let names: Vec<_> = lenders(&code)
+        .into_iter()
+        .map(|(name, lent)| format!("{name}: {lent}"))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "a: &mut ScsiTransport<>",
+            "b: &SharedDevice<>",
+            "c: &mut Device<T>",
+            "d: FlashTransport<>",
+            "e: &mut dyn ScsiDevice",
+            "g: (u8, u8), &mut ScsiTransport<>",
+        ]
     );
 }
 
