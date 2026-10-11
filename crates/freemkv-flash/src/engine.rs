@@ -147,7 +147,7 @@ pub fn info_file(path: &Path) -> Result<()> {
         .collect();
     println!("{}", style::kv("sha256", &sha));
 
-    for backend in crate::drive::backends() {
+    for backend in crate::drive::file_backends() {
         if let Some(report) = backend.describe_file(&image) {
             return report;
         }
@@ -714,16 +714,10 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     Ok(())
 }
 
-/// Restore per-unit regions from a `.tar` (targeted writes, not a full stream).
-/// Refuse to flash an image whose drive-descriptor model does not name this
-/// drive. Fails closed — unidentifiable image, unknown drive product, or model
-/// mismatch all abort, with no override.
-///
-/// Family identification is delegated to the shared [`freemkv_chipset::detect_chip`]
-/// — the SAME `MTEKMT19xx` pattern-search the modify tool uses — so the two tools
-/// never disagree on a firmware image's family, and byte-shifted extractions
-/// (where the old fixed-offset `0x1EC034` read missed) are still recognized. The
-/// model-vs-drive cross-check is retained as a secondary guard.
+/// Restore from a backup archive: decode it through the backend's
+/// `validate_backup` (or `validate_forced_backup` under `--force`), then
+/// reflash the decoded firmware image through [`flash_bin`]. The model and
+/// family gates live in the backend's validation, not here.
 fn flash_restore(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,

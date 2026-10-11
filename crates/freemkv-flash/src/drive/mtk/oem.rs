@@ -46,7 +46,14 @@ struct RawTable {
 /// every backup fails closed with "no factory contents" rather than guessing.
 pub fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
-    CATALOG.get_or_init(|| parse(MTK_OEM).unwrap_or_default())
+    CATALOG.get_or_init(|| {
+        parse(MTK_OEM).unwrap_or_else(|e| {
+            let msg = format!("embedded MediaTek OEM catalog failed to load: {e}");
+            crate::diagnostics::record(msg.clone());
+            eprintln!("warning: {msg}");
+            Catalog::default()
+        })
+    })
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {

@@ -1386,3 +1386,108 @@ fn chip_gate_refuses_when_the_descriptor_is_unreadable() {
     let err = Mtk.validate_forced_image(&mut dev, &img).unwrap_err();
     assert!(err.to_string().contains("identity descriptor"), "{err}");
 }
+
+fn captured_output(op: impl FnOnce()) -> String {
+    let log = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
+    let sink = log.clone();
+    crate::output::capture_events(
+        move |event| sink.borrow_mut().push_str(&format!("{event:?}\n")),
+        op,
+    );
+    let out = log.borrow().clone();
+    out
+}
+
+#[test]
+fn info_file_prefers_a_pioneer_bundle_over_an_embedded_mtek_tag() {
+    let mut normal = vec![0u8; 0x1d7000];
+    let head = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11 .\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";
+    normal[..head.len()].copy_from_slice(head);
+    normal[0x1000..0x100A].copy_from_slice(b"MTEKMT1959");
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        let path = "components/normal.enc";
+        let mut header = tar::Header::new_gnu();
+        header.as_mut_bytes()[..path.len()].copy_from_slice(path.as_bytes());
+        header.set_size(normal.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, &normal[..]).unwrap();
+        tar.finish().unwrap();
+    }
+    let path = fresh_backup_path();
+    std::fs::write(&path, &tar_bytes).unwrap();
+    let mut result = None;
+    let out = captured_output(|| result = Some(info_file(&path)));
+    let _ = std::fs::remove_file(&path);
+    result.unwrap().unwrap();
+    assert!(out.contains("Pioneer"), "Pioneer report missing: {out}");
+    assert!(
+        !out.to_lowercase().contains("chipset"),
+        "reported as MediaTek: {out}"
+    );
+}
+
+#[test]
+fn describe_never_prints_escape_sequences_from_the_image() {
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let mut hostile = img.clone();
+    let d = ROM_1EC000_OFFSET as usize;
+    hostile[d + 0x08..d + 0x08 + 4].copy_from_slice(b"\x1b[2J");
+    let hostile = crate::cmac::resign(&hostile).unwrap();
+    let out = captured_output(|| {
+        Mtk.describe_file(&hostile).expect("recognized").unwrap();
+    });
+    assert!(out.contains("Chipset"), "not described: {out}");
+    assert!(!out.contains('\x1b') && !out.contains("\\u{1b}"), "{out:?}");
+}
+
+#[test]
+fn legacy_backup_member_names_are_sanitized_in_errors() {
+    let mut out = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut out);
+        let path = "bad\u{1b}[2J.bin";
+        let mut header = tar::Header::new_gnu();
+        header.as_mut_bytes()[..path.len()].copy_from_slice(path.as_bytes());
+        header.set_size(1);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, &[0u8][..]).unwrap();
+        tar.finish().unwrap();
+    }
+    let err = crate::drive::mtk::backup::BackupArtifact::from_tar_bytes(&out, IMAGE_SIZE)
+        .err()
+        .expect("must fail");
+    let text = format!("{err:#}");
+    assert!(text.contains("unexpected"), "{text}");
+    assert!(!text.contains('\x1b'), "{text:?}");
+}
+
+#[test]
+fn classify_file_flags_an_integrity_entry_running_past_the_image() {
+    let img = with_active_cmac_range(vec![0u8; IMAGE_SIZE], 0x11000, IMAGE_SIZE as u32 + 5);
+    assert!(
+        matches!(classify_file(&img).cmac, CmacSummary::Invalid { .. }),
+        "a present-but-corrupt table must not read as unsigned"
+    );
+}
+
+#[test]
+fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
+    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    Mtk.validate_image(&mut dev, &img, "BD-RE BU40N", false)
+        .unwrap();
+    let banner = offset_bytes(0x3000);
+    let banner_reads = dev
+        .reads
+        .iter()
+        .filter(|cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&banner[..]))
+        .count();
+    assert_eq!(
+        banner_reads, 0,
+        "banner read issued despite a descriptor tag"
+    );
+}

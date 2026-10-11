@@ -56,7 +56,7 @@ pub(crate) fn classify_file(image: &[u8]) -> FileClass {
                 CmacSummary::Invalid { ok, total: v.len() }
             }
         }
-        Err(_) => CmacSummary::Unsigned,
+        Err(_) => corrupt_table_summary(image),
     };
     FileClass {
         chip,
@@ -66,14 +66,38 @@ pub(crate) fn classify_file(image: &[u8]) -> FileClass {
     }
 }
 
+/// A table whose verification errored (e.g. a range past the image): a present
+/// active entry makes it INVALID, otherwise there is no table to speak of.
+fn corrupt_table_summary(image: &[u8]) -> CmacSummary {
+    let active: Vec<_> = cmac::parse_table(image)
+        .map(|t| t.into_iter().filter(|e| e.is_active()).collect())
+        .unwrap_or_default();
+    if active.is_empty() {
+        return CmacSummary::Unsigned;
+    }
+    let ok = active
+        .iter()
+        .filter(|e| cmac::compute_stored_digest(image, e.start, e.end).is_ok_and(|d| d == e.stored))
+        .count();
+    CmacSummary::Invalid {
+        ok,
+        total: active.len(),
+    }
+}
+
 /// Print the MT19xx report for `image`, or `None` when it is not MT19xx.
 pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
     let fc = classify_file(image);
     let chip = fc.chip.as_ref()?;
 
+    let (vendor, model, rev) = (
+        style::printable(ident_or_unknown(&chip.vendor)),
+        style::printable(ident_or_unknown(&chip.model)),
+        style::printable(ident_or_unknown(&chip.rev)),
+    );
     crate::output::field("Chipset", chip.family.label());
-    crate::output::field("Model", ident_or_unknown(&chip.model));
-    crate::output::field("Firmware version", ident_or_unknown(&chip.rev));
+    crate::output::field("Model", model.clone());
+    crate::output::field("Firmware version", rev.clone());
     let conf = match chip.confidence {
         freemkv_chipset::Confidence::TagString => "identity string",
         freemkv_chipset::Confidence::BannerFallback => "banner (fallback)",
@@ -86,7 +110,7 @@ pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
                 "MediaTek {} (via {}; tag {})",
                 chip.family.label(),
                 conf,
-                chip.tag_string.as_deref().unwrap_or("<none>")
+                style::printable(chip.tag_string.as_deref().unwrap_or("<none>"))
             )
         )
     );
@@ -94,10 +118,10 @@ pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
         "{}",
         style::kv(
             "banner",
-            if chip.banner.is_empty() {
-                "<none>"
+            &if chip.banner.is_empty() {
+                "<none>".to_string()
             } else {
-                chip.banner.as_str()
+                style::printable(&chip.banner)
             }
         )
     );
@@ -105,12 +129,7 @@ pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
         "{}",
         style::kv(
             "descriptor",
-            &format!(
-                "vendor='{}' model='{}' rev='{}'",
-                ident_or_unknown(&chip.vendor),
-                ident_or_unknown(&chip.model),
-                ident_or_unknown(&chip.rev)
-            )
+            &format!("vendor='{}' model='{}' rev='{}'", vendor, model, rev)
         )
     );
 
@@ -160,12 +179,7 @@ pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
         "{}",
         style::kv(
             "built for",
-            &format!(
-                "{} {} ({})",
-                ident_or_unknown(&chip.vendor),
-                ident_or_unknown(&chip.model),
-                chip.family.label()
-            )
+            &format!("{} {} ({})", vendor, model, chip.family.label())
         )
     );
     Some(Ok(()))

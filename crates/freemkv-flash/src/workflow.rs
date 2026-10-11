@@ -413,7 +413,7 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         // itself.
         for backend in drive::backends() {
             if let Some(result) =
-                backend.recover(dev.as_mut(), supplied.clone(), &target, args.execute)
+                backend.recover(dev.as_mut(), supplied.as_deref(), &target, args.execute)
             {
                 return result;
             }

@@ -179,7 +179,7 @@ pub(crate) fn print_crossflash_banner(info: &CrossflashInfo) {
         style::amber(&format!(
             "CROSSFLASH: {} <- {} ({} chipset) — EXPERIMENTAL, hardware-unvalidated",
             ident_or_unknown(&info.drive_product),
-            info.image_model,
+            style::printable(&info.image_model),
             info.image_family.label()
         ))
     );
