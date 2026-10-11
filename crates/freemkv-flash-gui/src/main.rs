@@ -20,6 +20,8 @@ mod linux;
 #[cfg(all(feature = "native", target_os = "macos"))]
 mod mac;
 mod ops;
+#[cfg(test)]
+mod parity_0_11_2_tests;
 mod ui;
 // Toolkit-free and built everywhere so its tests run on every host; only Windows uses it.
 #[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
