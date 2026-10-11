@@ -245,8 +245,8 @@ impl Golden {
 
 impl Golden {
     /// Record a Pioneer diagnostic dump. The dump embeds the capture start time
-    /// in its trailing JSON directory (and that directory's own hash), so the
-    /// body and the directory are hashed separately with the time masked.
+    /// and tool version in its trailing JSON directory, so the body and the
+    /// directory are hashed separately with both masked.
     fn dump_file(&mut self, label: &str, path: &Path) {
         let bytes = std::fs::read(path).expect("dump saved");
         let n = bytes.len();
@@ -268,6 +268,8 @@ impl Golden {
             }
             None => directory,
         };
+        let version = format!("\"tool_version\":\"{}\"", env!("CARGO_PKG_VERSION"));
+        let masked = masked.replace(&version, "\"tool_version\":\"<VERSION>\"");
         self.kv(
             label,
             &format!(
@@ -316,6 +318,14 @@ fn normalize(raw: &str) -> String {
         let needle = format!("{}/freemkv-golden-{pid}-", base.trim_end_matches('/'));
         plain = plain.replace(&needle, "<TMP>/");
     }
+    // Build and host facts in diagnostic lines.
+    let host = format!(
+        "freemkv-flash={} os={} arch={}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+    plain = plain.replace(&host, "freemkv-flash=<VERSION> os=<OS> arch=<ARCH>");
     // The per-run diagnostic log path.
     plain
         .lines()

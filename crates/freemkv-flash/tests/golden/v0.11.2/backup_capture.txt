@@ -1480,7 +1480,7 @@ result: OK
 --- text (9) ---
 Backing up BD-RW   BDR-UD04 → <TMP>/backup/pioneer_backup.tar
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
-Pioneer firmware read probe: freemkv-flash=0.11.2 os=macos arch=aarch64 device=saved capture replay; no hardware
+Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=saved capture replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   reading kernel...
   verifying kernel...
@@ -1490,7 +1490,7 @@ UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zer
 --- events (11) ---
 MSG      Backing up BD-RW   BDR-UD04 → <TMP>/backup/pioneer_backup.tar
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
-MSG      Pioneer firmware read probe: freemkv-flash=0.11.2 os=macos arch=aarch64 device=saved capture replay; no hardware
+MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=saved capture replay; no hardware
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
 MSG        reading kernel...
 MSG        verifying kernel...
@@ -1547,7 +1547,7 @@ IN   cdb=3c02fc00000000400000 alloc=16384 -> err
 IN   cdb=120000006000 alloc=96 -> ok 96
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c029200000000010000 alloc=256 -> err
-saved file: 16883069 bytes; body sha256=ad014a01fb01cc08256975884a0a0719617b641fd141025b6bea37e358e6aa5b directory(time masked) sha256=c5b6c3e6859039841bf7ca18c6140c090eff25b0da087a28b09c751de22cdb29
+saved file: 16883069 bytes; body sha256=ad014a01fb01cc08256975884a0a0719617b641fd141025b6bea37e358e6aa5b directory(time masked) sha256=0a005af45c41a0ba8a4a49026e673bdb3d3ba49f362f071fa20a1b4dce5737e9
 
 === Pioneer backup: firmware unreadable ===
 result: ERR Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
