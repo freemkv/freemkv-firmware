@@ -47,5 +47,9 @@ mediatek-optical = { version = "=0.5.0", features = ["drive", "image", "enc", "o
 # there is no dependency cycle back onto the firmware/unlock side.
 libfreemkv = { git = "https://github.com/freemkv/libfreemkv", tag = "v1.8.2", default-features = false, features = ["scsi"] }
 
+# The golden CLI scenarios type their answer into a pseudo-terminal.
+[target.'cfg(unix)'.dev-dependencies]
+libc = "=0.2.190"
+
 [lints]
 workspace = true

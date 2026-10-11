@@ -375,8 +375,40 @@ fn golden_coverage_is_complete() {
             "flash_execute.txt",
             &[
                 "MTK execute: .bin with pre-flash backup",
-                "Pioneer flash_bundle: plain update (no kernel patch)",
-                "Pioneer flash_bundle: update with kernel restoration pass",
+                "MTK execute: MT1939 image on an MT1959 drive",
+                "MTK execute: raw drive read as input",
+            ],
+        ),
+        (
+            "Pioneer execute through the real engine",
+            "pioneer_execute.txt",
+            &[
+                "Pioneer execute: Kernel+Normal update",
+                "Pioneer execute: Kernel+Normal update with kernel restoration pass",
+                "Pioneer execute: Normal-only update",
+                "Pioneer execute: Normal for another Kernel tag, refused after the backup",
+                "Pioneer execute: disc inserted after the backup",
+                "Pioneer CLI execute: stdin is not a TTY",
+            ],
+        ),
+        (
+            "Pioneer CLI execute on a terminal",
+            "pioneer_execute_tty.txt",
+            &[
+                "Pioneer CLI execute: TTY answers y",
+                "Pioneer CLI execute: TTY answers n",
+                "Pioneer CLI execute: disc inserted after the backup, TTY answers y",
+            ],
+        ),
+        (
+            "Pioneer execute failures through the real engine",
+            "pioneer_flash_bundle_failures.txt",
+            &[
+                "Pioneer execute: installed backup is Kernel-only",
+                "Pioneer execute: target is a header-only bundle",
+                "Pioneer execute: target is garbage",
+                "Pioneer execute: target is the installed firmware (no change)",
+                "Pioneer flash: dry-run request",
             ],
         ),
         (
@@ -599,7 +631,13 @@ fn paths_and_hex_render_unmangled() {
     assert_eq!(Value::Hex("00ffab".into()).cli(), "00ffab");
 
     // A saved backup's path reaches the GUI exactly, and the sha256 line is raw hex.
-    let out = scratch("unmangled").join("back\tup é.tar");
+    // Windows refuses control characters in file names.
+    let name = if cfg!(windows) {
+        "back up é.tar"
+    } else {
+        "back\tup é.tar"
+    };
+    let out = scratch("unmangled").join(name);
     let (outcome, _) = drive_run(BackupReplay::new(), |d| {
         crate::engine::backup(d, &Pioneer::new(), &out, false)
     });

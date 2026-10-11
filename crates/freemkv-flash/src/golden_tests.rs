@@ -187,17 +187,6 @@ fn run(op: impl FnOnce() -> Result<()>) -> Outcome {
     }
 }
 
-/// The Pioneer confirmation prompt reads stdin when it is a terminal; refuse to
-/// run (rather than hang) in that case.
-fn require_non_tty_stdin() {
-    use std::io::IsTerminal;
-    assert!(
-        !std::io::stdin().is_terminal(),
-        "this golden drives the Pioneer confirmation prompt, which reads stdin when it is a \
-         terminal; run the tests with stdin redirected (`cargo test ... < /dev/null`)"
-    );
-}
-
 /// Accumulates one golden file.
 #[derive(Default)]
 struct Golden {
@@ -281,16 +270,88 @@ impl Golden {
     }
 }
 
-/// A scratch directory unique to this process and tag.
+/// A fresh scratch directory for one call, `freemkv-golden-<pid>-<n>-<tag>`:
+/// unique per process and call, so parallel tests never share one and no
+/// test relies on removing a leftover. [`normalize`] reduces it to `<TMP>/<tag>`.
 fn scratch(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("freemkv-golden-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    loop {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("freemkv-golden-{}-{n}-{tag}", std::process::id()));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return dir,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => panic!("creating {}: {e}", dir.display()),
+        }
+    }
+}
+
+/// The facts of this host and build that leak into recorded output.
+struct Host {
+    pid: u32,
+    /// Spellings of the temp directory (as given, canonical, verbatim-free).
+    temp: Vec<String>,
+    /// This OS's wording of "file not found" (os error 2).
+    not_found: String,
+    /// The tool version, OS and arch as diagnostic lines print them.
+    build: String,
+}
+
+impl Host {
+    fn current() -> Self {
+        let tmp = std::env::temp_dir();
+        let mut temp = vec![tmp.display().to_string()];
+        if let Ok(c) = tmp.canonicalize() {
+            let c = c.display().to_string();
+            if let Some(plain) = c.strip_prefix(r"\\?\") {
+                temp.push(plain.to_string());
+            }
+            temp.push(c);
+        }
+        Self {
+            pid: std::process::id(),
+            temp,
+            not_found: std::io::Error::from_raw_os_error(2).to_string(),
+            build: format!(
+                "freemkv-flash={} os={} arch={}",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            ),
+        }
+    }
 }
 
 /// Remove everything that legitimately varies between runs.
 fn normalize(raw: &str) -> String {
+    normalize_for(raw, &Host::current())
+}
+
+/// Replace each scratch path `<needle><n>-<tag><rest>` with `<TMP>/<tag><rest>`,
+/// the separators of the path (up to whitespace) turned into `/`.
+fn mask_scratch(text: &str, needle: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find(needle) {
+        out.push_str(&rest[..i]);
+        out.push_str("<TMP>/");
+        let mut tail = &rest[i + needle.len()..];
+        let digits = tail.bytes().take_while(u8::is_ascii_digit).count();
+        if digits > 0 && tail[digits..].starts_with('-') {
+            tail = &tail[digits + 1..];
+        }
+        let end = tail.find(char::is_whitespace).unwrap_or(tail.len());
+        out.push_str(&tail[..end].replace('\\', "/"));
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// [`normalize`] for the given host facts.
+fn normalize_for(raw: &str, host: &Host) -> String {
     // ANSI escape sequences.
     let mut plain = String::with_capacity(raw.len());
     let mut chars = raw.chars().peekable();
@@ -306,26 +367,22 @@ fn normalize(raw: &str) -> String {
             plain.push(c);
         }
     }
-    // Scratch directories (raw and canonical spellings).
-    let pid = std::process::id();
-    let tmp = std::env::temp_dir();
-    let mut prefixes = vec![tmp.clone()];
-    if let Ok(c) = tmp.canonicalize() {
-        prefixes.push(c);
+    // Scratch directories, longest spelling first (one may contain another).
+    let mut bases: Vec<&str> = host
+        .temp
+        .iter()
+        .map(|t| t.trim_end_matches(['/', '\\']))
+        .collect();
+    bases.sort_by_key(|b| std::cmp::Reverse(b.len()));
+    for base in bases {
+        for sep in ['/', '\\'] {
+            let needle = format!("{base}{sep}freemkv-golden-{}-", host.pid);
+            plain = mask_scratch(&plain, &needle);
+        }
     }
-    for prefix in prefixes {
-        let base = prefix.display().to_string();
-        let needle = format!("{}/freemkv-golden-{pid}-", base.trim_end_matches('/'));
-        plain = plain.replace(&needle, "<TMP>/");
-    }
-    // Build and host facts in diagnostic lines.
-    let host = format!(
-        "freemkv-flash={} os={} arch={}",
-        env!("CARGO_PKG_VERSION"),
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    );
-    plain = plain.replace(&host, "freemkv-flash=<VERSION> os=<OS> arch=<ARCH>");
+    // OS wording and build and host facts.
+    plain = plain.replace(&host.not_found, "No such file or directory (os error 2)");
+    plain = plain.replace(&host.build, "freemkv-flash=<VERSION> os=<OS> arch=<ARCH>");
     // The per-run diagnostic log path.
     plain
         .lines()
@@ -347,6 +404,49 @@ fn normalize(raw: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n"
+}
+
+#[test]
+fn normalize_masks_windows_and_unix_hosts_alike() {
+    let windows = Host {
+        pid: 7692,
+        temp: vec![
+            r"C:\Users\RUNNER~1\AppData\Local\Temp\".into(),
+            r"C:\Users\runneradmin\AppData\Local\Temp".into(),
+            r"\\?\C:\Users\runneradmin\AppData\Local\Temp".into(),
+        ],
+        not_found: "The system cannot find the file specified. (os error 2)".into(),
+        build: "freemkv-flash=9.9.9 os=windows arch=x86_64".into(),
+    };
+    let raw = concat!(
+        "wrote C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\freemkv-golden-7692-3-backup",
+        "\\mtk_backup.tar (2 MiB).\r\n",
+        "saved \\\\?\\C:\\Users\\runneradmin\\AppData\\Local\\Temp\\freemkv-golden-7692-12-x\\a\\b.bin\n",
+        "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\freemkv-golden-7692-0-y\\c.bin: ",
+        "The system cannot find the file specified. (os error 2)\n",
+        "probe: freemkv-flash=9.9.9 os=windows arch=x86_64 device=x\n",
+        "other pid C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\freemkv-golden-1-0-z\\d.bin\n",
+    );
+    let expected = concat!(
+        "wrote <TMP>/backup/mtk_backup.tar (2 MiB).\n",
+        "saved <TMP>/x/a/b.bin\n",
+        "<TMP>/y/c.bin: No such file or directory (os error 2)\n",
+        "probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=x\n",
+        "other pid C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\freemkv-golden-1-0-z\\d.bin\n",
+    );
+    assert_eq!(normalize_for(raw, &windows), expected);
+
+    let macos = Host {
+        pid: 42,
+        temp: vec![
+            "/var/folders/x/T/".into(),
+            "/private/var/folders/x/T".into(),
+        ],
+        not_found: "No such file or directory (os error 2)".into(),
+        build: "freemkv-flash=9.9.9 os=macos arch=aarch64".into(),
+    };
+    let raw = "a /private/var/folders/x/T/freemkv-golden-42-7-t/f.tar b /var/folders/x/T/freemkv-golden-42-8-u/g\n";
+    assert_eq!(normalize_for(raw, &macos), "a <TMP>/t/f.tar b <TMP>/u/g\n");
 }
 
 /// Ordered line edits turning `a` into `b`: `('-', line)` / `('+', line)`.
@@ -451,6 +551,8 @@ fn check(name: &str, golden: Golden) {
             path.display()
         )
     });
+    // A Windows checkout may have turned the recorded line endings into CRLF.
+    let expected = expected.replace("\r\n", "\n");
     if expected != actual {
         panic!(
             "golden mismatch: {}\n(- recorded, + actual; regenerate only for an intentional change with FREEMKV_BLESS=1)\n{}",
@@ -524,28 +626,6 @@ fn recover_via(
 /// The engine's flash with consent collected up front.
 fn engine_flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
     crate::engine::flash(dev, drive, req, &mut crate::workflow::Preconfirmed)
-}
-
-/// Pioneer's live flash stages after the backup (the old `flash_bundle` on
-/// `--execute`): `authorize` against `installed`, the warnings and
-/// confirmation text as the engine shows them, then `execute` with an
-/// ungated write grant.
-fn bundle_execute(
-    dev: &mut dyn ScsiDevice,
-    req: &FlashRequest,
-    installed: Option<&[u8]>,
-) -> Result<()> {
-    let pioneer = Pioneer::new();
-    let plan = pioneer.plan(&mut ReadDevice::new(dev, &[]), req)?;
-    let authorized = crate::backends::pioneer::authorize_installed(plan, installed)?;
-    for warning in &authorized.warnings {
-        eprintln!("{}", crate::style::amber(warning));
-    }
-    if let Some(text) = &authorized.confirmation {
-        println!("{}", crate::style::bold(text));
-    }
-    let mut writer = crate::engine::gates::ungated_for_tests(dev);
-    pioneer.execute(&mut writer, &authorized)
 }
 
 /// A signed image of `chip` (`MTEKMT1959` / `MTEKMT1939`) with the stored boot
@@ -660,9 +740,6 @@ use pioneer_optical::envelope::{
     builder::{encode_encrypted_pair, BuildInputs, KernelBuild, NormalSignature},
     Envelope, Update,
 };
-use pioneer_optical::receiver::{PreparedUpdate, Receiver};
-
-const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 
 // --- synthetic Pioneer packages (copied from recovery_tests.rs) ---
 // Synthetic instruction fixtures, not extracted firmware images.
@@ -718,6 +795,9 @@ fn pair_signature(kind: &str, gated: bool, marker: u8) -> Vec<u8> {
         ("prepared-false-1", "46ec2e64062aab8fec15610d982085eae4676e19d550f8891557ca571e19122ed38d0fb8340813430b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
         ("prepared-true-1", "122f0f061321f44c4397e76c055e37cbad74684669b2a8f8d2f548a55fdc5b3b629a1b585f929f400b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
         ("recovery-false-0", "0ae0c342876bc56c5c7b22a3cbad27af2a9c40d1d005fac83ec41a4dcac9e977216b78533a3d99730b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-false-0", "aba1c238f66b975894719ec1dcb6d775f519a3f759e97921ca84d4c8e1493da06953151817a1578a0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-true-1", "a6a5415bf199e26648cc663a675f15cd284169819d34180e42fb135118b03cdd64df43e65a03266e0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-id58-false-0", "0e65b6f79d1be3d7cd5d06fd798d594ea8379e03b58c9b403e530e77f8da04eaecb72ea17ff42eac0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
         ("recovery-false-1", "2278bd5b92f436c734cc5fe2ab2556744ae26459520f2d36a905c6f11329795dbb5471f4aaecef980b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
     ];
     let key = format!("{kind}-{gated}-{marker}");
@@ -893,90 +973,6 @@ fn prepared_pair(gated: bool, marker: u8) -> Update {
     .unwrap();
     Update::load(&encoded.kernel, &encoded.normal).unwrap()
 }
-struct PreparedDrive {
-    memory: Vec<u8>,
-    descriptor: Vec<u8>,
-    kernel: Vec<u8>,
-    writes: Vec<(Vec<u8>, Vec<u8>)>,
-    fail_at: Option<usize>,
-    corrupt_after_finish: Option<usize>,
-    finishes: usize,
-    medium_checks: usize,
-    insert_disc_after_first_pass: bool,
-}
-impl PreparedDrive {
-    fn new(plan: &PreparedUpdate) -> Self {
-        Self {
-            memory: plan.first_kernel_image().to_vec(),
-            descriptor: b"PIONEER TEST-NEW".to_vec(),
-            kernel: Vec::new(),
-            writes: Vec::new(),
-            fail_at: None,
-            corrupt_after_finish: None,
-            finishes: 0,
-            medium_checks: 0,
-            insert_disc_after_first_pass: false,
-        }
-    }
-}
-impl ScsiDevice for PreparedDrive {
-    fn medium_status(&mut self) -> Result<crate::platform::MediumStatus> {
-        self.medium_checks += 1;
-        Ok(if self.insert_disc_after_first_pass && self.finishes > 0 {
-            crate::platform::MediumStatus::DiscPresent
-        } else {
-            crate::platform::MediumStatus::ClosedEmpty
-        })
-    }
-
-    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-        if cdb == pioneer_optical::cdb::read_memory(CONTROL_DESCRIPTOR_ADDRESS, 16) {
-            return Ok(self.descriptor.clone());
-        }
-        if cdb.len() == 10 && cdb[..3] == pioneer_optical::cdb::read_memory(0, 0)[..3] {
-            let addr = u32::from_be_bytes([0, cdb[3], cdb[4], cdb[5]]);
-            let offset = (addr - pioneer_optical::image::KERNEL_BASE) as usize;
-            return Ok(self.memory[offset..offset + len].to_vec());
-        }
-        let mut out = vec![0; len];
-        if cdb[0] == 0x12 {
-            out[8..16].copy_from_slice(b"PIONEER ");
-            out[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
-            out[32..36].copy_from_slice(b"000 ");
-        }
-        Ok(out)
-    }
-    fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        if cdb == pioneer_optical::cdb::knock() && data.is_empty() {
-            return Ok(());
-        }
-        bail!("unexpected lenient write")
-    }
-    fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        if self.fail_at == Some(self.writes.len()) {
-            bail!("injected firmware write failure");
-        }
-        self.writes.push((cdb.to_vec(), data.to_vec()));
-        if cdb == pioneer_optical::cdb::enter_update() {
-            self.kernel.clear();
-        }
-        if cdb[..3] == [0x3b, 0x07, 0xfe] {
-            self.kernel.extend_from_slice(data);
-        }
-        if cdb == pioneer_optical::cdb::finish() {
-            self.memory = Envelope::load(&self.kernel).unwrap().image;
-            self.finishes += 1;
-            if self.corrupt_after_finish == Some(self.finishes) {
-                self.memory[0] ^= 1;
-            }
-        }
-        Ok(())
-    }
-    fn describe(&self) -> String {
-        "synthetic receiver".into()
-    }
-}
-
 fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
     fn put(image: &mut [u8], offset: usize, hex: &str) {
         let bytes: Vec<_> = hex
@@ -1345,7 +1341,6 @@ fn golden_flash_dry_run() {
 
 #[test]
 fn golden_flash_execute() {
-    require_non_tty_stdin();
     let dir = scratch("flash-execute");
     let mut g = Golden::default();
 
@@ -1461,31 +1456,22 @@ fn golden_flash_execute() {
         &dir.join("pioneer_rollback.tar"),
     );
 
-    // Pioneer's post-backup stages (authorize, then execute) against a stateful
-    // synthetic receiver, given the installed rollback the engine would have
-    // captured; no mock replays a backup surface for these packages.
-    for (title, restore) in [
+    // MTK: images the write path refuses, on execute (the backup is not taken).
+    for (title, image) in [
         (
-            "Pioneer flash_bundle: plain update (no kernel patch)",
-            false,
+            "MTK execute: MT1939 image on an MT1959 drive",
+            stored_image(b"MTEKMT1939", "BD-RE BU40N", 3),
         ),
         (
-            "Pioneer flash_bundle: update with kernel restoration pass",
-            true,
+            "MTK execute: raw drive read as input",
+            drive_read(&stored_image(b"MTEKMT1959", "BD-RE BU40N", 3)),
         ),
     ] {
-        let installed = prepared_pair(restore, 1);
-        let target = prepared_pair(false, 0);
-        let plan: PreparedUpdate = Receiver::from_installed(&installed)
-            .unwrap()
-            .prepare(prepared_pair(false, 0))
-            .unwrap();
-        let installed_tar = archive(&installed, false);
-        let req = pioneer_request(archive(&target, false), &PIONEER_PACKAGE, true);
-        let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
-            bundle_execute(d, &req, Some(&installed_tar))
-        });
+        let backup = dir.join(format!("refused_{}.tar", title.len()));
+        let req = mtk_request(image, true, Some(backup.clone()));
+        let (outcome, transcript) = drive_run(echoing(), |d| engine_flash(d, &Mtk, &req));
         g.case(title, &outcome, Some(&transcript));
+        g.file("saved pre-flash backup", &backup);
     }
     check("flash_execute", g);
 }
@@ -2122,82 +2108,486 @@ fn golden_pioneer_plan_and_gates() {
 }
 
 // ---------------------------------------------------------------------------
-// Pioneer live bundle executor: failure paths (stateful synthetic receiver)
+// Pioneer execute end to end: the real engine on a replaying UD04
+// ---------------------------------------------------------------------------
+
+/// The UD04 backup fixture with Kernel tag `tag` and the synthetic receiver
+/// code of [`prepared_pair`] grafted in: the real backup derives the Normal
+/// layout from the former, and authorize needs the latter.
+fn ud04_images(gated: bool, marker: u8, tag: &[u8; 8]) -> (Vec<u8>, Vec<u8>) {
+    let (mut kernel, mut normal) = bounded_backup_fixture();
+    kernel[0x1008..0x1010].copy_from_slice(tag);
+    let finalizer = if gated {
+        GATED_FINALIZER
+    } else {
+        UNGATED_FINALIZER
+    };
+    kernel[0x300..0x300 + finalizer.len()].copy_from_slice(finalizer);
+    for (offset, address) in [(0x349, [0x40, 0x20, 0]), (0x355, [0x40, 0x22, 0])] {
+        kernel[offset..offset + 3].copy_from_slice(&address);
+    }
+    if gated {
+        kernel[0x363..0x366].copy_from_slice(&[0x40, 0x30, 0]);
+        kernel[0x3000..0x3000 + MARKER_CHECK.len()].copy_from_slice(MARKER_CHECK);
+    }
+    kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
+    balance(&mut kernel);
+    normal[24..32].copy_from_slice(tag);
+    normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
+    normal[0x500..0x510].copy_from_slice(&[
+        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 4, 0x46, 0x4e,
+    ]);
+    balance(&mut normal);
+    (kernel, normal)
+}
+
+/// A signed package of [`ud04_images`] (Kernel tag `GENERAL`, or `ID58`).
+fn ud04_pair(gated: bool, marker: u8, id58: bool) -> Update {
+    let tag = if id58 { b"ID58    " } else { b"GENERAL " };
+    let (kernel, normal) = ud04_images(gated, marker, tag);
+    let kind = if id58 { "ud04-id58" } else { "ud04" };
+    let encoded = encode_encrypted_pair(
+        &BuildInputs {
+            kernel_image: &kernel,
+            normal_image: &normal,
+            envelope_id: "PIONEER BD-RW   BDR-UD04",
+            normal_revision: "1.20",
+            normal_date: "26/10/07",
+            kernel: KernelBuild::from_seed(7),
+            normal_key_seed: 11,
+        },
+        NormalSignature::Oem(&pair_signature(kind, gated, marker)),
+    )
+    .unwrap();
+    Update::load(&encoded.kernel, &encoded.normal).unwrap()
+}
+
+/// The update flashed onto the UD04: Kernel+Normal, generation marker 0.
+fn ud04_target() -> Update {
+    ud04_pair(false, 0, false)
+}
+
+fn normal_enc(update: &Update) -> Vec<u8> {
+    update.normal().repack(&update.normal().image).unwrap()
+}
+
+const UD04_KERNEL_BASE: usize = 0x400000;
+const UD04_NORMAL_BASE: usize = 0x410000;
+
+/// A UD04 on the bench: it replays its installed firmware for the pre-flash
+/// backup (reads unlock after the knock, as [`BackupReplay`]), then takes the
+/// OEM update (as the receiver mocks do). Each medium check answers the next
+/// scripted tray state; the last one repeats.
+struct Ud04Drive {
+    memory: Vec<u8>,
+    knocks: usize,
+    updating: bool,
+    kernel: Vec<u8>,
+    trays: Vec<MediumStatus>,
+    tray_checks: usize,
+    normal_unreadable: bool,
+}
+
+impl Ud04Drive {
+    /// Installed: marker 1, with the gated (restoration-pass) receiver or not.
+    fn new(gated: bool) -> Self {
+        Self::installed(ud04_images(gated, 1, b"GENERAL "))
+    }
+
+    fn installed((kernel, normal): (Vec<u8>, Vec<u8>)) -> Self {
+        Self {
+            memory: [kernel, normal].concat(),
+            knocks: 0,
+            updating: false,
+            kernel: Vec::new(),
+            trays: vec![MediumStatus::ClosedEmpty],
+            tray_checks: 0,
+            normal_unreadable: false,
+        }
+    }
+
+    fn with_trays(mut self, trays: &[MediumStatus]) -> Self {
+        self.trays = trays.to_vec();
+        self
+    }
+}
+
+impl ScsiDevice for Ud04Drive {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        let sense = |key, asc, what| -> Result<Vec<u8>> {
+            Err(crate::platform::ScsiSenseError::new(key, asc, 0, what).into())
+        };
+        if cdb.first() == Some(&0x12) {
+            let mut data = vec![0; len];
+            if len >= 36 {
+                data[8..16].copy_from_slice(b"PIONEER ");
+                data[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
+                data[32..36].copy_from_slice(if self.updating { b"000 " } else { b"1.14" });
+            }
+            return Ok(data);
+        }
+        if cdb == [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0] {
+            let mut data = vec![0; 48];
+            data[16..24].copy_from_slice(b"SAT 8A10");
+            return Ok(data);
+        }
+        if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
+            bail!("Pioneer does not implement the MTK identity buffer");
+        }
+        if cdb == pioneer_optical::cdb::test_unit_ready()
+            || cdb == pioneer_optical::cdb::get_event_status()
+        {
+            return Ok(vec![0; len]);
+        }
+        if self.knocks == 0 {
+            return sense(5, 0x24, "read access locked");
+        }
+        if cdb.len() != 10 || cdb[..3] != [0x3c, 2, 0xb0] {
+            bail!("unexpected read {}", hex(cdb));
+        }
+        let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+        let end = start + len;
+        if start < UD04_KERNEL_BASE || end > UD04_KERNEL_BASE + self.memory.len() {
+            return sense(5, 0x24, "outside firmware");
+        }
+        if self.normal_unreadable && end > UD04_NORMAL_BASE {
+            return sense(3, 0x11, "unrecovered read error");
+        }
+        Ok(self.memory[start - UD04_KERNEL_BASE..end - UD04_KERNEL_BASE].to_vec())
+    }
+
+    fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        if cdb != pioneer_optical::cdb::knock() || !data.is_empty() {
+            bail!("unexpected write {}", hex(cdb));
+        }
+        self.knocks += 1;
+        Ok(())
+    }
+
+    fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        if cdb == pioneer_optical::cdb::enter_update() {
+            self.updating = true;
+            self.kernel.clear();
+        } else if cdb[..3] == [0x3b, 0x07, 0xfe] {
+            self.kernel.extend_from_slice(data);
+        } else if cdb == pioneer_optical::cdb::finish() {
+            if !self.kernel.is_empty() {
+                let image = Envelope::load(&self.kernel)?.image;
+                self.memory[..image.len()].copy_from_slice(&image);
+            }
+            self.updating = false;
+        }
+        Ok(())
+    }
+
+    fn describe(&self) -> String {
+        "UD04 firmware replay; no hardware".into()
+    }
+
+    fn medium_status(&mut self) -> Result<MediumStatus> {
+        let state = self.trays[self.tray_checks.min(self.trays.len() - 1)];
+        self.tray_checks += 1;
+        Ok(state)
+    }
+}
+
+/// A live flash of `input` to the UD04, saving its backup to `backup`.
+fn ud04_request(input: Vec<u8>, format: &'static FileFormat, backup: &Path) -> FlashRequest {
+    let mut req = pioneer_request(input, format, true);
+    req.drive_model = "BD-RW   BDR-UD04".into();
+    req.predump_out = Some(backup.to_path_buf());
+    req
+}
+
+/// Run the real engine flash with consent collected up front (as the GUI
+/// does), then record the case and the backup it saved.
+fn ud04_case(g: &mut Golden, title: &str, dev: Ud04Drive, req: &FlashRequest) {
+    let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Pioneer::new(), req));
+    g.case(title, &outcome, Some(&transcript));
+    if let Some(backup) = &req.predump_out {
+        g.file("saved pre-flash backup", backup);
+    }
+}
+
+#[test]
+fn golden_pioneer_execute() {
+    let dir = scratch("pioneer-execute");
+    let mut g = Golden::default();
+    let target = archive(&ud04_target(), false);
+    let disc_after_backup = [MediumStatus::ClosedEmpty, MediumStatus::DiscPresent];
+    let cases: Vec<(&str, Ud04Drive, Vec<u8>, &'static FileFormat)> = vec![
+        (
+            "Kernel+Normal update",
+            Ud04Drive::new(false),
+            target.clone(),
+            &PIONEER_PACKAGE,
+        ),
+        (
+            "Kernel+Normal update with kernel restoration pass",
+            Ud04Drive::new(true),
+            target.clone(),
+            &PIONEER_PACKAGE,
+        ),
+        (
+            "Normal-only update",
+            Ud04Drive::new(false),
+            normal_enc(&ud04_target()),
+            &PIONEER_ENVELOPE,
+        ),
+        (
+            "Normal for another Kernel tag, refused after the backup",
+            Ud04Drive::new(false),
+            normal_enc(&ud04_pair(false, 0, true)),
+            &PIONEER_ENVELOPE,
+        ),
+        (
+            "disc inserted after the backup",
+            Ud04Drive::new(false).with_trays(&disc_after_backup),
+            target.clone(),
+            &PIONEER_PACKAGE,
+        ),
+    ];
+    for (i, (title, dev, input, format)) in cases.into_iter().enumerate() {
+        let req = ud04_request(input, format, &dir.join(format!("backup_{i}.tar")));
+        ud04_case(&mut g, &format!("Pioneer execute: {title}"), dev, &req);
+    }
+    let cli = cli_spawn("update", scratch("pioneer-cli-non-tty"), None);
+    g.cli_case("Pioneer CLI execute: stdin is not a TTY", cli);
+    check("pioneer_execute", g);
+}
+
+/// The CLI's confirmation on a terminal: the answer is typed into a
+/// pseudo-terminal that is the child's stdin.
+#[cfg(unix)]
+#[test]
+fn golden_pioneer_execute_tty() {
+    let mut g = Golden::default();
+    let runs = [
+        ("TTY answers y", "update", "y\n", "tty-yes"),
+        ("TTY answers n", "update", "n\n", "tty-no"),
+        (
+            "disc inserted after the backup, TTY answers y",
+            "disc-after-backup",
+            "y\n",
+            "tty-disc",
+        ),
+    ]
+    .map(|(title, scenario, answer, tag)| (title, cli_spawn(scenario, scratch(tag), Some(answer))));
+    for (title, cli) in runs {
+        g.cli_case(&format!("Pioneer CLI execute: {title}"), cli);
+    }
+    check("pioneer_execute_tty", g);
+}
+
+// ---- the CLI flash in a child process, with a real stdin ---------------------
+
+const CLI_CHILD: &str = "FREEMKV_GOLDEN_CLI_CHILD";
+const CLI_DIR: &str = "FREEMKV_GOLDEN_CLI_DIR";
+const CLI_BEGIN: &str = "<<<golden cli begin>>>\n";
+const CLI_END: &str = "<<<golden cli end>>>";
+
+/// The UD04 and the input a CLI scenario flashes.
+fn cli_scenario(name: &str) -> (Ud04Drive, Vec<u8>) {
+    let target = archive(&ud04_target(), false);
+    match name {
+        "update" => (Ud04Drive::new(false), target),
+        "disc-after-backup" => (
+            Ud04Drive::new(false)
+                .with_trays(&[MediumStatus::ClosedEmpty, MediumStatus::DiscPresent]),
+            target,
+        ),
+        other => panic!("no CLI scenario {other}"),
+    }
+}
+
+/// Child side of [`cli_spawn`] (a no-op in an ordinary run): the real engine
+/// flash with the CLI's terminal confirmation, printing to the process's own
+/// stdout and stderr between markers. Result and transcript go to a file.
+#[test]
+fn golden_cli_child() {
+    let (Ok(name), Some(dir)) = (std::env::var(CLI_CHILD), std::env::var_os(CLI_DIR)) else {
+        return;
+    };
+    let dir = PathBuf::from(dir);
+    let (dev, input) = cli_scenario(&name);
+    let req = ud04_request(input, &PIONEER_PACKAGE, &dir.join("backup.tar"));
+    let mut rec = Rec::new(dev);
+    let marker = |text: &str| {
+        use std::io::Write;
+        let mut out = std::io::stdout().lock();
+        out.write_all(text.as_bytes()).unwrap();
+        out.flush().unwrap();
+    };
+    marker(CLI_BEGIN);
+    let result = crate::engine::flash(
+        &mut rec,
+        &Pioneer::new(),
+        &req,
+        &mut crate::output::TerminalConfirm,
+    );
+    marker(CLI_END);
+    let mut report = match result {
+        Ok(()) => "result: OK\n".to_string(),
+        Err(e) => format!("result: ERR {e:#}\n"),
+    };
+    for line in rec.transcript() {
+        report.push_str(&line);
+        report.push('\n');
+    }
+    std::fs::write(dir.join("report.txt"), report).unwrap();
+}
+
+/// A CLI scenario running in a child copy of this test binary. Its stdout and
+/// stderr share one file, so they stay in order as one stream.
+struct CliRun {
+    child: std::process::Child,
+    dir: PathBuf,
+    _tty: Option<std::fs::File>,
+}
+
+/// Start CLI scenario `name` in `dir`, with stdin a pseudo-terminal holding
+/// `answer`, or not a terminal at all.
+fn cli_spawn(name: &str, dir: PathBuf, answer: Option<&str>) -> CliRun {
+    let terminal = std::fs::File::create(dir.join("terminal.txt")).unwrap();
+    let mut cmd = std::process::Command::new(std::env::current_exe().unwrap());
+    cmd.args([
+        "--exact",
+        "golden_tests::golden_cli_child",
+        "--nocapture",
+        "--test-threads=1",
+    ])
+    .env(CLI_CHILD, name)
+    .env(CLI_DIR, &dir)
+    .stdout(terminal.try_clone().unwrap())
+    .stderr(terminal);
+    let tty = match answer {
+        None => {
+            cmd.stdin(std::process::Stdio::null());
+            None
+        }
+        #[cfg(unix)]
+        Some(answer) => {
+            let (master, slave) = pty_holding(answer);
+            cmd.stdin(slave);
+            Some(master)
+        }
+        #[cfg(not(unix))]
+        Some(_) => unreachable!("a typed answer needs a pseudo-terminal"),
+    };
+    let child = cmd.spawn().unwrap();
+    CliRun {
+        child,
+        dir,
+        _tty: tty,
+    }
+}
+
+/// A pseudo-terminal whose input already holds `answer`: (master, slave).
+#[cfg(unix)]
+fn pty_holding(answer: &str) -> (std::fs::File, std::fs::File) {
+    use std::io::Write;
+    use std::os::fd::FromRawFd;
+    let (mut master, mut slave) = (0, 0);
+    // SAFETY: openpty writes two fresh descriptors, owned by the Files below.
+    let (mut master, slave) = unsafe {
+        assert_eq!(
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut()
+            ),
+            0,
+            "openpty: {}",
+            std::io::Error::last_os_error()
+        );
+        for fd in [master, slave] {
+            libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
+        }
+        (
+            std::fs::File::from_raw_fd(master),
+            std::fs::File::from_raw_fd(slave),
+        )
+    };
+    master.write_all(answer.as_bytes()).unwrap();
+    (master, slave)
+}
+
+impl Golden {
+    /// Record a finished CLI scenario: result, the terminal stream, the
+    /// device transcript and the backup it saved.
+    fn cli_case(&mut self, title: &str, mut run: CliRun) {
+        let status = run.child.wait().unwrap();
+        let terminal = std::fs::read_to_string(run.dir.join("terminal.txt")).unwrap();
+        let report = std::fs::read_to_string(run.dir.join("report.txt")).unwrap_or_default();
+        let shown = terminal
+            .split_once(CLI_BEGIN)
+            .and_then(|(_, rest)| rest.split_once(CLI_END))
+            .map(|(shown, _)| shown);
+        let (Some(shown), Some((result, transcript)), true) =
+            (shown, report.split_once('\n'), status.success())
+        else {
+            panic!("CLI child {title:?} failed ({status}):\n{terminal}");
+        };
+        self.section(title);
+        let _ = writeln!(self.body, "{result}");
+        let lines: Vec<String> = shown.lines().map(str::to_owned).collect();
+        self.lines("terminal", &lines);
+        let transcript: Vec<String> = transcript.lines().map(str::to_owned).collect();
+        self.lines("scsi transcript", &transcript);
+        self.file("saved pre-flash backup", &run.dir.join("backup.tar"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pioneer execute failure paths, end to end on the replaying UD04
 // ---------------------------------------------------------------------------
 
 #[test]
 fn golden_pioneer_flash_bundle_failures() {
-    require_non_tty_stdin();
+    let dir = scratch("pioneer-failures");
     let mut g = Golden::default();
-    let installed = prepared_pair(true, 1);
-    let target = prepared_pair(false, 0);
-    let plan: PreparedUpdate = Receiver::from_installed(&installed)
-        .unwrap()
-        .prepare(prepared_pair(false, 0))
-        .unwrap();
-    let pair = prepared_pair(true, 1);
-    let kernel_enc = pair.kernel().repack(&pair.kernel().image).unwrap();
-    let normal_enc = pair.normal().repack(&pair.normal().image).unwrap();
-    let target_tar = archive(&target, false);
-    let cases: Vec<(&str, Option<Vec<u8>>, Vec<u8>)> = vec![
-        ("no installed backup", None, target_tar.clone()),
+    let target = archive(&ud04_target(), false);
+    let mut kernel_only = Ud04Drive::new(true);
+    kernel_only.normal_unreadable = true;
+    let cases: Vec<(&str, Ud04Drive, Vec<u8>)> = vec![
         (
             "installed backup is Kernel-only",
-            Some(tar_of(&[("kernel.enc", &kernel_enc)])),
-            target_tar.clone(),
-        ),
-        (
-            "installed backup is Normal-only",
-            Some(tar_of(&[("normal.enc", &normal_enc)])),
-            target_tar.clone(),
-        ),
-        (
-            "installed backup is garbage",
-            Some(b"garbage".to_vec()),
-            target_tar.clone(),
+            kernel_only,
+            target.clone(),
         ),
         (
             "target is a header-only bundle",
-            Some(archive(&installed, false)),
+            Ud04Drive::new(true),
             header_only_bundle(),
         ),
         (
             "target is garbage",
-            Some(archive(&installed, false)),
+            Ud04Drive::new(true),
             b"garbage".to_vec(),
         ),
         (
             "target is the installed firmware (no change)",
-            Some(archive(&installed, false)),
-            archive(&installed, false),
+            Ud04Drive::new(true),
+            archive(&ud04_pair(true, 1, false), false),
         ),
     ];
-    for (title, backup, input) in cases {
-        let req = pioneer_request(input, &PIONEER_PACKAGE, true);
-        let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
-            bundle_execute(d, &req, backup.as_deref())
-        });
-        g.case(
-            &format!("Pioneer flash_bundle: {title}"),
-            &outcome,
-            Some(&transcript),
+    for (i, (title, dev, input)) in cases.into_iter().enumerate() {
+        let req = ud04_request(
+            input,
+            &PIONEER_PACKAGE,
+            &dir.join(format!("backup_{i}.tar")),
         );
+        ud04_case(&mut g, &format!("Pioneer execute: {title}"), dev, &req);
     }
-    // Dry-run request: flash_bundle does not run.
-    let req = pioneer_request(target_tar, &PIONEER_PACKAGE, false);
-    let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
-        if req.execute {
-            bundle_execute(d, &req, None)
-        } else {
-            // The executor only ever runs on --execute (the engine plans dry runs).
-            println!("flash_bundle: not applicable to a dry run");
-            Ok(())
-        }
-    });
-    g.case(
-        "Pioneer flash_bundle: dry-run request",
-        &outcome,
-        Some(&transcript),
+    let mut req = pioneer_request(target, &PIONEER_PACKAGE, false);
+    req.drive_model = "BD-RW   BDR-UD04".into();
+    ud04_case(
+        &mut g,
+        "Pioneer flash: dry-run request",
+        Ud04Drive::new(true),
+        &req,
     );
     check("pioneer_flash_bundle_failures", g);
 }
@@ -2205,9 +2595,14 @@ fn golden_pioneer_flash_bundle_failures() {
 // ---- Parity with the v0.11.2 baseline (same harness, COMPAT shims only) ----
 
 /// Reasons a MediaTek line may differ from v0.11.2. `tests/golden/v0.11.2/`
-/// was recorded at that tag; Pioneer scenarios must match it byte for byte,
-/// and a MediaTek line may differ only where `INTENDED_CHANGES.md` lists it.
+/// was recorded at that tag; a line may differ only where
+/// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7"];
+
+/// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
+/// that cannot be read is refused before the backup; P2, the last tray check
+/// runs after the confirmation.
+const PIONEER_REASONS: &[&str] = &["P1", "P2"];
 
 /// Split a golden file into `(scenario title, lines)` sections.
 fn sections(text: &str) -> Vec<(String, Vec<String>)> {
@@ -2352,34 +2747,34 @@ fn golden_parity_with_0_11_2() {
     }
 
     let intended = parse_intended(&std::fs::read_to_string(&intended_path).expect(
-        "tests/golden/INTENDED_CHANGES.md is missing; every MediaTek difference from v0.11.2 must be listed there",
+        "tests/golden/INTENDED_CHANGES.md is missing; every difference from v0.11.2 must be listed there",
     ));
     let mut problems = Vec::new();
     for ((file, title), ops) in &differences {
-        if is_pioneer_scenario(file, title) {
-            problems.push(format!(
-                "REGRESSION: Pioneer scenario differs from v0.11.2: {file} :: {title}\n  {}",
-                ops.iter().take(6).cloned().collect::<Vec<_>>().join("\n  ")
-            ));
-            continue;
-        }
+        let (kind, reasons_allowed) = if is_pioneer_scenario(file, title) {
+            ("REGRESSION: Pioneer scenario", PIONEER_REASONS)
+        } else {
+            ("UNEXPLAINED MediaTek scenario", ALLOWED_REASONS)
+        };
         match intended.entries.get(&(file.clone(), title.clone())) {
             None => problems.push(format!(
-                "UNEXPLAINED difference from v0.11.2 (not in INTENDED_CHANGES.md): {file} :: {title}\n  {}",
+                "{kind} differs from v0.11.2 (not in INTENDED_CHANGES.md): {file} :: {title}\n  {}",
                 ops.iter().take(6).cloned().collect::<Vec<_>>().join("\n  ")
             )),
             Some((reasons, allowed)) => {
                 if reasons.is_empty()
-                    || reasons.iter().any(|r| !ALLOWED_REASONS.contains(&r.as_str()))
+                    || reasons
+                        .iter()
+                        .any(|r| !reasons_allowed.contains(&r.as_str()))
                 {
                     problems.push(format!(
-                        "{file} :: {title}: reason must be from {ALLOWED_REASONS:?}, got {reasons:?}"
+                        "{kind} {file} :: {title}: reason must be from {reasons_allowed:?}, got {reasons:?}"
                     ));
                 }
                 for op in ops {
                     if !allowed.contains(op) {
                         problems.push(format!(
-                            "UNEXPLAINED line in {file} :: {title}:\n  {op}"
+                            "{kind}: unexplained line in {file} :: {title}:\n  {op}"
                         ));
                     }
                 }
