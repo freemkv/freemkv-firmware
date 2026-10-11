@@ -128,7 +128,9 @@ fn every_shell_source_is_scanned() {
 /// compiled out of release builds.
 #[test]
 fn the_gui_gate_is_compiled_out_of_release_builds() {
-    let main = include_str!("main.rs");
+    // A Windows checkout may turn sources into CRLF; match on LF.
+    let lf = |s: &str| s.replace("\r\n", "\n");
+    let main = lf(include_str!("main.rs"));
     assert!(
         main.contains("#[cfg(debug_assertions)]\n#[cfg_attr(not(feature = \"native\"), allow(dead_code))]\nmod gui_gate;"),
         "main.rs must declare gui_gate under cfg(debug_assertions)"
@@ -138,6 +140,7 @@ fn the_gui_gate_is_compiled_out_of_release_builds() {
         ("windows.rs", include_str!("windows.rs")),
         ("linux.rs", include_str!("linux.rs")),
     ] {
+        let src = &lf(src);
         assert!(
             src.contains("#[cfg(debug_assertions)]\nmod gate;"),
             "{file} must declare its gate under cfg(debug_assertions)"
