@@ -2805,3 +2805,7 @@ mod flash_tripwires;
 #[cfg(test)]
 #[path = "report_tripwire_tests.rs"]
 mod report_tripwires;
+
+#[cfg(test)]
+#[path = "golden_corpus_tests.rs"]
+mod corpus;

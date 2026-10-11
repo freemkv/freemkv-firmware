@@ -86,6 +86,16 @@ with the same harness, driving v0.11.2's `confirm_with` (made `pub(crate)` in
 the throwaway worktree, a visibility-only COMPAT change); the current file
 drives `engine::flash` and the CLI's prompt core and is byte-identical.
 
+`pioneer_corpus.txt` (`src/golden_corpus_tests.rs`) runs the real engine on
+one mock drive per Pioneer family of an OEM package corpus: backup, dry run,
+same-version, downgrade, upgrade and Normal-only flashes, and recovery. The
+packages are pinned by SHA-256 in `pioneer_corpus_subset.tsv`; recording
+needs the corpus. Both sets were recorded with the same file, its v0.11.2
+copy changing only COMPAT lines. Its only differences are P2: a Normal-only
+package that authorize refuses after the backup. Families whose refusal still
+carried the `--recover` hint removed in phase 1 are not pinned (they differ
+in that wording only); the full-corpus run reports them.
+
 Regenerate the skeleton after an intentional change with
 `FREEMKV_BLESS_INTENDED=1 cargo test -p freemkv-flash golden_parity`, then set
 the `reason:` of any `UNCLASSIFIED` section by hand.
@@ -3050,6 +3060,296 @@ reason: R4, R2
 +--- scsi transcript (1) ---
 -IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 -IN   cdb=000000000000000000000000 alloc=0 -> ok 0
+```
+
+## pioneer_corpus.txt
+
+### 1005/GENERAL BDR-203 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8301/ID43 BDR-S08 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8301/ID58 BDR-208M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8301/ID60 BDR-208M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8301/ID81 BDR-208 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8600/ID43 BDR-S09 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8600/ID58 BDR-209M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8600/ID60 BDR-209M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8600/ID72 BDR-S09JX :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8600/ID81 BDR-209 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8601/ID43 BDR-S09 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8601/ID60 BDR-209M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8800/ID43 BDR-S11 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8800/ID58 BDR-211M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8800/ID60 BDR-211M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8800/ID72 BDR-S11JX :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8801/ID43 BDR-S11 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8801/ID58 BDR-211M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8801/ID60 BDR-211M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8801/ID72 BDR-S11JX :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8A10/GENERAL BDR-UD04 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8D30/ID32 BDR-AD07 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8D30/ID35 BDR-XD07 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8D30/ID36 BDR-XD07 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 8D31/ID69 BDR-XD07U :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9000/ID15 BDR-X12 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9001/ID43 BDR-X12U :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9200/ID56 BDR-213M :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9330/GENERAL BDR-XD08 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9330/ID32 BDR-AD08 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9330/ID35 BDR-XD08 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9330/ID36 BDR-XD08 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9331/ID05 BDR-XD08U :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9331/ID69 BDR-XD08U :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9400/ID56 BDR-X13 :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
+```
+
+### 9401/ID29 BDR-X13U :: flash Normal-only package
+reason: P2
+```diff
+---- scsi transcript (13) ---
++--- scsi transcript (12) ---
+-MEDIUM -> ClosedEmpty
 ```
 
 ## pioneer_execute.txt
