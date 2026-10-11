@@ -592,6 +592,9 @@ struct Shell {
     /// True while `render` writes controls, so their change notifications are not input.
     painting: Rc<Cell<bool>>,
     confirming: Rc<Cell<bool>>,
+    /// The confirmation's risk box as its dialog last reported it: cleared on creation, then
+    /// every verification click, whatever caused it. The qa gate reads it.
+    risk_box: Rc<Cell<bool>>,
 }
 
 fn build_menu() -> w::SysResult<w::HMENU> {
@@ -800,6 +803,7 @@ impl Shell {
             dpi: Rc::new(Cell::new(s.dpi())),
             painting: Rc::new(Cell::new(false)),
             confirming: Rc::new(Cell::new(false)),
+            risk_box: Rc::new(Cell::new(false)),
         }
     }
 
@@ -1544,6 +1548,7 @@ impl Shell {
         }
         match tdn {
             w::Tdn::Created => {
+                self.risk_box.set(false);
                 send_raw(
                     hwnd,
                     TDM_ENABLE_BUTTON,
@@ -1552,6 +1557,7 @@ impl Shell {
                 );
             }
             w::Tdn::VerificationClicked(on) => {
+                self.risk_box.set(on);
                 let _ = self
                     .app
                     .borrow_mut()
