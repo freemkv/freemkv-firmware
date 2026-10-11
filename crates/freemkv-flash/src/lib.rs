@@ -40,3 +40,7 @@ pub fn crc32(data: &[u8]) -> u32 {
     h.update(data);
     h.finalize()
 }
+
+#[cfg(test)]
+#[path = "golden_tests.rs"]
+mod golden_tests;

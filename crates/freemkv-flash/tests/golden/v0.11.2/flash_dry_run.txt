@@ -1,0 +1,240 @@
+
+=== MTK dry run: .bin ===
+result: OK
+--- text (13) ---
+== flash plan ==
+device: mock://in-memory
+drive: BU40N
+firmware: 2 MiB (plaintext envelope)
+backup: not captured (dry run)
+upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
+
+  ** POINT OF NO RETURN **
+  The drive erases and reprograms its flash the instant the full 2 MiB upload
+  lands. This cannot be undone.
+  preflight ................ transport ready; backup capture is checked only on execute
+
+DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
+--- events (13) ---
+MSG      == flash plan ==
+MSG      device: mock://in-memory
+MSG      drive: BU40N
+MSG      firmware: 2 MiB (plaintext envelope)
+MSG      backup: not captured (dry run)
+MSG      upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
+MSG      
+MSG        ** POINT OF NO RETURN **
+MSG        The drive erases and reprograms its flash the instant the full 2 MiB upload
+MSG        lands. This cannot be undone.
+MSG        preflight ................ transport ready; backup capture is checked only on execute
+MSG      
+MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
+--- scsi transcript (3) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
+IN   cdb=000000000000000000000000 alloc=0 -> ok 0
+
+=== MTK dry run: .bin verbose ===
+result: OK
+--- text (24) ---
+== flash plan ==
+device: mock://in-memory
+drive: BU40N
+firmware: 2 MiB (plaintext envelope)
+backup: not captured (dry run)
+upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
+
+  ** POINT OF NO RETURN **
+  The drive erases and reprograms its flash the instant the full 2 MiB upload
+  lands. This cannot be undone.
+
+raw SCSI sequence (134 steps):
+  #01 PROBE   in   3C 06 00 1E C0 00 00 01 00 00 00 00   alloc=256
+  #02 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
+  #03 PREPARE out  3B 01 00 00 00 00 00 00 00 0B 00 00   data=0
+  #04 STREAM  out  3B 06 00 00 00 00 00 40 00 00 00 00   data=16384 @0x000000
+      ... 128 identical STREAM chunks collapsed (2 MiB total) ...
+  #131 STREAM  out  3B 06 00 1F C0 00 00 40 00 00 00 00   data=16384 @0x1FC000
+  #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 1B 12   data=0
+  #133 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
+  #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
+  preflight ................ transport ready; backup capture is checked only on execute
+
+DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
+--- events (24) ---
+MSG      == flash plan ==
+MSG      device: mock://in-memory
+MSG      drive: BU40N
+MSG      firmware: 2 MiB (plaintext envelope)
+MSG      backup: not captured (dry run)
+MSG      upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
+MSG      
+MSG        ** POINT OF NO RETURN **
+MSG        The drive erases and reprograms its flash the instant the full 2 MiB upload
+MSG        lands. This cannot be undone.
+MSG      
+MSG      raw SCSI sequence (134 steps):
+MSG        #01 PROBE   in   3C 06 00 1E C0 00 00 01 00 00 00 00   alloc=256
+MSG        #02 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
+MSG        #03 PREPARE out  3B 01 00 00 00 00 00 00 00 0B 00 00   data=0
+MSG        #04 STREAM  out  3B 06 00 00 00 00 00 40 00 00 00 00   data=16384 @0x000000
+MSG            ... 128 identical STREAM chunks collapsed (2 MiB total) ...
+MSG        #131 STREAM  out  3B 06 00 1F C0 00 00 40 00 00 00 00   data=16384 @0x1FC000
+MSG        #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 1B 12   data=0
+MSG        #133 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
+MSG        #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
+MSG        preflight ................ transport ready; backup capture is checked only on execute
+MSG      
+MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
+--- scsi transcript (3) ---
+MEDIUM -> ClosedEmpty
+IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
+IN   cdb=000000000000000000000000 alloc=0 -> ok 0
+
+=== MTK dry run: bad CMAC refused ===
+result: ERR firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+MEDIUM -> ClosedEmpty
+
+=== MTK dry run: wrong model refused ===
+result: ERR image is built for model "WH16NS60" but this drive reports "BU40N" — refusing to flash a wrong-model image (pass a compatible image)
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+MEDIUM -> ClosedEmpty
+
+=== MTK dry run: wrong size refused ===
+result: ERR firmware .bin must be exactly 2097152 bytes, got 1024
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+MEDIUM -> ClosedEmpty
+
+=== Pioneer dry run: signed Kernel+Normal bundle ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BD-RW   BDR-TEST
+SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+Validated envelope integrity and transfer framing; 8 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BD-RW   BDR-TEST
+MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== Pioneer dry run: bundle verbose ===
+result: OK
+--- text (15) ---
+== Pioneer offline transfer plan ==
+stated model: BD-RW   BDR-TEST
+SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+Validated envelope integrity and transfer framing; 8 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+  Entry [3B, 04, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
+  KernelFe [3B, 07, FE, 00, 00, 00, 00, 80, 00, 00] 32768 B
+  KernelFe [3B, 07, FE, 00, 80, 00, 00, 80, 00, 00] 32768 B
+  KernelFe [3B, 07, FE, 01, 00, 00, 00, 12, 00, 00] 4608 B
+  Normal [3B, 07, F0, 00, 00, 00, 00, 80, 00, 00] 32768 B
+  Normal [3B, 07, F0, 00, 80, 00, 00, 80, 00, 00] 32768 B
+  Normal [3B, 07, F0, 01, 00, 00, 00, 22, 00, 00] 8704 B
+  Finish [3B, 05, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
+DRY RUN: no device I/O or writes.
+--- events (15) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BD-RW   BDR-TEST
+MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG        Entry [3B, 04, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
+MSG        KernelFe [3B, 07, FE, 00, 00, 00, 00, 80, 00, 00] 32768 B
+MSG        KernelFe [3B, 07, FE, 00, 80, 00, 00, 80, 00, 00] 32768 B
+MSG        KernelFe [3B, 07, FE, 01, 00, 00, 00, 12, 00, 00] 4608 B
+MSG        Normal [3B, 07, F0, 00, 00, 00, 00, 80, 00, 00] 32768 B
+MSG        Normal [3B, 07, F0, 00, 80, 00, 00, 80, 00, 00] 32768 B
+MSG        Normal [3B, 07, F0, 01, 00, 00, 00, 22, 00, 00] 8704 B
+MSG        Finish [3B, 05, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== Pioneer dry run: bundle with crossflash ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BD-RW   BDR-TEST
+SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+Validated envelope integrity and transfer framing; 8 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup (force requested).
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BD-RW   BDR-TEST
+MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup (force requested).
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== Pioneer dry run: header-only bundle ===
+result: ERR Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (0) ---
+
+=== Pioneer dry run: bare signed Normal .enc ===
+result: OK
+--- text (7) ---
+== Pioneer offline transfer plan ==
+stated model: BD-RW   BDR-TEST
+SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+Validated envelope integrity and transfer framing; 5 data-out commands.
+Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+Installed-family compatibility is checked against the live backup.
+DRY RUN: no device I/O or writes.
+--- events (7) ---
+MSG      == Pioneer offline transfer plan ==
+MSG      stated model: BD-RW   BDR-TEST
+MSG      SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+MSG      Validated envelope integrity and transfer framing; 5 data-out commands.
+MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
+MSG      Installed-family compatibility is checked against the live backup.
+MSG      DRY RUN: no device I/O or writes.
+--- scsi transcript (0) ---
+
+=== Pioneer dry run: UD04 Normal .bin ===
+result: ERR malformed bundle: Normal slot carries a component whose header declares File Type "unknown", not "Normal"
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (0) ---
+
+=== Pioneer dry run: garbage .bin ===
+result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (0) ---
+
+=== Pioneer dry run: Tar kind refused ===
+result: ERR Pioneer planning requires an envelope or Pioneer bundle
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (0) ---
+
+=== MTK drive given a Pioneer bundle ===
+result: ERR Pioneer firmware bundles cannot use the MTK flash path
+--- text (0) ---
+--- events (0) ---
+--- scsi transcript (1) ---
+MEDIUM -> ClosedEmpty
