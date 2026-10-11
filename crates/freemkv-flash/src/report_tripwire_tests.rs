@@ -617,10 +617,54 @@ fn paths_and_hex_render_unmangled() {
 
 // ---- R13: one recognizer -----------------------------------------------------
 
+/// A 0.10.x MediaTek backup archive whose members are coherent, as Flash
+/// requires: per-unit regions copied from the firmware, well-formed
+/// GET CONFIGURATION descriptors.
+fn coherent_legacy_tar() -> Vec<u8> {
+    use crate::backends::mtk::{
+        backup::BackupArtifact, UserDump, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1F0000_LEN,
+        ROM_1F0000_OFFSET,
+    };
+    let descriptor = |feature: u16| {
+        let mut data = vec![b'S'; 28];
+        data[..12].fill(0);
+        data[..4].copy_from_slice(&24u32.to_be_bytes());
+        data[8..10].copy_from_slice(&feature.to_be_bytes());
+        data[11] = 16;
+        data
+    };
+    let firmware = backup_firmware();
+    let region = |offset: u32, len: u32| firmware[offset as usize..][..len as usize].to_vec();
+    let per_unit = UserDump {
+        rom_003000: vec![0; ROM_003000_LEN as usize],
+        rom_1ec000: region(ROM_1EC000_OFFSET, ROM_1EC000_LEN),
+        rom_1f0000: region(ROM_1F0000_OFFSET, ROM_1F0000_LEN),
+        inq: {
+            let mut data = vec![0u8; 96];
+            data[4] = 91;
+            data
+        },
+        fd_fwdate: descriptor(0x010C),
+        fd_sn: descriptor(0x0108),
+    };
+    BackupArtifact {
+        firmware,
+        per_unit,
+        drive_product: "BD-RE BU40N".into(),
+    }
+    .to_tar_bytes()
+    .unwrap()
+}
+
 #[test]
 fn one_recognizer_serves_flash_check_and_inspect() {
     let dir = scratch("one-recognizer");
-    let legacy = legacy_mtk_tar();
+    let legacy = coherent_legacy_tar();
+    // The golden fixture's descriptors are malformed, so Flash refuses it.
+    let fixture = legacy_mtk_tar();
+    let refusal = crate::backends::mtk::backup::validate(&fixture, "BD-RE BU40N", IMAGE_SIZE)
+        .unwrap_err()
+        .to_string();
     let cases: Vec<(&str, Vec<u8>, &str, &str)> = vec![
         (
             "pioneer.tar",
@@ -635,6 +679,7 @@ fn one_recognizer_serves_flash_check_and_inspect() {
             "pioneer-package",
         ),
         ("legacy.tar", legacy, "mtk19xx", "mtk-legacy-tar"),
+        ("fixture.tar", fixture, "mtk19xx", "mtk-legacy-tar"),
         ("image.bin", backup_firmware(), "mtk19xx", "mtk-image"),
     ];
     for (name, bytes, backend_id, format) in cases {
@@ -665,22 +710,22 @@ fn one_recognizer_serves_flash_check_and_inspect() {
             ("pioneer-oem", _, inspected) => {
                 assert!(inspected.is_ok(), "{name}: {:?}", inspected.err())
             }
-            (_, "mtk-image", Ok(inspection)) => {
+            // An archive Flash refuses fails inspection for Flash's reason.
+            (_, _, Err(e)) if name == "fixture.tar" => {
+                assert!(format!("{e:#}").starts_with(&refusal), "{e:#}")
+            }
+            // Both MediaTek formats inspect, through the MediaTek provider.
+            (_, "mtk-image" | "mtk-legacy-tar", Ok(inspection)) => {
                 let chip = inspection.components[0]
                     .fields
                     .iter()
                     .any(|f| f.label == "Chip");
                 assert!(chip, "{name} reached the wrong inspector: {inspection:?}");
+                assert_eq!(inspection.analyses[0].identity.family_scheme, "mtk");
+                let digest = format!("{:x}", Sha256::digest(&bytes));
+                assert_eq!(inspection.sha256, digest, "{name}: the input's digest");
             }
-            (_, "mtk-image", Err(e)) => panic!("{name}: {e:#}"),
-            (_, _, Ok(_)) => {}
-            (_, _, Err(e)) => {
-                let error = format!("{e:#}");
-                assert!(
-                    !error.contains("firmware package"),
-                    "{name} reached the Pioneer inspector: {error}"
-                );
-            }
+            (_, _, inspected) => panic!("{name}: {:?}", inspected.err()),
         }
     }
     // check / info <file>: the recognized backend describes the file.
