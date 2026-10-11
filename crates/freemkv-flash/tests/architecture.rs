@@ -33,7 +33,7 @@ fn production_sources() -> Vec<Source> {
                 continue;
             }
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            if !name.ends_with(".rs") || name.ends_with("_tests.rs") || name == "tests.rs" {
+            if !scanned_name(&name) {
                 continue;
             }
             let raw = fs::read_to_string(&path).unwrap();
@@ -48,6 +48,12 @@ fn production_sources() -> Vec<Source> {
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
     out
+}
+
+/// Whether [`production_sources`] scans a file of this name: Rust source that
+/// is not a test module.
+fn scanned_name(name: &str) -> bool {
+    name.ends_with(".rs") && !name.ends_with("_tests.rs") && name != "tests.rs"
 }
 
 /// The source with every `#[cfg(test)]` item removed. An item with a body ends
@@ -510,6 +516,113 @@ fn test_items_end_where_they_end() {
         without_test_items("#[cfg(test)]\n#[path = \"x_tests.rs\"]\nmod tests;\nm7"),
         "\nm7"
     );
+}
+
+/// How production code loads a file: `#[path = ".."]`, `include!("..")` (whose
+/// target is `None` unless a plain literal) or `mod name;`.
+#[derive(Debug, PartialEq)]
+enum Link {
+    Path(String),
+    Include(Option<String>),
+    Mod(String),
+}
+
+/// Every [`Link`] in lexed `code`, whose string literals are `strings` in order.
+fn module_links(code: &str, strings: &[String]) -> Vec<Link> {
+    let tight = tighten(code);
+    // The literal whose `""` placeholder starts at `at`.
+    let literal = |at: usize| strings.get(tight[..at].matches("\"\"").count()).cloned();
+    let mut out = Vec::new();
+    for at in word_hits(&tight, "path") {
+        let rest = &tight[at + "path".len()..];
+        if tight[..at].ends_with("#[") && rest.starts_with("=\"\"") {
+            out.extend(literal(at + "path=".len()).map(Link::Path));
+        }
+    }
+    for at in word_hits(&tight, "include") {
+        let rest = &tight[at + "include".len()..];
+        if rest.starts_with('!') {
+            let plain = rest.starts_with("!(\"\")");
+            let target = plain.then(|| literal(at + "include!(".len())).flatten();
+            out.push(Link::Include(target));
+        }
+    }
+    for at in word_hits(&tight, "mod") {
+        let rest = &tight[at + "mod".len()..].trim_start();
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if !name.is_empty() && rest[name.len()..].starts_with(';') {
+            out.push(Link::Mod(name));
+        }
+    }
+    out
+}
+
+/// Production code loads only files the scan reads: every `#[path]` and
+/// `include!` outside `#[cfg(test)]` names an existing, scanned `.rs` file, and
+/// no `mod x;` loads a `tests.rs` or `*_tests.rs` file.
+#[test]
+fn production_code_loads_only_scanned_files() {
+    let mut problems = Vec::new();
+    let mut mods = 0;
+    for s in production_sources() {
+        let dir = root().join(&s.path);
+        let dir = dir.parent().unwrap();
+        let scanned = |target: &str| {
+            let file = dir.join(target);
+            let name = file.file_name().map(|n| n.to_string_lossy().into_owned());
+            file.is_file()
+                && file.starts_with(root().join("src"))
+                && name.is_some_and(|n| scanned_name(&n))
+        };
+        for link in module_links(&s.code, &s.strings) {
+            let ok = match &link {
+                Link::Path(target) | Link::Include(Some(target)) => scanned(target),
+                Link::Include(None) => false,
+                Link::Mod(name) => {
+                    mods += 1;
+                    scanned_name(&format!("{name}.rs"))
+                }
+            };
+            if !ok {
+                problems.push(format!("{}: {link:?} loads a file the scan skips", s.path));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert!(mods >= 10, "the scan found only {mods} module declarations");
+}
+
+#[test]
+fn module_links_find_every_loaded_file() {
+    let src = "#[cfg(test)]\n#[path = \"a_tests.rs\"]\nmod tests;\n\
+               #[path = \"x_tests.rs\"]\npub mod x;\n\
+               #[cfg(any())]\n#[path=\"y.txt\"] mod y;\n\
+               fn f() { include!(\"gen.in\"); include ! (concat!(env!(\"OUT_DIR\"), \"/g.rs\")); }\n\
+               const T: &str = include_str!(\"t.txt\");\n\
+               mod tests;\n\
+               pub(crate) mod engine;\n\
+               mod inline { }\n";
+    let (code, strings) = lex(&without_test_items(src));
+    assert_eq!(
+        module_links(&code, &strings),
+        [
+            Link::Path("x_tests.rs".into()),
+            Link::Path("y.txt".into()),
+            Link::Include(Some("gen.in".into())),
+            Link::Include(None),
+            Link::Mod("x".into()),
+            Link::Mod("y".into()),
+            Link::Mod("tests".into()),
+            Link::Mod("engine".into()),
+        ]
+    );
+    assert!(scanned_name("engine.rs"));
+    for name in ["x_tests.rs", "tests.rs", "y.txt", "gen.in"] {
+        assert!(!scanned_name(name), "{name}");
+    }
 }
 
 // ---------------------------------------------------------------------------
