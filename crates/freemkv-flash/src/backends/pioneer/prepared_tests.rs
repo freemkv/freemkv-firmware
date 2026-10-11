@@ -7,8 +7,6 @@ fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
     crate::backends::pioneer::flash::execute_prepared(
         dev,
         crate::backends::pioneer::flash::PreparedFlash::Complete(plan),
-        false,
-        false,
     )
 }
 use pioneer_optical::envelope::{

@@ -195,7 +195,6 @@ impl From<FlashArgs> for freemkv_flash::workflow::FlashOptions {
             backup: a.backup,
             execute: a.execute,
             acknowledged_risk: a.i_understand_risk,
-            force: false,
         }
     }
 }

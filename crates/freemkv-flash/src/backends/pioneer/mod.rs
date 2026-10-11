@@ -117,7 +117,6 @@ fn validate_header_chain(
     kernel: Option<&[u8]>,
     normal: &[u8],
     backup: Option<&[u8]>,
-    force: bool,
 ) -> Result<()> {
     use crate::backends::pioneer::flash_plan::validate_component_headers;
     validate_component_headers(kernel, Some(normal)).map_err(anyhow::Error::msg)?;
@@ -128,7 +127,6 @@ fn validate_header_chain(
     let installed_kernel = captured.as_ref().and_then(|(k, _)| k.as_deref());
     match installed_kernel {
         Some(k) => validate_component_headers(Some(k), Some(normal)).map_err(anyhow::Error::msg),
-        None if force => Ok(()),
         None => {
             bail!("Normal-only flash needs the installed Kernel; supply a Kernel+Normal package")
         }
@@ -341,19 +339,14 @@ pub(crate) fn installed_facts(
 /// Route the installed firmware against the target ([`crate::backends::pioneer::flash_plan`])
 /// and return the plan. The installed facts come from the just-captured pre-flash
 /// backup (the planner stays pure; the family keys are computed here, where the
-/// backup bytes are in hand). `recover` uses the recover plan (family gate only);
-/// `force` ignores the family match. Without installed facts (no backup) the
-/// family cannot be proven, so the flash is refused unless `force`.
+/// backup bytes are in hand). Without installed facts (no usable backup) the
+/// family cannot be proven, so the flash is refused.
 pub(crate) fn resolve_flash_plan(
     installed_backup: Option<&[u8]>,
     kernel: Option<&[u8]>,
     normal: Option<&[u8]>,
-    recover: bool,
-    force: bool,
 ) -> Result<crate::backends::pioneer::flash_plan::FlashPlan> {
-    use crate::backends::pioneer::flash_plan::{
-        decide_recover_plan, normal_family_with_kernel, target_from_components,
-    };
+    use crate::backends::pioneer::flash_plan::{normal_family_with_kernel, target_from_components};
 
     let installed = installed_facts(installed_backup);
     let captured_kernel = installed_backup
@@ -361,39 +354,29 @@ pub(crate) fn resolve_flash_plan(
         .and_then(|(k, _)| k);
     let receiver_kernel = kernel.or(captured_kernel.as_deref());
     let target_family = normal.and_then(|n| normal_family_with_kernel(n, receiver_kernel?));
-    if recover {
-        let plan = decide_recover_plan(
-            installed.as_ref().and_then(|i| i.family.as_ref()),
-            target_family.as_ref(),
-            force,
-        );
-        crate::style::trace(&format!("recover plan = {plan:?}"));
-        return Ok(plan);
-    }
     let mut target = target_from_components(kernel, normal)
         .context("could not read target bundle identity for flash routing")?;
     target.family = target_family;
     crate::style::trace(&format!(
         "flash routing: installed={installed:?}, target={target:?}"
     ));
-    let plan = plan_for(installed.as_ref(), &target, force);
+    let plan = plan_for(installed.as_ref(), &target);
     crate::style::trace(&format!("flash plan = {plan:?}"));
     Ok(plan)
 }
 
 /// Pure routing core of [`resolve_flash_plan`]: no installed facts means the
-/// installed family is unknown, so the family gate refuses (or `force` overrides).
+/// installed family is unknown, so the family gate refuses.
 fn plan_for(
     installed: Option<&crate::backends::pioneer::flash_plan::Installed>,
     target: &crate::backends::pioneer::flash_plan::Target,
-    force: bool,
 ) -> crate::backends::pioneer::flash_plan::FlashPlan {
     use crate::backends::pioneer::flash_plan::{decide_flash_plan, Installed};
     match installed {
-        Some(inst) => decide_flash_plan(inst, target, force),
+        Some(inst) => decide_flash_plan(inst, target),
         None => {
             // Nothing known about the installed firmware: only the family gate's
-            // "unknown installed" refusal applies, which `force` waives.
+            // "unknown installed" refusal applies.
             let unknown = Installed {
                 controller_id: target.controller_id,
                 receiver_new_gen: None,
@@ -401,17 +384,10 @@ fn plan_for(
                 family: None,
                 kernel_tag: None,
             };
-            decide_flash_plan(&unknown, target, force)
+            decide_flash_plan(&unknown, target)
         }
     }
 }
-
-/// Loud notice that a safety gate was waived (--force): the firmware family
-/// and/or the installed Kernel tag could not be verified. A known Kernel-tag
-/// mismatch is still refused.
-const FORCED_WARNING: &str = "WARNING: a safety gate was bypassed (--force): the firmware family \
-    and/or the installed Kernel tag could not be verified. Flashing firmware from a different \
-    or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.";
 
 /// Explain the temporary marker patch and required pristine-Kernel restore.
 const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware generation barrier. \
@@ -433,14 +409,12 @@ fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
     )
 }
 
-/// Whether the plan (or a `Forced` plan's inner plan) is `KernelDowngrade`.
+/// Whether the plan is `KernelDowngrade`.
 fn plan_is_downgrade(plan: &crate::backends::pioneer::flash_plan::FlashPlan) -> bool {
-    use crate::backends::pioneer::flash_plan::FlashPlan;
-    match plan {
-        FlashPlan::KernelDowngrade => true,
-        FlashPlan::Forced(inner) => plan_is_downgrade(inner),
-        _ => false,
-    }
+    matches!(
+        plan,
+        crate::backends::pioneer::flash_plan::FlashPlan::KernelDowngrade
+    )
 }
 
 /// Decide whether the executor may act on a plan. `Refused` aborts before any
@@ -455,10 +429,6 @@ pub(crate) fn check_plan_executable(
     use crate::backends::pioneer::flash_plan::FlashPlan;
     match plan {
         FlashPlan::Plain | FlashPlan::KernelCrossflash => Ok(()),
-        FlashPlan::Forced(inner) => {
-            eprintln!("{}", crate::style::amber(FORCED_WARNING));
-            check_plan_executable(inner)
-        }
         FlashPlan::KernelDowngrade => {
             eprintln!("{}", crate::style::amber(DOWNGRADE_WARNING));
             Ok(())
@@ -613,10 +583,9 @@ impl DriveFamily for Pioneer {
 
             check_normal_size(normal)?;
 
-            validate_header_chain(kernel.as_deref(), normal, installed_backup, req.force)?;
+            validate_header_chain(kernel.as_deref(), normal, installed_backup)?;
 
-            // An image with an unrecoverable envelope tail is never flashed — not
-            // even with --force or --recover.
+            // An image with an unrecoverable envelope tail is never flashed.
             crate::backends::pioneer::flash_plan::ensure_no_unrecovered_tail(
                 kernel.as_deref(),
                 Some(normal),
@@ -624,13 +593,11 @@ impl DriveFamily for Pioneer {
 
             // Routing: the family-match gate (installed vs target Normal family,
             // computed from the just-captured pre-flash backup and the target).
-            // `--recover` skips the downgrade/pair refusals but keeps the family
-            // gate; `--force` ignores the family match. No path uses kernel mode.
+            // No path uses kernel mode.
             // Bundle self-consistency gate: refuse malformed bundles (bad
             // headers, SAT mismatch between Kernel/Normal, Kernel ID tag ≠
             // Normal's required-Kernel tag, unrecovered envelope tail) BEFORE
-            // any planning or writes. Even `--force` would still be flashing
-            // garbage; a broken bundle never has a legitimate path.
+            // any planning or writes; a broken bundle never has a legitimate path.
             crate::backends::pioneer::flash_plan::validate_bundle(kernel.as_deref(), Some(normal))
                 .map_err(|e| anyhow!("{e}"))?;
 
@@ -643,38 +610,24 @@ impl DriveFamily for Pioneer {
                     )
                     .map_err(crate::backends::pioneer::flash::preparation_error)?;
                     (
-                        Some(if req.force {
-                            receiver
-                                .prepare_without_family_check(target)
-                                .map_err(crate::backends::pioneer::flash::preparation_error)?
-                        } else {
+                        Some(
                             receiver
                                 .prepare(target)
-                                .map_err(crate::backends::pioneer::flash::preparation_error)?
-                        }),
+                                .map_err(crate::backends::pioneer::flash::preparation_error)?,
+                        ),
                         None,
                     )
                 }
                 FlashSelection::NormalOnly => (
                     None,
-                    Some(if req.force {
-                        receiver
-                            .prepare_normal_without_family_check(normal)
-                            .map_err(crate::backends::pioneer::flash::preparation_error)?
-                    } else {
+                    Some(
                         receiver
                             .prepare_normal(normal)
-                            .map_err(crate::backends::pioneer::flash::preparation_error)?
-                    }),
+                            .map_err(crate::backends::pioneer::flash::preparation_error)?,
+                    ),
                 ),
             };
-            let plan = resolve_flash_plan(
-                installed_backup,
-                kernel.as_deref(),
-                Some(normal),
-                req.recover,
-                req.force,
-            )?;
+            let plan = resolve_flash_plan(installed_backup, kernel.as_deref(), Some(normal))?;
             check_plan_executable(&plan)?;
             debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
                 &plan
@@ -695,12 +648,7 @@ impl DriveFamily for Pioneer {
                 (None, Some(plan)) => crate::backends::pioneer::flash::PreparedFlash::Normal(plan),
                 _ => unreachable!("one prepared plan selected"),
             };
-            crate::backends::pioneer::flash::execute_prepared(
-                dev,
-                prepared,
-                req.recover,
-                req.force,
-            )?;
+            crate::backends::pioneer::flash::execute_prepared(dev, prepared)?;
             println!(
                 "{}",
                 crate::style::green("flash complete; drive returned ready.")
@@ -752,10 +700,6 @@ impl DriveFamily for Pioneer {
         } else {
             crate::drive::InputKind::Bin
         }
-    }
-
-    fn force_refusal(&self) -> Option<&'static str> {
-        Some("Pioneer recovery requires Current firmware: use recover --current <file> (or --read-from-drive)")
     }
 
     fn recover(
@@ -857,7 +801,7 @@ impl DriveFamily for Pioneer {
     fn dump_is_raw(&self) -> bool {
         true
     }
-    fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
+    fn capture_dump(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         crate::backends::pioneer::dump::capture(dev)
     }
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {

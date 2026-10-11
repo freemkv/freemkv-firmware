@@ -55,7 +55,7 @@ fn every_prepared_package_in_both_directions_within_its_family() {
     let mut restore_passes = 0;
     for (source_id, installed, _, _, receiver) in &packages {
         for (target_id, _, target, update, _) in &packages {
-            let selected = plan::decide_flash_plan(installed, target, false);
+            let selected = plan::decide_flash_plan(installed, target);
             if installed.family != target.family {
                 assert!(matches!(selected, FlashPlan::Refused(_)));
                 assert!(matches!(

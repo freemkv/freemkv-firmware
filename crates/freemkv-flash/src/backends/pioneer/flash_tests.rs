@@ -39,8 +39,6 @@ fn execute_flash(
     control: &[u8; CONTROL_LEN],
     kernel: Option<&[u8]>,
     normal: &[u8],
-    recover: bool,
-    force: bool,
 ) -> Result<()> {
     let kernel_transfer = kernel.map(transfer::select_kernel).transpose()?;
     let kernel = match kernel_transfer.as_ref() {
@@ -48,19 +46,12 @@ fn execute_flash(
         Some(transfer::KernelTransfer::PreparedFe(bytes)) => Some(bytes.as_slice()),
         None => None,
     };
-    crate::engine::guard_no_medium(dev, true, force || recover)?;
+    crate::engine::guard_no_medium(dev, true)?;
     let shared = SharedDevice::new(dev);
-    let class = resolve_class(
-        transport::identify_on(&shared),
-        crate::backends::pioneer::flash_plan::normal_family(normal).is_some(),
-        recover,
-    )?;
+    let class = resolve_class(transport::identify_on(&shared))?;
     let mut port = ScsiTransport::flash(&shared);
     let mut runtime = Runtime {
         device: &shared,
-        recover,
-        force,
-        family_known: false,
         start: Instant::now(),
         kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
         normal: style::Progress::new("flashing normal", normal.len()),
@@ -70,7 +61,10 @@ fn execute_flash(
         &mut runtime,
         control,
         UpdateTransfer { kernel, normal },
-        UpdateOptions { class, recover },
+        UpdateOptions {
+            class,
+            recover: false,
+        },
     )
     .map_err(update_error)
 }
@@ -147,7 +141,7 @@ impl ScsiDevice for Recorder {
 fn disc_inserted_at_confirmation_is_refused_before_update_entry() {
     let mut dev = crate::platform::MockScsiDevice::pioneer().with_medium_loaded();
     let normal = ud04_normal(0x100000);
-    let error = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false)
+    let error = execute_flash(&mut dev, &ud04_control(), None, &normal)
         .expect_err("a disc inserted since the engine guard must abort the write");
     assert!(error.to_string().contains("disc"));
     assert!(
@@ -163,7 +157,7 @@ fn executes_entry_normal_chunks_finish_via_strict_writes_with_gate_and_poll() {
     let normal = ud04_normal(len);
     let control = ud04_control();
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
+    execute_flash(&mut dev, &control, None, &normal).unwrap();
 
     let chunks = len.div_ceil(0x8000);
     // EVERY write went through the strict (abort-on-any-nonzero) path — guards
@@ -193,7 +187,7 @@ fn executes_entry_normal_chunks_finish_via_strict_writes_with_gate_and_poll() {
 fn plain_flash_issues_no_kernel_mode_commands() {
     let normal = ud04_normal(0x0010_0000);
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap();
+    execute_flash(&mut dev, &ud04_control(), None, &normal).unwrap();
     // No F3/F2 buffer-id traffic at all on the plain path.
     assert!(!dev
         .writes
@@ -228,7 +222,7 @@ fn aborts_before_any_transfer_when_drive_not_in_update_state() {
     }
     let normal = ud04_normal(0x0010_0000 + 0x100);
     let mut dev = BadEntry { writes: Vec::new() };
-    let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
+    let err = execute_flash(&mut dev, &ud04_control(), None, &normal).unwrap_err();
     assert!(format!("{err:#}").contains("post-entry update state"));
     // Only the entry write happened; NO Normal chunk or finish followed.
     assert_eq!(dev.writes.len(), 1);
@@ -244,7 +238,7 @@ fn a_failed_mid_transfer_write_aborts_with_a_recovery_hint() {
         fail_strict_at: Some(1),
         ..Recorder::default()
     };
-    let err = execute_flash(&mut dev, &ud04_control(), None, &normal, false, false).unwrap_err();
+    let err = execute_flash(&mut dev, &ud04_control(), None, &normal).unwrap_err();
     let msg = format!("{err:#}");
     assert!(msg.contains("Normal") && msg.contains("re-flash the captured"));
     // No finish (05/FF) was sent after the failed transfer.
@@ -284,15 +278,7 @@ fn executor_preserves_prepared_kernel_bytes() {
     let kernel = marker_kernel(0xFF);
     let normal = ud04_normal(0x8100);
     let mut dev = Recorder::default();
-    execute_flash(
-        &mut dev,
-        &ud04_control(),
-        Some(&kernel),
-        &normal,
-        false,
-        false,
-    )
-    .unwrap();
+    execute_flash(&mut dev, &ud04_control(), Some(&kernel), &normal).unwrap();
     let sent: Vec<u8> = dev
         .writes
         .iter()
@@ -310,7 +296,7 @@ fn derived_kernel_sends_real_key_and_decodes_exactly_at_receiver() {
         .image;
     let normal = ud04_normal(0x8100);
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &[0xa5; 256], Some(&kernel), &normal, false, false).unwrap();
+    execute_flash(&mut dev, &[0xa5; 256], Some(&kernel), &normal).unwrap();
     assert_eq!(dev.strict_writes, 7);
     assert_eq!(dev.lenient_writes, 0);
     let mut wire = Vec::new();
@@ -345,7 +331,7 @@ fn executes_both_kernel_and_normal_via_strict_writes_in_order() {
     let kernel = marker_kernel(1);
     let normal: Vec<u8> = (0..0x8100usize).map(|i| (i % 251) as u8).collect();
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal, false, false).unwrap();
+    execute_flash(&mut dev, &[0xA5; 256], Some(&kernel), &normal).unwrap();
 
     // entry + 3 kernel FE + 2 normal F0 + finish, all strict, nothing lenient.
     assert_eq!(dev.strict_writes, 7);
@@ -382,7 +368,7 @@ fn executes_both_kernel_and_normal_via_strict_writes_in_order() {
 }
 
 #[test]
-fn recover_skips_the_identity_gate_that_aborts_a_normal_flash() {
+fn post_entry_identity_gate_aborts_a_degraded_receiver() {
     // A degraded drive that never reports the post-entry "000" identity.
     #[derive(Default)]
     struct Degraded {
@@ -413,35 +399,11 @@ fn recover_skips_the_identity_gate_that_aborts_a_normal_flash() {
     }
     let normal = ud04_normal(0x0010_0000);
 
-    // Without recover, the post-entry identity gate aborts before any transfer.
+    // The post-entry identity gate aborts before any transfer.
     let mut normal_dev = Degraded::default();
-    let err = execute_flash(
-        &mut normal_dev,
-        &ud04_control(),
-        None,
-        &normal,
-        false,
-        false,
-    )
-    .unwrap_err();
+    let err = execute_flash(&mut normal_dev, &ud04_control(), None, &normal).unwrap_err();
     assert!(format!("{err:#}").contains("post-entry update state"));
     assert!(!normal_dev.finished, "a gated flash must not reach finish");
-
-    // With recover, the gate is skipped and the forced write runs to finish.
-    let mut recover_dev = Degraded::default();
-    execute_flash(
-        &mut recover_dev,
-        &ud04_control(),
-        None,
-        &normal,
-        true,
-        false,
-    )
-    .unwrap();
-    assert!(
-        recover_dev.finished,
-        "recover must force the write through finish"
-    );
 }
 
 /// HARD INVARIANT: the generically-built 0x8A10 control buffer is byte-for-
@@ -465,7 +427,7 @@ fn ud04_self_flash_control_and_wire_bytes_are_byte_exact() {
     // 0x1D7000 => 59 full 07/F0 chunks; the canonical UD04 Normal size.
     let normal = ud04_normal(0x1D7000);
     let mut dev = Recorder::default();
-    execute_flash(&mut dev, &control, None, &normal, false, false).unwrap();
+    execute_flash(&mut dev, &control, None, &normal).unwrap();
 
     // Exact CDB sequence: 04/FF entry, 59x 07/F0 chunks, 05/FF finish.
     let cdbs: Vec<Vec<u8>> = dev.writes.iter().map(|(c, _)| c.clone()).collect();
@@ -509,34 +471,18 @@ impl ScsiDevice for Ident {
 fn class_follows_an_unambiguous_identity() {
     let id = transport::identify(&mut Ident(b"BD-RW   BDR-UD04")).unwrap();
     // The target need not profile: the drive's own identity decides.
-    assert_eq!(resolve_class(Ok(id), false, false).unwrap(), DriveClass::Bd);
+    assert_eq!(resolve_class(Ok(id)).unwrap(), DriveClass::Bd);
 }
 
 #[test]
-fn ambiguous_identity_without_a_known_family_is_refused_before_any_write() {
-    // Neither BD nor DVD-R/DVR, and a Normal that does not profile.
+fn ambiguous_identity_is_refused_before_any_write() {
+    // Neither BD nor DVD-R/DVR.
     let id = transport::identify(&mut Ident(b"CD-RW   UNKNOWN1")).unwrap();
-    let err = resolve_class(Ok(id), false, true).unwrap_err();
+    let err = resolve_class(Ok(id)).unwrap_err();
     assert!(format!("{err:#}").contains("refusing before any write"));
     // An unreadable identity is equally ambiguous.
-    let err = resolve_class(Err(anyhow::anyhow!("no identity")), false, true).unwrap_err();
+    let err = resolve_class(Err(anyhow::anyhow!("no identity"))).unwrap_err();
     assert!(format!("{err:#}").contains("refusing before any write"));
-}
-
-#[test]
-fn bd_class_is_only_assumed_for_a_recover_flash() {
-    // Unreadable identity + a target that profiles as a known family.
-    let unreadable = || Err(anyhow::anyhow!("no identity"));
-    assert_eq!(
-        resolve_class(unreadable(), true, true).unwrap(),
-        DriveClass::Bd
-    );
-    let err = resolve_class(unreadable(), true, false).unwrap_err();
-    assert!(format!("{err:#}").contains("refusing before any write"));
-    // Same for an identity that is neither BD nor DVR.
-    let id = transport::identify(&mut Ident(b"CD-RW   UNKNOWN1")).unwrap();
-    assert!(resolve_class(Ok(id.clone()), true, false).is_err());
-    assert_eq!(resolve_class(Ok(id), true, true).unwrap(), DriveClass::Bd);
 }
 
 #[test]
@@ -577,16 +523,7 @@ fn rejected_tray_never_announces_execution() {
     let mut dev = crate::platform::MockScsiDevice::pioneer().with_tray_open();
     let result = crate::output::capture(
         move |line| sink.borrow_mut().push(line),
-        || {
-            execute_flash(
-                &mut dev,
-                &ud04_control(),
-                None,
-                &ud04_normal(0x100000),
-                false,
-                false,
-            )
-        },
+        || execute_flash(&mut dev, &ud04_control(), None, &ud04_normal(0x100000)),
     );
     assert!(result.is_err());
     assert!(dev.writes.is_empty());

@@ -454,7 +454,7 @@ fn ud04_linear_fe_crossflash_transcript_is_byte_exact() {
         required_kernel_tag: None,
     };
     assert_eq!(
-        decide_flash_plan(&ud03_installed, &ud04_target, false),
+        decide_flash_plan(&ud03_installed, &ud04_target),
         FlashPlan::KernelCrossflash,
         "UD03 (0x8510) -> UD04 (0x8A10) in the same family is a crossflash"
     );
@@ -687,11 +687,6 @@ fn check_plan_executable_covers_every_variant() {
     // All executable plans — including a cross-generation downgrade, which the
     // executor now handles via the §15.3 marker patch when the Kernel is written.
     assert!(check_plan_executable(&FlashPlan::Plain).is_ok());
-    assert!(check_plan_executable(&FlashPlan::Forced(Box::new(FlashPlan::Plain))).is_ok());
-    assert!(
-        check_plan_executable(&FlashPlan::Forced(Box::new(FlashPlan::Refused("x".into()))))
-            .is_err()
-    );
     assert!(check_plan_executable(&FlashPlan::KernelCrossflash).is_ok());
     assert!(check_plan_executable(&FlashPlan::KernelDowngrade).is_ok());
     // A refusal always aborts.
@@ -737,34 +732,26 @@ fn facts(
 fn plan_for_same_family_newer_normal_only_is_plain() {
     use crate::backends::pioneer::flash_plan::FlashPlan;
     let (inst, tgt) = facts(Some("f1"), "22/06/01");
-    assert_eq!(plan_for(Some(&inst), &tgt, false), FlashPlan::Plain);
+    assert_eq!(plan_for(Some(&inst), &tgt), FlashPlan::Plain);
 }
 
 #[test]
-fn plan_for_family_mismatch_is_refused_then_forced() {
+fn plan_for_family_mismatch_is_refused() {
     use crate::backends::pioneer::flash_plan::{FamilyKey, FlashPlan};
     let (inst, mut tgt) = facts(Some("f1"), "22/06/01");
     tgt.family = Some(FamilyKey::new("f2"));
     assert!(matches!(
-        plan_for(Some(&inst), &tgt, false),
+        plan_for(Some(&inst), &tgt),
         FlashPlan::Refused(r) if r.contains("family mismatch")
     ));
-    assert_eq!(
-        plan_for(Some(&inst), &tgt, true),
-        FlashPlan::Forced(Box::new(FlashPlan::Plain))
-    );
 }
 
 #[test]
-fn plan_for_unknown_installed_is_refused_unless_forced() {
+fn plan_for_unknown_installed_is_refused() {
     use crate::backends::pioneer::flash_plan::FlashPlan;
     // No backup -> installed family unknown -> fail closed (not "plain").
     let (_, tgt) = facts(Some("f1"), "22/06/01");
-    assert!(matches!(plan_for(None, &tgt, false), FlashPlan::Refused(_)));
-    assert_eq!(
-        plan_for(None, &tgt, true),
-        FlashPlan::Forced(Box::new(FlashPlan::Plain))
-    );
+    assert!(matches!(plan_for(None, &tgt), FlashPlan::Refused(_)));
 }
 
 #[test]
@@ -775,31 +762,20 @@ fn plan_for_same_model_normal_only_tag_mismatch_is_refused() {
     let (inst, mut tgt) = facts(Some("f1"), "20/01/01");
     tgt.required_kernel_tag = Some("ID81".to_string());
     assert!(matches!(
-        plan_for(Some(&inst), &tgt, false),
+        plan_for(Some(&inst), &tgt),
         FlashPlan::Refused(r) if r.contains("ID81") && r.contains("ID58")
     ));
 }
 
 #[test]
-fn resolve_flash_plan_unprofilable_header_only_normal_is_refused_unless_forced() {
+fn resolve_flash_plan_unprofilable_header_only_normal_is_refused() {
     use crate::backends::pioneer::flash_plan::FlashPlan;
     // A header-only Normal does not decode to a profilable body: both families
-    // are None, so the gate refuses; --force overrides; --recover refuses too
-    // unless forced.
+    // are None, so the gate refuses.
     let installed = header_only_normal("SAT 8A10", "22/01/01");
     let target = header_only_normal("SAT 8A10", "22/06/01");
-    let refused = resolve_flash_plan(Some(&installed), None, Some(&target), false, false).unwrap();
+    let refused = resolve_flash_plan(Some(&installed), None, Some(&target)).unwrap();
     assert!(matches!(refused, FlashPlan::Refused(_)));
-    let forced = resolve_flash_plan(Some(&installed), None, Some(&target), false, true).unwrap();
-    assert_eq!(forced, FlashPlan::Forced(Box::new(FlashPlan::Plain)));
-    let recover = resolve_flash_plan(Some(&installed), None, Some(&target), true, false).unwrap();
-    assert!(matches!(recover, FlashPlan::Refused(_)));
-    let recover_forced =
-        resolve_flash_plan(Some(&installed), None, Some(&target), true, true).unwrap();
-    assert_eq!(
-        recover_forced,
-        FlashPlan::Forced(Box::new(FlashPlan::Plain))
-    );
 }
 
 #[test]
@@ -824,14 +800,12 @@ fn dump_is_raw_and_never_issues_kernel_mode_commands() {
         }
     }
     assert!(Pioneer::new().dump_is_raw());
-    for force in [false, true] {
-        let mut dev = Probe::default();
-        let _ = Pioneer::new().capture_dump(&mut dev, force);
-        assert!(!dev
-            .cdbs
-            .iter()
-            .any(|c| c.get(2) == Some(&0xF3) || c.get(2) == Some(&0xF2)));
-    }
+    let mut dev = Probe::default();
+    let _ = Pioneer::new().capture_dump(&mut dev);
+    assert!(!dev
+        .cdbs
+        .iter()
+        .any(|c| c.get(2) == Some(&0xF3) || c.get(2) == Some(&0xF2)));
 }
 
 #[test]
@@ -874,7 +848,7 @@ fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
         }
     }
     let mut dev = Mem::default();
-    let dump = Pioneer::new().capture_dump(&mut dev, true).unwrap();
+    let dump = Pioneer::new().capture_dump(&mut dev).unwrap();
     assert!(crate::backends::pioneer::dump::directory(&dump)
         .unwrap()
         .is_some());
@@ -882,13 +856,9 @@ fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
     assert_eq!(dump[0x5F_FFFF], (0x5F_FFFF % 251) as u8);
     assert_eq!(dump[0xC0_22FF], (0x88_02FF % 251) as u8);
     assert_eq!(dev.kernel_mode_cdbs, 0);
-    // Best-effort capture also accepts unavailable identity without --force.
-    assert!(Pioneer::new()
-        .capture_dump(&mut Mem::default(), false)
-        .is_ok());
 }
 
-fn recover_req(input: Vec<u8>) -> crate::drive::FlashRequest {
+fn bundle_req(input: Vec<u8>) -> crate::drive::FlashRequest {
     crate::drive::FlashRequest {
         input,
         input_kind: crate::drive::InputKind::Bin,
@@ -900,14 +870,11 @@ fn recover_req(input: Vec<u8>) -> crate::drive::FlashRequest {
         verbose: false,
         predump_out: None,
         allow_crossflash: false,
-        skip_backup: true,
-        recover: true,
-        force: true,
     }
 }
 
 #[test]
-fn recover_refuses_bad_sized_normal_before_entering_update_mode() {
+fn bundle_refuses_bad_sized_normal_before_entering_update_mode() {
     let drive = for_family(Family::Pioneer);
     for len in [IMAGE_MAX + 0x100, IMAGE_MIN - 0x100, IMAGE_MIN + 1] {
         let mut normal = header_only_normal("SAT 8A10", "22/01/01");
@@ -915,7 +882,7 @@ fn recover_refuses_bad_sized_normal_before_entering_update_mode() {
         let mut dev = MockScsiDevice::pioneer();
         dev.writes.clear();
         let err = drive
-            .flash_bundle(&mut dev, &recover_req(normal), None)
+            .flash_bundle(&mut dev, &bundle_req(normal), None)
             .expect("execute path")
             .unwrap_err();
         assert!(
@@ -947,22 +914,6 @@ fn untrusted_text_is_sanitized_before_printing() {
     env[at + 1] = 0x1b;
     let summary = flash_summary(None, Some(&env));
     assert!(!summary.contains('\x1b'), "{summary:?}");
-}
-
-#[test]
-fn forced_warning_does_not_claim_a_family_bypass_for_the_unknown_tag_case() {
-    use crate::backends::pioneer::flash_plan::FlashPlan;
-    // Same family, installed Kernel tag unreadable: Forced(Plain) via --force.
-    let (mut inst, tgt) = facts(Some("f1"), "22/06/01");
-    inst.kernel_tag = None;
-    let plan = plan_for(Some(&inst), &tgt, true);
-    assert_eq!(plan, FlashPlan::Forced(Box::new(FlashPlan::Plain)));
-    assert!(check_plan_executable(&plan).is_ok());
-    assert!(
-        !FORCED_WARNING.contains("family match was bypassed"),
-        "{FORCED_WARNING}"
-    );
-    assert!(FORCED_WARNING.contains("Kernel tag"), "{FORCED_WARNING}");
 }
 
 #[test]
@@ -1069,7 +1020,7 @@ fn generic_receiver_matrix_when_configured() {
 }
 
 #[test]
-fn pairing_failure_precedes_body_decode_even_when_forced() {
+fn pairing_failure_precedes_body_decode() {
     let envelope = |kind: &str, tag: &str| {
         let mut bytes = vec![0u8; 0x1000];
         let header = format!("********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   NEW-DRIVE\r\nRevision Level : 1.00\r\nHardware Version : SAT 8800\r\nKernel Version : {tag}\r\nDestination : GENERAL\r\nFile Type : {kind}\r\n");
@@ -1089,7 +1040,7 @@ fn pairing_failure_precedes_body_decode_even_when_forced() {
             .unwrap();
     }
     let input = archive.into_inner().unwrap();
-    let mut request = recover_req(input);
+    let mut request = bundle_req(input);
     request.input_kind = crate::drive::InputKind::PioneerBundle;
     let mut dev = MockScsiDevice::new();
     let error = for_family(Family::Pioneer)
@@ -1099,11 +1050,9 @@ fn pairing_failure_precedes_body_decode_even_when_forced() {
     assert!(error.to_string().contains("required-Kernel tag"), "{error}");
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
-    for force in [false, true] {
-        let error = validate_header_chain(Some(&kernel), &normal, None, force).unwrap_err();
-        assert!(error.to_string().contains("required-Kernel tag"), "{error}");
-        assert!(!error.to_string().contains("decode"));
-    }
+    let error = validate_header_chain(Some(&kernel), &normal, None).unwrap_err();
+    assert!(error.to_string().contains("required-Kernel tag"), "{error}");
+    assert!(!error.to_string().contains("decode"));
 }
 
 #[test]
@@ -1241,7 +1190,7 @@ fn info_prints_pioneer_identity_before_region_and_reads_snapshot_once() {
     assert_eq!(snapshots, 1, "Device::info() must run once per `info`");
 }
 
-// ---- force refusal, input classification, recover hook ----------------------
+// ---- input classification, recover hook ------------------------------------
 
 fn envelope_tar() -> Vec<u8> {
     let envelope = |kind: &str| {
@@ -1264,15 +1213,6 @@ fn envelope_tar() -> Vec<u8> {
             .unwrap();
     }
     archive.into_inner().unwrap()
-}
-
-#[test]
-fn only_pioneer_refuses_public_force_and_points_at_recover() {
-    let refusal = Pioneer::new()
-        .force_refusal()
-        .expect("Pioneer refuses --force");
-    assert!(refusal.contains("recover --current"), "{refusal}");
-    assert!(crate::backends::mtk::Mtk.force_refusal().is_none());
 }
 
 #[test]

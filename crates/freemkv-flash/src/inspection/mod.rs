@@ -143,7 +143,7 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
             control.check()?;
             let state = crate::backends::pioneer::inspect::live_state(&mut dev);
             let handler = drive::for_family(family);
-            engine::backup_with_replace(&mut dev, handler.as_ref(), capture, false, false, false)?;
+            engine::backup_with_replace(&mut dev, handler.as_ref(), capture, false, false)?;
             drop(opened);
             control.check()?;
             let mut inspection = inspect_inner(&Source::File(capture.clone()), control)?;

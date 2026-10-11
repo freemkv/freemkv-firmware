@@ -205,9 +205,8 @@ pub fn backup(
     drive: &dyn DriveFamily,
     out: &Path,
     recover: bool,
-    force: bool,
 ) -> Result<()> {
-    backup_with_replace(dev, drive, out, recover, force, false)
+    backup_with_replace(dev, drive, out, recover, false)
 }
 
 /// Capture a backup/dump and optionally replace a destination confirmed by the caller.
@@ -217,7 +216,6 @@ pub fn backup_with_replace(
     drive: &dyn DriveFamily,
     out: &Path,
     recover: bool,
-    force: bool,
     replace: bool,
 ) -> Result<()> {
     if !drive.capabilities().backup {
@@ -241,11 +239,10 @@ pub fn backup_with_replace(
             out.display()
         ))
     );
-    // `recover` (the `dump` command) uses the family's salvage capture; `force`
-    // tells it to stop trusting what the drive reports (never kernel mode).
-    // Families without a distinct dump capture a normal backup.
+    // `recover` (the `dump` command) uses the family's salvage capture (never
+    // kernel mode). Families without a distinct dump capture a normal backup.
     let bytes = if recover {
-        drive.capture_dump(dev, force)?
+        drive.capture_dump(dev)?
     } else {
         drive.capture_backup(dev)?
     };
@@ -313,7 +310,7 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     if let Some(plan) = drive.offline_plan(req) {
         return plan;
     }
-    guard_no_medium(dev, req.execute, req.force || req.recover)?;
+    guard_no_medium(dev, req.execute)?;
     // Whole-package executors (e.g. a Pioneer OEM update session) own the
     // execute flow, but only AFTER the shared safety gate and a captured
     // pre-flash backup — the same invariants the image-chunk path enforces.
@@ -321,13 +318,13 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
         if let Err(block) = check_safety(req.acknowledged_risk) {
             bail!("SAFETY GATE: {}", block.0);
         }
-        let (backup_summary, backup_bytes) = capture_preflash_backup(dev, drive, req)?;
+        let (backup_summary, backup_bytes) = capture_required_backup(dev, drive, req)?;
         // Re-check the tray right before any write (the backup opened a
         // multi-round-trip window; a disc/tray change is the same hazard class).
-        guard_no_medium(dev, req.execute, req.force || req.recover)?;
+        guard_no_medium(dev, req.execute)?;
         println!("{}", style::kv("backup", &backup_summary));
         return drive
-            .flash_bundle(dev, req, backup_bytes.as_deref())
+            .flash_bundle(dev, req, Some(&backup_bytes))
             .unwrap_or_else(|| {
                 bail!(
                     "{} declares a bundle flash but provides none",
@@ -345,41 +342,13 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     }
 }
 
-/// Capture the installed firmware unless force or skip-backup bypasses capture.
-/// Forced flashes do not attempt backup reads, validation, or file creation.
-/// Returns a summary and optional captured bytes for the bundle executor.
-fn capture_preflash_backup(
-    dev: &mut dyn ScsiDevice,
-    drive: &dyn DriveFamily,
-    req: &FlashRequest,
-) -> Result<(String, Option<Vec<u8>>)> {
-    if req.force {
-        let warning = "SKIPPED (--force): no pre-flash backup attempted; no rollback artifact";
-        crate::output::field("Backup warning", warning);
-        eprintln!("{warning}");
-        return Ok((warning.to_string(), None));
-    }
-    capture_required_backup(dev, drive, req)
-}
-
+/// Capture, save and verify the mandatory pre-flash backup. Returns a summary
+/// line and the captured bytes (the installed firmware, used for routing).
 fn capture_required_backup(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
     req: &FlashRequest,
-) -> Result<(String, Option<Vec<u8>>)> {
-    if req.skip_backup {
-        eprintln!(
-            "{}",
-            style::amber(
-                "WARNING: --skip-backup set; flashing with NO pre-flash backup. A failed \
-                 write may be unrecoverable."
-            )
-        );
-        return Ok((
-            "SKIPPED (--skip-backup): no rollback artifact".to_string(),
-            None,
-        ));
-    }
+) -> Result<(String, Vec<u8>)> {
     let out = req
         .predump_out
         .as_ref()
@@ -407,7 +376,7 @@ fn capture_required_backup(
     })?;
     Ok((
         format!("saved {} ({} bytes)", out.display(), saved_len),
-        Some(bytes),
+        bytes,
     ))
 }
 
@@ -417,31 +386,10 @@ fn capture_required_backup(
 /// a firmware flash MUST run against an empty, closed tray. On `--execute` this
 /// is a hard abort before any backup or write; on a dry run it is a prominent
 /// warning so the operator ejects before committing.
-///
-/// `bypass` (set by `--force` OR `--recover`) means force: the medium/tray state
-/// is reported as a warning but never blocks, and an UNREADABLE medium status is
-/// tolerated too. A partially bricked drive routinely misreports its tray as open
-/// / disc-present (or fails the status command outright); refusing on that would
-/// lock the operator out of the recovery flash they explicitly asked for.
-pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool, force: bool) -> Result<()> {
+pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
     // Flashing is safe ONLY with a closed, empty tray. A loaded disc can wedge
     // the controller mid-program; an open tray is not a settled flash state.
-    let status = match dev.medium_status() {
-        Ok(status) => status,
-        // Under --force a drive too degraded to even report medium status must
-        // not be blocked from its recovery flash.
-        Err(error) if force => {
-            println!(
-                "{}",
-                style::amber(&format!(
-                    "WARNING: could not read tray/medium status ({error:#}); \
-                     proceeding anyway on --force."
-                ))
-            );
-            return Ok(());
-        }
-        Err(error) => return Err(error).context("could not check whether the tray is closed and empty; refusing before firmware writes. Check the drive connection and retry"),
-    };
+    let status = dev.medium_status().context("could not check whether the tray is closed and empty; refusing before firmware writes. Check the drive connection and retry")?;
     let (condition, action) = match status {
         MediumStatus::ClosedEmpty => return Ok(()),
         MediumStatus::DiscPresent => (
@@ -450,15 +398,15 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool, force: bo
         ),
         MediumStatus::TrayOpen => ("the tray is OPEN", "Close the empty tray and retry."),
     };
-    if execute && !force {
+    if execute {
         bail!("{condition} — refusing to flash. {action} This update pass has not started.");
     }
-    let note = if force {
-        "Proceeding because --force was supplied."
-    } else {
-        "An actual flash requires a closed, empty tray."
-    };
-    println!("{}", style::amber(&format!("WARNING: {condition}. {note}")));
+    println!(
+        "{}",
+        style::amber(&format!(
+            "WARNING: {condition}. An actual flash requires a closed, empty tray."
+        ))
+    );
     Ok(())
 }
 
@@ -470,19 +418,15 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool, force: bo
 fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashRequest) -> Result<()> {
     // Image geometry, integrity, model, and any controller sub-family gate are
     // protocol decisions. The engine only enforces the common workflow.
-    if req.force {
-        drive.validate_forced_image(dev, &req.input)?;
-    } else {
-        drive.validate_image(dev, &req.input, &req.drive_model, req.allow_crossflash)?;
-    }
+    drive.validate_image(dev, &req.input, &req.drive_model, req.allow_crossflash)?;
     let (payload, enc) = drive.envelope(dev, &req.input, req.enc_override)?;
 
-    // Unless explicitly bypassed, save a complete rollback before flash_stream.
+    // Save a complete rollback before flash_stream.
     let backup_summary = if req.execute {
         if let Err(block) = check_safety(req.acknowledged_risk) {
             bail!("SAFETY GATE: {}", block.0);
         }
-        capture_preflash_backup(dev, drive, req)?.0
+        capture_required_backup(dev, drive, req)?.0
     } else {
         "not captured (dry run)".to_string()
     };
@@ -555,7 +499,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     // re-probe RIGHT before `flash_stream`; a stale check is the same class
     // of hazard as no check at all (drive controller can wedge mid-program
     // when servicing a medium).
-    guard_no_medium(dev, req.execute, req.force || req.recover)?;
+    guard_no_medium(dev, req.execute)?;
     println!(
         "\n{}",
         style::bold("EXECUTING flash — do not power off or disconnect the drive...")
@@ -715,19 +659,14 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
 }
 
 /// Restore from a backup archive: decode it through the backend's
-/// `validate_backup` (or `validate_forced_backup` under `--force`), then
-/// reflash the decoded firmware image through [`flash_bin`]. The model and
+/// `validate_backup`, then reflash the decoded firmware image through [`flash_bin`]. The model and
 /// family gates live in the backend's validation, not here.
 fn flash_restore(
     dev: &mut dyn ScsiDevice,
     drive: &dyn DriveFamily,
     req: &FlashRequest,
 ) -> Result<()> {
-    let firmware = if req.force {
-        drive.validate_forced_backup(&req.input, &req.drive_model)?
-    } else {
-        drive.validate_backup(&req.input, &req.drive_model)?
-    };
+    let firmware = drive.validate_backup(&req.input, &req.drive_model)?;
     println!(
         "{}",
         style::header("== reflash backup firmware (per-unit data retained as reference) ==")

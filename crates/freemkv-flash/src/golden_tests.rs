@@ -596,9 +596,6 @@ fn mtk_request(image: Vec<u8>, execute: bool, backup: Option<PathBuf>) -> FlashR
         verbose: false,
         predump_out: backup,
         allow_crossflash: false,
-        skip_backup: false,
-        recover: false,
-        force: false,
     }
 }
 
@@ -1216,9 +1213,6 @@ fn pioneer_request(input: Vec<u8>, kind: InputKind, execute: bool) -> FlashReque
         verbose: false,
         predump_out: None,
         allow_crossflash: false,
-        skip_backup: false,
-        recover: false,
-        force: false,
     }
 }
 
@@ -1367,10 +1361,6 @@ fn golden_flash_execute() {
     // MTK: refusals on the execute path.
     let mut no_ack = mtk_request(image.clone(), true, Some(dir.join("never.tar")));
     no_ack.acknowledged_risk = false;
-    let mut skip = mtk_request(image.clone(), true, None);
-    skip.skip_backup = true;
-    let mut force = mtk_request(image.clone(), true, None);
-    force.force = true;
     for (title, req, dev) in [
         ("MTK execute: no risk acknowledgement", no_ack, mtk_drive()),
         (
@@ -1383,8 +1373,6 @@ fn golden_flash_execute() {
             mtk_request(image.clone(), true, Some(dir.join("tray.tar"))),
             mtk_drive().with_tray_open(),
         ),
-        ("MTK execute: --skip-backup", skip, echoing()),
-        ("MTK execute: --force (no backup)", force, echoing()),
     ] {
         let (outcome, transcript) = drive_run(dev, |d| crate::engine::flash(d, &Mtk, &req));
         g.case(title, &outcome, Some(&transcript));
@@ -1402,12 +1390,8 @@ fn golden_flash_execute() {
     let target = archive(&pioneer_pair(false, 0), false);
     let mut no_ack = pioneer_request(target.clone(), InputKind::PioneerBundle, true);
     no_ack.acknowledged_risk = false;
-    let mut forced = pioneer_request(target.clone(), InputKind::PioneerBundle, true);
-    forced.force = true;
     let mut with_backup = pioneer_request(target.clone(), InputKind::PioneerBundle, true);
     with_backup.predump_out = Some(dir.join("pioneer_rollback.tar"));
-    let mut skipped = pioneer_request(target.clone(), InputKind::PioneerBundle, true);
-    skipped.skip_backup = true;
     for (title, req, dev) in [
         (
             "Pioneer execute: no risk acknowledgement",
@@ -1415,18 +1399,8 @@ fn golden_flash_execute() {
             MockScsiDevice::pioneer(),
         ),
         (
-            "Pioneer execute: --force, no backup, no installed receiver",
-            forced,
-            MockScsiDevice::pioneer(),
-        ),
-        (
             "Pioneer execute: pre-flash backup cannot be read",
             with_backup,
-            MockScsiDevice::pioneer(),
-        ),
-        (
-            "Pioneer execute: --skip-backup",
-            skipped,
             MockScsiDevice::pioneer(),
         ),
         (
@@ -1566,7 +1540,7 @@ fn golden_backup_capture() {
     ] {
         let out = dir.join(name);
         let (outcome, transcript) = drive_run(mtk_drive(), |d| {
-            crate::engine::backup(d, &Mtk, &out, recover, false)
+            crate::engine::backup(d, &Mtk, &out, recover)
         });
         g.case(title, &outcome, Some(&transcript));
         g.file("saved file", &out);
@@ -1574,9 +1548,8 @@ fn golden_backup_capture() {
 
     // A second backup to the same path is refused and must not touch the file.
     let out = dir.join("mtk_backup.tar");
-    let (outcome, transcript) = drive_run(mtk_drive(), |d| {
-        crate::engine::backup(d, &Mtk, &out, false, false)
-    });
+    let (outcome, transcript) =
+        drive_run(mtk_drive(), |d| crate::engine::backup(d, &Mtk, &out, false));
     g.case(
         "MTK backup: destination exists",
         &outcome,
@@ -1586,7 +1559,7 @@ fn golden_backup_capture() {
 
     let out = dir.join("pioneer_backup.tar");
     let (outcome, transcript) = drive_run(BackupReplay::new(), |d| {
-        crate::engine::backup(d, &Pioneer::new(), &out, false, false)
+        crate::engine::backup(d, &Pioneer::new(), &out, false)
     });
     g.case(
         "Pioneer backup: bounded replay of a UD04",
@@ -1597,7 +1570,7 @@ fn golden_backup_capture() {
 
     let out = dir.join("pioneer_dump.bin");
     let (outcome, transcript) = drive_run(BackupReplay::new(), |d| {
-        crate::engine::backup(d, &Pioneer::new(), &out, true, false)
+        crate::engine::backup(d, &Pioneer::new(), &out, true)
     });
     let outcome = outcome.mask_digest("candidate sha256: ");
     g.case(
@@ -1609,7 +1582,7 @@ fn golden_backup_capture() {
 
     let out = dir.join("pioneer_unreadable.tar");
     let (outcome, transcript) = drive_run(MockScsiDevice::pioneer(), |d| {
-        crate::engine::backup(d, &Pioneer::new(), &out, false, false)
+        crate::engine::backup(d, &Pioneer::new(), &out, false)
     });
     g.case(
         "Pioneer backup: firmware unreadable",
@@ -1851,9 +1824,8 @@ fn golden_mtk_backup_variants() {
     for (title, name, make) in &drives {
         for recover in [false, true] {
             let out = dir.join(format!("{}{name}", if recover { "dump_" } else { "" }));
-            let (outcome, transcript) = drive_run(make(), |d| {
-                crate::engine::backup(d, &Mtk, &out, recover, false)
-            });
+            let (outcome, transcript) =
+                drive_run(make(), |d| crate::engine::backup(d, &Mtk, &out, recover));
             g.case(
                 &format!("MTK {}: {title}", if recover { "dump" } else { "backup" }),
                 &outcome,
@@ -1893,21 +1865,13 @@ fn golden_mtk_flash_input_refusals() {
         ("all zeros", vec![0u8; IMAGE_SIZE]),
     ];
     for (title, image) in inputs {
-        for force in [false, true] {
-            let mut req = mtk_request(image.clone(), false, None);
-            req.force = force;
-            req.allow_crossflash = force;
-            let (outcome, transcript) =
-                drive_run(mtk_drive(), |d| crate::engine::flash(d, &Mtk, &req));
-            g.case(
-                &format!(
-                    "MTK dry run: {title}{}",
-                    if force { " (--force)" } else { "" }
-                ),
-                &outcome,
-                Some(&transcript),
-            );
-        }
+        let req = mtk_request(image.clone(), false, None);
+        let (outcome, transcript) = drive_run(mtk_drive(), |d| crate::engine::flash(d, &Mtk, &req));
+        g.case(
+            &format!("MTK dry run: {title}"),
+            &outcome,
+            Some(&transcript),
+        );
     }
     // Tray / medium state on a dry run is a warning, not a refusal.
     let good = make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N");
@@ -1984,7 +1948,7 @@ fn golden_pioneer_plan_and_gates() {
     use crate::backends::pioneer::{check_plan_executable, resolve_flash_plan};
     let mut g = Golden::default();
 
-    // resolve_flash_plan / check_plan_executable over installed x target x flags.
+    // resolve_flash_plan / check_plan_executable over installed x target.
     let target = header_only_normal("SAT 8A10", "26/01/01", "ID58");
     let installed: Vec<(&str, Option<Vec<u8>>)> = vec![
         ("no backup", None),
@@ -2005,30 +1969,24 @@ fn golden_pioneer_plan_and_gates() {
         ("garbage backup", Some(b"garbage".to_vec())),
     ];
     for (title, backup) in &installed {
-        for (flags, recover, force) in [
-            ("plain", false, false),
-            ("recover", true, false),
-            ("force", false, true),
-        ] {
-            let outcome = run(|| {
-                match resolve_flash_plan(backup.as_deref(), None, Some(&target), recover, force) {
-                    Ok(plan) => {
-                        println!("plan: {plan:?}");
-                        match check_plan_executable(&plan) {
-                            Ok(()) => println!("executable: yes"),
-                            Err(e) => println!("executable: no: {e:#}"),
-                        }
+        let outcome = run(|| {
+            match resolve_flash_plan(backup.as_deref(), None, Some(&target)) {
+                Ok(plan) => {
+                    println!("plan: {plan:?}");
+                    match check_plan_executable(&plan) {
+                        Ok(()) => println!("executable: yes"),
+                        Err(e) => println!("executable: no: {e:#}"),
                     }
-                    Err(e) => println!("plan error: {e:#}"),
                 }
-                Ok(())
-            });
-            g.case(
-                &format!("resolve_flash_plan: installed={title}, {flags}"),
-                &outcome,
-                None,
-            );
-        }
+                Err(e) => println!("plan error: {e:#}"),
+            }
+            Ok(())
+        });
+        g.case(
+            &format!("resolve_flash_plan: installed={title}, plain"),
+            &outcome,
+            None,
+        );
     }
 
     // Bundle self-consistency gate.
@@ -2137,75 +2095,41 @@ fn golden_pioneer_flash_bundle_failures() {
     let kernel_enc = pair.kernel().repack(&pair.kernel().image).unwrap();
     let normal_enc = pair.normal().repack(&pair.normal().image).unwrap();
     let target_tar = archive(&target, false);
-    let cases: Vec<(&str, Option<Vec<u8>>, Vec<u8>, bool, bool)> = vec![
-        (
-            "no installed backup",
-            None,
-            target_tar.clone(),
-            false,
-            false,
-        ),
+    let cases: Vec<(&str, Option<Vec<u8>>, Vec<u8>)> = vec![
+        ("no installed backup", None, target_tar.clone()),
         (
             "installed backup is Kernel-only",
             Some(tar_of(&[("kernel.enc", &kernel_enc)])),
             target_tar.clone(),
-            false,
-            false,
         ),
         (
             "installed backup is Normal-only",
             Some(tar_of(&[("normal.enc", &normal_enc)])),
             target_tar.clone(),
-            false,
-            false,
         ),
         (
             "installed backup is garbage",
             Some(b"garbage".to_vec()),
             target_tar.clone(),
-            false,
-            false,
         ),
         (
             "target is a header-only bundle",
             Some(archive(&installed, false)),
             header_only_bundle(),
-            false,
-            false,
         ),
         (
             "target is garbage",
             Some(archive(&installed, false)),
             b"garbage".to_vec(),
-            false,
-            false,
         ),
         (
             "target is the installed firmware (no change)",
             Some(archive(&installed, false)),
             archive(&installed, false),
-            false,
-            false,
-        ),
-        (
-            "--recover",
-            Some(archive(&installed, false)),
-            target_tar.clone(),
-            true,
-            false,
-        ),
-        (
-            "--force",
-            Some(archive(&installed, false)),
-            target_tar.clone(),
-            false,
-            true,
         ),
     ];
-    for (title, backup, input, recover, force) in cases {
-        let mut req = pioneer_request(input, InputKind::PioneerBundle, true);
-        req.recover = recover;
-        req.force = force;
+    for (title, backup, input) in cases {
+        let req = pioneer_request(input, InputKind::PioneerBundle, true);
         let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
             match Pioneer::new().flash_bundle(d, &req, backup.as_deref()) {
                 Some(r) => r,

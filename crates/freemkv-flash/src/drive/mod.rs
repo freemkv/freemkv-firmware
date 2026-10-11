@@ -291,18 +291,6 @@ pub struct FlashRequest {
     /// EXPERIMENTAL crossflash: allow flashing a DIFFERENT same-chipset model's
     /// firmware (waives the model match; never the chipset-family gate).
     pub allow_crossflash: bool,
-    /// Skip the mandatory pre-flash backup (dangerous: no rollback if the write
-    /// fails). Default `false`: a failed backup aborts the flash.
-    pub skip_backup: bool,
-    /// Recovery write: the drive is degraded, so re-push the given image through
-    /// the ordinary OEM-update route, waiving the pre-flash backup, the post-entry
-    /// identity gate and the downgrade/pair refusals (the family match still
-    /// applies unless `force`). No kernel mode. Still gated by `--execute` and
-    /// `--i-understand-risk`.
-    pub recover: bool,
-    /// `--force`: ignore the firmware-family match (Pioneer). Loud warning; the
-    /// user takes on the brick risk. Does not waive the unrecoverable-tail refusal.
-    pub force: bool,
 }
 
 /// A firmware command protocol's primitives.
@@ -440,10 +428,9 @@ pub trait FirmwareBackend: Sync {
     }
 
     /// The `dump` command: a best-effort salvage capture of the drive's firmware.
-    /// `force` stops trusting what the drive reports. Never uses vendor kernel
-    /// mode. The default is an ordinary backup, so a family without a distinct
-    /// dump (e.g. MTK) treats `dump` as `backup`.
-    fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
+    /// Never uses vendor kernel mode. The default is an ordinary backup, so a
+    /// family without a distinct dump treats `dump` as `backup`.
+    fn capture_dump(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         self.capture_backup(dev)
     }
 
@@ -478,26 +465,11 @@ pub trait FirmwareBackend: Sync {
         ))
     }
 
-    /// Validate input structure for a forced write without relying on drive identity.
-    fn validate_forced_image(&self, dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<()> {
-        self.validate_image(dev, image, "", true)
-    }
-
-    /// Decode a structurally valid backup while waiving target-model compatibility.
-    fn validate_forced_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
-        self.validate_backup(bytes, target_model)
-    }
-
     /// Interpret an input path for this protocol. The default is a direct
     /// firmware image; only backends that implement a backup codec recognize
     /// their backup extension as a restorable input.
     fn classify_input(&self, _path: &std::path::Path, _bytes: &[u8]) -> InputKind {
         InputKind::Bin
-    }
-
-    /// Why this backend refuses `--force` on `flash`, if it does.
-    fn force_refusal(&self) -> Option<&'static str> {
-        None
     }
 
     /// Recover a drive whose normal update path is unusable, without automatic

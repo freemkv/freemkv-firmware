@@ -109,18 +109,18 @@ fn normal_only_passes_when_installed_kernel_tag_matches_targets_required_tag() {
     let inst = installed(0x8A10, true, "22/01/01");
     // Date direction is irrelevant to the new policy; tag match is the gate.
     assert_eq!(
-        decide_flash_plan(&inst, &normal_only_target(0x8A10, "23/01/01"), false),
+        decide_flash_plan(&inst, &normal_only_target(0x8A10, "23/01/01")),
         FlashPlan::Plain
     );
     assert_eq!(
-        decide_flash_plan(&inst, &normal_only_target(0x8A10, "22/01/01"), false),
+        decide_flash_plan(&inst, &normal_only_target(0x8A10, "22/01/01")),
         FlashPlan::Plain
     );
     // Same-era older with Normal-only is now ALSO allowed if tags match
     // (OEM Normal-only patches ride on the installed Kernel regardless of
     // date direction).
     assert_eq!(
-        decide_flash_plan(&inst, &normal_only_target(0x8A10, "20/01/01"), false),
+        decide_flash_plan(&inst, &normal_only_target(0x8A10, "20/01/01")),
         FlashPlan::Plain
     );
 }
@@ -130,43 +130,13 @@ fn normal_only_refused_when_tags_differ() {
     let inst = installed(0x8A10, true, "22/01/01");
     let mut tgt = normal_only_target(0x8A10, "23/01/01");
     tgt.required_kernel_tag = Some("ID81".to_string());
-    let plan = decide_flash_plan(&inst, &tgt, false);
+    let plan = decide_flash_plan(&inst, &tgt);
     match plan {
         FlashPlan::Refused(reason) => {
             assert!(reason.contains("ID81"));
             assert!(reason.contains("ID58"));
         }
         other => panic!("expected refusal, got {other:?}"),
-    }
-    // --force bypasses only the family gate; the tag gate stays.
-    assert!(matches!(
-        decide_flash_plan(&inst, &tgt, true),
-        FlashPlan::Refused(_)
-    ));
-}
-
-#[test]
-fn normal_only_unknown_installed_tag_is_forceable_with_family_match() {
-    let mut inst = installed(0x8A10, true, "22/01/01");
-    inst.kernel_tag = None;
-    let tgt = normal_only_target(0x8A10, "23/01/01");
-    assert!(matches!(
-        decide_flash_plan(&inst, &tgt, false),
-        FlashPlan::Refused(r) if r.contains("Kernel+Normal")
-    ));
-    assert_eq!(
-        decide_flash_plan(&inst, &tgt, true),
-        FlashPlan::Forced(Box::new(FlashPlan::Plain))
-    );
-    // A malformed target (no required tag) is not forceable, and its message
-    // must not suggest --force.
-    let mut bad = tgt.clone();
-    bad.required_kernel_tag = None;
-    for force in [false, true] {
-        match decide_flash_plan(&inst, &bad, force) {
-            FlashPlan::Refused(r) => assert!(!r.contains("--force"), "{r}"),
-            other => panic!("expected refusal, got {other:?}"),
-        }
     }
 }
 
@@ -176,7 +146,7 @@ fn normal_only_refused_when_installed_tag_unknown() {
     inst.kernel_tag = None;
     let tgt = normal_only_target(0x8A10, "23/01/01");
     assert!(matches!(
-        decide_flash_plan(&inst, &tgt, false),
+        decide_flash_plan(&inst, &tgt),
         FlashPlan::Refused(_)
     ));
 }
@@ -185,10 +155,7 @@ fn normal_only_refused_when_installed_tag_unknown() {
 fn same_model_older_across_barrier_is_kernel_downgrade() {
     let inst = installed(0x8A10, true, "23/01/01");
     let tgt = pair_target(0x8A10, "20/06/15", "20/06/15", 0xFF);
-    assert_eq!(
-        decide_flash_plan(&inst, &tgt, false),
-        FlashPlan::KernelDowngrade
-    );
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::KernelDowngrade);
 }
 
 #[test]
@@ -196,7 +163,7 @@ fn same_model_older_same_generation_is_plain() {
     // Older, but incoming Kernel marker is 01 -> Site 1 accepts, no unlock.
     let inst = installed(0x8A10, true, "23/06/01");
     let tgt = pair_target(0x8A10, "23/01/01", "23/01/01", 0x01);
-    assert_eq!(decide_flash_plan(&inst, &tgt, false), FlashPlan::Plain);
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::Plain);
 }
 
 #[test]
@@ -204,7 +171,7 @@ fn same_model_older_on_old_receiver_is_plain() {
     // Receiver lacks Site 1, so even an FF kernel needs no unlock.
     let inst = installed(0x8A10, false, "23/01/01");
     let tgt = pair_target(0x8A10, "20/06/15", "20/06/15", 0xFF);
-    assert_eq!(decide_flash_plan(&inst, &tgt, false), FlashPlan::Plain);
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::Plain);
 }
 
 #[test]
@@ -216,7 +183,7 @@ fn normal_only_with_mismatched_tag_still_refused_even_for_newer_date() {
     let mut tgt = normal_only_target(0x8A10, "23/01/01");
     tgt.required_kernel_tag = Some("ID99".to_string());
     assert!(matches!(
-        decide_flash_plan(&inst, &tgt, false),
+        decide_flash_plan(&inst, &tgt),
         FlashPlan::Refused(_)
     ));
 }
@@ -225,78 +192,18 @@ fn normal_only_with_mismatched_tag_still_refused_even_for_newer_date() {
 fn crossflash_on_list_with_pair_is_kernel_crossflash() {
     let inst = installed(0x8F00, true, "22/01/01");
     let tgt = pair_target(0x8F01, "22/01/01", "22/01/01", 0x01);
-    assert_eq!(
-        decide_flash_plan(&inst, &tgt, false),
-        FlashPlan::KernelCrossflash
-    );
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::KernelCrossflash);
 }
 
 #[test]
-fn crossflash_family_mismatch_is_refused_then_forced() {
+fn crossflash_family_mismatch_is_refused() {
     let inst = installed(0x8F00, true, "22/01/01");
     let mut tgt = pair_target(0x9401, "22/01/01", "22/01/01", 0x01);
     tgt.family = Some(FamilyKey::new("f2"));
     assert!(matches!(
-        decide_flash_plan(&inst, &tgt, false),
+        decide_flash_plan(&inst, &tgt),
         FlashPlan::Refused(r) if r.contains("family mismatch")
     ));
-    assert_eq!(
-        decide_flash_plan(&inst, &tgt, true),
-        FlashPlan::Forced(Box::new(FlashPlan::KernelCrossflash))
-    );
-    // Family mismatch + tags match + Normal-only: forced, inner Plain.
-    let mut normal_only = normal_only_target(0x8F00, "22/01/01");
-    normal_only.family = Some(FamilyKey::new("f2"));
-    assert_eq!(
-        decide_flash_plan(&inst, &normal_only, true),
-        FlashPlan::Forced(Box::new(FlashPlan::Plain))
-    );
-    // Family mismatch + Normal-only + tag mismatch: refusal survives force.
-    normal_only.required_kernel_tag = Some("ID81".to_string());
-    assert!(matches!(
-        decide_flash_plan(&inst, &normal_only, true),
-        FlashPlan::Refused(_)
-    ));
-    // Family mismatch + Normal-only crossflash: same tag check, not the SAT refusal.
-    let mut xf = normal_only_target(0x8F01, "22/01/01");
-    xf.family = Some(FamilyKey::new("f2"));
-    assert_eq!(
-        decide_flash_plan(&inst, &xf, true),
-        FlashPlan::Forced(Box::new(FlashPlan::Plain))
-    );
-    // Malformed Normal-only (no required tag) stays refused under force.
-    xf.required_kernel_tag = None;
-    assert!(matches!(
-        decide_flash_plan(&inst, &xf, true),
-        FlashPlan::Refused(_)
-    ));
-}
-
-#[test]
-fn force_does_not_bypass_non_family_refusal_when_family_passes() {
-    let inst = installed(0x8F00, true, "22/01/01");
-    // Same family, Normal-only crossflash: refused with or without force.
-    let tgt = normal_only_target(0x8F01, "22/01/01");
-    assert!(matches!(
-        decide_flash_plan(&inst, &tgt, true),
-        FlashPlan::Refused(_)
-    ));
-}
-
-#[test]
-fn forced_unknown_installed_tag_is_forceable_and_downgrade_is_kept() {
-    let mut inst = installed(0x8A10, true, "22/01/01");
-    inst.family = None;
-    inst.kernel_tag = None;
-    assert_eq!(
-        decide_flash_plan(&inst, &normal_only_target(0x8A10, "23/01/01"), true),
-        FlashPlan::Forced(Box::new(FlashPlan::Plain))
-    );
-    let tgt = pair_target(0x8A10, "20/06/15", "20/06/15", 0xFF);
-    assert_eq!(
-        decide_flash_plan(&inst, &tgt, true),
-        FlashPlan::Forced(Box::new(FlashPlan::KernelDowngrade))
-    );
 }
 
 #[test]
@@ -307,7 +214,7 @@ fn crossflash_without_kernel_is_refused() {
     let inst = installed(0x8F00, true, "22/01/01");
     let tgt = normal_only_target(0x8F01, "22/01/01");
     assert!(matches!(
-        decide_flash_plan(&inst, &tgt, false),
+        decide_flash_plan(&inst, &tgt),
         FlashPlan::Refused(reason) if reason.contains("crossflash")
     ));
 }
@@ -320,12 +227,10 @@ fn same_family_crossflash_is_not_gated_by_any_table() {
     let fwd = decide_flash_plan(
         &installed(0x8F00, true, "22/01/01"),
         &pair_target(0x8F01, "22/01/01", "22/01/01", 0x01),
-        false,
     );
     let rev = decide_flash_plan(
         &installed(0x8F01, true, "22/01/01"),
         &pair_target(0x8F00, "22/01/01", "22/01/01", 0x01),
-        false,
     );
     assert_eq!(fwd, FlashPlan::KernelCrossflash);
     assert_eq!(rev, FlashPlan::KernelCrossflash);
@@ -347,7 +252,7 @@ fn family_gate_requires_both_some_and_equal() {
 }
 
 #[test]
-fn same_model_is_refused_on_family_mismatch_or_unknown_then_forced() {
+fn same_model_is_refused_on_family_mismatch_or_unknown() {
     let inst = installed(0x8A10, true, "22/01/01");
     let mut mismatch = pair_target(0x8A10, "23/01/01", "23/01/01", 0x01);
     mismatch.family = Some(FamilyKey::new("other"));
@@ -361,50 +266,16 @@ fn same_model_is_refused_on_family_mismatch_or_unknown_then_forced() {
         (&inst, &unknown_target),
         (&unknown_installed, &ok_target),
     ] {
-        assert!(matches!(
-            decide_flash_plan(i, t, false),
-            FlashPlan::Refused(_)
-        ));
-        assert_eq!(
-            decide_flash_plan(i, t, true),
-            FlashPlan::Forced(Box::new(FlashPlan::Plain))
-        );
+        assert!(matches!(decide_flash_plan(i, t), FlashPlan::Refused(_)));
     }
-    assert_eq!(
-        decide_flash_plan(&inst, &ok_target, false),
-        FlashPlan::Plain
-    );
+    assert_eq!(decide_flash_plan(&inst, &ok_target), FlashPlan::Plain);
 }
 
 #[test]
 fn crossflash_across_generation_barrier_is_reported_as_downgrade() {
     let inst = installed(0x8F00, true, "22/01/01");
     let tgt = pair_target(0x8F01, "20/01/01", "20/01/01", 0xFF);
-    assert_eq!(
-        decide_flash_plan(&inst, &tgt, false),
-        FlashPlan::KernelDowngrade
-    );
-}
-
-#[test]
-fn recover_plan_respects_family_unless_forced() {
-    let a = FamilyKey::new("aa");
-    let b = FamilyKey::new("bb");
-    assert_eq!(
-        decide_recover_plan(Some(&a), Some(&a), false),
-        FlashPlan::Plain
-    );
-    assert!(matches!(
-        decide_recover_plan(Some(&a), Some(&b), false),
-        FlashPlan::Refused(_)
-    ));
-    assert!(matches!(
-        decide_recover_plan(None, Some(&a), false),
-        FlashPlan::Refused(_)
-    ));
-    let forced = FlashPlan::Forced(Box::new(FlashPlan::Plain));
-    assert_eq!(decide_recover_plan(None, Some(&a), true), forced);
-    assert_eq!(decide_recover_plan(Some(&a), Some(&b), true), forced);
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::KernelDowngrade);
 }
 
 #[test]
@@ -413,7 +284,6 @@ fn kernel_mode_is_never_required() {
         FlashPlan::Plain,
         FlashPlan::KernelDowngrade,
         FlashPlan::KernelCrossflash,
-        FlashPlan::Forced(Box::new(FlashPlan::Plain)),
         FlashPlan::Refused("x".into()),
     ] {
         assert!(!kernel_mode_required(&plan));
@@ -502,12 +372,10 @@ fn same_family_cross_sat_pairs_work_in_both_directions() {
     for (source, destination) in [(0x8F00, 0x8F01), (0x8F01, 0x8F00)] {
         let installed = installed(source, true, "23/08/01");
         let target = pair_target(destination, "23/08/01", "23/08/01", 0x01);
-        for force in [false, true] {
-            assert_eq!(
-                decide_flash_plan(&installed, &target, force),
-                FlashPlan::KernelCrossflash
-            );
-        }
+        assert_eq!(
+            decide_flash_plan(&installed, &target),
+            FlashPlan::KernelCrossflash
+        );
     }
 }
 
@@ -518,7 +386,7 @@ fn cross_hardware_non_generated_framing_still_crossflashes() {
     let installed = installed(0x8F00, true, "23/08/01");
     let target = pair_target(0x8F01, "23/08/01", "23/08/01", 0x01); // generated=false
     assert_eq!(
-        decide_flash_plan(&installed, &target, false),
+        decide_flash_plan(&installed, &target),
         FlashPlan::KernelCrossflash
     );
 }

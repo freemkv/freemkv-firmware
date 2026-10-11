@@ -51,7 +51,7 @@ pub fn drives() -> Vec<DriveChoice> {
 }
 
 /// Flash options shared by both front-ends. Defaults are a backed-up dry run.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FlashOptions {
     /// Optional device selector; omission selects the sole attached drive.
     pub device: Option<String>,
@@ -63,21 +63,6 @@ pub struct FlashOptions {
     pub execute: bool,
     /// Explicit acknowledgement of the flash risk.
     pub acknowledged_risk: bool,
-    /// Override compatibility and recovery gates; skip pre-flash backup entirely.
-    pub force: bool,
-}
-
-impl Default for FlashOptions {
-    fn default() -> Self {
-        Self {
-            device: None,
-            input: PathBuf::new(),
-            backup: None,
-            execute: false,
-            acknowledged_risk: false,
-            force: false,
-        }
-    }
 }
 
 /// Inspect a local firmware file without drive discovery or transport access.
@@ -251,14 +236,7 @@ fn backup_with_replace_inner(
             }
         }
     };
-    engine::backup_with_replace(
-        dev.as_mut(),
-        handler.as_ref(),
-        &out,
-        recover,
-        recover,
-        replace,
-    )
+    engine::backup_with_replace(dev.as_mut(), handler.as_ref(), &out, recover, replace)
 }
 
 /// Validate and execute the shared flash workflow.
@@ -268,8 +246,8 @@ pub fn flash(args: FlashOptions) -> Result<()> {
 
 fn flash_inner(args: FlashOptions) -> Result<()> {
     crate::diagnostics::record(format!(
-        "flash options: input={:?} backup={:?} execute={} acknowledged_risk={} force={}",
-        args.input, args.backup, args.execute, args.acknowledged_risk, args.force
+        "flash options: input={:?} backup={:?} execute={} acknowledged_risk={}",
+        args.input, args.backup, args.execute, args.acknowledged_risk
     ));
     if args.execute && !args.acknowledged_risk {
         bail!("refusing to flash without acknowledging the risk");
@@ -281,23 +259,14 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
     let mut dev = platform::open(&selector, args.execute)?;
     let family = classify_gated(dev.as_mut())?;
     let handler = drive::for_family(family);
-    if args.force {
-        if let Some(reason) = handler.force_refusal() {
-            bail!("{reason}");
-        }
-    }
     let input_kind = handler.classify_input(&args.input, &input);
 
     let drive_model = handler.identity(dev.as_mut()).product;
-    let predump_out = if args.force {
-        None
-    } else {
-        args.backup.clone().or_else(|| {
-            handler
-                .backup_extension()
-                .and_then(|ext| default_backup_path(&args.input, ext))
-        })
-    };
+    let predump_out = args.backup.clone().or_else(|| {
+        handler
+            .backup_extension()
+            .and_then(|ext| default_backup_path(&args.input, ext))
+    });
 
     let req = FlashRequest {
         input,
@@ -309,10 +278,7 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
         drive_model,
         verbose: false,
         predump_out,
-        allow_crossflash: args.force,
-        skip_backup: false,
-        recover: args.force,
-        force: args.force,
+        allow_crossflash: false,
     };
     engine::flash(dev.as_mut(), handler.as_ref(), &req)
 }

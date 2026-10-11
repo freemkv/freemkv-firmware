@@ -19,41 +19,21 @@ use std::time::{Duration, Instant};
 
 const PARTIAL_HINT: &str = " — the drive may now hold a partial firmware; re-flash the captured pre-flash backup to restore it";
 
-/// The drive dialect an update session must speak. Taken from the drive's own
-/// identity (`drive::identify` -> `Identity::class`) when that identity is
-/// unambiguous: a `BD-*` product, or a `DVD-R*` product on a `DVR*` platform.
-///
-/// FALLBACK (`--recover` ONLY): an identity that cannot be read (a degraded
-/// drive) or that is neither of those is ambiguous. If the target Normal
-/// profiles as a known family (`target_family_known`, from
-/// `pioneer_optical::image::family` on its decoded body) the flash is a
-/// BD-generation image, so assume [`DriveClass::Bd`] — the `04/FF`-only entry,
-/// which is the only flash route validated on hardware. A normal (non-recover)
-/// flash never guesses: an unreadable/ambiguous identity is refused before any
-/// write, as is a recover flash with no family to lean on.
-fn resolve_class(
-    identity: Result<Identity>,
-    target_family_known: bool,
-    recover: bool,
-) -> Result<DriveClass> {
+/// The drive dialect an update session must speak, taken from the drive's own
+/// identity (`drive::identify` -> `Identity::class`): a `BD-*` product, or a
+/// `DVD-R*` product on a `DVR*` platform. An unreadable or ambiguous identity
+/// is refused before any write; the dialect is never guessed.
+fn resolve_class(identity: Result<Identity>) -> Result<DriveClass> {
     if let Some(class) = identity.as_ref().ok().and_then(Identity::class) {
         return Ok(class);
     }
-    if recover && target_family_known {
-        println!(
-            "{}",
-            style::dim("  drive class not reported; target is a known BD family, assuming Bd")
-        );
-        return Ok(DriveClass::Bd);
-    }
     match identity {
         Err(error) => Err(error).context(
-            "could not read the drive identity to choose the update dialect (a guess is only \
-             made under --recover, for a recognised BD family); refusing before any write",
+            "could not read the drive identity to choose the update dialect; refusing before \
+             any write",
         ),
         Ok(_) => bail!(
-            "the drive does not identify as a BD or DVR generation (a guess is only made under \
-             --recover, for a recognised BD family); refusing before any write"
+            "the drive does not identify as a BD or DVR generation; refusing before any write"
         ),
     }
 }
@@ -64,16 +44,7 @@ pub(crate) enum PreparedFlash<'a> {
     Normal(&'a PreparedNormal),
 }
 
-pub(crate) fn execute_prepared(
-    dev: &mut dyn ScsiDevice,
-    plan: PreparedFlash<'_>,
-    recover: bool,
-    force: bool,
-) -> Result<()> {
-    let normal = match plan {
-        PreparedFlash::Complete(plan) => plan.normal_transfer(),
-        PreparedFlash::Normal(plan) => plan.normal_transfer(),
-    };
+pub(crate) fn execute_prepared(dev: &mut dyn ScsiDevice, plan: PreparedFlash<'_>) -> Result<()> {
     let shared = SharedDevice::new(dev);
     let mut reads = ScsiTransport::reads(&shared);
     let mut writes = ScsiTransport::flash(&shared);
@@ -86,9 +57,6 @@ pub(crate) fn execute_prepared(
         kernel: style::Progress::new("flashing kernel", 0),
         normal: style::Progress::new("flashing normal", 0),
         device: &shared,
-        recover,
-        force,
-        family_known: crate::backends::pioneer::flash_plan::normal_family(normal).is_some(),
     };
     match plan {
         PreparedFlash::Complete(plan) => plan.flash(io, &mut runtime),
@@ -161,9 +129,6 @@ fn prepared_error(error: FlashError<anyhow::Error>) -> anyhow::Error {
 
 struct Runtime<'a, 'd> {
     device: &'a SharedDevice<'d>,
-    recover: bool,
-    force: bool,
-    family_known: bool,
     start: Instant,
     kernel: style::Progress,
     normal: style::Progress,
@@ -189,15 +154,8 @@ impl UpdateRuntime for Runtime<'_, '_> {
             Role::Normal => self.normal.set(written),
         }
     }
-    fn entered(&mut self, recover: bool) {
-        println!(
-            "{}",
-            style::dim(if recover {
-                "  update mode entered (recover: identity gate skipped)"
-            } else {
-                "  update mode entered"
-            })
-        );
+    fn entered(&mut self, _: bool) {
+        println!("{}", style::dim("  update mode entered"));
     }
     fn poll_failed(&mut self, elapsed: Duration, error: &dyn std::fmt::Debug) {
         crate::diagnostics::record(format!(
@@ -210,18 +168,15 @@ impl UpdateRuntime for Runtime<'_, '_> {
 impl FlashRuntime<anyhow::Error> for Runtime<'_, '_> {
     fn prepare_pass(&mut self, pass: FlashPass) -> Result<UpdateOptions> {
         self.device
-            .with(|dev| crate::engine::guard_no_medium(dev, true, self.force || self.recover))?;
-        let class = resolve_class(
-            transport::identify_on(self.device),
-            self.family_known,
-            self.recover,
-        )?;
+            .with(|dev| crate::engine::guard_no_medium(dev, true))?;
+        let class = resolve_class(transport::identify_on(self.device))?;
         if pass == FlashPass::Restoration {
             println!("{}", style::dim("restoring the unmodified target Kernel"));
         }
+        // The library's degraded-receiver mode is never requested.
         Ok(UpdateOptions {
             class,
-            recover: self.recover,
+            recover: false,
         })
     }
 }

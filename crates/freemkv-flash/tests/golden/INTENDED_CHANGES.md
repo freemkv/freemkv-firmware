@@ -23,6 +23,20 @@ The baseline set was produced by copying `src/golden_tests.rs` into a
 (`mtk_boot_page`, `recover_via`, the `flash_plan` import); blessing it there
 writes the files in `v0.11.2/`.
 
+**Removed scenarios.** removed: unreachable path deleted in phase 1 (CLI
+main.rs passes force:false; GUI app.rs forces false). These scenarios drove
+`FlashRequest.{force, skip_backup, recover}` directly and were dropped from
+both the current and the v0.11.2 sets:
+
+* flash_execute.txt: `MTK execute: --skip-backup`, `MTK execute: --force (no
+  backup)`, `Pioneer execute: --force, no backup, no installed receiver`,
+  `Pioneer execute: --skip-backup`
+* mtk_flash_input_refusals.txt: the five `MTK dry run: … (--force)` variants
+* pioneer_plan_and_gates.txt: the `recover` and `force` variants of every
+  `resolve_flash_plan: installed=…` scenario (the `plain` ones remain)
+* pioneer_flash_bundle_failures.txt: `Pioneer flash_bundle: --recover`,
+  `Pioneer flash_bundle: --force`
+
 Regenerate the skeleton after an intentional change with
 `FREEMKV_BLESS_INTENDED=1 cargo test -p freemkv-flash golden_parity`, then set
 the `reason:` of any `UNCLASSIFIED` section by hand.
@@ -151,22 +165,6 @@ reason: R2
 ```
 
 ## flash_execute.txt
-
-### MTK execute: --force (no backup)
-reason: R2
-```diff
----- scsi transcript (268) ---
-+--- scsi transcript (269) ---
-+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
-```
-
-### MTK execute: --skip-backup
-reason: R2
-```diff
----- scsi transcript (268) ---
-+--- scsi transcript (269) ---
-+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
-```
 
 ### MTK execute: .bin with pre-flash backup
 reason: R2
@@ -428,48 +426,6 @@ reason: R2
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 ```
 
-### MTK dry run: MT1939 image on an MT1959 drive (--force)
-reason: R2
-```diff
--result: OK
----- text (13) ---
--== flash plan ==
--device: mock://in-memory
--drive: BU40N
--firmware: 2 MiB (plaintext envelope)
--backup: not captured (dry run)
--upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
--
--  ** POINT OF NO RETURN **
--  The drive erases and reprograms its flash the instant the full 2 MiB upload
--  lands. This cannot be undone.
--  preflight ................ transport ready; backup capture is checked only on execute
--
--DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
----- events (13) ---
--MSG      == flash plan ==
--MSG      device: mock://in-memory
--MSG      drive: BU40N
--MSG      firmware: 2 MiB (plaintext envelope)
--MSG      backup: not captured (dry run)
--MSG      upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
--MSG      
--MSG        ** POINT OF NO RETURN **
--MSG        The drive erases and reprograms its flash the instant the full 2 MiB upload
--MSG        lands. This cannot be undone.
--MSG        preflight ................ transport ready; backup capture is checked only on execute
--MSG      
--MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
----- scsi transcript (3) ---
-+result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
-+--- text (0) ---
-+--- events (0) ---
-+--- scsi transcript (2) ---
--IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
--IN   cdb=000000000000000000000000 alloc=0 -> ok 0
-+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
-```
-
 ### MTK dry run: disc loaded
 reason: R2
 ```diff
@@ -479,47 +435,6 @@ reason: R2
 ```
 
 ### MTK dry run: raw drive read as input
-reason: R3
-```diff
--result: OK
----- text (13) ---
--== flash plan ==
--device: mock://in-memory
--drive: BU40N
--firmware: 2 MiB (plaintext envelope)
--backup: not captured (dry run)
--upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
--
--  ** POINT OF NO RETURN **
--  The drive erases and reprograms its flash the instant the full 2 MiB upload
--  lands. This cannot be undone.
--  preflight ................ transport ready; backup capture is checked only on execute
--
--DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
----- events (13) ---
--MSG      == flash plan ==
--MSG      device: mock://in-memory
--MSG      drive: BU40N
--MSG      firmware: 2 MiB (plaintext envelope)
--MSG      backup: not captured (dry run)
--MSG      upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
--MSG      
--MSG        ** POINT OF NO RETURN **
--MSG        The drive erases and reprograms its flash the instant the full 2 MiB upload
--MSG        lands. This cannot be undone.
--MSG        preflight ................ transport ready; backup capture is checked only on execute
--MSG      
--MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
----- scsi transcript (3) ---
-+result: ERR this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
-+--- text (0) ---
-+--- events (0) ---
-+--- scsi transcript (1) ---
--IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
--IN   cdb=000000000000000000000000 alloc=0 -> ok 0
-```
-
-### MTK dry run: raw drive read as input (--force)
 reason: R3
 ```diff
 -result: OK
@@ -609,10 +524,3 @@ reason: R4, R2
 -IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 ```
 
-### MTK dry run: unknown boot page, validly signed (--force)
-reason: R4, R2
-```diff
----- scsi transcript (3) ---
-+--- scsi transcript (4) ---
-+IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
-```

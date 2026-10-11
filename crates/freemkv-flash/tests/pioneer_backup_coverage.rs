@@ -161,7 +161,7 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
         bail!("wrong backend");
     }
     let backend = pioneer::Pioneer::new();
-    let result = engine::backup(&mut r, &backend, output, false, false);
+    let result = engine::backup(&mut r, &backend, output, false);
     if let Err(e) = result {
         assert!(!output.exists(), "failed backup left output");
         return Err(e);

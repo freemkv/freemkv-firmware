@@ -289,7 +289,6 @@ impl FlashApp {
             return;
         };
         let mut options = self.options.clone();
-        options.force = false;
         options.input = input;
         options.execute = execute;
         options.acknowledged_risk = false;
@@ -493,7 +492,6 @@ impl FlashApp {
                         label: self.device_label(),
                         options: FlashOptions {
                             input: self.recovery_input.clone().unwrap(),
-                            force: true,
                             execute: true,
                             ..Default::default()
                         },

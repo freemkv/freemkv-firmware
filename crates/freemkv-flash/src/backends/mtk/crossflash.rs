@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use crate::style::{self, ident_or_unknown};
 
 /// Details of an authorized CROSSFLASH (a deliberate flash of a DIFFERENT
-/// same-chipset model's firmware). Present only when `--force` waived
+/// same-chipset model's firmware). Present only when `allow_crossflash` waived
 /// a model mismatch; carries the brick-risk warnings to surface prominently.
 #[derive(Debug)]
 pub(crate) struct CrossflashInfo {
@@ -33,7 +33,7 @@ pub(crate) fn decide_crossflash(
     allow_crossflash: bool,
 ) -> Result<Option<CrossflashInfo>> {
     // Non-overridable sub-family gate: MT1959 image onto MT1939 silicon (or vice
-    // versa) is an instant brick — refuse even with --force.
+    // versa) is an instant brick — refuse even with `allow_crossflash`.
     if let Some(df) = drive_fine_family {
         if df != image_family {
             bail!(

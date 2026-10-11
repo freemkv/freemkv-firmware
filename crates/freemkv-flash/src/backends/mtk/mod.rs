@@ -896,7 +896,10 @@ pub(crate) fn read_chip(dev: &mut dyn ScsiDevice) -> Option<mediatek_optical::Ch
 /// the drive's. The drive's descriptor tag decides. The banner is accepted
 /// only for an image that itself carries no identity tag (some MT1939 builds),
 /// because a banner can name the wrong generation. Anything unreadable refuses.
-fn ensure_same_chip(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<mediatek_optical::Chip> {
+pub(crate) fn ensure_same_chip(
+    dev: &mut dyn ScsiDevice,
+    image: &[u8],
+) -> Result<mediatek_optical::Chip> {
     let info = freemkv_chipset::detect_chip(image)
         .context("identifying the image's controller generation")?;
     let (tag, banner) = read_chip_sources(dev);
@@ -923,9 +926,9 @@ fn ensure_same_chip(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<mediatek_o
 
 /// The boot-page gate. A drive read (boot page equal to the mirror at
 /// `0x10000`) is never flashable: writing it would store the read-back page in
-/// place of the boot page, which the integrity table does not cover. Without
-/// `--force`, the boot page must also be one the OEM catalog knows.
-fn ensure_flashable_boot_page(image: &[u8], forced: bool) -> Result<()> {
+/// place of the boot page, which the integrity table does not cover. The boot
+/// page must also be one the OEM catalog knows.
+fn ensure_flashable_boot_page(image: &[u8]) -> Result<()> {
     if mediatek_optical::image::is_drive_read(image) {
         bail!(
             "this is a raw drive read (its boot page is the read-back copy), not a flashable \
@@ -934,7 +937,7 @@ fn ensure_flashable_boot_page(image: &[u8], forced: bool) -> Result<()> {
         );
     }
     let boot = &image[..mediatek_optical::layout::BOOT_PAGE.len];
-    if !forced && !oem::catalog().knows_boot_page(boot) {
+    if !oem::catalog().knows_boot_page(boot) {
         bail!(
             "the image's boot page is not one any known OEM build stores — refusing to flash \
              an image whose boot page may not start the drive"
@@ -1072,7 +1075,7 @@ impl DriveFamily for Mtk {
         true
     }
 
-    fn capture_dump(&self, dev: &mut dyn ScsiDevice, _force: bool) -> Result<Vec<u8>> {
+    fn capture_dump(&self, dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
         let (image, readable, gaps) = self.read_full_image(dev)?;
         if readable == 0 {
             bail!("no MediaTek memory was readable; no dump saved");
@@ -1087,23 +1090,6 @@ impl DriveFamily for Mtk {
             eprintln!("{message}");
         }
         Ok(image)
-    }
-
-    fn validate_forced_image(&self, dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<()> {
-        if image.len() != self.image_size() {
-            bail!("firmware must be exactly {} bytes", self.image_size());
-        }
-        if !crate::cmac::verify(image) {
-            bail!("firmware image fails its AES-CMAC integrity check");
-        }
-        // The boot-page and chip gates survive --force.
-        ensure_flashable_boot_page(image, true)?;
-        ensure_same_chip(dev, image)?;
-        Ok(())
-    }
-
-    fn validate_forced_backup(&self, bytes: &[u8], _target_model: &str) -> Result<Vec<u8>> {
-        backup::decode(bytes, self.image_size())
     }
 
     fn validate_backup(&self, bytes: &[u8], target_model: &str) -> Result<Vec<u8>> {
@@ -1131,7 +1117,7 @@ impl DriveFamily for Mtk {
                  authenticator and can brick the drive."
             );
         }
-        ensure_flashable_boot_page(image, false)?;
+        ensure_flashable_boot_page(image)?;
         let fine_family = Some(ensure_same_chip(dev, image)?);
         crossflash::ensure_image_matches_drive(
             image,

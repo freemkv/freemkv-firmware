@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::backends::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
+use crate::backends::mtk::ensure_same_chip;
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};
 use crate::backends::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
@@ -171,9 +172,6 @@ fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
         verbose: false,
         predump_out: execute.then(fresh_backup_path),
         allow_crossflash: false,
-        skip_backup: false,
-        recover: false,
-        force: false,
     }
 }
 
@@ -241,7 +239,7 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
             vec![0xA5; 8],
         );
     let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
-    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out, false, false).unwrap_err();
+    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out, false).unwrap_err();
     assert!(format!("{err:#}").contains("complete hardware identity"));
     assert!(dev.reads.iter().all(|cdb| {
         cdb.first() == Some(&0x12) || (cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1))
@@ -254,7 +252,7 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
 fn unknown_backend_backup_fails_without_reads_writes_or_file() {
     let mut dev = MockScsiDevice::new();
     let out = fresh_backup_path();
-    let err = backup(&mut dev, &*for_family(Family::Unknown), &out, false, false).unwrap_err();
+    let err = backup(&mut dev, &*for_family(Family::Unknown), &out, false).unwrap_err();
     assert!(format!("{err:#}").contains("no firmware backup capability"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
@@ -974,7 +972,7 @@ fn dump_refuses_unreadable_firmware_without_creating_archive() {
             "unreadable main",
         );
     let out = fresh_backup_path();
-    let err = backup(&mut dev, &Mtk, &out, false, false).unwrap_err();
+    let err = backup(&mut dev, &Mtk, &out, false).unwrap_err();
     assert!(err.to_string().contains("backup needs every firmware byte"));
     assert!(!out.exists());
     assert!(dev.writes.is_empty());
@@ -1142,46 +1140,17 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
         );
     let mut req = bin_req(backup_firmware(), true);
     req.enc_override = Some(true);
-    req.skip_backup = true;
     let error = flash(&mut dev, &Mtk, &req)
         .expect_err("encrypted transport must not disable integrity verification");
+    let _ = std::fs::remove_file(req.predump_out.unwrap());
     assert!(error.to_string().contains("read-back verify FAILED"));
 }
 
 #[test]
-fn forced_flash_skips_backup_without_device_io_or_file_creation() {
-    let mut req = bin_req(backup_firmware(), true);
-    req.force = true;
-    let path = req.predump_out.clone().unwrap();
-    for mut dev in [
-        MockScsiDevice::new().with_firmware_image(backup_firmware()),
-        MockScsiDevice::new(),
-        MockScsiDevice::pioneer(),
-    ] {
-        let (summary, bytes) = capture_preflash_backup(&mut dev, &Mtk, &req).unwrap();
-        assert!(bytes.is_none());
-        assert!(summary.contains("SKIPPED (--force)"));
-        assert!(dev.reads.is_empty());
-        assert!(dev.writes.is_empty());
-        assert!(!path.exists());
-    }
-    // Force does not require a destination or touch an existing backup.
-    std::fs::write(&path, b"keep this rollback").unwrap();
-    let mut dev = MockScsiDevice::new();
-    capture_preflash_backup(&mut dev, &Mtk, &req).unwrap();
-    assert_eq!(std::fs::read(&path).unwrap(), b"keep this rollback");
-    std::fs::remove_file(&path).unwrap();
-    req.predump_out = None;
-    capture_preflash_backup(&mut dev, &Mtk, &req).unwrap();
-    assert!(dev.reads.is_empty());
-    assert!(dev.writes.is_empty());
-}
-
-#[test]
-fn unforced_flash_still_requires_successful_backup() {
+fn flash_requires_successful_backup() {
     let req = bin_req(backup_firmware(), true);
     let mut dev = MockScsiDevice::new();
-    assert!(capture_preflash_backup(&mut dev, &Mtk, &req).is_err());
+    assert!(capture_required_backup(&mut dev, &Mtk, &req).is_err());
     assert!(!dev.reads.is_empty());
     assert!(dev.writes.is_empty());
 }
@@ -1190,24 +1159,9 @@ fn unforced_flash_still_requires_successful_backup() {
 fn mediatek_dump_preserves_raw_unsigned_memory_without_requiring_backup_integrity() {
     let raw = vec![0x5a; IMAGE_SIZE];
     let mut dev = MockScsiDevice::new().with_firmware_image(raw.clone());
-    assert_eq!(Mtk.capture_dump(&mut dev, true).unwrap(), raw);
+    assert_eq!(Mtk.capture_dump(&mut dev).unwrap(), raw);
     assert!(dev.writes.is_empty());
     assert!(Mtk.capture_backup(&mut dev).is_err());
-}
-
-#[test]
-fn force_waives_model_identity_but_keeps_input_structure_checks() {
-    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    assert!(Mtk
-        .validate_forced_image(&mut dev, &backup_firmware())
-        .is_ok());
-    // --force reads only the drive's identity, for the chip gate.
-    assert!(dev.reads.iter().all(|c| is_identity_read(c)));
-    assert!(!dev.reads.is_empty() && dev.reads.len() <= 4);
-    assert!(Mtk
-        .validate_forced_image(&mut dev, b"not a firmware image")
-        .is_err());
-    assert!(dev.writes.is_empty());
 }
 
 fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
@@ -1221,44 +1175,20 @@ fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
 }
 
 #[test]
-fn guard_no_medium_force_overrides_disc_and_open_tray() {
-    // Non-force execute refuses a loaded disc or open tray (the safe default).
+fn guard_no_medium_refuses_disc_and_open_tray_on_execute() {
     let mut loaded = MockScsiDevice::new().with_medium_loaded();
-    assert!(guard_no_medium(&mut loaded, true, false).is_err());
+    assert!(guard_no_medium(&mut loaded, true).is_err());
     let mut open = MockScsiDevice::new().with_tray_open();
-    assert!(guard_no_medium(&mut open, true, false).is_err());
-
-    // --force means force: the same states warn but proceed, because a
-    // partially bricked drive routinely misreports its tray/medium.
+    assert!(guard_no_medium(&mut open, true).is_err());
+    // A dry run only warns.
     let mut loaded = MockScsiDevice::new().with_medium_loaded();
-    assert!(guard_no_medium(&mut loaded, true, true).is_ok());
-    let mut open = MockScsiDevice::new().with_tray_open();
-    assert!(guard_no_medium(&mut open, true, true).is_ok());
+    assert!(guard_no_medium(&mut loaded, false).is_ok());
 }
 
 #[test]
-fn guard_no_medium_allows_closed_empty_regardless_of_force() {
+fn guard_no_medium_allows_closed_empty() {
     let mut dev = MockScsiDevice::new();
-    assert!(guard_no_medium(&mut dev, true, false).is_ok());
-    let mut dev = MockScsiDevice::new();
-    assert!(guard_no_medium(&mut dev, true, true).is_ok());
-}
-
-#[test]
-fn forced_tray_warning_does_not_claim_refusal() {
-    use std::{cell::RefCell, rc::Rc};
-    let messages = Rc::new(RefCell::new(Vec::new()));
-    let sink = messages.clone();
-    let mut dev = MockScsiDevice::pioneer().with_tray_open();
-    crate::output::capture(
-        move |line| sink.borrow_mut().push(line),
-        || guard_no_medium(&mut dev, true, true),
-    )
-    .unwrap();
-    let text = messages.borrow().join("\n");
-    assert!(text.contains("tray is OPEN"));
-    assert!(text.contains("Proceeding because --force"));
-    assert!(!text.contains("refusing"));
+    assert!(guard_no_medium(&mut dev, true).is_ok());
 }
 
 #[test]
@@ -1337,18 +1267,15 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
 }
 
 #[test]
-fn chip_gate_refuses_cross_generation_images_even_forced() {
+fn chip_gate_refuses_cross_generation_images() {
     // Drive: MT1959 (BU40N). Image: an MT1939 build with a matching model.
     let mut img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let d = ROM_1EC000_OFFSET as usize;
     img[d + 0x34..d + 0x3E].copy_from_slice(b"MTEKMT1939");
     let img = crate::cmac::resign(&img).unwrap();
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let forced = Mtk.validate_forced_image(&mut dev, &img).unwrap_err();
-    assert!(
-        forced.to_string().contains("cannot be overridden"),
-        "{forced}"
-    );
+    let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
+    assert!(gate.to_string().contains("cannot be overridden"), "{gate}");
     let normal = Mtk
         .validate_image(&mut dev, &img, "BD-RE BU40N", false)
         .unwrap_err();
@@ -1359,13 +1286,11 @@ fn chip_gate_refuses_cross_generation_images_even_forced() {
 #[test]
 fn raw_drive_reads_are_never_flashable() {
     // A drive read's boot page is the read-back mirror of 0x10000; writing it
-    // would store the wrong boot page. Refused with and without --force.
+    // would store the wrong boot page.
     let mut read = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let mirror = read[0x1_0000..0x1_0400].to_vec();
     read[..0x400].copy_from_slice(&mirror);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let forced = Mtk.validate_forced_image(&mut dev, &read).unwrap_err();
-    assert!(forced.to_string().contains("raw drive read"), "{forced}");
     let normal = Mtk
         .validate_image(&mut dev, &read, "BD-RE BU40N", false)
         .unwrap_err();
@@ -1373,7 +1298,7 @@ fn raw_drive_reads_are_never_flashable() {
 }
 
 #[test]
-fn unknown_boot_pages_need_force() {
+fn unknown_boot_pages_are_refused() {
     let mut img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     img[..0x400].fill(0x42);
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
@@ -1381,7 +1306,6 @@ fn unknown_boot_pages_need_force() {
         .validate_image(&mut dev, &img, "BD-RE BU40N", false)
         .unwrap_err();
     assert!(err.to_string().contains("boot page"), "{err}");
-    Mtk.validate_forced_image(&mut dev, &img).unwrap();
 }
 
 #[test]
@@ -1395,7 +1319,7 @@ fn chip_gate_refuses_when_the_descriptor_is_unreadable() {
             |cdb: &[u8]| cdb.get(3..6) == Some(&offset_bytes(ROM_1EC000_OFFSET)[..]),
             "descriptor read refused",
         );
-    let err = Mtk.validate_forced_image(&mut dev, &img).unwrap_err();
+    let err = ensure_same_chip(&mut dev, &img).unwrap_err();
     assert!(err.to_string().contains("identity descriptor"), "{err}");
 }
 
@@ -1533,7 +1457,7 @@ fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
     let mut dev = mt1939_drive();
     Mtk.validate_image(&mut dev, &mt1939, "BD-RE BU40N", false)
         .unwrap();
-    Mtk.validate_forced_image(&mut dev, &mt1939).unwrap();
+    ensure_same_chip(&mut dev, &mt1939).unwrap();
 
     let mt1959 = chip_image("BD-RE BU40N", Some(b"MTEKMT1959"), b"MT1959 Boot JB8");
     let normal = Mtk
@@ -1541,8 +1465,8 @@ fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1959"), "{normal:#}");
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");
-    let forced = Mtk.validate_forced_image(&mut dev, &mt1959).unwrap_err();
-    assert!(format!("{forced:#}").contains("MT1939"), "{forced:#}");
+    let gate = ensure_same_chip(&mut dev, &mt1959).unwrap_err();
+    assert!(format!("{gate:#}").contains("MT1939"), "{gate:#}");
     assert!(dev.writes.is_empty());
 }
 
@@ -1551,14 +1475,11 @@ fn chip_gate_banner_fallback_only_serves_untagged_images() {
     let untagged = chip_image("BD-RE BU40N", None, b"MT1939 Boot");
     let mut banner_only =
         MockScsiDevice::new().with_firmware_image(chip_image("BD-RE BU40N", None, b"MT1939 Boot"));
-    Mtk.validate_forced_image(&mut banner_only, &untagged)
-        .unwrap();
+    ensure_same_chip(&mut banner_only, &untagged).unwrap();
 
     // A tagged image needs the drive's descriptor: a banner alone is refused.
     let tagged = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1939 Boot");
-    let err = Mtk
-        .validate_forced_image(&mut banner_only, &tagged)
-        .unwrap_err();
+    let err = ensure_same_chip(&mut banner_only, &tagged).unwrap_err();
     assert!(err.to_string().contains("identity descriptor"), "{err}");
     assert!(banner_only.writes.is_empty());
 }

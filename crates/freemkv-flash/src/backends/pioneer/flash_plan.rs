@@ -5,14 +5,14 @@
 //! downgrade, a crossflash, or a refusal. It is pure classification — no device
 //! I/O, no flashing, no state change.
 //!
-//! **Family gate.** Every non-forced flash is gated by a deterministic FAMILY
+//! **Family gate.** Every flash is gated by a deterministic FAMILY
 //! MATCH: `family(installed Normal body)` and `family(target Normal body)`
 //! (`pioneer_optical::image`) must both profile (`Some`) and be EQUAL — equal
 //! [`FamilyKey`] means the same silicon/optical platform, i.e. crossflash
 //! compatible. Anything else is [`FlashPlan::Refused`]. The planner stays pure:
 //! the caller computes the two keys (from the pre-flash backup it already holds
 //! and from the target bundle) and passes them in [`Installed::family`] /
-//! [`Target::family`]. `--force` ignores the family match ([`FlashPlan::Forced`]).
+//! [`Target::family`].
 //!
 //! **Kernel mode is not used.** The F3/F2 "kernel mode" handshake is not
 //! cold-reachable on any Pioneer BD firmware (only present at internal OEM-update
@@ -177,12 +177,7 @@ pub enum FlashPlan {
     /// mode; see [`kernel_mode_required`]).
     KernelCrossflash,
     /// Refused, with a human-readable reason (including any family-gate failure).
-    /// `--force` turns a family-gate refusal into [`FlashPlan::Forced`]; other
-    /// refusals (e.g. a Kernel-tag mismatch) stay refused.
     Refused(String),
-    /// `--force` waived the family gate; proceed on your own. Carries the plan
-    /// classification produced had the family gate passed.
-    Forced(Box<FlashPlan>),
 }
 
 /// Opaque crossflash-family key: the lowercase-hex rendering of
@@ -265,25 +260,9 @@ pub fn family_gate(
     }
 }
 
-/// Plan for `flash --recover`: re-push a same/known-good image to a degraded
-/// drive. Bypasses the date/"older" downgrade and Kernel+Normal pair refusals
-/// (the drive is degraded; the image is the user's chosen known-good one) but
-/// still honours the family gate unless `force`.
-pub fn decide_recover_plan(
-    installed: Option<&FamilyKey>,
-    target: Option<&FamilyKey>,
-    force: bool,
-) -> FlashPlan {
-    match family_gate(installed, target) {
-        Ok(()) => FlashPlan::Plain,
-        Err(_) if force => FlashPlan::Forced(Box::new(FlashPlan::Plain)),
-        Err(reason) => FlashPlan::Refused(reason),
-    }
-}
-
 /// Refuse an image whose decoded envelope has an unrecoverable tail (bytes a
 /// spliced envelope does not carry and decoding could not prove). Such an image
-/// must never be flashed — not even with `--force` / `--recover`.
+/// must never be flashed.
 pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<()> {
     for (label, bytes) in [("Kernel", kernel), ("Normal", normal)] {
         let Some(bytes) = bytes else { continue };
@@ -301,37 +280,12 @@ pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) 
     Ok(())
 }
 
-/// Decide the flash path. Pure: no I/O. `force` waives ONLY the family gate:
-/// the post-family classification still runs, and the refusals that survive
-/// `force` are a Normal-only bundle whose known installed Kernel tag differs
-/// from the Normal's required tag, and a Normal-only bundle with no declared
-/// required tag. When the family gate fails under `force` the plan is
-/// [`FlashPlan::Forced`] carrying the classification's own plan. When the family
-/// gate passed, `force` only waives one refusal: a same-model Normal-only bundle
-/// whose installed Kernel tag is unknown (the target's required tag being known);
-/// every other refusal stands.
-pub fn decide_flash_plan(installed: &Installed, target: &Target, force: bool) -> FlashPlan {
+/// Decide the flash path. Pure: no I/O. The family gate refuses first; a
+/// family match then classifies the flash.
+pub fn decide_flash_plan(installed: &Installed, target: &Target) -> FlashPlan {
     match family_gate(installed.family.as_ref(), target.family.as_ref()) {
-        Ok(()) => match classify(installed, target) {
-            // An unknown installed Kernel tag on a same-model Normal-only flash is
-            // forceable (the refusal says "or --force"); a malformed target is not.
-            FlashPlan::Refused(_)
-                if force
-                    && target.controller_id == installed.controller_id
-                    && target.kernel.is_none()
-                    && target.normal.is_some()
-                    && installed.kernel_tag.is_none()
-                    && target.required_kernel_tag.is_some() =>
-            {
-                FlashPlan::Forced(Box::new(FlashPlan::Plain))
-            }
-            plan => plan,
-        },
-        Err(reason) if !force => FlashPlan::Refused(reason),
-        Err(_) => match classify_forced(installed, target) {
-            refused @ FlashPlan::Refused(_) => refused,
-            inner => FlashPlan::Forced(Box::new(inner)),
-        },
+        Ok(()) => classify(installed, target),
+        Err(reason) => FlashPlan::Refused(reason),
     }
 }
 
@@ -340,32 +294,6 @@ fn classify(installed: &Installed, target: &Target) -> FlashPlan {
         classify_same_model(installed, target)
     } else {
         classify_crossflash(installed, target)
-    }
-}
-
-/// Post-family classification under `--force` (family gate failed and waived).
-/// Only the Normal-only tag check can refuse; an unknown installed tag is
-/// forceable. Otherwise report the plan classification would have produced.
-fn classify_forced(installed: &Installed, target: &Target) -> FlashPlan {
-    if target.kernel.is_none() && target.normal.is_some() {
-        return match (
-            installed.kernel_tag.as_deref(),
-            target.required_kernel_tag.as_deref(),
-        ) {
-            (Some(inst), Some(req)) if inst != req => normal_only_tag_mismatch(inst, req),
-            (_, None) => normal_only_no_tag(),
-            _ => FlashPlan::Plain,
-        };
-    }
-    match target.kernel {
-        Some(kernel)
-            if installed.receiver_new_gen.unwrap_or(false)
-                && Generation::from_marker(kernel.marker).site1_rejected() =>
-        {
-            FlashPlan::KernelDowngrade
-        }
-        Some(_) if target.controller_id != installed.controller_id => FlashPlan::KernelCrossflash,
-        _ => FlashPlan::Plain,
     }
 }
 

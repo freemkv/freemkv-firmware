@@ -8,26 +8,6 @@ executable: no: refusing to flash: could not determine the installed firmware fa
 MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
 MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
 
-=== resolve_flash_plan: installed=no backup, recover ===
-result: OK
---- text (2) ---
-plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
---- events (2) ---
-MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
-
-=== resolve_flash_plan: installed=no backup, force ===
-result: OK
---- text (3) ---
-plan: Forced(Plain)
-WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-executable: yes
---- events (3) ---
-MSG      plan: Forced(Plain)
-MSG      WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-MSG      executable: yes
-
 === resolve_flash_plan: installed=same-family Normal, plain ===
 result: OK
 --- text (2) ---
@@ -36,26 +16,6 @@ executable: no: refusing to flash: could not determine the installed firmware fa
 --- events (2) ---
 MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
 MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
-
-=== resolve_flash_plan: installed=same-family Normal, recover ===
-result: OK
---- text (2) ---
-plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
---- events (2) ---
-MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
-
-=== resolve_flash_plan: installed=same-family Normal, force ===
-result: OK
---- text (3) ---
-plan: Forced(Plain)
-WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-executable: yes
---- events (3) ---
-MSG      plan: Forced(Plain)
-MSG      WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-MSG      executable: yes
 
 === resolve_flash_plan: installed=other-family Normal, plain ===
 result: OK
@@ -66,26 +26,6 @@ executable: no: refusing to flash: could not determine the installed firmware fa
 MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
 MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
 
-=== resolve_flash_plan: installed=other-family Normal, recover ===
-result: OK
---- text (2) ---
-plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
---- events (2) ---
-MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
-
-=== resolve_flash_plan: installed=other-family Normal, force ===
-result: OK
---- text (3) ---
-plan: Forced(Plain)
-WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-executable: yes
---- events (3) ---
-MSG      plan: Forced(Plain)
-MSG      WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-MSG      executable: yes
-
 === resolve_flash_plan: installed=garbage backup, plain ===
 result: OK
 --- text (2) ---
@@ -94,26 +34,6 @@ executable: no: refusing to flash: could not determine the installed firmware fa
 --- events (2) ---
 MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
 MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
-
-=== resolve_flash_plan: installed=garbage backup, recover ===
-result: OK
---- text (2) ---
-plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
---- events (2) ---
-MSG      plan: Refused("could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family")
-MSG      executable: no: refusing to flash: could not determine the installed firmware family (no usable installed Normal to profile); normal Flash requires a known family
-
-=== resolve_flash_plan: installed=garbage backup, force ===
-result: OK
---- text (3) ---
-plan: Forced(Plain)
-WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-executable: yes
---- events (3) ---
-MSG      plan: Forced(Plain)
-MSG      WARNING: a safety gate was bypassed (--force): the firmware family and/or the installed Kernel tag could not be verified. Flashing firmware from a different or unprofiled family, or onto an incompatible Kernel, can permanently brick this drive.
-MSG      executable: yes
 
 === validate_bundle: matching pair ===
 result: OK

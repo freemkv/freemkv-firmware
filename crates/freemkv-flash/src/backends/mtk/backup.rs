@@ -243,13 +243,6 @@ pub(crate) fn notice(bytes: &[u8]) -> BackupNotice {
     }
 }
 
-/// Decode a backup without imposing its model on the target (forced restore).
-pub(crate) fn decode(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
-    let image = backup_image(bytes, expected_size)?;
-    validate_image(&image, None)?;
-    Ok(image)
-}
-
 /// Decode and validate a backup for the target drive model.
 pub(crate) fn validate(bytes: &[u8], target_model: &str, expected_size: usize) -> Result<Vec<u8>> {
     let image = backup_image(bytes, expected_size)?;
