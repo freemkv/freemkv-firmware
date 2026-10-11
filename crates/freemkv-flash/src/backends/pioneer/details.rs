@@ -110,8 +110,55 @@ fn settings_rows(settings: &Result<Settings>) -> Vec<Row> {
         Capability::Unknown => rows.push(row("pure_read", "PureRead", "Not reported")),
         _ => {}
     }
+    rows.extend(mode_rows(s));
     rows.into_iter()
         .map(|r| r.in_group(Group::Settings))
+        .collect()
+}
+
+/// The GUI's list of each setting's codec-defined modes, marking the active and
+/// saved ones, as 0.11.x's read-only choice controls showed them. The CLI never
+/// listed them, so these rows are GUI-only.
+fn mode_rows(s: &Settings) -> Vec<Row> {
+    use pioneer_optical::device::settings::{SettingId, Value as Mode};
+    let name = |v: Mode| match v {
+        Mode::Quiet(q) => quiet(q),
+        Mode::PureRead(p) => pure(p),
+        Mode::Boolean(true) => "On",
+        Mode::Boolean(false) => "Off",
+    };
+    s.entries()
+        .filter(|e| {
+            e.control.choices.len() > 1 && !matches!(e.control.choices, [Mode::Boolean(_), ..])
+        })
+        .map(|e| {
+            let (key, label) = match e.id {
+                SettingId::QuietDrive => ("quiet_drive_modes", "Quiet Drive modes"),
+                SettingId::PureRead => ("pure_read_modes", "PureRead modes"),
+                SettingId::RealTimePureRead => {
+                    ("real_time_pure_read_modes", "Real-time PureRead modes")
+                }
+            };
+            let modes: Vec<String> = e
+                .control
+                .choices
+                .iter()
+                .map(|&v| {
+                    let mut marks = Vec::new();
+                    if e.current == Observed::Known(v) {
+                        marks.push("active");
+                    }
+                    if e.saved == Observed::Known(v) {
+                        marks.push("saved");
+                    }
+                    match marks.is_empty() {
+                        true => name(v).to_string(),
+                        false => format!("{} ({})", name(v), marks.join(", ")),
+                    }
+                })
+                .collect();
+            Row::gui(key, label, crate::report::Value::text(&modes.join(" · ")))
+        })
         .collect()
 }
 
@@ -139,3 +186,7 @@ fn pure(mode: PureReadMode) -> &'static str {
         PureReadMode::Perfect => "Perfect",
     }
 }
+
+#[cfg(test)]
+#[path = "details_tests.rs"]
+mod tests;
