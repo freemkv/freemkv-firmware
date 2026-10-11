@@ -1,15 +1,45 @@
 name: doc-links
 
-# Thin caller → the canonical reusable doc-links gate in freemkv/.github.
-# Dependencies resolve from the committed Cargo.lock; the toolchain from
-# rust-version.
+# Inlined rather than the shared reusable gate (freemkv/.github guard-doclinks), as freemkv
+# does: documenting the flash GUI's native Linux shell needs the GTK4/libadwaita headers no
+# other repo needs. Same command and toolchain as the shared gate: fails on broken intra-doc
+# links in ///|//! comments (`cargo doc -D rustdoc::broken_intra_doc_links`), toolchain
+# from rust-version in Cargo.toml.
 on: [push, pull_request]
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+permissions:
+  contents: read
 jobs:
   doc-links:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
-    uses: freemkv/.github/.github/workflows/guard-doclinks.yml@v1
-    with:
-      self: freemkv-firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - name: Install GTK4 + libadwaita development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
+      - name: Resolve toolchain from rust-version
+        id: msrv
+        run: |
+          v=$(grep -m1 -E '^[[:space:]]*rust-version[[:space:]]*=' freemkv-firmware/Cargo.toml | sed -E 's/.*"([0-9.]+)".*/\1/')
+          echo "v=${v:-stable}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.v }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+      - name: cargo doc (deny broken intra-doc links)
+        working-directory: freemkv-firmware
+        env:
+          RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
+        # Drop any cached target/doc first: rust-cache can restore a partial doc tree that
+        # `cargo doc` then fails to remove.
+        run: |
+          rm -rf target/doc || true
+          cargo doc --no-deps --document-private-items --lib --bins
