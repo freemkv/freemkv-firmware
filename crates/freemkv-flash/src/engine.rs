@@ -14,7 +14,8 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::drive::{BackupNotice, DriveFamily, FlashRequest, InputKind};
+use crate::backend::{FormatRole, UNKNOWN_FAMILY};
+use crate::drive::{BackupNotice, Capabilities, DriveFamily, FlashRequest};
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::style;
 
@@ -24,14 +25,19 @@ pub(crate) mod device_info;
 use crate::backends::mtk::backup::BackupArtifact;
 use backup::save_backup;
 
-/// Run the `info` command: identify + classify (read-only).
-pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
+/// Run the `info` command: identify + classify (read-only). `drive` is the
+/// matched backend, or `None` for a drive no backend recognizes.
+pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn DriveFamily>) -> Result<()> {
     println!("{}", style::kv("device", &dev.describe()));
-    let id = drive.identity(dev);
+    let id = match drive {
+        Some(drive) => drive.identity(dev),
+        None => crate::drive::read_identity(dev),
+    };
+    let family = drive.map_or(UNKNOWN_FAMILY, |d| d.descriptor().display_name);
     crate::output::field("Manufacturer", style::printable(&id.vendor));
     crate::output::field("Model", style::printable(&id.product));
     crate::output::field("Firmware version", style::printable(&id.revision));
-    crate::output::field("Drive family", drive.family().to_string());
+    crate::output::field("Drive family", family);
     println!(
         "{}",
         style::kv(
@@ -57,7 +63,7 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
     // The single source of truth for what this family can do (see
     // drive::Capabilities). `info` is always on for a classified drive; the
     // headline is which of backup/flash are live.
-    let caps = drive.capabilities();
+    let caps = drive.map_or(Capabilities::NONE, |d| d.capabilities());
     crate::output::field(
         "Backup",
         if caps.backup {
@@ -81,17 +87,17 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily) -> Result<()> {
     };
     println!(
         "{}",
-        style::kv("family", &format!("{} ({})", drive.family(), capability))
+        style::kv("family", &format!("{family} ({capability})"))
     );
     // Show the flash line only when a runnable recipe exists for this family;
     // the capability label above already states flash availability otherwise.
-    if let Some(set) = crate::flashset::FlashInstructionSet::for_family(drive.family()) {
-        println!(
-            "{}",
-            style::kv("flash", &format!("{} — {}", set.name, set.status.label()))
-        );
+    if let Some(summary) = drive.and_then(|d| d.descriptor().flash_summary) {
+        println!("{}", style::kv("flash", summary));
     }
-    device_info::show(dev, drive.family() == crate::drive::Family::Pioneer);
+    device_info::show(dev, drive.is_some_and(|d| d.vendor_snapshot()));
+    let Some(drive) = drive else {
+        return Ok(());
+    };
     drive.print_device_info(dev);
     // Best-effort firmware identification (read-only). `info` never aborts, so a
     // read failure here is simply omitted.
@@ -147,7 +153,7 @@ pub fn info_file(path: &Path) -> Result<()> {
         .collect();
     println!("{}", style::kv("sha256", &sha));
 
-    for backend in crate::drive::file_backends() {
+    for backend in crate::backend::registry::file_backends() {
         if let Some(report) = backend.describe_file(&image) {
             return report;
         }
@@ -219,7 +225,10 @@ pub fn backup_with_replace(
     replace: bool,
 ) -> Result<()> {
     if !drive.capabilities().backup {
-        bail!("no firmware backup capability for {}", drive.backend_name());
+        bail!(
+            "no firmware backup capability for {}",
+            drive.descriptor().id
+        );
     }
     let kind = drive.backup_kind();
     // Fail fast before the multi-minute capture if the output already exists.
@@ -328,17 +337,21 @@ pub fn flash(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
             .unwrap_or_else(|| {
                 bail!(
                     "{} declares a bundle flash but provides none",
-                    drive.backend_name()
+                    drive.descriptor().id
                 )
             });
     }
-    match req.input_kind {
-        InputKind::Tar => flash_restore(dev, drive, req),
-        InputKind::Bin => flash_bin(dev, drive, req),
-        InputKind::PioneerBundle => bail!(
-            "a Pioneer firmware bundle cannot be flashed to this {} drive",
-            drive.backend_name()
-        ),
+    let format = req.input_format;
+    if !drive.descriptor().owns(format) {
+        bail!(
+            "a {} cannot be flashed to this {} drive",
+            format.label,
+            drive.descriptor().id
+        );
+    }
+    match format.role {
+        FormatRole::Backup => flash_restore(dev, drive, req),
+        FormatRole::Image | FormatRole::Package => flash_bin(dev, drive, req),
     }
 }
 
@@ -482,7 +495,7 @@ fn flash_bin(dev: &mut dyn ScsiDevice, drive: &dyn DriveFamily, req: &FlashReque
     if !drive.capabilities().flash {
         bail!(
             "refusing to flash: {} has no executable flash capability",
-            drive.backend_name()
+            drive.descriptor().id
         );
     }
 
@@ -673,7 +686,6 @@ fn flash_restore(
     );
     let mut firmware_req = req.clone();
     firmware_req.input = firmware;
-    firmware_req.input_kind = InputKind::Bin;
     firmware_req.allow_crossflash = false;
     // The full image uses the same proven MTK update path. Per-unit members are
     // coherence/reference data, not separate post-reboot writes.

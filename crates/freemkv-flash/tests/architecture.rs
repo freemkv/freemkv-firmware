@@ -6,7 +6,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use freemkv_flash::drive::{FlashRequest, InputKind};
+use freemkv_flash::backends::pioneer;
+use freemkv_flash::drive::FlashRequest;
 use freemkv_flash::manifest::FlashMode;
 use freemkv_flash::platform::MockScsiDevice;
 
@@ -276,7 +277,7 @@ fn force_and_skip_backup_paths_are_gone() {
     let mut dev = MockScsiDevice::new();
     let request = FlashRequest {
         input: vec![0; 0x20_0000],
-        input_kind: InputKind::Bin,
+        input_format: &pioneer::PACKAGE,
         mode: FlashMode::Full,
         execute: true,
         acknowledged_risk: true,
@@ -286,7 +287,7 @@ fn force_and_skip_backup_paths_are_gone() {
         predump_out: None,
         allow_crossflash: false,
     };
-    let backend = freemkv_flash::backends::pioneer::Pioneer::new();
+    let backend = pioneer::Pioneer::new();
     let error = freemkv_flash::engine::flash(&mut dev, &backend, &request).unwrap_err();
     assert!(
         format!("{error:#}").contains("preflash backup path"),

@@ -26,9 +26,12 @@ use sha2::{Digest, Sha256};
 
 use crate::backends::mtk::{Mtk, CHUNK, IMAGE_SIZE, ROM_1EC000_OFFSET};
 // COMPAT: the module path differs in the 0.11.2 baseline copy of this file.
+use crate::backend::{BackendId, FileFormat};
+use crate::backends::mtk::{IMAGE as MTK_IMAGE, LEGACY_TAR as MTK_LEGACY_TAR};
 use crate::backends::pioneer::flash_plan;
 use crate::backends::pioneer::Pioneer;
-use crate::drive::{DriveFamily, FlashRequest, InputKind};
+use crate::backends::pioneer::{ENVELOPE as PIONEER_ENVELOPE, PACKAGE as PIONEER_PACKAGE};
+use crate::drive::{DriveFamily, FlashRequest};
 use crate::manifest::FlashMode;
 use crate::output::{capture_events, Event};
 use crate::platform::{MediumStatus, MockScsiDevice, ScsiDevice};
@@ -587,7 +590,7 @@ fn backup_firmware() -> Vec<u8> {
 fn mtk_request(image: Vec<u8>, execute: bool, backup: Option<PathBuf>) -> FlashRequest {
     FlashRequest {
         input: image,
-        input_kind: InputKind::Bin,
+        input_format: &MTK_IMAGE,
         mode: FlashMode::Full,
         execute,
         acknowledged_risk: execute,
@@ -1143,7 +1146,7 @@ fn golden_info_mtk() {
             MockScsiDevice::mtk(),
         ),
     ] {
-        let (outcome, transcript) = drive_run(dev, |d| crate::engine::info(d, &Mtk));
+        let (outcome, transcript) = drive_run(dev, |d| crate::engine::info(d, Some(&Mtk)));
         g.case(title, &outcome, Some(&transcript));
     }
     check("info_mtk", g);
@@ -1162,7 +1165,8 @@ fn golden_info_pioneer() {
             MockScsiDevice::renesas(),
         ),
     ] {
-        let (outcome, transcript) = drive_run(dev, |d| crate::engine::info(d, &Pioneer::new()));
+        let (outcome, transcript) =
+            drive_run(dev, |d| crate::engine::info(d, Some(&Pioneer::new())));
         g.case(title, &outcome, Some(&transcript));
     }
     check("info_pioneer", g);
@@ -1201,10 +1205,10 @@ fn golden_check_file() {
 // 3. flash dry run
 // ---------------------------------------------------------------------------
 
-fn pioneer_request(input: Vec<u8>, kind: InputKind, execute: bool) -> FlashRequest {
+fn pioneer_request(input: Vec<u8>, kind: &'static FileFormat, execute: bool) -> FlashRequest {
     FlashRequest {
         input,
-        input_kind: kind,
+        input_format: kind,
         mode: FlashMode::Full,
         execute,
         acknowledged_risk: execute,
@@ -1247,20 +1251,20 @@ fn golden_flash_dry_run() {
     }
 
     let bundle = archive(&pioneer_pair(false, 0), false);
-    let mut verbose = pioneer_request(bundle.clone(), InputKind::PioneerBundle, false);
+    let mut verbose = pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false);
     verbose.verbose = true;
-    let mut crossflash = pioneer_request(bundle.clone(), InputKind::PioneerBundle, false);
+    let mut crossflash = pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false);
     crossflash.allow_crossflash = true;
     for (title, req) in [
         (
             "Pioneer dry run: signed Kernel+Normal bundle",
-            pioneer_request(bundle.clone(), InputKind::PioneerBundle, false),
+            pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false),
         ),
         ("Pioneer dry run: bundle verbose", verbose),
         ("Pioneer dry run: bundle with crossflash", crossflash),
         (
             "Pioneer dry run: header-only bundle",
-            pioneer_request(header_only_bundle(), InputKind::PioneerBundle, false),
+            pioneer_request(header_only_bundle(), &PIONEER_PACKAGE, false),
         ),
         (
             "Pioneer dry run: bare signed Normal .enc",
@@ -1269,21 +1273,21 @@ fn golden_flash_dry_run() {
                     let update = pioneer_pair(false, 0);
                     update.normal().repack(&update.normal().image).unwrap()
                 },
-                InputKind::Bin,
+                &PIONEER_ENVELOPE,
                 false,
             ),
         ),
         (
             "Pioneer dry run: UD04 Normal .bin",
-            pioneer_request(ud04_normal_bin(), InputKind::Bin, false),
+            pioneer_request(ud04_normal_bin(), &PIONEER_ENVELOPE, false),
         ),
         (
             "Pioneer dry run: garbage .bin",
-            pioneer_request(b"garbage".to_vec(), InputKind::Bin, false),
+            pioneer_request(b"garbage".to_vec(), &PIONEER_ENVELOPE, false),
         ),
         (
             "Pioneer dry run: Tar kind refused",
-            pioneer_request(bundle.clone(), InputKind::Tar, false),
+            pioneer_request(bundle.clone(), &MTK_LEGACY_TAR, false),
         ),
     ] {
         let (outcome, transcript) = drive_run(MockScsiDevice::pioneer(), |d| {
@@ -1293,7 +1297,7 @@ fn golden_flash_dry_run() {
     }
 
     // A Pioneer bundle against an MTK drive and an MTK image against Pioneer.
-    let req = pioneer_request(bundle, InputKind::PioneerBundle, false);
+    let req = pioneer_request(bundle, &PIONEER_PACKAGE, false);
     let (outcome, transcript) = drive_run(mtk_drive(), |d| crate::engine::flash(d, &Mtk, &req));
     g.case(
         "MTK drive given a Pioneer bundle",
@@ -1347,7 +1351,7 @@ fn golden_flash_execute() {
     let saved = std::fs::read(&rollback).unwrap();
     let second = dir.join("mtk_rollback_of_restore.tar");
     let mut restore = mtk_request(saved, true, Some(second.clone()));
-    restore.input_kind = InputKind::Tar;
+    restore.input_format = &MTK_LEGACY_TAR;
     restore.drive_model = "BD-RE BU40N".into();
     let dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let (outcome, transcript) = drive_run(dev, |d| crate::engine::flash(d, &Mtk, &restore));
@@ -1388,9 +1392,9 @@ fn golden_flash_execute() {
 
     // Pioneer: engine-level execute stops where the existing mocks allow.
     let target = archive(&pioneer_pair(false, 0), false);
-    let mut no_ack = pioneer_request(target.clone(), InputKind::PioneerBundle, true);
+    let mut no_ack = pioneer_request(target.clone(), &PIONEER_PACKAGE, true);
     no_ack.acknowledged_risk = false;
-    let mut with_backup = pioneer_request(target.clone(), InputKind::PioneerBundle, true);
+    let mut with_backup = pioneer_request(target.clone(), &PIONEER_PACKAGE, true);
     with_backup.predump_out = Some(dir.join("pioneer_rollback.tar"));
     for (title, req, dev) in [
         (
@@ -1405,12 +1409,12 @@ fn golden_flash_execute() {
         ),
         (
             "Pioneer execute: disc loaded",
-            pioneer_request(target.clone(), InputKind::PioneerBundle, true),
+            pioneer_request(target.clone(), &PIONEER_PACKAGE, true),
             MockScsiDevice::pioneer().with_medium_loaded(),
         ),
         (
             "MTK execute: Pioneer bundle sent to an MTK drive",
-            pioneer_request(target.clone(), InputKind::PioneerBundle, true),
+            pioneer_request(target.clone(), &PIONEER_PACKAGE, true),
             mtk_drive(),
         ),
     ] {
@@ -1450,7 +1454,7 @@ fn golden_flash_execute() {
             .prepare(prepared_pair(false, 0))
             .unwrap();
         let installed_tar = archive(&installed, false);
-        let req = pioneer_request(archive(&target, false), InputKind::PioneerBundle, true);
+        let req = pioneer_request(archive(&target, false), &PIONEER_PACKAGE, true);
         let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
             match Pioneer::new().flash_bundle(d, &req, Some(&installed_tar)) {
                 Some(r) => r,
@@ -1715,9 +1719,18 @@ fn ambiguous_drive() -> MockScsiDevice {
         .on(|cdb| cdb.first() == Some(&0x12), inq)
 }
 
+/// COMPAT: the pre-0.12 `Family` debug names these scenarios recorded.
+fn family_label(id: Option<BackendId>) -> &'static str {
+    match id.map(|id| id.0) {
+        None => "Unknown",
+        Some("mtk19xx") => "Mtk",
+        Some("pioneer-oem") => "Pioneer",
+        Some(other) => panic!("no recorded label for backend {other}"),
+    }
+}
+
 #[test]
 fn golden_classify_and_unknown_info() {
-    use crate::drive::{for_family, Family};
     let mut g = Golden::default();
     let drives: Vec<(&str, Box<dyn Fn() -> MockScsiDevice>)> = vec![
         (
@@ -1736,17 +1749,22 @@ fn golden_classify_and_unknown_info() {
     for (title, make) in &drives {
         let mut rec = Rec::new(make());
         let outcome = run(|| {
-            println!("classify: {:?}", crate::drive::classify(&mut rec));
-            match crate::drive::resolve_backend(&mut rec) {
+            let classified = crate::backend::registry::resolve(&mut rec).ok().flatten();
+            println!(
+                "classify: {}",
+                family_label(classified.map(|m| m.evidence.backend))
+            );
+            match crate::backend::registry::resolve(&mut rec) {
                 Ok(Some(m)) => println!(
-                    "resolve_backend: {:?} backend={}",
-                    m.evidence.family, m.evidence.backend_name
+                    "resolve_backend: {} backend={}",
+                    family_label(Some(m.evidence.backend)),
+                    m.evidence.backend
                 ),
                 Ok(None) => println!("resolve_backend: no match"),
                 Err(e) => println!("resolve_backend: error {e:#}"),
             }
             match crate::workflow::classify_gated(&mut rec) {
-                Ok(f) => println!("classify_gated: {f:?}"),
+                Ok(id) => println!("classify_gated: {}", family_label(Some(id))),
                 Err(e) => println!("classify_gated: error {e:#}"),
             }
             Ok(())
@@ -1758,9 +1776,7 @@ fn golden_classify_and_unknown_info() {
         );
     }
     for (title, make) in &drives {
-        let (outcome, transcript) = drive_run(make(), |d| {
-            crate::engine::info(d, for_family(Family::Unknown).as_ref())
-        });
+        let (outcome, transcript) = drive_run(make(), |d| crate::engine::info(d, None));
         g.case(
             &format!("info with the Unknown handler on {title}"),
             &outcome,
@@ -1895,7 +1911,7 @@ fn golden_mtk_flash_input_refusals() {
         ),
         ("tray open", MockScsiDevice::pioneer().with_tray_open()),
     ] {
-        let req = pioneer_request(bundle.clone(), InputKind::PioneerBundle, false);
+        let req = pioneer_request(bundle.clone(), &PIONEER_PACKAGE, false);
         let (outcome, transcript) =
             drive_run(dev, |d| crate::engine::flash(d, &Pioneer::new(), &req));
         g.case(
@@ -2129,7 +2145,7 @@ fn golden_pioneer_flash_bundle_failures() {
         ),
     ];
     for (title, backup, input) in cases {
-        let req = pioneer_request(input, InputKind::PioneerBundle, true);
+        let req = pioneer_request(input, &PIONEER_PACKAGE, true);
         let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
             match Pioneer::new().flash_bundle(d, &req, backup.as_deref()) {
                 Some(r) => r,
@@ -2143,7 +2159,7 @@ fn golden_pioneer_flash_bundle_failures() {
         );
     }
     // Dry-run request: flash_bundle does not run.
-    let req = pioneer_request(target_tar, InputKind::PioneerBundle, false);
+    let req = pioneer_request(target_tar, &PIONEER_PACKAGE, false);
     let (outcome, transcript) = drive_run(PreparedDrive::new(&plan), |d| {
         match Pioneer::new().flash_bundle(d, &req, None) {
             Some(r) => r,

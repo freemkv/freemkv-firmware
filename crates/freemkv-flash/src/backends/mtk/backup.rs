@@ -18,8 +18,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::crossflash::ensure_image_matches_drive;
+use super::UserDump;
 use crate::cmac;
-use crate::drive::{BackupNotice, DriveFamily, Family, UserDump};
+use crate::drive::{BackupNotice, DriveFamily};
 use crate::platform::ScsiDevice;
 
 /// A 0.10.x MTK rollback archive (`backup.toml` + raw `firmware.bin` + per-unit
@@ -56,14 +57,8 @@ impl BackupArtifact {
         {
             bail!("backup per-unit writable regions disagree with firmware image; no byte-coherent rollback image exists");
         }
-        ensure_image_matches_drive(
-            &self.firmware,
-            &self.drive_product,
-            Family::Mtk,
-            false,
-            None,
-        )
-        .context("backup image model/family does not match current drive")?;
+        ensure_image_matches_drive(&self.firmware, &self.drive_product, false, None)
+            .context("backup image model/family does not match current drive")?;
         Ok(())
     }
     fn per_unit_hash(&self) -> String {
@@ -277,7 +272,7 @@ fn validate_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
         bail!("backup firmware fails AES-CMAC; it is not a valid MTK update image");
     }
     if let Some(model) = target_model {
-        ensure_image_matches_drive(image, model, Family::Mtk, false, None)
+        ensure_image_matches_drive(image, model, false, None)
             .context("backup image model/family does not match the target drive")?;
     }
     Ok(())

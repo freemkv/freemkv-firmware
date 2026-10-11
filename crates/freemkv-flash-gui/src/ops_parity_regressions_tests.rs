@@ -5,7 +5,7 @@ fn gui_accepts_the_same_pioneer_backend_as_cli() {
     let mut dev = platform::MockScsiDevice::pioneer();
     let backend = freemkv_flash::workflow::classify_gated(&mut dev)
         .expect("Pioneer supports backup and flash");
-    assert_eq!(backend, Family::Pioneer);
+    assert_eq!(backend.0, "pioneer-oem");
     assert!(dev.writes.is_empty());
 }
 

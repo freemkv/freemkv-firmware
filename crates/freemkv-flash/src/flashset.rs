@@ -15,8 +15,6 @@
 //! Every recipe has `host_side_key = false`: no brand needs a host secret, so a
 //! generic verbatim writer is never crypto-blocked.
 
-use crate::drive::Family;
-
 /// How CDBs reach the drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
@@ -142,8 +140,6 @@ impl FlashStep {
 pub struct FlashInstructionSet {
     /// Human name (`"MediaTek MT19xx (proven on MT1959)"`).
     pub name: &'static str,
-    /// The silicon family this set drives.
-    pub family: Family,
     /// How CDBs are delivered.
     pub transport: Transport,
     /// The firmware-write opcode (e.g. `0x3B` WRITE BUFFER).
@@ -229,22 +225,11 @@ impl FlashInstructionSet {
     pub const fn mt1959() -> Self {
         FlashInstructionSet {
             name: "MediaTek MT19xx (proven on MT1959)",
-            family: Family::Mtk,
             transport: Transport::Spti,
             write_opcode: 0x3B,
             host_side_key: false,
             status: FlashStatus::Executable,
             steps: MT1959_STEPS,
-        }
-    }
-
-    /// The instruction set for a classified drive [`Family`]. MTK returns the
-    /// executable MT1959 recipe; other silicon families have no executable set
-    /// yet (their brand recipes live in [`crate::flashset::CATALOG`], catalog-only).
-    pub fn for_family(family: Family) -> Option<Self> {
-        match family {
-            Family::Mtk => Some(Self::mt1959()),
-            _ => None,
         }
     }
 }

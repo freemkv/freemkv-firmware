@@ -1172,7 +1172,7 @@ fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
     let drive = crate::backends::pioneer::Pioneer::new();
     crate::backends::pioneer::file_info::plan_offline(
         &candidate,
-        crate::drive::InputKind::PioneerBundle,
+        &crate::backends::pioneer::PACKAGE,
         "BD-RW BDR-UD04",
         false,
         false,

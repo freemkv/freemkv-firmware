@@ -8,7 +8,8 @@ use crate::backends::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
     ROM_1F0000_OFFSET,
 };
-use crate::drive::{for_family, Family, InputKind, UserDump};
+use crate::backends::mtk::{UserDump, IMAGE, LEGACY_TAR};
+use crate::backends::pioneer::Pioneer;
 use crate::manifest::FlashMode;
 use crate::platform::{MockScsiDevice, ScsiDevice};
 
@@ -163,7 +164,7 @@ fn fresh_backup_path() -> std::path::PathBuf {
 fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
     FlashRequest {
         input: image,
-        input_kind: InputKind::Bin,
+        input_format: &IMAGE,
         mode: FlashMode::Full,
         execute,
         acknowledged_risk: execute,
@@ -187,13 +188,14 @@ fn pioneer_real_ud04_envelope_is_offline_only() {
         "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6"
     );
     let mut req = bin_req(image, false);
+    req.input_format = &crate::backends::pioneer::ENVELOPE;
     req.drive_model = "BDR-UD04".into();
     let mut dev = MockScsiDevice::pioneer();
-    flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap();
+    flash(&mut dev, &Pioneer::new(), &req).unwrap();
     assert!(dev.writes.is_empty());
     assert!(dev.reads.is_empty());
     req.execute = true;
-    assert!(flash(&mut dev, &*for_family(Family::Pioneer), &req).is_err());
+    assert!(flash(&mut dev, &Pioneer::new(), &req).is_err());
     assert!(dev.writes.is_empty());
     assert!(dev.reads.is_empty());
 }
@@ -205,9 +207,10 @@ fn pioneer_offline_plan_does_not_gate_on_marketing_model() {
     };
     let image = std::fs::read(path).unwrap();
     let mut req = bin_req(image, false);
+    req.input_format = &crate::backends::pioneer::ENVELOPE;
     req.drive_model = "BDR-UD040".into();
     let mut dev = MockScsiDevice::pioneer();
-    flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap();
+    flash(&mut dev, &Pioneer::new(), &req).unwrap();
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
 }
@@ -218,9 +221,10 @@ fn pioneer_offline_plan_rejects_malformed_envelope_without_device_io() {
     let header = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nThis is microcode file.\r\nID : PIONEER BD-RW   BDR-212.\r\nRevision Level : 1.05 .\r\n";
     image[..header.len()].copy_from_slice(header);
     let mut req = bin_req(image, false);
+    req.input_format = &crate::backends::pioneer::ENVELOPE;
     req.drive_model = "BDR-212".into();
     let mut dev = MockScsiDevice::pioneer();
-    let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
+    let err = flash(&mut dev, &Pioneer::new(), &req).unwrap_err();
     assert!(format!("{err:#}").contains("malformed bundle"));
     assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
@@ -239,22 +243,11 @@ fn pioneer_template_free_backup_rejects_missing_hardware_identity_without_servic
             vec![0xA5; 8],
         );
     let out = std::env::temp_dir().join(format!("pioneer-not-backup-{}.tar", std::process::id()));
-    let err = backup(&mut dev, &*for_family(Family::Pioneer), &out, false).unwrap_err();
+    let err = backup(&mut dev, &Pioneer::new(), &out, false).unwrap_err();
     assert!(format!("{err:#}").contains("complete hardware identity"));
     assert!(dev.reads.iter().all(|cdb| {
         cdb.first() == Some(&0x12) || (cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1))
     }));
-    assert!(dev.writes.is_empty());
-    assert!(!out.exists());
-}
-
-#[test]
-fn unknown_backend_backup_fails_without_reads_writes_or_file() {
-    let mut dev = MockScsiDevice::new();
-    let out = fresh_backup_path();
-    let err = backup(&mut dev, &*for_family(Family::Unknown), &out, false).unwrap_err();
-    assert!(format!("{err:#}").contains("no firmware backup capability"));
-    assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
     assert!(!out.exists());
 }
@@ -265,10 +258,11 @@ fn pioneer_execute_without_risk_ack_is_safety_gated_and_issues_no_writes() {
     let header = b"********  Copyright(c) 2000 Pioneer Corporation\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11.\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";
     image[..header.len()].copy_from_slice(header);
     let mut req = bin_req(image, true);
+    req.input_format = &crate::backends::pioneer::ENVELOPE;
     req.acknowledged_risk = false;
     req.drive_model = "BD-RW   BDR-UD04".into();
     let mut dev = MockScsiDevice::pioneer();
-    let err = flash(&mut dev, &*for_family(Family::Pioneer), &req).unwrap_err();
+    let err = flash(&mut dev, &Pioneer::new(), &req).unwrap_err();
     // The shared safety gate fires before any backup or write.
     assert!(format!("{err:#}").contains("SAFETY GATE"));
     assert!(dev.writes.is_empty());
@@ -549,7 +543,7 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let mut req = bin_req(vec![], true);
     req.input = tar;
-    req.input_kind = InputKind::Tar;
+    req.input_format = &LEGACY_TAR;
     req.drive_model = "BD-RE BU40N".into();
     flash(&mut dev, &Mtk, &req).unwrap();
 
@@ -568,20 +562,6 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
     assert!(!dev.writes.iter().any(|(cdb, data)| cdb.get(3..6)
         == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
         && data.len() == ROM_1EC000_LEN as usize));
-}
-
-#[test]
-fn non_mtk_family_reports_full_image_unsupported_not_panic() {
-    // Full-image path routes through the DriveFamily trait, so a family that
-    // doesn't implement it (Unknown) returns "unsupported" rather than panicking —
-    // dump degrades gracefully (omits fw.bin). (Pioneer/Renesas do implement it.)
-    let drive = for_family(Family::Unknown);
-    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let err = drive.read_full_image(&mut dev).unwrap_err();
-    assert!(
-        err.to_string().contains("not supported"),
-        "expected an unsupported-family error, got: {err}"
-    );
 }
 
 /// A minimal fixed-format REQUEST SENSE payload carrying `key`.
@@ -726,7 +706,7 @@ fn flash_restore_tar_detects_readback_mismatch() {
         );
     let mut req = bin_req(vec![], true);
     req.input = tar;
-    req.input_kind = InputKind::Tar;
+    req.input_format = &LEGACY_TAR;
     req.drive_model = "BD-RE BU40N".into();
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
@@ -740,48 +720,32 @@ fn flash_restore_tar_detects_readback_mismatch() {
 #[test]
 fn model_gate_accepts_a_matching_image() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Mtk, false, None).is_ok());
+    assert!(ensure_image_matches_drive(&img, "BU40N", false, None).is_ok());
 }
 
 #[test]
 fn model_gate_refuses_a_wrong_model_image() {
     // A valid MT19xx image built for a DIFFERENT model than the drive reports.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
-    let err = ensure_image_matches_drive(&img, "BU40N", Family::Mtk, false, None).unwrap_err();
+    let err = ensure_image_matches_drive(&img, "BU40N", false, None).unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
 }
 
 #[test]
 fn model_gate_refuses_a_non_mt19xx_image() {
     // No MTEKMT19 family tag at the descriptor → not a recognizable image.
-    assert!(
-        ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", Family::Mtk, false, None)
-            .is_err()
-    );
+    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", false, None).is_err());
 }
 
 #[test]
 fn model_gate_refuses_an_unknown_drive_product() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "   ", Family::Mtk, false, None).is_err());
+    assert!(ensure_image_matches_drive(&img, "   ", false, None).is_err());
 }
 
 #[test]
 fn model_gate_refuses_a_truncated_image() {
-    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", Family::Mtk, false, None).is_err());
-}
-
-#[test]
-fn family_cross_gate_refuses_an_mt19xx_image_on_a_non_mtk_drive() {
-    // A perfectly valid MT1959 image, but the connected drive classified as a
-    // different silicon family — refuse across families, before any write.
-    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    let err = ensure_image_matches_drive(&img, "BU40N", Family::Pioneer, false, None).unwrap_err();
-    assert!(
-        err.to_string().contains("across silicon families"),
-        "got: {err}"
-    );
-    assert!(ensure_image_matches_drive(&img, "BU40N", Family::Unknown, false, None).is_err());
+    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", false, None).is_err());
 }
 
 // ---- crossflash gate (--allow-crossflash): waive model, never the family ------
@@ -1003,7 +967,7 @@ fn restore_refuses_partial_or_corrupt_archive_without_write() {
     let body = pos + 512;
     tar[body] ^= 0x01;
     let mut req = bin_req(tar, true);
-    req.input_kind = InputKind::Tar;
+    req.input_format = &LEGACY_TAR;
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     assert!(format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err())
         .contains("per-unit regions do not match"));
@@ -1021,7 +985,7 @@ fn restore_refuses_partial_or_corrupt_archive_without_write() {
 fn restore_refuses_other_drive_backup_without_write() {
     let tar = coherent_backup().to_tar_bytes().unwrap();
     let mut req = bin_req(tar, true);
-    req.input_kind = InputKind::Tar;
+    req.input_format = &LEGACY_TAR;
     req.drive_model = "WH16NS60".into();
     req.allow_crossflash = true;
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
@@ -1038,7 +1002,7 @@ fn backup_refuses_image_per_unit_disagreement_without_write() {
     artifact.per_unit.rom_1f0000[0] ^= 1;
     let tar = artifact.to_tar_bytes().unwrap();
     let mut req = bin_req(tar, true);
-    req.input_kind = InputKind::Tar;
+    req.input_format = &LEGACY_TAR;
     req.drive_model = "BD-RE BU40N".into();
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     assert!(format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err())
@@ -1187,19 +1151,20 @@ fn guard_no_medium_allows_closed_empty() {
 
 #[test]
 fn capture_is_saved_before_target_dependent_rollback_check() {
+    use crate::backend::FileFormat;
     use crate::drive::{Capabilities, Identity, ProbeEvidence};
     struct RejectUpdate {
         path: std::path::PathBuf,
     }
     impl DriveFamily for RejectUpdate {
-        fn family(&self) -> Family {
-            Family::Mtk
+        fn descriptor(&self) -> &'static crate::backend::Descriptor {
+            &crate::backends::mtk::DESCRIPTOR
         }
         fn capabilities(&self) -> Capabilities {
             Mtk.capabilities()
         }
-        fn backend_name(&self) -> &'static str {
-            "rollback ordering test"
+        fn classify_input(&self, _: &std::path::Path, _: &[u8]) -> &'static FileFormat {
+            &IMAGE
         }
         fn probe(&self, _: &mut dyn ScsiDevice, _: &Identity) -> Result<Option<ProbeEvidence>> {
             unreachable!()

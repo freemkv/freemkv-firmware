@@ -119,24 +119,11 @@ pub(crate) fn decide_crossflash(
 pub(crate) fn ensure_image_matches_drive(
     image: &[u8],
     drive_product: &str,
-    drive_family: crate::drive::Family,
     allow_crossflash: bool,
     drive_fine_family: Option<freemkv_chipset::ChipFamily>,
 ) -> Result<Option<CrossflashInfo>> {
     let chip = freemkv_chipset::detect_chip(image)
         .context("input is not a recognizable MT19xx firmware image — refusing to flash")?;
-
-    // Family cross-gate: an MT19xx image (ChipFamily::Mt1959/Mt1939 are both
-    // MediaTek silicon) must be flashed onto a drive that classified as MediaTek.
-    // Refuse flashing across silicon families outright — never overridable.
-    if drive_family != crate::drive::Family::Mtk {
-        bail!(
-            "image is {} (MediaTek) firmware but this drive classified as {} — \
-             refusing to flash across silicon families",
-            chip.family.label(),
-            drive_family
-        );
-    }
 
     let de_enabled = image
         .get(freemkv_chipset::DESCRIPTOR_OFFSET + 0x56)
@@ -158,15 +145,14 @@ pub(crate) fn ensure_image_matches_drive(
 pub(crate) fn preview_crossflash(
     image: &[u8],
     drive_product: &str,
-    drive_family: crate::drive::Family,
     allow_crossflash: bool,
 ) -> Option<CrossflashInfo> {
-    if !allow_crossflash || drive_family != crate::drive::Family::Mtk {
+    if !allow_crossflash {
         return None;
     }
     // drive_fine_family = None here: the plan is informational; the real
     // sub-family gate runs at execute time in ensure_image_matches_drive.
-    ensure_image_matches_drive(image, drive_product, drive_family, true, None)
+    ensure_image_matches_drive(image, drive_product, true, None)
         .ok()
         .flatten()
 }

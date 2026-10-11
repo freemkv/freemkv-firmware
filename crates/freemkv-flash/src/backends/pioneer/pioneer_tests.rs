@@ -4,7 +4,6 @@
 use super::*;
 // Independent byte-level oracle for the transcript KATs (the code under test
 // builds its CDBs with the pioneer-optical builders).
-use crate::drive::{for_family, Family};
 use crate::manifest::FlashMode;
 use crate::platform::MockScsiDevice;
 
@@ -27,10 +26,13 @@ fn pioneer_corpus_root() -> std::path::PathBuf {
 #[test]
 fn pioneer_classifies_but_cannot_dump_without_restorable_format() {
     let mut dev = MockScsiDevice::pioneer();
-    assert_eq!(crate::drive::classify(&mut dev), Family::Pioneer);
+    let resolved = crate::backend::registry::resolve(&mut dev)
+        .unwrap()
+        .unwrap();
+    assert_eq!(resolved.evidence.backend, DESCRIPTOR.id);
     dev.reads.clear(); // classification probes are separate from the blocked dump API
 
-    let drive = for_family(Family::Pioneer);
+    let drive = Pioneer::new();
     assert!(drive.read_full_image(&mut dev).is_err());
     assert!(drive.readback(&mut dev, 0, 0xA4).is_err());
     assert!(dev.writes.is_empty());
@@ -861,7 +863,7 @@ fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
 fn bundle_req(input: Vec<u8>) -> crate::drive::FlashRequest {
     crate::drive::FlashRequest {
         input,
-        input_kind: crate::drive::InputKind::Bin,
+        input_format: &ENVELOPE,
         mode: FlashMode::Full,
         execute: true,
         acknowledged_risk: true,
@@ -875,7 +877,7 @@ fn bundle_req(input: Vec<u8>) -> crate::drive::FlashRequest {
 
 #[test]
 fn bundle_refuses_bad_sized_normal_before_entering_update_mode() {
-    let drive = for_family(Family::Pioneer);
+    let drive = Pioneer::new();
     for len in [IMAGE_MAX + 0x100, IMAGE_MIN - 0x100, IMAGE_MIN + 1] {
         let mut normal = header_only_normal("SAT 8A10", "22/01/01");
         normal.resize(len, 0);
@@ -1041,9 +1043,9 @@ fn pairing_failure_precedes_body_decode() {
     }
     let input = archive.into_inner().unwrap();
     let mut request = bundle_req(input);
-    request.input_kind = crate::drive::InputKind::PioneerBundle;
+    request.input_format = &PACKAGE;
     let mut dev = MockScsiDevice::new();
-    let error = for_family(Family::Pioneer)
+    let error = Pioneer::new()
         .flash_bundle(&mut dev, &request, None)
         .unwrap()
         .unwrap_err();
@@ -1114,7 +1116,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
         generic_normal_transcript(&pair.normal).unwrap();
         crate::backends::pioneer::file_info::plan_offline(
             &pair.normal,
-            crate::drive::InputKind::Bin,
+            &ENVELOPE,
             "UNLISTED DEVICE",
             false,
             false,
@@ -1155,7 +1157,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
 fn info_prints_pioneer_identity_before_region_and_reads_snapshot_once() {
     use std::{cell::RefCell, rc::Rc};
     let mut dev = MockScsiDevice::pioneer();
-    let drive = for_family(Family::Pioneer);
+    let drive = Pioneer::new();
     let labels = Rc::new(RefCell::new(Vec::<String>::new()));
     let sink = labels.clone();
     crate::output::capture_events(
@@ -1164,7 +1166,7 @@ fn info_prints_pioneer_identity_before_region_and_reads_snapshot_once() {
                 sink.borrow_mut().push(label);
             }
         },
-        || crate::engine::info(&mut dev, drive.as_ref()).expect("info"),
+        || crate::engine::info(&mut dev, Some(&drive)).expect("info"),
     );
     let labels = labels.borrow();
     let at = |names: &[&str]| {
@@ -1217,24 +1219,20 @@ fn envelope_tar() -> Vec<u8> {
 
 #[test]
 fn classify_input_routes_by_content_then_extension() {
-    use crate::drive::InputKind;
     use std::path::Path;
     let tar = envelope_tar();
     assert!(bundle::Bundle::from_tar_bytes(&tar).is_ok());
     let pioneer = Pioneer::new();
     // A valid bundle is recognized by content, whatever it is named.
-    assert_eq!(
-        pioneer.classify_input(Path::new("fw.bin"), &tar),
-        InputKind::PioneerBundle
-    );
+    assert_eq!(pioneer.classify_input(Path::new("fw.bin"), &tar), &PACKAGE);
     // A broken .tar still routes to the bundle path for the specific error.
     assert_eq!(
         pioneer.classify_input(Path::new("x.TAR"), b"garbage"),
-        InputKind::PioneerBundle
+        &PACKAGE
     );
     assert_eq!(
         pioneer.classify_input(Path::new("x.bin"), b"garbage"),
-        InputKind::Bin
+        &ENVELOPE
     );
 }
 

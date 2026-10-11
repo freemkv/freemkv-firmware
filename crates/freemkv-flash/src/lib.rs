@@ -4,9 +4,9 @@
 //! * [`platform`] — OS SCSI pass-through transport ([`platform::ScsiDevice`])
 //!   with a real Linux `SG_IO` backend, Windows/macOS stubs, and a
 //!   [`platform::MockScsiDevice`] for host-independent tests.
-//! * [`drive`] — chip-family classification ([`drive::Family`],
-//!   [`drive::classify`]) and the per-family command trait
-//!   ([`drive::DriveFamily`]); [`backends`] holds the protocol implementations.
+//! * [`backend`] — backend identity, file formats and the explicit registry;
+//!   [`drive`] — the per-backend command trait ([`drive::DriveFamily`]);
+//!   [`backends`] holds the protocol implementations.
 //! * [`engine`] — the generic, chip-agnostic `info`/`backup`/`flash` orchestration
 //!   that drives a [`drive::DriveFamily`] through its trait primitives.
 //!
@@ -20,6 +20,7 @@ pub mod output;
 
 pub mod diagnostics;
 
+pub mod backend;
 pub mod backends;
 pub mod cmac;
 pub mod drive;

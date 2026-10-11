@@ -42,7 +42,8 @@ pub(crate) mod file_info;
 pub mod fw_ident;
 pub mod oem;
 
-use crate::drive::{Capabilities, DriveFamily, Family};
+use crate::backend::{BackendId, Descriptor, FileFormat, FormatRole};
+use crate::drive::{Capabilities, DriveFamily};
 use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 
@@ -989,12 +990,36 @@ fn post_commit_status(dev: &mut dyn ScsiDevice) -> Result<()> {
 
 // ---- The MTK family ---------------------------------------------------------
 
+/// A full MediaTek firmware image (a vendor update or a freemkv backup `.bin`).
+pub const IMAGE: FileFormat = FileFormat {
+    id: "mtk-image",
+    label: "MediaTek firmware image",
+    extensions: &["bin"],
+    role: FormatRole::Image,
+};
+
+/// A freemkv 0.10.x MediaTek backup archive, restored through its firmware.
+pub const LEGACY_TAR: FileFormat = FileFormat {
+    id: "mtk-legacy-tar",
+    label: "MediaTek 0.10.x backup archive",
+    extensions: &["tar"],
+    role: FormatRole::Backup,
+};
+
+/// What the MediaTek backend declares.
+pub static DESCRIPTOR: Descriptor = Descriptor {
+    id: BackendId("mtk19xx"),
+    display_name: "MediaTek MT19xx",
+    flash_summary: Some("MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)"),
+    formats: &[IMAGE, LEGACY_TAR],
+};
+
 /// The MediaTek MT19xx drive family.
 pub struct Mtk;
 
 impl DriveFamily for Mtk {
-    fn backend_name(&self) -> &'static str {
-        "mtk19xx"
+    fn descriptor(&self) -> &'static Descriptor {
+        &DESCRIPTOR
     }
 
     fn probe(
@@ -1009,8 +1034,7 @@ impl DriveFamily for Mtk {
         }
         Ok((get_config_is_mtk(dev) && has_mt19_banner(dev)).then_some(
             crate::drive::ProbeEvidence {
-                family: Family::Mtk,
-                backend_name: self.backend_name(),
+                backend: DESCRIPTOR.id,
                 discriminator: "MMC 0x010C + MT19 boot ROM banner",
             },
         ))
@@ -1041,15 +1065,16 @@ impl DriveFamily for Mtk {
     }
 
     fn print_flash_notes(&self, image: &[u8], drive_model: &str, allow_crossflash: bool) {
-        if let Some(info) =
-            crossflash::preview_crossflash(image, drive_model, Family::Mtk, allow_crossflash)
-        {
+        if let Some(info) = crossflash::preview_crossflash(image, drive_model, allow_crossflash) {
             crossflash::print_crossflash_banner(&info);
         }
     }
 
-    fn classify_input(&self, path: &std::path::Path, _bytes: &[u8]) -> crate::drive::InputKind {
-        crate::drive::sniff_input(path)
+    fn classify_input(&self, path: &std::path::Path, _bytes: &[u8]) -> &'static FileFormat {
+        match path.extension().and_then(|e| e.to_str()) {
+            Some(ext) if ext.eq_ignore_ascii_case("tar") => &LEGACY_TAR,
+            _ => &IMAGE,
+        }
     }
 
     fn verification_ranges(&self, image: &[u8]) -> Result<Vec<(usize, usize)>> {
@@ -1122,16 +1147,11 @@ impl DriveFamily for Mtk {
         crossflash::ensure_image_matches_drive(
             image,
             drive_product,
-            Family::Mtk,
             allow_crossflash,
             fine_family,
         )?;
         Ok(())
     }
-    fn family(&self) -> Family {
-        Family::Mtk
-    }
-
     fn capabilities(&self) -> Capabilities {
         Capabilities::all()
     }

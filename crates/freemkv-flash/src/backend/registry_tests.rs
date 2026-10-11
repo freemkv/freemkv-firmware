@@ -1,8 +1,13 @@
-//! Unit tests for [`super`] (classification, input sniffing, the MTK-gate).
+//! Unit tests for [`super`] (protocol probes, input formats, drive identity).
 
 use super::*;
+use crate::drive::{sanitize_ascii, try_read_identity};
 use crate::platform::MockScsiDevice;
-use std::path::Path;
+
+/// The id of the uniquely matching backend, if any.
+fn matched(dev: &mut dyn ScsiDevice) -> Option<&'static str> {
+    resolve(dev).ok().flatten().map(|r| r.evidence.backend.0)
+}
 
 fn f1_sat() -> Vec<u8> {
     let mut response = vec![0u8; 48];
@@ -13,10 +18,10 @@ fn f1_sat() -> Vec<u8> {
 #[test]
 fn classify_mtk_from_get_config_010c() {
     let mut dev = MockScsiDevice::mtk();
-    assert_eq!(classify(&mut dev), Family::Mtk);
-    let matched = resolve_backend(&mut dev).unwrap().unwrap();
-    assert_eq!(matched.evidence.backend_name, "mtk19xx");
-    assert_eq!(matched.evidence.family, Family::Mtk);
+    assert_eq!(matched(&mut dev), Some("mtk19xx"));
+    let matched = resolve(&mut dev).unwrap().unwrap();
+    assert_eq!(matched.evidence.backend.0, "mtk19xx");
+    assert_eq!(Some(matched.evidence.backend.0), Some("mtk19xx"));
     assert!(dev.writes.is_empty());
 }
 
@@ -31,8 +36,8 @@ fn pioneer_identity_prevents_mtk_vendor_probe_even_if_standard_feature_matches()
             f1_sat(),
         )
         .on(|cdb| cdb.first() == Some(&0x12), inq);
-    let matched = resolve_backend(&mut dev).unwrap().unwrap();
-    assert_eq!(matched.evidence.family, Family::Pioneer);
+    let matched = resolve(&mut dev).unwrap().unwrap();
+    assert_eq!(Some(matched.evidence.backend.0), Some("pioneer-oem"));
     assert!(!dev
         .reads
         .iter()
@@ -46,7 +51,7 @@ fn f1_without_positive_identity_does_not_select_pioneer() {
         |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
         f1_sat(),
     );
-    assert_eq!(classify(&mut dev), Family::Unknown);
+    assert_eq!(matched(&mut dev), None);
     assert!(dev.writes.is_empty());
 }
 
@@ -58,7 +63,7 @@ fn f1_with_failed_inquiry_does_not_select_pioneer() {
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
             f1_sat(),
         );
-    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(resolve(&mut dev).unwrap().is_none());
     assert!(dev.writes.is_empty());
 }
 
@@ -73,7 +78,7 @@ fn f1_with_unrelated_vendor_does_not_select_pioneer() {
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
             f1_sat(),
         );
-    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(resolve(&mut dev).unwrap().is_none());
     assert!(dev.writes.is_empty());
 }
 
@@ -89,14 +94,14 @@ fn mt19_banner_without_mmc_feature_does_not_match() {
         },
         boot_rom,
     );
-    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(resolve(&mut dev).unwrap().is_none());
     assert!(dev.writes.is_empty());
 }
 
 #[test]
 fn protocol_match_keeps_device_identity_separate() {
     let mut dev = MockScsiDevice::renesas();
-    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(resolve(&mut dev).unwrap().is_none());
     let identity = read_identity(&mut dev);
     assert_eq!(identity.vendor, "RENESAS");
     assert!(dev.writes.is_empty());
@@ -105,7 +110,7 @@ fn protocol_match_keeps_device_identity_separate() {
 /// Regression guard: a drive that answers GET CONFIG 0x010C with the standard
 /// MMC "Firmware Information" descriptor (as any compliant non-MTK drive
 /// implementing feature 0x010C would) but does NOT carry the MT19 boot banner
-/// at `0x003000` MUST classify as [`Family::Unknown`] — never MTK. This is
+/// at `0x003000` MUST match no backend — never MTK. This is
 /// exactly the mis-classification the `has_mt19_banner` gate was added to
 /// prevent (0x010C alone is not authoritative; the banner is the hardware
 /// signature that anchors the MTK identification).
@@ -123,8 +128,8 @@ fn classify_unknown_when_010c_matches_but_mt19_banner_absent() {
         fd,
     );
     assert_eq!(
-        classify(&mut dev),
-        Family::Unknown,
+        matched(&mut dev),
+        None,
         "0x010C echo alone must NOT be enough to classify as MTK — the MT19 boot banner is \
          a required second gate. A compliant non-MTK drive that also implements 0x010C would \
          otherwise be misclassified and become a `flash --allow-crossflash` target."
@@ -134,7 +139,7 @@ fn classify_unknown_when_010c_matches_but_mt19_banner_absent() {
 #[test]
 fn classify_pioneer_from_read_buffer_f1() {
     let mut dev = MockScsiDevice::pioneer();
-    assert_eq!(classify(&mut dev), Family::Pioneer);
+    assert_eq!(matched(&mut dev), Some("pioneer-oem"));
 }
 
 #[test]
@@ -150,8 +155,12 @@ fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
                 |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
                 f1_sat(),
             );
-        let matched = resolve_backend(&mut dev).unwrap().unwrap();
-        assert_eq!(matched.evidence.family, Family::Pioneer, "{product}");
+        let matched = resolve(&mut dev).unwrap().unwrap();
+        assert_eq!(
+            Some(matched.evidence.backend.0),
+            Some("pioneer-oem"),
+            "{product}"
+        );
         assert!(dev.reads.iter().any(|cdb| {
             cdb.first() == Some(&0x3C)
                 && cdb.get(1) == Some(&0x02)
@@ -182,8 +191,8 @@ fn old_pioneer_hardware_is_classified_but_malformed_f1_is_not() {
                 f1,
             );
         assert_eq!(
-            resolve_backend(&mut dev).unwrap().unwrap().evidence.family,
-            Family::Pioneer
+            resolve(&mut dev).unwrap().unwrap().evidence.backend.0,
+            "pioneer-oem"
         );
         assert!(dev.writes.is_empty());
     }
@@ -193,51 +202,28 @@ fn old_pioneer_hardware_is_classified_but_malformed_f1_is_not() {
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
             vec![0xA5; 8],
         );
-    assert!(resolve_backend(&mut dev).unwrap().is_none());
+    assert!(resolve(&mut dev).unwrap().is_none());
     assert!(dev.writes.is_empty());
 }
 
 #[test]
 fn classify_unknown_when_no_discriminator() {
     let mut dev = MockScsiDevice::new();
-    assert_eq!(classify(&mut dev), Family::Unknown);
+    assert_eq!(matched(&mut dev), None);
 }
 
 #[test]
-fn sniff_picks_tar_vs_bin() {
-    assert_eq!(sniff_input(Path::new("dump.tar")), InputKind::Tar);
-    assert_eq!(
-        sniff_input(Path::new("UD04.firmware.tar")),
-        InputKind::PioneerBundle
-    );
-    assert_eq!(sniff_input(Path::new("fw.bin")), InputKind::Bin);
-    assert_eq!(sniff_input(Path::new("image")), InputKind::Bin);
-}
-
-#[test]
-fn dump_only_families_stay_read_only() {
-    // Unknown is inert. Pioneer is exercised by its own tests.
-    {
-        let handler = for_family(Family::Unknown);
-        assert!(!handler.is_supported());
-        let mut dev = MockScsiDevice::new();
-        assert!(handler
-            .flash_stream(
-                &mut dev,
-                &[0u8; 4],
-                crate::manifest::FlashMode::Full,
-                &mut |_| {}
-            )
-            .is_err());
-        assert!(dev.writes.is_empty());
-    }
-}
-
-#[test]
-fn for_family_reports_the_expected_family() {
-    assert_eq!(for_family(Family::Mtk).family(), Family::Mtk);
-    assert_eq!(for_family(Family::Pioneer).family(), Family::Pioneer);
-    assert_eq!(for_family(Family::Unknown).family(), Family::Unknown);
+fn flash_input_formats_follow_the_drive_and_foreign_package_names() {
+    let path = std::path::Path::new;
+    let format = |b: &dyn FirmwareBackend, p| flash_input_format(b, path(p), b"").id;
+    assert_eq!(format(&MTK, "dump.tar"), "mtk-legacy-tar");
+    assert_eq!(format(&MTK, "fw.bin"), "mtk-image");
+    assert_eq!(format(&MTK, "image"), "mtk-image");
+    // A Pioneer package name is a Pioneer package even on a MediaTek drive.
+    assert_eq!(format(&MTK, "UD04.firmware.tar"), "pioneer-package");
+    assert_eq!(format(&MTK, "UD04.INSTALLER.TAR"), "pioneer-package");
+    assert_eq!(format(&PIONEER, "x.tar"), "pioneer-package");
+    assert_eq!(format(&PIONEER, "normal.enc"), "pioneer-envelope");
 }
 
 #[test]
@@ -251,7 +237,7 @@ fn mtk_identity_parses_boot_banner_from_32b_region() {
         |cdb| cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..]),
         banner,
     );
-    let id = mtk::Mtk.identity(&mut dev);
+    let id = MTK.identity(&mut dev);
     assert_eq!(id.banner.as_deref(), Some("MT1959 Boot BU5"));
 }
 
@@ -337,13 +323,13 @@ fn truncated_boot_rom_is_not_protocol_evidence() {
 fn file_identification_covers_every_registered_backend_once() {
     // `info <file>` keeps its own order (structural parsers first); a backend
     // added to the registry but not to that order would never describe files.
-    let mut registered: Vec<_> = backends().map(|b| b.backend_name()).collect();
-    let mut for_files: Vec<_> = file_backends().map(|b| b.backend_name()).collect();
+    let mut registered: Vec<_> = backends().map(|b| b.descriptor().id.0).collect();
+    let mut for_files: Vec<_> = file_backends().map(|b| b.descriptor().id.0).collect();
     registered.sort_unstable();
     for_files.sort_unstable();
     assert_eq!(for_files, registered);
     assert_eq!(
-        file_backends().next().map(|b| b.family()),
-        Some(Family::Pioneer)
+        file_backends().next().map(|b| b.descriptor().id.0),
+        Some("pioneer-oem")
     );
 }

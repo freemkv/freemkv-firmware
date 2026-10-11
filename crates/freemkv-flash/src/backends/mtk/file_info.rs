@@ -37,14 +37,10 @@ pub(crate) fn classify_file(image: &[u8]) -> FileClass {
     let capability = chip
         .as_ref()
         .map(|c| freemkv_chipset::capability_for(&c.model, c.family));
-    let flash = chip.as_ref().and_then(|c| {
-        // Both MT1959 and MT1939 are MediaTek silicon → the MediaTek recipe.
-        let fam = match c.family {
-            freemkv_chipset::ChipFamily::Mt1959 | freemkv_chipset::ChipFamily::Mt1939 => {
-                crate::drive::Family::Mtk
-            }
-        };
-        crate::flashset::FlashInstructionSet::for_family(fam).map(|s| (s.name, s.status))
+    // Both MT1959 and MT1939 are MediaTek silicon → the MediaTek recipe.
+    let flash = chip.as_ref().map(|_| {
+        let set = crate::flashset::FlashInstructionSet::mt1959();
+        (set.name, set.status)
     });
     let cmac = match cmac::verify_detailed(image) {
         Ok(v) if v.is_empty() => CmacSummary::Unsigned,

@@ -6,7 +6,7 @@ pub(crate) mod comparison;
 mod report;
 pub use report::*;
 
-use crate::{drive, engine, platform, workflow};
+use crate::{engine, platform, workflow};
 use anyhow::{Context, Result};
 use std::{
     path::PathBuf,
@@ -134,16 +134,18 @@ fn inspect_inner(source: &Source, control: &Control) -> Result<Inspection> {
                 device: opened.as_mut(),
                 control,
             };
-            let resolved = drive::resolve_backend(&mut dev)?
-                .context("Drive protocol could not be identified")?;
-            let family = resolved.evidence.family;
-            if family != drive::Family::Pioneer {
-                return Err(InspectionError::UnsupportedFormat(family.to_string()).into());
+            let backend = crate::backend::registry::resolve(&mut dev)?
+                .context("Drive protocol could not be identified")?
+                .backend;
+            let descriptor = backend.descriptor();
+            if descriptor.id != crate::backends::pioneer::DESCRIPTOR.id {
+                return Err(
+                    InspectionError::UnsupportedFormat(descriptor.display_name.into()).into(),
+                );
             }
             control.check()?;
             let state = crate::backends::pioneer::inspect::live_state(&mut dev);
-            let handler = drive::for_family(family);
-            engine::backup_with_replace(&mut dev, handler.as_ref(), capture, false, false)?;
+            engine::backup_with_replace(&mut dev, backend, capture, false, false)?;
             drop(opened);
             control.check()?;
             let mut inspection = inspect_inner(&Source::File(capture.clone()), control)?;

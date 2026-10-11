@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 #[cfg(test)]
-use freemkv_flash::{drive::Family, platform};
+use freemkv_flash::platform;
 
 /// Enumerate the same optical drives shown by the CLI, including empty trays.
 pub fn enumerate() -> Vec<freemkv_flash::workflow::DriveChoice> {

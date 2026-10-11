@@ -9,9 +9,10 @@ use pioneer_optical::receiver::Receiver;
 use pioneer_optical::Role;
 use std::borrow::Cow;
 
+use crate::backend::{BackendId, Descriptor, FileFormat, FormatRole};
 #[cfg(test)]
 use crate::drive::Identity;
-use crate::drive::{Capabilities, DriveFamily, Family, FullImage};
+use crate::drive::{Capabilities, DriveFamily, FullImage};
 use crate::platform::ScsiDevice;
 
 /// Offline reconstruction of Pioneer backup candidates from captured images.
@@ -490,9 +491,33 @@ impl Pioneer {
     }
 }
 
+/// An extractor-produced Pioneer package (tar of Kernel and/or Normal).
+pub const PACKAGE: FileFormat = FileFormat {
+    id: "pioneer-package",
+    label: "Pioneer firmware bundle",
+    extensions: &["firmware.tar", "installer.tar", "tar"],
+    role: FormatRole::Package,
+};
+
+/// A bare Pioneer Normal envelope (`.enc`).
+pub const ENVELOPE: FileFormat = FileFormat {
+    id: "pioneer-envelope",
+    label: "Pioneer firmware envelope",
+    extensions: &["enc", "bin"],
+    role: FormatRole::Image,
+};
+
+/// What the Pioneer backend declares.
+pub static DESCRIPTOR: Descriptor = Descriptor {
+    id: BackendId("pioneer-oem"),
+    display_name: "Pioneer",
+    flash_summary: None,
+    formats: &[PACKAGE, ENVELOPE],
+};
+
 impl DriveFamily for Pioneer {
-    fn backend_name(&self) -> &'static str {
-        "pioneer-oem"
+    fn descriptor(&self) -> &'static Descriptor {
+        &DESCRIPTOR
     }
 
     fn probe(
@@ -513,8 +538,7 @@ impl DriveFamily for Pioneer {
             && pioneer_model
             && read_buffer_f1_ok(dev))
         .then_some(crate::drive::ProbeEvidence {
-            family: Family::Pioneer,
-            backend_name: self.backend_name(),
+            backend: DESCRIPTOR.id,
             discriminator: "PIONEER BDR/BDC/DVR INQUIRY + READ BUFFER 02/F1 hardware",
         }))
     }
@@ -526,7 +550,7 @@ impl DriveFamily for Pioneer {
         }
         Some(file_info::plan_offline(
             &req.input,
-            req.input_kind,
+            req.input_format,
             &req.drive_model,
             req.allow_crossflash,
             req.verbose,
@@ -670,8 +694,8 @@ impl DriveFamily for Pioneer {
             Ok(())
         })())
     }
-    fn family(&self) -> Family {
-        Family::Pioneer
+    fn vendor_snapshot(&self) -> bool {
+        true
     }
     fn backup_extension(&self) -> Option<&'static str> {
         Some("tar")
@@ -688,7 +712,7 @@ impl DriveFamily for Pioneer {
         file_info::describe(image)
     }
 
-    fn classify_input(&self, path: &std::path::Path, bytes: &[u8]) -> crate::drive::InputKind {
+    fn classify_input(&self, path: &std::path::Path, bytes: &[u8]) -> &'static FileFormat {
         // A `.tar` that fails to parse still routes to the bundle path, which
         // reports the specific package-parse error.
         if bundle::Bundle::from_tar_bytes(bytes).is_ok()
@@ -696,10 +720,15 @@ impl DriveFamily for Pioneer {
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
         {
-            crate::drive::InputKind::PioneerBundle
+            &PACKAGE
         } else {
-            crate::drive::InputKind::Bin
+            &ENVELOPE
         }
+    }
+
+    fn claims_by_name(&self, path: &std::path::Path) -> Option<&'static FileFormat> {
+        let name = path.file_name()?.to_str()?.to_ascii_lowercase();
+        (name.ends_with(".firmware.tar") || name.ends_with(".installer.tar")).then_some(&PACKAGE)
     }
 
     fn recover(

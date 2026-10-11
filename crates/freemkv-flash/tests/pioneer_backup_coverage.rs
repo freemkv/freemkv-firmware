@@ -1,11 +1,12 @@
 //! Opt-in offline census of the public backup path. Never opens a device.
 use anyhow::{bail, Context, Result};
 use freemkv_flash::{
+    backend::registry,
     backends::pioneer::{
         self, backup as pioneer_backup,
         bundle::{Bundle, Role},
     },
-    drive, engine,
+    engine,
     platform::{ScsiDevice, ScsiSenseError},
 };
 use serde_json::{json, Value};
@@ -156,8 +157,8 @@ fn run_pair(bundle: &Bundle, evidence: &BTreeMap<String, Value>, output: &Path) 
         kernel_bytes: 0,
         normal_bytes: 0,
     };
-    let found = drive::resolve_backend(&mut r)?.context("backend not recognized")?;
-    if found.evidence.family != drive::Family::Pioneer {
+    let found = registry::resolve(&mut r)?.context("backend not recognized")?;
+    if found.evidence.backend != pioneer::DESCRIPTOR.id {
         bail!("wrong backend");
     }
     let backend = pioneer::Pioneer::new();

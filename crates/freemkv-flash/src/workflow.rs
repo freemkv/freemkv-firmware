@@ -1,6 +1,7 @@
 //! Shared application workflows for the CLI and desktop front-end.
 
-use crate::drive::{self, Family, FlashRequest};
+use crate::backend::{registry, BackendId, UNKNOWN_FAMILY};
+use crate::drive::{self, DriveFamily, FlashRequest};
 use crate::manifest::FlashMode;
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
@@ -89,9 +90,8 @@ fn info_inner(target: Option<&str>) -> Result<()> {
     }
     let selector = resolve_device(target)?;
     let mut dev = platform::open(&selector, false)?;
-    let family = resolved_family(dev.as_mut())?;
-    let handler = drive::for_family(family);
-    engine::info(dev.as_mut(), handler.as_ref())
+    let backend = resolved_backend(dev.as_mut())?;
+    engine::info(dev.as_mut(), backend)
 }
 
 /// Turn an optional user selector into a concrete device selector.
@@ -134,28 +134,29 @@ fn is_firmware_file(target: &str) -> bool {
 }
 
 /// Resolve the backend registry while preserving probe and ambiguity errors.
-fn resolved_family(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    Ok(drive::resolve_backend(dev)?
-        .map(|matched| matched.evidence.family)
-        .unwrap_or(Family::Unknown))
+fn resolved_backend(
+    dev: &mut dyn platform::ScsiDevice,
+) -> Result<Option<&'static dyn DriveFamily>> {
+    Ok(registry::resolve(dev)?.map(|resolved| resolved.backend))
+}
+
+/// Resolve a backend that offers `capability`, else the unsupported error.
+fn resolve_capable(
+    dev: &mut dyn platform::ScsiDevice,
+    capability: fn(&drive::Capabilities) -> bool,
+) -> Result<&'static dyn DriveFamily> {
+    match resolved_backend(dev)? {
+        Some(backend) if capability(&backend.capabilities()) => Ok(backend),
+        Some(backend) => Err(drive::unsupported_family_error(
+            backend.descriptor().display_name,
+        )),
+        None => Err(drive::unsupported_family_error(UNKNOWN_FAMILY)),
+    }
 }
 
 /// Resolve a backend with a supported flash operation.
-pub fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    let family = resolved_family(dev)?;
-    if !drive::for_family(family).capabilities().flash {
-        return Err(drive::unsupported_family_error(family));
-    }
-    Ok(family)
-}
-
-/// Classify a drive for a backend's backup path.
-fn classify_for_backup(dev: &mut dyn platform::ScsiDevice) -> Result<Family> {
-    let family = resolved_family(dev)?;
-    if !drive::for_family(family).capabilities().backup {
-        return Err(drive::unsupported_family_error(family));
-    }
-    Ok(family)
+pub fn classify_gated(dev: &mut dyn platform::ScsiDevice) -> Result<BackendId> {
+    Ok(resolve_capable(dev, |c| c.flash)?.descriptor().id)
 }
 
 /// Print the optical drives, by the name or id every operation accepts.
@@ -207,8 +208,7 @@ fn backup_with_replace_inner(
     } else {
         platform::open(&selector, false)?
     };
-    let family = classify_for_backup(dev.as_mut())?;
-    let handler = drive::for_family(family);
+    let handler = resolve_capable(dev.as_mut(), |c| c.backup)?;
     let out = match out {
         Some(o) => o,
         None => {
@@ -236,7 +236,7 @@ fn backup_with_replace_inner(
             }
         }
     };
-    engine::backup_with_replace(dev.as_mut(), handler.as_ref(), &out, dump, replace)
+    engine::backup_with_replace(dev.as_mut(), handler, &out, dump, replace)
 }
 
 /// Validate and execute the shared flash workflow.
@@ -257,9 +257,8 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
         .with_context(|| format!("reading input {}", args.input.display()))?;
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
-    let family = classify_gated(dev.as_mut())?;
-    let handler = drive::for_family(family);
-    let input_kind = handler.classify_input(&args.input, &input);
+    let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
+    let input_format = registry::flash_input_format(handler, &args.input, &input);
 
     let drive_model = handler.identity(dev.as_mut()).product;
     let predump_out = args.backup.clone().or_else(|| {
@@ -270,7 +269,7 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
 
     let req = FlashRequest {
         input,
-        input_kind,
+        input_format,
         mode: FlashMode::Full,
         execute: args.execute,
         acknowledged_risk: args.acknowledged_risk,
@@ -280,7 +279,7 @@ fn flash_inner(args: FlashOptions) -> Result<()> {
         predump_out,
         allow_crossflash: false,
     };
-    engine::flash(dev.as_mut(), handler.as_ref(), &req)
+    engine::flash(dev.as_mut(), handler, &req)
 }
 
 /// Read a firmware input file with a hard size cap, so a huge file or an endless
@@ -377,7 +376,7 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         // Recovery serves drives too damaged to classify, so it does not run the
         // protocol probe: each backend with a recovery path checks the receiver
         // itself.
-        for backend in drive::backends() {
+        for backend in registry::backends() {
             if let Some(result) =
                 backend.recover(dev.as_mut(), supplied.as_deref(), &target, args.execute)
             {

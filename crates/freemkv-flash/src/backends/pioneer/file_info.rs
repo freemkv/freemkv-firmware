@@ -4,7 +4,7 @@
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
-use crate::drive::InputKind;
+use crate::backend::FileFormat;
 use crate::style;
 
 /// Print the Pioneer bundle report for `image`, or `None` when it is not one.
@@ -79,12 +79,12 @@ pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
 /// planner is only reached when `--execute` is NOT set.
 pub fn plan_offline(
     image: &[u8],
-    input_kind: InputKind,
+    format: &FileFormat,
     model: &str,
     allow_crossflash: bool,
     verbose: bool,
 ) -> Result<()> {
-    if input_kind == InputKind::Tar {
+    if !super::DESCRIPTOR.owns(format) {
         bail!("Pioneer planning requires an envelope or Pioneer bundle");
     }
     let (kernel, normal) = super::classify_flash_input(image)?;
