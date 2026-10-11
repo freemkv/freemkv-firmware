@@ -46,6 +46,43 @@ pub struct TableView {
     /// All records, in original order.
     pub records: Vec<RecordView>,
 }
+/// What a region holds. Compare treats differences in [`RegionRole::PerUnit`]
+/// and [`RegionRole::ReadBack`] regions as expected, every other as unexpected.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+pub enum RegionRole {
+    /// Firmware code or data an update writes.
+    Code,
+    /// Digests or signatures over other regions.
+    Integrity,
+    /// Identity strings: vendor, model, revision, banner.
+    Identity,
+    /// Build-wide settings an update writes.
+    Configuration,
+    /// Data each drive writes for itself (calibration, per-unit settings).
+    PerUnit,
+    /// Bytes a drive read returns in place of what flash stores.
+    ReadBack,
+    /// Purpose not established.
+    Unknown,
+}
+impl RegionRole {
+    /// Whether two sources of the same build are expected to differ here.
+    pub fn expected_difference(self) -> bool {
+        matches!(self, Self::PerUnit | Self::ReadBack)
+    }
+    /// English display name.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Code => "Code",
+            Self::Integrity => "Integrity",
+            Self::Identity => "Identity",
+            Self::Configuration => "Configuration",
+            Self::PerUnit => "Per-unit",
+            Self::ReadBack => "Read-back",
+            Self::Unknown => "Unknown",
+        }
+    }
+}
 /// A logical, possibly decompressed region.
 #[derive(Clone, Debug, Serialize)]
 pub struct RegionView {
@@ -53,6 +90,8 @@ pub struct RegionView {
     pub id: usize,
     /// Display name.
     pub name: String,
+    /// What the region holds.
+    pub role: RegionRole,
     /// Region facts and coordinates.
     pub fields: Vec<Field>,
     /// Recognized tables.
@@ -204,6 +243,11 @@ pub enum FamilyRelationship {
 pub struct RegionSummary {
     /// Human-readable region name without inferred purpose.
     pub name: String,
+    /// The region's role (source A's, else source B's).
+    pub role: RegionRole,
+    /// Whether a difference here is expected (per-unit or read-back data on
+    /// either side); the verdict counts only unexpected differences.
+    pub expected: bool,
     /// Bytes changed on source A, excluding established metadata/relocations.
     pub left_changed: usize,
     /// Bytes changed on source B, excluding established metadata/relocations.
@@ -220,6 +264,12 @@ pub struct RegionSummary {
     pub table_changes: usize,
     /// Recognized table records compared at equal positions.
     pub table_records: usize,
+}
+impl RegionSummary {
+    /// Whether any content changed or could not be compared.
+    pub fn differs(&self) -> bool {
+        self.left_changed != 0 || self.right_changed != 0 || self.unresolved
+    }
 }
 /// Provider-neutral comparison section.
 #[derive(Debug, Serialize)]
@@ -260,6 +310,15 @@ pub struct ComparisonReport {
     pub right: Arc<Inspection>,
 }
 impl ComparisonReport {
+    /// Regions with unexpected differences: changed or unresolved content
+    /// outside per-unit and read-back regions. Zero means no unexpected change.
+    pub fn unexpected_regions(&self) -> usize {
+        self.sections
+            .iter()
+            .flat_map(|s| &s.regions)
+            .filter(|r| !r.expected && r.differs())
+            .count()
+    }
     /// Forum-friendly summary, family relationship first.
     pub fn text(&self) -> String {
         let mut out = format!(
@@ -293,6 +352,54 @@ fn serialize_inspection<S: serde::Serializer>(
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value.as_ref().serialize(serializer)
+}
+
+impl LiveState {
+    /// An empty state stamped with the current time.
+    pub(crate) fn now() -> Self {
+        Self {
+            captured_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            fields: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+    /// Append the drive's DVD region state (standard MMC REPORT KEY, RPC
+    /// format). A drive that cannot report it adds a note instead.
+    pub(crate) fn read_dvd_region(&mut self, dev: &mut dyn crate::platform::ScsiDevice) {
+        match dev.command_in(
+            &pioneer_optical::rpc::report_key(),
+            pioneer_optical::rpc::RESPONSE_LEN,
+        ) {
+            Ok(bytes) => match pioneer_optical::rpc::State::parse(&bytes) {
+                Some(rpc) => {
+                    self.fields
+                        .push(Field::new("DVD region", dvd_region_label(rpc)));
+                    self.fields.push(Field::new(
+                        "User region changes remaining",
+                        rpc.user_changes_remaining,
+                    ));
+                    self.fields.push(Field::new(
+                        "Vendor region resets remaining",
+                        rpc.vendor_resets_remaining,
+                    ));
+                    self.fields.push(Field::new("RPC scheme", rpc.scheme));
+                    self.fields.push(Field::new("RPC type", rpc.type_code));
+                }
+                None => self
+                    .diagnostics
+                    .push("DVD region response was incomplete or malformed.".into()),
+            },
+            Err(e) => {
+                crate::diagnostics::record(format!("Optional DVD RPC read failed: {e:#}"));
+                self.diagnostics.push(
+                    "DVD region and remaining changes could not be read from this drive.".into(),
+                );
+            }
+        }
+    }
 }
 
 /// The regions the drive's RPC mask permits. The mask, not the type code, is

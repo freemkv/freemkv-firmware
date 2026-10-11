@@ -176,6 +176,8 @@ fn comparison_summary_is_readable_and_details_remain_in_json() {
 fn partial_summary_never_claims_only_relocation_changes() {
     let regions = vec![RegionSummary {
         name: "Main firmware".into(),
+        role: RegionRole::Code,
+        expected: false,
         left_changed: 0,
         right_changed: 0,
         unresolved: true,

@@ -6,7 +6,6 @@ use pioneer_optical::{
     envelope::Envelope,
 };
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 struct Progress<'a> {
     control: &'a Control,
@@ -157,6 +156,7 @@ fn analyze(
             .map(|r| RegionView {
                 id: r.id,
                 name: r.name.clone(),
+                role: region_role(r),
                 fields: vec![
                     Field::new(
                         "Stored range",
@@ -208,47 +208,15 @@ fn analyze(
 }
 
 pub(crate) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState {
-    let mut state = LiveState {
-        captured_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        fields: Vec::new(),
-        diagnostics: Vec::new(),
-    };
-    match dev.command_in(
-        &pioneer_optical::rpc::report_key(),
-        pioneer_optical::rpc::RESPONSE_LEN,
-    ) {
-        Ok(bytes) => match pioneer_optical::rpc::State::parse(&bytes) {
-            Some(rpc) => {
-                state.fields.push(Field::new(
-                    "DVD region",
-                    crate::inspection::dvd_region_label(rpc),
-                ));
-                state.fields.push(Field::new(
-                    "User region changes remaining",
-                    rpc.user_changes_remaining,
-                ));
-                state.fields.push(Field::new(
-                    "Vendor region resets remaining",
-                    rpc.vendor_resets_remaining,
-                ));
-                state.fields.push(Field::new("RPC scheme", rpc.scheme));
-                state.fields.push(Field::new("RPC type", rpc.type_code));
-            }
-            None => state
-                .diagnostics
-                .push("DVD region response was incomplete or malformed.".into()),
-        },
-        Err(e) => {
-            crate::diagnostics::record(format!("Optional DVD RPC read failed: {e:#}"));
-            state
-                .diagnostics
-                .push("DVD region and remaining changes could not be read from this drive.".into());
-        }
-    }
+    let mut state = LiveState::now();
+    state.read_dvd_region(dev);
     state
+}
+
+/// Every region of a decoded Pioneer component (its body and expanded
+/// streams) is firmware the update package delivers; none is per-unit.
+fn region_role(_region: &pioneer_optical::analysis::Region<'_>) -> RegionRole {
+    RegionRole::Code
 }
 
 fn signature_label(status: pioneer_optical::envelope::SignatureStatus) -> &'static str {
@@ -293,6 +261,7 @@ fn comparison_input(
                     None => format!("Stored data section {}", r.id + 1),
                 },
                 address: r.address.map(u64::from),
+                role: region_role(r),
                 metadata: r.metadata.clone(),
                 representation: if r.stream.is_some() {
                     Representation::Expanded

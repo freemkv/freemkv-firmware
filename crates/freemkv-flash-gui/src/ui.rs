@@ -1766,7 +1766,11 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                         .map(Node::text),
                 );
                 for r in &c.regions {
-                    let mut region = field_nodes(&r.fields);
+                    let mut region = vec![Node::leaf(NodeKind::Field {
+                        label: "Role:".into(),
+                        value: r.role.label().into(),
+                    })];
+                    region.extend(field_nodes(&r.fields));
                     for t in &r.tables {
                         let records = t
                             .records
@@ -1805,6 +1809,11 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                 report.right.source,
                 family_id(&report.right_family)
             )));
+            nodes.push(Node::text(match report.unexpected_regions() {
+                0 => "No unexpected differences.".to_string(),
+                1 => "Unexpected differences in 1 region.".to_string(),
+                n => format!("Unexpected differences in {n} regions."),
+            }));
             nodes.push(Node::leaf(NodeKind::Buttons(vec![
                 Button::new("Inspect A", Input::InspectSide(Side::A), true),
                 Button::new("Inspect B", Input::InspectSide(Side::B), true),
@@ -1817,6 +1826,7 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                     .map(|region| {
                         vec![
                             region.name.clone(),
+                            region.role.label().into(),
                             byte_count(region.left_changed),
                             byte_count(region.right_changed),
                             if region.unresolved {
@@ -1826,13 +1836,26 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                                     .difference_percent
                                     .map_or("Not available".into(), |p| format!("{p:.2}%"))
                             },
+                            match (region.differs(), region.expected) {
+                                (false, _) => "None",
+                                (true, true) => "Expected",
+                                (true, false) => "Unexpected",
+                            }
+                            .into(),
                         ]
                     })
                     .collect();
                 let table = Node::leaf(NodeKind::Table {
-                    header: ["Region", "Changed in A", "Changed in B", "Different"]
-                        .map(String::from)
-                        .to_vec(),
+                    header: [
+                        "Region",
+                        "Role",
+                        "Changed in A",
+                        "Changed in B",
+                        "Different",
+                        "Verdict",
+                    ]
+                    .map(String::from)
+                    .to_vec(),
                     rows,
                 });
                 children.push(Node::section("Changes by region", true, vec![table]));

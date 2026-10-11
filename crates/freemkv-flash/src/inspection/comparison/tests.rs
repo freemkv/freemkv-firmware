@@ -14,6 +14,7 @@ fn analysis(bytes: &[u8]) -> FirmwareAnalysis {
         regions: vec![Region {
             id: 0,
             name: "Data".into(),
+            role: crate::inspection::RegionRole::Code,
             address: None,
             metadata: Vec::new(),
             representation: Representation::Decoded,

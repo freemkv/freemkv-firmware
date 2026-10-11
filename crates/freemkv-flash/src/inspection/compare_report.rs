@@ -78,12 +78,25 @@ pub(super) fn compare(
                     });
                 let display_name =
                     descriptor.map_or_else(|| "Unknown region".into(), |r| r.name.clone());
+                // A stored image's boot page (Code) against a drive read's
+                // (ReadBack) is expected to differ, so either side's role counts.
+                let sides = [
+                    region
+                        .left
+                        .and_then(|id| a.regions.iter().find(|r| r.id == id)),
+                    region
+                        .right
+                        .and_then(|id| b.regions.iter().find(|r| r.id == id)),
+                ];
+                let expected = sides.iter().flatten().any(|r| r.role.expected_difference());
                 let accounting = region.accounting();
                 section.regions.push(RegionSummary {
                     total_bytes: accounting.total,
                     unresolved_bytes: accounting.unresolved,
                     difference_percent: accounting.difference_percent(),
                     name: display_name,
+                    role: descriptor.map_or(RegionRole::Unknown, |r| r.role),
+                    expected,
                     left_changed: region
                         .changes
                         .iter()
@@ -181,21 +194,34 @@ pub(super) fn compare(
     })
 }
 
+/// The verdict lines. Only unexpected differences count toward the
+/// percentage and the changed-region findings; expected ones (per-unit or
+/// read-back data) are listed separately.
 pub(super) fn summarize(regions: &[RegionSummary], identical: bool, complete: bool) -> Vec<String> {
     if identical {
         return vec!["0.00% different after alignment. The decoded firmware is identical.".into()];
     }
     let mut out = Vec::new();
     let total: usize = regions.iter().map(|r| r.total_bytes).sum();
-    let changed_bytes: usize = regions
+    let unexpected: Vec<&RegionSummary> = regions.iter().filter(|r| !r.expected).collect();
+    let mut expected: Vec<&RegionSummary> = regions
+        .iter()
+        .filter(|r| r.expected && r.differs())
+        .collect();
+    let changed_bytes: usize = unexpected
         .iter()
         .map(|r| r.left_changed + r.right_changed)
         .sum();
-    let unresolved_bytes: usize = regions.iter().map(|r| r.unresolved_bytes).sum();
+    let unresolved_bytes: usize = unexpected.iter().map(|r| r.unresolved_bytes).sum();
     if total != 0 {
         out.push(format!(
-            "{:.2}% different after alignment.",
-            100.0 * changed_bytes as f64 / total as f64
+            "{:.2}% different after alignment{}.",
+            100.0 * changed_bytes as f64 / total as f64,
+            if expected.is_empty() {
+                ""
+            } else {
+                ", excluding expected per-unit and read-back differences"
+            }
         ));
         if unresolved_bytes != 0 {
             out.push(format!(
@@ -207,7 +233,7 @@ pub(super) fn summarize(regions: &[RegionSummary], identical: bool, complete: bo
     if !complete {
         out.push("Comparison is partial; some content could not be fully analyzed.".into());
     }
-    let mut changed: Vec<_> = regions
+    let mut changed: Vec<_> = unexpected
         .iter()
         .filter(|r| r.left_changed != 0 || r.right_changed != 0)
         .collect();
@@ -225,8 +251,26 @@ pub(super) fn summarize(regions: &[RegionSummary], identical: bool, complete: bo
                 largest.name.to_lowercase()
             ));
         }
-    } else if complete {
+    } else if complete && expected.is_empty() {
         out.push("Only packaging, metadata or verified address relocations differ.".into());
+    } else if complete {
+        out.push("No unexpected differences.".into());
+    }
+    if !expected.is_empty() {
+        expected.sort_by_key(|r| std::cmp::Reverse(r.left_changed + r.right_changed));
+        out.push(format!(
+            "Expected differences (per-unit or read-back data) in {}: {}.",
+            if expected.len() == 1 {
+                "1 region".to_string()
+            } else {
+                format!("{} regions", expected.len())
+            },
+            expected
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     let unchanged = regions
         .iter()
