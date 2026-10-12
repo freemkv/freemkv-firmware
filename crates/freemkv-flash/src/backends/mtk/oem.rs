@@ -106,11 +106,7 @@ pub(crate) fn parse(gz: &[u8]) -> Result<Catalog, String> {
         );
     }
     for (label, f) in &raw.defaults {
-        let chip = match label.as_str() {
-            "MT1959" => Chip::Mt1959,
-            "MT1939" => Chip::Mt1939,
-            other => return Err(format!("unknown chip {other}")),
-        };
+        let chip: Chip = label.parse().map_err(|_| format!("unknown chip {label}"))?;
         catalog.set_default(chip, factory(f)?);
     }
     Ok(catalog)

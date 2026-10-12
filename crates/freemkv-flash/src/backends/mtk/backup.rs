@@ -56,7 +56,7 @@ impl BackupArtifact {
         {
             bail!("backup per-unit writable regions disagree with firmware image; no byte-coherent rollback image exists");
         }
-        ensure_image_matches_drive(&self.firmware, &self.drive_product, None)
+        ensure_image_matches_drive(&self.firmware, &self.drive_product)
             .context("backup image model/family does not match current drive")?;
         Ok(())
     }
@@ -270,7 +270,7 @@ fn validate_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
         bail!("backup firmware fails AES-CMAC; it is not a valid MTK update image");
     }
     if let Some(model) = target_model {
-        ensure_image_matches_drive(image, model, None)
+        ensure_image_matches_drive(image, model)
             .context("backup image model/family does not match the target drive")?;
     }
     Ok(())

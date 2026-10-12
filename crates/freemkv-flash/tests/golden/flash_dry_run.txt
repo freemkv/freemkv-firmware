@@ -58,7 +58,7 @@ raw SCSI sequence (134 steps):
   #131 STREAM  out  3B 06 00 1F C0 00 00 40 00 00 00 00   data=16384 @0x1FC000
   #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 1B 12   data=0
   #133 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
-  #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
+  #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
   preflight ................ transport ready; backup capture is checked only on execute
 
 DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
@@ -83,7 +83,7 @@ MSG            ... 128 identical STREAM chunks collapsed (2 MiB total) ...
 MSG        #131 STREAM  out  3B 06 00 1F C0 00 00 40 00 00 00 00   data=16384 @0x1FC000
 MSG        #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 1B 12   data=0
 MSG        #133 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
-MSG        #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
+MSG        #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
 MSG        preflight ................ transport ready; backup capture is checked only on execute
 MSG      
 MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.

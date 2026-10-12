@@ -100,3 +100,73 @@ pub(crate) fn stamp(img: &mut [u8], board: &Board) {
     let record = hardware(board);
     img[RECORD_AREA..RECORD_AREA + record.len()].copy_from_slice(&record);
 }
+
+/// A signed update image for `board` and `model` with the catalog's stored
+/// boot page and one active integrity range, `0x11000..=0x1FFFF`.
+pub(crate) fn image(board: &Board, model: &str, code: u8) -> Vec<u8> {
+    use mediatek_optical::image::cmac;
+    use mediatek_optical::layout;
+    let mut img: Vec<u8> = (0..layout::IMAGE_SIZE)
+        .map(|i| (i % 251) as u8 ^ code)
+        .collect();
+    let boot = super::oem::catalog()
+        .default_for(mediatek_optical::Chip::Mt1959)
+        .expect("a stored boot page")
+        .boot_page()
+        .to_vec();
+    img[..layout::BOOT_PAGE.len].copy_from_slice(&boot);
+    let d = layout::DESCRIPTOR.start;
+    img[d + 0x08..d + 0x18].fill(b' ');
+    img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
+    img[d + 0x34..d + 0x3E].copy_from_slice(board.tag.as_bytes());
+    stamp(&mut img, board);
+    let t = cmac::TABLE_OFFSET;
+    img[t..t + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE].fill(0xFF);
+    img[t..t + 4].copy_from_slice(&cmac::ENABLED.to_le_bytes());
+    img[t + 4..t + 8].copy_from_slice(&0x1_1000u32.to_le_bytes());
+    img[t + 8..t + 12].copy_from_slice(&0x1_FFFFu32.to_le_bytes());
+    cmac::resign(&img).expect("a well-formed integrity table")
+}
+
+/// `img` with its hardware record's marker cleared, re-signed: an image that
+/// names its chip but no hardware family.
+pub(crate) fn without_record(img: &[u8]) -> Vec<u8> {
+    let mut img = img.to_vec();
+    let at = RECORD_AREA
+        + img[RECORD_AREA..RECORD_AREA + 0x100]
+            .windows(8)
+            .position(|w| w == b"\x55\xAAUNIQUE")
+            .expect("a stamped record");
+    img[at] = 0;
+    mediatek_optical::image::cmac::resign(&img).expect("a well-formed integrity table")
+}
+
+/// The live identity of a drive running `image`, as the plan reads it.
+pub(crate) fn identity(image: &[u8]) -> mediatek_optical::Identity {
+    use mediatek_optical::layout;
+    mediatek_optical::Identity::parse(
+        &[0; mediatek_optical::INQUIRY_LEN],
+        layout::BANNER.of(image).unwrap(),
+        layout::DESCRIPTOR.of(image).unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn stamped_boards_have_their_families() {
+    for (board, family) in [
+        (BU3, "309829e6c3c8f31d"),
+        (JB7, "11e7527216405467"),
+        (JB8, "70f72c46f9603141"),
+    ] {
+        let mut img = vec![0x11u8; mediatek_optical::layout::IMAGE_SIZE];
+        let d = mediatek_optical::layout::DESCRIPTOR.start;
+        img[d + 0x34..d + 0x3E].copy_from_slice(board.tag.as_bytes());
+        stamp(&mut img, &board);
+        assert_eq!(
+            mediatek_optical::image::family(&img).map(|f| f.to_string()),
+            Some(family.to_string()),
+            "{board:?}"
+        );
+    }
+}

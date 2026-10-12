@@ -4,7 +4,7 @@
 harness against the v0.11.2 tag. `golden_parity_with_0_11_2` requires that
 every difference is listed below, under its golden file and scenario, line
 for line (`-` = only in v0.11.2, `+` = only now). A Pioneer scenario may
-differ only for P1 to P3; a MediaTek scenario only for R1 to R8:
+differ only for P1 to P3; a MediaTek scenario only for R1 to R8 and M-RS:
 
 | id | reason |
 |----|--------|
@@ -19,6 +19,7 @@ differ only for P1 to P3; a MediaTek scenario only for R1 to R8:
 | R6 | round-1 audit fixes (sanitized output, INVALID CMAC report, accurate enter_update message, lazy banner read) |
 | R7 | mediatek-optical crate move (CDBs byte-identical; labels and refusal wording come from the shared engine/flashset) |
 | R8 | the synthetic MediaTek fixtures carry a hardware configuration record (boot banner, descriptor platform code at `+0x46`, feature template and record at `0x11000`), which the hardware-family gate needs. Commands are unchanged; only the bytes that depend on the fixture differ: payload and file digests, the displayed banner, the firmware fingerprint and the first differing read-back offset |
+| M-RS | MediaTek REQUEST SENSE (STATUS) is sent as the OEM updaters send it, `03 00 00 00 10 80` padded to 12 bytes: allocation length `0x10` in byte 4, `0x80` in the control byte. We sent `03 00 00 10 80 00`, one byte off. Evidence: LG's MT19xx updater v1.081 (`WH16NS40.exe`, sha256 `281c668c…806bac`, file offset `0x1383`) builds it as `c6 45 f0 03` / `66 c7 45 f4 10 80` (`cdb[0] = 03`, `cdb[4..6] = 10 80`); v1.074 (`BH16NS40(1.03-A0).exe`) the same with allocation `0x12`. Every other MT1959 command and payload is byte-identical |
 
 The baseline set was produced by copying `src/golden_tests.rs` into a
 `git worktree` of the v0.11.2 tag and changing only its COMPAT shims
@@ -98,6 +99,15 @@ pinned. Its differences are P2, a Normal-only package that authorize refuses
 after the backup, and P3, the refusal of the eight families whose INQUIRY
 product does not start with `BD-` (BC-5100S, PP-100 twice, BDR-PR1EPDVPP100,
 SBW-06D2X-U, SBC-06D2X-U, BW-16D1X-U, BDW-PR1EPDVPP100).
+
+**New golden files.** `mtk_family_gate.txt` (M-FAM) records the MediaTek
+hardware-family gate, which v0.11.2 does not have (it flashed a same-model
+image from another board line, e.g. a BH16NS40 JB8 build onto a JB7 drive),
+so it has no baseline and `golden_parity_with_0_11_2` skips it by name
+(`NEW_SINCE_0_11_2`). Its six scenarios run the real engine: a same-line,
+same-build reflash for a JB7 and a JB8 drive (the OEM session, unchanged),
+both cross-line directions and an unknown family on either side, refused
+before any write.
 
 Regenerate the skeleton after an intentional change with
 `FREEMKV_BLESS_INTENDED=1 cargo test -p freemkv-flash golden_parity`, then set
@@ -263,8 +273,12 @@ reason: R2
 ```
 
 ### MTK dry run: .bin verbose
-reason: R2
+reason: R2, M-RS
 ```diff
+-  #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
++  #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
+-MSG        #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
++MSG        #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
 ---- scsi transcript (3) ---
 +--- scsi transcript (4) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
@@ -281,7 +295,7 @@ reason: R2
 ## flash_execute.txt
 
 ### MTK execute: .bin with pre-flash backup
-reason: R2, R8
+reason: R2, R8, M-RS
 ```diff
 -firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
 +firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
@@ -296,6 +310,10 @@ reason: R2, R8
 +OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
 -OUTS cdb=3b06001ec000004000000000 len=16384 sha256=58b65b0e2b6e1358a272cc43c82fc5552c0f6f43c9f546ff958d4d1e38eb3e9f -> ok
 +OUTS cdb=3b06001ec000004000000000 len=16384 sha256=feefb47a844959e6e5d0d040b6876750936cf8a3812a68148c2677f9c85dc7bb -> ok
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 ```
@@ -2795,7 +2813,7 @@ reason: R3
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2, R8
+reason: R2, R8, M-RS
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 +result: ERR read-back verify FAILED at 0x01105E: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61346 of 61440 protected bytes differ).
@@ -2808,12 +2826,16 @@ reason: R2, R8
 +OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
 -OUTS cdb=3b06001ec000004000000000 len=16384 sha256=58b65b0e2b6e1358a272cc43c82fc5552c0f6f43c9f546ff958d4d1e38eb3e9f -> ok
 +OUTS cdb=3b06001ec000004000000000 len=16384 sha256=feefb47a844959e6e5d0d040b6876750936cf8a3812a68148c2677f9c85dc7bb -> ok
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 ```
 
 ### MTK execute: restore the saved .tar
-reason: R2, R8
+reason: R2, R8, M-RS
 ```diff
 -firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
 +firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
@@ -2828,6 +2850,10 @@ reason: R2, R8
 +OUTS cdb=3b0600010000004000000000 len=16384 sha256=68d92d5c5b65aedc61a89cfe676c675767aa16e1e8aa5aaa56e828a951959db2 -> ok
 -OUTS cdb=3b06001ec000004000000000 len=16384 sha256=f8846a808bf17f1a19139cd36056f4734cd592a72e8ac5d1e68c5f36e298ad9a -> ok
 +OUTS cdb=3b06001ec000004000000000 len=16384 sha256=320980d032fd165b9a762570769c1b62231cefbc3d85f9aff7795747e5f2abab -> ok
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 ```

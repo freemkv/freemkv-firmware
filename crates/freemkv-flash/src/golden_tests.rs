@@ -1875,6 +1875,44 @@ fn golden_mtk_backup_variants() {
 // MediaTek flash dry run: images the write path must refuse or flag
 // ---------------------------------------------------------------------------
 
+/// A same-model drive and image per board line, flashed through the real
+/// engine: the family gate refuses across lines after the backup and before
+/// any write, and refuses an unknown family; within a line the OEM session
+/// runs unchanged.
+#[test]
+fn golden_mtk_family_gate() {
+    let dir = scratch("mtk-family");
+    let mut g = Golden::default();
+    let model = "BD-RE  BH16NS40";
+    let jb7 = fixture::image(&fixture::JB7, model, 3);
+    let jb8 = fixture::image(&fixture::JB8, model, 5);
+    let nameless = fixture::without_record(&jb7);
+    let cases: [(&str, &[u8], &[u8]); 6] = [
+        ("JB7 drive reflashed with its own build", &jb7, &jb7),
+        ("JB8 drive reflashed with its own build", &jb8, &jb8),
+        ("JB8 image onto a JB7 drive of the same model", &jb7, &jb8),
+        ("JB7 image onto a JB8 drive of the same model", &jb8, &jb7),
+        ("image without a hardware record", &jb7, &nameless),
+        ("drive without a hardware record", &nameless, &jb7),
+    ];
+    for (i, (title, installed, target)) in cases.into_iter().enumerate() {
+        let backup = dir.join(format!("backup_{i}.bin"));
+        let mut req = mtk_request(target.to_vec(), true, Some(backup.clone()));
+        req.drive_model = model.into();
+        let dev = MockScsiDevice::echoing()
+            .with_firmware_image(drive_read(installed))
+            .with_product(model);
+        let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
+        g.case(
+            &format!("MTK execute: {title}"),
+            &outcome,
+            Some(&transcript),
+        );
+        g.file("saved pre-flash backup", &backup);
+    }
+    check("mtk_family_gate", g);
+}
+
 #[test]
 fn golden_mtk_flash_input_refusals() {
     let mut g = Golden::default();
@@ -2605,7 +2643,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// Reasons a MediaTek line may differ from v0.11.2. `tests/golden/v0.11.2/`
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
-const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"];
+const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS"];
 
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
 /// that cannot be read is refused before the backup; P2, the last tray check
@@ -2693,6 +2731,10 @@ fn parse_intended(text: &str) -> Intended {
     intended
 }
 
+/// Golden files of behaviour v0.11.2 does not have, so no baseline exists:
+/// the hardware-family gate (INTENDED_CHANGES.md, M-FAM).
+const NEW_SINCE_0_11_2: &[&str] = &["mtk_family_gate.txt"];
+
 /// Every difference between the baseline and current goldens, as
 /// `(file, scenario) -> signed lines` (`-` = only in v0.11.2, `+` = only now).
 fn baseline_differences(root: &Path) -> std::collections::BTreeMap<(String, String), Vec<String>> {
@@ -2705,6 +2747,13 @@ fn baseline_differences(root: &Path) -> std::collections::BTreeMap<(String, Stri
         .collect();
     files.sort();
     for file in files {
+        if NEW_SINCE_0_11_2.contains(&file.as_str()) {
+            assert!(
+                !root.join("v0.11.2").join(&file).exists(),
+                "{file} has a v0.11.2 baseline; compare it"
+            );
+            continue;
+        }
         let cur = std::fs::read_to_string(root.join(&file)).unwrap();
         let base = std::fs::read_to_string(root.join("v0.11.2").join(&file))
             .unwrap_or_else(|_| panic!("no v0.11.2 baseline for {file}"));

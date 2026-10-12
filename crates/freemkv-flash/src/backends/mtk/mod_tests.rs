@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::platform::MockScsiDevice;
+use mediatek_optical::update::Step;
 
 // ---- CDB layouts ------------------------------------------------------------
 
@@ -223,31 +224,25 @@ fn parse_field_descriptor_serial_and_helpers() {
 
 // ---- flash sequence plan ----------------------------------------------------
 
-#[test]
-fn flash_sequence_has_128_streams_plus_framing() {
-    let seq = flash_sequence(IMAGE_SIZE, CHUNK).unwrap();
-    assert_eq!(seq.len(), 134);
-    let streams = seq.iter().filter(|s| s.label == LABEL_STREAM).count();
-    assert_eq!(streams, 128);
-    assert_eq!(seq[0].label, LABEL_PROBE);
-    assert_eq!(seq[2].label, LABEL_PREPARE);
-    assert_eq!(seq[131].label, LABEL_COMMIT);
-    assert_eq!(seq[133].label, LABEL_STATUS);
+fn steps() -> Vec<Step> {
+    mediatek_optical::DriveClass::Mt19.steps()
 }
 
 #[test]
-fn flash_sequence_rejects_wrong_geometry() {
-    assert!(flash_sequence(0x100000, CHUNK).is_err());
-    assert!(flash_sequence(IMAGE_SIZE, 0).is_err());
-    assert!(flash_sequence(IMAGE_SIZE, 0x3000).is_err());
-    // A chunk that would overflow the u16 length field is rejected.
-    assert!(flash_sequence(IMAGE_SIZE, 0x10000).is_err());
+fn session_has_128_streams_plus_framing() {
+    let seq = steps();
+    assert_eq!(seq.len(), 134);
+    let streams = seq.iter().filter(|s| s.label == STREAM).count();
+    assert_eq!(streams, 128);
+    assert_eq!(seq[0].label, "PROBE");
+    assert_eq!(seq[2].label, "PREPARE");
+    assert_eq!(seq[131].label, "COMMIT");
+    assert_eq!(seq[133].label, "STATUS");
 }
 
 #[test]
 fn plan_clean_is_human_readable_with_no_cdbs() {
-    let seq = flash_sequence(IMAGE_SIZE, CHUNK).unwrap();
-    let text = describe_sequence(&seq, false);
+    let text = describe_sequence(&steps(), false);
     assert!(text.contains("POINT OF NO RETURN"), "{text}");
     assert!(text.contains("2 MiB"), "{text}");
     assert!(text.contains("128"), "{text}");
@@ -259,8 +254,7 @@ fn plan_clean_is_human_readable_with_no_cdbs() {
 
 #[test]
 fn plan_verbose_shows_framing_and_collapses_streams() {
-    let seq = flash_sequence(IMAGE_SIZE, CHUNK).unwrap();
-    let text = describe_sequence(&seq, true);
+    let text = describe_sequence(&steps(), true);
     assert!(text.contains("#01 PROBE"), "{text}");
     assert!(text.contains("#03 PREPARE"), "{text}");
     assert!(text.contains("@0x1FC000"), "{text}");
@@ -270,49 +264,6 @@ fn plan_verbose_shows_framing_and_collapses_streams() {
 }
 
 // ---- the Mtk trait impl -----------------------------------------------------
-
-#[test]
-fn mtk_geometry_and_readback() {
-    let m = Mtk;
-
-    // Distinct, non-zero bytes at the queried offset: a mock that just
-    // zero-fills would make a bug that swaps FLASH_BUFFER_ID / mode / offset
-    // in `readback` invisible. Pin the exact CDB *and* the returned content.
-    let want: Vec<u8> = (0..64u32).map(|i| (i * 3 + 1) as u8).collect();
-    let mut dev = MockScsiDevice::new().on(
-        |cdb| cdb == cdb::read_memory(0x1000, 64).as_slice(),
-        want.clone(),
-    );
-    let got = m
-        .readback(&mut ReadDevice::without_unlocks(&mut dev), 0x1000, 64)
-        .unwrap();
-    assert_eq!(got.len(), 64);
-    assert_eq!(got, want);
-    assert_eq!(dev.reads[0][0], 0x3C);
-    assert_eq!(dev.reads[0], cdb::read_memory(0x1000, 64));
-}
-
-#[test]
-fn mtk_envelope_plaintext_by_default() {
-    let m = Mtk;
-    let mut dev = MockScsiDevice::new();
-    let image = vec![0xABu8; IMAGE_SIZE];
-    let (payload, enc) = m
-        .envelope(&mut ReadDevice::without_unlocks(&mut dev), &image, None)
-        .unwrap();
-    assert!(!enc);
-    assert_eq!(payload, image);
-    // Forced enc changes the bytes.
-    let (enc_payload, enc_on) = m
-        .envelope(
-            &mut ReadDevice::without_unlocks(&mut dev),
-            &image,
-            Some(true),
-        )
-        .unwrap();
-    assert!(enc_on);
-    assert_ne!(enc_payload, image);
-}
 
 #[test]
 fn parse_sense_fixed_descriptor_and_short_buffers() {
@@ -353,7 +304,7 @@ fn flash_stream_aborts_without_writing_when_preflight_fails() {
     // TEST UNIT READY fails at the transport for a non-tolerated reason (a real
     // fault). flash_open must abort BEFORE issuing PREPARE — no writes.
     let mut dev = MockScsiDevice::new().on_fail(|cdb| cdb == [0u8; 12].as_slice(), "TUR faulted");
-    assert!(stream(&mut dev, &[0; 32]).is_err());
+    assert!(stream(&mut dev).is_err());
     assert!(
         dev.writes.is_empty(),
         "a not-ready drive must never reach PREPARE"
@@ -378,7 +329,7 @@ fn firmware_writes_reject_status_that_a_lenient_transport_would_tolerate() {
         }
     }
     // PREPARE is the first data-out; it goes strict and its status aborts.
-    assert!(stream(&mut Rejected, &[0; 4]).is_err());
+    assert!(stream(&mut Rejected).is_err());
 }
 
 fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
@@ -523,7 +474,7 @@ fn short_preflight_rom_read_prevents_prepare_write() {
         |cdb| cdb.first() == Some(&0x3c),
         vec![0; cdb::PROBE_LEN - 1],
     );
-    let error = format!("{:#}", stream(&mut dev, &[0; 32]).unwrap_err());
+    let error = format!("{:#}", stream(&mut dev).unwrap_err());
     assert!(
         error.contains("before any firmware data was sent"),
         "{error}"
@@ -550,28 +501,29 @@ fn fixed_sense_with_valid_information_bit_preserves_hardware_fault() {
     assert_eq!(parse_sense(&sense), Some((4, 0x44, 0)));
 }
 
-/// Run the MTK image-stream flash of `payload`, discarding progress.
-fn stream(dev: &mut dyn crate::platform::ScsiDevice, payload: &[u8]) -> anyhow::Result<()> {
-    let mut writer = crate::engine::gates::ungated_for_tests(dev);
-    Mtk.stream(&mut writer, payload, &mut |_| {})
+/// Run the prepared update of a BU40N fixture through `Mtk::execute`.
+fn stream(dev: &mut dyn crate::platform::ScsiDevice) -> anyhow::Result<()> {
+    use crate::backend::{AuthorizedPlan, FlashFacet, FlashPlan};
+    use mediatek_optical::update::{InstalledFirmware, PreparedUpdate};
+    let image = fixture::image(&fixture::BU3, "BD-RE BU40N", 1);
+    let installed = InstalledFirmware::new(fixture::identity(&image), &image).unwrap();
+    let prepared = PreparedUpdate::prepare(&image, &installed).unwrap();
+    let authorized = AuthorizedPlan::new(FlashPlan::new(()), prepared);
+    Mtk.execute(
+        &mut crate::engine::gates::ungated_for_tests(dev),
+        &authorized,
+    )
 }
 
 #[test]
-fn flash_stream_sends_the_oem_sequence_and_reports_progress() {
-    let mut dev = MockScsiDevice::new();
-    let payload = vec![0xA5u8; 2 * CHUNK];
-    let mut seen = Vec::new();
-    Mtk.stream(
-        &mut crate::engine::gates::ungated_for_tests(&mut dev),
-        &payload,
-        &mut |n| seen.push(n),
-    )
-    .unwrap();
-    assert_eq!(seen, vec![CHUNK, 2 * CHUNK]);
+fn flash_stream_sends_the_oem_sequence() {
+    let mut dev = MockScsiDevice::echoing();
+    stream(&mut dev).unwrap();
     let cdbs: Vec<&[u8]> = dev.writes.iter().map(|(c, _)| c.as_slice()).collect();
+    assert_eq!(cdbs.len(), 130);
     assert_eq!(cdbs[0], cdb::enter_update());
     assert_eq!(cdbs[1], cdb::transfer(0, CHUNK as u16));
     assert_eq!(cdbs[2], cdb::transfer(CHUNK as u32, CHUNK as u16));
-    assert_eq!(cdbs[3], cdb::finish());
+    assert_eq!(cdbs[129], cdb::finish());
     assert_eq!(dev.reads[0], cdb::probe());
 }

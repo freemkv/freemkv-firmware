@@ -1233,7 +1233,7 @@ fn write_issuers_take_the_write_grant() {
     for (known, writes) in [
         ("execute_prepared", true),
         ("run", true),
-        ("stream", true),
+        ("execute", true),
         ("enable_logging", true),
         ("capture", false),
         ("with_device", false),
@@ -1495,6 +1495,61 @@ fn core_modules_name_no_backend() {
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
+/// MediaTek backend code that may name a chip generation: `(file, mentions,
+/// reason)`. The update path (plan, authorize, execute, backup, model gate)
+/// names none: `mediatek_optical` decides chips and families.
+const MTK_CHIP_MENTIONS: &[(&str, usize, &str)] = &[
+    (
+        "src/backends/mtk/file_info.rs",
+        4,
+        "the file report names the image's recipe and chip",
+    ),
+    (
+        "src/backends/mtk/mod.rs",
+        1,
+        "the backend's flash summary names the proven chip",
+    ),
+];
+
+/// Case-insensitive mentions of a MediaTek chip generation in `s`'s code and
+/// string literals (comments excluded).
+fn chip_mentions(s: &Source) -> usize {
+    let count = |text: &str| {
+        let lower = text.to_lowercase();
+        lower.matches("mt1959").count() + lower.matches("mt1939").count()
+    };
+    count(&s.code) + s.strings.iter().map(|t| count(t)).sum::<usize>()
+}
+
+#[test]
+fn mediatek_backend_names_no_chip_outside_reviewed_reports() {
+    let mut found = Vec::new();
+    for s in production_sources() {
+        if s.path.starts_with("src/backends/mtk/") {
+            let n = chip_mentions(&s);
+            if n > 0 {
+                found.push((s.path.clone(), n));
+            }
+        }
+    }
+    let allowed: Vec<(String, usize)> = MTK_CHIP_MENTIONS
+        .iter()
+        .map(|(path, n, _)| (path.to_string(), *n))
+        .collect();
+    assert_eq!(found, allowed, "MediaTek backend chip mentions changed");
+}
+
+#[test]
+fn chip_mentions_skip_comments_and_count_strings() {
+    let (code, strings) = lex("// MT1959\nlet c = Chip::Mt1939; let s = \"MT1959 Boot\";\n");
+    let source = Source {
+        path: String::new(),
+        code,
+        strings,
+    };
+    assert_eq!(chip_mentions(&source), 2);
+}
+
 // ---------------------------------------------------------------------------
 // R9: front-end code names no vendor; that wording comes from descriptors
 // ---------------------------------------------------------------------------
@@ -1712,8 +1767,20 @@ fn lenders_find_closures_and_returns_that_hand_out_a_device() {
 /// keying by item means dropping a mention from one item (a `use` replaced by
 /// a full path) frees no slot for a new one, so this list is closed-world.
 const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
-    ("src/backends/mtk/flash.rs", "fn stream", "ScsiTransport", 1),
-    ("src/backends/mtk/flash.rs", "fn stream", "SharedDevice", 1),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn execute",
+        "FlashTransport",
+        1,
+    ),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn execute",
+        "ScsiTransport",
+        2,
+    ),
+    ("src/backends/mtk/flash.rs", "fn execute", "SharedDevice", 1),
+    ("src/backends/mtk/flash.rs", "use", "FlashTransport", 1),
     ("src/backends/mtk/flash.rs", "use", "ScsiTransport", 1),
     ("src/backends/mtk/flash.rs", "use", "SharedDevice", 1),
     (
