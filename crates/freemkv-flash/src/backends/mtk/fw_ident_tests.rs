@@ -55,3 +55,92 @@ fn descriptor_extracts_ascii_prefix() {
     // Non-descriptor / empty input yields None.
     assert!(descriptor(&[0x00, 0x01, 0x02]).is_none());
 }
+
+/// Fingerprints of downgrade-enabled copies (a `0xDE` byte in the identity
+/// descriptor) once labelled OEM: the OEM builds carry another fingerprint.
+const DE_PATCHED: [&str; 7] = [
+    "b9adb37a560d",
+    "d88e939f89a7",
+    "3e05d733d374",
+    "41baece3ed42",
+    "d3c8e06ff841",
+    "e02261a17737",
+    "f479cf997d05",
+];
+
+#[test]
+fn downgrade_enabled_copies_are_not_labelled_oem() {
+    for prefix in DE_PATCHED {
+        let entry = CATALOG.iter().find(|e| e.fp.starts_with(prefix)).unwrap();
+        assert!(entry.desc.ends_with("(DE-patched)"), "{}", entry.desc);
+    }
+}
+
+#[test]
+fn catalog_builds_carry_their_image_digest() {
+    let recorded: Vec<&FwEntry> = CATALOG
+        .iter()
+        .filter(|e| !e.image_sha256.is_empty())
+        .collect();
+    assert_eq!(recorded.len(), 42);
+    for (i, a) in recorded.iter().enumerate() {
+        assert!(a.desc.ends_with("(OEM)"), "{}", a.desc);
+        assert_eq!(a.image_sha256.len(), 64, "{}", a.desc);
+        assert!(recorded[i + 1..]
+            .iter()
+            .all(|b| b.image_sha256 != a.image_sha256));
+    }
+}
+
+/// Every MT1939 OEM build in a corpus (`FREEMKV_MTK_IMAGES`) that the embedded
+/// catalog holds is identified by its fingerprint after a flash.
+#[test]
+#[ignore = "needs FREEMKV_MTK_IMAGES pointing at OEM MT1959/MT1939 images"]
+fn corpus_mt1939_catalog_builds_are_identified() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let mut paths = Vec::new();
+    walk(
+        std::path::Path::new(&std::env::var("FREEMKV_MTK_IMAGES").unwrap()),
+        &mut paths,
+    );
+    let catalog = super::super::oem::catalog();
+    let mut identified = 0;
+    for path in paths {
+        let image = std::fs::read(&path).unwrap();
+        let Some(key) = mediatek_optical::oem::content_key(&image) else {
+            continue;
+        };
+        let Some(build) = catalog.build(&key) else {
+            continue;
+        };
+        if mediatek_optical::image::detect_chip(&image).map(|c| c.family.label()) != Ok("MT1939") {
+            continue;
+        }
+        let r = report(&image[0x3000..0x3020], &image[0x1E_C000..0x1E_C100]);
+        let entry = r.matched.unwrap_or_else(|| panic!("{}", path.display()));
+        let model = build
+            .model
+            .split_whitespace()
+            .find(|w| w.len() >= 4 && !w.starts_with("BD"))
+            .unwrap();
+        assert!(entry.desc.contains(model), "{} vs {model}", entry.desc);
+        // LG's "original flasher" packages carry an `INTM` descriptor revision
+        // and are named for their release.
+        assert!(
+            build.revision == "INTM" || entry.desc.contains(&build.revision),
+            "{}",
+            entry.desc
+        );
+        identified += 1;
+    }
+    assert!(identified >= 58, "{identified}");
+}
