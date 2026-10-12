@@ -6,7 +6,7 @@ use mediatek_optical::layout;
 #[test]
 fn embedded_catalog_parses_with_both_chip_defaults() {
     let catalog = parse(MTK_OEM).expect("embedded oem.bin parses");
-    assert_eq!(catalog.len(), 75, "OEM builds");
+    assert_eq!(catalog.len(), 69, "OEM builds");
     for chip in [Chip::Mt1959, Chip::Mt1939] {
         let f = catalog.default_for(chip).expect("chip default");
         // Every LG/HP/ASUS build in the hoard stores the same boot page.
@@ -74,7 +74,7 @@ fn embedded_chip_defaults_match_their_known_digests() {
 
 /// Content keys of modified builds the catalog once listed as OEM: their
 /// backups must read as reconstructions, never as a vendor file.
-const MODIFIED: [(&str, &str); 8] = [
+const MODIFIED: [(&str, &str); 14] = [
     (
         "538deee75487afd4686941f3ab6fb1758a76defaf2dc9d539c8f849105444e86",
         "DE-patched WH16NS40 1.01",
@@ -106,6 +106,30 @@ const MODIFIED: [(&str, &str); 8] = [
     (
         "58ba2b5bed6bab0c602de6de54e871d0c8e4a6dae97b4603f1868c4e7adf4ef7",
         "MakeMKV-patched BH16NS40 1.03",
+    ),
+    (
+        "53954d69366b5b387402169a96688b51827376aef931a0e94efe4d545bbbad33",
+        "loose image, no vendor updater: BD-RE BH40N B7C6",
+    ),
+    (
+        "3f98f96fc47eab363f8c1d50d3cd3a417c75107f5fad05d49dd51d5f00e70485",
+        "loose image, no vendor updater: BD-RE WH16NS48 1.D3",
+    ),
+    (
+        "869ac24570f53a10521a7d6b16112476e6ea131588846a1897a0b0bbb59e89b8",
+        "loose image, no vendor updater: BD-RE WH16NS58 1.V5",
+    ),
+    (
+        "d84a2392f48d00edf8fe81220d8a8725a86dadb988ac4fffb56f60eb47ebdf80",
+        "loose image, no vendor updater: BD-RE BU40N 1.00",
+    ),
+    (
+        "d4d2f7bd49e3dc47be8528314fe8b8782df12b09b9721a6434ed984e03a86396",
+        "loose image, no vendor updater: BDRE BU50N BW51",
+    ),
+    (
+        "04716d0e244efa6c0ed458598908915d9c6dab4005eae5fdb4b59e4e6c7edc94",
+        "loose image, no vendor updater: BW-16D1HT 3.01",
     ),
 ];
 

@@ -142,5 +142,5 @@ fn corpus_mt1939_catalog_builds_are_identified() {
         );
         identified += 1;
     }
-    assert!(identified >= 58, "{identified}");
+    assert!(identified >= 54, "{identified}");
 }

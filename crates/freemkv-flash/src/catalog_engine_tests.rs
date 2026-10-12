@@ -87,7 +87,7 @@ fn stand_in(build: &CatalogBuild, seed: u8) -> Vec<u8> {
 
 fn stand_ins() -> Vec<(CatalogBuild, Vec<u8>)> {
     let builds = catalog_builds();
-    assert_eq!(builds.len(), 75, "catalog size");
+    assert_eq!(builds.len(), 69, "catalog size");
     builds
         .into_iter()
         .enumerate()

@@ -52,12 +52,23 @@ fn simulated_read(image: &[u8]) -> Vec<u8> {
     read
 }
 
-/// Where the hoard says an image came from: its sidecar's `patched` flag and
-/// the names and paths of its source files.
+/// Where the hoard says an image came from: its sidecar's `patched` flag, the
+/// names and paths of its source files, and whether it was decoded from inside
+/// an updater executable.
 #[derive(Default)]
 struct Provenance {
     patched: bool,
     names: Vec<String>,
+    from_updater: bool,
+}
+
+/// Whether a sidecar source chain (`outer::inner::...`) extracts the image
+/// from inside an `.exe`: a vendor updater, not a loose image file.
+fn inside_executable(candidate: &str) -> bool {
+    let steps: Vec<&str> = candidate.split("::").collect();
+    steps[..steps.len() - 1]
+        .iter()
+        .any(|step| step.to_ascii_lowercase().ends_with(".exe"))
 }
 
 /// Read `<image>.json` (the hoard's sidecar) and, when given, the hoard's
@@ -69,8 +80,10 @@ fn provenance(path: &Path, index: &HashMap<String, Vec<String>>) -> Result<Prove
     }
     let meta: Value = serde_json::from_slice(&std::fs::read(&sidecar)?)?;
     let mut names = Vec::new();
+    let mut from_updater = false;
     for source in meta["sources"].as_array().into_iter().flatten() {
         if let Some(name) = source["candidate"].as_str() {
+            from_updater |= inside_executable(name);
             names.push(name.to_string());
         }
         if let Some(sha) = source["source_sha256"].as_str() {
@@ -80,6 +93,7 @@ fn provenance(path: &Path, index: &HashMap<String, Vec<String>>) -> Result<Prove
     Ok(Provenance {
         patched: meta["mediatek"]["patched"].as_bool() == Some(true),
         names,
+        from_updater,
     })
 }
 
@@ -126,6 +140,11 @@ fn exclusion(image: &[u8], prov: &Provenance) -> Option<String> {
                 return Some(format!("community or modified source ({marker}: {name})"));
             }
         }
+    }
+    // A loose image has no origin to check (the CMAC key is public, so a
+    // re-signed build verifies); only one a vendor updater carried is admitted.
+    if !prov.from_updater {
+        return Some("not decoded from a vendor updater executable".into());
     }
     // An update image carries the factory calibration template: the
     // `VENDOR_INFO` header and nothing else. More is one unit's calibration.
