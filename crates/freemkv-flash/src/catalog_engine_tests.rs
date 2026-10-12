@@ -192,6 +192,7 @@ fn every_catalog_build_reflashes_its_real_oem_image_verbatim() {
         .filter(|s| s.direction == mediatek_optical::update::Direction::Out)
         .map(|s| s.cdb.to_vec())
         .collect();
+    let recorded = catalog_builds();
     let scratch_dir = scratch("catalog-real");
     let mut covered = Vec::new();
     for (i, path) in paths.iter().enumerate() {
@@ -206,6 +207,14 @@ fn every_catalog_build_reflashes_its_real_oem_image_verbatim() {
             continue;
         };
         let model = build.model.clone();
+        let family = mediatek_optical::image::family(&image).map(|f| f.to_string());
+        assert!(
+            recorded.iter().any(|b| b.model == model
+                && b.revision == build.revision
+                && Some(&b.family) == family.as_ref()),
+            "{}: family {family:?} is not the one the catalog records",
+            path.display()
+        );
         let mut req = mtk_request(
             image.clone(),
             true,
