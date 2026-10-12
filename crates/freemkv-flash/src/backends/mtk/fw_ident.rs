@@ -98,6 +98,259 @@ pub fn report(rom_003000: &[u8], rom_1ec000: &[u8]) -> FwReport {
 /// `image_sha256` / `source` are populated as they are recorded — an empty
 /// string means "not yet known", not "none exists".
 pub const CATALOG: &[FwEntry] = &[
+    // ---- OEM builds of the embedded MediaTek catalog (oem.bin) ----
+    FwEntry {
+        fp: "576eeff21845aeb644f5428d9065dcc00e7ebaa336c51ede3b074543188ddf81",
+        desc: "BC-12D2HT 3.01 (OEM)",
+        image_sha256: "93ea068da225140d9628c105d88d13088982c61024bf6cca03e0fe456d53a721",
+        source: "",
+    },
+    FwEntry {
+        fp: "815989ae0f0fcf0d6f6c1e25a96de4172ce9c6e856d23b55ab942d7f918f454c",
+        desc: "BE14NU40 1.00 (OEM)",
+        image_sha256: "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+        source: "",
+    },
+    FwEntry {
+        fp: "039716e5184c7ab02d8713d60b7fc9219b5ad8788f50b5b3971e328737431916",
+        desc: "BE14NU40 1.01 (OEM)",
+        image_sha256: "2f02308413c86c180ec863ada97fec3f594ebd7bf144e3159e91439518e57847",
+        source: "",
+    },
+    FwEntry {
+        fp: "5059cac4bb44a1d17ebea625d68d94ffef1f14fa53a233bc69fb0ed145b9545c",
+        desc: "BE14NU40 1.01 (OEM)",
+        image_sha256: "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+        source: "",
+    },
+    FwEntry {
+        fp: "2a3eee2bc1e94657b7384a38915c986dfd55c0fb68e9352ddf6ad0316edb54fb",
+        desc: "BE16NU50 1.02 (OEM)",
+        image_sha256: "2b3ea41f87764ccc497059c9e362657df545fb169d6eeb2e78ccfbd7fafee533",
+        source: "",
+    },
+    FwEntry {
+        fp: "99f5d3e3d88150d2bb9e89d37e561677281e773e1e4d9ec1995a304273228734",
+        desc: "BH14NS40 1.00 (OEM)",
+        image_sha256: "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+        source: "",
+    },
+    FwEntry {
+        fp: "7b4109fc142ed65bc27c1e424e057095a82fd8504a760ead0d17fe391060ef37",
+        desc: "BH14NS40 1.01 (OEM)",
+        image_sha256: "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+        source: "",
+    },
+    FwEntry {
+        fp: "619084959e9c043f5db691d0012bb48b3f961f872c352fb21a9887d6921fe6d1",
+        desc: "BH14NS40 1.02 (OEM)",
+        image_sha256: "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+        source: "",
+    },
+    FwEntry {
+        fp: "b968f6b0c40f14c11233acf601b6521cdc597303371b7f82c7799245fb34981b",
+        desc: "BH14NS48 1.00 (OEM)",
+        image_sha256: "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+        source: "",
+    },
+    FwEntry {
+        fp: "4a076f76858f6ab1239c8df5046d04ccf10bf26ab0594e5e62f1cb6fb1f9a163",
+        desc: "BH14NS48 1.01 (OEM)",
+        image_sha256: "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+        source: "",
+    },
+    FwEntry {
+        fp: "491511d07eafead570d241a6e733dcb1a007bdeed09616a7295c9715b54a6515",
+        desc: "BH14NS48 1.03 (OEM)",
+        image_sha256: "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+        source: "",
+    },
+    FwEntry {
+        fp: "2a29e7062175244c74b68cac3947661b99f02e51e3a8fc209a22effa7567434f",
+        desc: "BH14NS50 1.01 (OEM)",
+        image_sha256: "4ef56002dd392733d15378e4535115f24ba891d3266a7c87420df14df0a7089d",
+        source: "",
+    },
+    FwEntry {
+        fp: "2b4d2e4c07582f581a7e4d5a3c4329782f3adfb371474fd7447de0ee367e04ea",
+        desc: "BH14NS58 1.00 (OEM)",
+        image_sha256: "53d2cdc32a2ae99864ec8fc4ea98a3a5218220aea990481f560112adaa871624",
+        source: "",
+    },
+    FwEntry {
+        fp: "02a410116a033fe6ce6feba9d823ca4312efcd2c48c5be15da73f6eac72ca452",
+        desc: "BH14NS58 1.01 (OEM)",
+        image_sha256: "eb0e2e7275448919aa72bec63ed0cd24ca360fcb0a8347601e85c2750f0d173a",
+        source: "",
+    },
+    FwEntry {
+        fp: "83ad13395ee7235f08820ebf33c74e6245a3843c1175f9e29258e8a0c3e4b8eb",
+        desc: "BH16NS40 1.02 (OEM)",
+        image_sha256: "acbe782ebc3c4850a24f852b8dc2ec42059f6b131e29d96157b09505628c415b",
+        source: "",
+    },
+    FwEntry {
+        fp: "59f4d9113af13e2aa8e1299a89cdd4bd4ab9cb4beb03bda23e6052cab8e67d65",
+        desc: "BH16NS40 1.03 (OEM)",
+        image_sha256: "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+        source: "",
+    },
+    FwEntry {
+        fp: "e988565c7565ffe50ee95e661696ace654c7f511a13657beec80a37fa595b422",
+        desc: "BH16NS40 1.03 (OEM)",
+        image_sha256: "a5bb75b8dbec1684e596f473aa53905f9f723b2b2f9c448550cb523145f90dd3",
+        source: "",
+    },
+    FwEntry {
+        fp: "9a3bce7415fdf71b28daf7d08f9f6fc8a8bdf4ae74d4e3c8e40624c4d0aa4d67",
+        desc: "BH16NS48 1.01 (OEM)",
+        image_sha256: "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+        source: "",
+    },
+    FwEntry {
+        fp: "f1a17f87e06f1f8d9f403aba5827ee51c75fb0c4d4e3b59ceb02b341e20647ec",
+        desc: "BH16NS48 1.02 (OEM)",
+        image_sha256: "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+        source: "",
+    },
+    FwEntry {
+        fp: "86b62cb0936dce24b843c8567d902f402d3af00af6cc9984373e5f951e9b2c86",
+        desc: "BH16NS50 1.01 (OEM)",
+        image_sha256: "b7a368da0fcbe905e45a09c6523bdd6f80557ce455272238c73868aa4ae4bd41",
+        source: "",
+    },
+    FwEntry {
+        fp: "7d000be12b81099f609f978a9e41e596865efe3f48b5f36376292f7688f3c1b2",
+        desc: "BH16NS55 1.03 (OEM)",
+        image_sha256: "0bfdd3009ed1bc246f81aae50cfd9a5e4919c5295263e488c2a900500fe48728",
+        source: "",
+    },
+    FwEntry {
+        fp: "bf66b9e62ff8535a32256d03070f9feeaf50b42fc97e41fb06beaa28d71b608f",
+        desc: "BH16NS58 1.00 (OEM)",
+        image_sha256: "6d9fdb2bd658165a073e6144c8938057e08d8cba7ca108274b120dd30c55328f",
+        source: "",
+    },
+    FwEntry {
+        fp: "bfa7812aa8b78f157f6638514e7f93e7f7716f1e88597c0cc2acb8cd332d42a5",
+        desc: "BH16NS58 1.01 (OEM)",
+        image_sha256: "ccc97e4f92e47b6fc1fab1e9baa1860020c7f104efa9ffb649321a173523adfb",
+        source: "",
+    },
+    FwEntry {
+        fp: "785270842397d2d0e0c74ced8b3334ff5853f5a5321c6330bc097644d055b07e",
+        desc: "BH16NS58 1.02 (OEM)",
+        image_sha256: "4f4e63cd5988f68f5729af21fe4033d0da2eeeec8f7576772f0f3a197f8eda21",
+        source: "",
+    },
+    FwEntry {
+        fp: "6215e7260aaadc0d84c104596ed8176644381e90b8bdf269a77b048caa05d5ca",
+        desc: "BH40N B7C6 (OEM)",
+        image_sha256: "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+        source: "",
+    },
+    FwEntry {
+        fp: "0e51a92e403eb6255beb4f4ccda26c133430372adffa897b3a2afc6a942b4377",
+        desc: "BP50NB40 1.00 (OEM)",
+        image_sha256: "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+        source: "",
+    },
+    FwEntry {
+        fp: "d9a6152a9a43b269b8481a4633cd97df606e1525884528be6fe0c3747bb2f6fb",
+        desc: "BW-16D1H-U A203 (OEM)",
+        image_sha256: "e9d8bcddf85aab6627c90623efcb7a39ee97681a68b729ef58fea391bc99b33a",
+        source: "",
+    },
+    FwEntry {
+        fp: "ac48ad00da8a2498b882549b3ba178b1605263a3baf28862f900890895666056",
+        desc: "BW-16D1HT 3.01 (OEM)",
+        image_sha256: "2e243a167739d4e46ad7095db7cb5452c2980579a0cb359208945a0bbe0f3f29",
+        source: "",
+    },
+    FwEntry {
+        fp: "e7d47927afe53b946a848742c03408b0516cd0c54592ac5ac3ae77430b7796f6",
+        desc: "BW-16D1HT 3.03 (OEM)",
+        image_sha256: "1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764",
+        source: "",
+    },
+    FwEntry {
+        fp: "b14cde46956e90c6fed16bcc0e1dd5c56c90980053377bd4b54741d9e71a4834",
+        desc: "BW-16D1HT 3.10 (OEM)",
+        image_sha256: "37a32bfd708b86c825877364d7e52c943d0a856ec3e5457953b61b7fa1c9a23f",
+        source: "",
+    },
+    FwEntry {
+        fp: "e3159083ea755d3965a84c933c45f8c8f31b070db1787fe2479c2ab1a1d371f5",
+        desc: "CH12NS40 1.01 (OEM)",
+        image_sha256: "731bcf7aa48dacbcb5729f97576cf24b90d7a795a330c2ab8a801c57eb738f0e",
+        source: "",
+    },
+    FwEntry {
+        fp: "6b78278f35c9a7d96637ea98ae836512da485fd271981d9bf61facdd527da1e2",
+        desc: "UH12NS30 1.01 (OEM)",
+        image_sha256: "84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e",
+        source: "",
+    },
+    FwEntry {
+        fp: "4561b79e2a2e6712004f3f0b41c74838f08ff46f3e568fdc9106d29e5fe3bb7c",
+        desc: "UH12NS30 1.02 (OEM)",
+        image_sha256: "d98c2e11f400cf54133289369f19064ccabc72c69ef189f9129fc19b2d700cc8",
+        source: "",
+    },
+    FwEntry {
+        fp: "6dd823c0d3719efa78e937993937100c620cd35ef8ecbf6c977fc2b1d11d8609",
+        desc: "UH12NS40 1.01 (OEM)",
+        image_sha256: "fbe641e5e808e8127c0196e28bc8a10ba9d8ae61bd8645affff9f259b4a6b25c",
+        source: "",
+    },
+    FwEntry {
+        fp: "409b09a6020bcf4e3fff1ce85442b6ab2c8d932cc3c927d43e1fdc2c50c84f69",
+        desc: "WH16NS40 1.01 (OEM)",
+        image_sha256: "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+        source: "",
+    },
+    FwEntry {
+        fp: "040de4a2cf04dd429e13ee70f54791e163dc05540a1cdcaea6a1be2cbc3b4683",
+        desc: "WH16NS40 1.02 (OEM)",
+        image_sha256: "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+        source: "",
+    },
+    FwEntry {
+        fp: "e8bcc7a46c2909d2b93bc79066f19cce06e7b85e4f462b61e2426332ed72ba83",
+        desc: "WH16NS40 1.03 (OEM)",
+        image_sha256: "3e3b227e1338b5bc601ad6b2ce02fd1d375b7ea6179b055412ea0702ce54615c",
+        source: "",
+    },
+    FwEntry {
+        fp: "68a08b026f85e0feb639fc3a816287c273123f743941cefabf189515b9ec0e77",
+        desc: "WH16NS48 1.D3 (OEM)",
+        image_sha256: "46b41f15e053b66daccb024cba4380c45f791c2d0c2b8258cd23253fc5f0b22a",
+        source: "",
+    },
+    FwEntry {
+        fp: "17664e2c1453b9cbaf52f0f21c8518fec7f241545676328c7f0b502403fe666d",
+        desc: "WH16NS58 1.V1 (OEM)",
+        image_sha256: "4041c0f122a902288ca8439888f68f7760616a0a37c366b825d6497b51157e46",
+        source: "",
+    },
+    FwEntry {
+        fp: "2a3ab353f2855787305b954b35fc38e723996a073e29d936c1b3ba4ccc510f22",
+        desc: "WH16NS58 1.V2 (OEM)",
+        image_sha256: "3018997b63cc9a2f31618fd9b6b5c6bfe0cc921b891f4a80ac08ae3ef2b16504",
+        source: "",
+    },
+    FwEntry {
+        fp: "7afb5b9179dd2b48cadea8c8bdff0ebbba0c0ec4ef1ad44b6dcd88d3e686fdf5",
+        desc: "WH16NS58 1.V5 (OEM)",
+        image_sha256: "e24060184915a9860a84ea7d0ad23fee478e6eb31af86da589f5723c8e29a1cd",
+        source: "",
+    },
+    FwEntry {
+        fp: "a7c3f30e41a30d659e29d9354b52dfcad88c39fa12de4a522e0e94e26529b7ff",
+        desc: "WH16NS60 1.01 (OEM)",
+        image_sha256: "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+        source: "",
+    },
     // ---- ASUS / TSSTcorp (MediaTek MT19xx) ----
     e(
         "001cb2b2299cf9b8e47bead095f7cf5074ff15843e86dbfb1b6d2d7ee8c4966d",
@@ -149,11 +402,11 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "b9adb37a560d11be91c2f92b27d62eedf80fb3080be6a092f5e2f2787b3c1fe8",
-        "BC-12D2HT 3.00 (OEM)",
+        "BC-12D2HT 3.00 (DE-patched)",
     ),
     e(
         "d88e939f89a78b0e3f4b514b1758a60e66e6f873c6765cefa9665d7150159b30",
-        "BW-16D1HT 3.02 (OEM)",
+        "BW-16D1HT 3.02 (DE-patched)",
     ),
     e(
         "d36c2cf1157c957870def87aa0c84dc07a6e2459b5c326727e37ff9d8c539a19",
@@ -230,7 +483,7 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "3e05d733d37435921dc4400c7d1a65641e0c693bed6fef8bf3e6156fb67d3492",
-        "BH16NS40-NS50 1.02 (OEM)",
+        "BH16NS40-NS50 1.02 (DE-patched)",
     ),
     e(
         "3f0276d36cab2a12ea6d10cee3cff943a171b2e2c0abca4786bbaa255c7004b0",
@@ -246,7 +499,7 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "41baece3ed4245b30ab08d1fe8743f5af999817821aa127939d4b4c6b6934f6b",
-        "BU40N 1.00 (OEM)",
+        "BU40N 1.00 (DE-patched)",
     ),
     e(
         "420e357a39b26abbceb5937b8b2a6679920f85d43d8e2afda5b27b1eaa6bb8a3",
@@ -354,7 +607,7 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "94c8edfadb46606733b7d1d1823159cd912dfa2b6dc1ac221ddaf0342ecd7ed4",
-        "WH16NS60 1.03 (OEM)",
+        "BH16NS60 INTM (OEM, WH16NS60 1.03 flasher)",
     ),
     e(
         "960b32ddc0b3f596854b6caeb94f99944e4fcb9fcf8a9f861c3499b9c918ecff",
@@ -414,7 +667,7 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "c45795ee4592b1ed7e837ece59e05fc439a55fc5b9569eb4988c318ead0fb52d",
-        "UH12NS40 1.03 (OEM)",
+        "CH12NS40 INTM (OEM)",
     ),
     e(
         "c8876a74685a425995f5c43c26145b623557124666df93b451e336cd3930e00a",
@@ -434,7 +687,7 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "d3c8e06ff8419ffd9bff07a01f8915c5e731cf59ca9c3980a818d70cd63bbc0f",
-        "WH16NS40-NS50 1.02 (OEM)",
+        "WH16NS40-NS50 1.02 (DE-patched)",
     ),
     e(
         "d62cf2c04c40ab28143764163daddbcdd6a8fe0a80bca4393d691ac53d487b3d",
@@ -450,7 +703,7 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "e02261a177377b288e4678f870a9850e9f80314fc96397ddb5d6794ac9c58b13",
-        "WH14NS40-NS50 1.02 (OEM)",
+        "WH14NS40-NS50 1.02 (DE-patched)",
     ),
     e(
         "ec7196b1b0a94e0dc2a184b2f31afef73f580d8ee3b307c173697e7e60165d2f",
@@ -466,7 +719,7 @@ pub const CATALOG: &[FwEntry] = &[
     ),
     e(
         "f479cf997d056af7bf8c8851863a382ecfe077bef9c1cdd1150a54a555811a7c",
-        "BH16NS55 1.02 (OEM)",
+        "BH16NS55 1.02 (DE-patched)",
     ),
     e(
         "f7fcf70d896f6a406c9ae2d350bb33bd8ca50103a13b56921c962143498fa6c3",

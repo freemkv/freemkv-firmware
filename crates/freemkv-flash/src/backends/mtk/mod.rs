@@ -8,10 +8,11 @@
 //! byte, per-unit splice or CMAC re-sign). It backs up, writes the bytes and
 //! verifies. [`enc_needed`] currently always selects plaintext.
 //!
-//! A 2 MiB image goes over a fixed sequence of 12-byte CDBs: PROBE, TEST UNIT
-//! READY, PREPARE, 128 x 16 KiB STREAM, COMMIT, TEST UNIT READY, REQUEST
-//! SENSE. The drive programs when the last STREAM chunk lands; COMMIT is a
-//! trailing handshake. `FlashMode` does not change this sequence.
+//! `mediatek_optical::update` owns the update: the gates against the installed
+//! firmware (chip, hardware family), the session's commands, readiness timing
+//! and read-back. This backend owns the drive: identity reads, the backup,
+//! model checks, progress and the post-flash identity. `FlashMode` does not
+//! change the session.
 
 use std::io::{Read, Write};
 
@@ -20,6 +21,9 @@ use anyhow::{anyhow, bail, Context, Result};
 pub(crate) mod backup;
 pub(crate) mod crossflash;
 pub(crate) mod file_info;
+#[cfg(test)]
+#[path = "fixture_tests.rs"]
+pub(crate) mod fixture;
 mod flash;
 pub mod fw_ident;
 pub(crate) mod inspect;
@@ -31,6 +35,7 @@ use crate::backend::{
     FormatRole, Identity, Match, ReadDevice,
 };
 use crate::platform::ScsiDevice;
+use mediatek_optical::update::{Direction, Step};
 
 // ---- Region geometry and wire constants (from `mediatek_optical`) -----------
 
@@ -593,149 +598,47 @@ pub fn parse_field_descriptor(data: &[u8]) -> Option<FieldDescriptor> {
 
 // ---- Flash sequence plan (dry-run renderer) ---------------------------------
 
-/// Data-phase direction of a planned flash step.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Dir {
-    In,
-    Out,
-    None,
-}
-
-impl Dir {
-    fn token(self) -> &'static str {
-        match self {
-            Dir::In => "in",
-            Dir::Out => "out",
-            Dir::None => "---",
+/// One step as the verbose dry run prints it.
+fn render(step: &Step) -> String {
+    let hex = step
+        .cdb
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let (token, detail) = match step.direction {
+        Direction::In => ("in", format!("alloc={}", step.length)),
+        Direction::Out if step.label == STREAM => {
+            let offset = u32::from_be_bytes([0, step.cdb[3], step.cdb[4], step.cdb[5]]);
+            ("out", format!("data={} @0x{offset:06X}", step.length))
         }
-    }
-}
-
-const LABEL_PROBE: &str = "PROBE";
-const LABEL_READY: &str = "READY";
-const LABEL_PREPARE: &str = "PREPARE";
-const LABEL_STREAM: &str = "STREAM";
-const LABEL_COMMIT: &str = "COMMIT";
-const LABEL_STATUS: &str = "STATUS";
-
-/// One planned step of the flash sequence.
-#[derive(Debug, Clone, Copy)]
-struct FlashStep {
-    label: &'static str,
-    cdb: [u8; 12],
-    dir: Dir,
-    data_len: usize,
-}
-
-impl FlashStep {
-    fn stream_offset(&self) -> u32 {
-        ((self.cdb[3] as u32) << 16) | ((self.cdb[4] as u32) << 8) | (self.cdb[5] as u32)
-    }
-
-    fn render(&self) -> String {
-        let hex = self
-            .cdb
-            .iter()
-            .map(|b| format!("{b:02X}"))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let detail = match self.dir {
-            Dir::In => format!("alloc={}", self.data_len),
-            Dir::Out if self.label == LABEL_STREAM => {
-                format!("data={} @0x{:06X}", self.data_len, self.stream_offset())
-            }
-            Dir::Out => format!("data={}", self.data_len),
-            Dir::None => String::new(),
-        };
-        format!(
-            "{:<8}{:<3}  {}   {}",
-            self.label,
-            self.dir.token(),
-            hex,
-            detail
-        )
+        Direction::Out => ("out", format!("data={}", step.length)),
+        Direction::None => ("---", String::new()),
+    };
+    format!("{:<8}{:<3}  {}   {}", step.label, token, hex, detail)
         .trim_end()
         .to_string()
-    }
 }
 
-/// Assemble the full ordered flash plan for an `image_len`-byte image streamed
-/// in `chunk`-byte writes.
-fn flash_sequence(image_len: usize, chunk: usize) -> Result<Vec<FlashStep>> {
-    if image_len != IMAGE_SIZE {
-        bail!(
-            "flash sequence is defined only for a {IMAGE_SIZE}-byte (2 MiB) image, got {image_len}"
-        );
-    }
-    if chunk == 0 || chunk > 0xFFFF || !image_len.is_multiple_of(chunk) {
-        bail!("chunk {chunk} does not evenly divide the {image_len}-byte image (and must fit u16)");
-    }
-    let mut steps = Vec::with_capacity(image_len / chunk + 6);
-    steps.push(FlashStep {
-        label: LABEL_PROBE,
-        cdb: cdb::probe(),
-        dir: Dir::In,
-        data_len: cdb::PROBE_LEN,
-    });
-    steps.push(FlashStep {
-        label: LABEL_READY,
-        cdb: cdb::test_unit_ready(),
-        dir: Dir::None,
-        data_len: 0,
-    });
-    steps.push(FlashStep {
-        label: LABEL_PREPARE,
-        cdb: cdb::enter_update(),
-        dir: Dir::Out,
-        data_len: 0,
-    });
-    let mut offset = 0usize;
-    while offset < image_len {
-        steps.push(FlashStep {
-            label: LABEL_STREAM,
-            cdb: cdb::transfer(offset as u32, chunk as u16),
-            dir: Dir::Out,
-            data_len: chunk,
-        });
-        offset += chunk;
-    }
-    steps.push(FlashStep {
-        label: LABEL_COMMIT,
-        cdb: cdb::finish(),
-        dir: Dir::Out,
-        data_len: 0,
-    });
-    steps.push(FlashStep {
-        label: LABEL_READY,
-        cdb: cdb::test_unit_ready(),
-        dir: Dir::None,
-        data_len: 0,
-    });
-    steps.push(FlashStep {
-        label: LABEL_STATUS,
-        cdb: cdb::request_sense(),
-        dir: Dir::In,
-        data_len: cdb::REQUEST_SENSE_LEN,
-    });
-    Ok(steps)
-}
+/// The label of a firmware chunk write.
+const STREAM: &str = "STREAM";
 
 /// Render the flash sequence for human review (the dry-run output).
-fn describe_sequence(steps: &[FlashStep], verbose: bool) -> String {
+fn describe_sequence(steps: &[Step], verbose: bool) -> String {
     use crate::style::human_size;
     use std::fmt::Write as _;
 
     let stream_total: usize = steps
         .iter()
-        .filter(|s| s.label == LABEL_STREAM)
-        .map(|s| s.data_len)
+        .filter(|s| s.label == STREAM)
+        .map(|s| s.length)
         .sum();
     let chunk = steps
         .iter()
-        .find(|s| s.label == LABEL_STREAM)
-        .map(|s| s.data_len)
+        .find(|s| s.label == STREAM)
+        .map(|s| s.length)
         .unwrap_or(0);
-    let count = steps.iter().filter(|s| s.label == LABEL_STREAM).count();
+    let count = steps.iter().filter(|s| s.label == STREAM).count();
 
     // Clean, human-readable plan by default — no CDB hex.
     let mut out = String::new();
@@ -761,14 +664,14 @@ fn describe_sequence(steps: &[FlashStep], verbose: bool) -> String {
         let _ = writeln!(out, "raw SCSI sequence ({} steps):", steps.len());
         let mut i = 0usize;
         while i < steps.len() {
-            if steps[i].label == LABEL_STREAM {
+            if steps[i].label == STREAM {
                 let start = i;
                 let mut j = i;
-                while j < steps.len() && steps[j].label == LABEL_STREAM {
+                while j < steps.len() && steps[j].label == STREAM {
                     j += 1;
                 }
                 let cnt = j - start;
-                let _ = writeln!(out, "  #{:02} {}", start + 1, steps[start].render());
+                let _ = writeln!(out, "  #{:02} {}", start + 1, render(&steps[start]));
                 if cnt > 2 {
                     let _ = writeln!(
                         out,
@@ -778,11 +681,11 @@ fn describe_sequence(steps: &[FlashStep], verbose: bool) -> String {
                     );
                 }
                 if cnt >= 2 {
-                    let _ = writeln!(out, "  #{:02} {}", j, steps[j - 1].render());
+                    let _ = writeln!(out, "  #{:02} {}", j, render(&steps[j - 1]));
                 }
                 i = j;
             } else {
-                let _ = writeln!(out, "  #{:02} {}", i + 1, steps[i].render());
+                let _ = writeln!(out, "  #{:02} {}", i + 1, render(&steps[i]));
                 i += 1;
             }
         }
@@ -850,64 +753,24 @@ fn read_exact_retry(dev: &mut dyn ScsiDevice, offset: u32, len: u32) -> Option<V
     })
 }
 
-/// The drive's controller generation as `(descriptor tag, boot banner)`. The
-/// descriptor's `MTEKMT19xx` tag is authoritative; the banner names the
-/// bootloader generation and reads `MT1959 Boot` on some MT1939 parts.
-fn read_chip_sources(
-    dev: &mut dyn ScsiDevice,
-) -> (
-    Option<mediatek_optical::Chip>,
-    Option<mediatek_optical::Chip>,
-) {
-    let tag = read_exact_retry(dev, ROM_1EC000_OFFSET, ROM_1EC000_LEN)
-        .and_then(|d| mediatek_optical::Chip::from_tag(&d));
-    // The banner is only consulted when the descriptor carries no tag.
-    let banner = if tag.is_some() {
-        None
+/// The drive's identity descriptor and, only when that carries no chip tag,
+/// its boot banner: what the chip and family gates compare an image with.
+/// Unreadable regions stay empty.
+pub(crate) fn live_identity(dev: &mut dyn ScsiDevice) -> mediatek_optical::Identity {
+    let descriptor = read_exact_retry(dev, ROM_1EC000_OFFSET, ROM_1EC000_LEN).unwrap_or_default();
+    let banner = if mediatek_optical::Chip::from_tag(&descriptor).is_some() {
+        Vec::new()
     } else {
-        read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN)
-            .and_then(|b| mediatek_optical::Chip::from_banner(&b))
+        read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN).unwrap_or_default()
     };
-    (tag, banner)
+    mediatek_optical::Identity::parse(&[0; mediatek_optical::INQUIRY_LEN], &banner, &descriptor)
+        .expect("a full-length INQUIRY")
 }
 
 /// The drive's controller generation for display: the descriptor tag, else
 /// the boot banner.
 pub(crate) fn read_chip(dev: &mut dyn ScsiDevice) -> Option<mediatek_optical::Chip> {
-    let (tag, banner) = read_chip_sources(dev);
-    tag.or(banner)
-}
-
-/// The chip gate (never overridable): the image's chip generation must equal
-/// the drive's. The drive's descriptor tag decides. The banner is accepted
-/// only for an image that itself carries no identity tag (some MT1939 builds),
-/// because a banner can name the wrong generation. Anything unreadable refuses.
-pub(crate) fn ensure_same_chip(
-    dev: &mut dyn ScsiDevice,
-    image: &[u8],
-) -> Result<mediatek_optical::Chip> {
-    let info = freemkv_chipset::detect_chip(image)
-        .context("identifying the image's controller generation")?;
-    let (tag, banner) = read_chip_sources(dev);
-    let drive = match (tag, info.confidence) {
-        (Some(chip), _) => chip,
-        (None, freemkv_chipset::Confidence::BannerFallback) => banner.context(
-            "could not read this drive's controller generation (MT1959/MT1939) from its \
-             identity descriptor or boot banner; refusing to flash",
-        )?,
-        (None, freemkv_chipset::Confidence::TagString) => bail!(
-            "could not read this drive's identity descriptor to confirm its controller \
-             generation (MT1959/MT1939); refusing to flash"
-        ),
-    };
-    if info.family != drive {
-        bail!(
-            "image is {} firmware but this drive is {drive} silicon — refusing to flash \
-             across chip generations. This gate cannot be overridden.",
-            info.family
-        );
-    }
-    Ok(drive)
+    live_identity(dev).chip()
 }
 
 /// The boot-page gate. A drive read (boot page equal to the mirror at
@@ -928,47 +791,6 @@ fn ensure_flashable_boot_page(image: &[u8]) -> Result<()> {
             "the image's boot page is not one any known OEM build stores — refusing to flash \
              an image whose boot page may not start the drive"
         );
-    }
-    Ok(())
-}
-
-/// After the commit trailer: TEST UNIT READY (best-effort) and REQUEST SENSE.
-/// Hard-fail ONLY on a sense key that proves a programming failure; every other
-/// outcome is left to read-back verify and firmware re-identification.
-fn post_commit_status(dev: &mut dyn ScsiDevice) -> Result<()> {
-    if let Err(error) = dev.command_in(&cdb::test_unit_ready(), 0) {
-        crate::diagnostics::record(format!("MediaTek post-commit readiness: {error:#}"));
-    }
-    let sense = match dev.command_in(&cdb::request_sense(), cdb::REQUEST_SENSE_LEN) {
-        Ok(data) => data,
-        Err(error) => {
-            eprintln!("warning: post-flash REQUEST SENSE failed: {error:#}");
-            Vec::new()
-        }
-    };
-    match parse_sense(&sense) {
-        // Hard-fail ONLY on an unambiguous programming failure (see
-        // `sense_key_is_fatal`). Every other key is non-fatal here — the
-        // drive re-enumeration is the authority.
-        Some((key, asc, ascq)) if sense_key_is_fatal(key) => {
-            bail!(
-                "drive reported an error after flash — {}; the flash may have FAILED",
-                crate::platform::describe_sense(key, asc, ascq)
-            );
-        }
-        // Unparseable/short sense: the burn already completed and TEST UNIT
-        // READY passed, so do not conclude failure — but surface it, since
-        // read-back verify is the remaining check.
-        None => {
-            eprintln!(
-                "warning: could not parse the post-flash REQUEST SENSE response ({} bytes); relying on read-back verify",
-                sense.len()
-            );
-        }
-        // Any other key (0x0/0x1 clean, 0x2/0x6 benign transient, or an
-        // unexpected 0x5/0x7/…): not hard-failed here — post-flash identity
-        // re-enumeration + read-back verify are the authorities.
-        _ => {}
     }
     Ok(())
 }

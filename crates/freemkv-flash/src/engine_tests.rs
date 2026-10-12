@@ -3,7 +3,6 @@
 use super::*;
 use crate::backend::{BackupFacet, DumpFacet, FileFacet};
 use crate::backends::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
-use crate::backends::mtk::ensure_same_chip;
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};
 use crate::backends::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
@@ -72,6 +71,7 @@ fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
     assert_eq!(img.len(), IMAGE_SIZE);
     img[..0x400].copy_from_slice(stored_boot_page());
     stamp_descriptor(&mut img, model);
+    crate::backends::mtk::fixture::stamp(&mut img, &crate::backends::mtk::fixture::BU3);
     let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
     crate::cmac::resign(&img).expect("resign a well-formed image")
 }
@@ -584,9 +584,10 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
         && data.len() == ROM_1EC000_LEN as usize));
 }
 
-/// A minimal fixed-format REQUEST SENSE payload carrying `key`.
+/// A fixed-format REQUEST SENSE reply carrying `key`, as the 16-byte
+/// allocation the OEM sequence uses returns it.
 fn fixed_sense(key: u8) -> Vec<u8> {
-    let mut s = vec![0u8; 18];
+    let mut s = vec![0u8; 16];
     s[0] = 0x70; // fixed-format response code
     s[2] = key & 0x0F; // sense key
     s[7] = 10; // additional sense length
@@ -740,66 +741,48 @@ fn flash_restore_tar_detects_readback_mismatch() {
 #[test]
 fn model_gate_accepts_a_matching_image() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "BU40N", None).is_ok());
+    assert!(ensure_image_matches_drive(&img, "BU40N").is_ok());
 }
 
 #[test]
 fn model_gate_refuses_a_wrong_model_image() {
     // A valid MT19xx image built for a DIFFERENT model than the drive reports.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
-    let err = ensure_image_matches_drive(&img, "BU40N", None).unwrap_err();
+    let err = ensure_image_matches_drive(&img, "BU40N").unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
 }
 
 #[test]
 fn model_gate_refuses_a_non_mt19xx_image() {
     // No MTEKMT19 family tag at the descriptor → not a recognizable image.
-    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N", None).is_err());
+    assert!(ensure_image_matches_drive(&vec![0u8; IMAGE_SIZE], "BU40N").is_err());
 }
 
 #[test]
 fn model_gate_refuses_an_unknown_drive_product() {
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    assert!(ensure_image_matches_drive(&img, "   ", None).is_err());
+    assert!(ensure_image_matches_drive(&img, "   ").is_err());
 }
 
 #[test]
 fn model_gate_refuses_a_truncated_image() {
-    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N", None).is_err());
+    assert!(ensure_image_matches_drive(&[0u8; 0x1000], "BU40N").is_err());
 }
 
-// ---- chip-family and model gate --------------------------------------------
-
-use freemkv_chipset::ChipFamily;
-
-#[test]
-fn model_gate_refuses_cross_chip_family_first() {
-    // MT1959 image, but the drive's current firmware reads as MT1939 silicon.
-    let err = decide_crossflash(
-        ChipFamily::Mt1959,
-        "BD-RE BU40N",
-        "BU40N",
-        Some(ChipFamily::Mt1939),
-    )
-    .unwrap_err();
-    assert!(
-        err.to_string().contains("across chip families"),
-        "got: {err}"
-    );
-}
+// ---- model gate ------------------------------------------------------------
 
 #[test]
 fn model_mismatch_is_refused() {
-    let err = decide_crossflash(ChipFamily::Mt1959, "BD-RE BU40N", "WH16NS60", None).unwrap_err();
+    let err = decide_crossflash("BD-RE BU40N", "WH16NS60").unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
     assert!(err.to_string().contains("compatible image"), "got: {err}");
-    let same = decide_crossflash(
-        ChipFamily::Mt1959,
-        "BD-RE BU40N",
-        "BU40N",
-        Some(ChipFamily::Mt1959),
-    );
-    assert!(same.is_ok());
+    assert!(decide_crossflash("BD-RE BU40N", "BU40N").is_ok());
+}
+
+/// The chip gate as the plan runs it: every pre-backup gate against `dev`.
+fn ensure_same_chip(dev: &mut MockScsiDevice, image: &[u8]) -> Result<()> {
+    Mtk.validate_image(&mut ReadDevice::without_unlocks(dev), image, "BD-RE BU40N")
+        .map(drop)
 }
 
 #[test]
@@ -1164,6 +1147,7 @@ fn chip_gate_refuses_cross_generation_images() {
     let mut img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let d = ROM_1EC000_OFFSET as usize;
     img[d + 0x34..d + 0x3E].copy_from_slice(b"MTEKMT1939");
+    crate::backends::mtk::fixture::stamp(&mut img, &crate::backends::mtk::fixture::JB7);
     let img = crate::cmac::resign(&img).unwrap();
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
@@ -1346,11 +1330,20 @@ fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
 /// banner at 0x3000 reads `banner`: real ASUS BW-16D1HT parts are MT1939
 /// silicon (tag) with an `MT1959 Boot` banner.
 fn chip_image(model: &str, tag: Option<&[u8; 10]>, banner: &[u8]) -> Vec<u8> {
+    use crate::backends::mtk::fixture;
     let mut img = make_flashable(vec![0u8; IMAGE_SIZE], model);
     let d = ROM_1EC000_OFFSET as usize;
     img[d + 0x34..d + 0x3E].fill(0);
+    // The hardware record repeats the tag: an untagged image has none.
+    img[fixture::RECORD_AREA..fixture::RECORD_AREA + 0x100].fill(0);
     if let Some(tag) = tag {
         img[d + 0x34..d + 0x3E].copy_from_slice(tag);
+        let board = if tag == b"MTEKMT1939" {
+            fixture::JB8
+        } else {
+            fixture::BU3
+        };
+        fixture::stamp(&mut img, &board);
     }
     img[0x3000..0x3020].fill(0);
     img[0x3000..0x3000 + banner.len()].copy_from_slice(banner);
@@ -1394,10 +1387,13 @@ fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
 
 #[test]
 fn chip_gate_banner_fallback_only_serves_untagged_images() {
+    // An untagged image passes the chip gate on the drive's banner, but has no
+    // hardware record, so the family gate refuses it.
     let untagged = chip_image("BD-RE BU40N", None, b"MT1939 Boot");
     let mut banner_only =
         MockScsiDevice::new().with_firmware_image(chip_image("BD-RE BU40N", None, b"MT1939 Boot"));
-    ensure_same_chip(&mut banner_only, &untagged).unwrap();
+    let err = ensure_same_chip(&mut banner_only, &untagged).unwrap_err();
+    assert!(err.to_string().contains("target firmware family"), "{err}");
 
     // A tagged image needs the drive's descriptor: a banner alone is refused.
     let tagged = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1939 Boot");

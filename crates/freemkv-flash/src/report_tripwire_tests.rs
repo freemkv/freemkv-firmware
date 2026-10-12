@@ -353,6 +353,18 @@ fn golden_coverage_is_complete() {
             ],
         ),
         (
+            "MediaTek hardware-family gate",
+            "mtk_family_gate.txt",
+            &[
+                "MTK execute: JB7 drive reflashed with its own build",
+                "MTK execute: JB8 drive reflashed with its own build",
+                "MTK execute: JB8 image onto a JB7 drive of the same model",
+                "MTK execute: JB7 image onto a JB8 drive of the same model",
+                "MTK execute: image without a hardware record",
+                "MTK execute: drive without a hardware record",
+            ],
+        ),
+        (
             "backup and dump",
             "backup_capture.txt",
             &[

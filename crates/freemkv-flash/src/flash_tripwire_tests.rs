@@ -518,3 +518,106 @@ macro_rules! test_backend {
 
 test_backend!(Confirming, Ok(vec![0xAA; 16]));
 test_backend!(FailingBackup, bail!("no capture"));
+
+/// Flash `target` onto a drive running `installed` (both `BD-RE  BH16NS40`)
+/// through the real engine, recording every command in order.
+fn family_flash(installed: &[u8], target: &[u8]) -> (Outcome, Vec<String>, std::path::PathBuf) {
+    let model = "BD-RE  BH16NS40";
+    let backup = scratch("mtk-family-tripwire").join(format!("{}.bin", sha(target)));
+    let mut req = mtk_request(target.to_vec(), true, Some(backup.clone()));
+    req.drive_model = model.into();
+    let dev = MockScsiDevice::echoing()
+        .with_firmware_image(drive_read(installed))
+        .with_product(model);
+    let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
+    (outcome, transcript, backup)
+}
+
+/// The session as the transcript records it: what the OEM tool sends.
+fn oem_session() -> Vec<String> {
+    mediatek_optical::DriveClass::Mt19
+        .steps()
+        .iter()
+        .map(|step| {
+            use mediatek_optical::update::Direction;
+            match step.direction {
+                Direction::Out => format!("OUTS cdb={} len={}", hex(&step.cdb), step.length),
+                _ => format!("IN   cdb={} alloc={}", hex(&step.cdb), step.length),
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn same_line_reflash_sends_exactly_the_oem_session() {
+    for board in [fixture::JB7, fixture::JB8] {
+        let image = fixture::image(&board, "BD-RE  BH16NS40", 9);
+        let (outcome, transcript, _) = family_flash(&image, &image);
+        assert_eq!(outcome.result, "OK", "{board:?}: {:#?}", outcome.text);
+        let probe = format!("IN   cdb={} alloc=256", hex(&cdb_probe()));
+        let start = transcript
+            .iter()
+            .position(|l| l.starts_with(&probe))
+            .expect("PROBE");
+        let sent: Vec<String> = transcript[start..start + 134]
+            .iter()
+            .map(|l| {
+                l.split(" sha256=")
+                    .next()
+                    .unwrap()
+                    .split(" -> ")
+                    .next()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(sent, oem_session(), "{board:?}");
+        // The OEM updaters' REQUEST SENSE (INTENDED_CHANGES.md, M-RS).
+        assert_eq!(sent[133], "IN   cdb=030000001080000000000000 alloc=16");
+    }
+}
+
+fn cdb_probe() -> [u8; 12] {
+    crate::backends::mtk::cdb::probe()
+}
+
+#[test]
+fn cross_line_image_is_refused_after_the_backup_before_any_write() {
+    let model = "BD-RE  BH16NS40";
+    let jb7 = fixture::image(&fixture::JB7, model, 3);
+    let jb8 = fixture::image(&fixture::JB8, model, 5);
+    for (installed, target) in [(&jb7, &jb8), (&jb8, &jb7)] {
+        let (outcome, transcript, backup) = family_flash(installed, target);
+        assert!(
+            outcome.result.contains("family mismatch"),
+            "{}",
+            outcome.result
+        );
+        assert!(backup.exists(), "the pre-flash backup is kept");
+        assert!(
+            !transcript.iter().any(|l| l.starts_with("OUT")),
+            "no write may reach the drive"
+        );
+    }
+}
+
+#[test]
+fn unknown_families_are_refused_before_any_write() {
+    let model = "BD-RE  BH16NS40";
+    let jb7 = fixture::image(&fixture::JB7, model, 3);
+    let nameless = fixture::without_record(&jb7);
+    for (installed, target, which) in [(&jb7, &nameless, "target"), (&nameless, &jb7, "installed")]
+    {
+        let (outcome, transcript, backup) = family_flash(installed, target);
+        assert!(
+            outcome
+                .result
+                .contains(&format!("could not determine the {which} firmware family")),
+            "{}",
+            outcome.result
+        );
+        assert!(!transcript.iter().any(|l| l.starts_with("OUT")));
+        // An image without a family is refused at the plan, before the backup.
+        assert_eq!(backup.exists(), which == "installed", "{which}");
+    }
+}

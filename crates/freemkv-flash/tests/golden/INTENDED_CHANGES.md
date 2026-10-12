@@ -4,7 +4,7 @@
 harness against the v0.11.2 tag. `golden_parity_with_0_11_2` requires that
 every difference is listed below, under its golden file and scenario, line
 for line (`-` = only in v0.11.2, `+` = only now). A Pioneer scenario may
-differ only for P1 to P3; a MediaTek scenario only for R1 to R7:
+differ only for P1 to P3; a MediaTek scenario only for R1 to R8 and M-RS:
 
 | id | reason |
 |----|--------|
@@ -18,6 +18,8 @@ differ only for P1 to P3; a MediaTek scenario only for R1 to R7:
 | R5 | MediaTek `Chipset` info row |
 | R6 | round-1 audit fixes (sanitized output, INVALID CMAC report, accurate enter_update message, lazy banner read) |
 | R7 | mediatek-optical crate move (CDBs byte-identical; labels and refusal wording come from the shared engine/flashset) |
+| R8 | the synthetic MediaTek fixtures carry a hardware configuration record (boot banner, descriptor platform code at `+0x46`, feature template and record at `0x11000`), which the hardware-family gate needs. Commands are unchanged; only the bytes that depend on the fixture differ: payload and file digests, the displayed banner, the firmware fingerprint and the first differing read-back offset |
+| M-RS | MediaTek REQUEST SENSE (STATUS) is sent as the OEM updaters send it, `03 00 00 00 10 80` padded to 12 bytes: allocation length `0x10` in byte 4, `0x80` in the control byte. We sent `03 00 00 10 80 00`, one byte off. Evidence: LG's MT19xx updater v1.081 (`WH16NS40.exe`, sha256 `281c668c…806bac`, file offset `0x1383`) builds it as `c6 45 f0 03` / `66 c7 45 f4 10 80` (`cdb[0] = 03`, `cdb[4..6] = 10 80`); v1.074 (`BH16NS40(1.03-A0).exe`) the same with allocation `0x12`. Every other MT1959 command and payload is byte-identical |
 
 The baseline set was produced by copying `src/golden_tests.rs` into a
 `git worktree` of the v0.11.2 tag and changing only its COMPAT shims
@@ -98,52 +100,105 @@ after the backup, and P3, the refusal of the eight families whose INQUIRY
 product does not start with `BD-` (BC-5100S, PP-100 twice, BDR-PR1EPDVPP100,
 SBW-06D2X-U, SBC-06D2X-U, BW-16D1X-U, BDW-PR1EPDVPP100).
 
+**New golden files.** `mtk_family_gate.txt` (M-FAM) records the MediaTek
+hardware-family gate, which v0.11.2 does not have (it flashed a same-model
+image from another board line, e.g. a BH16NS40 JB8 build onto a JB7 drive),
+so it has no baseline and `golden_parity_with_0_11_2` skips it by name
+(`NEW_SINCE_0_11_2`). Its six scenarios run the real engine: a same-line,
+same-build reflash for a JB7 and a JB8 drive (the OEM session, unchanged),
+both cross-line directions and an unknown family on either side, refused
+before any write.
+
 Regenerate the skeleton after an intentional change with
 `FREEMKV_BLESS_INTENDED=1 cargo test -p freemkv-flash golden_parity`, then set
 the `reason:` of any `UNCLASSIFIED` section by hand.
 
 ## backup_capture.txt
 
-### MTK backup: drive-read image
-reason: R1
+### MTK backup: destination exists
+reason: R8
 ```diff
+-saved file: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++saved file: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
+```
+
+### MTK backup: drive-read image
+reason: R1, R8
+```diff
+-backup sha256: 338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++backup sha256: 4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 -OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 +this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
+-MSG      backup sha256: 338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++MSG      backup sha256: 4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 -FIELD    Backup validation = OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 -MSG      OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 +FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
+-saved file: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++saved file: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
+```
+
+### MTK dump (recover): raw memory
+reason: R8
+```diff
+-backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++backup sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-MSG      backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++MSG      backup sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-saved file: 2097152 bytes sha256=aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++saved file: 2097152 bytes sha256=dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
 ```
 
 ## check_file.txt
 
 ### check_file mtk_bad_cmac.bin
-reason: R7
+reason: R7, R8
 ```diff
+-sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
++sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-banner: <none>
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
++MSG      sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-MSG      banner: <none>
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### check_file mtk_drive_read_backup.bin
-reason: R7, R6
+reason: R7, R6, R8
 ```diff
+-sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
 -banner: �����������
-+banner: ��������������
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++MSG      sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
 -MSG      banner: �����������
-+MSG      banner: ��������������
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### check_file mtk_flashable.bin
-reason: R7
+reason: R7, R8
 ```diff
+-sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-banner: <none>
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++MSG      sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-MSG      banner: <none>
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
@@ -158,27 +213,35 @@ reason: R7
 ```
 
 ### check_file mtk_mt1939_stored.bin
-reason: R7, R6
+reason: R7, R6, R8
 ```diff
+-sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
++sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
 -banner: �����������
-+banner: ������������������
++banner: MT1939 Boot Code
 -flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
+-MSG      sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
++MSG      sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
 -MSG      banner: �����������
-+MSG      banner: ������������������
++MSG      banner: MT1939 Boot Code
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 ```
 
 ### check_file mtk_mt1959_stored.bin
-reason: R7, R6
+reason: R7, R6, R8
 ```diff
+-sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
++sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
 -banner: �����������
-+banner: ��������������
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
++MSG      sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
 -MSG      banner: �����������
-+MSG      banner: ��������������
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
@@ -210,8 +273,12 @@ reason: R2
 ```
 
 ### MTK dry run: .bin verbose
-reason: R2
+reason: R2, M-RS
 ```diff
+-  #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
++  #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
+-MSG        #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
++MSG        #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
 ---- scsi transcript (3) ---
 +--- scsi transcript (4) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
@@ -228,11 +295,27 @@ reason: R2
 ## flash_execute.txt
 
 ### MTK execute: .bin with pre-flash backup
-reason: R2
+reason: R2, R8, M-RS
 ```diff
+-firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
++firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
+-MSG      firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
 ---- scsi transcript (784) ---
++MSG      firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
 +--- scsi transcript (785) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+-OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
++OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
+-OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
++OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
+-OUTS cdb=3b06001ec000004000000000 len=16384 sha256=58b65b0e2b6e1358a272cc43c82fc5552c0f6f43c9f546ff958d4d1e38eb3e9f -> ok
++OUTS cdb=3b06001ec000004000000000 len=16384 sha256=feefb47a844959e6e5d0d040b6876750936cf8a3812a68148c2677f9c85dc7bb -> ok
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 ```
 
 ### MTK execute: MT1939 image on an MT1959 drive
@@ -2730,50 +2813,100 @@ reason: R3
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2
+reason: R2, R8, M-RS
 ```diff
+-result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
++result: ERR read-back verify FAILED at 0x01105E: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61346 of 61440 protected bytes differ).
 ---- scsi transcript (782) ---
 +--- scsi transcript (783) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+-OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
++OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
+-OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
++OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
+-OUTS cdb=3b06001ec000004000000000 len=16384 sha256=58b65b0e2b6e1358a272cc43c82fc5552c0f6f43c9f546ff958d4d1e38eb3e9f -> ok
++OUTS cdb=3b06001ec000004000000000 len=16384 sha256=feefb47a844959e6e5d0d040b6876750936cf8a3812a68148c2677f9c85dc7bb -> ok
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 ```
 
 ### MTK execute: restore the saved .tar
-reason: R2
+reason: R2, R8, M-RS
 ```diff
+-firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
++firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
+-MSG      firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
 ---- scsi transcript (784) ---
++MSG      firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
 +--- scsi transcript (785) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+-OUTS cdb=3b0600000000004000000000 len=16384 sha256=a4cb3cc52bb7eb6b5653aa3ae08de21602c9e35b2554c26e436da86f17db43bf -> ok
++OUTS cdb=3b0600000000004000000000 len=16384 sha256=6d0a58a40c8d493d1e4020bf2df55806488f025a07b38762237be67ee64747e4 -> ok
+-OUTS cdb=3b0600010000004000000000 len=16384 sha256=b9e553f7d1a5cc04a848712b55885a676f216144d11abac0a94d2c73c01522d3 -> ok
++OUTS cdb=3b0600010000004000000000 len=16384 sha256=68d92d5c5b65aedc61a89cfe676c675767aa16e1e8aa5aaa56e828a951959db2 -> ok
+-OUTS cdb=3b06001ec000004000000000 len=16384 sha256=f8846a808bf17f1a19139cd36056f4734cd592a72e8ac5d1e68c5f36e298ad9a -> ok
++OUTS cdb=3b06001ec000004000000000 len=16384 sha256=320980d032fd165b9a762570769c1b62231cefbc3d85f9aff7795747e5f2abab -> ok
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-IN   cdb=030000108000000000000000 alloc=16 -> ok 16
++IN   cdb=030000001080000000000000 alloc=16 -> ok 16
+-saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 ```
 
 ## info_file.txt
 
 ### info_file mtk_bad_cmac.bin
-reason: R7
+reason: R7, R8
 ```diff
+-sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
++sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-banner: <none>
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
++MSG      sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-MSG      banner: <none>
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### info_file mtk_drive_read_backup.bin
-reason: R7, R6
+reason: R7, R6, R8
 ```diff
+-sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
 -banner: �����������
-+banner: ��������������
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++MSG      sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
 -MSG      banner: �����������
-+MSG      banner: ��������������
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### info_file mtk_flashable.bin
-reason: R7
+reason: R7, R8
 ```diff
+-sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-banner: <none>
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++MSG      sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-MSG      banner: <none>
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
@@ -2788,27 +2921,35 @@ reason: R7
 ```
 
 ### info_file mtk_mt1939_stored.bin
-reason: R7, R6
+reason: R7, R6, R8
 ```diff
+-sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
++sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
 -banner: �����������
-+banner: ������������������
++banner: MT1939 Boot Code
 -flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
+-MSG      sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
++MSG      sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
 -MSG      banner: �����������
-+MSG      banner: ������������������
++MSG      banner: MT1939 Boot Code
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 ```
 
 ### info_file mtk_mt1959_stored.bin
-reason: R7, R6
+reason: R7, R6, R8
 ```diff
+-sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
++sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
 -banner: �����������
-+banner: ��������������
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
++MSG      sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
 -MSG      banner: �����������
-+MSG      banner: ��������������
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
@@ -2845,20 +2986,28 @@ reason: R5, R7
 ```
 
 ### MTK info: mock exposing a drive-read firmware image
-reason: R5, R7
+reason: R5, R7, R8
 ```diff
 ---- text (33) ---
 +--- text (34) ---
+-banner: <none>
++banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 +chipset: MT1959
+-          fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
 ---- events (65) ---
++          fingerprint acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf
 +--- events (67) ---
+-MSG      banner: <none>
++MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 +FIELD    Chipset = MT1959
 +MSG      chipset: MT1959
+-MSG                fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
 ---- scsi transcript (21) ---
++MSG                fingerprint acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf
 +--- scsi transcript (22) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 ```
@@ -2866,19 +3015,19 @@ reason: R5, R7
 ## mtk_backup_variants.txt
 
 ### MTK backup: MT1939 drive read (build not in the catalog)
-reason: R1, R4
+reason: R1, R4, R8
 ```diff
 -result: ERR unrecognized boot page (sha256 233fadcb958146c4a25a7bde190f956ab7d684fdacb35452f2a39f39ebf81812); no restorable backup can be built for this firmware
 ---- text (102) ---
 +result: OK
 +--- text (105) ---
 ---- events (102) ---
-+backup sha256: 9eb55dca2bf12a7ec41a9a0b922aa8a93f18b9eb3bbcf90c5453cc7d5c568d33
++backup sha256: b1a084f567992bce6cbecfeb441c832d9400e287b53a1d447af4ed88f76c873d
 +wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
 +this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +--- events (107) ---
 ---- scsi transcript (514) ---
-+MSG      backup sha256: 9eb55dca2bf12a7ec41a9a0b922aa8a93f18b9eb3bbcf90c5453cc7d5c568d33
++MSG      backup sha256: b1a084f567992bce6cbecfeb441c832d9400e287b53a1d447af4ed88f76c873d
 +FIELD    Saved to = <TMP>/mtk-backup/mt1939.bak
 +MSG      wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
 +FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
@@ -2887,23 +3036,23 @@ reason: R1, R4
 -saved file: <not created>
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-+saved file: 2097152 bytes sha256=9eb55dca2bf12a7ec41a9a0b922aa8a93f18b9eb3bbcf90c5453cc7d5c568d33
++saved file: 2097152 bytes sha256=b1a084f567992bce6cbecfeb441c832d9400e287b53a1d447af4ed88f76c873d
 ```
 
 ### MTK backup: MT1959 drive read
-reason: R1, R4
+reason: R1, R4, R8
 ```diff
 -result: ERR unrecognized boot page (sha256 0bd0297c45ac0fe82554dd385bac39bdbd1b5ee852596f8d5e4630c01ebde361); no restorable backup can be built for this firmware
 ---- text (102) ---
 +result: OK
 +--- text (105) ---
 ---- events (102) ---
-+backup sha256: 002f73e3f3423efeb03f7c0c75937d543d04198421ded1db0a1d57474fa8c188
++backup sha256: 28335b8294725272c76efefa42026d602073b98d6e1ba085dcfc62cb3107981a
 +wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
 +this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +--- events (107) ---
 ---- scsi transcript (514) ---
-+MSG      backup sha256: 002f73e3f3423efeb03f7c0c75937d543d04198421ded1db0a1d57474fa8c188
++MSG      backup sha256: 28335b8294725272c76efefa42026d602073b98d6e1ba085dcfc62cb3107981a
 +FIELD    Saved to = <TMP>/mtk-backup/mt1959.bak
 +MSG      wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
 +FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
@@ -2912,7 +3061,7 @@ reason: R1, R4
 -saved file: <not created>
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-+saved file: 2097152 bytes sha256=002f73e3f3423efeb03f7c0c75937d543d04198421ded1db0a1d57474fa8c188
++saved file: 2097152 bytes sha256=28335b8294725272c76efefa42026d602073b98d6e1ba085dcfc62cb3107981a
 ```
 
 ### MTK backup: unknown boot page
@@ -2920,6 +3069,50 @@ reason: R1, R4
 ```diff
 -result: ERR unrecognized boot page (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033); no restorable backup can be built for this firmware
 +result: ERR rebuilding the OEM image from the drive read: boot page is neither a stored page nor a drive read's mirror (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033)
+```
+
+### MTK dump: MT1939 drive read (build not in the catalog)
+reason: R8
+```diff
+-backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
++backup sha256: 3292ad51b79283df960099820f1cabb2a90e0552cc5340ef1c7fd1d1c5c6f066
+-MSG      backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
++MSG      backup sha256: 3292ad51b79283df960099820f1cabb2a90e0552cc5340ef1c7fd1d1c5c6f066
+-saved file: 2097152 bytes sha256=933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
++saved file: 2097152 bytes sha256=3292ad51b79283df960099820f1cabb2a90e0552cc5340ef1c7fd1d1c5c6f066
+```
+
+### MTK dump: MT1959 drive read
+reason: R8
+```diff
+-backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++backup sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+-MSG      backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++MSG      backup sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+-saved file: 2097152 bytes sha256=1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++saved file: 2097152 bytes sha256=8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+```
+
+### MTK dump: firmware read fails at 0x100000
+reason: R8
+```diff
+-backup sha256: 39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
++backup sha256: 7ac803a619301d63664494022d704b678902be2ac1156d447571bd6c80ad0461
+-MSG      backup sha256: 39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
++MSG      backup sha256: 7ac803a619301d63664494022d704b678902be2ac1156d447571bd6c80ad0461
+-saved file: 2097152 bytes sha256=39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
++saved file: 2097152 bytes sha256=7ac803a619301d63664494022d704b678902be2ac1156d447571bd6c80ad0461
+```
+
+### MTK dump: unknown boot page
+reason: R8
+```diff
+-backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
++backup sha256: 2f3236449fb4692d142d1acc938afff060417cfdc6567ac26b2bedbc26e4a153
+-MSG      backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
++MSG      backup sha256: 2f3236449fb4692d142d1acc938afff060417cfdc6567ac26b2bedbc26e4a153
+-saved file: 2097152 bytes sha256=e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
++saved file: 2097152 bytes sha256=2f3236449fb4692d142d1acc938afff060417cfdc6567ac26b2bedbc26e4a153
 ```
 
 ## mtk_flash_input_refusals.txt

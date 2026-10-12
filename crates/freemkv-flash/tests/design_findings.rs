@@ -1,6 +1,7 @@
 //! Design-review tripwire: every finding (R1–R13) from the adversarial review of
-//! the 0.12 universal-backend design must be guarded by a named test. A
-//! missing test means the finding was not coded, and this fails.
+//! the 0.12 universal-backend design, and R14 (the MediaTek hardware-family
+//! gate), must be guarded by a named test. A missing test means the finding
+//! was not coded, and this fails.
 
 use std::{fs, path::Path};
 
@@ -120,6 +121,22 @@ const REQUIRED: &[(&str, &str)] = &[
     ),
     ("R13 consistency", "ambiguous_file_is_an_error"),
     ("R13 consistency", "settings_are_read_only"),
+    (
+        "R14 MediaTek family gate",
+        "cross_line_image_is_refused_after_the_backup_before_any_write",
+    ),
+    (
+        "R14 MediaTek family gate",
+        "unknown_families_are_refused_before_any_write",
+    ),
+    (
+        "R14 MediaTek family gate",
+        "same_line_reflash_sends_exactly_the_oem_session",
+    ),
+    (
+        "R14 MediaTek family gate",
+        "mediatek_backend_names_no_chip_outside_reviewed_reports",
+    ),
 ];
 
 fn test_fns(dir: &Path, out: &mut Vec<String>) {

@@ -1,14 +1,20 @@
-//! The MediaTek update in the engine's two stages: `plan` validates the image
-//! against the drive (size, CMAC, boot page, chip generation, model) before
-//! any backup; `execute` streams it, waits for programming to finish, reads
-//! back the integrity-protected ranges and re-identifies the firmware.
+//! The MediaTek update in the engine's two stages. `plan` validates the image
+//! against the live drive before any backup; `authorize` binds the pre-flash
+//! backup as the installed firmware and lets `mediatek_optical` prepare the
+//! update, refusing another hardware family; `execute` runs the prepared
+//! update and re-identifies the firmware. The crate owns the session.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
+use mediatek_optical::drive::Error as DriveError;
+use mediatek_optical::update::{
+    FlashError, FlashRuntime, FlashTransport, InstalledFirmware, PrepareError, PreparedUpdate,
+    Stage, Status,
+};
+use mediatek_optical::Identity;
 
 use super::{
-    backup, cdb, crossflash, describe_sequence, enc_needed, enc_transform,
-    ensure_flashable_boot_page, ensure_same_chip, flash_sequence, parse_sense, post_commit_status,
-    sense_key_is_fatal, Mtk, CHUNK, DESCRIPTOR, IMAGE_SIZE,
+    backup, cdb, crossflash, describe_sequence, enc_needed, ensure_flashable_boot_page,
+    live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE,
 };
 use crate::backend::{
     AuthorizedPlan, DetailsFacet, FlashFacet, FlashPlan, FlashRequest, FormatRole, PlanLine,
@@ -16,11 +22,13 @@ use crate::backend::{
 };
 use crate::platform::ScsiDevice;
 use crate::style;
+use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
 
-/// What `plan` decided: the image to verify against and the bytes to stream.
+/// What `plan` decided, for `authorize`.
 struct Plan {
     image: Vec<u8>,
-    payload: Vec<u8>,
+    live: Identity,
+    enc: bool,
 }
 
 impl FlashFacet for Mtk {
@@ -46,8 +54,12 @@ impl FlashFacet for Mtk {
             }
             FormatRole::Image | FormatRole::Package => req.input.clone(),
         };
-        self.validate_image(dev, &image, &req.drive_model)?;
-        let (payload, enc) = self.envelope(dev, &image, req.enc_override)?;
+        let live = self.validate_image(dev, &image, &req.drive_model)?;
+        let steps = live
+            .class()
+            .context("the drive names no update dialect; refusing")?
+            .steps();
+        let enc = req.enc_override.unwrap_or_else(|| enc_needed(dev));
         let mut block = vec![
             PlanLine::Header("== flash plan ==".into()),
             PlanLine::Field("device", dev.describe()),
@@ -56,16 +68,15 @@ impl FlashFacet for Mtk {
                 "firmware",
                 format!(
                     "{} ({} envelope)",
-                    style::human_size(payload.len()),
+                    style::human_size(image.len()),
                     if enc { "encrypted" } else { "plaintext" }
                 ),
             ),
             PlanLine::Backup,
             PlanLine::Text(String::new()),
         ];
-        let sequence = flash_sequence(payload.len(), CHUNK)?;
-        block.push(PlanLine::Block(describe_sequence(&sequence, req.verbose)));
-        let mut plan = FlashPlan::new(Plan { image, payload });
+        block.push(PlanLine::Block(describe_sequence(&steps, req.verbose)));
+        let mut plan = FlashPlan::new(Plan { image, live, enc });
         plan.notes = notes;
         plan.dry_run = block.clone();
         plan.after_backup = block;
@@ -89,126 +100,266 @@ impl FlashFacet for Mtk {
         ])
     }
 
+    /// The installed firmware is the pre-flash backup: the image rebuilt from
+    /// a complete drive read. Its family equals the read's, because the family
+    /// reads no byte a rebuild replaces, and it is the artifact the user keeps.
     fn authorize(
         &self,
         _dev: &mut ReadDevice<'_>,
         plan: FlashPlan,
-        _backup: &SavedBackup,
+        backup: &SavedBackup,
     ) -> Result<AuthorizedPlan> {
-        plan.state::<Plan>()?;
-        Ok(AuthorizedPlan::new(plan, ()))
+        let state: &Plan = plan.state()?;
+        let installed = InstalledFirmware::new(state.live.clone(), backup.bytes())
+            .map_err(refusal)
+            .context("the pre-flash backup cannot serve as this drive's installed firmware")?;
+        let mut prepared = PreparedUpdate::prepare(&state.image, &installed).map_err(refusal)?;
+        if state.enc {
+            prepared = prepared.encrypted();
+        }
+        Ok(AuthorizedPlan::new(plan, prepared))
     }
 
     fn execute(&self, dev: &mut WriteDevice<'_>, authorized: &AuthorizedPlan) -> Result<()> {
-        let plan: &Plan = authorized.plan.state()?;
+        let prepared: &PreparedUpdate = authorized.state()?;
+        let verified = {
+            let shared = SharedDevice::new(dev);
+            let (mut reads, mut writes) =
+                (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
+            let io = FlashTransport {
+                reads: &mut reads,
+                writes: &mut writes,
+            };
+            let mut runtime = Runtime::new();
+            prepared
+                .flash(io, &mut runtime)
+                .map_err(|e| flash_error(e, prepared))?
+        };
+        if verified.ranges == 0 {
+            println!(
+                "{}",
+                style::dim_line(
+                    "  read-back cross-check: image carries no integrity table; \
+                     relying on the drive's firmware identity below."
+                )
+            );
+        } else {
+            println!(
+                "{}",
+                style::status_line(
+                    "flash complete",
+                    &format!(
+                        "{} of integrity-protected regions verified",
+                        style::human_size(verified.checked)
+                    ),
+                    style::Status::Ok
+                )
+            );
+        }
+        println!(
+            "{}",
+            style::dim_line(
+                "  Integrity is enforced on-device: the drive recomputes CMAC at boot and \
+                 rejects a bad image. The firmware identity below is the real result."
+            )
+        );
+        confirm_identity(self, &mut ReadDevice::without_unlocks(dev))
+    }
+}
+
+/// The text of a crate command error, keeping the transport's own chain.
+fn text(error: &DriveError<anyhow::Error>) -> String {
+    match error {
+        DriveError::Transport(e) => format!("{e:#}"),
+        other => other.to_string(),
+    }
+}
+
+/// Progress and diagnostics for the crate's flash, in the flasher's words.
+struct Runtime {
+    start: std::time::Instant,
+    progress: style::Progress,
+}
+
+impl Runtime {
+    fn new() -> Self {
+        Self {
+            start: std::time::Instant::now(),
+            progress: style::Progress::new("flashing firmware", 0),
+        }
+    }
+}
+
+impl FlashRuntime<anyhow::Error> for Runtime {
+    fn elapsed(&self) -> std::time::Duration {
+        self.start.elapsed()
+    }
+    fn sleep(&mut self, duration: std::time::Duration) {
+        std::thread::sleep(duration);
+    }
+    fn starting(&mut self, bytes: usize) {
         println!(
             "\n{}",
             style::bold("EXECUTING flash — do not power off or disconnect the drive...")
         );
-        let mut progress = style::Progress::new("flashing firmware", plan.payload.len());
-        self.stream(dev, &plan.payload, &mut |sent| progress.set(sent))?;
+        self.progress = style::Progress::new("flashing firmware", bytes);
+    }
+    fn progress(&mut self, written: usize, _total: usize) {
+        self.progress.set(written);
+    }
+    fn commit_failed(&mut self, error: &DriveError<anyhow::Error>) {
+        eprintln!(
+            "MediaTek commit trailer returned an error: {}; checking completion and read-back",
+            text(error)
+        );
+    }
+    fn commit_not_ready(&mut self, error: &DriveError<anyhow::Error>) {
+        crate::diagnostics::record(format!("MediaTek post-commit readiness: {}", text(error)));
+    }
+    fn status(&mut self, stage: Stage, status: Status<'_, anyhow::Error>) {
+        match (stage, status) {
+            (_, Status::Sense(_)) => {}
+            (Stage::Commit, Status::Failed(error)) => {
+                eprintln!("warning: post-flash REQUEST SENSE failed: {}", text(error));
+                self.status(Stage::Commit, Status::Unparseable(0));
+            }
+            (Stage::Commit, Status::Unparseable(n)) => eprintln!(
+                "warning: could not parse the post-flash REQUEST SENSE response ({n} bytes); \
+                 relying on read-back verify"
+            ),
+            (Stage::Settled, Status::Failed(error)) => eprintln!(
+                "warning: post-settle REQUEST SENSE errored ({}); relying on read-back verify — \
+                 the drive settled but its final sense state is unknown.",
+                text(error)
+            ),
+            (Stage::Settled, Status::Unparseable(0)) => {}
+            (Stage::Settled, Status::Unparseable(n)) => eprintln!(
+                "warning: post-settle REQUEST SENSE returned an unparseable {n}-byte reply; \
+                 relying on read-back verify."
+            ),
+        }
+    }
+    fn uploaded(&mut self, bytes: usize) {
         println!(
             "upload complete {}",
             style::dim(&format!(
                 "({}); waiting for the drive to finish programming...",
-                style::human_size(plan.payload.len())
+                style::human_size(bytes)
             ))
         );
-        let dev = &mut ReadDevice::without_unlocks(dev);
-        // The drive keeps programming after the last chunk; reading back
-        // earlier would surface a mid-program error on a good flash.
-        self.wait_ready(dev)?;
+    }
+    fn poll_failed(&mut self, _elapsed: std::time::Duration, error: &DriveError<anyhow::Error>) {
+        crate::diagnostics::record(format!("MediaTek post-flash readiness: {}", text(error)));
+    }
+    fn verifying(&mut self) {
         println!("verifying...");
-        verify_readback(self, dev, &plan.image)?;
-        confirm_identity(self, dev)
+    }
+    fn unverified(&mut self, offset: usize, length: usize, error: &DriveError<anyhow::Error>) {
+        let reason = match error {
+            DriveError::Short { expected, actual } => format!("short read: {actual}/{expected}"),
+            other => text(other),
+        };
+        crate::diagnostics::record(format!(
+            "read-back incomplete: offset={offset:#x} length={length} reason={reason}"
+        ));
     }
 }
 
-/// Compare the image's integrity-protected ranges with a read-back. Mutable
-/// per-unit regions and the remapped boot page are excluded; a differing or
-/// unreadable protected byte fails, since identity alone proves nothing.
-fn verify_readback(mtk: &Mtk, dev: &mut ReadDevice<'_>, image: &[u8]) -> Result<()> {
-    let protected = mtk.verification_ranges(image);
-    let is_protected = |pos: usize| protected.iter().any(|&(s, e)| pos >= s && pos <= e);
-    let (mut checked, mut differing, mut unverified) = (0usize, 0usize, 0usize);
-    let mut first_bad: Option<(usize, u8, u8)> = None;
-    let mut offset = 0usize;
-    for piece in image.chunks(CHUNK) {
-        let has_protected = (offset..offset + piece.len()).any(&is_protected);
-        match mtk.readback(dev, offset, piece.len()) {
-            Ok(got) if got.len() == piece.len() => {
-                for (i, (a, b)) in got.iter().zip(piece).enumerate() {
-                    let pos = offset + i;
-                    if !is_protected(pos) {
-                        continue;
-                    }
-                    checked += 1;
-                    if a != b {
-                        differing += 1;
-                        first_bad.get_or_insert((pos, *a, *b));
-                    }
-                }
-            }
-            // A protected chunk that errored or came back short stays
-            // unverified, so success must not be claimed for it.
-            result if has_protected => {
-                unverified += 1;
-                let reason = match result {
-                    Ok(data) => format!("short read: {}/{}", data.len(), piece.len()),
-                    Err(error) => format!("{error:#}"),
-                };
-                crate::diagnostics::record(format!(
-                    "read-back incomplete: offset={offset:#x} length={} reason={reason}",
-                    piece.len()
-                ));
-            }
-            _ => {}
-        }
-        offset += piece.len();
-    }
-    if let Some((pos, read, wrote)) = first_bad {
-        bail!(
-            "read-back verify FAILED at 0x{pos:06X}: an integrity-protected byte differs \
+/// A failed flash, with what the user must do about it.
+fn flash_error(error: FlashError<anyhow::Error>, prepared: &PreparedUpdate) -> anyhow::Error {
+    let describe = |(key, asc, ascq): (u8, u8, u8)| crate::platform::describe_sense(key, asc, ascq);
+    match error {
+        FlashError::Entry(e) => mtk_err(e).context(
+            "MediaTek PROBE, TEST UNIT READY or PREPARE failed before any firmware data was \
+             sent; if PREPARE was reached the drive may be in update mode — power-cycle it \
+             before retrying",
+        ),
+        FlashError::Transfer {
+            offset,
+            length,
+            source,
+        } => mtk_err(source).context(format!(
+            "firmware write failed at offset {offset:#x}, length {length}; drive may contain \
+             partial firmware"
+        )),
+        FlashError::Fault {
+            stage: Stage::Commit,
+            sense,
+        } => anyhow!(
+            "drive reported an error after flash — {}; the flash may have FAILED",
+            describe(sense)
+        ),
+        FlashError::Fault { sense, .. } => anyhow!(
+            "post-settle sense reports a flash fault — {}; the flash may have FAILED. \
+             Physically confirm the drive's firmware identity before shipping.",
+            describe(sense)
+        ),
+        FlashError::ReadyTimeout(e) => anyhow!(
+            "drive did not settle after the flash burn within {} s — TEST UNIT READY never came \
+             back Ok. The flash may have FAILED, or the drive is hung; do NOT trust the exit \
+             code as success. Physically power-cycle the drive and re-verify its firmware \
+             identity before shipping. Last error: {}",
+            prepared.class().ready_timeout().as_secs(),
+            text(&e)
+        ),
+        FlashError::Mismatch {
+            address,
+            read,
+            wrote,
+            differing,
+            checked,
+        } => anyhow!(
+            "read-back verify FAILED at 0x{address:06X}: an integrity-protected byte differs \
              (read 0x{read:02X}, wrote 0x{wrote:02X}) — the image did not program cleanly \
              ({differing} of {checked} protected bytes differ)."
-        );
-    }
-    if protected.is_empty() {
-        println!(
-            "{}",
-            style::dim_line(
-                "  read-back cross-check: image carries no integrity table; \
-                 relying on the drive's firmware identity below."
-            )
-        );
-    } else if unverified > 0 {
-        bail!(
+        ),
+        FlashError::Incomplete {
+            unverified,
+            checked,
+        } => anyhow!(
             "flash complete but read-back INCOMPLETE: could not read back {unverified} \
              integrity-protected chunk(s) ({} verified). Do NOT trust the exit code as \
              success — physically confirm the drive's firmware identity before shipping.",
             style::human_size(checked),
-        );
-    } else {
-        println!(
-            "{}",
-            style::status_line(
-                "flash complete",
-                &format!(
-                    "{} of integrity-protected regions verified",
-                    style::human_size(checked)
-                ),
-                style::Status::Ok
-            )
-        );
+        ),
+        other => anyhow!("{other}"),
     }
-    println!(
-        "{}",
-        style::dim_line(
-            "  Integrity is enforced on-device: the drive recomputes CMAC at boot and \
-             rejects a bad image. The firmware identity below is the real result."
-        )
-    );
-    Ok(())
+}
+
+/// The hardware-family gate's refusal, worded like Pioneer's `family_gate`.
+/// Both families must be known and equal; nothing overrides it.
+pub(crate) fn family_gate(error: &PrepareError) -> Option<String> {
+    Some(match error {
+        PrepareError::FamilyMismatch { installed, target } => format!(
+            "family mismatch: installed firmware is family {installed}, target is family \
+             {target} (a different board line; not update-compatible)"
+        ),
+        PrepareError::UnknownInstalledFamily => "could not determine the installed firmware \
+             family (the pre-flash backup has no hardware configuration record to profile); \
+             flashing requires a known family"
+            .to_string(),
+        PrepareError::UnknownTargetFamily => "could not determine the target firmware family \
+             (the image has no hardware configuration record to profile); flashing requires a \
+             known family"
+            .to_string(),
+        _ => return None,
+    })
+}
+
+/// A refusal before any write, in the flasher's words.
+fn refusal(error: PrepareError) -> anyhow::Error {
+    if let Some(reason) = family_gate(&error) {
+        return anyhow!("{reason}");
+    }
+    match error {
+        PrepareError::ChipMismatch { .. } => {
+            anyhow!("{error}. This gate cannot be overridden.")
+        }
+        PrepareError::DriveDescriptor | PrepareError::UnknownDriveChip => {
+            anyhow!("{error}; refusing to flash")
+        }
+        other => anyhow!("{other}; refusing to flash"),
+    }
 }
 
 /// The re-read firmware identity is the authoritative proof that the new
@@ -240,14 +391,15 @@ fn confirm_identity(mtk: &Mtk, dev: &mut ReadDevice<'_>) -> Result<()> {
 }
 
 impl Mtk {
-    /// Validate an image against this drive before any write (read-only):
-    /// size, CMAC, a stored boot page, chip generation and model.
+    /// Every gate that needs no backup (read-only): size, integrity, a stored
+    /// boot page the catalog knows, then the chip and hardware family against
+    /// the live drive, then the model. Returns the live identity.
     pub(crate) fn validate_image(
         &self,
         dev: &mut ReadDevice<'_>,
         image: &[u8],
         drive_product: &str,
-    ) -> Result<()> {
+    ) -> Result<Identity> {
         if image.len() != IMAGE_SIZE {
             bail!(
                 "firmware .bin must be exactly {} bytes, got {}",
@@ -263,23 +415,10 @@ impl Mtk {
             );
         }
         ensure_flashable_boot_page(image)?;
-        let fine_family = Some(ensure_same_chip(dev, image)?);
-        crossflash::ensure_image_matches_drive(image, drive_product, fine_family)
-    }
-
-    /// The payload to stream and whether the enc envelope was applied.
-    pub(crate) fn envelope(
-        &self,
-        dev: &mut ReadDevice<'_>,
-        image: &[u8],
-        enc_override: Option<bool>,
-    ) -> Result<(Vec<u8>, bool)> {
-        let enc = enc_override.unwrap_or_else(|| enc_needed(dev));
-        let mut payload = image.to_vec();
-        if enc {
-            enc_transform(&mut payload)?;
-        }
-        Ok((payload, enc))
+        let live = live_identity(dev);
+        PreparedUpdate::check(image, &live).map_err(refusal)?;
+        crossflash::ensure_image_matches_drive(image, drive_product)?;
+        Ok(live)
     }
 
     /// Read-only readiness handshake: PROBE must return the full ROM read;
@@ -295,126 +434,5 @@ impl Mtk {
         }
         let _ = dev.command_in(&cdb::test_unit_ready(), 0)?;
         Ok(())
-    }
-
-    /// Stream the whole payload through `mediatek_optical`'s flash session:
-    /// PROBE + TEST UNIT READY + PREPARE, the 16 KiB transfers, then the
-    /// commit trailer. The drive programs when the last chunk lands.
-    pub(crate) fn stream(
-        &self,
-        dev: &mut WriteDevice<'_>,
-        payload: &[u8],
-        progress: &mut dyn FnMut(usize),
-    ) -> Result<()> {
-        use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
-        let shared = SharedDevice::new(dev);
-        {
-            let mut transport = ScsiTransport::flash(&shared);
-            let mut session = mediatek_optical::drive::enter_update(&mut transport)
-                .map_err(mtk_err)
-                .context(
-                    "MediaTek PROBE, TEST UNIT READY or PREPARE failed before any firmware data was \
-                     sent; if PREPARE was reached the drive may be in update mode — power-cycle \
-                     it before retrying",
-                )?;
-            let mut sent = 0usize;
-            for piece in payload.chunks(CHUNK) {
-                session.write(sent as u32, piece).map_err(mtk_err).with_context(|| {
-                    format!(
-                        "firmware write failed at offset {sent:#x}, length {}; drive may contain partial firmware",
-                        piece.len()
-                    )
-                })?;
-                sent += piece.len();
-                progress(sent);
-            }
-            // The burn completed on the final chunk; the reinitializing drive
-            // may answer the commit trailer with a transient CHECK CONDITION.
-            if let Err(error) = session.finish().map_err(mtk_err) {
-                eprintln!("MediaTek commit trailer returned an error: {error:#}; checking completion and read-back");
-            }
-        }
-        shared.with(post_commit_status)
-    }
-
-    /// Wait (read-only, bounded at 45 s) for programming to finish, then
-    /// check the settled sense. A drive that never settles fails the flash.
-    pub(crate) fn wait_ready(&self, dev: &mut ReadDevice<'_>) -> Result<()> {
-        use std::time::{Duration, Instant};
-        let deadline = Instant::now() + Duration::from_secs(45);
-        loop {
-            let error = match dev.command_in(&cdb::test_unit_ready(), 0) {
-                Ok(_) => break,
-                Err(error) => error,
-            };
-            crate::diagnostics::record(format!("MediaTek post-flash readiness: {error:#}"));
-            if Instant::now() >= deadline {
-                bail!(
-                    "drive did not settle after the flash burn within 45 s — TEST UNIT READY \
-                     never came back Ok. The flash may have FAILED, or the drive is hung; do \
-                     NOT trust the exit code as success. Physically power-cycle the drive and \
-                    re-verify its firmware identity before shipping. Last error: {error:#}"
-                );
-            }
-            std::thread::sleep(Duration::from_millis(500));
-        }
-        // Same fatal-sense policy as `post_commit_status`; an unreadable sense
-        // warns rather than being swallowed.
-        let sense = match dev.command_in(&cdb::request_sense(), cdb::REQUEST_SENSE_LEN) {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!(
-                    "warning: post-settle REQUEST SENSE errored ({e:#}); relying on read-back \
-                     verify — the drive settled but its final sense state is unknown."
-                );
-                Vec::new()
-            }
-        };
-        match parse_sense(&sense) {
-            Some((key, asc, ascq)) if sense_key_is_fatal(key) => {
-                bail!(
-                    "post-settle sense reports a flash fault — {}; the flash may have FAILED. \
-                     Physically confirm the drive's firmware identity before shipping.",
-                    crate::platform::describe_sense(key, asc, ascq)
-                );
-            }
-            Some(_) => {}
-            None if !sense.is_empty() => {
-                eprintln!(
-                    "warning: post-settle REQUEST SENSE returned an unparseable {}-byte reply; \
-                     relying on read-back verify.",
-                    sense.len()
-                );
-            }
-            None => {}
-        }
-        Ok(())
-    }
-
-    /// Inclusive byte ranges read-back must match: active CMAC entries,
-    /// excluding the remapped boot area below 0x1000.
-    pub(crate) fn verification_ranges(&self, image: &[u8]) -> Vec<(usize, usize)> {
-        let Some(entries) = crate::cmac::parse_table(image).ok() else {
-            return Vec::new();
-        };
-        entries
-            .iter()
-            .filter(|entry| entry.is_active())
-            .filter_map(|entry| {
-                let start = (entry.start as usize).max(0x1000);
-                let end = entry.end as usize;
-                (start <= end).then_some((start, end))
-            })
-            .collect()
-    }
-
-    /// Read back `len` bytes at `offset`.
-    pub(crate) fn readback(
-        &self,
-        dev: &mut ReadDevice<'_>,
-        offset: usize,
-        len: usize,
-    ) -> Result<Vec<u8>> {
-        dev.command_in(&cdb::read_memory(offset as u32, len as u32), len)
     }
 }

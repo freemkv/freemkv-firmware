@@ -6,7 +6,7 @@ use mediatek_optical::layout;
 #[test]
 fn embedded_catalog_parses_with_both_chip_defaults() {
     let catalog = parse(MTK_OEM).expect("embedded oem.bin parses");
-    assert!(catalog.len() >= 200, "{} builds", catalog.len());
+    assert_eq!(catalog.len(), 75, "OEM builds");
     for chip in [Chip::Mt1959, Chip::Mt1939] {
         let f = catalog.default_for(chip).expect("chip default");
         // Every LG/HP/ASUS build in the hoard stores the same boot page.
@@ -69,5 +69,51 @@ fn embedded_chip_defaults_match_their_known_digests() {
                 "{chip:?} region {i}"
             );
         }
+    }
+}
+
+/// Content keys of modified builds the catalog once listed as OEM: their
+/// backups must read as reconstructions, never as a vendor file.
+const MODIFIED: [(&str, &str); 8] = [
+    (
+        "538deee75487afd4686941f3ab6fb1758a76defaf2dc9d539c8f849105444e86",
+        "DE-patched WH16NS40 1.01",
+    ),
+    (
+        "18571e6932ac129a7c84c09b79d14f2f5e4be36843935e14ecb69d04bea4283e",
+        "DE-patched WH16NS40 1.02",
+    ),
+    (
+        "72a35c0fcfd71e6f7d2383c2bb4bf344dbf7d05e562b57db63a5a310491245c3",
+        "DE-patched BW-16D1HT 1.01, a unit's calibration",
+    ),
+    (
+        "be95f4b4f166fca07d7908c860367629cd695fa1effe5d38fb342852eb86a2ae",
+        "freemkv-fw BU40N 1.00",
+    ),
+    (
+        "bddaf2b31680ff077f2227d014b64afe22c50b68e0bed60eb1d227deb1796dfe",
+        "freemkv-fw BU40N 1.00 (gated)",
+    ),
+    (
+        "4a2a98dd7210419d7668167bbb99a59685e934bcd3fcaf128ef5e80208009420",
+        "CMAC-invalid unMK BH16NS40 1.05",
+    ),
+    (
+        "f885042147673a9d8052a0650620c5102e1242966f8245d5e8d451e87fcdb5d3",
+        "BH16NS55 1.01 drive dump",
+    ),
+    (
+        "58ba2b5bed6bab0c602de6de54e871d0c8e4a6dae97b4603f1868c4e7adf4ef7",
+        "MakeMKV-patched BH16NS40 1.03",
+    ),
+];
+
+#[test]
+fn catalog_lists_no_modified_build() {
+    let catalog = parse(MTK_OEM).unwrap();
+    for (key, what) in MODIFIED {
+        let key: Digest = hex_decode(key).unwrap().try_into().unwrap();
+        assert!(catalog.build(&key).is_none(), "{what} is cataloged as OEM");
     }
 }

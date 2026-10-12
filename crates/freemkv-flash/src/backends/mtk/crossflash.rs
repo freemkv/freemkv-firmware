@@ -1,29 +1,11 @@
-//! The MT19xx image↔drive gate: the image's chip generation must match the
-//! drive's silicon, and its model must be the drive's.
+//! The MT19xx model gate: the image's model must be the drive's. The chip
+//! and hardware-family gates are `mediatek_optical::update`'s.
 
 use anyhow::{bail, Context, Result};
 
-/// The image↔drive decision core (pure — unit-testable without a device).
-///
-/// `drive_fine_family` is the drive's current silicon family, read from its
-/// own firmware, when known. A known silicon that differs from the image's is
-/// refused first, then any model mismatch or an unknown drive model.
-pub(crate) fn decide_crossflash(
-    image_family: freemkv_chipset::ChipFamily,
-    image_model: &str,
-    drive_product: &str,
-    drive_fine_family: Option<freemkv_chipset::ChipFamily>,
-) -> Result<()> {
-    if let Some(df) = drive_fine_family {
-        if df != image_family {
-            bail!(
-                "image is {} firmware but this drive is {} silicon — refusing to \
-                 flash across chip families. This gate cannot be overridden.",
-                image_family.label(),
-                df.label()
-            );
-        }
-    }
+/// The image↔drive model decision (pure — unit-testable without a device).
+/// An unknown drive model or a different one is refused.
+pub(crate) fn decide_crossflash(image_model: &str, drive_product: &str) -> Result<()> {
     let product = drive_product.trim();
     let model_matches = !product.is_empty()
         && image_model
@@ -45,13 +27,10 @@ pub(crate) fn decide_crossflash(
     );
 }
 
-/// Enforce the image↔drive match on the write path. See [`decide_crossflash`].
-pub(crate) fn ensure_image_matches_drive(
-    image: &[u8],
-    drive_product: &str,
-    drive_fine_family: Option<freemkv_chipset::ChipFamily>,
-) -> Result<()> {
+/// Enforce the image↔drive model match on the write path. See
+/// [`decide_crossflash`].
+pub(crate) fn ensure_image_matches_drive(image: &[u8], drive_product: &str) -> Result<()> {
     let chip = freemkv_chipset::detect_chip(image)
         .context("input is not a recognizable MT19xx firmware image — refusing to flash")?;
-    decide_crossflash(chip.family, &chip.model, drive_product, drive_fine_family)
+    decide_crossflash(&chip.model, drive_product)
 }
