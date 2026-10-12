@@ -164,3 +164,78 @@ fn every_cross_family_pair_of_catalog_builds_is_refused() {
     assert_eq!(refused + allowed, n * n);
     assert!(refused > 0 && allowed >= n);
 }
+
+/// Every catalog build as the real OEM image, from a corpus
+/// (`FREEMKV_MTK_IMAGES`): a same-build reflash through the real engine streams
+/// the image verbatim in the OEM session, and every catalog build is covered.
+#[test]
+#[ignore = "needs FREEMKV_MTK_IMAGES pointing at OEM MT1959/MT1939 images"]
+fn every_catalog_build_reflashes_its_real_oem_image_verbatim() {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let dir = std::env::var("FREEMKV_MTK_IMAGES").expect("FREEMKV_MTK_IMAGES");
+    let mut paths = Vec::new();
+    walk(Path::new(&dir), &mut paths);
+    paths.sort();
+    let catalog = crate::backends::mtk::oem::catalog();
+    let session: Vec<Vec<u8>> = mediatek_optical::DriveClass::Mt19
+        .steps()
+        .iter()
+        .filter(|s| s.direction == mediatek_optical::update::Direction::Out)
+        .map(|s| s.cdb.to_vec())
+        .collect();
+    let scratch_dir = scratch("catalog-real");
+    let mut covered = Vec::new();
+    for (i, path) in paths.iter().enumerate() {
+        let image = std::fs::read(path).unwrap();
+        if image.len() != IMAGE_SIZE || mediatek_optical::image::is_drive_read(&image) {
+            continue;
+        }
+        let Some(key) = mediatek_optical::oem::content_key(&image) else {
+            continue;
+        };
+        let Some(build) = catalog.build(&key) else {
+            continue;
+        };
+        let model = build.model.clone();
+        let mut req = mtk_request(
+            image.clone(),
+            true,
+            Some(scratch_dir.join(format!("{i}.bin"))),
+        );
+        req.drive_model = model.clone();
+        let mut dev = Rec::new(
+            MockScsiDevice::echoing()
+                .with_firmware_image(drive_read(&image))
+                .with_product(&model),
+        );
+        let outcome = run(|| engine_flash(&mut dev, &Mtk, &req));
+        let label = path.display();
+        assert_eq!(outcome.result, "OK", "{label}: {:#?}", outcome.text);
+        let writes = &dev.inner.writes;
+        let sent: Vec<Vec<u8>> = writes.iter().map(|(cdb, _)| cdb.clone()).collect();
+        assert_eq!(sent, session, "{label}");
+        let streamed: Vec<u8> = writes
+            .iter()
+            .filter(|(cdb, _)| cdb[1] == 0x06)
+            .flat_map(|(_, data)| data.clone())
+            .collect();
+        assert!(streamed == image, "{label}: not streamed verbatim");
+        if !covered.contains(&key) {
+            covered.push(key);
+        }
+    }
+    assert_eq!(
+        covered.len(),
+        catalog_builds().len(),
+        "catalog builds covered"
+    );
+}
