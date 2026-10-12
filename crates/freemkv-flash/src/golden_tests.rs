@@ -2893,3 +2893,7 @@ mod report_tripwires;
 #[cfg(test)]
 #[path = "golden_corpus_tests.rs"]
 mod corpus;
+
+#[cfg(test)]
+#[path = "catalog_engine_tests.rs"]
+mod catalog_engine;

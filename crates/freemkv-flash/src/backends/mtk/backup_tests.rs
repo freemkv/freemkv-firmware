@@ -93,11 +93,13 @@ fn validation_requires_a_known_stored_boot_page() {
     assert!(validate(&image, "BD-RE BU40N", IMAGE_SIZE).is_err());
 }
 
-/// Every OEM image in a corpus rebuilds byte-exact from a simulated drive
-/// read. Set `FREEMKV_MTK_IMAGES` to a directory of images.
+/// Across a corpus (`FREEMKV_MTK_IMAGES`), a drive running a cataloged OEM
+/// build backs up byte-exact to it; a drive running anything else (a modified,
+/// community or dumped build) backs up as a reconstruction, never labelled
+/// byte-identical to an OEM image.
 #[test]
 #[ignore = "needs FREEMKV_MTK_IMAGES pointing at OEM MT1959/MT1939 images"]
-fn corpus_rebuilds_byte_exact() {
+fn corpus_backups_are_exact_only_for_oem_builds() {
     fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         for entry in std::fs::read_dir(dir).unwrap().flatten() {
             let path = entry.path();
@@ -112,7 +114,7 @@ fn corpus_rebuilds_byte_exact() {
     let mut paths = Vec::new();
     walk(std::path::Path::new(&dir), &mut paths);
     let catalog = super::super::oem::catalog();
-    let mut checked = 0;
+    let (mut exact, mut reconstructed) = (0, 0);
     for path in paths {
         let image = std::fs::read(&path).unwrap();
         if image.len() != IMAGE_SIZE
@@ -121,12 +123,30 @@ fn corpus_rebuilds_byte_exact() {
         {
             continue;
         }
-        let rebuilt = oem::rebuild(&drive_read(&image), catalog).unwrap();
-        assert!(rebuilt.provenance.is_exact(), "{}", path.display());
-        assert!(rebuilt.image == image, "{}", path.display());
-        checked += 1;
+        let cataloged = catalog.build(&oem::content_key(&image).unwrap()).is_some();
+        let Ok(rebuilt) = oem::rebuild(&drive_read(&image), catalog) else {
+            assert!(!cataloged, "{}", path.display());
+            continue;
+        };
+        let verified = matches!(notice(&rebuilt.image), BackupNotice::VerifiedOem(_));
+        assert_eq!(
+            rebuilt.provenance.is_exact(),
+            cataloged,
+            "{}",
+            path.display()
+        );
+        assert_eq!(verified, cataloged, "{}", path.display());
+        if cataloged {
+            assert!(rebuilt.image == image, "{}", path.display());
+            exact += 1;
+        } else {
+            reconstructed += 1;
+        }
     }
-    assert!(checked > 0);
+    assert!(
+        exact > 0 && reconstructed > 0,
+        "{exact} exact, {reconstructed} reconstructed"
+    );
 }
 
 /// A real drive capture (`FREEMKV_MTK_LIVE`, a raw 2 MiB `dump`) rebuilds to a

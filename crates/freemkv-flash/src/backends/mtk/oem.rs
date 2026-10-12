@@ -1,9 +1,11 @@
-//! Embedded MediaTek OEM catalog (`oem.bin`): a gzip'd JSON table of every OEM
-//! MT1959/MT1939 build in our hoard, keyed by [`mediatek_optical::oem::content_key`],
+//! Embedded MediaTek OEM catalog (`oem.bin`): a gzip'd JSON table of the OEM
+//! MT1959/MT1939 builds in our hoard, keyed by [`mediatek_optical::oem::content_key`],
 //! plus each chip generation's default factory contents.
 //!
-//! Built ONLY from OEM update images by `examples/mtk_oem_tables.rs`, which
-//! admits a build only if it rebuilds byte-for-byte from a simulated drive read.
+//! Built by `examples/mtk_oem_tables.rs`, which admits a build only if it is
+//! an OEM update image (a valid integrity table, no freemkv-fw build, no
+//! patched, downgrade-enabled, community or dump source, no unit calibration),
+//! has a hardware family and rebuilds byte-for-byte from a simulated drive read.
 //! A recognized build backs up identical to the vendor file; an unknown one
 //! gets its chip's defaults and is reported as a reconstruction.
 //!
