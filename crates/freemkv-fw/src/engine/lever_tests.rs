@@ -74,3 +74,36 @@ fn json_escapes_control_and_quotes() {
     let j = r.to_json();
     assert!(j.contains("a\\\"b\\\\c\\n"), "{j}");
 }
+
+#[test]
+fn refusal_is_none_when_any_lever_applied() {
+    let r = report(vec![
+        LeverReport::applied(LeverId::Speed, vec![]),
+        LeverReport::missed(LeverId::RawRead, "gate not found"),
+    ]);
+    assert_eq!(r.applied_count(), 1);
+    assert_eq!(r.refusal(), None);
+    assert!(r.to_json().contains("\"modified\":true"));
+}
+
+#[test]
+fn refusal_says_already_modified_when_everything_is_already_set() {
+    let r = report(vec![
+        LeverReport::already(LeverId::RegionFree, vec![]),
+        LeverReport::already(LeverId::Speed, vec![]),
+        LeverReport::not_applicable(LeverId::RawRead, "no BD"),
+    ]);
+    assert_eq!(r.refusal(), Some(ALREADY_MODIFIED));
+    assert!(r.to_json().contains("\"modified\":false"));
+}
+
+#[test]
+fn refusal_says_not_modifiable_when_a_lever_was_missed() {
+    let r = report(vec![
+        LeverReport::already(LeverId::DowngradeEnable, vec![]),
+        LeverReport::missed(LeverId::RawRead, "gate not found"),
+    ]);
+    assert_eq!(r.refusal(), Some(NOT_MODIFIABLE));
+    let r = report(vec![LeverReport::missed(LeverId::Speed, "x")]);
+    assert_eq!(r.refusal(), Some(NOT_MODIFIABLE));
+}

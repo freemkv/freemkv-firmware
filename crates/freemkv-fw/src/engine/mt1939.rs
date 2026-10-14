@@ -284,7 +284,10 @@ impl Engine for Mt1939Engine {
         ));
 
         if !levers.iter().any(|l| l.outcome.is_effective()) {
-            bail!("nothing modifiable on this MT1939 image (no identity page for the DE byte)");
+            bail!(
+                "{} (MT1939: no identity page for the DE byte)",
+                super::lever::NOT_MODIFIABLE
+            );
         }
 
         let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;

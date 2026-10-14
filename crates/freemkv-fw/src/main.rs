@@ -690,6 +690,21 @@ fn cmd_create(
     let report = engine.modify(&image).context("building freemkv firmware")?;
     diagnostics::record(report.to_json());
 
+    // Zero levers Applied: refuse and write nothing. `--json` still emits the
+    // report so tooling can read why; the human report shows the per-lever table.
+    if let Some(why) = report.refusal() {
+        if json {
+            println!("{}", report.to_json());
+        } else {
+            print_modify_report(&report, None, 0);
+            if why == engine::lever::NOT_MODIFIABLE {
+                println!();
+                println!("The stock image can still be flashed as-is with freemkv-flash.");
+            }
+        }
+        bail!("{why}");
+    }
+
     // Never write an image that does not re-verify.
     let verdicts = MtkCmac.verify(&report.image)?;
     for verdict in &verdicts {
@@ -729,7 +744,7 @@ fn cmd_create(
     if json {
         println!("{}", report.to_json());
     } else {
-        print_modify_report(&report, &out_path, verdicts.len());
+        print_modify_report(&report, Some(&out_path), verdicts.len());
     }
 
     Ok(ExitCode::SUCCESS)
@@ -892,7 +907,11 @@ fn print_base_report(outcome: &api::CreateOutcome, out_path: &Path) {
 /// outcome (applied / already set / n/a / skipped) and grounded facts, all
 /// derived from the real [`engine::ModifyReport`] so the output can never drift
 /// from what was emitted.
-fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regions: usize) {
+fn print_modify_report(
+    report: &engine::ModifyReport,
+    out_path: Option<&Path>,
+    cmac_regions: usize,
+) {
     use engine::lever::LeverOutcome;
 
     println!();
@@ -906,6 +925,9 @@ fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regi
         report.media,
     );
     println!("  {}", style::bold(&report.summary()));
+    if let Some(partial) = partial_note(report) {
+        println!("  {partial}");
+    }
     println!();
 
     for l in &report.levers {
@@ -954,15 +976,45 @@ fn print_modify_report(report: &engine::ModifyReport, out_path: &Path, cmac_regi
         )
     );
 
-    println!();
-    println!(
-        "Wrote {} {}",
-        out_path.display(),
-        style::dim(&format!(
-            "({} bytes, {cmac_regions} CMAC region(s) OK)",
-            report.image.len(),
-        )),
-    );
+    if let Some(out_path) = out_path {
+        println!();
+        println!(
+            "Wrote {} {}",
+            out_path.display(),
+            style::dim(&format!(
+                "({} bytes, {cmac_regions} CMAC region(s) OK)",
+                report.image.len(),
+            )),
+        );
+    }
+}
+
+/// The "Applied N of M changes; not supported on this image: ..." line for a
+/// partial result (some levers Applied, some not). `None` when every lever
+/// applied or nothing did (the zero case is refused, not summarised).
+fn partial_note(report: &engine::ModifyReport) -> Option<String> {
+    use engine::lever::LeverOutcome;
+
+    let applied = report.applied_count();
+    let unsupported: Vec<String> = report
+        .levers
+        .iter()
+        .filter_map(|l| match &l.outcome {
+            LeverOutcome::NotApplicable { reason } => Some(format!("{} ({reason})", l.id.label())),
+            LeverOutcome::SignatureNotFound { detail } => {
+                Some(format!("{} ({detail})", l.id.label()))
+            }
+            _ => None,
+        })
+        .collect();
+    if applied == 0 || unsupported.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "Applied {applied} of {} changes; not supported on this image: {}",
+        report.levers.len(),
+        unsupported.join(", ")
+    ))
 }
 
 #[cfg(test)]

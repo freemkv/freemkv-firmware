@@ -266,3 +266,41 @@ fn create_base_prints_the_strict_summary_and_per_feature_availability() {
     assert!(output.is_file());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn create_of_an_already_modified_image_is_refused_and_writes_nothing() {
+    let dir = scratch_dir("create-already");
+    let input = dir.join("BU40N.bin");
+    let first = dir.join("first.bin");
+    let second = dir.join("second.bin");
+    std::fs::write(&input, fixture()).unwrap();
+
+    let out = run(&["create", &path_str(&input), &path_str(&first)]);
+    assert!(out.status.success(), "first build must succeed");
+
+    // Re-feeding our own output: every lever is already set, nothing to apply.
+    let out = run(&["create", &path_str(&first), &path_str(&second)]);
+    assert!(
+        !out.status.success(),
+        "zero applied levers must exit non-zero"
+    );
+    assert!(!second.exists(), "no output file may be written");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("already modified"),
+        "the refusal must say why: {stderr}"
+    );
+    assert!(
+        stdout_of(&out).contains("already set"),
+        "the per-lever table must still be shown: {}",
+        stdout_of(&out)
+    );
+
+    let out = run(&["create", &path_str(&first), &path_str(&second), "--json"]);
+    assert!(!out.status.success());
+    assert!(!second.exists());
+    let stdout = stdout_of(&out);
+    assert!(stdout.contains("\"modified\":false"), "{stdout}");
+    assert!(stdout.contains("\"levers\":["), "{stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

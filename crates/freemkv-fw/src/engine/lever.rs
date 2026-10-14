@@ -199,6 +199,11 @@ pub struct ModifyReport {
     pub validation: Validation,
 }
 
+/// Refusal wording when every lever is already set.
+pub const ALREADY_MODIFIED: &str = "this image is already modified — nothing to change";
+/// Refusal wording when no lever can be applied to this image.
+pub const NOT_MODIFIABLE: &str = "nothing in this image can be modified by freemkv-fw";
+
 impl ModifyReport {
     /// A one-line summary: engine · media · what applied.
     pub fn summary(&self) -> String {
@@ -241,6 +246,36 @@ impl ModifyReport {
         self.levers.iter().any(|l| l.outcome.is_effective())
     }
 
+    /// Number of levers that changed bytes on this run.
+    pub fn applied_count(&self) -> usize {
+        self.levers
+            .iter()
+            .filter(|l| l.outcome == LeverOutcome::Applied)
+            .count()
+    }
+
+    /// Why `create` must refuse this report, or `None` when at least one lever
+    /// was Applied. An image whose levers are all already set (none skipped) is
+    /// "already modified"; anything else is simply not modifiable.
+    pub fn refusal(&self) -> Option<&'static str> {
+        if self.applied_count() > 0 {
+            return None;
+        }
+        let already = self
+            .levers
+            .iter()
+            .any(|l| l.outcome == LeverOutcome::AlreadyPresent);
+        let missed = self
+            .levers
+            .iter()
+            .any(|l| matches!(l.outcome, LeverOutcome::SignatureNotFound { .. }));
+        Some(if already && !missed {
+            ALREADY_MODIFIED
+        } else {
+            NOT_MODIFIABLE
+        })
+    }
+
     /// Machine-readable JSON (hand-rolled — no serde dependency).
     pub fn to_json(&self) -> String {
         let mut s = String::new();
@@ -256,6 +291,7 @@ impl ModifyReport {
         ));
         s.push_str(&format!("\"media\":{},", jstr(&self.media)));
         s.push_str(&format!("\"validation\":{},", jstr(self.validation.key())));
+        s.push_str(&format!("\"modified\":{},", self.applied_count() > 0));
         s.push_str(&format!("\"summary\":{},", jstr(&self.summary())));
         s.push_str("\"levers\":[");
         for (i, l) in self.levers.iter().enumerate() {

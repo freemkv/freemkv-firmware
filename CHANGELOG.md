@@ -6,6 +6,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### freemkv-fw
+- `create` now refuses an image where no change can be applied: it exits
+  non-zero and writes no output file, instead of exiting 0 with a copy of the
+  input. An image whose changes are all already set reports "this image is
+  already modified"; any other image reports "nothing in this image can be
+  modified by freemkv-fw" and points to flashing the stock image with
+  `freemkv-flash`. `create --json` still prints the report, with a new
+  top-level `"modified"` field (`true` when at least one change was applied).
+- When only some changes apply, `create` still writes the image and now prints
+  "Applied N of M changes; not supported on this image: ..." with the reasons.
+
 ## [0.12.2] - 2026-10-14
 
 ### Pioneer

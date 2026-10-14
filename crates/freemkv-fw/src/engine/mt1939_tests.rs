@@ -225,8 +225,8 @@ fn mt1939_refuses_an_image_with_nothing_effective_to_apply() {
         .modify(&img)
         .expect_err("no identity page → nothing modifiable → clean refusal");
     assert!(
-        err.to_string().contains("nothing modifiable"),
-        "expected the 'nothing modifiable' refusal, got: {err:#}"
+        err.to_string().contains("can be modified by freemkv-fw"),
+        "expected the 'can be modified' refusal, got: {err:#}"
     );
 }
 

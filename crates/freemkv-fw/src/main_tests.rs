@@ -840,3 +840,43 @@ fn cmd_info_requires_the_output_and_length_arguments_before_touching_a_device() 
         "an unparseable --dump address must be refused, never defaulted"
     );
 }
+
+fn lever_report(levers: Vec<engine::lever::LeverReport>) -> engine::ModifyReport {
+    engine::ModifyReport {
+        engine: "MT1959",
+        family: "MT1959".into(),
+        vendor: "HL-DT-ST".into(),
+        model: "BD-RE BU40N".into(),
+        rev: "1.00".into(),
+        vendor_specific: "N000000".into(),
+        media: "BD/UHD".into(),
+        levers,
+        image: vec![],
+        validation: engine::lever::Validation::StaticOnly,
+    }
+}
+
+#[test]
+fn partial_note_names_the_unsupported_levers() {
+    use engine::lever::{LeverId, LeverReport};
+    let r = lever_report(vec![
+        LeverReport::applied(LeverId::RegionFree, vec![]),
+        LeverReport::applied(LeverId::Speed, vec![]),
+        LeverReport::missed(LeverId::RawRead, "gate not found"),
+    ]);
+    let note = partial_note(&r).expect("partial result must get a summary line");
+    assert!(
+        note.starts_with("Applied 2 of 3 changes; not supported on this image: "),
+        "{note}"
+    );
+    assert!(note.contains("Raw read (gate not found)"), "{note}");
+}
+
+#[test]
+fn partial_note_is_absent_when_all_applied_or_none_applied() {
+    use engine::lever::{LeverId, LeverReport};
+    let all = lever_report(vec![LeverReport::applied(LeverId::Speed, vec![])]);
+    assert!(partial_note(&all).is_none());
+    let none = lever_report(vec![LeverReport::missed(LeverId::Speed, "x")]);
+    assert!(partial_note(&none).is_none());
+}
