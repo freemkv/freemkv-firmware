@@ -52,13 +52,26 @@ fn fixture_pair(gated: bool, marker: u8) -> Update {
 }
 
 fn fixture_pair_sat(gated: bool, marker: u8, sat: &[u8; 20]) -> Update {
+    // Default receiver class: XOR-skip offsets [0x100, 0x200].
+    fixture_pair_class(gated, marker, sat, [0x100, 0x200])
+}
+
+/// Like `fixture_pair_sat` but with explicit XOR-skip offsets, so a test can
+/// build a second receiver class (the offsets ARE the class; see
+/// `kernel_xor_branches`). Both must be distinct and 4-aligned.
+fn fixture_pair_class(gated: bool, marker: u8, sat: &[u8; 20], xor_offsets: [u32; 2]) -> Update {
     let mut kernel = vec![0; 0x10000];
     kernel[0x1000..0x1014].copy_from_slice(sat);
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
-    kernel[0x100..0x114].copy_from_slice(&[
-        0x7a, 0x20, 0, 0, 1, 0, 0x47, 12, 0x7a, 0x20, 0, 0, 2, 0, 0x47, 4, 1, 0xf0, 0x65, 5,
-    ]);
+    let (o1, o2) = (xor_offsets[0].to_be_bytes(), xor_offsets[1].to_be_bytes());
+    #[rustfmt::skip]
+    let branch = [
+        0x7a, 0x20, o1[0], o1[1], o1[2], o1[3], 0x47, 12,
+        0x7a, 0x20, o2[0], o2[1], o2[2], o2[3], 0x47, 4,
+        1, 0xf0, 0x65, 5,
+    ];
+    kernel[0x100..0x114].copy_from_slice(&branch);
     // The XOR-skip branch above is followed by the Forward-rotation decode loop
     // the receiver reads: AND.W #0x1F,R3; MOV.W R3,R1; JSR shift-helper (at
     // KERNEL_BASE+0x114+14 = 0x400122); OR.L; SHLR.L (right) + RTS. Without this
@@ -854,6 +867,39 @@ fn check_receiver_refuses_a_different_sat_kernel() {
         check_receiver(Some(&ik), Some(&tk), &tn),
         Err(RECEIVER_KERNEL_SAT.to_string()),
         "a different-SAT target must be refused with the SAT-mismatch reason"
+    );
+}
+
+#[test]
+fn check_receiver_refuses_a_different_receiver_class() {
+    use crate::backends::pioneer::flash_plan::{receiver_class, RECEIVER_INCOMPATIBLE};
+    // Same SAT, DIFFERENT receiver class (different XOR-skip offsets): the
+    // installed Kernel cannot decode the target's Normal, so check_receiver must
+    // refuse with RECEIVER_INCOMPATIBLE — the cross-class brick case. Synthetic,
+    // non-hoard regression guard for the receiver_gate refusal arm (previously
+    // proven only under FREEMKV_PIONEER_HOARD).
+    let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
+    let target = fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]);
+    let ik = installed
+        .kernel()
+        .repack(&installed.kernel().image)
+        .unwrap();
+    let in_ = installed
+        .normal()
+        .repack(&installed.normal().image)
+        .unwrap();
+    let tk = target.kernel().repack(&target.kernel().image).unwrap();
+    let tn = target.normal().repack(&target.normal().image).unwrap();
+    // Setup sanity: the two fixtures really are different receiver classes.
+    assert_ne!(
+        receiver_class(&ik, &in_),
+        receiver_class(&tk, &tn),
+        "fixtures must be different receiver classes for this test"
+    );
+    assert_eq!(
+        check_receiver(Some(&ik), Some(&tk), &tn),
+        Err(RECEIVER_INCOMPATIBLE.to_string()),
+        "a same-SAT but different-receiver-class target must be refused as incompatible"
     );
 }
 
