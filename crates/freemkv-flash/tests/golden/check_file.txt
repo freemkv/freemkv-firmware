@@ -39,7 +39,7 @@ result: OK
 Diagnostic log: <LOG>
 file: <TMP>/check-file/pioneer_bundle_signed_pair.tar
 size: 143 KiB
-sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
+sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
 family: Pioneer
 firmware model: BDR-TEST
 hardware: SAT FFFE
@@ -56,7 +56,7 @@ MSG      file: <TMP>/check-file/pioneer_bundle_signed_pair.tar
 MSG      size: 143 KiB
 FIELD    File = <TMP>/check-file/pioneer_bundle_signed_pair.tar
 FIELD    Size = 143 KiB
-MSG      sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
+MSG      sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
 MSG      family: Pioneer
 MSG      firmware model: BDR-TEST
 MSG      hardware: SAT FFFE

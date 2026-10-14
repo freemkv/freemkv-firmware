@@ -32,7 +32,7 @@ IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000001800 alloc=24 -> err
 IN   cdb=120000006000 alloc=96 -> ok 96
-saved pre-flash backup: 71680 bytes sha256=1ca0f8fd812313de0e9f42418df7eb1d378763bb0629b9b7dc25bc61799c43f2
+saved pre-flash backup: 71680 bytes sha256=d827e8c5d589e922a0cd54a305164cac456c163227798d10ac30bab07c2d1909
 
 === Pioneer execute: target is a header-only bundle ===
 result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
@@ -73,7 +73,7 @@ IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 IN   cdb=120000006000 alloc=96 -> ok 96
-saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
+saved pre-flash backup: 146432 bytes sha256=96194fc8db04f06c88fd17ddec226c2769f83b2b622789707f7235a198aa82b6
 
 === Pioneer execute: target is garbage ===
 result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
@@ -144,9 +144,9 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 OUTS cdb=3b04ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
 IN   cdb=120000006000 alloc=96 -> ok 96
-OUTS cdb=3b07fe00000000800000 len=32768 sha256=3322ba5603d28bfebd97ba3633c0c60f5c9c09ab41c54c12f0c13e0bc6ecf39f -> ok
+OUTS cdb=3b07fe00000000800000 len=32768 sha256=141a156c55e3e8ccff00cc94a79c9ba630f08714e26ae8764f86b051ff9894de -> ok
 OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
-OUTS cdb=3b07fe01000000120000 len=4608 sha256=23ec2bedd92e6f32f54fcf35b1d633d87df58bc1aeb0d37dc542d65d513b6c60 -> ok
+OUTS cdb=3b07fe01000000120000 len=4608 sha256=79f2251b2edefec88f24ed8fddcc83182da76ab707ca8c13bb869962d3c07e40 -> ok
 OUTS cdb=3b07f000000000800000 len=32768 sha256=779a9a4415b19ca050d425d694aa06da6e3e24920108546bfdf2105e09fb9e92 -> ok
 OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
 OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
@@ -159,14 +159,14 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
-saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
+saved pre-flash backup: 146432 bytes sha256=96194fc8db04f06c88fd17ddec226c2769f83b2b622789707f7235a198aa82b6
 
 === Pioneer flash: dry-run request ===
 result: OK
 --- text (7) ---
 == Pioneer offline transfer plan ==
 stated model: BD-RW   BDR-UD04
-SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
+SHA-256: 52d698397cdc7dccefa39db6ee1becaee3ef7876a99eda1deb86df6b05735cc6
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 Installed-family compatibility is checked against the live backup.
@@ -174,7 +174,7 @@ DRY RUN: no device I/O or writes.
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-UD04
-MSG      SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
+MSG      SHA-256: 52d698397cdc7dccefa39db6ee1becaee3ef7876a99eda1deb86df6b05735cc6
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 MSG      Installed-family compatibility is checked against the live backup.

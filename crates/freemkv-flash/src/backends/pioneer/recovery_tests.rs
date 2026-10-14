@@ -403,7 +403,6 @@ fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
     assert!(live.finished && !live.writes.is_empty());
 }
 
-
 // ---- Hoard-wide recover re-encode KAT ---------------------------------------
 //
 // Env-gated (`FREEMKV_PIONEER_HOARD`, the directory holding
@@ -497,7 +496,14 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
         Some(decode_envelope_with_kernel(normal, &k)?.image)
     };
 
-    let (mut same_class, mut cross_proven, mut cross_total) = (0usize, 0usize, 0usize);
+    // `cross_abi` = cross-receiver pairs refused because the target Normal needs
+    // Kernel entry points the installed Kernel does not provide (AbiMismatch):
+    // a structural incompatibility (different Kernel ABI generation inside one
+    // family hash) that re-encode cannot bridge and that `flash` also refuses.
+    // These are legitimately not crossflashable, so they are excluded from the
+    // re-encode provable-ratio rather than counted as re-encode failures.
+    let (mut same_class, mut cross_proven, mut cross_total, mut cross_abi) =
+        (0usize, 0usize, 0usize, 0usize);
     let mut failures: Vec<String> = Vec::new();
     // Full per-pair matrix (family, installed X, target Y, verdict), emitted to
     // FREEMKV_PIONEER_HOARD_REPORT when set. AS-IS = installed Kernel decodes the
@@ -531,7 +537,8 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
         let bytes: HashMap<usize, (Vec<u8>, Vec<u8>)> = group
             .iter()
             .filter_map(|&i| {
-                let (Some(k), Some(n)) = classify_flash_input(&std::fs::read(&metas[i].path).ok()?).ok()?
+                let (Some(k), Some(n)) =
+                    classify_flash_input(&std::fs::read(&metas[i].path).ok()?).ok()?
                 else {
                     return None;
                 };
@@ -578,6 +585,18 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
             ) {
                 Ok(bytes) => bytes,
                 Err(e) => {
+                    // AbiMismatch is a legitimate structural refusal (the Normal
+                    // requires Kernel entry points this Kernel does not provide),
+                    // not a re-encode failure: record it but do not count it
+                    // against the provable-ratio.
+                    if matches!(e, pioneer_optical::envelope::Error::AbiMismatch) {
+                        cross_abi += 1;
+                        rows.push(format!(
+                            "{}\t{}\t{}\tREFUSED: AbiMismatch",
+                            metas[i].family, metas[i].name, metas[j].name
+                        ));
+                        continue;
+                    }
                     failures.push(format!("{} <- {}: {e:?}", metas[j].name, metas[i].name));
                     rows.push(format!(
                         "{}\t{}\t{}\tREFUSED: {e:?}",
@@ -616,7 +635,10 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
     };
     let a = find("BDR-207M ID43 1.60");
     let b = find("BDR-PR1ML ID88 1.30");
-    assert_eq!(metas[a].family, metas[b].family, "named case shares a family");
+    assert_eq!(
+        metas[a].family, metas[b].family,
+        "named case shares a family"
+    );
     assert_ne!(
         metas[a].class, metas[b].class,
         "207M and PR1ML must straddle a receiver class"
@@ -639,7 +661,9 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
              # AS-IS = installed Kernel decodes shipped Normal unchanged; \
              REENCODE = X->Y needs re-encode; REFUSED = not offline-provable (cause)\n\
              # totals: same-class(AS-IS) {same_class}; cross-receiver proven \
-             {cross_proven}/{cross_total}; {} not provable\n{}\n",
+             {cross_proven}/{} re-encodable; {cross_abi} AbiMismatch (structural, \
+             not crossflashable); {} other not-provable\n{}\n",
+            cross_total - cross_abi,
             failures.len(),
             rows.join("\n"),
         );
@@ -649,20 +673,93 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
             rows.len()
         );
     }
+    let cross_reencodable = cross_total - cross_abi;
     eprintln!(
-        "recover KAT: same-class pairs {same_class} provable by construction; \
-         cross-receiver re-encode proven {cross_proven}/{cross_total}; {} not provable",
+        "recover KAT: same-class(AS-IS) {same_class}; cross-receiver re-encode proven \
+         {cross_proven}/{cross_reencodable} re-encodable; {cross_abi} AbiMismatch \
+         (structural, not crossflashable); {} other not-provable",
         failures.len()
     );
     assert!(
         cross_proven >= 1,
         "expected at least one cross-receiver re-encode to be proven"
     );
-    // Cross-receiver re-encode must succeed for the overwhelming majority; a few
-    // packages (e.g. no recoverable seed) are legitimately not re-encodable.
+    // Of the re-encodable cross pairs (AbiMismatch excluded — a structural
+    // incompatibility re-encode cannot bridge and that `flash` also refuses),
+    // the overwhelming majority must prove; the rest are a few legitimately
+    // not-re-encodable packages (e.g. no recoverable seed).
     assert!(
-        cross_total == 0 || cross_proven * 5 >= cross_total * 4,
-        "too many cross-receiver re-encode failures ({}/{cross_total}): {failures:#?}",
-        cross_total - cross_proven
+        cross_reencodable == 0 || cross_proven * 5 >= cross_reencodable * 4,
+        "too many cross-receiver re-encode failures ({}/{cross_reencodable}; \
+         {cross_abi} AbiMismatch excluded): {failures:#?}",
+        cross_reencodable - cross_proven
+    );
+}
+
+// ---- Backup-restorable gate (revert must stay possible) ---------------------
+
+use crate::backends::pioneer::flash_plan::backup_restorable;
+
+#[test]
+fn backup_restorable_allows_a_same_class_backup() {
+    // A same-receiver-class backup can always be flashed back onto a drive
+    // running the target, so the gate must not refuse it.
+    let target = fixture_pair(false, 0);
+    let backup = archive(&fixture_pair(false, 1), false);
+    let target_kernel = target.kernel().repack(&target.kernel().image).unwrap();
+    assert!(backup_restorable(Some(&target_kernel), &backup).is_ok());
+}
+
+#[test]
+fn backup_restorable_is_noop_for_a_normal_only_flash() {
+    // No target Kernel means the installed Kernel stays, so the backup is
+    // restorable by construction.
+    let backup = archive(&fixture_pair(false, 1), false);
+    assert!(backup_restorable(None, &backup).is_ok());
+}
+
+// Real one-way crossflash: a drive running BDW-PR1EPDVPP100 can flash down to
+// BDR-PR1ML, but the BDW backup needs Kernel entry points the PR1ML Kernel does
+// not provide, so it could not be flashed back. The gate must refuse that flash
+// and allow the reverse. Gated by FREEMKV_PIONEER_HOARD.
+#[test]
+fn backup_restorable_refuses_the_one_way_bdw_pr1ml_crossflash() {
+    let Ok(root) = std::env::var("FREEMKV_PIONEER_HOARD") else {
+        eprintln!("FREEMKV_PIONEER_HOARD not set; one-way backup gate test skipped");
+        return;
+    };
+    use std::path::PathBuf;
+    let root = PathBuf::from(root);
+    let index: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(root.join("index/packages.json")).expect("index"))
+            .expect("index JSON");
+    let field = |p: &serde_json::Value, k: &str| p[k].as_str().unwrap_or_default().to_string();
+    let find = |model: &str, rev: &str| -> Vec<u8> {
+        for p in index["packages"].as_array().expect("packages") {
+            if field(p, "embedded_model").starts_with(model) && field(p, "revision") == rev {
+                if let Ok(b) = std::fs::read(root.join(field(p, "path"))) {
+                    return b;
+                }
+            }
+        }
+        panic!("hoard missing {model} {rev}");
+    };
+    let bdw = find("BDW-PR1EPDVPP100", "1.01");
+    let pr1ml = find("BDR-PR1ML", "1.30");
+    let kernel_of = |tar: &[u8]| {
+        let (k, _) = crate::backends::pioneer::classify_flash_input(tar).unwrap();
+        k.unwrap()
+    };
+    // Installed BDW, flashing PR1ML: the BDW backup cannot be restored onto a
+    // PR1ML-running drive -> refuse.
+    assert!(
+        backup_restorable(Some(&kernel_of(&pr1ml)), &bdw).is_err(),
+        "one-way crossflash must refuse: BDW backup is not restorable onto PR1ML"
+    );
+    // Installed PR1ML, flashing BDW: the PR1ML backup IS restorable onto a
+    // BDW-running drive (BDW Kernel provides a superset) -> allow.
+    assert!(
+        backup_restorable(Some(&kernel_of(&bdw)), &pr1ml).is_ok(),
+        "the restorable reverse direction must be allowed"
     );
 }

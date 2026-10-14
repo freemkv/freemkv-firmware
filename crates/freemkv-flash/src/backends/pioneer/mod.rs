@@ -857,7 +857,14 @@ impl FlashFacet for Pioneer {
 
     fn verify_backup(&self, plan: &FlashPlan, backup: &[u8]) -> Result<()> {
         let p: &ExecutePlan = plan.state()?;
-        verify_coverage(backup, p.kernel.is_some(), true)
+        verify_coverage(backup, p.kernel.is_some(), true)?;
+        // A kept backup must stay restorable once the drive runs the target, or
+        // the "keep your backup to revert" promise is false. Refuses a one-way
+        // crossflash (e.g. a drive whose Normal needs Kernel entry points the
+        // target Kernel does not provide). MediaTek enforces the same contract
+        // via `crossflash::decide_rollback`.
+        crate::backends::pioneer::flash_plan::backup_restorable(p.kernel.as_deref(), backup)
+            .map_err(|reason| anyhow!("{reason}"))
     }
 
     fn authorize(

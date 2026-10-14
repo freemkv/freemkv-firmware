@@ -1484,7 +1484,7 @@ Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   reading kernel...
   verifying kernel...
-candidate sha256: d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
+candidate sha256: f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
 wrote <TMP>/backup/pioneer_backup.tar (143 KiB).
 UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 --- events (11) ---
@@ -1494,7 +1494,7 @@ MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
 MSG        reading kernel...
 MSG        verifying kernel...
-MSG      candidate sha256: d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
+MSG      candidate sha256: f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
 FIELD    Saved to = <TMP>/backup/pioneer_backup.tar
 MSG      wrote <TMP>/backup/pioneer_backup.tar (143 KiB).
 FIELD    Backup warning = UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
@@ -1521,7 +1521,7 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-saved file: 146432 bytes sha256=d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
+saved file: 146432 bytes sha256=f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
 
 === Pioneer dump (recover): bounded replay ===
 result: OK

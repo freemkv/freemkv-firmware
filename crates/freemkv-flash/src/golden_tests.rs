@@ -842,6 +842,12 @@ fn fixture_pair(gated: bool, marker: u8) -> Update {
     kernel[0x100..0x114].copy_from_slice(&[
         0x7a, 0x20, 0, 0, 1, 0, 0x47, 12, 0x7a, 0x20, 0, 0, 2, 0, 0x47, 4, 1, 0xf0, 0x65, 5,
     ]);
+    // Forward-rotation decode loop after the XOR-skip branch; without it
+    // pioneer-optical 0.15.0 returns UnknownRotation from Update::load.
+    kernel[0x114..0x126].copy_from_slice(&[
+        0x79, 0x63, 0, 0x1f, 0x0d, 0x31, 0x5e, 0x40, 0x01, 0x22, 1, 0xf0, 0x64, 0x40, 0x11, 0x70,
+        0x54, 0x70,
+    ]);
     let finalizer = if gated {
         GATED_FINALIZER
     } else {
@@ -959,6 +965,12 @@ fn prepared_pair(gated: bool, marker: u8) -> Update {
     kernel[0x100..0x114].copy_from_slice(&[
         0x7a, 0x20, 0, 0, 1, 0, 0x47, 12, 0x7a, 0x20, 0, 0, 2, 0, 0x47, 4, 1, 0xf0, 0x65, 5,
     ]);
+    // Forward-rotation decode loop after the XOR-skip branch; without it
+    // pioneer-optical 0.15.0 returns UnknownRotation from Update::load.
+    kernel[0x114..0x126].copy_from_slice(&[
+        0x79, 0x63, 0, 0x1f, 0x0d, 0x31, 0x5e, 0x40, 0x01, 0x22, 1, 0xf0, 0x64, 0x40, 0x11, 0x70,
+        0x54, 0x70,
+    ]);
     let finalizer = if gated {
         GATED_FINALIZER
     } else {
@@ -1026,6 +1038,13 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
         &mut kernel,
         0x100,
         "7a 20 00 00 01 00 47 0c 7a 20 00 00 02 00 47 04 01 f0 65 05",
+    );
+    // Forward-rotation decode loop after the XOR-skip branch; without it
+    // pioneer-optical 0.15.0 returns UnknownRotation from Update::load.
+    put(
+        &mut kernel,
+        0x114,
+        "79 63 00 1f 0d 31 5e 40 01 22 01 f0 64 40 11 70 54 70",
     );
     put(&mut kernel, 0x200, "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 20 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de");
     put(&mut kernel, 0x400, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6");
@@ -2666,8 +2685,10 @@ const ALLOWED_REASONS: &[&str] = &[
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
 /// that cannot be read is refused before the backup; P2, the last tray check
 /// runs after the confirmation; P3, a refusal no longer carries
-/// [`RECOVER_HINT`].
-const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3"];
+/// [`RECOVER_HINT`]; P4, the synthetic Kernel fixtures gained a 0.15.0 receiver
+/// rotation decode-loop, so only fixture-derived digests differ (commands and
+/// messages unchanged).
+const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4"];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
 /// v0.11.2 could not reach that flash mode either: its CLI and GUI always

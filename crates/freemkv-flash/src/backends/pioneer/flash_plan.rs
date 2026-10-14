@@ -409,6 +409,69 @@ pub fn check_receiver(
     ))
 }
 
+/// The refusal when a crossflash would make the pre-flash backup un-restorable.
+pub const BACKUP_NOT_RESTORABLE: &str =
+    "this crossflash would leave the drive unable to restore its backup: the target firmware's \
+     Kernel does not provide the Kernel entry points the current firmware's Normal requires, so \
+     the saved backup could not be flashed back afterwards. Refusing, because a kept backup must \
+     always be restorable. (The reverse direction is fine — this specific pairing is one-way.)";
+
+/// Whether the pre-flash backup can be restored after this flash: a drive
+/// running the TARGET firmware must be able to receive the backup (the installed
+/// firmware) again, by flash (same receiver class and SAT) or by recover
+/// re-encode (the backup Normal's required Kernel ABI is provided by the target
+/// Kernel). We promise a kept backup can always revert, so a crossflash that
+/// would make the backup un-restorable is refused.
+///
+/// Refuses ONLY when revert is provably impossible (the target Kernel cannot
+/// provide the backup Normal's required entry points); every undecidable case
+/// is allowed, so no valid flash is blocked. This shares the restore
+/// admissibility, so it auto-passes if a future restore path (e.g. a staged
+/// two-pass crossflash) makes more backups restorable.
+pub fn backup_restorable(target_kernel: Option<&[u8]>, backup: &[u8]) -> Result<(), String> {
+    use pioneer_optical::envelope::{decode_envelope, decode_envelope_with_kernel};
+    use pioneer_optical::image::{provided_abi, required_abi};
+    // A Normal-only flash leaves the installed Kernel in place, so the backup is
+    // restorable by construction.
+    let Some(target_kernel) = target_kernel else {
+        return Ok(());
+    };
+    // Coverage is verified separately; do not block on a parse gap here.
+    let Ok((Some(backup_kernel), Some(backup_normal))) =
+        crate::backends::pioneer::classify_flash_input(backup)
+    else {
+        return Ok(());
+    };
+    // Flash-revert: a drive running the target can receive the backup directly.
+    if check_receiver(
+        Some(target_kernel),
+        Some(backup_kernel.as_slice()),
+        &backup_normal,
+    )
+    .is_ok()
+    {
+        return Ok(());
+    }
+    // Recover-revert: re-encode the backup Normal for the target Kernel. The one
+    // decisive, provable barrier is ABI — the backup Normal must only call entry
+    // points the target Kernel provides. Only refuse when we can prove it cannot.
+    let Some(backup_body) = decode_envelope(&backup_kernel)
+        .and_then(|k| decode_envelope_with_kernel(&backup_normal, &k))
+        .map(|d| d.image)
+    else {
+        return Ok(());
+    };
+    let Some(target_image) = decode_envelope(target_kernel).map(|k| k.image) else {
+        return Ok(());
+    };
+    match (required_abi(&backup_body), provided_abi(&target_image)) {
+        (Some(required), Some(provided)) if !required.is_satisfied_by(&provided) => {
+            Err(BACKUP_NOT_RESTORABLE.to_string())
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Whether a flash needs the vendor F3/F2 "kernel mode" unlock. Always `false`.
 ///
 /// The F3/F2 handshake is not cold-reachable on any Pioneer BD firmware (a live

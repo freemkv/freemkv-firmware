@@ -556,8 +556,12 @@ pub trait FlashFacet {
     fn preflight(&self, _dev: &mut ReadDevice<'_>, _plan: &FlashPlan) -> Result<Vec<PlanLine>> {
         Ok(Vec::new())
     }
-    /// Whether the saved backup holds a rollback for every region the plan
-    /// overwrites. The backup stays saved when this refuses.
+    /// Whether the saved backup is a usable rollback: it holds every region the
+    /// plan overwrites AND can be restored once the drive runs the target (a
+    /// crossflash that would make the backup un-restorable must be refused, so
+    /// the "keep your backup to revert" promise holds). The backup stays saved
+    /// when this refuses. Each backend enforces this one contract (Pioneer in
+    /// `flash_plan::backup_restorable`, MediaTek in `crossflash::decide_rollback`).
     fn verify_backup(&self, _plan: &FlashPlan, _backup: &[u8]) -> Result<()> {
         Ok(())
     }

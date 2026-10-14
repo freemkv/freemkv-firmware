@@ -121,7 +121,7 @@ result: OK
 --- text (7) ---
 == Pioneer offline transfer plan ==
 stated model: BD-RW   BDR-TEST
-SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 Installed-family compatibility is checked against the live backup.
@@ -129,7 +129,7 @@ DRY RUN: no device I/O or writes.
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
-MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+MSG      SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 MSG      Installed-family compatibility is checked against the live backup.
@@ -141,7 +141,7 @@ result: OK
 --- text (15) ---
 == Pioneer offline transfer plan ==
 stated model: BD-RW   BDR-TEST
-SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 Installed-family compatibility is checked against the live backup.
@@ -157,7 +157,7 @@ DRY RUN: no device I/O or writes.
 --- events (15) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
-MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
+MSG      SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 MSG      Installed-family compatibility is checked against the live backup.

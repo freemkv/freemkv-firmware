@@ -1113,6 +1113,13 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
         0x100,
         "7a 20 00 00 01 00 47 0c 7a 20 00 00 02 00 47 04 01 f0 65 05",
     );
+    // Forward-rotation decode loop the receiver reads after the XOR-skip branch;
+    // without it pioneer-optical 0.15.0 returns UnknownRotation from Update::load.
+    put(
+        &mut kernel,
+        0x114,
+        "79 63 00 1f 0d 31 5e 40 01 22 01 f0 64 40 11 70 54 70",
+    );
     put(&mut kernel, 0x200, "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 20 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de");
     put(&mut kernel, 0x400, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6");
     fix(&mut kernel);

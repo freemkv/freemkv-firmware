@@ -1016,6 +1016,12 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
     kernel[0x100..0x114].copy_from_slice(&[
         0x7a, 0x20, 0, 0, 1, 0, 0x47, 12, 0x7a, 0x20, 0, 0, 2, 0, 0x47, 4, 1, 0xf0, 0x65, 5,
     ]);
+    // Forward-rotation decode loop the receiver reads after the XOR-skip branch;
+    // without it pioneer-optical 0.15.0 returns UnknownRotation from Update::load.
+    kernel[0x114..0x126].copy_from_slice(&[
+        0x79, 0x63, 0, 0x1f, 0x0d, 0x31, 0x5e, 0x40, 0x01, 0x22, 1, 0xf0, 0x64, 0x40, 0x11, 0x70,
+        0x54, 0x70,
+    ]);
     checksum(&mut kernel, 0xff00);
     let mut scalar = [0; 20];
     scalar[19] = 5;
