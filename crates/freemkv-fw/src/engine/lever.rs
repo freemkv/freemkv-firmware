@@ -177,9 +177,11 @@ impl Validation {
 /// The result of a MODIFY run: the re-signed image plus per-lever outcomes.
 #[derive(Debug, Clone)]
 pub struct ModifyReport {
-    /// Engine label (e.g. `"MT1959"`).
+    /// Engine / code-layout label (e.g. `"MT1959"`). This is the lineage whose
+    /// build machinery handled the image, not necessarily a silicon name.
     pub engine: &'static str,
-    /// Detected chip family label.
+    /// The chip generation, taken from the boot-loader banner (the authoritative
+    /// rule). Emitted in `--json` as both `family` and `chip`.
     pub family: String,
     /// Drive vendor/model/rev (display), from the descriptor.
     pub vendor: String,
@@ -282,6 +284,10 @@ impl ModifyReport {
         s.push('{');
         s.push_str(&format!("\"engine\":{},", jstr(self.engine)));
         s.push_str(&format!("\"family\":{},", jstr(&self.family)));
+        // The chip generation per the boot-banner rule. Kept distinct from
+        // `engine` (the code-layout/lineage label) so consumers that want the
+        // chip do not read the engine name.
+        s.push_str(&format!("\"chip\":{},", jstr(&self.family)));
         s.push_str(&format!("\"vendor\":{},", jstr(&self.vendor)));
         s.push_str(&format!("\"model\":{},", jstr(&self.model)));
         s.push_str(&format!("\"rev\":{},", jstr(&self.rev)));

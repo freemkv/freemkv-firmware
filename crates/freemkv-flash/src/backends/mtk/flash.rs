@@ -538,7 +538,7 @@ fn refusal(error: PrepareError) -> anyhow::Error {
         PrepareError::ChipMismatch { .. } => {
             anyhow!("{error}. This gate cannot be overridden.")
         }
-        PrepareError::DriveDescriptor | PrepareError::UnknownDriveChip => {
+        PrepareError::UnknownDriveChip => {
             anyhow!("{error}; refusing to flash")
         }
         other => anyhow!("{other}; refusing to flash"),

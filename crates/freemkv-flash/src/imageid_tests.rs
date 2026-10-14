@@ -6,11 +6,19 @@
 
 use super::*;
 
-/// A minimal MT19xx image: the `MTEKMT1959` descriptor tag + a model/rev field
-/// at the descriptor offset, sized so [`freemkv_chipset::detect_chip`] accepts it.
+/// A minimal MT19xx image: a boot banner at `0x3000` (the authoritative chip
+/// signal) matching `tag`'s generation, plus the descriptor tag + model/rev at
+/// the descriptor offset, sized so [`freemkv_chipset::detect_chip`] accepts it.
 fn mt19xx(model: &str, rev: &str, tag: &str) -> Vec<u8> {
     let desc = freemkv_chipset::DESCRIPTOR_OFFSET;
     let mut img = vec![0u8; desc + 0x100];
+    let banner: &[u8] = if tag.ends_with("59") {
+        b"MT1959 Boot BU5"
+    } else {
+        b"MT1939 Boot Code"
+    };
+    let b = freemkv_chipset::BANNER_OFFSET;
+    img[b..b + banner.len()].copy_from_slice(banner);
     img[desc + 0x08..desc + 0x08 + model.len()].copy_from_slice(model.as_bytes());
     img[desc + 0x18..desc + 0x18 + rev.len()].copy_from_slice(rev.as_bytes());
     img[desc + 0x34..desc + 0x34 + tag.len()].copy_from_slice(tag.as_bytes());

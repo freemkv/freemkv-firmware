@@ -29,9 +29,10 @@ MSG        lands. This cannot be undone.
 MSG        preflight ................ transport ready; backup capture is checked only on execute
 MSG      
 MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
---- scsi transcript (4) ---
+--- scsi transcript (5) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 
@@ -87,9 +88,10 @@ MSG        #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
 MSG        preflight ................ transport ready; backup capture is checked only on execute
 MSG      
 MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
---- scsi transcript (4) ---
+--- scsi transcript (5) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 

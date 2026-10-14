@@ -94,19 +94,14 @@ pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
     crate::output::field("Chipset", chip.family.label());
     crate::output::field("Model", crate::report::Value::text(&model));
     crate::output::field("Firmware version", crate::report::Value::text(&rev));
-    let conf = match chip.confidence {
-        freemkv_chipset::Confidence::TagString => "identity string",
-        freemkv_chipset::Confidence::BannerFallback => "banner (fallback)",
-    };
     println!(
         "{}",
         style::kv(
             "chipset",
             &format!(
-                "MediaTek {} (via {}; tag {})",
+                "MediaTek {} (from boot banner; identity tag {})",
                 chip.family.label(),
-                conf,
-                style::printable(chip.tag_string.as_deref().unwrap_or("<none>"))
+                style::printable(chip.identity_tag.as_deref().unwrap_or("<none>"))
             )
         )
     );

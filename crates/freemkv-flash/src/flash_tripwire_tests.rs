@@ -53,7 +53,8 @@ fn text_index(outcome: &Outcome, needle: &str) -> usize {
 #[test]
 fn flash_plan_needs_no_backup() {
     // MediaTek: an execute plan with no backup destination reads only the chip
-    // identity; the firmware is never read.
+    // identity (the descriptor and the boot banner, which decides the chip); the
+    // firmware is never read.
     let image = make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N");
     let req = mtk_request(image.clone(), true, None);
     let mut dev = Rec::new(mtk_drive());
@@ -63,7 +64,10 @@ fn flash_plan_needs_no_backup() {
     assert!(plan.after_backup.contains(&PlanLine::Backup));
     assert_eq!(
         dev.transcript(),
-        ["IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256"]
+        [
+            "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
+            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
+        ]
     );
 
     // Pioneer: planned from the package alone, against a drive that is not a
@@ -85,7 +89,8 @@ fn flash_plan_needs_no_backup() {
         transcript,
         [
             "MEDIUM -> ClosedEmpty",
-            "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256"
+            "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
+            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
         ]
     );
 }
@@ -358,6 +363,7 @@ fn dry_run_keeps_tray_warning_and_mtk_preflight() {
         [
             "MEDIUM -> DiscPresent",
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
+            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
             "IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256",
             "IN   cdb=000000000000000000000000 alloc=0 -> ok 0",
         ]
@@ -584,9 +590,20 @@ fn cdb_probe() -> [u8; 12] {
 #[test]
 fn cross_line_image_is_refused_after_the_backup_before_any_write() {
     let model = "BD-RE  BH16NS40";
+    // Two board lines of the SAME chip (both MT1939, banner "MT1939 Boot Code")
+    // and model, differing only by platform → a family mismatch caught after the
+    // backup. (JB8 is now MT1959, so JB7-vs-JB8 would be a chip mismatch caught
+    // before the backup, a different path.)
     let jb7 = fixture::image(&fixture::JB7, model, 3);
-    let jb8 = fixture::image(&fixture::JB8, model, 5);
-    for (installed, target) in [(&jb7, &jb8), (&jb8, &jb7)] {
+    let jb9 = fixture::image(
+        &fixture::Board {
+            platform: "JB9",
+            ..fixture::JB7
+        },
+        model,
+        5,
+    );
+    for (installed, target) in [(&jb7, &jb9), (&jb9, &jb7)] {
         let (outcome, transcript, backup) = family_flash(installed, target);
         assert!(
             outcome.result.contains("family mismatch"),

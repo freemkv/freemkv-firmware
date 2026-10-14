@@ -22,6 +22,7 @@ differ only for P1 to P4; a MediaTek scenario only for R1 to R8, M-RS and M-FAM:
 | R8 | the synthetic MediaTek fixtures carry a hardware configuration record (boot banner, descriptor platform code at `+0x46`, feature template and record at `0x11000`), which the hardware-family gate needs. Commands are unchanged; only the bytes that depend on the fixture differ: payload and file digests, the displayed banner, the firmware fingerprint and the first differing read-back offset |
 | M-RS | MediaTek REQUEST SENSE (STATUS) is sent as the OEM updaters send it, `03 00 00 00 10 80` padded to 12 bytes: allocation length `0x10` in byte 4, `0x80` in the control byte. We sent `03 00 00 10 80 00`, one byte off. Evidence: LG's MT19xx updater v1.081 (`WH16NS40.exe`, sha256 `281c668c…806bac`, file offset `0x1383`) builds it as `c6 45 f0 03` / `66 c7 45 f4 10 80` (`cdb[0] = 03`, `cdb[4..6] = 10 80`); v1.074 (`BH16NS40(1.03-A0).exe`) the same with allocation `0x12`. Every other MT1959 command and payload is byte-identical |
 | M-FAM | MediaTek same-hardware-family crossflash gate. v0.11.2 refused any image of another model by name; now an image of another model is admitted when it is the drive's hardware family (and refused, before any write, when it is not). A different-family dry run reads the drive's boot banner (its loader tells apart families that share a platform) and refuses with "this image is for a different hardware family" instead of the wrong-model message |
+| M-CHIP | MediaTek chip generation (MT1959 vs MT1939) is now decided by the boot loader banner at 0x3000, never the stale `MTEKMT19xx` identity tag (which is shown only as a curiosity). Consequences visible in the goldens: the `chipset` line reads "from boot banner; identity tag …" (was "via identity string; tag …"); the `banner` row shows the real banner (the chip gate always reads it, so the SCSI transcript gains one `3c06…3000…2000` read even when the descriptor has a tag); a legacy `.tar` backup is described from its rebuilt image, so a synthetic fixture with no 0x3000 banner now reads as unrecognized rather than keying on the embedded tag; and an image/drive whose banner names the chip is labelled by that banner (an MT1939-tagged JB8 build is MT1959) |
 
 The baseline set was produced by copying `src/golden_tests.rs` into a
 `git worktree` of the v0.11.2 tag and changing only its COMPAT shims
@@ -166,106 +167,166 @@ reason: P4
 ## check_file.txt
 
 ### check_file mtk_bad_cmac.bin
-reason: R7, R8
+reason: R7, R8, M-CHIP
 ```diff
 -sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
-+sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
++sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
 +MSG      sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### check_file mtk_drive_read_backup.bin
-reason: R7, R6, R8
+reason: R7, R6, R8, M-CHIP
 ```diff
 -sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
-+sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: �����������
++sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
 +MSG      sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: �����������
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### check_file mtk_flashable.bin
-reason: R7, R8
+reason: R7, R8, M-CHIP
 ```diff
 -sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
++sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 +MSG      sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### check_file mtk_legacy_0_10_backup.tar
-reason: R7
+reason: R7, M-CHIP
 ```diff
+-result: OK
+---- text (12) ---
++result: ERR not a MediaTek firmware backup: undetectable — the boot loader banner at 0x3000 names no supported MT19xx generation (only MT1959 and MT1939 are handled; unpack packed/truncated dumps first)
++--- text (5) ---
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-banner: <none>
+-descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
+-capability: BD/UHD, region-lockable, AACS content
 -flash: MediaTek MT1959 — executable (hardware-proven)
-+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-integrity: no signed CMAC table (unsigned or non-standard image)
+-built for: <unknown> <unknown> (MT1959)
+---- events (19) ---
++--- events (8) ---
+-FIELD    Chipset = MT1959
+-FIELD    Model = <unknown>
+-FIELD    Firmware version = <unknown>
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-MSG      banner: <none>
+-MSG      descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
+-MSG      capability: BD/UHD, region-lockable, AACS content
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
-+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
+-MSG      integrity: no signed CMAC table (unsigned or non-standard image)
+-MSG      built for: <unknown> <unknown> (MT1959)
 ```
 
 ### check_file mtk_mt1939_stored.bin
-reason: R7, R6, R8
+reason: R7, R6, R8, M-CHIP
 ```diff
 -sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
-+sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
+-chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
 -banner: �����������
++sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
++chipset: MediaTek MT1939 (from boot banner; identity tag MTEKMT1939)
 +banner: MT1939 Boot Code
 -flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 -MSG      sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
 +MSG      sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
+-MSG      chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
 -MSG      banner: �����������
++MSG      chipset: MediaTek MT1939 (from boot banner; identity tag MTEKMT1939)
 +MSG      banner: MT1939 Boot Code
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 ```
 
 ### check_file mtk_mt1959_stored.bin
-reason: R7, R6, R8
+reason: R7, R6, R8, M-CHIP
 ```diff
 -sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
-+sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: �����������
++sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
 +MSG      sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: �����������
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### check_file mtk_unsigned.bin
-reason: R7
+reason: R7, M-CHIP
 ```diff
+---- text (12) ---
++--- text (6) ---
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-banner: <none>
+-descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+-capability: BD/UHD, region-lockable, AACS content
 -flash: MediaTek MT1959 — executable (hardware-proven)
-+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-integrity: no signed CMAC table (unsigned or non-standard image)
+-built for: <unknown> BD-RE BU40N (MT1959)
++image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+---- events (19) ---
++--- events (9) ---
+-FIELD    Chipset = MT1959
+-FIELD    Model = BD-RE BU40N
+-FIELD    Firmware version = <unknown>
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-MSG      banner: <none>
+-MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+-MSG      capability: BD/UHD, region-lockable, AACS content
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
-+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
+-MSG      integrity: no signed CMAC table (unsigned or non-standard image)
+-MSG      built for: <unknown> BD-RE BU40N (MT1959)
++MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 ```
 
 ### check_file pioneer_bundle_signed_pair.tar
@@ -287,27 +348,29 @@ reason: R7
 ```
 
 ### MTK dry run: .bin
-reason: R2
+reason: R2, M-CHIP
 ```diff
 ---- scsi transcript (3) ---
-+--- scsi transcript (4) ---
++--- scsi transcript (5) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ### MTK dry run: .bin verbose
-reason: R2, M-RS
+reason: R2, M-RS, M-CHIP
 ```diff
 -  #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
 +  #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
 -MSG        #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
 +MSG        #134 STATUS  in   03 00 00 00 10 80 00 00 00 00 00 00   alloc=16
 ---- scsi transcript (3) ---
-+--- scsi transcript (4) ---
++--- scsi transcript (5) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ### MTK dry run: different family refused
-reason: M-FAM
+reason: M-FAM, M-CHIP
 ```diff
 +result: ERR this image is for a different hardware family than this drive (image platform "BU9" banner "MT1959 Boot BU5." vs drive platform "BU3" banner "MT1959 Boot BU5."); refusing to flash
 +--- text (0) ---
@@ -351,15 +414,16 @@ reason: P4
 ## flash_execute.txt
 
 ### MTK execute: .bin with pre-flash backup
-reason: R2, R8, M-RS
+reason: R2, R8, M-RS, M-CHIP
 ```diff
 -firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
 +firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
 -MSG      firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
 ---- scsi transcript (784) ---
 +MSG      firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
-+--- scsi transcript (785) ---
++--- scsi transcript (786) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
@@ -375,7 +439,7 @@ reason: R2, R8, M-RS
 ```
 
 ### MTK execute: MT1939 image on an MT1959 drive
-reason: R2
+reason: R2, M-CHIP
 ```diff
 -result: OK
 ---- text (221) ---
@@ -1343,7 +1407,7 @@ reason: R2
 +result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 +--- text (0) ---
 +--- events (0) ---
-+--- scsi transcript (2) ---
++--- scsi transcript (3) ---
 -IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 -IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 -OUTS cdb=3b01000000000000000b0000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
@@ -1610,6 +1674,7 @@ reason: R2
 -IN   cdb=3c06001fc00000400000 alloc=16384 -> ok 16384
 -IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 +saved pre-flash backup: <not created>
 ```
 
@@ -1621,15 +1686,16 @@ reason: R7
 ```
 
 ### MTK execute: no risk acknowledgement
-reason: R2
+reason: R2, M-CHIP
 ```diff
 ---- scsi transcript (1) ---
-+--- scsi transcript (2) ---
++--- scsi transcript (3) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ### MTK execute: raw drive read as input
-reason: R3
+reason: R3, M-CHIP
 ```diff
 -result: OK
 ---- text (221) ---
@@ -2869,13 +2935,14 @@ reason: R3
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2, R8, M-RS
+reason: R2, R8, M-RS, M-CHIP
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 +result: ERR read-back verify FAILED at 0x01105E: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61346 of 61440 protected bytes differ).
 ---- scsi transcript (782) ---
-+--- scsi transcript (783) ---
++--- scsi transcript (784) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
@@ -2891,15 +2958,16 @@ reason: R2, R8, M-RS
 ```
 
 ### MTK execute: restore the saved .tar
-reason: R2, R8, M-RS
+reason: R2, R8, M-RS, M-CHIP
 ```diff
 -firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
 +firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
 -MSG      firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
 ---- scsi transcript (784) ---
 +MSG      firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
-+--- scsi transcript (785) ---
++--- scsi transcript (786) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=a4cb3cc52bb7eb6b5653aa3ae08de21602c9e35b2554c26e436da86f17db43bf -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=6d0a58a40c8d493d1e4020bf2df55806488f025a07b38762237be67ee64747e4 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=b9e553f7d1a5cc04a848712b55885a676f216144d11abac0a94d2c73c01522d3 -> ok
@@ -2917,106 +2985,166 @@ reason: R2, R8, M-RS
 ## info_file.txt
 
 ### info_file mtk_bad_cmac.bin
-reason: R7, R8
+reason: R7, R8, M-CHIP
 ```diff
 -sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
-+sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
++sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
 +MSG      sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### info_file mtk_drive_read_backup.bin
-reason: R7, R6, R8
+reason: R7, R6, R8, M-CHIP
 ```diff
 -sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
-+sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: �����������
++sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
 +MSG      sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: �����������
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### info_file mtk_flashable.bin
-reason: R7, R8
+reason: R7, R8, M-CHIP
 ```diff
 -sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
++sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 +MSG      sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### info_file mtk_legacy_0_10_backup.tar
-reason: R7
+reason: R7, M-CHIP
 ```diff
+-result: OK
+---- text (10) ---
++result: ERR not a MediaTek firmware backup: undetectable — the boot loader banner at 0x3000 names no supported MT19xx generation (only MT1959 and MT1939 are handled; unpack packed/truncated dumps first)
++--- text (3) ---
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-banner: <none>
+-descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
+-capability: BD/UHD, region-lockable, AACS content
 -flash: MediaTek MT1959 — executable (hardware-proven)
-+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-integrity: no signed CMAC table (unsigned or non-standard image)
+-built for: <unknown> <unknown> (MT1959)
+---- events (16) ---
++--- events (5) ---
+-FIELD    Chipset = MT1959
+-FIELD    Model = <unknown>
+-FIELD    Firmware version = <unknown>
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-MSG      banner: <none>
+-MSG      descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
+-MSG      capability: BD/UHD, region-lockable, AACS content
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
-+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
+-MSG      integrity: no signed CMAC table (unsigned or non-standard image)
+-MSG      built for: <unknown> <unknown> (MT1959)
 ```
 
 ### info_file mtk_mt1939_stored.bin
-reason: R7, R6, R8
+reason: R7, R6, R8, M-CHIP
 ```diff
 -sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
-+sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
+-chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
 -banner: �����������
++sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
++chipset: MediaTek MT1939 (from boot banner; identity tag MTEKMT1939)
 +banner: MT1939 Boot Code
 -flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 -MSG      sha256: e00cd2da6f6e8f0d0974adea2c29def3b232ffdb0b14ec897db3ae4c9b98d851
 +MSG      sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
+-MSG      chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
 -MSG      banner: �����������
++MSG      chipset: MediaTek MT1939 (from boot banner; identity tag MTEKMT1939)
 +MSG      banner: MT1939 Boot Code
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven) (image is MT1939 — recognized; only the MT1959 path is proven)
 ```
 
 ### info_file mtk_mt1959_stored.bin
-reason: R7, R6, R8
+reason: R7, R6, R8, M-CHIP
 ```diff
 -sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
-+sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: �����������
++sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
++chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 -MSG      sha256: 4bd0e59e3a6c5a3485839576c17c9b38c9326dc863a5b25646f34efc167dd4f9
 +MSG      sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: �����������
++MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 ```
 
 ### info_file mtk_unsigned.bin
-reason: R7
+reason: R7, M-CHIP
 ```diff
+---- text (10) ---
++--- text (4) ---
+-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-banner: <none>
+-descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+-capability: BD/UHD, region-lockable, AACS content
 -flash: MediaTek MT1959 — executable (hardware-proven)
-+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-integrity: no signed CMAC table (unsigned or non-standard image)
+-built for: <unknown> BD-RE BU40N (MT1959)
+---- events (16) ---
++image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
++--- events (6) ---
+-FIELD    Chipset = MT1959
+-FIELD    Model = BD-RE BU40N
+-FIELD    Firmware version = <unknown>
+-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+-MSG      banner: <none>
+-MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
+-MSG      capability: BD/UHD, region-lockable, AACS content
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
-+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
+-MSG      integrity: no signed CMAC table (unsigned or non-standard image)
+-MSG      built for: <unknown> BD-RE BU40N (MT1959)
++MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 ```
 
 ### info_file pioneer_bundle_signed_pair.tar
@@ -3031,7 +3159,7 @@ reason: P4
 ## info_mtk.txt
 
 ### MTK info: classify-only mock (MockScsiDevice::mtk)
-reason: R5, R7
+reason: R5, R7, M-CHIP
 ```diff
 ---- text (33) ---
 +--- text (34) ---
@@ -3051,7 +3179,7 @@ reason: R5, R7
 ```
 
 ### MTK info: mock exposing a drive-read firmware image
-reason: R5, R7, R8
+reason: R5, R7, R8, M-CHIP
 ```diff
 ---- text (33) ---
 +--- text (34) ---
@@ -3073,14 +3201,15 @@ reason: R5, R7, R8
 -MSG                fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
 ---- scsi transcript (21) ---
 +MSG                fingerprint acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf
-+--- scsi transcript (22) ---
++--- scsi transcript (23) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ## mtk_backup_variants.txt
 
 ### MTK backup: MT1939 drive read (build not in the catalog)
-reason: R1, R4, R8
+reason: R1, R4, R8, M-CHIP
 ```diff
 -result: ERR unrecognized boot page (sha256 233fadcb958146c4a25a7bde190f956ab7d684fdacb35452f2a39f39ebf81812); no restorable backup can be built for this firmware
 ---- text (102) ---
@@ -3105,7 +3234,7 @@ reason: R1, R4, R8
 ```
 
 ### MTK backup: MT1959 drive read
-reason: R1, R4, R8
+reason: R1, R4, R8, M-CHIP
 ```diff
 -result: ERR unrecognized boot page (sha256 0bd0297c45ac0fe82554dd385bac39bdbd1b5ee852596f8d5e4630c01ebde361); no restorable backup can be built for this firmware
 ---- text (102) ---
@@ -3183,7 +3312,7 @@ reason: R8
 ## mtk_flash_input_refusals.txt
 
 ### MTK dry run: MT1939 image on an MT1959 drive
-reason: R2
+reason: R2, M-CHIP
 ```diff
 -result: OK
 ---- text (13) ---
@@ -3214,22 +3343,22 @@ reason: R2
 -MSG        preflight ................ transport ready; backup capture is checked only on execute
 -MSG      
 -MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
----- scsi transcript (3) ---
 +result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 +--- text (0) ---
 +--- events (0) ---
-+--- scsi transcript (2) ---
 -IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 -IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ### MTK dry run: disc loaded
-reason: R2
+reason: R2, M-CHIP
 ```diff
 ---- scsi transcript (3) ---
-+--- scsi transcript (4) ---
++--- scsi transcript (5) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ### MTK dry run: raw drive read as input
@@ -3274,11 +3403,12 @@ reason: R3
 ```
 
 ### MTK dry run: tray open
-reason: R2
+reason: R2, M-CHIP
 ```diff
 ---- scsi transcript (3) ---
-+--- scsi transcript (4) ---
++--- scsi transcript (5) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ### MTK dry run: unknown boot page, validly signed

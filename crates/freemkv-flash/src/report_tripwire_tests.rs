@@ -669,8 +669,8 @@ fn paths_and_hex_render_unmangled() {
 /// GET CONFIGURATION descriptors.
 fn coherent_legacy_tar() -> Vec<u8> {
     use crate::backends::mtk::{
-        backup::BackupArtifact, UserDump, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1F0000_LEN,
-        ROM_1F0000_OFFSET,
+        backup::BackupArtifact, UserDump, ROM_003000_LEN, ROM_003000_OFFSET, ROM_1EC000_LEN,
+        ROM_1F0000_LEN, ROM_1F0000_OFFSET,
     };
     let descriptor = |feature: u16| {
         let mut data = vec![b'S'; 28];
@@ -683,7 +683,9 @@ fn coherent_legacy_tar() -> Vec<u8> {
     let firmware = backup_firmware();
     let region = |offset: u32, len: u32| firmware[offset as usize..][..len as usize].to_vec();
     let per_unit = UserDump {
-        rom_003000: vec![0; ROM_003000_LEN as usize],
+        // The boot banner at 0x3000 decides the chip, so the rebuilt image must
+        // keep it (a zeroed region would wipe the banner and read as unknown).
+        rom_003000: region(ROM_003000_OFFSET, ROM_003000_LEN),
         rom_1ec000: region(ROM_1EC000_OFFSET, ROM_1EC000_LEN),
         rom_1f0000: region(ROM_1F0000_OFFSET, ROM_1F0000_LEN),
         inq: {

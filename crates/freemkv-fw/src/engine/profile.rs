@@ -77,9 +77,13 @@ fn is_classic_banner(image: &[u8]) -> bool {
         .unwrap_or(false)
 }
 
-/// Identify an image's lineage. MT1959 vs MT1939 comes from the chip family
-/// (the authoritative in-image detector); within MT1939, the boot banner splits
-/// modern (JB8/JBC6) from classic. On an unidentifiable family we default to the
+/// Identify an image's lineage from its CODE LAYOUT, as named by the boot
+/// loader banner (the authoritative chip signal — never the stale `MTEKMT19xx`
+/// identity tag): an "MT1959 Boot …" banner (genuine MT1959 and the
+/// JB8/JBC6/JBP6 MT1959-lineage builds) is the MT1959 modern machinery; an
+/// "MT1939 Boot Code" banner is the classic MT1939 code. `detect_chip` keys on
+/// that banner, so MT1959 vs MT1939 follows it; within MT1939 the banner further
+/// splits classic from modern. On an unidentifiable family we default to the
 /// MT1959/modern profile — the historical behaviour (the MT1959 windows are the
 /// primary path), never a wrong-guess refusal here.
 pub fn detect_lineage(image: &[u8]) -> Lineage {

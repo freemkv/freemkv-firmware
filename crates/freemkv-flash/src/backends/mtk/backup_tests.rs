@@ -162,3 +162,39 @@ fn live_capture_rebuilds_flashable() {
     validate_image(&rebuilt.image, None).unwrap();
     eprintln!("{}", describe(&rebuilt.provenance));
 }
+
+/// Backup compatibility for the stale-tag drives. A JB8 build carries the
+/// descriptor tag `MTEKMT1939` but an "MT1959 Boot" banner, so it is MT1959.
+/// An existing backup of such a drive recorded `chip_family = "MT1939"` (the
+/// old tag label); restore must still accept it as a legacy alias of the banner
+/// chip, while an unrelated label is still rejected.
+#[test]
+fn legacy_backups_accept_the_old_tag_label_as_an_alias() {
+    // stored_image(MTEKMT1939) stamps the JB7 (classic MT1939) board; re-stamp
+    // the JB8 board so the banner reads "MT1959 Boot JB8" while the tag stays
+    // MTEKMT1939 — the real stale-tag shape.
+    let mut img = stored_image(b"MTEKMT1939", "BD-RE  WH16NS58", 5);
+    crate::backends::mtk::fixture::stamp(&mut img, &crate::backends::mtk::fixture::JB8);
+    let img = cmac::resign(&img).unwrap();
+    assert_eq!(
+        freemkv_chipset::detect_chip(&img).unwrap().family,
+        Chip::Mt1959,
+        "the banner decides: MT1959"
+    );
+    assert_eq!(
+        mediatek_optical::Chip::from_tag(&img),
+        Some(Chip::Mt1939),
+        "the stale descriptor tag names MT1939"
+    );
+    // The authoritative banner label matches, and so does the legacy tag label.
+    assert!(
+        chip_family_matches(&img, "MT1959").unwrap(),
+        "banner chip label"
+    );
+    assert!(
+        chip_family_matches(&img, "MT1939").unwrap(),
+        "legacy tag label accepted as an alias"
+    );
+    // An unrelated label is still rejected — the gate is not disabled.
+    assert!(!chip_family_matches(&img, "MT1805").unwrap());
+}

@@ -142,7 +142,7 @@ impl BackupArtifact {
             || manifest.firmware_size != expected_size
             || firmware.len() != expected_size
             || manifest.firmware_sha256 != format!("{:x}", Sha256::digest(&firmware))
-            || freemkv_chipset::detect_chip(&firmware)?.family.label() != manifest.chip_family
+            || !chip_family_matches(&firmware, &manifest.chip_family)?
             || !cmac::verify(&firmware)
         {
             bail!("backup firmware is incomplete, altered, or not a valid MTK update image");
@@ -274,6 +274,26 @@ fn validate_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
             .context("backup image model/family does not match the target drive")?;
     }
     Ok(())
+}
+
+/// Whether `firmware`'s chip family matches the `stored` label from an existing
+/// backup's `backup.toml`.
+///
+/// New backups store the banner chip (the authoritative generation). Backups
+/// written before the banner became authoritative stored the drive's stale
+/// `MTEKMT19xx` identity tag instead, so for the JB8/JBC6/JBP6/BUP1 drives (tag
+/// `MTEK MT1939`, banner/code MT1959) an old backup says "MT1939" where the
+/// banner says "MT1959". Accept both: the banner chip, or — as a legacy alias —
+/// the firmware's own identity-tag chip. This keeps existing user backups
+/// restorable; the chip gate is still enforced (an unrelated label is rejected).
+fn chip_family_matches(firmware: &[u8], stored: &str) -> Result<bool> {
+    let banner = freemkv_chipset::detect_chip(firmware)?.family.label();
+    if stored == banner {
+        return Ok(true);
+    }
+    // Legacy alias: the stale identity-tag chip an older backup recorded.
+    let legacy_tag_chip = mediatek_optical::Chip::from_tag(firmware).map(|c| c.label());
+    Ok(legacy_tag_chip == Some(stored))
 }
 
 #[cfg(test)]

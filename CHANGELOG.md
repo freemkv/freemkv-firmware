@@ -19,6 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When only some changes apply, `create` still writes the image and now prints
   "Applied N of M changes; not supported on this image: ..." with the reasons.
 
+### All tools
+- The drive/chip generation (MT1959 vs MT1939) is now read from the firmware's
+  **boot loader banner**, not the `MTEKMT19xx` identity string in the drive
+  descriptor. That identity string is a stale vendor label on a number of
+  drives — the JB8/JBC6/JBP6 builds (e.g. LG WH16NS58/WH16NS60,
+  BH16NS40..NS50) report `MT1939` but run an MT1959 boot loader and MT1959
+  code — so those drives and images are now correctly shown as **MT1959**.
+  - `freemkv-fw create` modifies exactly the same images, byte-for-byte, as
+    before; only the displayed chip/engine name changes for the affected
+    builds (now MT1959). `create --json` gains a `chip` field (the banner chip);
+    `engine` remains the code-layout/lineage name.
+  - `freemkv-flash` info/inspect show the banner chip and list the identity tag
+    only as a raw-facts curiosity; a live drive's chip is read from the banner
+    it reports (the banner is always read). Flashing is unaffected; the chip
+    gate compares banner to banner.
+  - Restoring an existing backup still works: a backup of an affected drive that
+    recorded the old `MT1939` label is accepted as a legacy alias of the banner
+    chip.
+
 ## [0.12.2] - 2026-10-14
 
 ### Pioneer

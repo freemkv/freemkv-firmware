@@ -28,3 +28,4 @@ all = "warn"
 strip = true
 lto = "thin"
 codegen-units = 1
+

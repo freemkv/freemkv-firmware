@@ -273,7 +273,9 @@ fn stamped_boards_have_their_families() {
     for (board, family) in [
         (BU3, "309829e6c3c8f31d"),
         (JB7, "11e7527216405467"),
-        (JB8, "70f72c46f9603141"),
+        // JB8's banner is "MT1959 Boot JB8", so it is now MT1959 (the tag is the
+        // stale MTEKMT1939 label) and its family hash flips accordingly.
+        (JB8, "336e449ab6a827e3"),
     ] {
         let mut img = vec![0x11u8; mediatek_optical::layout::IMAGE_SIZE];
         let d = mediatek_optical::layout::DESCRIPTOR.start;

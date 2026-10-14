@@ -1225,18 +1225,18 @@ fn unknown_boot_pages_are_refused() {
 }
 
 #[test]
-fn chip_gate_refuses_when_the_descriptor_is_unreadable() {
-    // A banner can name the wrong generation, so a tagged image needs the
-    // drive's descriptor; an unreadable one refuses rather than failing open.
+fn chip_gate_refuses_when_the_banner_is_unreadable() {
+    // The drive's chip generation is decided by its boot banner, so an
+    // unreadable banner refuses rather than falling back to the stale tag.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(backup_firmware())
         .on_fail(
-            |cdb: &[u8]| cdb.get(3..6) == Some(&offset_bytes(ROM_1EC000_OFFSET)[..]),
-            "descriptor read refused",
+            |cdb: &[u8]| cdb.get(3..6) == Some(&offset_bytes(0x3000)[..]),
+            "banner read refused",
         );
     let err = ensure_same_chip(&mut dev, &img).unwrap_err();
-    assert!(err.to_string().contains("identity descriptor"), "{err}");
+    assert!(err.to_string().contains("boot banner"), "{err}");
 }
 
 fn captured_output(op: impl FnOnce()) -> String {
@@ -1333,7 +1333,9 @@ fn classify_file_flags_an_integrity_entry_running_past_the_image() {
 }
 
 #[test]
-fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
+fn chip_gate_always_reads_the_banner() {
+    // The banner is the authoritative chip signal, so it is always read — never
+    // skipped for a "tagged" drive (the tag is a stale vendor label).
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     Mtk.validate_image(
@@ -1348,9 +1350,9 @@ fn chip_gate_skips_the_banner_read_when_the_descriptor_has_a_tag() {
         .iter()
         .filter(|cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&banner[..]))
         .count();
-    assert_eq!(
-        banner_reads, 0,
-        "banner read issued despite a descriptor tag"
+    assert!(
+        banner_reads > 0,
+        "the banner must be read to decide the chip"
     );
 }
 
@@ -1387,45 +1389,53 @@ fn mt1939_drive() -> MockScsiDevice {
 }
 
 #[test]
-fn chip_gate_trusts_the_descriptor_tag_over_a_misleading_banner() {
-    let mt1939 = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1959 Boot JB8");
+fn chip_gate_follows_the_banner_not_the_tag() {
+    // A JB8 image/drive carries the stale tag MTEKMT1939 but an "MT1959 Boot"
+    // banner, so both are MT1959 and the gate passes — the tag never decides.
+    let jb8 = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1959 Boot JB8");
     let mut dev = mt1939_drive();
     Mtk.validate_image(
         &mut ReadDevice::without_unlocks(&mut dev),
-        &mt1939,
+        &jb8,
         "BD-RE BU40N",
     )
     .unwrap();
-    ensure_same_chip(&mut dev, &mt1939).unwrap();
+    ensure_same_chip(&mut dev, &jb8).unwrap();
 
-    let mt1959 = chip_image("BD-RE BU40N", Some(b"MTEKMT1959"), b"MT1959 Boot JB8");
+    // A genuine classic MT1939 image ("MT1939 Boot Code") on that MT1959 drive
+    // is a true cross-generation mismatch, refused with no writes.
+    let classic = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1939 Boot Code");
     let normal = Mtk
         .validate_image(
             &mut ReadDevice::without_unlocks(&mut dev),
-            &mt1959,
+            &classic,
             "BD-RE BU40N",
         )
         .unwrap_err();
     assert!(format!("{normal:#}").contains("MT1959"), "{normal:#}");
     assert!(format!("{normal:#}").contains("MT1939"), "{normal:#}");
-    let gate = ensure_same_chip(&mut dev, &mt1959).unwrap_err();
+    let gate = ensure_same_chip(&mut dev, &classic).unwrap_err();
     assert!(format!("{gate:#}").contains("MT1939"), "{gate:#}");
     assert!(dev.writes.is_empty());
 }
 
 #[test]
-fn chip_gate_banner_fallback_only_serves_untagged_images() {
-    // An untagged image passes the chip gate on the drive's banner, but has no
-    // hardware record, so the family gate refuses it.
-    let untagged = chip_image("BD-RE BU40N", None, b"MT1939 Boot");
-    let mut banner_only =
-        MockScsiDevice::new().with_firmware_image(chip_image("BD-RE BU40N", None, b"MT1939 Boot"));
+fn chip_gate_identifies_from_the_banner_with_or_without_a_tag() {
+    // An untagged image is identified by its banner alone (MT1939 here), but has
+    // no hardware record, so the family gate refuses it — the chip gate passes.
+    let untagged = chip_image("BD-RE BU40N", None, b"MT1939 Boot Code");
+    let mut banner_only = MockScsiDevice::new().with_firmware_image(chip_image(
+        "BD-RE BU40N",
+        None,
+        b"MT1939 Boot Code",
+    ));
     let err = ensure_same_chip(&mut banner_only, &untagged).unwrap_err();
     assert!(err.to_string().contains("target firmware family"), "{err}");
 
-    // A tagged image needs the drive's descriptor: a banner alone is refused.
-    let tagged = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"MT1939 Boot");
-    let err = ensure_same_chip(&mut banner_only, &tagged).unwrap_err();
-    assert!(err.to_string().contains("identity descriptor"), "{err}");
+    // A tag cannot stand in for the banner: an image with a tag but no banner
+    // names no chip and is refused as unrecognizable.
+    let tag_no_banner = chip_image("BD-RE BU40N", Some(b"MTEKMT1939"), b"");
+    let err = ensure_same_chip(&mut banner_only, &tag_no_banner).unwrap_err();
+    assert!(format!("{err:#}").contains("MT19"), "{err:#}");
     assert!(banner_only.writes.is_empty());
 }

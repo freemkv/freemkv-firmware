@@ -2679,7 +2679,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
-    "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS", "M-FAM",
+    "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS", "M-FAM", "M-CHIP",
 ];
 
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package

@@ -765,22 +765,18 @@ fn read_exact_retry(dev: &mut dyn ScsiDevice, offset: u32, len: u32) -> Option<V
     })
 }
 
-/// The drive's identity descriptor and, only when that carries no chip tag,
-/// its boot banner: what the chip and family gates compare an image with.
-/// Unreadable regions stay empty.
+/// The drive's identity descriptor and its boot banner: what the chip and family
+/// gates compare an image with. The chip generation is decided by the banner, so
+/// the banner is ALWAYS read (never skipped for a "tagged" drive — the tag is a
+/// stale vendor label). Unreadable regions stay empty.
 pub(crate) fn live_identity(dev: &mut dyn ScsiDevice) -> mediatek_optical::Identity {
     let descriptor = read_exact_retry(dev, ROM_1EC000_OFFSET, ROM_1EC000_LEN).unwrap_or_default();
-    let banner = if mediatek_optical::Chip::from_tag(&descriptor).is_some() {
-        Vec::new()
-    } else {
-        read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN).unwrap_or_default()
-    };
+    let banner = read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN).unwrap_or_default();
     mediatek_optical::Identity::parse(&[0; mediatek_optical::INQUIRY_LEN], &banner, &descriptor)
         .expect("a full-length INQUIRY")
 }
 
-/// The drive's controller generation for display: the descriptor tag, else
-/// the boot banner.
+/// The drive's controller generation for display, decided by its boot banner.
 pub(crate) fn read_chip(dev: &mut dyn ScsiDevice) -> Option<mediatek_optical::Chip> {
     live_identity(dev).chip()
 }
@@ -927,6 +923,17 @@ impl FileFacet for Mtk {
     }
 
     fn describe(&self, image: &[u8], _: &crate::backend::Recognized) -> Option<Result<()>> {
+        // A 0.10.x legacy archive carries the firmware inside a tar; its boot
+        // banner (the chip signal) is not at a fixed offset of the archive, so
+        // rebuild the flashable image first and describe that. A raw .bin is
+        // described directly.
+        if is_legacy_archive(image) {
+            let rebuilt = match backup::backup_image(image, IMAGE_SIZE) {
+                Ok(img) => img,
+                Err(e) => return Some(Err(e)),
+            };
+            return file_info::describe(&rebuilt);
+        }
         file_info::describe(image)
     }
 

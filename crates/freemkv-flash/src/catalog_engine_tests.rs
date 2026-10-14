@@ -272,7 +272,8 @@ fn a_same_family_crossflash_runs_through_the_engine() {
     let wh16ns58 = find("BD-RE  WH16NS58", "1.V1");
     let bw16d1ht = find("BW-16D1HT", "3.10");
     let bu40n = find("BD-RE BU40N", "1.02");
-    // A JB7 build: the same MT1939 chip as the JB8 WH16NS58, a different family.
+    // A JB7 build: a classic MT1939 (banner "MT1939 Boot Code"), a different
+    // chip from the JB8 WH16NS58 (now MT1959 by its "MT1959 Boot" banner).
     let jb7 = builds
         .iter()
         .find(|(b, _)| b.family == "11e7527216405467" && b.model != "BD-RE  WH16NS58")
@@ -284,10 +285,11 @@ fn a_same_family_crossflash_runs_through_the_engine() {
     assert_crossflash(&wh16ns58, &wh16ns60, &dir, "ns58-ns60");
     assert_crossflash(&bw16d1ht, &wh16ns58, &dir, "d1ht-ns58");
 
-    // A same-chip, different-family image is refused with the family message;
-    // a different-chip image is refused before the family gate. Neither writes.
-    assert_cross_family_refused(&jb7, &wh16ns58, "jb7-ns58");
-    assert_flash_refused(&bu40n, &wh16ns58, "bu40n-ns58");
+    // A same-chip (MT1959), different-family image (BU40N) is refused with the
+    // family message; a different-chip image (the classic MT1939 JB7) is refused
+    // before the family gate. Neither writes.
+    assert_cross_family_refused(&bu40n, &wh16ns58, "bu40n-ns58");
+    assert_flash_refused(&jb7, &wh16ns58, "jb7-ns58");
 
     // The drive keeps its old identity: the flash fails.
     let old = wh16ns60[0x1E_C000..0x1E_C100].to_vec();
@@ -388,11 +390,11 @@ fn crossflash_family_gate_holds_on_real_images() {
     assert_crossflash(&wh16ns60, &bw16d1ht, &dir, "ns60-d1ht");
     eprintln!("same family: NS60<->NS58, D1HT->NS58, NS60->D1HT flashed");
 
-    // Different families are refused at the dry run, no writes: the JB7
-    // BW-16D1HT is the same MT1939 chip, so it gets the family message; the
-    // MT1959 BU40N refuses one gate earlier, on the chip.
-    assert_cross_family_refused(&jb7, &wh16ns58, "jb7-ns58");
-    assert_flash_refused(&bu40n, &wh16ns58, "bu40n-ns58");
+    // Refused at the dry run, no writes: the MT1959 BU40N is the same chip as
+    // the (banner-MT1959) WH16NS58, so it gets the family message; the classic
+    // MT1939 JB7 BW-16D1HT refuses one gate earlier, on the chip.
+    assert_cross_family_refused(&bu40n, &wh16ns58, "bu40n-ns58");
+    assert_flash_refused(&jb7, &wh16ns58, "jb7-ns58");
 
     // An INTM build of another model is a wrong-model image, refused as today.
     let (outcome, dev) = flash_onto(&wh16ns60, "BD-RE  WH16NS60", &intm, None);

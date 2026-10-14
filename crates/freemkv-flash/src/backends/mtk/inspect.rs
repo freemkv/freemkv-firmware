@@ -367,7 +367,7 @@ fn fixed_spans(
         Field::new("SKU", sanitize_ascii(&chip.vendor_specific)),
         Field::new(
             "Identity tag",
-            chip.tag_string
+            chip.identity_tag
                 .as_deref()
                 .map_or("Not present".into(), sanitize_ascii),
         ),

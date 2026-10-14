@@ -132,7 +132,7 @@ Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_flashable.bin
 size: 2 MiB
 sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a5192
-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 capability: BD/UHD, region-lockable, AACS content
@@ -151,7 +151,7 @@ MSG      sha256: dd2093967ab2376014b96351f7c45950362723fdd9b6e14917cefab4ce2a519
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = <unknown>
-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 MSG      capability: BD/UHD, region-lockable, AACS content
@@ -168,7 +168,7 @@ Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_bad_cmac.bin
 size: 2 MiB
 sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5a
-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 capability: BD/UHD, region-lockable, AACS content
@@ -187,7 +187,7 @@ MSG      sha256: f43659967fa786a34c7fcf5abb5c2b6bbe91555c9f06d51acd03296d544f1f5
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = <unknown>
-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
 MSG      capability: BD/UHD, region-lockable, AACS content
@@ -199,20 +199,14 @@ MSG      Diagnostic log saved: <LOG>
 
 === check_file mtk_unsigned.bin ===
 result: OK
---- text (12) ---
+--- text (6) ---
 Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_unsigned.bin
 size: 2 MiB
 sha256: 1778b3ed7796dad5553929eb37c3f42050a1eb645b67142e92722680be86698b
-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-banner: <none>
-descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
-capability: BD/UHD, region-lockable, AACS content
-flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
-integrity: no signed CMAC table (unsigned or non-standard image)
-built for: <unknown> BD-RE BU40N (MT1959)
+image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 Diagnostic log saved: <LOG>
---- events (19) ---
+--- events (9) ---
 FIELD    Diagnostic log = <LOG>
 MSG      Diagnostic log: <LOG>
 MSG      file: <TMP>/check-file/mtk_unsigned.bin
@@ -220,17 +214,7 @@ MSG      size: 2 MiB
 FIELD    File = <TMP>/check-file/mtk_unsigned.bin
 FIELD    Size = 2 MiB
 MSG      sha256: 1778b3ed7796dad5553929eb37c3f42050a1eb645b67142e92722680be86698b
-FIELD    Chipset = MT1959
-FIELD    Model = BD-RE BU40N
-FIELD    Firmware version = <unknown>
-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-MSG      banner: <none>
-MSG      descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
-MSG      capability: BD/UHD, region-lockable, AACS content
-MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
-FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
-MSG      integrity: no signed CMAC table (unsigned or non-standard image)
-MSG      built for: <unknown> BD-RE BU40N (MT1959)
+MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file zeros_2mib.bin ===
@@ -260,7 +244,7 @@ Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_drive_read_backup.bin
 size: 2 MiB
 sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 capability: BD/UHD, region-lockable, AACS content
@@ -279,7 +263,7 @@ MSG      sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd9
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = ����
-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 MSG      capability: BD/UHD, region-lockable, AACS content
@@ -296,7 +280,7 @@ Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_mt1959_stored.bin
 size: 2 MiB
 sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b338
-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 capability: BD/UHD, region-lockable, AACS content
@@ -315,7 +299,7 @@ MSG      sha256: 935f52442916c46289557bc2acef2ac9445c41b1dc81242ca6541d2a5f39b33
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = ����
-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
+MSG      chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 MSG      banner: MT1959 Boot BU5
 MSG      descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
 MSG      capability: BD/UHD, region-lockable, AACS content
@@ -332,7 +316,7 @@ Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_mt1939_stored.bin
 size: 2 MiB
 sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c8
-chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
+chipset: MediaTek MT1939 (from boot banner; identity tag MTEKMT1939)
 banner: MT1939 Boot Code
 descriptor: vendor='��������' model='BD-RE BE14NU40' rev='����'
 capability: BD, region-lockable, AACS content
@@ -351,7 +335,7 @@ MSG      sha256: f26337012725d32174d3cee5b800bfcc8956162fa45c5937e60cf645ae6194c
 FIELD    Chipset = MT1939
 FIELD    Model = BD-RE BE14NU40
 FIELD    Firmware version = ����
-MSG      chipset: MediaTek MT1939 (via identity string; tag MTEKMT1939)
+MSG      chipset: MediaTek MT1939 (from boot banner; identity tag MTEKMT1939)
 MSG      banner: MT1939 Boot Code
 MSG      descriptor: vendor='��������' model='BD-RE BE14NU40' rev='����'
 MSG      capability: BD, region-lockable, AACS content
@@ -362,21 +346,14 @@ MSG      built for: �������� BD-RE BE14NU40 (MT1939)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file mtk_legacy_0_10_backup.tar ===
-result: OK
---- text (12) ---
+result: ERR not a MediaTek firmware backup: undetectable — the boot loader banner at 0x3000 names no supported MT19xx generation (only MT1959 and MT1939 are handled; unpack packed/truncated dumps first)
+--- text (5) ---
 Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_legacy_0_10_backup.tar
 size: 2.07 MiB
 sha256: 089adb0d6f547aa75c5b6e5dc10716ae6985c95e6216a2242b2ee7b781789c5d
-chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-banner: <none>
-descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
-capability: BD/UHD, region-lockable, AACS content
-flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
-integrity: no signed CMAC table (unsigned or non-standard image)
-built for: <unknown> <unknown> (MT1959)
 Diagnostic log saved: <LOG>
---- events (19) ---
+--- events (8) ---
 FIELD    Diagnostic log = <LOG>
 MSG      Diagnostic log: <LOG>
 MSG      file: <TMP>/check-file/mtk_legacy_0_10_backup.tar
@@ -384,17 +361,6 @@ MSG      size: 2.07 MiB
 FIELD    File = <TMP>/check-file/mtk_legacy_0_10_backup.tar
 FIELD    Size = 2.07 MiB
 MSG      sha256: 089adb0d6f547aa75c5b6e5dc10716ae6985c95e6216a2242b2ee7b781789c5d
-FIELD    Chipset = MT1959
-FIELD    Model = <unknown>
-FIELD    Firmware version = <unknown>
-MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
-MSG      banner: <none>
-MSG      descriptor: vendor='<unknown>' model='<unknown>' rev='<unknown>'
-MSG      capability: BD/UHD, region-lockable, AACS content
-MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
-FIELD    Integrity = no signed CMAC table (unsigned or non-standard image)
-MSG      integrity: no signed CMAC table (unsigned or non-standard image)
-MSG      built for: <unknown> <unknown> (MT1959)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file pioneer_signed_normal.enc ===

@@ -7,7 +7,9 @@
 use super::super::fixture::{self, Board, BU3, JB7, JB8};
 use super::*;
 
-const JB8_FAMILY: &str = "70f72c46f9603141";
+// JB8 ships an "MT1959 Boot JB8" banner, so it is MT1959 (the MTEKMT1939 tag is
+// the stale vendor label); its family hash flips to the MT1959-keyed value.
+const JB8_FAMILY: &str = "336e449ab6a827e3";
 const JB7_FAMILY: &str = "11e7527216405467";
 const BU3_FAMILY: &str = "309829e6c3c8f31d";
 
@@ -331,8 +333,11 @@ fn the_rollback_runs_the_update_gates_on_the_backup() {
     let mut corrupt = backup.clone();
     corrupt[0x11000] ^= 1;
     assert!(format!("{:#}", rollback(&corrupt, &image).unwrap_err()).contains("AES-CMAC"));
-    let jb7 = fixture::image(&JB7, "BW-16D1HT", 3);
-    let err = format!("{:#}", rollback(&jb7, &image).unwrap_err());
+    // A same-chip (MT1959) but different-family image is a family mismatch. (A
+    // different-chip image — e.g. the MT1939 JB7 — would be a chip mismatch
+    // instead, since the chip now comes from the banner.)
+    let bu3 = fixture::image(&BU3, "BD-RE BU40N", 3);
+    let err = format!("{:#}", rollback(&bu3, &image).unwrap_err());
     assert!(err.contains("family mismatch"), "{err}");
 }
 

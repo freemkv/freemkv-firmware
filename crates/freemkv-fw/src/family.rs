@@ -7,11 +7,11 @@
 //! `crate::family::…` path so existing call sites keep compiling; new code may
 //! use `freemkv_chipset` directly.
 //!
-//! See [`freemkv_chipset::detect_chip`] for why the `MTEKMT19xx` identity string
-//! (pattern-searched) is authoritative and the boot banner / `+0x50` marker are
+//! See [`freemkv_chipset::detect_chip`] for why the boot loader banner decides
+//! the chip generation and the `MTEKMT19xx` identity string / `+0x50` marker are
 //! display-only.
 
 pub use freemkv_chipset::{
-    capability_for, detect_chip, Capability, ChipFamily, ChipInfo, Confidence, MediaClass,
-    BANNER_OFFSET, DESCRIPTOR_OFFSET,
+    capability_for, detect_chip, Capability, ChipFamily, ChipInfo, MediaClass, BANNER_OFFSET,
+    DESCRIPTOR_OFFSET,
 };

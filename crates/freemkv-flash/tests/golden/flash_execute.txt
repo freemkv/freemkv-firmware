@@ -445,9 +445,10 @@ MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 MSG      firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
---- scsi transcript (785) ---
+--- scsi transcript (786) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -1674,9 +1675,10 @@ MSG      warning: could not parse the post-flash REQUEST SENSE response (16 byte
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
 MSG      warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 MSG      verifying...
---- scsi transcript (783) ---
+--- scsi transcript (784) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -2908,9 +2910,10 @@ MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 MSG      firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
---- scsi transcript (785) ---
+--- scsi transcript (786) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -3700,9 +3703,10 @@ saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974
 result: ERR SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
 --- text (0) ---
 --- events (0) ---
---- scsi transcript (2) ---
+--- scsi transcript (3) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === MTK execute: disc loaded ===
 result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
@@ -3754,9 +3758,10 @@ failed Pioneer backup left a file: <not created>
 result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 --- text (0) ---
 --- events (0) ---
---- scsi transcript (2) ---
+--- scsi transcript (3) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 saved pre-flash backup: <not created>
 
 === MTK execute: raw drive read as input ===
