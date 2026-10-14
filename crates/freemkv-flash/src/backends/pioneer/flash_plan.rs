@@ -426,6 +426,15 @@ pub const BACKUP_NOT_RESTORABLE: &str =
      the saved backup could not be flashed back afterwards. Refusing, because a kept backup must \
      always be restorable. (The reverse direction is fine — this specific pairing is one-way.)";
 
+/// The refusal when the pre-flash backup itself cannot be read back, so its
+/// restorability cannot be proven. Distinct from `BACKUP_NOT_RESTORABLE` (a
+/// provably one-way crossflash) so the message does not misattribute an
+/// unreadable backup to the target Kernel.
+pub const BACKUP_UNREADABLE: &str =
+    "the pre-flash backup could not be read back as a usable Kernel+Normal pair, so it cannot be \
+     proven restorable. Refusing, because a kept backup must always be restorable. Recapture the \
+     backup (resolve any read error first) and retry.";
+
 /// Whether the pre-flash backup can be restored after this flash: a drive
 /// running the TARGET firmware must be able to receive the backup (the installed
 /// firmware) again, by flash (same receiver class and SAT) or by recover
@@ -433,11 +442,13 @@ pub const BACKUP_NOT_RESTORABLE: &str =
 /// Kernel). We promise a kept backup can always revert, so a crossflash that
 /// would make the backup un-restorable is refused.
 ///
-/// Refuses ONLY when revert is provably impossible (the target Kernel cannot
-/// provide the backup Normal's required entry points); every undecidable case
-/// is allowed, so no valid flash is blocked. This shares the restore
-/// admissibility, so it auto-passes if a future restore path (e.g. a staged
-/// two-pass crossflash) makes more backups restorable.
+/// Refuses when revert is provably impossible (the target Kernel cannot provide
+/// the backup Normal's required entry points) OR when the backup cannot be read
+/// back at all (it is then not a usable rollback) — both fail closed. Target
+/// validity (a malformed or partial target) is NOT judged here; it is deferred
+/// to `authorize`, so this gate speaks only to backup restorability. This shares
+/// the restore admissibility, so it auto-passes if a future restore path (e.g. a
+/// staged two-pass crossflash) makes more backups restorable.
 pub fn backup_restorable(target_kernel: Option<&[u8]>, backup: &[u8]) -> Result<(), String> {
     use pioneer_optical::envelope::{decode_envelope, decode_envelope_with_kernel};
     use pioneer_optical::image::{provided_abi, required_abi};
@@ -452,7 +463,7 @@ pub fn backup_restorable(target_kernel: Option<&[u8]>, backup: &[u8]) -> Result<
     let Ok((Some(backup_kernel), Some(backup_normal))) =
         crate::backends::pioneer::classify_flash_input(backup)
     else {
-        return Err(BACKUP_NOT_RESTORABLE.to_string());
+        return Err(BACKUP_UNREADABLE.to_string());
     };
     // Flash-revert: a drive running the target can receive the backup directly
     // (same receiver class and SAT). This is the common, same-class case.
@@ -467,16 +478,17 @@ pub fn backup_restorable(target_kernel: Option<&[u8]>, backup: &[u8]) -> Result<
     }
     // Cross receiver class: a revert needs the recover re-encode, which is
     // possible only if the backup Normal's required Kernel ABI is provided by
-    // the target Kernel. We must be able to PROVE it; the gate fails CLOSED on
-    // anything it cannot evaluate, so a kept backup is never silently
-    // un-restorable.
+    // the target Kernel. We must be able to PROVE the backup's restorability;
+    // the gate fails CLOSED on anything about the backup it cannot evaluate.
+    // (Target validity — e.g. a malformed target Kernel — is authorize's gate,
+    // deferred to below.)
     // The backup itself must decode: a kept backup we cannot even read is not a
     // usable rollback, so fail closed.
     let Some(backup_body) = decode_envelope(&backup_kernel)
         .and_then(|k| decode_envelope_with_kernel(&backup_normal, &k))
         .map(|d| d.image)
     else {
-        return Err(BACKUP_NOT_RESTORABLE.to_string());
+        return Err(BACKUP_UNREADABLE.to_string());
     };
     // A malformed TARGET is diagnosed by the target-validity gate in `authorize`
     // (which refuses it before any write); defer to it so this gate speaks only
@@ -660,7 +672,7 @@ fn classify_crossflash(installed: &Installed, target: &Target) -> FlashPlan {
     };
     if target.normal.is_none() {
         return FlashPlan::Refused(
-            "crossflash refused: a different-SAT target needs a Kernel+Normal pair; this \
+            "crossflash refused: a crossflash target needs a Kernel+Normal pair; this \
              bundle is Kernel-only"
                 .to_string(),
         );

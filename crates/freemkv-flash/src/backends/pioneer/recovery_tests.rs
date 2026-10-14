@@ -714,7 +714,9 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
 
 // ---- Backup-restorable gate (revert must stay possible) ---------------------
 
-use crate::backends::pioneer::flash_plan::{backup_restorable, check_receiver};
+use crate::backends::pioneer::flash_plan::{
+    backup_restorable, check_receiver, BACKUP_NOT_RESTORABLE, BACKUP_UNREADABLE,
+};
 
 #[test]
 fn backup_restorable_allows_a_same_class_backup() {
@@ -767,10 +769,13 @@ fn backup_restorable_refuses_the_one_way_bdw_pr1ml_crossflash() {
         k.unwrap()
     };
     // Installed BDW, flashing PR1ML: the BDW backup cannot be restored onto a
-    // PR1ML-running drive -> refuse.
-    assert!(
-        backup_restorable(Some(&kernel_of(&pr1ml)), &bdw).is_err(),
-        "one-way crossflash must refuse: BDW backup is not restorable onto PR1ML"
+    // PR1ML-running drive -> refuse. Assert the SPECIFIC one-way-ABI refusal, so
+    // inverting the `is_satisfied_by` arm (or returning Ok) fails here, and so a
+    // mere parse failure (BACKUP_UNREADABLE) cannot masquerade as this refusal.
+    assert_eq!(
+        backup_restorable(Some(&kernel_of(&pr1ml)), &bdw),
+        Err(BACKUP_NOT_RESTORABLE.to_string()),
+        "one-way crossflash must refuse with the one-way-ABI reason: BDW backup is not restorable onto PR1ML"
     );
     // Installed PR1ML, flashing BDW: the PR1ML backup IS restorable onto a
     // BDW-running drive (BDW Kernel provides a superset) -> allow.
@@ -790,9 +795,13 @@ fn backup_restorable_fails_closed_on_an_unparseable_backup() {
     // promise even when the hoard KAT is not run.
     let target = fixture_pair(false, 0);
     let tk = target.kernel().repack(&target.kernel().image).unwrap();
-    assert!(
-        backup_restorable(Some(&tk), b"not a firmware archive at all").is_err(),
-        "unparseable backup + Kernel flash must fail closed"
+    // Assert the SPECIFIC unreadable-backup refusal: a fail-open (Ok) fails here,
+    // and the message must blame the unreadable backup, not the target Kernel's
+    // ABI (BACKUP_NOT_RESTORABLE).
+    assert_eq!(
+        backup_restorable(Some(&tk), b"not a firmware archive at all"),
+        Err(BACKUP_UNREADABLE.to_string()),
+        "unparseable backup + Kernel flash must fail closed with the unreadable-backup reason"
     );
 }
 

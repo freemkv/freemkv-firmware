@@ -205,7 +205,8 @@ fn crossflash_lines(live: &Identity, image: &[u8]) -> Result<Vec<PlanLine>> {
         .unwrap_or_else(|| "unknown".into());
     Ok(vec![
         PlanLine::Warning(format!(
-            "CROSSFLASH: {} \u{2192} {} (same hardware family {family})",
+            "CROSSFLASH: {} \u{2192} {} (same hardware family {family}; confirmed against your \
+             backup before any write)",
             from.label(),
             to.label(),
         )),

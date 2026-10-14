@@ -277,8 +277,10 @@ pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Str
 
 /// Derive installed-firmware routing facts from the pre-flash backup — the OEM
 /// package captured off this very drive moments earlier. Returns `None` when the
-/// backup is absent or its identity cannot be resolved (callers then treat the
-/// flash as plain; the backup + gates still protect the drive).
+/// backup is absent or its identity cannot be resolved; callers (`plan_for`)
+/// then route an all-unknown installed through the family gate, which REFUSES
+/// (fail closed) rather than proceeding, so an unidentifiable installed firmware
+/// never flashes.
 pub(crate) fn installed_facts(
     backup: Option<&[u8]>,
 ) -> Option<crate::backends::pioneer::flash_plan::Installed> {

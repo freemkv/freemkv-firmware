@@ -43,11 +43,19 @@ fn be32_sum_zero(body: &[u8]) -> bool {
 
 /// Load the target package to flash, with the Normal-signature guidance, and
 /// enforce the boot-time (model, variant) pairing on the written pair.
+/// Readiness poll after a recover write: this many attempts, 500 ms apart, so
+/// the "within N seconds" ceiling in the failure message is half this count.
+const READINESS_POLLS: usize = 180;
+
 fn load_target(bytes: &[u8]) -> Result<(Update, Vec<u8>)> {
     let (kernel, normal) = classify_flash_input(bytes)?;
     let kernel = kernel.context("Firmware to flash must include Kernel and Normal")?;
     let normal = normal.context("Firmware to flash must include Kernel and Normal")?;
     let result = Update::load(&kernel, &normal);
+    // 0x170..0x1c0 is the Normal envelope's signature field (layout owned by
+    // pioneer-optical). An all-zero field on an Authentication failure means the
+    // package is unsigned, so give the actionable "use a signed OEM package"
+    // guidance instead of the generic decode error.
     if matches!(result, Err(UpdateError::Authentication))
         && normal
             .get(0x170..0x1c0)
@@ -57,6 +65,11 @@ fn load_target(bytes: &[u8]) -> Result<(Update, Vec<u8>)> {
     }
     let update = result.context("cannot decode Firmware to flash")?;
     crate::backends::pioneer::flash_plan::validate_component_headers(Some(&kernel), Some(&normal))
+        .map_err(|e| anyhow!("Firmware to flash: {e}"))?;
+    // Refuse a target whose envelope tail cannot be reproduced, exactly as the
+    // flash path does: the re-encode rebuilds the Normal from the decoded body,
+    // so an unrecoverable tail would be silently dropped from the written image.
+    crate::backends::pioneer::flash_plan::ensure_no_unrecovered_tail(Some(&kernel), Some(&normal))
         .map_err(|e| anyhow!("Firmware to flash: {e}"))?;
     Ok((update, normal))
 }
@@ -119,6 +132,12 @@ impl Plan {
                 "recover refused: the installed firmware is family {i} but the target is family \
                  {t} (different hardware family)"
             ),
+            // Both unprofilable: reached by the synthetic test fixtures, and in
+            // principle by any non-OEM input whose family cannot be hashed. This
+            // EXPERIMENTAL, hardware-unproven path does not prove hardware family
+            // here; it relies on the caller's Current file being correct and on
+            // the offline re-encode proof below (the target Normal must decode
+            // under the installed Kernel to the identical zero-checksum body).
             (None, None) => {}
             (installed, _) => bail!(
                 "recover refused: cannot confirm the target is the installed drive's hardware \
@@ -174,8 +193,13 @@ impl Plan {
         // Kernel is already written (which would leave the drive half-flashed in
         // update mode).
         for (_, bytes) in transfers {
+            // Same bound as the flash path (`IMAGE_MIN..=IMAGE_MAX`, 256-byte
+            // aligned): the transfer offset is a 24-bit CDB field, so a length
+            // above IMAGE_MAX (0x00ff_ff00) or not 256-aligned would truncate the
+            // offset mid-session — after the Kernel is already written.
             ensure!(
-                !bytes.is_empty() && bytes.len() <= 0x100_0000,
+                (super::IMAGE_MIN..=super::IMAGE_MAX).contains(&bytes.len())
+                    && bytes.len().is_multiple_of(0x100),
                 "invalid transfer size"
             );
         }
@@ -187,8 +211,8 @@ impl Plan {
                 },
                 bytes.len(),
             );
-            for (index, chunk) in bytes.chunks(0x8000).enumerate() {
-                let offset = index * 0x8000;
+            for (index, chunk) in bytes.chunks(super::FLASH_CHUNK).enumerate() {
+                let offset = index * super::FLASH_CHUNK;
                 dev.command_out_strict(&cdb::transfer(role, offset as u32, chunk.len() as u32), chunk)
                     .with_context(|| format!("{role:?} write failed at {offset:#x}; firmware may be partial; write was not retried"))?;
                 progress.set(offset + chunk.len());
@@ -202,7 +226,7 @@ impl Plan {
         sleep(Duration::from_secs(2));
         // No readback: prove normal operation through identity and readiness.
         // NO MEDIUM is normal for an empty recovered optical drive.
-        for attempt in 0..=180 {
+        for attempt in 0..=READINESS_POLLS {
             let _ = dev.command_in(&cdb::get_event_status(), 8);
             let ready = dev.command_in(&cdb::test_unit_ready(), 0);
             if let Err(error) = &ready {
@@ -226,11 +250,11 @@ impl Plan {
                     }
                 }
             }
-            if attempt < 180 {
+            if attempt < READINESS_POLLS {
                 sleep(Duration::from_millis(500));
             }
         }
-        bail!("firmware transferred, but return to normal mode could not be verified within 90 seconds; save the diagnostic log")
+        bail!("firmware transferred, but return to normal mode could not be verified within {} seconds; save the diagnostic log", READINESS_POLLS / 2)
     }
 }
 
