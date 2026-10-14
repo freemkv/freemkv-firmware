@@ -170,13 +170,7 @@ pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
     let (read, readable, gaps) =
         crate::probe::read_full_image(dev).context("reading the drive's firmware")?;
     if read.len() != super::IMAGE_SIZE || readable != read.len() || !gaps.is_empty() {
-        bail!(
-            "backup needs every firmware byte, but read {} of {}; unreadable ranges {:#x?}. \
-             `dump` saves what the drive returned",
-            readable,
-            super::IMAGE_SIZE,
-            gaps
-        );
+        return Err(incomplete_read(readable, &gaps));
     }
     let rebuilt = oem::rebuild(&read, super::oem::catalog())
         .context("rebuilding the OEM image from the drive read")?;
@@ -187,6 +181,33 @@ pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
     let product = super::Mtk.identity(dev).product;
     validate_image(&rebuilt.image, Some(&product))?;
     Ok(rebuilt.image)
+}
+
+/// Why a backup cannot be built from an incomplete drive read. When the boot
+/// banner itself did not answer, the firmware does not expose its flash to the
+/// read command we use at all (some drives answer only their calibration area),
+/// which is a different problem from a few unreadable spans.
+fn incomplete_read(readable: usize, gaps: &[(usize, usize)]) -> anyhow::Error {
+    let banner = mediatek_optical::layout::BANNER.start;
+    if gaps
+        .iter()
+        .any(|&(start, end)| (start..end).contains(&banner))
+    {
+        anyhow::anyhow!(
+            "this drive's firmware does not expose its flash to the read command freemkv \
+             uses (only {readable} of {} bytes answered: {gaps:#x?}), so a backup is not \
+             possible on this firmware yet. Run `freemkv-flash dump --read-map` and send the \
+             output to support so it can be added; `freemkv-flash dump` saves what the drive \
+             returns",
+            super::IMAGE_SIZE
+        )
+    } else {
+        anyhow::anyhow!(
+            "backup needs every firmware byte, but read {readable} of {}; unreadable ranges \
+             {gaps:#x?}. `dump` saves what the drive returned",
+            super::IMAGE_SIZE
+        )
+    }
 }
 
 /// One-line provenance for logs and the backup notice.

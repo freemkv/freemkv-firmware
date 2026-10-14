@@ -198,3 +198,20 @@ fn legacy_backups_accept_the_old_tag_label_as_an_alias() {
     // An unrelated label is still rejected — the gate is not disabled.
     assert!(!chip_family_matches(&img, "MT1805").unwrap());
 }
+
+#[test]
+fn a_drive_that_hides_its_flash_is_told_so_not_asked_for_every_byte() {
+    // The reported WH16NS58: only the calibration area (0x1F0000..) answered.
+    let err = super::incomplete_read(0x1_0000, &[(0, 0x1F_0000)]).to_string();
+    assert!(err.contains("does not expose its flash"), "{err}");
+    assert!(err.contains("dump --read-map"), "{err}");
+    assert!(!err.contains("needs every firmware byte"), "{err}");
+}
+
+#[test]
+fn a_few_unreadable_spans_keep_the_partial_read_message() {
+    // Banner readable; a span elsewhere failed: a genuine partial read.
+    let err = super::incomplete_read(0x20_0000 - 0x1000, &[(0x80_000, 0x81_000)]).to_string();
+    assert!(err.contains("needs every firmware byte"), "{err}");
+    assert!(!err.contains("does not expose its flash"), "{err}");
+}

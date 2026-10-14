@@ -844,8 +844,10 @@ fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
         );
     let req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    // Every flash read fails, so not even the boot banner answers: the drive is
+    // told its firmware does not expose its flash, not asked for every byte.
     assert!(
-        format!("{err:#}").contains("backup needs every firmware byte"),
+        format!("{err:#}").contains("does not expose its flash"),
         "got: {err}"
     );
     assert!(

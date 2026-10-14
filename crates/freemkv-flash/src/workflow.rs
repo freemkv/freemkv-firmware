@@ -301,6 +301,16 @@ pub fn backup(device: Option<&str>, out: Option<PathBuf>, dump: bool) -> Result<
     backup_with_replace(device, out, dump, false)
 }
 
+/// Map which READ BUFFER channels `device` answers with firmware, for support.
+/// Read-only: issues only READ BUFFER.
+pub fn read_map(device: Option<&str>, out: Option<PathBuf>) -> Result<()> {
+    crate::diagnostics::run("read-map", || {
+        let selector = resolve_device(device)?;
+        let mut dev = platform::open(&selector, false)?;
+        crate::probe::read_map(dev.as_mut(), out.as_deref())
+    })
+}
+
 /// Capture to a save-dialog destination; replacement requires explicit caller consent.
 pub fn backup_with_replace(
     device: Option<&str>,

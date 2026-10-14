@@ -72,9 +72,13 @@ enum Command {
     Dump {
         /// Drive selector; omitted when only one drive is connected.
         device: Option<String>,
-        /// Output raw .bin path.
+        /// Output raw .bin path (with --read-map: the map text file).
         #[arg(short, long)]
         out: Option<PathBuf>,
+        /// Instead of dumping, map which READ BUFFER channels this drive answers
+        /// with firmware (read-only diagnostic; send the output to support).
+        #[arg(long)]
+        read_map: bool,
     },
     /// Inspect a firmware file without opening a drive.
     Check {
@@ -167,7 +171,12 @@ fn main() -> ExitCode {
         Some(Command::Backup { device, out }) => {
             freemkv_flash::workflow::backup(device.as_deref(), out, false)
         }
-        Some(Command::Dump { device, out }) => {
+        Some(Command::Dump {
+            device,
+            out,
+            read_map: true,
+        }) => freemkv_flash::workflow::read_map(device.as_deref(), out),
+        Some(Command::Dump { device, out, .. }) => {
             freemkv_flash::workflow::backup(device.as_deref(), out, true)
         }
         Some(Command::Check { input }) => freemkv_flash::workflow::check_file(&input),
