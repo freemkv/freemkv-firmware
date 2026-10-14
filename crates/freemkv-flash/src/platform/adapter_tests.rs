@@ -349,13 +349,13 @@ fn transport_sense_survives_context_without_changing_display() {
         ascq: 0,
     };
     let expected = format!(
-            "SCSI transport failure on test: {} (cdb=[3c], direction=FromDevice, requested=1, attempt=1)",
-            FError::ScsiError {
-                opcode: 0,
-                status: CHECK_CONDITION,
-                sense: Some(sense),
-            }
-        );
+        "SCSI command failed on test: {} (cdb=[3c], direction=FromDevice, requested=1, attempt=1)",
+        super::super::describe_scsi_error(&FError::ScsiError {
+            opcode: 0,
+            status: CHECK_CONDITION,
+            sense: Some(sense),
+        })
+    );
     let error = dev_with(sense).command_in(&[0x3c], 1).unwrap_err();
     assert_eq!(error.to_string(), expected);
     assert_eq!(super::super::sense_triplet(&error), Some((5, 0x24, 0)));
@@ -429,9 +429,9 @@ fn senseless_transport_error_is_not_classified() {
         path: "test".into(),
     };
     let error = dev.command_in(&[0x3c], 1).unwrap_err();
-    assert!(error
-        .to_string()
-        .starts_with("SCSI transport failure on test:"));
+    assert!(error.to_string().starts_with(
+        "SCSI command failed on test: no reply from the drive (transport/link failure)"
+    ));
     assert_eq!(super::super::sense_triplet(&error), None);
 }
 

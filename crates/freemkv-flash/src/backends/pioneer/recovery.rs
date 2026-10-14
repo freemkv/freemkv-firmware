@@ -208,8 +208,22 @@ impl Plan {
             );
             for (index, chunk) in bytes.chunks(super::FLASH_CHUNK).enumerate() {
                 let offset = index * super::FLASH_CHUNK;
-                dev.command_out_strict(&cdb::transfer(role, offset as u32, chunk.len() as u32), chunk)
-                    .with_context(|| format!("{role:?} write failed at {offset:#x}; firmware may be partial; write was not retried"))?;
+                let sent = dev.command_out_strict(
+                    &cdb::transfer(role, offset as u32, chunk.len() as u32),
+                    chunk,
+                );
+                match &sent {
+                    Ok(()) => crate::diagnostics::record(format!(
+                        "Recovery WRITE BUFFER chunk: role={role:?} offset={offset:#x} length={} result=ok",
+                        chunk.len()
+                    )),
+                    Err(error) => crate::diagnostics::record(format!(
+                        "Recovery WRITE BUFFER chunk: role={role:?} offset={offset:#x} length={} result=FAILED sense={:?}: {error:#}",
+                        chunk.len(),
+                        crate::platform::sense_triplet(error)
+                    )),
+                }
+                sent.with_context(|| format!("{role:?} write failed at {offset:#x}; firmware may be partial; write was not retried"))?;
                 progress.set(offset + chunk.len());
             }
             if role == Role::Kernel {

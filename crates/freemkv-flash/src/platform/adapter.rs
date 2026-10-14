@@ -158,7 +158,7 @@ impl TransportDevice {
                             continue;
                         }
                     }
-                    let detail = format!("SCSI transport failure on {}: {e} (cdb={cdb:02x?}, direction={dir:?}, requested={}, attempt={})", self.path, buf.len(), attempt + 1);
+                    let detail = format!("SCSI command failed on {}: {} (cdb={cdb:02x?}, direction={dir:?}, requested={}, attempt={})", self.path, super::describe_scsi_error(&e), buf.len(), attempt + 1);
                     return Err(match e.scsi_sense() {
                         Some(s) => ScsiSenseError::new(s.sense_key, s.asc, s.ascq, detail).into(),
                         None => anyhow!(detail),

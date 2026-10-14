@@ -42,3 +42,50 @@ fn describe_sense_is_human_readable() {
     assert!(describe_sense(0x4, 0x0C, 0x00).contains("HARDWARE ERROR"));
     assert!(describe_sense(0x3, 0x0C, 0x00).contains("write error"));
 }
+
+fn scsi_err(status: u8, sense: Option<(u8, u8, u8)>) -> libfreemkv::error::Error {
+    libfreemkv::error::Error::ScsiError {
+        opcode: 0x3b,
+        status,
+        sense: sense.map(|(sense_key, asc, ascq)| libfreemkv::scsi::ScsiSense {
+            sense_key,
+            asc,
+            ascq,
+        }),
+    }
+}
+
+#[test]
+fn scsi_error_transport_wedge_is_no_reply() {
+    let s = describe_scsi_error(&scsi_err(0xff, None));
+    assert!(
+        s.starts_with("no reply from the drive (transport/link failure)"),
+        "{s}"
+    );
+    assert!(s.contains("/0xff"), "raw code kept: {s}");
+}
+
+#[test]
+fn scsi_error_check_condition_with_sense_is_decoded() {
+    let s = describe_scsi_error(&scsi_err(0x02, Some((0x5, 0x24, 0x00))));
+    assert!(
+        s.starts_with("CHECK CONDITION (0x02): ILLEGAL REQUEST"),
+        "{s}"
+    );
+    assert!(s.contains("24h/00h"), "{s}");
+    assert!(s.contains("0x3b/0x02/0x05/0x24/0x00"), "raw code kept: {s}");
+    assert!(!s.contains("transport"), "{s}");
+}
+
+#[test]
+fn scsi_error_check_condition_no_sense_is_a_rejection() {
+    let s = describe_scsi_error(&scsi_err(0x02, Some((0, 0, 0))));
+    assert!(
+        s.starts_with(
+            "CHECK CONDITION (0x02): the drive rejected the command and returned no sense data"
+        ),
+        "{s}"
+    );
+    assert!(s.contains("0x3b/0x02/0x00/0x00/0x00"), "raw code kept: {s}");
+    assert!(!s.contains("transport"), "{s}");
+}

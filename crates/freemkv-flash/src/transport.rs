@@ -91,11 +91,27 @@ impl Transport for ScsiTransport<'_, '_> {
                     Data::Out(bytes) => bytes,
                     _ => &[],
                 };
-                if strict {
-                    d.command_out_strict(cdb, payload)?;
+                let sent = if strict {
+                    d.command_out_strict(cdb, payload)
                 } else {
-                    d.command_out(cdb, payload)?;
+                    d.command_out(cdb, payload)
+                };
+                // Flash-path WRITE BUFFER chunks: log each so the saved
+                // diagnostic shows the sequence up to the failing chunk.
+                if strict && !payload.is_empty() {
+                    match &sent {
+                        Ok(()) => crate::diagnostics::record(format!(
+                            "Flash WRITE BUFFER chunk: cdb={cdb:02x?} length={} result=ok",
+                            payload.len()
+                        )),
+                        Err(error) => crate::diagnostics::record(format!(
+                            "Flash WRITE BUFFER chunk: cdb={cdb:02x?} length={} result=FAILED sense={:?}: {error:#}",
+                            payload.len(),
+                            sense_triplet(error)
+                        )),
+                    }
                 }
+                sent?;
                 Ok(payload.len())
             }
         });

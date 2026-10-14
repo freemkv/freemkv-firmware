@@ -204,6 +204,58 @@ pub fn describe_sense(key: u8, asc: u8, ascq: u8) -> String {
     )
 }
 
+/// Human name of a SCSI status byte.
+pub fn scsi_status_name(status: u8) -> &'static str {
+    match status {
+        0x00 => "GOOD",
+        0x02 => "CHECK CONDITION",
+        0x04 => "CONDITION MET",
+        0x08 => "BUSY",
+        0x18 => "RESERVATION CONFLICT",
+        0x28 => "TASK SET FULL",
+        0x30 => "ACA ACTIVE",
+        0x40 => "TASK ABORTED",
+        0xFF => "no status (transport)",
+        _ => "unknown status",
+    }
+}
+
+/// Classify a libfreemkv SCSI error for people: a transport/link failure (no
+/// reply from the drive) is kept distinct from a real drive reply (CHECK
+/// CONDITION with or without sense). The raw `E<code>: ...` text is appended
+/// in brackets for support.
+pub fn describe_scsi_error(error: &libfreemkv::error::Error) -> String {
+    use libfreemkv::error::Error as E;
+    let summary = if error.is_scsi_transport_failure() {
+        "no reply from the drive (transport/link failure)".to_string()
+    } else if let Some(s) = error.scsi_sense() {
+        let status = match error {
+            E::ScsiError { status, .. } => *status,
+            _ => 0x02,
+        };
+        if (s.sense_key, s.asc, s.ascq) == (0, 0, 0) {
+            format!(
+                "{} (0x{status:02x}): the drive rejected the command and returned no sense data",
+                scsi_status_name(status)
+            )
+        } else {
+            format!(
+                "{} (0x{status:02x}): {}",
+                scsi_status_name(status),
+                describe_sense(s.sense_key, s.asc, s.ascq)
+            )
+        }
+    } else if let E::ScsiError { status, .. } = error {
+        format!(
+            "{} (0x{status:02x}): the drive replied without sense data",
+            scsi_status_name(*status)
+        )
+    } else {
+        "the drive command failed".to_string()
+    };
+    format!("{summary} [{error}]")
+}
+
 mod adapter;
 pub(crate) use adapter::trace_commands;
 
