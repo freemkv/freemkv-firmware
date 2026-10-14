@@ -15,6 +15,11 @@ use mediatek_optical::{layout, Identity};
 /// Length of the boot banner at `0x3000` that a crossflash must keep.
 pub(crate) const BANNER_LEN: usize = 16;
 
+/// The refusal when the pre-flash backup would not re-admit as a crossflash
+/// once the target has booted — the crossflash is not reversible, so refuse it.
+pub(crate) const BACKUP_NOT_FLASHABLE_BACK: &str =
+    "your backup could not be flashed back; refusing";
+
 /// The identity descriptor's platform code (`+0x46`, e.g. `JB7`): one of the
 /// hardware fields `mediatek_optical::image::family` hashes, and the one the
 /// boot banner does not carry (BU3 and BU9 share a banner). The descriptor
@@ -161,7 +166,9 @@ fn banner_text(banner: &[u8; BANNER_LEN]) -> String {
 
 /// The unknown-family refusals, worded like the engine's `family_gate`.
 fn unknown_family(error: PrepareError) -> String {
-    super::flash::family_gate(&error).expect("a family-gate refusal")
+    super::flash::family_gate(&error).unwrap_or_else(|| {
+        "could not determine the firmware family; flashing requires a known family".to_string()
+    })
 }
 
 /// The image↔drive model decision before any backup, against the live identity
@@ -257,10 +264,10 @@ pub(crate) fn decide_authorized(
 /// The backup must stay flashable once the drive runs the target: the decision
 /// with the two swapped must re-admit as a crossflash.
 pub(crate) fn decide_rollback(installed: &Build, target: &Build) -> Result<()> {
-    let back = decide_authorized(&target.product, target, installed)
-        .context("your backup could not be flashed back; refusing")?;
+    let back =
+        decide_authorized(&target.product, target, installed).context(BACKUP_NOT_FLASHABLE_BACK)?;
     if back != Verdict::Crossflash {
-        bail!("your backup could not be flashed back; refusing");
+        bail!("{BACKUP_NOT_FLASHABLE_BACK}");
     }
     Ok(())
 }

@@ -224,8 +224,8 @@ pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
 /// Derived from the receiving Kernel together with a Normal it is paired with:
 /// the offsets come from the Kernel's own recognized XOR-skip branch
 /// ([`pioneer_optical::envelope::KernelXorPolicy`]); the rotation direction is
-/// read from that paired Normal's detected envelope layout, because 0.12.4's
-/// Kernel recognizers do not yet expose rotation independently (see the note on
+/// read from that paired Normal's detected envelope layout, because the pinned
+/// pioneer-optical's Kernel recognizers do not expose rotation independently (see the note on
 /// [`receiver_class`]). Deliberately excludes Kernel `version2`, which varies
 /// within one edition and so is not a receiver property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -297,12 +297,12 @@ pub const RECEIVER_INCOMPATIBLE: &str =
     "the drive's currently-installed Kernel cannot receive this firmware: the incoming Normal \
      does not decode to a valid image under the installed Kernel's receiver rules (a different \
      un-XORed-offset/rotation receiver class). Flashing it would leave the drive stuck in boot \
-     mode. Refused. This is the same hardware family, so use Recover to install it instead \
-     (Recover re-encodes the firmware for the installed Kernel's receiver).";
+     mode. Refused. If this is the same hardware family, Recover can install it instead \
+     (it re-encodes the firmware for the installed Kernel's receiver).";
 
 /// The receiver gate's message when the installed Kernel cannot be established.
 pub const RECEIVER_UNKNOWN: &str =
-    "could not decode the drive's currently-installed Kernel to prove it can receive this \
+    "could not establish the drive's currently-installed Kernel's receiver policy to prove it can receive this \
      firmware; refusing to flash (fail closed).";
 
 /// The pure receiver decision: admit only when the installed Kernel decodes the

@@ -43,7 +43,7 @@ fn be32_sum_zero(body: &[u8]) -> bool {
 
 /// Load the target package to flash, with the Normal-signature guidance, and
 /// enforce the boot-time (model, variant) pairing on the written pair.
-fn load_target(bytes: &[u8]) -> Result<(Update, Vec<u8>, Vec<u8>)> {
+fn load_target(bytes: &[u8]) -> Result<(Update, Vec<u8>)> {
     let (kernel, normal) = classify_flash_input(bytes)?;
     let kernel = kernel.context("Firmware to flash must include Kernel and Normal")?;
     let normal = normal.context("Firmware to flash must include Kernel and Normal")?;
@@ -58,7 +58,7 @@ fn load_target(bytes: &[u8]) -> Result<(Update, Vec<u8>, Vec<u8>)> {
     let update = result.context("cannot decode Firmware to flash")?;
     crate::backends::pioneer::flash_plan::validate_component_headers(Some(&kernel), Some(&normal))
         .map_err(|e| anyhow!("Firmware to flash: {e}"))?;
-    Ok((update, kernel, normal))
+    Ok((update, normal))
 }
 
 impl Plan {
@@ -77,7 +77,7 @@ impl Plan {
                 && installed_normal.info().kind == pioneer_optical::ComponentKind::Normal,
             "Current firmware must contain Kernel and Normal components"
         );
-        let (target, _target_kernel, target_normal) = load_target(target)?;
+        let (target, target_normal) = load_target(target)?;
         Self::assemble(
             &installed_kernel,
             &installed_normal.image,
@@ -283,7 +283,9 @@ fn normal_transfer_for_installed(
     }
     // Cross-receiver recover: re-encode the target Normal body for the installed
     // Kernel's receiver transport.
-    let header = bytes.get(..0x200).context("target Normal has no header")?;
+    let header = bytes
+        .get(..super::IMAGE_MIN)
+        .context("target Normal has no header")?;
     let key = match target.normal().encoding_seed() {
         Some(seed) => NormalKeySource::Seed(seed),
         None => bail!(

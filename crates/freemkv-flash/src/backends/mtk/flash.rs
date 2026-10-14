@@ -252,7 +252,7 @@ fn authorize_crossflash(
     let (installed, target) = (Build::of_image(backup)?, Build::of_image(image)?);
     let now = crossflash::decide_authorized(drive_product, &installed, &target)?;
     crossflash::ensure_unchanged(planned, now)?;
-    rollback(backup, image).context("your backup could not be flashed back; refusing")?;
+    rollback(backup, image).context(crossflash::BACKUP_NOT_FLASHABLE_BACK)?;
     crossflash::decide_rollback(&installed, &target)?;
     Ok(target.product)
 }
