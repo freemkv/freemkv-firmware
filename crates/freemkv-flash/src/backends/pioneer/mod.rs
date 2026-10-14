@@ -937,6 +937,13 @@ impl RecoveryFacet for Pioneer {
             "Recovery",
             "No automatic backup; compatibility policy bypassed",
         );
+        if plan.was_reencoded() {
+            crate::output::field(
+                "Recovery",
+                "Normal re-encoded for the installed Kernel's receiver transport \
+                 (experimental, offline-proven, hardware-unproven)",
+            );
+        }
         match dev.writer() {
             Some(writer) => plan.execute(writer),
             None => {

@@ -84,6 +84,14 @@ enum Command {
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
     /// Recover a Pioneer drive using Current firmware or an explicit drive read.
+    ///
+    /// EXPERIMENTAL: when the drive's installed Kernel is a different receiver
+    /// class than the target package (a drive stuck after a same-hardware
+    /// crossflash), recover re-encodes the target Normal into the installed
+    /// Kernel's receive transport so its loader decodes it to the identical,
+    /// byte-identical-OEM body. This is proven OFFLINE only; it is not yet
+    /// proven on hardware, stays recover-only for now, and is intended to move
+    /// into `flash` in a later release once proven on hardware.
     Recover(RecoveryArgs),
 }
 

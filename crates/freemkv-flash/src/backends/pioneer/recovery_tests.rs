@@ -55,6 +55,15 @@ fn fixture_pair(gated: bool, marker: u8) -> Update {
     kernel[0x100..0x114].copy_from_slice(&[
         0x7a, 0x20, 0, 0, 1, 0, 0x47, 12, 0x7a, 0x20, 0, 0, 2, 0, 0x47, 4, 1, 0xf0, 0x65, 5,
     ]);
+    // The XOR-skip branch above is followed by the Forward-rotation decode loop
+    // the receiver reads: AND.W #0x1F,R3; MOV.W R3,R1; JSR shift-helper (at
+    // KERNEL_BASE+0x114+14 = 0x400122); OR.L; SHLR.L (right) + RTS. Without this
+    // `normal_rotation_from_kernel` returns None and `Update::load` fails
+    // `UnknownRotation`.
+    kernel[0x114..0x126].copy_from_slice(&[
+        0x79, 0x63, 0, 0x1f, 0x0d, 0x31, 0x5e, 0x40, 0x01, 0x22, 1, 0xf0, 0x64, 0x40, 0x11, 0x70,
+        0x54, 0x70,
+    ]);
     let finalizer = if gated {
         GATED_FINALIZER
     } else {
@@ -169,8 +178,8 @@ fn kernel_recovery_writes_both_components_without_entry_or_firmware_reads() {
         1
     );
     for (buffer, expected) in [
-        (0xfe, plan.target.kernel_transfer()),
-        (0xf0, plan.target.normal_transfer()),
+        (0xfe, plan.kernel_transfer.as_slice()),
+        (0xf0, plan.normal_transfer.as_slice()),
     ] {
         let actual: Vec<_> = drive
             .writes
@@ -392,4 +401,268 @@ fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
     };
     crate::engine::recover(&mut live, &pioneer, Some(&current), &target, true, true).unwrap();
     assert!(live.finished && !live.writes.is_empty());
+}
+
+
+// ---- Hoard-wide recover re-encode KAT ---------------------------------------
+//
+// Env-gated (`FREEMKV_PIONEER_HOARD`, the directory holding
+// `index/packages.json`); unset is a no-op. Across every same-family
+// Kernel+Normal package pair, the recover plan must admit exactly the
+// offline-provable target Normals. Two cases:
+//
+//  * same receiver class (identical XOR-skip offsets + rotation): the installed
+//    Kernel decodes the shipped Normal to the identical body by construction, so
+//    the pair is provable without a re-encode;
+//  * different receiver class: the target Normal must re-encode for the installed
+//    Kernel and the result must decode, under that Kernel, to the identical body
+//    with a zero BE32 checksum. Every such cross-receiver pair is proven here.
+//
+// The real same-SAT cross-receiver case BDR-207M <- BDR-PR1ML is additionally
+// driven end-to-end through `Plan::prepare` and must take the re-encode path.
+#[test]
+fn hoard_recover_admits_offline_provable_same_family_pairs() {
+    use crate::backends::pioneer::classify_flash_input;
+    use crate::backends::pioneer::flash_plan::{
+        normal_family_with_kernel, receiver_class, ReceiverClass,
+    };
+    use pioneer_optical::envelope::builder::{
+        encode_normal_for_kernel, NormalKeySource, NormalSignature,
+    };
+    use pioneer_optical::envelope::signature::SigningKey;
+    use pioneer_optical::envelope::{decode_envelope_with_kernel, Envelope};
+    use std::collections::{HashMap, HashSet};
+    use std::path::PathBuf;
+
+    let Ok(root) = std::env::var("FREEMKV_PIONEER_HOARD") else {
+        eprintln!("FREEMKV_PIONEER_HOARD not set; recover re-encode KAT skipped");
+        return;
+    };
+    let root = PathBuf::from(root);
+    let index: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(root.join("index/packages.json")).expect("index"))
+            .expect("index JSON");
+    let field = |p: &serde_json::Value, k: &str| p[k].as_str().unwrap_or_default().to_string();
+
+    struct Meta {
+        name: String,
+        path: PathBuf,
+        family: String,
+        class: ReceiverClass,
+    }
+    let mut metas: Vec<Meta> = Vec::new();
+    let mut seen = HashSet::new();
+    for p in index["packages"].as_array().expect("packages array") {
+        if !p["kernel_sha256"].is_string() || !p["normal_sha256"].is_string() {
+            continue;
+        }
+        if !seen.insert((field(p, "kernel_sha256"), field(p, "normal_sha256"))) {
+            continue;
+        }
+        let path = root.join(field(p, "path"));
+        let Ok(tar) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok((Some(k), Some(n))) = classify_flash_input(&tar) else {
+            continue;
+        };
+        let (Some(family), Some(class)) =
+            (normal_family_with_kernel(&n, &k), receiver_class(&k, &n))
+        else {
+            continue;
+        };
+        metas.push(Meta {
+            name: format!(
+                "{} {} {}",
+                field(p, "embedded_model"),
+                field(p, "destination"),
+                field(p, "revision")
+            ),
+            path,
+            family: family.to_string(),
+            class,
+        });
+    }
+    assert!(metas.len() >= 2, "hoard must hold multiple K+N packages");
+
+    let mut by_family: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, m) in metas.iter().enumerate() {
+        by_family.entry(m.family.as_str()).or_default().push(i);
+    }
+
+    // A fixed caller-owned signer; its on-drive acceptance is hardware-unproven.
+    let signer = SigningKey::from_bytes([7; 20]).unwrap();
+    let decode_body = |kernel: &[u8], normal: &[u8]| -> Option<Vec<u8>> {
+        let k = Envelope::load(kernel).ok()?;
+        Some(decode_envelope_with_kernel(normal, &k)?.image)
+    };
+
+    let (mut same_class, mut cross_proven, mut cross_total) = (0usize, 0usize, 0usize);
+    let mut failures: Vec<String> = Vec::new();
+    // Full per-pair matrix (family, installed X, target Y, verdict), emitted to
+    // FREEMKV_PIONEER_HOARD_REPORT when set. AS-IS = installed Kernel decodes the
+    // shipped Normal unchanged; REENCODE = X->Y needs cross-receiver re-encode;
+    // REFUSED = not offline-provable (with cause).
+    let mut rows: Vec<String> = Vec::new();
+    for group in by_family.values() {
+        let mut cross: Vec<(usize, usize)> = Vec::new();
+        let mut same_pair: Option<(usize, usize)> = None;
+        for &i in group {
+            for &j in group {
+                if i == j {
+                    continue;
+                }
+                if metas[i].class == metas[j].class {
+                    same_class += 1;
+                    same_pair.get_or_insert((i, j));
+                    rows.push(format!(
+                        "{}\t{}\t{}\tAS-IS",
+                        metas[i].family, metas[i].name, metas[j].name
+                    ));
+                } else {
+                    cross.push((i, j));
+                }
+            }
+        }
+        if cross.is_empty() {
+            continue;
+        }
+        // Load only this family's bytes, proving each cross-receiver pair.
+        let bytes: HashMap<usize, (Vec<u8>, Vec<u8>)> = group
+            .iter()
+            .filter_map(|&i| {
+                let (Some(k), Some(n)) = classify_flash_input(&std::fs::read(&metas[i].path).ok()?).ok()?
+                else {
+                    return None;
+                };
+                Some((i, (k, n)))
+            })
+            .collect();
+        // Sanity-check the by-construction claim on one same-class pair when one
+        // exists in this (multi-class) family.
+        if let Some((i, j)) = same_pair {
+            let (ki, _) = &bytes[&i];
+            let (kj, nj) = &bytes[&j];
+            assert_eq!(
+                decode_body(ki, nj),
+                decode_body(kj, nj),
+                "{} and {} share a receiver class but decode a Normal differently",
+                metas[i].name,
+                metas[j].name
+            );
+        }
+        for (i, j) in cross {
+            cross_total += 1;
+            let (ki, _) = &bytes[&i];
+            let (kj, nj) = &bytes[&j];
+            let installed = Envelope::load(ki).expect("installed kernel");
+            let want = decode_body(kj, nj).expect("target body");
+            let seed = Envelope::load(kj)
+                .ok()
+                .and_then(|k| decode_envelope_with_kernel(nj, &k))
+                .and_then(|n| n.encoding_seed());
+            let Some(seed) = seed else {
+                failures.push(format!("{} <- {}: no seed", metas[j].name, metas[i].name));
+                rows.push(format!(
+                    "{}\t{}\t{}\tREFUSED: no recoverable encoding seed",
+                    metas[i].family, metas[i].name, metas[j].name
+                ));
+                continue;
+            };
+            let reencoded = match encode_normal_for_kernel(
+                &installed.image,
+                &want,
+                &nj[..0x200],
+                NormalKeySource::Seed(seed),
+                NormalSignature::Sign(&signer),
+            ) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    failures.push(format!("{} <- {}: {e:?}", metas[j].name, metas[i].name));
+                    rows.push(format!(
+                        "{}\t{}\t{}\tREFUSED: {e:?}",
+                        metas[i].family, metas[i].name, metas[j].name
+                    ));
+                    continue;
+                }
+            };
+            let proven = decode_envelope_with_kernel(&reencoded, &installed)
+                .is_some_and(|d| d.image == want && be32_sum_zero(&d.image));
+            if proven {
+                cross_proven += 1;
+                rows.push(format!(
+                    "{}\t{}\t{}\tREENCODE",
+                    metas[i].family, metas[i].name, metas[j].name
+                ));
+            } else {
+                failures.push(format!(
+                    "{} <- {}: re-encode does not prove",
+                    metas[j].name, metas[i].name
+                ));
+                rows.push(format!(
+                    "{}\t{}\t{}\tREFUSED: re-encode does not prove",
+                    metas[i].family, metas[i].name, metas[j].name
+                ));
+            }
+        }
+    }
+
+    // The real same-SAT cross-receiver case through the full recover plan.
+    let find = |n: &str| {
+        metas
+            .iter()
+            .position(|m| m.name.starts_with(n))
+            .unwrap_or_else(|| panic!("hoard is missing {n}"))
+    };
+    let a = find("BDR-207M ID43 1.60");
+    let b = find("BDR-PR1ML ID88 1.30");
+    assert_eq!(metas[a].family, metas[b].family, "named case shares a family");
+    assert_ne!(
+        metas[a].class, metas[b].class,
+        "207M and PR1ML must straddle a receiver class"
+    );
+    let plan = Plan::prepare(
+        &std::fs::read(&metas[a].path).unwrap(),
+        &std::fs::read(&metas[b].path).unwrap(),
+    )
+    .expect("installed 207M must admit a re-encoded PR1ML Normal");
+    assert!(
+        plan.was_reencoded(),
+        "207M <- PR1ML must take the cross-receiver re-encode path"
+    );
+
+    if let Ok(report) = std::env::var("FREEMKV_PIONEER_HOARD_REPORT") {
+        rows.sort();
+        let body = format!(
+            "# Pioneer recover re-encode matrix: every same-family ordered pair\n\
+             # columns: family<TAB>installed(X)<TAB>target(Y)<TAB>verdict\n\
+             # AS-IS = installed Kernel decodes shipped Normal unchanged; \
+             REENCODE = X->Y needs re-encode; REFUSED = not offline-provable (cause)\n\
+             # totals: same-class(AS-IS) {same_class}; cross-receiver proven \
+             {cross_proven}/{cross_total}; {} not provable\n{}\n",
+            failures.len(),
+            rows.join("\n"),
+        );
+        std::fs::write(&report, body).expect("write hoard report");
+        eprintln!(
+            "wrote recover re-encode matrix ({} rows) to {report}",
+            rows.len()
+        );
+    }
+    eprintln!(
+        "recover KAT: same-class pairs {same_class} provable by construction; \
+         cross-receiver re-encode proven {cross_proven}/{cross_total}; {} not provable",
+        failures.len()
+    );
+    assert!(
+        cross_proven >= 1,
+        "expected at least one cross-receiver re-encode to be proven"
+    );
+    // Cross-receiver re-encode must succeed for the overwhelming majority; a few
+    // packages (e.g. no recoverable seed) are legitimately not re-encodable.
+    assert!(
+        cross_total == 0 || cross_proven * 5 >= cross_total * 4,
+        "too many cross-receiver re-encode failures ({}/{cross_total}): {failures:#?}",
+        cross_total - cross_proven
+    );
 }

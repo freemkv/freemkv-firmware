@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Pioneer
+- Add a brick-prevention receiver gate to `flash`. Before any write, the drive's
+  currently-installed Kernel must be able to receive every component the flash
+  sends: for a Kernel+Normal flash the target Kernel must carry the installed
+  Kernel's hardware version (SAT), and the target Normal must decode, under the
+  installed Kernel's receiver rules, to the same zero-checksum body the target
+  Kernel decodes. A written Kernel+Normal must also share model and variant (the
+  boot-time pairing the loader enforces at reset). This refuses, before any
+  write, a Kernel swap across hardware versions and any Normal the installed
+  Kernel cannot decode to the identical body (e.g. BDR-207M <-> BDR-PR1ML inside
+  one SAT, and BDR-205 <-> BDR-206 across SATs), which would otherwise leave the
+  drive stuck in update mode.
+- Add EXPERIMENTAL re-encode recovery to `recover` (recover-only, no override
+  flag). For a drive stuck after a same-hardware crossflash, `recover` re-encodes
+  the target Normal into the installed Kernel's receive transport (its XOR-skip
+  offsets, rotation, derived-key pad and authentication) so the installed loader
+  decodes it to the identical zero-checksum body, then writes the untouched
+  target Kernel and the re-encoded Normal; the end-state resident firmware is
+  byte-identical OEM. The re-encode is PROVEN OFFLINE (it must decode under the
+  installed Kernel to the identical body with a zero BE32 checksum, including the
+  real BDR-207M <-> BDR-PR1ML pair) but is NOT yet proven on hardware, so it
+  stays recover-only for now; it is intended for promotion into the default
+  `flash` path in a later release once proven on hardware. A fresh, caller-owned
+  signature is applied, whose on-drive acceptance is part of what is unproven.
+
 ## [0.12.0] - 2026-10-10
 
 ### MediaTek

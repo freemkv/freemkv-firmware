@@ -292,7 +292,8 @@ pub const RECEIVER_INCOMPATIBLE: &str =
     "the drive's currently-installed Kernel cannot receive this firmware: the incoming Normal \
      does not decode to a valid image under the installed Kernel's receiver rules (a different \
      un-XORed-offset/rotation receiver class). Flashing it would leave the drive stuck in boot \
-     mode. Refused.";
+     mode. Refused. This is the same hardware family, so use Recover to install it instead \
+     (Recover re-encodes the firmware for the installed Kernel's receiver).";
 
 /// The receiver gate's message when the installed Kernel cannot be established.
 pub const RECEIVER_UNKNOWN: &str =

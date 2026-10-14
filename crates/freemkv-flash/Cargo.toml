@@ -33,7 +33,10 @@ cmac = "0.7"
 cipher = "0.4"
 sha2 = "0.10"
 getrandom = "0.3"
-pioneer-optical = { version = "=0.12.4", features = ["drive", "envelope", "analysis", "firmware-info"] }
+# pioneer-optical 0.15.0 (receiver-aware Normal re-encoding used by `recover`) is
+# not yet on crates.io; pin the published git rev. Before 0.12.1 is tagged this
+# SHOULD be published to crates.io and restored to `version = "=0.15.0"`.
+pioneer-optical = { git = "https://github.com/MattJackson/pioneer-optical.git", rev = "9d008cf26fa376f0afe0358e44fbf3e3fc0d8afd", features = ["drive", "envelope", "analysis", "firmware-info"] }
 # Shared step-1 chipset detection (MTEKMT19xx family key) — the same detector
 # freemkv-fw uses, so the flash tool and the modify tool never disagree on a
 # firmware image's family. Detection-only crate (std + anyhow); no cycle.
