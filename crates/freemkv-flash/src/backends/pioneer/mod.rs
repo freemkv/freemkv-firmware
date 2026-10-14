@@ -461,6 +461,30 @@ pub(crate) fn decide_offline(installed: &[u8], target: &[u8]) -> Result<()> {
     authorize_installed(FlashPlan::new(plan), Some(installed)).map(|_| ())
 }
 
+/// The routing facts the offline crossflash pre-filter compares: the family
+/// the family gate compares, the controller id (SAT), and whether the package
+/// is Normal-only.
+pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
+    use crate::backends::pioneer::flash_plan::{controller_id_from_sat, normal_family_with_kernel};
+    let (kernel, normal) = classify_flash_input(bytes).unwrap_or((None, None));
+    let header = normal
+        .as_deref()
+        .or(kernel.as_deref())
+        .and_then(pioneer_optical::envelope::header_info);
+    crate::crossflash::Prefilter {
+        platform: crate::crossflash::Platform::Pioneer,
+        family: normal
+            .as_deref()
+            .zip(kernel.as_deref())
+            .and_then(|(n, k)| normal_family_with_kernel(n, k))
+            .map(|f| f.to_string()),
+        model: header
+            .and_then(|h| controller_id_from_sat(&h.hardware_version))
+            .map(|id| format!("{id:04X}")),
+        normal_only: kernel.is_none() && normal.is_some(),
+    }
+}
+
 /// The library plan the receiver accepted.
 struct Prepared {
     complete: Option<pioneer_optical::receiver::PreparedUpdate>,

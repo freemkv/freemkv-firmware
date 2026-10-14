@@ -18,10 +18,7 @@ pub enum Platform {
 /// Whether `flash` admits `target` on a drive whose installed firmware is
 /// `installed` (refusal reason on `Err`).
 pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()> {
-    match platform {
-        Platform::Pioneer => crate::backends::pioneer::decide_offline(installed, target),
-        Platform::Mediatek => crate::backends::mtk::decide_offline(installed, target),
-    }
+    crate::backend::registry::decide_offline(platform, installed, target)
 }
 
 /// Every admitted `(installed, target)` pair of distinct packages, as indices
@@ -61,53 +58,22 @@ pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
 }
 
 /// What decides, without the full gates, that a pair can never be admitted.
-struct Prefilter {
-    platform: Platform,
+/// Each backend computes it from the bytes (`registry::offline_prefilter`).
+pub(crate) struct Prefilter {
+    pub(crate) platform: Platform,
     /// The family the flasher's family gate compares (`None`: unknown, which
     /// the gate refuses — except a Pioneer Normal-only target, see below).
-    family: Option<String>,
+    pub(crate) family: Option<String>,
     /// Pioneer: the controller id (SAT). MediaTek: the image's model.
-    model: Option<String>,
+    pub(crate) model: Option<String>,
     /// Pioneer: the package has no Kernel. Its family is computed with the
     /// installed Kernel, and it can only be a same-SAT (same controller) target.
-    normal_only: bool,
+    pub(crate) normal_only: bool,
 }
 
 impl Prefilter {
     fn of(platform: Platform, bytes: &[u8]) -> Self {
-        match platform {
-            Platform::Pioneer => {
-                use crate::backends::pioneer::flash_plan::{
-                    controller_id_from_sat, normal_family_with_kernel,
-                };
-                let (kernel, normal) =
-                    crate::backends::pioneer::classify_flash_input(bytes).unwrap_or((None, None));
-                let header = normal
-                    .as_deref()
-                    .or(kernel.as_deref())
-                    .and_then(pioneer_optical::envelope::header_info);
-                Self {
-                    platform,
-                    family: normal
-                        .as_deref()
-                        .zip(kernel.as_deref())
-                        .and_then(|(n, k)| normal_family_with_kernel(n, k))
-                        .map(|f| f.to_string()),
-                    model: header
-                        .and_then(|h| controller_id_from_sat(&h.hardware_version))
-                        .map(|id| format!("{id:04X}")),
-                    normal_only: kernel.is_none() && normal.is_some(),
-                }
-            }
-            Platform::Mediatek => Self {
-                platform,
-                family: mediatek_optical::image::family(bytes).map(|f| f.to_string()),
-                model: crate::backends::mtk::crossflash::Build::of_image(bytes)
-                    .ok()
-                    .map(|b| b.product),
-                normal_only: false,
-            },
-        }
+        crate::backend::registry::offline_prefilter(platform, bytes)
     }
 
     /// False only when the flasher's routing must refuse the pair. Pioneer: the

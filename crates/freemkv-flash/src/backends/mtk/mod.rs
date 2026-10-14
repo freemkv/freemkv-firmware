@@ -26,6 +26,17 @@ pub(crate) mod file_info;
 pub(crate) mod fixture;
 mod flash;
 pub(crate) use flash::decide_offline;
+
+/// The routing facts the offline crossflash pre-filter compares: the hardware
+/// family and the image's model.
+pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
+    crate::crossflash::Prefilter {
+        platform: crate::crossflash::Platform::Mediatek,
+        family: mediatek_optical::image::family(bytes).map(|f| f.to_string()),
+        model: crossflash::Build::of_image(bytes).ok().map(|b| b.product),
+        normal_only: false,
+    }
+}
 pub mod fw_ident;
 pub(crate) mod inspect;
 pub mod oem;

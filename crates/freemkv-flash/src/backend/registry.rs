@@ -17,6 +17,31 @@ use crate::platform::ScsiDevice;
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
+/// The whole `flash` decision with no device (see [`crate::crossflash`]).
+pub(crate) fn decide_offline(
+    platform: crate::crossflash::Platform,
+    installed: &[u8],
+    target: &[u8],
+) -> Result<()> {
+    use crate::crossflash::Platform;
+    match platform {
+        Platform::Pioneer => pioneer::decide_offline(installed, target),
+        Platform::Mediatek => mtk::decide_offline(installed, target),
+    }
+}
+
+/// The routing facts [`crate::crossflash`] pre-filters pairs on.
+pub(crate) fn offline_prefilter(
+    platform: crate::crossflash::Platform,
+    bytes: &[u8],
+) -> crate::crossflash::Prefilter {
+    use crate::crossflash::Platform;
+    match platform {
+        Platform::Pioneer => pioneer::offline_prefilter(bytes),
+        Platform::Mediatek => mtk::offline_prefilter(bytes),
+    }
+}
+
 /// Probe order.
 static BACKENDS: [&'static dyn Backend; 2] = [&MTK, &PIONEER];
 
