@@ -856,3 +856,44 @@ fn check_receiver_refuses_a_different_sat_kernel() {
         "a different-SAT target must be refused with the SAT-mismatch reason"
     );
 }
+
+#[test]
+fn authorize_installed_enforces_the_receiver_sat_gate() {
+    // Wiring guard: the receiver gate must be enforced THROUGH authorize_installed,
+    // not only as a pure function. A same-receiver-class but different-SAT installed
+    // Kernel must make authorize_installed refuse, so deleting the check_receiver
+    // call site no longer passes a bricking Kernel+Normal flash green in CI.
+    use crate::backend::FlashPlan;
+    use crate::backends::pioneer::{authorize_installed, execute_plan};
+    let target = fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000");
+    let installed = fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000");
+    let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
+    let err = match authorize_installed(plan, Some(&archive(&installed, false))) {
+        Ok(_) => panic!("authorize_installed must refuse a different-SAT installed Kernel"),
+        Err(e) => format!("{e:#}"),
+    };
+    assert!(
+        err.contains("refusing to flash") && err.contains(RECEIVER_KERNEL_SAT),
+        "authorize_installed must enforce the receiver SAT gate, got: {err}"
+    );
+}
+
+#[test]
+fn be32_sum_zero_fails_closed_on_degenerate_bodies() {
+    // Fail-closed guards: a degenerate decode (empty or non-4-aligned body) must
+    // NOT read as a zero checksum, or the receiver gate would admit it.
+    assert!(
+        !be32_sum_zero(&[]),
+        "empty body must not be a zero checksum"
+    );
+    assert!(
+        !be32_sum_zero(&[0, 0, 0]),
+        "a trailing partial word must fail"
+    );
+    assert!(
+        !be32_sum_zero(&[0, 0, 0, 0, 1]),
+        "a non-4-aligned body must fail"
+    );
+    // Positive control: a well-formed all-zero body is a valid zero checksum.
+    assert!(be32_sum_zero(&[0, 0, 0, 0]));
+}

@@ -41,12 +41,12 @@ fn be32_sum_zero(body: &[u8]) -> bool {
     crate::backends::pioneer::flash_plan::be32_sum_zero(body)
 }
 
-/// Load the target package to flash, with the Normal-signature guidance, and
-/// enforce the boot-time (model, variant) pairing on the written pair.
 /// Readiness poll after a recover write: this many attempts, 500 ms apart, so
 /// the "within N seconds" ceiling in the failure message is half this count.
 const READINESS_POLLS: usize = 180;
 
+/// Load the target package to flash, with the Normal-signature guidance, and
+/// enforce the boot-time (model, variant) pairing on the written pair.
 fn load_target(bytes: &[u8]) -> Result<(Update, Vec<u8>)> {
     let (kernel, normal) = classify_flash_input(bytes)?;
     let kernel = kernel.context("Firmware to flash must include Kernel and Normal")?;

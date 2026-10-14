@@ -267,8 +267,6 @@ pub(crate) fn receiver_class(kernel: &[u8], paired_normal: &[u8]) -> Option<Rece
 }
 
 /// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
-/// before it programs a decoded body. A trailing partial word counts as failed.
-/// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
 /// before it programs a decoded body. An empty body is NOT a valid zero-checksum
 /// body (a degenerate decode must not pass this gate); a trailing partial word
 /// fails.
