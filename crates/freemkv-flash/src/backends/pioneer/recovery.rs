@@ -116,13 +116,26 @@ impl Plan {
         target_normal_bytes: Option<&[u8]>,
     ) -> Result<Self> {
         let control = control_from_image(installed_normal_image)?;
-        // Same-family gate. The offline re-encode proof below re-encodes the
-        // TARGET body into the installed Kernel's transport, so it does NOT by
-        // itself prove the target is the installed drive's hardware family —
-        // this gate must. Refuse a different family, and refuse the asymmetric
-        // case where one side profiles and the other does not (we cannot confirm
-        // the family, so fail closed). Both unprofiled is the synthetic/test
-        // path, carried by the Kernel-ABI check and the offline re-encode proof.
+        // Hardware SAT gate. `image::family` does NOT hash the hardware_version
+        // (SAT), so a matching family hash does not prove same hardware — a
+        // different SAT is a different drive generation that recover must not
+        // flash (the flash path refuses it as RECEIVER_KERNEL_SAT; writing a
+        // foreign-SAT Kernel bricks). recover legitimately crosses receiver
+        // CLASS (same SAT, different transport), so class is NOT gated here;
+        // the SAT is the hardware identity and is required to match. An
+        // unreadable SAT on either side fails closed.
+        let installed_sat = installed_kernel.header().map(|h| h.hardware_version);
+        let target_sat = target.kernel().header().map(|h| h.hardware_version);
+        ensure!(
+            installed_sat.is_some() && installed_sat == target_sat,
+            "recover refused: the target firmware's hardware SAT does not match the installed \
+             drive's (or is unreadable); refusing (fail closed)"
+        );
+        // Family gate (additional same-line check). The offline re-encode proof
+        // below re-encodes the TARGET body into the installed Kernel's transport,
+        // so it does NOT by itself prove the target line — this gate does. Refuse
+        // a different family and the asymmetric one-side-unprofiled case (fail
+        // closed). Both unprofiled is a non-OEM input already SAT-matched above.
         match (
             pioneer_optical::image::family(installed_normal_image),
             target.family(),
@@ -132,12 +145,6 @@ impl Plan {
                 "recover refused: the installed firmware is family {i} but the target is family \
                  {t} (different hardware family)"
             ),
-            // Both unprofilable: reached by the synthetic test fixtures, and in
-            // principle by any non-OEM input whose family cannot be hashed. This
-            // EXPERIMENTAL, hardware-unproven path does not prove hardware family
-            // here; it relies on the caller's Current file being correct and on
-            // the offline re-encode proof below (the target Normal must decode
-            // under the installed Kernel to the identical zero-checksum body).
             (None, None) => {}
             (installed, _) => bail!(
                 "recover refused: cannot confirm the target is the installed drive's hardware \

@@ -879,6 +879,27 @@ fn authorize_installed_enforces_the_receiver_sat_gate() {
 }
 
 #[test]
+fn recover_refuses_a_different_sat_target() {
+    // `image::family` does not hash the SAT, so these two fixtures share a family
+    // hash yet differ in hardware_version (SAT). recover must still refuse — a
+    // different SAT is a different drive generation and writing its Kernel would
+    // brick. Regression guard for the SAT gate (same-family hash is not enough).
+    let current = archive(&fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000"), false);
+    let foreign = archive(&fixture_pair_sat(false, 0, b"SAT FFFDGENERAL 0000"), false);
+    let err = match Plan::prepare(&current, &foreign) {
+        Ok(_) => panic!("different-SAT foreign target must be refused"),
+        Err(e) => format!("{e:#}"),
+    };
+    assert!(
+        err.contains("hardware SAT"),
+        "recover must refuse a different-SAT foreign target on the SAT gate, got: {err}"
+    );
+    // Same SAT (the synthetic happy path) still prepares.
+    let same = archive(&fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000"), false);
+    assert!(Plan::prepare(&current, &same).is_ok());
+}
+
+#[test]
 fn be32_sum_zero_fails_closed_on_degenerate_bodies() {
     // Fail-closed guards: a degenerate decode (empty or non-4-aligned body) must
     // NOT read as a zero checksum, or the receiver gate would admit it.
