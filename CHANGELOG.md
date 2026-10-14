@@ -38,6 +38,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     recorded the old `MT1939` label is accepted as a legacy alias of the banner
     chip.
 
+### freemkv-flash
+- MediaTek `backup` on a drive whose firmware does not expose its flash to the
+  standard read (some drives answer only their calibration area) now says so
+  plainly, instead of "backup needs every firmware byte", and points to the new
+  diagnostic below. No partial or invented backup is written.
+- New `freemkv-flash dump --read-map`: a read-only map of which READ BUFFER
+  channels the drive answers with firmware. Run it and send the output to
+  support when backup reports that the drive does not expose its flash.
+- SCSI errors during flash and recover are reported accurately: a drive that
+  rejects a command (CHECK CONDITION) is no longer described as a transport
+  failure. The message names the status, decodes the sense data when the drive
+  returns any, and says so when it returns none. The diagnostic log now records
+  every firmware write chunk (offset, length, result).
+
 ## [0.12.2] - 2026-10-14
 
 ### Pioneer
