@@ -18,7 +18,7 @@ use mediatek_optical::Identity;
 use super::crossflash::{Build, Verdict};
 use super::{
     backup, cdb, crossflash, describe_sequence, enc_needed, ensure_flashable_boot_page,
-    live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE,
+    live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE, ROM_003000_LEN, ROM_003000_OFFSET,
 };
 use crate::backend::{
     AuthorizedPlan, DetailsFacet, FlashFacet, FlashPlan, FlashRequest, FormatRole, PlanLine,
@@ -287,17 +287,17 @@ fn confirm_crossflash(dev: &mut ReadDevice<'_>, model: &str) -> Result<()> {
     Ok(())
 }
 
-/// The drive's hardware family from a full firmware read, for the crossflash
-/// gate. Any read that does not return a complete, family-bearing image yields
-/// `None`, which fails a crossflash closed. The family reads no byte the
-/// read-back boot page replaces, so the raw read names the same family a backup
-/// would. Read-only; a same-model reflash never calls it.
-fn read_drive_family(dev: &mut ReadDevice<'_>) -> Option<mediatek_optical::image::Family> {
-    let (read, readable, gaps) = crate::probe::read_full_image(dev).ok()?;
-    if read.len() != IMAGE_SIZE || readable != read.len() || !gaps.is_empty() {
-        return None;
-    }
-    mediatek_optical::image::family(&read)
+/// The drive's 16-byte boot banner at `0x3000`, for the crossflash gate's
+/// loader check. One `READ BUFFER`; `None` on any short or failed read, which
+/// leaves the banner blank and fails the crossflash closed.
+fn read_drive_banner(dev: &mut ReadDevice<'_>) -> Option<[u8; crossflash::BANNER_LEN]> {
+    let data = dev
+        .command_in(
+            &cdb::read_memory(ROM_003000_OFFSET, ROM_003000_LEN),
+            ROM_003000_LEN as usize,
+        )
+        .ok()?;
+    data.get(..crossflash::BANNER_LEN)?.try_into().ok()
 }
 
 /// The text of a crate command error, keeping the transport's own chain.
@@ -525,11 +525,11 @@ fn confirm_identity(mtk: &Mtk, dev: &mut ReadDevice<'_>) -> Result<()> {
 
 impl Mtk {
     /// Every gate that needs no backup (read-only): size, integrity, a stored
-    /// boot page the catalog knows, then the chip and hardware family against
-    /// the live drive, then the model decision (same-model, or a same-family
-    /// crossflash). For a crossflash the drive's hardware family is resolved
-    /// from a full firmware read, so the family gate can fail closed at the
-    /// plan, before any backup. Returns the live identity and the verdict.
+    /// boot page the catalog knows, then the chip against the live drive, then
+    /// the model decision (same-model, or a same-family crossflash gated on the
+    /// descriptor's platform and boot banner — the chip is already matched).
+    /// The full family is re-checked once the backup is read. Returns the live
+    /// identity and the verdict.
     pub(crate) fn validate_image(
         &self,
         dev: &mut ReadDevice<'_>,
@@ -554,18 +554,19 @@ impl Mtk {
         let live = live_identity(dev);
         PreparedUpdate::check(image, &live).map_err(refusal)?;
         let target = Build::of_image(image)?;
-        // A same-model reflash reads nothing more; a crossflash resolves the
-        // drive's family from a full read so the plan gates on it directly.
-        let drive_family = if crossflash::is_same_model(&target.product, drive_product) {
-            None
-        } else {
-            read_drive_family(dev)
-        };
-        let verdict = crossflash::decide_plan(
-            drive_product,
-            &Build::of_drive_with_family(&live, drive_family),
-            &target,
-        )?;
+        let mut drive = Build::of_drive(&live);
+        // A crossflash gates on the boot banner too (its loader tells apart the
+        // families that share a platform). `live_identity` skips the banner for
+        // a tagged drive, so read it now; a same-model reflash needs none of
+        // this, and reads nothing more than today.
+        if drive.banner.iter().all(|&b| b == 0)
+            && !crossflash::is_same_model(&target.product, drive_product)
+        {
+            if let Some(banner) = read_drive_banner(dev) {
+                drive.banner = banner;
+            }
+        }
+        let verdict = crossflash::decide_plan(drive_product, &drive, &target)?;
         Ok((live, verdict))
     }
 

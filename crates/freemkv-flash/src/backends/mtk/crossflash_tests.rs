@@ -23,6 +23,7 @@ fn build(vendor: &str, product: &str, revision: &str, board: &Board, banner: &[u
         product: product.into(),
         revision: revision.into(),
         family: family(board),
+        platform: board.platform.into(),
         banner: *banner,
     }
 }
@@ -53,9 +54,9 @@ pub(crate) fn bu40n_102() -> Build {
 }
 
 /// The flash path's model decisions for a drive running `drive` and the image
-/// `target`: the plan against the live drive (its family resolved from a full
-/// read, as the engine does for a crossflash), then authorize with the backup
-/// as the installed build, then the rollback. The whole pure decision.
+/// `target`, with the drive's full facts known (as a backup or fixture gives
+/// them): the plan, then authorize with the backup as the installed build, then
+/// the rollback. The whole pure decision.
 pub(crate) fn decide(drive: &Build, target: &Build) -> Result<Verdict> {
     let planned = decide_plan(&drive.product, drive, target)?;
     let now = decide_authorized(&drive.product, drive, target)?;
@@ -237,30 +238,34 @@ fn an_unknown_family_on_either_side_fails_closed() {
 }
 
 #[test]
-fn a_different_family_is_refused_at_the_plan_once_resolved() {
-    // When the drive's family is resolved (a full read), the gate refuses at
-    // the plan, before any backup.
+fn a_different_family_is_refused_at_the_plan() {
     let (drive, target) = (bu40n_102(), wh16ns58_1v5());
+    // With the drive's full family known, the exact family gate refuses, naming
+    // both hashes.
     let err = format!(
         "{:#}",
         decide_plan(&drive.product, &drive, &target).unwrap_err()
     );
     assert!(err.contains("different hardware family"), "{err}");
-    // With the drive's family still unresolved, the plan defers and authorize
-    // refuses on the backup's family.
-    let unresolved = Build {
+    assert!(
+        err.contains(BU3_FAMILY) && err.contains(JB8_FAMILY),
+        "{err}"
+    );
+    // At the engine plan the drive is only its descriptor (no full family): a
+    // differing platform is refused there too, by platform and boot banner.
+    let descriptor_only = Build {
         family: None,
         ..drive.clone()
     };
-    assert_eq!(
-        decide_plan(&drive.product, &unresolved, &target).unwrap(),
-        Verdict::Crossflash
-    );
     let err = format!(
         "{:#}",
-        decide_authorized(&drive.product, &drive, &target).unwrap_err()
+        decide_plan(&drive.product, &descriptor_only, &target).unwrap_err()
     );
     assert!(err.contains("different hardware family"), "{err}");
+    assert!(
+        err.contains(&drive.platform) && err.contains(&target.platform),
+        "{err}"
+    );
 }
 
 #[test]

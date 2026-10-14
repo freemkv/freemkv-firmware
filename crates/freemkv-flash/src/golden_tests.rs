@@ -590,6 +590,22 @@ fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
     crate::cmac::resign(&img).expect("resign a well-formed image")
 }
 
+/// A flashable MT1959 image of `model` on a different board line than BU3: the
+/// same chip as a BU40N drive, a different hardware family, so a crossflash onto
+/// a BU40N is refused by the family gate.
+fn make_flashable_other_family(model: &str) -> Vec<u8> {
+    let board = fixture::Board {
+        platform: "BU9",
+        ..fixture::BU3
+    };
+    let mut img = vec![0u8; IMAGE_SIZE];
+    img[..0x400].copy_from_slice(&mtk_boot_page());
+    stamp_descriptor(&mut img, model);
+    fixture::stamp(&mut img, &board);
+    let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
+    crate::cmac::resign(&img).expect("resign a well-formed image")
+}
+
 /// The stored MT1959 boot page every cataloged build shares.
 ///
 /// COMPAT: the only line that names the catalog; the 0.11.2 baseline differs.
@@ -1268,7 +1284,7 @@ fn golden_flash_dry_run() {
     verbose.verbose = true;
     let mut bad_cmac = good.clone();
     bad_cmac[0x11000] ^= 1;
-    let wrong_model = make_flashable(vec![0u8; IMAGE_SIZE], "WH16NS60");
+    let wrong_family = make_flashable_other_family("WH16NS60");
     for (title, req) in [
         ("MTK dry run: .bin", mtk_request(good.clone(), false, None)),
         ("MTK dry run: .bin verbose", verbose),
@@ -1277,8 +1293,8 @@ fn golden_flash_dry_run() {
             mtk_request(bad_cmac, false, None),
         ),
         (
-            "MTK dry run: wrong model refused",
-            mtk_request(wrong_model, false, None),
+            "MTK dry run: different family refused",
+            mtk_request(wrong_family, false, None),
         ),
         (
             "MTK dry run: wrong size refused",
@@ -2643,7 +2659,9 @@ fn golden_pioneer_flash_bundle_failures() {
 /// Reasons a MediaTek line may differ from v0.11.2. `tests/golden/v0.11.2/`
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
-const ALLOWED_REASONS: &[&str] = &["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS"];
+const ALLOWED_REASONS: &[&str] = &[
+    "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS", "M-FAM",
+];
 
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
 /// that cannot be read is refused before the backup; P2, the last tray check

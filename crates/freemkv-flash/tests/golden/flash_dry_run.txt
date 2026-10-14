@@ -100,13 +100,14 @@ result: ERR firmware image fails its AES-CMAC integrity check — refusing to fl
 --- scsi transcript (1) ---
 MEDIUM -> ClosedEmpty
 
-=== MTK dry run: wrong model refused ===
-result: ERR image is built for model "WH16NS60" but this drive reports "BU40N" — refusing to flash a wrong-model image (pass a compatible image)
+=== MTK dry run: different family refused ===
+result: ERR this image is for a different hardware family than this drive (image platform "BU9" banner "MT1959 Boot BU5." vs drive platform "BU3" banner "MT1959 Boot BU5."); refusing to flash
 --- text (0) ---
 --- events (0) ---
---- scsi transcript (2) ---
+--- scsi transcript (3) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === MTK dry run: wrong size refused ===
 result: ERR firmware .bin must be exactly 2097152 bytes, got 1024

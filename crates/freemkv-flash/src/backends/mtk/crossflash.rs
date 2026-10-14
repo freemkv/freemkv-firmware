@@ -15,6 +15,13 @@ use mediatek_optical::{layout, Identity};
 /// Length of the boot banner at `0x3000` that a crossflash must keep.
 pub(crate) const BANNER_LEN: usize = 16;
 
+/// The identity descriptor's platform code (`+0x46`, e.g. `JB7`): one of the
+/// hardware fields `mediatek_optical::image::family` hashes, and the one the
+/// boot banner does not carry (BU3 and BU9 share a banner). The descriptor
+/// holds it, so a crossflash can tell two families apart at the plan without
+/// reading the drive's whole firmware.
+const DESCRIPTOR_PLATFORM: core::ops::Range<usize> = 0x46..0x4C;
+
 /// What the gates know about one firmware build: an image, a backup, or the
 /// live drive's identity descriptor.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -22,7 +29,13 @@ pub(crate) struct Build {
     pub vendor: String,
     pub product: String,
     pub revision: String,
+    /// The hardware family, for a complete image or backup. `None` for the
+    /// live drive, whose descriptor names its `platform` and `banner` but not
+    /// the full family (that needs a complete read, done when the backup is
+    /// captured).
     pub family: Option<Family>,
+    /// The descriptor platform code; empty when there is no descriptor.
+    pub platform: String,
     pub banner: [u8; BANNER_LEN],
 }
 
@@ -36,6 +49,10 @@ impl Build {
         if let Some(bytes) = layout::BANNER.of(image) {
             banner.copy_from_slice(&bytes[..BANNER_LEN]);
         }
+        let platform = layout::DESCRIPTOR
+            .of(image)
+            .map(|d| crate::backend::trim_ascii(&d[DESCRIPTOR_PLATFORM]))
+            .unwrap_or_default();
         Ok(Self {
             vendor: if chip.descriptor_present {
                 chip.vendor
@@ -45,21 +62,15 @@ impl Build {
             product: chip.model,
             revision: chip.rev,
             family: mediatek_optical::image::family(image),
+            platform,
             banner,
         })
     }
 
-    /// The live drive's facts from its identity descriptor. The family is
-    /// unknown until a full firmware read, so it is `None` unless the caller
-    /// resolves it (see [`of_drive_with_family`]).
+    /// The live drive's facts from its identity descriptor. The full family
+    /// needs a complete read, so it is `None`; the descriptor's `platform` and
+    /// the `banner` carry the hardware fields the plan gates a crossflash on.
     pub(crate) fn of_drive(live: &Identity) -> Self {
-        Self::of_drive_with_family(live, None)
-    }
-
-    /// The live drive's facts with its hardware family resolved from a full
-    /// firmware read. `family` stays `None` when the read could not establish
-    /// one, which fails a crossflash closed.
-    pub(crate) fn of_drive_with_family(live: &Identity, family: Option<Family>) -> Self {
         let descriptor = live.descriptor_bytes();
         let text = |range: core::ops::Range<usize>| {
             if live.has_descriptor() {
@@ -74,7 +85,8 @@ impl Build {
             vendor: text(0x00..0x08),
             product: live.descriptor_model().to_owned(),
             revision: text(0x18..0x1C),
-            family,
+            family: None,
+            platform: text(DESCRIPTOR_PLATFORM),
             banner,
         }
     }
@@ -121,12 +133,30 @@ fn wrong_model(image_model: &str, product: &str) -> String {
     )
 }
 
-/// The crossflash family-mismatch refusal, in the firmware's own family hashes.
+/// The crossflash family-mismatch refusal, in the firmware's own family hashes
+/// (the drive's, then the image's).
 fn different_family(drive: Family, image: Family) -> String {
+    format!("this image is for a different hardware family ({drive} vs {image}); refusing to flash")
+}
+
+/// The crossflash hardware-mismatch refusal when the drive's family is not yet
+/// resolved (the plan has only its descriptor): the chip gate has already
+/// matched the chip, so a differing platform or boot banner is a different
+/// hardware family. Shown without a hash, which only a full read would give.
+fn different_hardware(drive: &Build, image: &Build) -> String {
     format!(
-        "this image is for a different hardware family (image {image} vs drive \
-         {drive}); refusing to flash"
+        "this image is for a different hardware family than this drive (image platform {:?} \
+         banner {:?} vs drive platform {:?} banner {:?}); refusing to flash",
+        image.platform,
+        banner_text(&image.banner),
+        drive.platform,
+        banner_text(&drive.banner),
     )
+}
+
+/// A boot banner as safe-to-print text.
+fn banner_text(banner: &[u8; BANNER_LEN]) -> String {
+    crate::backend::sanitize_ascii(String::from_utf8_lossy(banner).trim())
 }
 
 /// The unknown-family refusals, worded like the engine's `family_gate`.
@@ -134,12 +164,14 @@ fn unknown_family(error: PrepareError) -> String {
     super::flash::family_gate(&error).expect("a family-gate refusal")
 }
 
-/// The image↔drive model decision before any backup, against the live
-/// identity descriptor. When the drive's family is known (a full read resolved
-/// it) a crossflash is gated on family equality here; otherwise the family gate
-/// follows once the backup is read. An unknown drive model, an inconsistent
-/// identity, an INTM or unknown-identity image, an unknown or different family
-/// is refused.
+/// The image↔drive model decision before any backup, against the live identity
+/// descriptor. A crossflash is gated on the hardware family: when the drive's
+/// family is known (a backup or a fixture built it) on family equality, and at
+/// the plan — where the drive is only its descriptor — on the family fields the
+/// descriptor carries (platform and boot banner; the chip is already matched by
+/// `PreparedUpdate::check`). The full family is re-checked once the backup is
+/// read. An unknown drive model, an inconsistent identity, an INTM or
+/// unknown-identity image, an unknown or different family is refused.
 pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> Result<Verdict> {
     let product = drive_product.trim();
     if product.is_empty() {
@@ -154,7 +186,11 @@ pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> 
     if target.is_intm() || target.product.is_empty() {
         bail!("{legacy}");
     }
-    if live.product.is_empty() || live.product != product {
+    // The INQUIRY product and the identity descriptor's model must agree. They
+    // are the same string formatted differently (INQUIRY trims the vendor
+    // prefix and padding), so compare them the way the same-model gate does:
+    // the descriptor model contains the INQUIRY product.
+    if live.product.is_empty() || !same_model(&live.product, product) {
         bail!(
             "drive identity is inconsistent: INQUIRY reports {product:?} but its identity \
              descriptor reads {:?} — refusing to flash another model",
@@ -168,12 +204,21 @@ pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> 
     let Some(image_family) = target.family else {
         bail!("{}", unknown_family(PrepareError::UnknownTargetFamily));
     };
-    // When the drive's family is already resolved, the family gate runs now, at
-    // the plan, before any backup or write.
-    if let Some(drive_family) = live.family {
-        if drive_family != image_family {
-            bail!("{}", different_family(drive_family, image_family));
+    match live.family {
+        // The drive's full family is known (a backup, or a fixture): the exact
+        // family gate runs now.
+        Some(drive_family) if drive_family != image_family => {
+            bail!("{}", different_family(drive_family, image_family))
         }
+        Some(_) => {}
+        // Only the descriptor is known: refuse a differing platform or boot
+        // banner (the chip is already matched). A same-platform, same-banner
+        // image of a different family is admitted now and caught by the exact
+        // family gate once the backup is read.
+        None if live.platform != target.platform || live.banner != target.banner => {
+            bail!("{}", different_hardware(live, target))
+        }
+        None => {}
     }
     Ok(Verdict::Crossflash)
 }
