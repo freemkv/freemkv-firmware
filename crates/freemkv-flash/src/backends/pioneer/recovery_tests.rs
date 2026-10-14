@@ -694,11 +694,27 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
          {cross_abi} AbiMismatch excluded): {failures:#?}",
         cross_reencodable - cross_proven
     );
+    // Both arms of the receiver-class split must actually be exercised, or the
+    // ratio above is vacuous.
+    assert!(
+        same_class > 0 && cross_total > 0,
+        "receiver-class split exercised neither arm (same_class={same_class}, \
+         cross_total={cross_total})"
+    );
+    // The re-encodable cross set must stay large. A regression that misclassified
+    // most pairs as AbiMismatch would shrink `cross_reencodable` and otherwise
+    // slip past both the ratio and the `cross_proven >= 1` floor.
+    assert!(
+        cross_reencodable >= 100,
+        "far fewer cross-receiver re-encodable pairs than expected \
+         ({cross_reencodable}; cross_abi={cross_abi}) — a regression may be \
+         misclassifying them as AbiMismatch"
+    );
 }
 
 // ---- Backup-restorable gate (revert must stay possible) ---------------------
 
-use crate::backends::pioneer::flash_plan::backup_restorable;
+use crate::backends::pioneer::flash_plan::{backup_restorable, check_receiver};
 
 #[test]
 fn backup_restorable_allows_a_same_class_backup() {
@@ -762,4 +778,39 @@ fn backup_restorable_refuses_the_one_way_bdw_pr1ml_crossflash() {
         backup_restorable(Some(&kernel_of(&bdw)), &pr1ml).is_ok(),
         "the restorable reverse direction must be allowed"
     );
+}
+
+// ---- Non-hoard fail-closed guards (gates must refuse in CI, not only with a hoard) ----
+
+#[test]
+fn backup_restorable_fails_closed_on_an_unparseable_backup() {
+    // A Kernel-changing flash whose backup cannot be parsed must REFUSE: the
+    // revert gate fails closed on anything it cannot evaluate. Regression guard
+    // for a fail-open that would silently break the keep-a-backup-to-revert
+    // promise even when the hoard KAT is not run.
+    let target = fixture_pair(false, 0);
+    let tk = target.kernel().repack(&target.kernel().image).unwrap();
+    assert!(
+        backup_restorable(Some(&tk), b"not a firmware archive at all").is_err(),
+        "unparseable backup + Kernel flash must fail closed"
+    );
+}
+
+#[test]
+fn check_receiver_fails_closed_when_the_installed_kernel_is_unknown() {
+    // A Kernel+Normal flash with no readable installed Kernel must refuse, never
+    // assume the drive can receive it. Covered in CI without a hoard.
+    let target = fixture_pair(false, 0);
+    let tk = target.kernel().repack(&target.kernel().image).unwrap();
+    let tn = target.normal().repack(&target.normal().image).unwrap();
+    let err = check_receiver(None, Some(&tk), &tn).unwrap_err();
+    assert!(
+        err.contains("currently-installed Kernel"),
+        "unknown installed Kernel must fail closed, got: {err}"
+    );
+    // A Normal-only flash (no target Kernel) is always admitted: the installed
+    // Kernel is the receiver.
+    assert!(check_receiver(None, None, &tn).is_ok());
+    // An identical installed and target Kernel is trivially its own receiver.
+    assert!(check_receiver(Some(&tk), Some(&tk), &tn).is_ok());
 }

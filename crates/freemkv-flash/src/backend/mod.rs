@@ -560,8 +560,11 @@ pub trait FlashFacet {
     /// plan overwrites AND can be restored once the drive runs the target (a
     /// crossflash that would make the backup un-restorable must be refused, so
     /// the "keep your backup to revert" promise holds). The backup stays saved
-    /// when this refuses. Each backend enforces this one contract (Pioneer in
-    /// `flash_plan::backup_restorable`, MediaTek in `crossflash::decide_rollback`).
+    /// when this refuses. Pioneer enforces both halves here, in `verify_backup`
+    /// (`flash_plan::verify_coverage` + `flash_plan::backup_restorable`).
+    /// MediaTek enforces coverage here and the restorable half in its `authorize`
+    /// (`crossflash::decide_rollback`), which refuses with the backup still
+    /// saved — the same guarantee by a different seam.
     fn verify_backup(&self, _plan: &FlashPlan, _backup: &[u8]) -> Result<()> {
         Ok(())
     }

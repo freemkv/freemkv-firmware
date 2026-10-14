@@ -35,14 +35,10 @@ pub(crate) struct Plan {
 }
 
 /// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
-/// before it programs a decoded body. A trailing partial word counts as failed.
+/// before it programs a decoded body. Single source of truth in `flash_plan`
+/// (empty body and trailing partial word both fail).
 fn be32_sum_zero(body: &[u8]) -> bool {
-    let (words, rest) = body.as_chunks::<4>();
-    rest.is_empty()
-        && words
-            .iter()
-            .fold(0u32, |s, w| s.wrapping_add(u32::from_be_bytes(*w)))
-            == 0
+    crate::backends::pioneer::flash_plan::be32_sum_zero(body)
 }
 
 /// Load the target package to flash, with the Normal-signature guidance, and
@@ -155,14 +151,21 @@ impl Plan {
                 .context("update entry failed; no firmware transferred")?;
             sleep(Duration::from_secs(1));
         }
-        for (role, bytes) in [
+        let transfers = [
             (Role::Kernel, self.kernel_transfer.as_slice()),
             (Role::Normal, self.normal_transfer.as_slice()),
-        ] {
+        ];
+        // Validate BOTH transfer sizes before the first write: an oversized or
+        // empty Normal must be refused up front, never discovered only after the
+        // Kernel is already written (which would leave the drive half-flashed in
+        // update mode).
+        for (_, bytes) in transfers {
             ensure!(
                 !bytes.is_empty() && bytes.len() <= 0x100_0000,
                 "invalid transfer size"
             );
+        }
+        for (role, bytes) in transfers {
             let mut progress = crate::style::Progress::new(
                 match role {
                     Role::Kernel => "Recovering Kernel",

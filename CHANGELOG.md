@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Kernel cannot decode to the identical body (e.g. BDR-207M <-> BDR-PR1ML inside
   one SAT, and BDR-205 <-> BDR-206 across SATs), which would otherwise leave the
   drive stuck in update mode.
+- Refuse a crossflash that would make the pre-flash backup un-restorable. A kept
+  backup must always flash back, so `flash` refuses, before any write, a one-way
+  cross-receiver pairing whose backup Normal needs Kernel entry points the target
+  Kernel does not provide (the reverse direction still works). The gate fails
+  closed: if restorability cannot be proven, the flash is refused.
+- Route a same-SAT, different-edition bundle (e.g. BDR-207M ID43 -> BDR-PR1ML
+  ID88) through the same crossflash classifier as a different-SAT target, so the
+  receiver gate and backup-restorable check apply to it too.
 - Add EXPERIMENTAL re-encode recovery to `recover` (recover-only, no override
   flag). For a drive stuck after a same-hardware crossflash, `recover` re-encodes
   the target Normal into the installed Kernel's receive transport (its XOR-skip

@@ -263,9 +263,14 @@ pub fn receiver_class(kernel: &[u8], paired_normal: &[u8]) -> Option<ReceiverCla
 
 /// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
 /// before it programs a decoded body. A trailing partial word counts as failed.
-fn be32_sum_zero(body: &[u8]) -> bool {
+/// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
+/// before it programs a decoded body. An empty body is NOT a valid zero-checksum
+/// body (a degenerate decode must not pass this gate); a trailing partial word
+/// fails.
+pub(crate) fn be32_sum_zero(body: &[u8]) -> bool {
     let (words, rest) = body.as_chunks::<4>();
-    rest.is_empty()
+    !body.is_empty()
+        && rest.is_empty()
         && words
             .iter()
             .fold(0u32, |s, w| s.wrapping_add(u32::from_be_bytes(*w)))
@@ -436,13 +441,16 @@ pub fn backup_restorable(target_kernel: Option<&[u8]>, backup: &[u8]) -> Result<
     let Some(target_kernel) = target_kernel else {
         return Ok(());
     };
-    // Coverage is verified separately; do not block on a parse gap here.
+    // verify_backup already proved (via component_roles) that the backup covers
+    // every written region; if we cannot re-parse it here to check restorability,
+    // this brick-prevention gate fails CLOSED rather than wave the flash through.
     let Ok((Some(backup_kernel), Some(backup_normal))) =
         crate::backends::pioneer::classify_flash_input(backup)
     else {
-        return Ok(());
+        return Err(BACKUP_NOT_RESTORABLE.to_string());
     };
-    // Flash-revert: a drive running the target can receive the backup directly.
+    // Flash-revert: a drive running the target can receive the backup directly
+    // (same receiver class and SAT). This is the common, same-class case.
     if check_receiver(
         Some(target_kernel),
         Some(backup_kernel.as_slice()),
@@ -452,23 +460,38 @@ pub fn backup_restorable(target_kernel: Option<&[u8]>, backup: &[u8]) -> Result<
     {
         return Ok(());
     }
-    // Recover-revert: re-encode the backup Normal for the target Kernel. The one
-    // decisive, provable barrier is ABI — the backup Normal must only call entry
-    // points the target Kernel provides. Only refuse when we can prove it cannot.
+    // Cross receiver class: a revert needs the recover re-encode, which is
+    // possible only if the backup Normal's required Kernel ABI is provided by
+    // the target Kernel. We must be able to PROVE it; the gate fails CLOSED on
+    // anything it cannot evaluate, so a kept backup is never silently
+    // un-restorable.
+    // The backup itself must decode: a kept backup we cannot even read is not a
+    // usable rollback, so fail closed.
     let Some(backup_body) = decode_envelope(&backup_kernel)
         .and_then(|k| decode_envelope_with_kernel(&backup_normal, &k))
         .map(|d| d.image)
     else {
-        return Ok(());
+        return Err(BACKUP_NOT_RESTORABLE.to_string());
     };
+    // A malformed TARGET is diagnosed by the target-validity gate in `authorize`
+    // (which refuses it before any write); defer to it so this gate speaks only
+    // to backup restorability and does not mis-report a broken target as an
+    // un-restorable backup.
     let Some(target_image) = decode_envelope(target_kernel).map(|k| k.image) else {
         return Ok(());
     };
     match (required_abi(&backup_body), provided_abi(&target_image)) {
-        (Some(required), Some(provided)) if !required.is_satisfied_by(&provided) => {
-            Err(BACKUP_NOT_RESTORABLE.to_string())
-        }
-        _ => Ok(()),
+        // The backup Normal calls no Kernel entry points, so any Kernel restores it.
+        (None, _) => Ok(()),
+        // Every entry point the backup Normal needs is provided by the target
+        // Kernel, so the backup re-encodes and restores.
+        (Some(required), Some(provided)) if required.is_satisfied_by(&provided) => Ok(()),
+        // The target Kernel's provided ABI is unreadable (not a full Kernel
+        // image): a target-validity problem `authorize` reports, not this gate.
+        (Some(_), None) => Ok(()),
+        // The backup Normal positively needs entry points the target Kernel does
+        // not provide: the one-way crossflash. Refuse — the backup cannot restore.
+        _ => Err(BACKUP_NOT_RESTORABLE.to_string()),
     }
 }
 
@@ -777,7 +800,13 @@ pub fn validate_component_headers(
         // ID-tag check above already refuses.)
         let k_model = kh.model.trim();
         let n_model = nh.model.trim();
-        if !k_model.eq_ignore_ascii_case(n_model) && !k_model.is_empty() && !n_model.is_empty() {
+        // Refuse a model mismatch, including the asymmetric case where one
+        // component of the bundle carries a model and the other is blank (a
+        // mismatched or corrupt pairing — a Kernel+Normal bundle is one product
+        // and must share a model). Only skip when BOTH are blank: a package
+        // format that carries no model token at all, where the variant tag
+        // checked just above is the pairing proof.
+        if !k_model.eq_ignore_ascii_case(n_model) && !(k_model.is_empty() && n_model.is_empty()) {
             return Err(format!(
                 "malformed bundle: the Kernel's model {k_model:?} and the Normal's model \
                  {n_model:?} differ. A written pair must share model and variant or the drive \
