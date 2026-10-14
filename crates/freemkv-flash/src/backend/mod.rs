@@ -557,16 +557,13 @@ pub trait FlashFacet {
         Ok(Vec::new())
     }
     /// Whether the saved backup is a usable rollback: it holds every region the
-    /// plan overwrites AND can be restored once the drive runs the target (a
-    /// crossflash that would make the backup un-restorable must be refused, so
-    /// the "keep your backup to revert" promise holds). The backup stays saved
-    /// when this refuses. Pioneer enforces both halves in its `verify_backup`
-    /// override (a private coverage check + `flash_plan::backup_restorable`).
+    /// plan overwrites. The backup stays saved when this refuses. Pioneer
+    /// enforces this in its `verify_backup` override (a private coverage check).
     /// MediaTek does NOT override this method (it uses the default `Ok`); it
     /// enforces coverage in its `authorize`, where `InstalledFirmware::new`
     /// refuses a backup that cannot serve as the drive's installed firmware, and
-    /// the restorable half there too via `crossflash::decide_rollback` — the same
-    /// guarantee by a different seam, with the backup still saved.
+    /// additionally runs its rollback simulation there via
+    /// `crossflash::decide_rollback`, with the backup still saved.
     fn verify_backup(&self, _plan: &FlashPlan, _backup: &[u8]) -> Result<()> {
         Ok(())
     }

@@ -352,38 +352,19 @@ pub fn receiver_evidence(
     }
 }
 
-/// The receiver gate's message for a Kernel swap across hardware versions.
-///
-/// This is a conservative pre-check, not an ASCII-identity check: a different
-/// hardware version (SAT) uses a different group transport key, so the incoming
-/// body decodes to a nonzero checksum under the installed loader and is rejected,
-/// leaving the drive in update mode. The offline decode/checksum gate models the
-/// Normal's own key, so it cannot by itself distinguish two same-receiver-class
-/// Kernels that differ only in group key (e.g. BDR-205 SAT 1014 vs BDR-206 SAT
-/// 1030); this hardware-version branch covers that gap. It only ever refuses a
-/// cross-platform Kernel swap, which is never a safe pairing.
-pub const RECEIVER_KERNEL_SAT: &str =
-    "the drive's currently-installed Kernel cannot decode firmware for a different hardware \
-     version (SAT): a different hardware version uses a different group transport key, so the \
-     incoming body decodes to a nonzero checksum and the loader rejects it, leaving the drive \
-     in update mode. Refused.";
-
 /// The receiver gate over raw envelope bytes: refuse unless the installed Kernel
 /// can receive every component the flash writes. A `None` target Kernel (a
 /// Normal-only flash) is always admitted here — the installed Kernel *is* the
 /// receiver, and the library's Normal-only preparation already authenticates
 /// against it.
 ///
-/// For a Kernel+Normal flash the installed Kernel receives both components, so:
-/// - the target Kernel must carry the installed Kernel's hardware version (SAT):
-///   a different SAT uses a different group transport key, so a BDR-206 (SAT
-///   1030) body decodes to a nonzero checksum under a BDR-205 (SAT 1014) loader
-///   and is rejected. This hardware-version pre-check stands in for the offline
-///   decode/checksum gate, which models the Normal's own key and so cannot
-///   distinguish two same-receiver-class Kernels that differ only in group key;
-/// - the target Normal must decode under the installed Kernel's receiver rules
-///   to the body the target Kernel decodes, with a zero checksum (BDR-207M ->
-///   BDR-PR1ML fails this inside one SAT — different receiver class).
+/// For a Kernel+Normal flash the installed Kernel receives both components, so
+/// the target Normal must decode under the installed Kernel's receiver rules to
+/// the body the target Kernel decodes, with a zero checksum. A same-family pair
+/// whose receiver encoding differs (BDR-207M <-> BDR-PR1ML) fails this and is
+/// sent to Recover, which re-encodes. The hardware version (SAT) is NOT gated:
+/// a hardware family spans several SATs and crossflashing across them is the
+/// 0.11.x behaviour, proven in the field.
 ///
 /// The installed Kernel's *authentication* policy is deliberately not checked:
 /// OEM same-model updates change policy in one session (BDR-XS06 ID69 1.10
@@ -396,7 +377,6 @@ pub fn check_receiver(
     target_kernel: Option<&[u8]>,
     target_normal: &[u8],
 ) -> Result<(), String> {
-    use pioneer_optical::envelope::header_info;
     let Some(target_kernel) = target_kernel else {
         return Ok(());
     };
@@ -404,110 +384,11 @@ pub fn check_receiver(
         return Ok(());
     }
     let installed = installed_kernel.ok_or_else(|| RECEIVER_UNKNOWN.to_string())?;
-    let (Some(ih), Some(th)) = (header_info(installed), header_info(target_kernel)) else {
-        return Err(RECEIVER_UNKNOWN.to_string());
-    };
-    if ih.hardware_version != th.hardware_version {
-        return Err(RECEIVER_KERNEL_SAT.to_string());
-    }
     receiver_gate(&receiver_evidence(
         Some(installed),
         target_normal,
         target_kernel,
     ))
-}
-
-/// The refusal when a crossflash would make the pre-flash backup un-restorable.
-pub const BACKUP_NOT_RESTORABLE: &str =
-    "this crossflash would leave the drive unable to restore its backup: the target firmware's \
-     Kernel does not provide the Kernel entry points the current firmware's Normal requires, so \
-     the saved backup could not be flashed back afterwards. Refusing, because a kept backup must \
-     always be restorable. (The reverse direction is fine — this specific pairing is one-way.)";
-
-/// The refusal when the pre-flash backup itself cannot be read back, so its
-/// restorability cannot be proven. Distinct from `BACKUP_NOT_RESTORABLE` (a
-/// provably one-way crossflash) so the message does not misattribute an
-/// unreadable backup to the target Kernel.
-pub const BACKUP_UNREADABLE: &str =
-    "the pre-flash backup could not be read back as a usable Kernel+Normal pair, so it cannot be \
-     proven restorable. Refusing, because a kept backup must always be restorable. Recapture the \
-     backup (resolve any read error first) and retry.";
-
-/// Whether the pre-flash backup can be restored after this flash: a drive
-/// running the TARGET firmware must be able to receive the backup (the installed
-/// firmware) again, by flash (same receiver class and SAT) or by recover
-/// re-encode (the backup Normal's required Kernel ABI is provided by the target
-/// Kernel). We promise a kept backup can always revert, so a crossflash that
-/// would make the backup un-restorable is refused.
-///
-/// Refuses when revert is provably impossible (the target Kernel cannot provide
-/// the backup Normal's required entry points) OR when the backup cannot be read
-/// back at all (it is then not a usable rollback) — both fail closed. Target
-/// validity (a malformed or partial target) is NOT judged here; it is deferred
-/// to `authorize`, so this gate speaks only to backup restorability. This shares
-/// the restore admissibility, so it auto-passes if a future restore path (e.g. a
-/// staged two-pass crossflash) makes more backups restorable.
-pub fn backup_restorable(target_kernel: Option<&[u8]>, backup: &[u8]) -> Result<(), String> {
-    use pioneer_optical::envelope::{decode_envelope, decode_envelope_with_kernel};
-    use pioneer_optical::image::{provided_abi, required_abi};
-    // A Normal-only flash leaves the installed Kernel in place, so the backup is
-    // restorable by construction.
-    let Some(target_kernel) = target_kernel else {
-        return Ok(());
-    };
-    // verify_backup already proved (via component_roles) that the backup covers
-    // every written region; if we cannot re-parse it here to check restorability,
-    // this brick-prevention gate fails CLOSED rather than wave the flash through.
-    let Ok((Some(backup_kernel), Some(backup_normal))) =
-        crate::backends::pioneer::classify_flash_input(backup)
-    else {
-        return Err(BACKUP_UNREADABLE.to_string());
-    };
-    // Flash-revert: a drive running the target can receive the backup directly
-    // (same receiver class and SAT). This is the common, same-class case.
-    if check_receiver(
-        Some(target_kernel),
-        Some(backup_kernel.as_slice()),
-        &backup_normal,
-    )
-    .is_ok()
-    {
-        return Ok(());
-    }
-    // Cross receiver class: a revert needs the recover re-encode, which is
-    // possible only if the backup Normal's required Kernel ABI is provided by
-    // the target Kernel. We must be able to PROVE the backup's restorability;
-    // the gate fails CLOSED on anything about the backup it cannot evaluate.
-    // (Target validity — e.g. a malformed target Kernel — is authorize's gate,
-    // deferred to below.)
-    // The backup itself must decode: a kept backup we cannot even read is not a
-    // usable rollback, so fail closed.
-    let Some(backup_body) = decode_envelope(&backup_kernel)
-        .and_then(|k| decode_envelope_with_kernel(&backup_normal, &k))
-        .map(|d| d.image)
-    else {
-        return Err(BACKUP_UNREADABLE.to_string());
-    };
-    // A malformed TARGET is diagnosed by the target-validity gate in `authorize`
-    // (which refuses it before any write); defer to it so this gate speaks only
-    // to backup restorability and does not mis-report a broken target as an
-    // un-restorable backup.
-    let Some(target_image) = decode_envelope(target_kernel).map(|k| k.image) else {
-        return Ok(());
-    };
-    match (required_abi(&backup_body), provided_abi(&target_image)) {
-        // The backup Normal calls no Kernel entry points, so any Kernel restores it.
-        (None, _) => Ok(()),
-        // Every entry point the backup Normal needs is provided by the target
-        // Kernel, so the backup re-encodes and restores.
-        (Some(required), Some(provided)) if required.is_satisfied_by(&provided) => Ok(()),
-        // The target Kernel's provided ABI is unreadable (not a full Kernel
-        // image): a target-validity problem `authorize` reports, not this gate.
-        (Some(_), None) => Ok(()),
-        // The backup Normal positively needs entry points the target Kernel does
-        // not provide: the one-way crossflash. Refuse — the backup cannot restore.
-        _ => Err(BACKUP_NOT_RESTORABLE.to_string()),
-    }
 }
 
 /// Whether a flash needs the vendor F3/F2 "kernel mode" unlock. Always `false`.
@@ -657,7 +538,7 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
 }
 
 /// Same-family crossflash updates require both components. This routes a
-/// different SAT and also a same-SAT, different-edition bundle (e.g. BDR-207M
+/// different model (SAT) and also a same-SAT, different-edition bundle (e.g. BDR-207M
 /// ID43 -> BDR-PR1ML ID88). The receiver's marker policy determines whether an
 /// intermediate Kernel is required.
 fn classify_crossflash(installed: &Installed, target: &Target) -> FlashPlan {

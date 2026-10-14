@@ -6,6 +6,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.2] - 2026-10-14
+
+### Pioneer
+- Restore the 0.11.x crossflash rule: `flash` and `recover` gate on the hardware
+  family, which spans several hardware versions (SATs). 0.12.1 added a
+  same-SAT requirement to both, which refused every cross-model crossflash
+  (e.g. BDR-UD03 -> BDR-UD04) that worked in 0.11.x. That requirement is
+  removed.
+- Keep the 0.12.1 receiver-encoding check in `flash`: a same-family image whose
+  receiver encoding differs from the installed Kernel's (e.g. BDR-207M <->
+  BDR-PR1ML) is refused before any write and pointed to `recover`, which
+  re-encodes it. Re-encode stays recover-only until it is proven on hardware.
+- Remove the backup-restorable (one-way Kernel-ABI) refusal from `flash`; it
+  was not part of the 0.11.x rule.
+
 ## [0.12.1] - 2026-10-14
 
 ### Pioneer

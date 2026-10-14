@@ -123,125 +123,6 @@ fn fixture_pair_class(gated: bool, marker: u8, sat: &[u8; 20], xor_offsets: [u32
     Update::load(&encoded.kernel, &encoded.normal).unwrap()
 }
 
-/// Encode a (kernel, normal) pair with a chosen kernel background fill byte,
-/// XOR-skip offsets (the receiver class) and a caller-supplied Normal image.
-/// Returns the encoded `.enc` component bytes. Used to build the one-way-ABI
-/// scenario, which needs a non-zero-filled (so `provided_abi`-sparse) kernel.
-fn encoded_pair(kernel_fill: u8, xor_offsets: [u32; 2], normal: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let mut kernel = vec![kernel_fill; 0x10000];
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
-    kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
-    kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
-    let (o1, o2) = (xor_offsets[0].to_be_bytes(), xor_offsets[1].to_be_bytes());
-    #[rustfmt::skip]
-    let branch = [
-        0x7a, 0x20, o1[0], o1[1], o1[2], o1[3], 0x47, 12,
-        0x7a, 0x20, o2[0], o2[1], o2[2], o2[3], 0x47, 4,
-        1, 0xf0, 0x65, 5,
-    ];
-    kernel[0x100..0x114].copy_from_slice(&branch);
-    kernel[0x114..0x126].copy_from_slice(&[
-        0x79, 0x63, 0, 0x1f, 0x0d, 0x31, 0x5e, 0x40, 0x01, 0x22, 1, 0xf0, 0x64, 0x40, 0x11, 0x70,
-        0x54, 0x70,
-    ]);
-    kernel[0x300..0x300 + UNGATED_FINALIZER.len()].copy_from_slice(UNGATED_FINALIZER);
-    for (offset, address) in [(0x349, [0x40, 0x20, 0]), (0x355, [0x40, 0x22, 0])] {
-        kernel[offset..offset + 3].copy_from_slice(&address);
-    }
-    kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = 0;
-    balance(&mut kernel);
-    let mut scalar = [0; 20];
-    scalar[19] = 5;
-    let signer = SigningKey::from_bytes(scalar).unwrap();
-    let encoded = encode_encrypted_pair(
-        &BuildInputs {
-            kernel_image: &kernel,
-            normal_image: normal,
-            envelope_id: "PIONEER BDR-TEST",
-            normal_revision: "1.00",
-            normal_date: "26/10/07",
-            kernel: KernelBuild::from_seed(7),
-            normal_key_seed: 11,
-        },
-        NormalSignature::Sign(&signer),
-    )
-    .unwrap();
-    (encoded.kernel, encoded.normal)
-}
-
-/// A tar of raw Kernel+Normal `.enc` component bytes (the flasher's archive).
-fn tar_of(kernel: &[u8], normal: &[u8]) -> Vec<u8> {
-    let mut tar = tar::Builder::new(Vec::new());
-    for (name, data) in [("kernel.enc", kernel), ("normal.enc", normal)] {
-        let mut header = tar::Header::new_gnu();
-        header.set_size(data.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, name, data).unwrap();
-    }
-    tar.into_inner().unwrap()
-}
-
-#[test]
-fn backup_restorable_refuses_a_synthetic_one_way_abi_crossflash() {
-    use pioneer_optical::envelope::{decode_envelope, decode_envelope_with_kernel};
-    use pioneer_optical::image::{provided_abi, required_abi};
-    // X: an even Kernel-range address in a 0x01-filled region of the target.
-    const X: u32 = 0x40_8000;
-    // Backup: class A, a Normal body > KERNEL_LEN whose code region is zeros
-    // (NOPs — a long valid run) then a JSR @X, so required_abi = Some({X}).
-    let mut big = vec![0u8; 0x1_0100];
-    big[..16].copy_from_slice(b"PIONEER TEST-NEW");
-    big[20..24].copy_from_slice(&0x1_0100u32.to_be_bytes());
-    big[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
-    big[0x500..0x510].copy_from_slice(&[
-        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 0, 0x46, 0x4e,
-    ]);
-    // JSR @aa:24 to X, well past NORMAL_CODE_START (0x1100) after >=128 NOPs.
-    big[0x1200..0x1204].copy_from_slice(&[0x5e, 0x40, 0x80, 0x00]);
-    balance(&mut big);
-    let (bk, bn) = encoded_pair(0x00, [0x100, 0x200], &big);
-    // Target: class B (so check_receiver fails -> reach the ABI path), kernel
-    // 0x01-filled so provided_abi is sparse and should NOT contain X.
-    let mut small = vec![0u8; 0x2000];
-    small[..16].copy_from_slice(b"PIONEER TEST-NEW");
-    small[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
-    small[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
-    small[0x500..0x510].copy_from_slice(&[
-        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 0, 0x46, 0x4e,
-    ]);
-    balance(&mut small);
-    let (tk, _tn) = encoded_pair(0x01, [0x400, 0x800], &small);
-
-    // Setup sanity: the arm is genuinely exercised (no vacuous pass).
-    let backup_body = decode_envelope(&bk)
-        .and_then(|k| decode_envelope_with_kernel(&bn, &k))
-        .map(|d| d.image)
-        .expect("backup must decode");
-    let target_body = decode_envelope(&tk)
-        .map(|k| k.image)
-        .expect("target must decode");
-    let req = required_abi(&backup_body).expect("backup must have a required ABI");
-    let prov =
-        provided_abi(&target_body).expect("target must be a full Kernel with a provided ABI");
-    assert!(
-        req.entries().contains(&X),
-        "required ABI must include X={X:#x}"
-    );
-    assert!(
-        !req.is_satisfied_by(&prov),
-        "setup must be a genuine one-way mismatch (target must NOT provide X)"
-    );
-
-    // The gate: a tar of the class-A backup, flashing the class-B target.
-    let backup = tar_of(&bk, &bn);
-    assert_eq!(
-        backup_restorable(Some(&tk), &backup),
-        Err(BACKUP_NOT_RESTORABLE.to_string()),
-        "a one-way-ABI crossflash must be refused as un-restorable"
-    );
-}
-
 #[derive(Default)]
 struct Drive {
     updating: bool,
@@ -848,99 +729,9 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
     );
 }
 
-// ---- Backup-restorable gate (revert must stay possible) ---------------------
+// ---- Receiver gate: family + encoding, never SAT (0.11.x rule + re-encode) ----
 
-use crate::backends::pioneer::flash_plan::{
-    backup_restorable, check_receiver, BACKUP_NOT_RESTORABLE, BACKUP_UNREADABLE,
-    RECEIVER_KERNEL_SAT,
-};
-
-#[test]
-fn backup_restorable_allows_a_same_class_backup() {
-    // A same-receiver-class backup can always be flashed back onto a drive
-    // running the target, so the gate must not refuse it.
-    let target = fixture_pair(false, 0);
-    let backup = archive(&fixture_pair(false, 1), false);
-    let target_kernel = target.kernel().repack(&target.kernel().image).unwrap();
-    assert!(backup_restorable(Some(&target_kernel), &backup).is_ok());
-}
-
-#[test]
-fn backup_restorable_is_noop_for_a_normal_only_flash() {
-    // No target Kernel means the installed Kernel stays, so the backup is
-    // restorable by construction.
-    let backup = archive(&fixture_pair(false, 1), false);
-    assert!(backup_restorable(None, &backup).is_ok());
-}
-
-// Real one-way crossflash: a drive running BDW-PR1EPDVPP100 can flash down to
-// BDR-PR1ML, but the BDW backup needs Kernel entry points the PR1ML Kernel does
-// not provide, so it could not be flashed back. The gate must refuse that flash
-// and allow the reverse. Gated by FREEMKV_PIONEER_HOARD.
-#[test]
-fn backup_restorable_refuses_the_one_way_bdw_pr1ml_crossflash() {
-    let Ok(root) = std::env::var("FREEMKV_PIONEER_HOARD") else {
-        eprintln!("FREEMKV_PIONEER_HOARD not set; one-way backup gate test skipped");
-        return;
-    };
-    use std::path::PathBuf;
-    let root = PathBuf::from(root);
-    let index: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(root.join("index/packages.json")).expect("index"))
-            .expect("index JSON");
-    let field = |p: &serde_json::Value, k: &str| p[k].as_str().unwrap_or_default().to_string();
-    let find = |model: &str, rev: &str| -> Vec<u8> {
-        for p in index["packages"].as_array().expect("packages") {
-            if field(p, "embedded_model").starts_with(model) && field(p, "revision") == rev {
-                if let Ok(b) = std::fs::read(root.join(field(p, "path"))) {
-                    return b;
-                }
-            }
-        }
-        panic!("hoard missing {model} {rev}");
-    };
-    let bdw = find("BDW-PR1EPDVPP100", "1.01");
-    let pr1ml = find("BDR-PR1ML", "1.30");
-    let kernel_of = |tar: &[u8]| {
-        let (k, _) = crate::backends::pioneer::classify_flash_input(tar).unwrap();
-        k.unwrap()
-    };
-    // Installed BDW, flashing PR1ML: the BDW backup cannot be restored onto a
-    // PR1ML-running drive -> refuse. Assert the SPECIFIC one-way-ABI refusal, so
-    // inverting the `is_satisfied_by` arm (or returning Ok) fails here, and so a
-    // mere parse failure (BACKUP_UNREADABLE) cannot masquerade as this refusal.
-    assert_eq!(
-        backup_restorable(Some(&kernel_of(&pr1ml)), &bdw),
-        Err(BACKUP_NOT_RESTORABLE.to_string()),
-        "one-way crossflash must refuse with the one-way-ABI reason: BDW backup is not restorable onto PR1ML"
-    );
-    // Installed PR1ML, flashing BDW: the PR1ML backup IS restorable onto a
-    // BDW-running drive (BDW Kernel provides a superset) -> allow.
-    assert!(
-        backup_restorable(Some(&kernel_of(&bdw)), &pr1ml).is_ok(),
-        "the restorable reverse direction must be allowed"
-    );
-}
-
-// ---- Non-hoard fail-closed guards (gates must refuse in CI, not only with a hoard) ----
-
-#[test]
-fn backup_restorable_fails_closed_on_an_unparseable_backup() {
-    // A Kernel-changing flash whose backup cannot be parsed must REFUSE: the
-    // revert gate fails closed on anything it cannot evaluate. Regression guard
-    // for a fail-open that would silently break the keep-a-backup-to-revert
-    // promise even when the hoard KAT is not run.
-    let target = fixture_pair(false, 0);
-    let tk = target.kernel().repack(&target.kernel().image).unwrap();
-    // Assert the SPECIFIC unreadable-backup refusal: a fail-open (Ok) fails here,
-    // and the message must blame the unreadable backup, not the target Kernel's
-    // ABI (BACKUP_NOT_RESTORABLE).
-    assert_eq!(
-        backup_restorable(Some(&tk), b"not a firmware archive at all"),
-        Err(BACKUP_UNREADABLE.to_string()),
-        "unparseable backup + Kernel flash must fail closed with the unreadable-backup reason"
-    );
-}
+use crate::backends::pioneer::flash_plan::check_receiver;
 
 #[test]
 fn check_receiver_fails_closed_when_the_installed_kernel_is_unknown() {
@@ -962,11 +753,11 @@ fn check_receiver_fails_closed_when_the_installed_kernel_is_unknown() {
 }
 
 #[test]
-fn check_receiver_refuses_a_different_sat_kernel() {
-    // A different-SAT target must be refused BEFORE the receiver policy is even
-    // consulted (a SAT swap bricks the drive in update mode). Synthetic, non-hoard
-    // regression guard for the `hardware_version != hardware_version` arm, so
-    // deleting it no longer stays green in CI without the hoard.
+fn check_receiver_admits_a_different_sat_same_receiver_class() {
+    // A hardware family spans several SATs and crossflashing across them is the
+    // 0.11.x behaviour (e.g. BDR-UD03 SAT 8510 -> BDR-UD04 SAT 8A10). Only the
+    // receiver encoding is gated, so a different SAT with the same receiver
+    // class must be admitted. Regression guard against re-adding a SAT gate.
     let installed = fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000");
     let target = fixture_pair_sat(false, 0, b"SAT FFFDGENERAL 0000");
     let ik = installed
@@ -975,18 +766,13 @@ fn check_receiver_refuses_a_different_sat_kernel() {
         .unwrap();
     let tk = target.kernel().repack(&target.kernel().image).unwrap();
     let tn = target.normal().repack(&target.normal().image).unwrap();
-    // Setup sanity: the two kernels really do report different SATs, so the test
-    // exercises the SAT arm and not some earlier branch.
+    // Setup sanity: the two kernels really do report different SATs.
     assert_ne!(
         pioneer_optical::envelope::header_info(&ik).map(|h| h.hardware_version),
         pioneer_optical::envelope::header_info(&tk).map(|h| h.hardware_version),
-        "fixtures must differ in SAT for this test to exercise the SAT gate"
+        "fixtures must differ in SAT for this test to mean anything"
     );
-    assert_eq!(
-        check_receiver(Some(&ik), Some(&tk), &tn),
-        Err(RECEIVER_KERNEL_SAT.to_string()),
-        "a different-SAT target must be refused with the SAT-mismatch reason"
-    );
+    assert_eq!(check_receiver(Some(&ik), Some(&tk), &tn), Ok(()));
 }
 
 #[test]
@@ -1023,45 +809,44 @@ fn check_receiver_refuses_a_different_receiver_class() {
 }
 
 #[test]
-fn authorize_installed_enforces_the_receiver_sat_gate() {
-    // Wiring guard: the receiver gate must be enforced THROUGH authorize_installed,
-    // not only as a pure function. A same-receiver-class but different-SAT installed
-    // Kernel must make authorize_installed refuse, so deleting the check_receiver
-    // call site no longer passes a bricking Kernel+Normal flash green in CI.
+fn authorize_installed_enforces_the_receiver_gate_but_not_sat() {
+    // Wiring guard: the receiver gate is enforced THROUGH authorize_installed, not
+    // only as a pure function. A different receiver class must make it refuse (so
+    // deleting the check_receiver call site fails CI), while a different SAT with
+    // the same receiver class must be admitted (the 0.11.x crossflash rule).
     use crate::backend::FlashPlan;
+    use crate::backends::pioneer::flash_plan::RECEIVER_INCOMPATIBLE;
     use crate::backends::pioneer::{authorize_installed, execute_plan};
+    let target = fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]);
+    let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
+    let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
+    let err = match authorize_installed(plan, Some(&archive(&installed, false))) {
+        Ok(_) => panic!("authorize_installed must refuse a different receiver class"),
+        Err(e) => format!("{e:#}"),
+    };
+    assert!(
+        err.contains("refusing to flash") && err.contains(RECEIVER_INCOMPATIBLE),
+        "authorize_installed must enforce the receiver gate, got: {err}"
+    );
+
     let target = fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000");
     let installed = fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000");
     let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
-    let err = match authorize_installed(plan, Some(&archive(&installed, false))) {
-        Ok(_) => panic!("authorize_installed must refuse a different-SAT installed Kernel"),
-        Err(e) => format!("{e:#}"),
-    };
-    assert!(
-        err.contains("refusing to flash") && err.contains(RECEIVER_KERNEL_SAT),
-        "authorize_installed must enforce the receiver SAT gate, got: {err}"
-    );
+    if let Err(e) = authorize_installed(plan, Some(&archive(&installed, false))) {
+        panic!("a different-SAT, same-class installed Kernel must be admitted: {e:#}");
+    }
 }
 
 #[test]
-fn recover_refuses_a_different_sat_target() {
-    // `image::family` does not hash the SAT, so these two fixtures share a family
-    // hash yet differ in hardware_version (SAT). recover must still refuse — a
-    // different SAT is a different drive generation and writing its Kernel would
-    // brick. Regression guard for the SAT gate (same-family hash is not enough).
+fn recover_admits_a_different_sat_target_in_the_same_family() {
+    // `image::family` does not hash the SAT, and a hardware family spans several
+    // SATs. recover gates on family + re-encode, never SAT, so a same-family,
+    // different-SAT target must prepare. Regression guard against a SAT gate.
     let current = archive(&fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000"), false);
-    let foreign = archive(&fixture_pair_sat(false, 0, b"SAT FFFDGENERAL 0000"), false);
-    let err = match Plan::prepare(&current, &foreign) {
-        Ok(_) => panic!("different-SAT foreign target must be refused"),
-        Err(e) => format!("{e:#}"),
-    };
-    assert!(
-        err.contains("hardware SAT"),
-        "recover must refuse a different-SAT foreign target on the SAT gate, got: {err}"
-    );
-    // Same SAT (the synthetic happy path) still prepares.
-    let same = archive(&fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000"), false);
-    assert!(Plan::prepare(&current, &same).is_ok());
+    let other_sat = archive(&fixture_pair_sat(false, 0, b"SAT FFFDGENERAL 0000"), false);
+    if let Err(e) = Plan::prepare(&current, &other_sat) {
+        panic!("a same-family, different-SAT target must prepare: {e:#}");
+    }
 }
 
 #[test]
