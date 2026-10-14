@@ -68,6 +68,35 @@ fn header_only(file_type: &str, tag: Option<&str>) -> Vec<u8> {
     img
 }
 
+fn header_model(file_type: &str, tag: &str, model: &str) -> Vec<u8> {
+    let mut img = vec![0u8; 0x200];
+    let header = format!(
+        "********  Copyright(c) 2000 Pioneer Corporation  ********\r\n\
+             ID : PIONEER BD-RW   {model}\r\n\
+             Revision Level : 1.11\r\n\
+             Hardware Version : SAT 8A10\r\n\
+             Destination : GENERAL\r\n\
+             Generated Date : 22/01/01\r\n\
+             Kernel Version : {tag}\r\n\
+             File Type : {file_type}\r\n"
+    );
+    img[..header.len()].copy_from_slice(header.as_bytes());
+    img
+}
+
+/// The boot-time (model, variant) pairing gate: a written Kernel+Normal that
+/// agree on variant (ID tag) but disagree on model must still be refused — the
+/// resident-firmware validator aborts at boot on a model mismatch.
+#[test]
+fn validate_bundle_refuses_model_mismatch() {
+    let k = header_model("Kernel", "ID58", "BDR-207");
+    let same = header_model("Normal", "ID58", "BDR-207");
+    assert!(validate_bundle(Some(&k), Some(&same)).is_ok());
+    let other_model = header_model("Normal", "ID58", "BDR-209");
+    let err = validate_bundle(Some(&k), Some(&other_model)).unwrap_err();
+    assert!(err.contains("model"), "{err}");
+}
+
 #[test]
 fn validate_bundle_pair_requires_both_kernel_tags() {
     let k = header_only("Kernel", Some("ID58"));
@@ -389,4 +418,90 @@ fn cross_hardware_non_generated_framing_still_crossflashes() {
         decide_flash_plan(&installed, &target),
         FlashPlan::KernelCrossflash
     );
+}
+
+// ---- receiver class routing + the pure receiver gate ------------------------
+
+/// A same-SAT Kernel+Normal pair to a *different* edition (e.g. BDR-207M ID43 ->
+/// BDR-PR1ML ID88) swaps the resident Kernel, so it routes as a crossflash, not
+/// Plain — the receiver gate must then clear it before any write.
+#[test]
+fn same_sat_different_destination_routes_crossflash_not_plain() {
+    let mut inst = installed(0x8000, false, "12/09/05");
+    inst.kernel_tag = Some("ID43".to_string());
+    let mut tgt = pair_target(0x8000, "12/09/05", "12/09/05", 0x01);
+    tgt.required_kernel_tag = Some("ID88".to_string());
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::KernelCrossflash);
+}
+
+/// A same-SAT, same-edition Kernel+Normal pair stays an ordinary Plain update.
+#[test]
+fn same_sat_same_destination_stays_plain() {
+    let mut inst = installed(0x8000, false, "12/09/05");
+    inst.kernel_tag = Some("ID43".to_string());
+    let mut tgt = pair_target(0x8000, "12/09/05", "12/09/05", 0x01);
+    tgt.required_kernel_tag = Some("ID43".to_string());
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::Plain);
+}
+
+/// An unknown installed destination routes same-SAT Kernel+Normal as a
+/// crossflash (the safer route), so the receiver gate is forced to run.
+#[test]
+fn same_sat_unknown_destination_routes_crossflash() {
+    let mut inst = installed(0x8000, false, "12/09/05");
+    inst.kernel_tag = None;
+    let tgt = pair_target(0x8000, "12/09/05", "12/09/05", 0x01);
+    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::KernelCrossflash);
+}
+
+/// The pure receiver gate admits only a zero-checksum, body-matching decode.
+#[test]
+fn receiver_gate_admits_only_zero_checksum_matching_body() {
+    assert!(receiver_gate(&ReceiverEvidence {
+        installed_checksum_zero: Some(true),
+        bodies_match: true,
+    })
+    .is_ok());
+}
+
+/// A nonzero installed-Kernel checksum (the 207M<->PR1ML case: 0x7004c /
+/// 0x1acbab75) is refused as incompatible.
+#[test]
+fn receiver_gate_refuses_nonzero_installed_checksum() {
+    let err = receiver_gate(&ReceiverEvidence {
+        installed_checksum_zero: Some(false),
+        bodies_match: false,
+    })
+    .unwrap_err();
+    assert_eq!(err, RECEIVER_INCOMPATIBLE);
+}
+
+/// A zero checksum but a differing body (a rotation-only divergence) is refused.
+#[test]
+fn receiver_gate_refuses_zero_checksum_but_mismatched_body() {
+    let err = receiver_gate(&ReceiverEvidence {
+        installed_checksum_zero: Some(true),
+        bodies_match: false,
+    })
+    .unwrap_err();
+    assert_eq!(err, RECEIVER_INCOMPATIBLE);
+}
+
+/// An unknown installed Kernel fails closed.
+#[test]
+fn receiver_gate_fails_closed_on_unknown_installed_kernel() {
+    let err = receiver_gate(&ReceiverEvidence {
+        installed_checksum_zero: None,
+        bodies_match: false,
+    })
+    .unwrap_err();
+    assert_eq!(err, RECEIVER_UNKNOWN);
+}
+
+/// A Normal-only flash has no target Kernel to compare, so `check_receiver`
+/// admits it: the installed Kernel is the receiver and the library's Normal-only
+/// preparation already authenticates against it.
+#[test]
+fn check_receiver_admits_normal_only() {
+    assert!(check_receiver(None, None, b"ignored").is_ok());
 }

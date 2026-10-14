@@ -203,6 +203,211 @@ pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
     FamilyKey::from_body(&pioneer_optical::envelope::decode_envelope(normal)?.image)
 }
 
+// ---- Receiver class and the installed-Kernel receiver gate ------------------
+//
+// The family key ([`FamilyKey`]) proves same silicon/optical platform but it is
+// computed from the decoded Normal body alone, so two drives in one family can
+// still disagree on how their resident Kernel *receives* an incoming Normal: the
+// two payload offsets its decode loop leaves un-XORed, and its rotation
+// direction. A BDR-207M (un-XORed at 0x16900/0x77300, forward rotation) and a
+// BDR-PR1ML (0x32400/0xB1700, reversed) share family `cee5c9016d0174c9` yet
+// cannot decode each other's Normal: the installed Kernel reaches a nonzero body
+// checksum and refuses to program, leaving the drive in boot mode. The family
+// gate admits the pair; only this receiver check catches it.
+
+/// How a resident Kernel receives an incoming Normal: the two payload offsets it
+/// leaves un-XORed while decoding, and whether it rotates in reverse. Equal keys
+/// mean two Kernels decode the same ciphertext to the same body, so one drive's
+/// Kernel can receive the other's firmware. This is the crossflash-safety key
+/// that sits *next to* [`FamilyKey`]; family equality does not imply it.
+///
+/// Derived from the receiving Kernel together with a Normal it is paired with:
+/// the offsets come from the Kernel's own recognized XOR-skip branch
+/// ([`pioneer_optical::envelope::KernelXorPolicy`]); the rotation direction is
+/// read from that paired Normal's detected envelope layout, because 0.12.4's
+/// Kernel recognizers do not yet expose rotation independently (see the note on
+/// [`receiver_class`]). Deliberately excludes Kernel `version2`, which varies
+/// within one edition and so is not a receiver property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ReceiverClass {
+    /// The two decoded-Normal payload offsets the Kernel's loop leaves un-XORed.
+    pub xor_offsets: [u32; 2],
+    /// The Kernel decodes with the reversed key rotation (NormalReverse layout).
+    pub reverse_rotation: bool,
+}
+
+/// The receiver class a Kernel presents, derived from the Kernel bytes and a
+/// Normal it is paired with (an installed backup's own Normal, or a bundle's).
+/// `None` when the Kernel has no unique recognized XOR-skip branch (fail closed)
+/// or either envelope does not decode.
+///
+/// NOTE for `firmware-extractor` and the site's `finder.mjs crossflashTargets`
+/// (not implemented here): both should carry this receiver-class key beside
+/// `family_id` and only offer a crossflash target whose receiver class equals
+/// the installed drive's. `firmware-extractor`'s `index/packages.json` should
+/// record `receiver_xor_offsets` + `receiver_reverse` per Kernel+Normal package;
+/// `finder.mjs` should intersect on it so the UI never proposes a same-family,
+/// different-receiver-class pair that this gate would then refuse. The key must
+/// NOT be the Kernel `version2` word (0000/0001), which differs within a single
+/// receiver class (e.g. across BDR-PR1ML revisions) and would over-partition.
+pub fn receiver_class(kernel: &[u8], paired_normal: &[u8]) -> Option<ReceiverClass> {
+    use pioneer_optical::envelope::{decode_envelope, KernelXorPolicy, Layout};
+    let kernel = decode_envelope(kernel)?;
+    let policy = KernelXorPolicy::from_kernel(&kernel)?;
+    let normal = pioneer_optical::envelope::decode_envelope_with_kernel(paired_normal, &kernel)?;
+    Some(ReceiverClass {
+        xor_offsets: policy.offsets,
+        reverse_rotation: normal.info().layout == Layout::NormalReverse,
+    })
+}
+
+/// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
+/// before it programs a decoded body. A trailing partial word counts as failed.
+fn be32_sum_zero(body: &[u8]) -> bool {
+    let (words, rest) = body.as_chunks::<4>();
+    rest.is_empty()
+        && words
+            .iter()
+            .fold(0u32, |s, w| s.wrapping_add(u32::from_be_bytes(*w)))
+            == 0
+}
+
+/// Offline evidence for the receiver gate: how the target Normal decodes under
+/// the drive's *installed* Kernel versus under the target's own Kernel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReceiverEvidence {
+    /// `true` when the target Normal, decoded with the installed Kernel's
+    /// receiver rules, reaches a zero body checksum (what the Kernel demands
+    /// before it programs). `None` when the installed Kernel is unknown or could
+    /// not decode it — the fail-closed case.
+    pub installed_checksum_zero: Option<bool>,
+    /// Whether that installed-Kernel decode yields the identical body the target
+    /// Kernel decodes (the bytes the drive would actually run).
+    pub bodies_match: bool,
+}
+
+/// The receiver gate's message for a drive whose installed Kernel cannot decode
+/// the incoming firmware.
+pub const RECEIVER_INCOMPATIBLE: &str =
+    "the drive's currently-installed Kernel cannot receive this firmware: the incoming Normal \
+     does not decode to a valid image under the installed Kernel's receiver rules (a different \
+     un-XORed-offset/rotation receiver class). Flashing it would leave the drive stuck in boot \
+     mode. Refused.";
+
+/// The receiver gate's message when the installed Kernel cannot be established.
+pub const RECEIVER_UNKNOWN: &str =
+    "could not decode the drive's currently-installed Kernel to prove it can receive this \
+     firmware; refusing to flash (fail closed).";
+
+/// The pure receiver decision: admit only when the installed Kernel decodes the
+/// incoming Normal to a zero-checksum body identical to the target Kernel's
+/// decode. Unknown installed Kernel fails closed.
+pub fn receiver_gate(ev: &ReceiverEvidence) -> Result<(), String> {
+    match (ev.installed_checksum_zero, ev.bodies_match) {
+        (None, _) => Err(RECEIVER_UNKNOWN.to_string()),
+        (Some(true), true) => Ok(()),
+        _ => Err(RECEIVER_INCOMPATIBLE.to_string()),
+    }
+}
+
+/// Build [`ReceiverEvidence`] by decoding the target Normal twice: once with the
+/// installed Kernel's receiver rules and once with the target Kernel's. Pure of
+/// device I/O. `installed_kernel` is the raw Kernel envelope from the pre-flash
+/// backup; `None` (or an undecodable/ambiguous Kernel) yields the fail-closed
+/// evidence. `target_kernel` is the bundle's Kernel envelope.
+pub fn receiver_evidence(
+    installed_kernel: Option<&[u8]>,
+    target_normal: &[u8],
+    target_kernel: &[u8],
+) -> ReceiverEvidence {
+    use pioneer_optical::envelope::{
+        decode_envelope, decode_envelope_with_kernel, KernelXorPolicy,
+    };
+
+    let target_body = decode_envelope(target_kernel)
+        .and_then(|k| decode_envelope_with_kernel(target_normal, &k))
+        .map(|d| d.image);
+    // Fail closed on an installed Kernel with no unique recognized receiver
+    // policy: treat it as unknown rather than guessing it is compatible.
+    let installed_body = installed_kernel
+        .and_then(decode_envelope)
+        .filter(|k| KernelXorPolicy::from_kernel(k).is_some())
+        .and_then(|k| decode_envelope_with_kernel(target_normal, &k))
+        .map(|d| d.image);
+    ReceiverEvidence {
+        installed_checksum_zero: installed_body.as_deref().map(be32_sum_zero),
+        bodies_match: matches!(
+            (&installed_body, &target_body),
+            (Some(a), Some(b)) if a == b
+        ),
+    }
+}
+
+/// The receiver gate's message for a Kernel swap across hardware versions.
+///
+/// This is a conservative pre-check, not an ASCII-identity check: a different
+/// hardware version (SAT) uses a different group transport key, so the incoming
+/// body decodes to a nonzero checksum under the installed loader and is rejected,
+/// leaving the drive in update mode. The offline decode/checksum gate models the
+/// Normal's own key, so it cannot by itself distinguish two same-receiver-class
+/// Kernels that differ only in group key (e.g. BDR-205 SAT 1014 vs BDR-206 SAT
+/// 1030); this hardware-version branch covers that gap. It only ever refuses a
+/// cross-platform Kernel swap, which is never a safe pairing.
+pub const RECEIVER_KERNEL_SAT: &str =
+    "the drive's currently-installed Kernel cannot decode firmware for a different hardware \
+     version (SAT): a different hardware version uses a different group transport key, so the \
+     incoming body decodes to a nonzero checksum and the loader rejects it, leaving the drive \
+     in update mode. Refused.";
+
+/// The receiver gate over raw envelope bytes: refuse unless the installed Kernel
+/// can receive every component the flash writes. A `None` target Kernel (a
+/// Normal-only flash) is always admitted here — the installed Kernel *is* the
+/// receiver, and the library's Normal-only preparation already authenticates
+/// against it.
+///
+/// For a Kernel+Normal flash the installed Kernel receives both components, so:
+/// - the target Kernel must carry the installed Kernel's hardware version (SAT):
+///   a different SAT uses a different group transport key, so a BDR-206 (SAT
+///   1030) body decodes to a nonzero checksum under a BDR-205 (SAT 1014) loader
+///   and is rejected. This hardware-version pre-check stands in for the offline
+///   decode/checksum gate, which models the Normal's own key and so cannot
+///   distinguish two same-receiver-class Kernels that differ only in group key;
+/// - the target Normal must decode under the installed Kernel's receiver rules
+///   to the body the target Kernel decodes, with a zero checksum (BDR-207M ->
+///   BDR-PR1ML fails this inside one SAT — different receiver class).
+///
+/// The installed Kernel's *authentication* policy is deliberately not checked:
+/// OEM same-model updates change policy in one session (BDR-XS06 ID69 1.10
+/// signs key+ciphertext, 1.11 ciphertext only), so it is not proven to apply to
+/// an incoming Normal.
+///
+/// An identical installed and target Kernel is trivially its own receiver.
+pub fn check_receiver(
+    installed_kernel: Option<&[u8]>,
+    target_kernel: Option<&[u8]>,
+    target_normal: &[u8],
+) -> Result<(), String> {
+    use pioneer_optical::envelope::header_info;
+    let Some(target_kernel) = target_kernel else {
+        return Ok(());
+    };
+    if installed_kernel == Some(target_kernel) {
+        return Ok(());
+    }
+    let installed = installed_kernel.ok_or_else(|| RECEIVER_UNKNOWN.to_string())?;
+    let (Some(ih), Some(th)) = (header_info(installed), header_info(target_kernel)) else {
+        return Err(RECEIVER_UNKNOWN.to_string());
+    };
+    if ih.hardware_version != th.hardware_version {
+        return Err(RECEIVER_KERNEL_SAT.to_string());
+    }
+    receiver_gate(&receiver_evidence(
+        Some(installed),
+        target_normal,
+        target_kernel,
+    ))
+}
+
 /// Whether a flash needs the vendor F3/F2 "kernel mode" unlock. Always `false`.
 ///
 /// The F3/F2 handshake is not cold-reachable on any Pioneer BD firmware (a live
@@ -318,9 +523,27 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
         };
     }
 
-    // A Kernel+Normal bundle: the only runtime special case is Site 1, where a
-    // new-generation receiver rejects an `FF`/`00` Kernel (a KernelDowngrade,
-    // patched at write time).
+    // A Kernel+Normal bundle whose destination differs from the installed one
+    // (same SAT, different edition — e.g. BDR-207M ID43 -> BDR-PR1ML ID88) swaps
+    // the resident Kernel, so route it as a crossflash, not Plain: the installed
+    // Kernel may belong to a different receiver class and the receiver gate must
+    // clear it before any write. An unknown installed destination is treated as
+    // a crossflash too (the safer route). A matching destination is an ordinary
+    // same-edition update.
+    let different_destination = match (
+        installed.kernel_tag.as_deref(),
+        target.required_kernel_tag.as_deref(),
+    ) {
+        (Some(inst), Some(req)) => inst != req,
+        _ => true,
+    };
+    if different_destination {
+        return classify_crossflash(installed, target);
+    }
+
+    // A same-edition Kernel+Normal bundle: the only runtime special case is
+    // Site 1, where a new-generation receiver rejects an `FF`/`00` Kernel (a
+    // KernelDowngrade, patched at write time).
     let kernel = target.kernel.expect("has_kernel branch");
     if installed.receiver_new_gen.unwrap_or(false)
         && Generation::from_marker(kernel.marker).site1_rejected()
@@ -417,8 +640,10 @@ fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
 /// before any gate or write:
 /// 1. each present component decodes to a well-formed envelope header;
 /// 2. each declares the right `File Type` (`Kernel` / `Normal`);
-/// 3. with both present, they agree on the SAT/hardware id, and the Kernel's ID
-///    tag equals the Normal's required-Kernel tag (else a Site-2 soft-brick);
+/// 3. with both present, they agree on the SAT/hardware id, the Kernel's ID tag
+///    equals the Normal's required-Kernel tag (else a Site-2 soft-brick), and
+///    they share the model string (the boot-time model+variant pairing the
+///    resident-firmware validator enforces at reset);
 /// 4. neither has an unrecovered envelope tail.
 pub fn validate_bundle(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<(), String> {
     validate_component_headers(kernel, normal)?;
@@ -475,6 +700,24 @@ pub fn validate_component_headers(
                 "malformed bundle: Normal declares required-Kernel tag {n_tag:?} but the \
                  bundled Kernel's own tag is {k_tag:?}. These must be equal; a Normal paired \
                  with a Kernel of a different ABI generation will soft-brick on Site 2."
+            ));
+        }
+        // Boot-time (model, variant) pairing. At reset the loader validates the
+        // resident Normal against its own ROM identity: a 16-byte model string
+        // and an 8-byte variant tag; a mismatch aborts into the error handler
+        // instead of launching the resident firmware. The variant is the ID tag
+        // checked just above (`k_tag`/`n_tag`); the model is the header model
+        // token. A written Kernel+Normal must therefore share both, or the drive
+        // will not boot even though every transfer-time gate passed. (207M ID43
+        // and PR1ML ID88 share model "BDR-207" but differ in variant, which the
+        // ID-tag check above already refuses.)
+        let k_model = kh.model.trim();
+        let n_model = nh.model.trim();
+        if !k_model.eq_ignore_ascii_case(n_model) && !k_model.is_empty() && !n_model.is_empty() {
+            return Err(format!(
+                "malformed bundle: the Kernel's model {k_model:?} and the Normal's model \
+                 {n_model:?} differ. A written pair must share model and variant or the drive \
+                 aborts at boot (the loader's resident-firmware model+variant check)."
             ));
         }
     }
