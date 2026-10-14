@@ -229,11 +229,12 @@ pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
 /// [`receiver_class`]). Deliberately excludes Kernel `version2`, which varies
 /// within one edition and so is not a receiver property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ReceiverClass {
+#[allow(dead_code)] // reserved reference type; exercised by tests, not yet wired in production
+pub(crate) struct ReceiverClass {
     /// The two decoded-Normal payload offsets the Kernel's loop leaves un-XORed.
-    pub xor_offsets: [u32; 2],
+    pub(crate) xor_offsets: [u32; 2],
     /// The Kernel decodes with the reversed key rotation (NormalReverse layout).
-    pub reverse_rotation: bool,
+    pub(crate) reverse_rotation: bool,
 }
 
 /// The receiver class a Kernel presents, derived from the Kernel bytes and a
@@ -250,7 +251,11 @@ pub struct ReceiverClass {
 /// different-receiver-class pair that this gate would then refuse. The key must
 /// NOT be the Kernel `version2` word (0000/0001), which differs within a single
 /// receiver class (e.g. across BDR-PR1ML revisions) and would over-partition.
-pub fn receiver_class(kernel: &[u8], paired_normal: &[u8]) -> Option<ReceiverClass> {
+///
+/// Kept `pub(crate)` until that cross-repo consumer is wired in-tree; widen the
+/// visibility (and the `ReceiverClass` type above) when it lands.
+#[allow(dead_code)] // reference impl for the receiver-class key; exercised by tests until wired
+pub(crate) fn receiver_class(kernel: &[u8], paired_normal: &[u8]) -> Option<ReceiverClass> {
     use pioneer_optical::envelope::{decode_envelope, KernelXorPolicy, Layout};
     let kernel = decode_envelope(kernel)?;
     let policy = KernelXorPolicy::from_kernel(&kernel)?;
