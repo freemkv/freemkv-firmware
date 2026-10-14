@@ -13,6 +13,11 @@ description = "freemkv device firmware info, backup, and flash (MediaTek MT19xx;
 name = "freemkv-flash"
 path = "src/main.rs"
 
+# Internal tool (not shipped): every crossflash `flash` admits between packages.
+[[bin]]
+name = "freemkv-crossflash"
+path = "src/bin/freemkv-crossflash.rs"
+
 [lib]
 name = "freemkv_flash"
 path = "src/lib.rs"

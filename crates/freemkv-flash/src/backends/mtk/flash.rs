@@ -258,17 +258,59 @@ fn authorize_crossflash(
     Ok(target.product)
 }
 
-/// The update gates for the backup as the update, with the drive running
-/// `image`.
-pub(super) fn rollback(backup: &[u8], image: &[u8]) -> Result<()> {
+/// The gates on the image alone: size, integrity, and a stored boot page the
+/// catalog knows.
+fn check_image(image: &[u8]) -> Result<()> {
+    if image.len() != IMAGE_SIZE {
+        bail!(
+            "firmware .bin must be exactly {} bytes, got {}",
+            IMAGE_SIZE,
+            image.len()
+        );
+    }
+    if !crate::cmac::verify(image) {
+        bail!(
+            "firmware image fails its AES-CMAC integrity check — refusing to flash. \
+             A mis-signed or corrupted image is rejected by the drive's boot \
+             authenticator and can brick the drive."
+        );
+    }
+    ensure_flashable_boot_page(image)?;
+    Ok(())
+}
+
+/// The drive identity a complete image (or backup) reports, as the gates see a
+/// live drive running it. The INQUIRY is blank; the gates read the descriptor.
+fn identity_of_image(image: &[u8]) -> Result<Identity> {
     use mediatek_optical::layout;
-    let identity = Identity::parse(
+    Identity::parse(
         &[0; mediatek_optical::INQUIRY_LEN],
         layout::BANNER.of(image).unwrap_or_default(),
         layout::DESCRIPTOR.of(image).unwrap_or_default(),
     )
-    .context("an empty INQUIRY")?;
-    let installed = InstalledFirmware::new(identity, image).map_err(refusal)?;
+    .context("an empty INQUIRY")
+}
+
+/// The whole `flash` decision with no device: `installed` (a complete image)
+/// stands in for both the live drive and its pre-flash backup. Runs the same
+/// image, plan and authorize gates `flash` runs before any write.
+pub(crate) fn decide_offline(installed: &[u8], image: &[u8]) -> Result<()> {
+    check_image(image)?;
+    let live = identity_of_image(installed)?;
+    PreparedUpdate::check(image, &live).map_err(refusal)?;
+    let drive_product = Build::of_image(installed)?.product;
+    let verdict = crossflash::decide_plan(
+        &drive_product,
+        &Build::of_drive(&live),
+        &Build::of_image(image)?,
+    )?;
+    authorize_bytes(&live, &drive_product, verdict, image, installed).map(|_| ())
+}
+
+/// The update gates for the backup as the update, with the drive running
+/// `image`.
+pub(super) fn rollback(backup: &[u8], image: &[u8]) -> Result<()> {
+    let installed = InstalledFirmware::new(identity_of_image(image)?, image).map_err(refusal)?;
     ensure_flashable_boot_page(backup)?;
     PreparedUpdate::prepare(backup, &installed).map_err(refusal)?;
     Ok(())
@@ -544,21 +586,7 @@ impl Mtk {
         image: &[u8],
         drive_product: &str,
     ) -> Result<(Identity, Verdict)> {
-        if image.len() != IMAGE_SIZE {
-            bail!(
-                "firmware .bin must be exactly {} bytes, got {}",
-                IMAGE_SIZE,
-                image.len()
-            );
-        }
-        if !crate::cmac::verify(image) {
-            bail!(
-                "firmware image fails its AES-CMAC integrity check — refusing to flash. \
-                 A mis-signed or corrupted image is rejected by the drive's boot \
-                 authenticator and can brick the drive."
-            );
-        }
-        ensure_flashable_boot_page(image)?;
+        check_image(image)?;
         let live = live_identity(dev);
         PreparedUpdate::check(image, &live).map_err(refusal)?;
         let target = Build::of_image(image)?;

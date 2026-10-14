@@ -868,3 +868,26 @@ fn be32_sum_zero_fails_closed_on_degenerate_bodies() {
     // Positive control: a well-formed all-zero body is a valid zero checksum.
     assert!(be32_sum_zero(&[0, 0, 0, 0]));
 }
+
+#[test]
+fn crossflash_links_follow_the_flash_gates() {
+    // Crossflash links come from the flasher's own offline
+    // decision: a different SAT with the same receiver class links both ways; a
+    // different receiver class (same SAT) never links.
+    use crate::crossflash::{links, Platform};
+    let sat_a = archive(&fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000"), false);
+    let sat_b = archive(&fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000"), false);
+    let class_y = archive(
+        &fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]),
+        false,
+    );
+    let found = links(Platform::Pioneer, &[&sat_a, &sat_b, &class_y]);
+    assert!(
+        found.contains(&(0, 1)) && found.contains(&(1, 0)),
+        "{found:?}"
+    );
+    assert!(
+        !found.contains(&(0, 2)) && !found.contains(&(2, 0)),
+        "{found:?}"
+    );
+}

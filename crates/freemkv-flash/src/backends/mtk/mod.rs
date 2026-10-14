@@ -25,6 +25,7 @@ pub(crate) mod file_info;
 #[path = "fixture_tests.rs"]
 pub(crate) mod fixture;
 mod flash;
+pub(crate) use flash::decide_offline;
 pub mod fw_ident;
 pub(crate) mod inspect;
 pub mod oem;

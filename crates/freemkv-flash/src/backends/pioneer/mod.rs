@@ -452,6 +452,15 @@ pub(crate) fn execute_plan(input: &[u8]) -> Result<ExecutePlan> {
     })
 }
 
+/// The whole `flash` decision with no device: `installed` (a Kernel+Normal
+/// package) stands in for the drive's pre-flash backup. Runs the same plan,
+/// backup-coverage and authorize gates `flash` runs before any write.
+pub(crate) fn decide_offline(installed: &[u8], target: &[u8]) -> Result<()> {
+    let plan = execute_plan(target)?;
+    verify_coverage(installed, plan.kernel.is_some(), true)?;
+    authorize_installed(FlashPlan::new(plan), Some(installed)).map(|_| ())
+}
+
 /// The library plan the receiver accepted.
 struct Prepared {
     complete: Option<pioneer_optical::receiver::PreparedUpdate>,
