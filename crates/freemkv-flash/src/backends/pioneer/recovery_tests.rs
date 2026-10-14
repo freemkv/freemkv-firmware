@@ -123,6 +123,125 @@ fn fixture_pair_class(gated: bool, marker: u8, sat: &[u8; 20], xor_offsets: [u32
     Update::load(&encoded.kernel, &encoded.normal).unwrap()
 }
 
+/// Encode a (kernel, normal) pair with a chosen kernel background fill byte,
+/// XOR-skip offsets (the receiver class) and a caller-supplied Normal image.
+/// Returns the encoded `.enc` component bytes. Used to build the one-way-ABI
+/// scenario, which needs a non-zero-filled (so `provided_abi`-sparse) kernel.
+fn encoded_pair(kernel_fill: u8, xor_offsets: [u32; 2], normal: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let mut kernel = vec![kernel_fill; 0x10000];
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
+    kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
+    let (o1, o2) = (xor_offsets[0].to_be_bytes(), xor_offsets[1].to_be_bytes());
+    #[rustfmt::skip]
+    let branch = [
+        0x7a, 0x20, o1[0], o1[1], o1[2], o1[3], 0x47, 12,
+        0x7a, 0x20, o2[0], o2[1], o2[2], o2[3], 0x47, 4,
+        1, 0xf0, 0x65, 5,
+    ];
+    kernel[0x100..0x114].copy_from_slice(&branch);
+    kernel[0x114..0x126].copy_from_slice(&[
+        0x79, 0x63, 0, 0x1f, 0x0d, 0x31, 0x5e, 0x40, 0x01, 0x22, 1, 0xf0, 0x64, 0x40, 0x11, 0x70,
+        0x54, 0x70,
+    ]);
+    kernel[0x300..0x300 + UNGATED_FINALIZER.len()].copy_from_slice(UNGATED_FINALIZER);
+    for (offset, address) in [(0x349, [0x40, 0x20, 0]), (0x355, [0x40, 0x22, 0])] {
+        kernel[offset..offset + 3].copy_from_slice(&address);
+    }
+    kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = 0;
+    balance(&mut kernel);
+    let mut scalar = [0; 20];
+    scalar[19] = 5;
+    let signer = SigningKey::from_bytes(scalar).unwrap();
+    let encoded = encode_encrypted_pair(
+        &BuildInputs {
+            kernel_image: &kernel,
+            normal_image: normal,
+            envelope_id: "PIONEER BDR-TEST",
+            normal_revision: "1.00",
+            normal_date: "26/10/07",
+            kernel: KernelBuild::from_seed(7),
+            normal_key_seed: 11,
+        },
+        NormalSignature::Sign(&signer),
+    )
+    .unwrap();
+    (encoded.kernel, encoded.normal)
+}
+
+/// A tar of raw Kernel+Normal `.enc` component bytes (the flasher's archive).
+fn tar_of(kernel: &[u8], normal: &[u8]) -> Vec<u8> {
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, data) in [("kernel.enc", kernel), ("normal.enc", normal)] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, name, data).unwrap();
+    }
+    tar.into_inner().unwrap()
+}
+
+#[test]
+fn backup_restorable_refuses_a_synthetic_one_way_abi_crossflash() {
+    use pioneer_optical::envelope::{decode_envelope, decode_envelope_with_kernel};
+    use pioneer_optical::image::{provided_abi, required_abi};
+    // X: an even Kernel-range address in a 0x01-filled region of the target.
+    const X: u32 = 0x40_8000;
+    // Backup: class A, a Normal body > KERNEL_LEN whose code region is zeros
+    // (NOPs — a long valid run) then a JSR @X, so required_abi = Some({X}).
+    let mut big = vec![0u8; 0x1_0100];
+    big[..16].copy_from_slice(b"PIONEER TEST-NEW");
+    big[20..24].copy_from_slice(&0x1_0100u32.to_be_bytes());
+    big[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
+    big[0x500..0x510].copy_from_slice(&[
+        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 0, 0x46, 0x4e,
+    ]);
+    // JSR @aa:24 to X, well past NORMAL_CODE_START (0x1100) after >=128 NOPs.
+    big[0x1200..0x1204].copy_from_slice(&[0x5e, 0x40, 0x80, 0x00]);
+    balance(&mut big);
+    let (bk, bn) = encoded_pair(0x00, [0x100, 0x200], &big);
+    // Target: class B (so check_receiver fails -> reach the ABI path), kernel
+    // 0x01-filled so provided_abi is sparse and should NOT contain X.
+    let mut small = vec![0u8; 0x2000];
+    small[..16].copy_from_slice(b"PIONEER TEST-NEW");
+    small[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
+    small[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
+    small[0x500..0x510].copy_from_slice(&[
+        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 0, 0x46, 0x4e,
+    ]);
+    balance(&mut small);
+    let (tk, _tn) = encoded_pair(0x01, [0x400, 0x800], &small);
+
+    // Setup sanity: the arm is genuinely exercised (no vacuous pass).
+    let backup_body = decode_envelope(&bk)
+        .and_then(|k| decode_envelope_with_kernel(&bn, &k))
+        .map(|d| d.image)
+        .expect("backup must decode");
+    let target_body = decode_envelope(&tk)
+        .map(|k| k.image)
+        .expect("target must decode");
+    let req = required_abi(&backup_body).expect("backup must have a required ABI");
+    let prov =
+        provided_abi(&target_body).expect("target must be a full Kernel with a provided ABI");
+    assert!(
+        req.entries().contains(&X),
+        "required ABI must include X={X:#x}"
+    );
+    assert!(
+        !req.is_satisfied_by(&prov),
+        "setup must be a genuine one-way mismatch (target must NOT provide X)"
+    );
+
+    // The gate: a tar of the class-A backup, flashing the class-B target.
+    let backup = tar_of(&bk, &bn);
+    assert_eq!(
+        backup_restorable(Some(&tk), &backup),
+        Err(BACKUP_NOT_RESTORABLE.to_string()),
+        "a one-way-ABI crossflash must be refused as un-restorable"
+    );
+}
+
 #[derive(Default)]
 struct Drive {
     updating: bool,

@@ -40,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stays recover-only for now; it is intended for promotion into the default
   `flash` path in a later release once proven on hardware. A fresh, caller-owned
   signature is applied, whose on-drive acceptance is part of what is unproven.
+- `recover` refuses, before any write, a target that is not the installed
+  drive's hardware family. It gates on the firmware family hash and, because
+  that hash does not include the hardware version, additionally requires the
+  target Kernel's SAT to match the installed Kernel's (a different SAT is a
+  different drive generation); `recover` may cross receiver class but never
+  hardware. Fails closed when the family or SAT cannot be read.
+- Build against `pioneer-optical` 0.15.0, which exposes the receiver-class,
+  Kernel-ABI (`required_abi`/`provided_abi`) and rotation APIs the receiver and
+  backup-restorable gates above are built on.
+
 ### MediaTek
 - Admit a MediaTek crossflash automatically between drives of the same hardware
   family, derived from the firmware itself — a content hash of
