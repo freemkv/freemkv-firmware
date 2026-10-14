@@ -48,8 +48,12 @@ fn balance(bytes: &mut [u8]) {
     bytes[at..].copy_from_slice(&sum.wrapping_neg().to_be_bytes());
 }
 fn fixture_pair(gated: bool, marker: u8) -> Update {
+    fixture_pair_sat(gated, marker, b"SAT FFFEGENERAL 0000")
+}
+
+fn fixture_pair_sat(gated: bool, marker: u8, sat: &[u8; 20]) -> Update {
     let mut kernel = vec![0; 0x10000];
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x1000..0x1014].copy_from_slice(sat);
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
     kernel[0x100..0x114].copy_from_slice(&[
@@ -716,6 +720,7 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
 
 use crate::backends::pioneer::flash_plan::{
     backup_restorable, check_receiver, BACKUP_NOT_RESTORABLE, BACKUP_UNREADABLE,
+    RECEIVER_KERNEL_SAT,
 };
 
 #[test]
@@ -822,4 +827,32 @@ fn check_receiver_fails_closed_when_the_installed_kernel_is_unknown() {
     assert!(check_receiver(None, None, &tn).is_ok());
     // An identical installed and target Kernel is trivially its own receiver.
     assert!(check_receiver(Some(&tk), Some(&tk), &tn).is_ok());
+}
+
+#[test]
+fn check_receiver_refuses_a_different_sat_kernel() {
+    // A different-SAT target must be refused BEFORE the receiver policy is even
+    // consulted (a SAT swap bricks the drive in update mode). Synthetic, non-hoard
+    // regression guard for the `hardware_version != hardware_version` arm, so
+    // deleting it no longer stays green in CI without the hoard.
+    let installed = fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000");
+    let target = fixture_pair_sat(false, 0, b"SAT FFFDGENERAL 0000");
+    let ik = installed
+        .kernel()
+        .repack(&installed.kernel().image)
+        .unwrap();
+    let tk = target.kernel().repack(&target.kernel().image).unwrap();
+    let tn = target.normal().repack(&target.normal().image).unwrap();
+    // Setup sanity: the two kernels really do report different SATs, so the test
+    // exercises the SAT arm and not some earlier branch.
+    assert_ne!(
+        pioneer_optical::envelope::header_info(&ik).map(|h| h.hardware_version),
+        pioneer_optical::envelope::header_info(&tk).map(|h| h.hardware_version),
+        "fixtures must differ in SAT for this test to exercise the SAT gate"
+    );
+    assert_eq!(
+        check_receiver(Some(&ik), Some(&tk), &tn),
+        Err(RECEIVER_KERNEL_SAT.to_string()),
+        "a different-SAT target must be refused with the SAT-mismatch reason"
+    );
 }
