@@ -103,18 +103,32 @@ impl Plan {
         target_normal_bytes: Option<&[u8]>,
     ) -> Result<Self> {
         let control = control_from_image(installed_normal_image)?;
-        // Same-family gate: refuse a genuinely cross-family recover when both
-        // sides profile. An unrecognized synthetic image profiles to `None` and
-        // is carried by the offline re-encode proof below instead.
-        if let (Some(i), Some(t)) = (
+        // Same-family gate. The offline re-encode proof below re-encodes the
+        // TARGET body into the installed Kernel's transport, so it does NOT by
+        // itself prove the target is the installed drive's hardware family —
+        // this gate must. Refuse a different family, and refuse the asymmetric
+        // case where one side profiles and the other does not (we cannot confirm
+        // the family, so fail closed). Both unprofiled is the synthetic/test
+        // path, carried by the Kernel-ABI check and the offline re-encode proof.
+        match (
             pioneer_optical::image::family(installed_normal_image),
             target.family(),
         ) {
-            ensure!(
+            (Some(i), Some(t)) => ensure!(
                 i == t,
                 "recover refused: the installed firmware is family {i} but the target is family \
                  {t} (different hardware family)"
-            );
+            ),
+            (None, None) => {}
+            (installed, _) => bail!(
+                "recover refused: cannot confirm the target is the installed drive's hardware \
+                 family — {} is unrecognized; refusing (fail closed)",
+                if installed.is_none() {
+                    "the installed firmware"
+                } else {
+                    "the target"
+                }
+            ),
         }
         let (normal_transfer, reencoded) =
             normal_transfer_for_installed(installed_kernel, &target, target_normal_bytes)?;

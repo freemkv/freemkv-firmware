@@ -641,12 +641,14 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
     }
 }
 
-/// Same-family cross-SAT updates require both components. The receiver's
-/// marker policy determines whether an intermediate Kernel is required.
+/// Same-family crossflash updates require both components. This routes a
+/// different SAT and also a same-SAT, different-edition bundle (e.g. BDR-207M
+/// ID43 -> BDR-PR1ML ID88). The receiver's marker policy determines whether an
+/// intermediate Kernel is required.
 fn classify_crossflash(installed: &Installed, target: &Target) -> FlashPlan {
     let Some(kernel) = target.kernel else {
         return FlashPlan::Refused(
-            "crossflash refused: a different-SAT target needs a Kernel+Normal pair; this \
+            "crossflash refused: a crossflash target needs a Kernel+Normal pair; this \
              bundle is Normal-only"
                 .to_string(),
         );

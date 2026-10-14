@@ -276,7 +276,14 @@ pub(super) fn rollback(backup: &[u8], image: &[u8]) -> Result<()> {
 /// After a crossflash the drive must identify as the target's model.
 fn confirm_crossflash(dev: &mut ReadDevice<'_>, model: &str) -> Result<()> {
     let now = Build::of_drive(&live_identity(dev));
-    if now.product != model {
+    // Confirm with the same model relation the pre-flash gate used to admit this
+    // image (`crossflash::same_model`: the drive's reported product is contained
+    // in the image model), not a raw string equality — `model` is the image's
+    // chip-derived model while `now.product` is the drive's descriptor model, so
+    // `!=` would false-fail a successful crossflash whose descriptor model is a
+    // variant of the chip model. A genuine failure (the drive still reports the
+    // old product) and a blank read both still refuse.
+    if !crossflash::is_same_model(model, &now.product) {
         bail!(
             "drive did not take the crossflash image: it identifies as {:?}, not {:?}. \
              Physically re-verify the drive before using it.",
