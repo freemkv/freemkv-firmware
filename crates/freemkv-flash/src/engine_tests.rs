@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::backend::{BackupFacet, DumpFacet, FileFacet};
-use crate::backends::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
+use crate::backends::mtk::crossflash::{decide_model, ensure_image_matches_drive};
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};
 use crate::backends::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
@@ -773,10 +773,10 @@ fn model_gate_refuses_a_truncated_image() {
 
 #[test]
 fn model_mismatch_is_refused() {
-    let err = decide_crossflash("BD-RE BU40N", "WH16NS60").unwrap_err();
+    let err = decide_model("BD-RE BU40N", "WH16NS60").unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
     assert!(err.to_string().contains("compatible image"), "got: {err}");
-    assert!(decide_crossflash("BD-RE BU40N", "BU40N").is_ok());
+    assert!(decide_model("BD-RE BU40N", "BU40N").is_ok());
 }
 
 /// The chip gate as the plan runs it: every pre-backup gate against `dev`.

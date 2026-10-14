@@ -508,7 +508,13 @@ fn stream(dev: &mut dyn crate::platform::ScsiDevice) -> anyhow::Result<()> {
     let image = fixture::image(&fixture::BU3, "BD-RE BU40N", 1);
     let installed = InstalledFirmware::new(fixture::identity(&image), &image).unwrap();
     let prepared = PreparedUpdate::prepare(&image, &installed).unwrap();
-    let authorized = AuthorizedPlan::new(FlashPlan::new(()), prepared);
+    let authorized = AuthorizedPlan::new(
+        FlashPlan::new(()),
+        super::flash::Authorized {
+            prepared,
+            expect: None,
+        },
+    );
     Mtk.execute(
         &mut crate::engine::gates::ungated_for_tests(dev),
         &authorized,
