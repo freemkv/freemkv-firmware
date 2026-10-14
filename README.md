@@ -64,7 +64,13 @@ Current reference to derive receiver credentials; see the limits below.
 ## Flash workflow
 
 The flasher does not modify the input image. For supported MTK images, it
-validates integrity and model compatibility before writing. Its workflow is:
+validates integrity and model compatibility before writing. An image of another
+model is admitted only when it is the drive's own hardware family — derived from
+the firmware itself (a content hash of chip, platform, loader, interface, medium
+and BD-write capability), not from a curated list — and only with the full
+content-integrity and rollback gates. A different family, an INTM build or an
+unknown-identity image is refused, an unknown family fails closed, and nothing
+switches the gate off. Its workflow is:
 
 1. **Back up** — a live execution reads and saves a fresh, complete, validated
    backup artifact. A failed backup stops the flash before any firmware write.

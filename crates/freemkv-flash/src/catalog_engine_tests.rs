@@ -5,100 +5,8 @@
 //! session; every pair of builds from different families is refused.
 
 use super::*;
+use fixture::{catalog_builds, stand_ins};
 use mediatek_optical::update::{InstalledFirmware, PrepareError, PreparedUpdate};
-
-/// One catalog build, as `oem.bin` records it.
-struct CatalogBuild {
-    model: String,
-    revision: String,
-    family: String,
-    hardware: String,
-    boot: Vec<u8>,
-    regions: Vec<Vec<u8>>,
-}
-
-fn unhex(s: &str) -> Vec<u8> {
-    (0..s.len() / 2)
-        .map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap())
-        .collect()
-}
-
-fn catalog_builds() -> Vec<CatalogBuild> {
-    use std::io::Read;
-    let gz = include_bytes!("backends/mtk/oem.bin");
-    let mut json = String::new();
-    flate2::read::GzDecoder::new(&gz[..])
-        .read_to_string(&mut json)
-        .unwrap();
-    let table: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(table["family_scheme"], "mediatek.hardware.v1");
-    let blob = |digest: &serde_json::Value| {
-        unhex(table["blobs"][digest.as_str().unwrap()].as_str().unwrap())
-    };
-    table["builds"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|b| CatalogBuild {
-            model: b["model"].as_str().unwrap().into(),
-            revision: b["revision"].as_str().unwrap().into(),
-            family: b["family"].as_str().unwrap().into(),
-            hardware: b["hardware"].as_str().unwrap().into(),
-            boot: blob(&b["boot"]),
-            regions: b["regions"].as_array().unwrap().iter().map(blob).collect(),
-        })
-        .collect()
-}
-
-/// The board a hardware key describes.
-fn board(key: &str) -> fixture::Board {
-    let field = |name: &str| {
-        key.split('\x1f')
-            .find_map(|f| f.strip_prefix(&format!("{name}=")))
-            .unwrap_or_else(|| panic!("{name} in {key:?}"))
-    };
-    assert_eq!(field("iface"), "00000007", "{key:?}");
-    let leak = |s: String| -> &'static str { Box::leak(s.into_boxed_str()) };
-    let digits = &field("chip")[4..];
-    fixture::Board {
-        tag: leak(format!("MTEKMT19{digits}")),
-        banner: leak(format!("MT19{digits} Boot {}", field("loader"))),
-        platform: leak(field("platform").to_string()),
-        medium: u8::from_str_radix(field("medium"), 16).unwrap(),
-        bd_write: field("bdwrite") == "1",
-    }
-}
-
-/// A signed image carrying `build`'s model, revision, hardware record and
-/// factory contents.
-fn stand_in(build: &CatalogBuild, seed: u8) -> Vec<u8> {
-    let mut img = fixture::image(&board(&build.hardware), &build.model, seed);
-    let d = ROM_1EC000_OFFSET as usize;
-    img[d + 0x18..d + 0x1C].copy_from_slice(&format!("{:<4}", build.revision).as_bytes()[..4]);
-    img[..0x400].copy_from_slice(&build.boot);
-    for (range, contents) in mediatek_optical::layout::DRIVE_WRITTEN
-        .iter()
-        .zip(&build.regions)
-    {
-        img[range.start..range.end()].copy_from_slice(contents);
-    }
-    crate::cmac::resign(&img).unwrap()
-}
-
-fn stand_ins() -> Vec<(CatalogBuild, Vec<u8>)> {
-    let builds = catalog_builds();
-    assert_eq!(builds.len(), 69, "catalog size");
-    builds
-        .into_iter()
-        .enumerate()
-        .map(|(i, b)| {
-            let image = stand_in(&b, i as u8);
-            let family = mediatek_optical::image::family(&image).map(|f| f.to_string());
-            assert_eq!(family.as_deref(), Some(b.family.as_str()), "{}", b.model);
-            (b, image)
-        })
-        .collect()
-}
 
 #[test]
 fn every_catalog_build_reflashes_verbatim_in_the_oem_session() {
@@ -247,4 +155,315 @@ fn every_catalog_build_reflashes_its_real_oem_image_verbatim() {
         catalog_builds().len(),
         "catalog builds covered"
     );
+}
+
+// ---- the same-hardware-family crossflash gate ----------------------------------
+
+use crate::backends::mtk::crossflash::tests::{self as gate};
+use crate::backends::mtk::crossflash::{decide_model, Build, Verdict};
+
+/// A drive running `image` and reporting `product`, as a full read shows it.
+fn drive_running(image: &[u8], product: &str) -> Rec<MockScsiDevice> {
+    Rec::new(
+        MockScsiDevice::echoing()
+            .with_firmware_image(drive_read(image))
+            .with_product(product),
+    )
+}
+
+/// Flash `image` onto a drive running `drive`, backing up to `backup`; without
+/// one, a dry run.
+fn flash_onto(
+    drive: &[u8],
+    product: &str,
+    image: &[u8],
+    backup: Option<PathBuf>,
+) -> (Outcome, Rec<MockScsiDevice>) {
+    let mut req = mtk_request(image.to_vec(), backup.is_some(), backup);
+    req.drive_model = product.into();
+    let mut dev = drive_running(drive, product);
+    let outcome = run(|| engine_flash(&mut dev, &Mtk, &req));
+    (outcome, dev)
+}
+
+/// The dry-run plan of `image` onto a drive running `drive`.
+fn preview(drive: &[u8], product: &str, image: &[u8]) -> Result<Vec<String>> {
+    let mut req = mtk_request(image.to_vec(), false, None);
+    req.drive_model = product.into();
+    crate::engine::preview_flash(&mut drive_running(drive, product), &Mtk, &req)
+}
+
+fn streamed(dev: &Rec<MockScsiDevice>) -> Vec<u8> {
+    dev.inner
+        .writes
+        .iter()
+        .filter(|(cdb, _)| cdb[1] == 0x06)
+        .flat_map(|(_, data)| data.clone())
+        .collect()
+}
+
+fn is_descriptor_read(cdb: &[u8]) -> bool {
+    cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x1E, 0xC0, 0x00][..])
+}
+
+fn is_intm(revision: &str) -> bool {
+    revision.eq_ignore_ascii_case("INTM")
+}
+
+/// A same-family crossflash of `image` onto a drive running `drive` through the
+/// engine: the dry-run names it, and the execute streams the image verbatim and
+/// confirms the drive's new identity.
+fn assert_crossflash(drive: &[u8], image: &[u8], dir: &Path, tag: &str) {
+    let (from, to) = (
+        Build::of_image(drive).unwrap(),
+        Build::of_image(image).unwrap(),
+    );
+    let plan = preview(drive, &from.product, image).unwrap().join("\n");
+    for line in [
+        format!("CROSSFLASH: {} \u{2192} {}", from.label(), to.label()),
+        format!("the drive will identify as {} after the flash", to.model()),
+        format!(
+            "your backup restores {} under the same family gate",
+            from.label()
+        ),
+    ] {
+        assert!(plan.contains(&line), "{tag}: {line:?} not in\n{plan}");
+    }
+    assert!(plan.contains("same hardware family"), "{tag}:\n{plan}");
+    let backup = Some(dir.join(format!("{tag}.bin")));
+    let (outcome, dev) = flash_onto(drive, &from.product, image, backup);
+    assert_eq!(outcome.result, "OK", "{tag}: {:#?}", outcome.text);
+    assert!(streamed(&dev) == image, "{tag}: not streamed verbatim");
+}
+
+/// A same-chip, different-family flash is refused at the dry run with the
+/// family message, before any backup or write.
+fn assert_cross_family_refused(drive: &[u8], image: &[u8], tag: &str) {
+    let product = Build::of_image(drive).unwrap().product;
+    let err = format!(
+        "{:#}",
+        preview(drive, &product, image).expect_err("refused")
+    );
+    assert!(err.contains("different hardware family"), "{tag}: {err}");
+    assert_flash_refused(drive, image, tag);
+}
+
+/// A flash is refused at the dry run and writes nothing, whatever the reason
+/// (a different chip refuses before the family gate).
+fn assert_flash_refused(drive: &[u8], image: &[u8], tag: &str) {
+    let product = Build::of_image(drive).unwrap().product;
+    assert!(preview(drive, &product, image).is_err(), "{tag}: admitted");
+    let (outcome, dev) = flash_onto(drive, &product, image, None);
+    assert_ne!(outcome.result, "OK", "{tag}: {:#?}", outcome.text);
+    assert!(streamed(&dev).is_empty(), "{tag}: wrote despite refusal");
+}
+
+#[test]
+fn a_same_family_crossflash_runs_through_the_engine() {
+    let builds = stand_ins();
+    let find = |model: &str, revision: &str| {
+        let (_, image) = builds
+            .iter()
+            .find(|(b, _)| b.model == model && b.revision == revision)
+            .unwrap();
+        image.clone()
+    };
+    let wh16ns60 = find("BD-RE  WH16NS60", "1.01");
+    let wh16ns58 = find("BD-RE  WH16NS58", "1.V1");
+    let bw16d1ht = find("BW-16D1HT", "3.10");
+    let bu40n = find("BD-RE BU40N", "1.02");
+    // A JB7 build: the same MT1939 chip as the JB8 WH16NS58, a different family.
+    let jb7 = builds
+        .iter()
+        .find(|(b, _)| b.family == "11e7527216405467" && b.model != "BD-RE  WH16NS58")
+        .map(|(_, image)| image.clone())
+        .unwrap();
+    let dir = scratch("crossflash-engine");
+
+    assert_crossflash(&wh16ns60, &wh16ns58, &dir, "ns60-ns58");
+    assert_crossflash(&wh16ns58, &wh16ns60, &dir, "ns58-ns60");
+    assert_crossflash(&bw16d1ht, &wh16ns58, &dir, "d1ht-ns58");
+
+    // A same-chip, different-family image is refused with the family message;
+    // a different-chip image is refused before the family gate. Neither writes.
+    assert_cross_family_refused(&jb7, &wh16ns58, "jb7-ns58");
+    assert_flash_refused(&bu40n, &wh16ns58, "bu40n-ns58");
+
+    // The drive keeps its old identity: the flash fails.
+    let old = wh16ns60[0x1E_C000..0x1E_C100].to_vec();
+    let mut req = mtk_request(wh16ns58.clone(), true, Some(dir.join("kept.bin")));
+    req.drive_model = "BD-RE  WH16NS60".into();
+    let mut dev = Rec::new(
+        MockScsiDevice::echoing()
+            .with_firmware_image(drive_read(&wh16ns60))
+            .with_product("BD-RE  WH16NS60")
+            .on_after_stream(is_descriptor_read, old),
+    );
+    let outcome = run(|| engine_flash(&mut dev, &Mtk, &req));
+    assert!(
+        outcome
+            .result
+            .contains("drive did not take the crossflash image"),
+        "{}",
+        outcome.result
+    );
+}
+
+/// Every 2 MiB MediaTek image under `FREEMKV_MTK_IMAGES` with an identity
+/// descriptor, and its sha256.
+fn corpus() -> Vec<(String, PathBuf, Vec<u8>)> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|e| e == "bin") {
+                out.push(path);
+            }
+        }
+    }
+    let dir = std::env::var("FREEMKV_MTK_IMAGES").expect("FREEMKV_MTK_IMAGES");
+    let mut paths = Vec::new();
+    walk(Path::new(&dir), &mut paths);
+    paths.sort();
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            let image = std::fs::read(&path).ok()?;
+            let descriptor = mediatek_optical::layout::DESCRIPTOR.of(&image)?;
+            let usable = image.len() == IMAGE_SIZE
+                && mediatek_optical::Chip::from_tag(descriptor).is_some()
+                && !mediatek_optical::image::is_drive_read(&image);
+            usable.then(|| (sha(&image), path, image))
+        })
+        .collect()
+}
+
+/// The same-hardware-family crossflash gate against the real images of the
+/// hoard (`FREEMKV_MTK_IMAGES`): the motivating builds' facts, engine dry-runs
+/// and flashes of the motivating cases, and every ordered pair of the corpus
+/// through the engine dry run.
+#[test]
+#[ignore = "needs FREEMKV_MTK_IMAGES pointing at the MediaTek image hoard"]
+fn crossflash_family_gate_holds_on_real_images() {
+    let corpus = corpus();
+    let find = |prefix: &str| -> Option<Vec<u8>> {
+        let (_, path, image) = corpus.iter().find(|(sha, ..)| sha.starts_with(prefix))?;
+        let cmac = if crate::cmac::verify(image) {
+            "ok"
+        } else {
+            "FAILS"
+        };
+        eprintln!("{prefix}: {} (CMAC {cmac})", path.display());
+        Some(image.clone())
+    };
+    let image = |prefix: &str| find(prefix).unwrap_or_else(|| panic!("no image {prefix}"));
+    // The broken unMK WH16NS60 1.03 build, which the hoard may have dropped.
+    if let Some(broken) = find("c2279417") {
+        assert_eq!(Build::of_image(&broken).unwrap(), gate::wh16ns60_103());
+    }
+    // The pure tests' facts are the real images'.
+    for (prefix, facts) in [
+        ("3d901142", gate::wh16ns60_103()),
+        ("e2406018", gate::wh16ns58_1v5()),
+        ("37a32bfd", gate::bw16d1ht_310()),
+        ("3f436c31", gate::bw16d1ht_101()),
+        ("6d8b000f", gate::bu40n_102()),
+    ] {
+        assert_eq!(Build::of_image(&image(prefix)).unwrap(), facts, "{prefix}");
+    }
+
+    let wh16ns60 = image("3d901142");
+    let wh16ns58 = image("e2406018");
+    let bw16d1ht = image("37a32bfd");
+    let jb7 = image("3f436c31");
+    let bu40n = image("6d8b000f");
+    let intm = image("1baed51d");
+    let dir = scratch("crossflash-real");
+
+    // Same-family crossflashes admit and flash through the engine.
+    assert_crossflash(&wh16ns60, &wh16ns58, &dir, "ns60-ns58");
+    assert_crossflash(&wh16ns58, &wh16ns60, &dir, "ns58-ns60");
+    assert_crossflash(&bw16d1ht, &wh16ns58, &dir, "d1ht-ns58");
+    assert_crossflash(&wh16ns60, &bw16d1ht, &dir, "ns60-d1ht");
+    eprintln!("same family: NS60<->NS58, D1HT->NS58, NS60->D1HT flashed");
+
+    // Different families are refused at the dry run, no writes: the JB7
+    // BW-16D1HT is the same MT1939 chip, so it gets the family message; the
+    // MT1959 BU40N refuses one gate earlier, on the chip.
+    assert_cross_family_refused(&jb7, &wh16ns58, "jb7-ns58");
+    assert_flash_refused(&bu40n, &wh16ns58, "bu40n-ns58");
+
+    // An INTM build of another model is a wrong-model image, refused as today.
+    let (outcome, dev) = flash_onto(&wh16ns60, "BD-RE  WH16NS60", &intm, None);
+    eprintln!("1baed51d onto WH16NS60: {}", outcome.result);
+    assert!(outcome.result.contains("wrong-model"), "{}", outcome.result);
+    assert!(streamed(&dev).is_empty());
+
+    // Every ordered pair of the corpus through the gate (the engine's own
+    // decision function, `Build::of_image` + `decide`): admitted as a crossflash
+    // exactly when the two are one family, of different models, and neither is
+    // an INTM build; refused otherwise.
+    let builds: Vec<Build> = corpus
+        .iter()
+        .map(|(.., image)| Build::of_image(image).unwrap())
+        .collect();
+    let (mut crossed, mut same, mut refused) = (0u64, 0u64, 0u64);
+    for ba in &builds {
+        for bb in &builds {
+            let expected = decide_model(&bb.product, &ba.product).is_err()
+                && ba.family.is_some()
+                && ba.family == bb.family
+                && !is_intm(&ba.revision)
+                && !is_intm(&bb.revision);
+            let label = || format!("{} onto {}", bb.label(), ba.label());
+            match gate::decide(ba, bb) {
+                Ok(Verdict::Crossflash) => {
+                    assert!(expected, "{}", label());
+                    crossed += 1;
+                }
+                Ok(Verdict::SameModel) => {
+                    assert!(!expected, "{}", label());
+                    same += 1;
+                }
+                Err(_) => {
+                    assert!(!expected, "{}", label());
+                    refused += 1;
+                }
+            }
+        }
+    }
+    eprintln!("corpus pairs: {crossed} crossflash, {same} same model, {refused} refused");
+    assert!(crossed > 0);
+
+    // One image per family, every ordered pair through the engine dry run: a
+    // cross-family flash is refused (no writes); a same-family, same-image
+    // reflash is a same-model plan. Same-family crossflash admits are the
+    // motivating assert_crossflash cases above.
+    let mut reps: Vec<usize> = Vec::new();
+    for (i, b) in builds.iter().enumerate() {
+        if b.family.is_some() && !reps.iter().any(|&j| builds[j].family == b.family) {
+            reps.push(i);
+        }
+    }
+    eprintln!(
+        "families represented through the engine dry run: {}",
+        reps.len()
+    );
+    for &i in &reps {
+        for &j in &reps {
+            let (drive, image) = (&corpus[i].2, &corpus[j].2);
+            let product = &builds[i].product;
+            let dry = preview(drive, product, image);
+            let label = format!("{} onto {}", builds[j].label(), builds[i].label());
+            if builds[i].family == builds[j].family {
+                let lines = dry.unwrap_or_else(|e| panic!("{label}: {e:#}"));
+                assert!(lines.join("\n").contains("flash plan"), "{label}");
+            } else {
+                // A different family (or, one gate earlier, a different chip) is
+                // refused at the dry run.
+                assert!(dry.is_err(), "{label}: admitted");
+            }
+        }
+    }
 }

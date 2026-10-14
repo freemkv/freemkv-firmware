@@ -152,6 +152,122 @@ pub(crate) fn identity(image: &[u8]) -> mediatek_optical::Identity {
     .unwrap()
 }
 
+/// One build of the embedded OEM catalog, as `oem.bin` records it.
+pub(crate) struct CatalogBuild {
+    pub model: String,
+    pub revision: String,
+    pub family: String,
+    pub hardware: String,
+    pub boot: Vec<u8>,
+    pub regions: Vec<Vec<u8>>,
+}
+
+impl CatalogBuild {
+    /// The descriptor vendor; see [`vendor_of`].
+    pub(crate) fn vendor(&self) -> &'static str {
+        vendor_of(&self.model)
+    }
+}
+
+/// The descriptor vendor of a catalog model. `oem.bin` records none; the
+/// real-image test checks this against every catalog build in the corpus.
+pub(crate) fn vendor_of(model: &str) -> &'static str {
+    if model.starts_with("BW-") || model.starts_with("BC-") {
+        "ASUS"
+    } else if model.starts_with("BDRE ") {
+        "hp HLDS"
+    } else {
+        "HL-DT-ST"
+    }
+}
+
+fn unhex(s: &str) -> Vec<u8> {
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap())
+        .collect()
+}
+
+/// Every build of the embedded OEM catalog.
+pub(crate) fn catalog_builds() -> Vec<CatalogBuild> {
+    use std::io::Read;
+    let gz = include_bytes!("oem.bin");
+    let mut json = String::new();
+    flate2::read::GzDecoder::new(&gz[..])
+        .read_to_string(&mut json)
+        .unwrap();
+    let table: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(table["family_scheme"], "mediatek.hardware.v1");
+    let blob = |digest: &serde_json::Value| {
+        unhex(table["blobs"][digest.as_str().unwrap()].as_str().unwrap())
+    };
+    table["builds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| CatalogBuild {
+            model: b["model"].as_str().unwrap().into(),
+            revision: b["revision"].as_str().unwrap().into(),
+            family: b["family"].as_str().unwrap().into(),
+            hardware: b["hardware"].as_str().unwrap().into(),
+            boot: blob(&b["boot"]),
+            regions: b["regions"].as_array().unwrap().iter().map(blob).collect(),
+        })
+        .collect()
+}
+
+/// The board a catalog hardware key describes.
+pub(crate) fn board(key: &str) -> Board {
+    let field = |name: &str| {
+        key.split('\x1f')
+            .find_map(|f| f.strip_prefix(&format!("{name}=")))
+            .unwrap_or_else(|| panic!("{name} in {key:?}"))
+    };
+    assert_eq!(field("iface"), "00000007", "{key:?}");
+    let leak = |s: String| -> &'static str { Box::leak(s.into_boxed_str()) };
+    let digits = &field("chip")[4..];
+    Board {
+        tag: leak(format!("MTEKMT19{digits}")),
+        banner: leak(format!("MT19{digits} Boot {}", field("loader"))),
+        platform: leak(field("platform").to_string()),
+        medium: u8::from_str_radix(field("medium"), 16).unwrap(),
+        bd_write: field("bdwrite") == "1",
+    }
+}
+
+/// A signed image carrying `build`'s vendor, model, revision, hardware record
+/// and factory contents (the catalog holds no code bytes).
+pub(crate) fn stand_in(build: &CatalogBuild, seed: u8) -> Vec<u8> {
+    let mut img = image(&board(&build.hardware), &build.model, seed);
+    let d = mediatek_optical::layout::DESCRIPTOR.start;
+    img[d..d + 0x08].copy_from_slice(&padded(build.vendor(), 8));
+    img[d + 0x18..d + 0x1C].copy_from_slice(&format!("{:<4}", build.revision).as_bytes()[..4]);
+    img[..0x400].copy_from_slice(&build.boot);
+    for (range, contents) in mediatek_optical::layout::DRIVE_WRITTEN
+        .iter()
+        .zip(&build.regions)
+    {
+        img[range.start..range.end()].copy_from_slice(contents);
+    }
+    crate::cmac::resign(&img).unwrap()
+}
+
+/// Every catalog build with its stand-in image, whose family is the one the
+/// catalog records.
+pub(crate) fn stand_ins() -> Vec<(CatalogBuild, Vec<u8>)> {
+    let builds = catalog_builds();
+    assert_eq!(builds.len(), 69, "catalog size");
+    builds
+        .into_iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let image = stand_in(&b, i as u8);
+            let family = mediatek_optical::image::family(&image).map(|f| f.to_string());
+            assert_eq!(family.as_deref(), Some(b.family.as_str()), "{}", b.model);
+            (b, image)
+        })
+        .collect()
+}
+
 #[test]
 fn stamped_boards_have_their_families() {
     for (board, family) in [

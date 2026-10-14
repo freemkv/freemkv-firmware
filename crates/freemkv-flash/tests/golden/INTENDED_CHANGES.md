@@ -4,7 +4,7 @@
 harness against the v0.11.2 tag. `golden_parity_with_0_11_2` requires that
 every difference is listed below, under its golden file and scenario, line
 for line (`-` = only in v0.11.2, `+` = only now). A Pioneer scenario may
-differ only for P1 to P3; a MediaTek scenario only for R1 to R8 and M-RS:
+differ only for P1 to P3; a MediaTek scenario only for R1 to R8, M-RS and M-FAM:
 
 | id | reason |
 |----|--------|
@@ -20,6 +20,7 @@ differ only for P1 to P3; a MediaTek scenario only for R1 to R8 and M-RS:
 | R7 | mediatek-optical crate move (CDBs byte-identical; labels and refusal wording come from the shared engine/flashset) |
 | R8 | the synthetic MediaTek fixtures carry a hardware configuration record (boot banner, descriptor platform code at `+0x46`, feature template and record at `0x11000`), which the hardware-family gate needs. Commands are unchanged; only the bytes that depend on the fixture differ: payload and file digests, the displayed banner, the firmware fingerprint and the first differing read-back offset |
 | M-RS | MediaTek REQUEST SENSE (STATUS) is sent as the OEM updaters send it, `03 00 00 00 10 80` padded to 12 bytes: allocation length `0x10` in byte 4, `0x80` in the control byte. We sent `03 00 00 10 80 00`, one byte off. Evidence: LG's MT19xx updater v1.081 (`WH16NS40.exe`, sha256 `281c668c…806bac`, file offset `0x1383`) builds it as `c6 45 f0 03` / `66 c7 45 f4 10 80` (`cdb[0] = 03`, `cdb[4..6] = 10 80`); v1.074 (`BH16NS40(1.03-A0).exe`) the same with allocation `0x12`. Every other MT1959 command and payload is byte-identical |
+| M-FAM | MediaTek same-hardware-family crossflash gate. v0.11.2 refused any image of another model by name; now an image of another model is admitted when it is the drive's hardware family (and refused, before any write, when it is not). A different-family dry run reads the drive's boot banner (its loader tells apart families that share a platform) and refuses with "this image is for a different hardware family" instead of the wrong-model message |
 
 The baseline set was produced by copying `src/golden_tests.rs` into a
 `git worktree` of the v0.11.2 tag and changing only its COMPAT shims
@@ -284,12 +285,28 @@ reason: R2, M-RS
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 ```
 
-### MTK dry run: wrong model refused
-reason: R2
+### MTK dry run: different family refused
+reason: M-FAM
 ```diff
----- scsi transcript (1) ---
-+--- scsi transcript (2) ---
++result: ERR this image is for a different hardware family than this drive (image platform "BU9" banner "MT1959 Boot BU5." vs drive platform "BU3" banner "MT1959 Boot BU5."); refusing to flash
++--- text (0) ---
++--- events (0) ---
++--- scsi transcript (3) ---
++MEDIUM -> ClosedEmpty
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++
+```
+
+### MTK dry run: wrong model refused
+reason: M-FAM
+```diff
+-result: ERR image is built for model "WH16NS60" but this drive reports "BU40N" — refusing to flash a wrong-model image (pass a compatible image)
+---- text (0) ---
+---- events (0) ---
+---- scsi transcript (1) ---
+-MEDIUM -> ClosedEmpty
+-
 ```
 
 ## flash_execute.txt

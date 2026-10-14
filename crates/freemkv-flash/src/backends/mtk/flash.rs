@@ -1,8 +1,11 @@
 //! The MediaTek update in the engine's two stages. `plan` validates the image
-//! against the live drive before any backup; `authorize` binds the pre-flash
-//! backup as the installed firmware and lets `mediatek_optical` prepare the
-//! update, refusing another hardware family; `execute` runs the prepared
-//! update and re-identifies the firmware. The crate owns the session.
+//! against the live drive before any backup, deciding a same-model reflash or a
+//! same-hardware-family crossflash; `authorize` binds the pre-flash backup as
+//! the installed firmware and lets `mediatek_optical` prepare the update,
+//! refusing another hardware family, and re-decides a crossflash on the backup;
+//! `execute` runs the prepared update and re-identifies the firmware, and for a
+//! crossflash confirms the drive now reports the target model. The crate owns
+//! the session.
 
 use anyhow::{anyhow, bail, Context, Result};
 use mediatek_optical::drive::Error as DriveError;
@@ -12,9 +15,10 @@ use mediatek_optical::update::{
 };
 use mediatek_optical::Identity;
 
+use super::crossflash::{Build, Verdict};
 use super::{
     backup, cdb, crossflash, describe_sequence, enc_needed, ensure_flashable_boot_page,
-    live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE,
+    live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE, ROM_003000_LEN, ROM_003000_OFFSET,
 };
 use crate::backend::{
     AuthorizedPlan, DetailsFacet, FlashFacet, FlashPlan, FlashRequest, FormatRole, PlanLine,
@@ -29,6 +33,15 @@ struct Plan {
     image: Vec<u8>,
     live: Identity,
     enc: bool,
+    drive_product: String,
+    verdict: Verdict,
+}
+
+/// What `authorize` decided, for `execute`.
+pub(super) struct Authorized {
+    pub(super) prepared: PreparedUpdate,
+    /// A crossflash's target model, which the drive must report afterwards.
+    pub(super) expect: Option<String>,
 }
 
 impl FlashFacet for Mtk {
@@ -54,7 +67,7 @@ impl FlashFacet for Mtk {
             }
             FormatRole::Image | FormatRole::Package => req.input.clone(),
         };
-        let live = self.validate_image(dev, &image, &req.drive_model)?;
+        let (live, verdict) = self.validate_image(dev, &image, &req.drive_model)?;
         let steps = live
             .class()
             .context("the drive names no update dialect; refusing")?
@@ -72,11 +85,19 @@ impl FlashFacet for Mtk {
                     if enc { "encrypted" } else { "plaintext" }
                 ),
             ),
-            PlanLine::Backup,
-            PlanLine::Text(String::new()),
         ];
+        if verdict == Verdict::Crossflash {
+            block.extend(crossflash_lines(&live, &image)?);
+        }
+        block.extend([PlanLine::Backup, PlanLine::Text(String::new())]);
         block.push(PlanLine::Block(describe_sequence(&steps, req.verbose)));
-        let mut plan = FlashPlan::new(Plan { image, live, enc });
+        let mut plan = FlashPlan::new(Plan {
+            image,
+            live,
+            enc,
+            drive_product: req.drive_model.clone(),
+            verdict,
+        });
         plan.notes = notes;
         plan.dry_run = block.clone();
         plan.after_backup = block;
@@ -110,18 +131,21 @@ impl FlashFacet for Mtk {
         backup: &SavedBackup,
     ) -> Result<AuthorizedPlan> {
         let state: &Plan = plan.state()?;
-        let installed = InstalledFirmware::new(state.live.clone(), backup.bytes())
-            .map_err(refusal)
-            .context("the pre-flash backup cannot serve as this drive's installed firmware")?;
-        let mut prepared = PreparedUpdate::prepare(&state.image, &installed).map_err(refusal)?;
+        let mut authorized = authorize_bytes(
+            &state.live,
+            &state.drive_product,
+            state.verdict,
+            &state.image,
+            backup.bytes(),
+        )?;
         if state.enc {
-            prepared = prepared.encrypted();
+            authorized.prepared = authorized.prepared.encrypted();
         }
-        Ok(AuthorizedPlan::new(plan, prepared))
+        Ok(AuthorizedPlan::new(plan, authorized))
     }
 
     fn execute(&self, dev: &mut WriteDevice<'_>, authorized: &AuthorizedPlan) -> Result<()> {
-        let prepared: &PreparedUpdate = authorized.state()?;
+        let Authorized { prepared, expect } = authorized.state()?;
         let verified = {
             let shared = SharedDevice::new(dev);
             let (mut reads, mut writes) =
@@ -163,8 +187,117 @@ impl FlashFacet for Mtk {
                  rejects a bad image. The firmware identity below is the real result."
             )
         );
-        confirm_identity(self, &mut ReadDevice::without_unlocks(dev))
+        let reader = &mut ReadDevice::without_unlocks(dev);
+        confirm_identity(self, reader)?;
+        match expect {
+            Some(model) => confirm_crossflash(reader, model),
+            None => Ok(()),
+        }
     }
+}
+
+/// The plan's crossflash lines: what changes, how to go back, and the hardware
+/// family the image and the drive share.
+fn crossflash_lines(live: &Identity, image: &[u8]) -> Result<Vec<PlanLine>> {
+    let (from, to) = (Build::of_drive(live), Build::of_image(image)?);
+    let family = mediatek_optical::image::family(image)
+        .map(|f| f.to_string())
+        .unwrap_or_else(|| "unknown".into());
+    Ok(vec![
+        PlanLine::Warning(format!(
+            "CROSSFLASH: {} \u{2192} {} (same hardware family {family})",
+            from.label(),
+            to.label(),
+        )),
+        PlanLine::Warning(format!(
+            "the drive will identify as {} after the flash",
+            to.model()
+        )),
+        PlanLine::Warning(format!(
+            "your backup restores {} under the same family gate",
+            from.label()
+        )),
+    ])
+}
+
+/// `authorize` on bytes: the backup as the installed firmware (chip and family
+/// gates), then a crossflash re-decided on the backup.
+pub(super) fn authorize_bytes(
+    live: &Identity,
+    drive_product: &str,
+    verdict: Verdict,
+    image: &[u8],
+    backup: &[u8],
+) -> Result<Authorized> {
+    let installed = InstalledFirmware::new(live.clone(), backup)
+        .map_err(refusal)
+        .context("the pre-flash backup cannot serve as this drive's installed firmware")?;
+    let prepared = PreparedUpdate::prepare(image, &installed).map_err(refusal)?;
+    let expect = match verdict {
+        Verdict::SameModel => None,
+        Verdict::Crossflash => Some(authorize_crossflash(drive_product, verdict, backup, image)?),
+    };
+    Ok(Authorized { prepared, expect })
+}
+
+/// A crossflash, re-decided on the backup's bytes: the plan's family decision
+/// must still hold, and the backup must flash back once the drive runs the
+/// target. Returns the model the drive must report afterwards.
+fn authorize_crossflash(
+    drive_product: &str,
+    planned: Verdict,
+    backup: &[u8],
+    image: &[u8],
+) -> Result<String> {
+    let (installed, target) = (Build::of_image(backup)?, Build::of_image(image)?);
+    let now = crossflash::decide_authorized(drive_product, &installed, &target)?;
+    crossflash::ensure_unchanged(planned, now)?;
+    rollback(backup, image).context("your backup could not be flashed back; refusing")?;
+    crossflash::decide_rollback(&installed, &target)?;
+    Ok(target.product)
+}
+
+/// The update gates for the backup as the update, with the drive running
+/// `image`.
+pub(super) fn rollback(backup: &[u8], image: &[u8]) -> Result<()> {
+    use mediatek_optical::layout;
+    let identity = Identity::parse(
+        &[0; mediatek_optical::INQUIRY_LEN],
+        layout::BANNER.of(image).unwrap_or_default(),
+        layout::DESCRIPTOR.of(image).unwrap_or_default(),
+    )
+    .context("an empty INQUIRY")?;
+    let installed = InstalledFirmware::new(identity, image).map_err(refusal)?;
+    ensure_flashable_boot_page(backup)?;
+    PreparedUpdate::prepare(backup, &installed).map_err(refusal)?;
+    Ok(())
+}
+
+/// After a crossflash the drive must identify as the target's model.
+fn confirm_crossflash(dev: &mut ReadDevice<'_>, model: &str) -> Result<()> {
+    let now = Build::of_drive(&live_identity(dev));
+    if now.product != model {
+        bail!(
+            "drive did not take the crossflash image: it identifies as {:?}, not {:?}. \
+             Physically re-verify the drive before using it.",
+            crate::backend::sanitize_ascii(&now.product),
+            crate::backend::sanitize_ascii(model)
+        );
+    }
+    Ok(())
+}
+
+/// The drive's 16-byte boot banner at `0x3000`, for the crossflash gate's
+/// loader check. One `READ BUFFER`; `None` on any short or failed read, which
+/// leaves the banner blank and fails the crossflash closed.
+fn read_drive_banner(dev: &mut ReadDevice<'_>) -> Option<[u8; crossflash::BANNER_LEN]> {
+    let data = dev
+        .command_in(
+            &cdb::read_memory(ROM_003000_OFFSET, ROM_003000_LEN),
+            ROM_003000_LEN as usize,
+        )
+        .ok()?;
+    data.get(..crossflash::BANNER_LEN)?.try_into().ok()
 }
 
 /// The text of a crate command error, keeping the transport's own chain.
@@ -392,14 +525,17 @@ fn confirm_identity(mtk: &Mtk, dev: &mut ReadDevice<'_>) -> Result<()> {
 
 impl Mtk {
     /// Every gate that needs no backup (read-only): size, integrity, a stored
-    /// boot page the catalog knows, then the chip and hardware family against
-    /// the live drive, then the model. Returns the live identity.
+    /// boot page the catalog knows, then the chip against the live drive, then
+    /// the model decision (same-model, or a same-family crossflash gated on the
+    /// descriptor's platform and boot banner — the chip is already matched).
+    /// The full family is re-checked once the backup is read. Returns the live
+    /// identity and the verdict.
     pub(crate) fn validate_image(
         &self,
         dev: &mut ReadDevice<'_>,
         image: &[u8],
         drive_product: &str,
-    ) -> Result<Identity> {
+    ) -> Result<(Identity, Verdict)> {
         if image.len() != IMAGE_SIZE {
             bail!(
                 "firmware .bin must be exactly {} bytes, got {}",
@@ -417,8 +553,21 @@ impl Mtk {
         ensure_flashable_boot_page(image)?;
         let live = live_identity(dev);
         PreparedUpdate::check(image, &live).map_err(refusal)?;
-        crossflash::ensure_image_matches_drive(image, drive_product)?;
-        Ok(live)
+        let target = Build::of_image(image)?;
+        let mut drive = Build::of_drive(&live);
+        // A crossflash gates on the boot banner too (its loader tells apart the
+        // families that share a platform). `live_identity` skips the banner for
+        // a tagged drive, so read it now; a same-model reflash needs none of
+        // this, and reads nothing more than today.
+        if drive.banner.iter().all(|&b| b == 0)
+            && !crossflash::is_same_model(&target.product, drive_product)
+        {
+            if let Some(banner) = read_drive_banner(dev) {
+                drive.banner = banner;
+            }
+        }
+        let verdict = crossflash::decide_plan(drive_product, &drive, &target)?;
+        Ok((live, verdict))
     }
 
     /// Read-only readiness handshake: PROBE must return the full ROM read;

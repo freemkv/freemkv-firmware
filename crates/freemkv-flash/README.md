@@ -110,6 +110,17 @@ failed PR1ML drive. No automatic downgrade patch or extra restoration pass is us
 Version 0.11.0 removes `flash --force`. There are no separate mode, encryption,
 crossflash, skip-backup, `flash --recover`, or dump-force switches.
 
+A MediaTek image of another model is flashed only when the image and the drive
+are the same hardware family, which freemkv derives from the firmware itself (a
+content hash of chip, platform, loader, interface, medium and BD-write), not
+from a curated list — the firmware encodes no finer hardware distinction, so a
+same-family crossflash is safe by derivation. A crossflash still needs a valid
+AES-CMAC, a boot page a known OEM build stores, one boot banner, no INTM build,
+and a backup that can be flashed back; the plan shows the crossflash, and the
+drive must identify as the new model afterwards. A different family fails with
+"this image is for a different hardware family", an unknown family fails closed,
+and nothing switches the gate off.
+
 ## Safety
 
 - Both write commands need `--execute` and `--i-understand-risk`. Normal Flash

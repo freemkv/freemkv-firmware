@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::backend::{BackupFacet, DumpFacet, FileFacet};
-use crate::backends::mtk::crossflash::{decide_crossflash, ensure_image_matches_drive};
+use crate::backends::mtk::crossflash::{decide_model, ensure_image_matches_drive};
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};
 use crate::backends::mtk::{
     Mtk, CHUNK, IMAGE_SIZE, ROM_003000_LEN, ROM_1EC000_LEN, ROM_1EC000_OFFSET, ROM_1F0000_LEN,
@@ -72,6 +72,22 @@ fn make_flashable(mut img: Vec<u8>, model: &str) -> Vec<u8> {
     img[..0x400].copy_from_slice(stored_boot_page());
     stamp_descriptor(&mut img, model);
     crate::backends::mtk::fixture::stamp(&mut img, &crate::backends::mtk::fixture::BU3);
+    let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
+    crate::cmac::resign(&img).expect("resign a well-formed image")
+}
+
+/// A flashable MT1959 image of `model` on a different board line than BU3: the
+/// same chip as a BU40N drive, but a different hardware family, so the family
+/// gate (not the chip gate) refuses a crossflash onto a BU40N.
+fn make_flashable_other_family(model: &str) -> Vec<u8> {
+    let board = crate::backends::mtk::fixture::Board {
+        platform: "BU9",
+        ..crate::backends::mtk::fixture::BU3
+    };
+    let mut img = vec![0u8; IMAGE_SIZE];
+    img[..0x400].copy_from_slice(stored_boot_page());
+    stamp_descriptor(&mut img, model);
+    crate::backends::mtk::fixture::stamp(&mut img, &board);
     let img = with_active_cmac_range(img, 0x11000, 0x1FFFF);
     crate::cmac::resign(&img).expect("resign a well-formed image")
 }
@@ -317,11 +333,17 @@ fn flash_dry_run_rejects_bad_cmac_without_writes() {
 }
 
 #[test]
-fn flash_dry_run_rejects_wrong_model_without_writes() {
+fn flash_dry_run_rejects_a_different_family_without_writes() {
+    // A different-model image of another hardware family is refused at the dry
+    // run, before any write. (A same-family image is a crossflash; see the
+    // crossflash tests.)
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let image = make_flashable(vec![0u8; IMAGE_SIZE], "WH16NS60");
+    let image = make_flashable_other_family("WH16NS60");
     let err = flash(&mut dev, &Mtk, &bin_req(image, false)).unwrap_err();
-    assert!(err.to_string().contains("wrong-model"), "got: {err}");
+    assert!(
+        err.to_string().contains("different hardware family"),
+        "got: {err}"
+    );
     assert!(dev.writes.is_empty());
 }
 
@@ -773,10 +795,10 @@ fn model_gate_refuses_a_truncated_image() {
 
 #[test]
 fn model_mismatch_is_refused() {
-    let err = decide_crossflash("BD-RE BU40N", "WH16NS60").unwrap_err();
+    let err = decide_model("BD-RE BU40N", "WH16NS60").unwrap_err();
     assert!(err.to_string().contains("wrong-model"), "got: {err}");
     assert!(err.to_string().contains("compatible image"), "got: {err}");
-    assert!(decide_crossflash("BD-RE BU40N", "BU40N").is_ok());
+    assert!(decide_model("BD-RE BU40N", "BU40N").is_ok());
 }
 
 /// The chip gate as the plan runs it: every pre-backup gate against `dev`.
@@ -786,8 +808,10 @@ fn ensure_same_chip(dev: &mut MockScsiDevice, image: &[u8]) -> Result<()> {
 }
 
 #[test]
-fn wrong_model_flash_is_refused_without_writes() {
-    let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
+fn different_family_flash_is_refused_without_writes() {
+    // A different-model image of another hardware family is refused with no
+    // writes. (A same-family image of another model is a crossflash.)
+    let image = make_flashable_other_family("BD-RE WH16NS60");
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     assert!(flash(&mut dev, &Mtk, &bin_req(image, true)).is_err());
     assert!(dev.writes.is_empty());
@@ -920,15 +944,19 @@ fn backup_refuses_image_per_unit_disagreement_without_write() {
 }
 
 #[test]
-fn flash_execute_refuses_a_wrong_model_image_with_no_write() {
-    // A correctly-signed image for a DIFFERENT model must never reach the write.
+fn flash_execute_refuses_a_different_family_image_with_no_write() {
+    // A correctly-signed image of a DIFFERENT hardware family must never reach
+    // the write. (A same-family image of another model is a crossflash.)
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
-    let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
+    let img = make_flashable_other_family("BD-RE WH16NS60");
     let err = flash(&mut dev, &Mtk, &bin_req(img, true)).unwrap_err();
-    assert!(err.to_string().contains("wrong-model"), "got: {err}");
+    assert!(
+        err.to_string().contains("different hardware family"),
+        "got: {err}"
+    );
     assert!(
         !dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)),
-        "no firmware bytes may be streamed for a wrong-model image"
+        "no firmware bytes may be streamed for a different-family image"
     );
 }
 

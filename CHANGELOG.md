@@ -32,6 +32,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stays recover-only for now; it is intended for promotion into the default
   `flash` path in a later release once proven on hardware. A fresh, caller-owned
   signature is applied, whose on-drive acceptance is part of what is unproven.
+### MediaTek
+- Admit a MediaTek crossflash automatically between drives of the same hardware
+  family, derived from the firmware itself — a content hash of
+  chip·platform·loader·interface·medium·BD-write, which is the finest hardware
+  distinction the image encodes (14x/16x/UHD differences within a family are
+  firmware limits, and per-drive calibration lives on the drive and is not
+  overwritten). An image of another model is flashed when it is the drive's
+  hardware family and passes every content gate: chip match, a boot page a known
+  OEM build stores, a valid AES-CMAC, an identical boot banner, a rollback
+  simulation (the backup must flash back under the same rule), and a post-flash
+  identity that confirms the drive now reports the new model. A different family,
+  an INTM build or an unknown-identity image is refused, and an unknown family
+  fails closed. There is no curated allowlist, no hardware-validated flag and no
+  override. Same-model flashes and their messages are unchanged. The motivating
+  case — LG WH16NS60 and WH16NS58 and the ASUS BW-16D1HT, all one JB8 family —
+  now crossflashes; a JB7 BW-16D1HT or an LG BU40N is refused as a different
+  family. Replaces the curated crossflash-class gate.
 
 ## [0.12.0] - 2026-10-10
 
