@@ -485,6 +485,19 @@ pub(crate) fn authorize_installed(
             normal: Some(receiver.prepare_normal(normal).map_err(preparation_error)?),
         },
     };
+    // Receiver gate: before any write, prove the drive's currently-installed
+    // Kernel can receive every component this flash sends (see
+    // `flash_plan::check_receiver`). Runs after the library's own preparation so
+    // a malformed package keeps its decode error. Fails closed.
+    let installed_kernel = installed
+        .and_then(|b| classify_flash_input(b).ok())
+        .and_then(|(k, _)| k);
+    crate::backends::pioneer::flash_plan::check_receiver(
+        installed_kernel.as_deref(),
+        kernel,
+        normal,
+    )
+    .map_err(|reason| anyhow!("refusing to flash: {reason}"))?;
     let route = resolve_flash_plan(installed, kernel, Some(normal))?;
     let mut warnings = routing_warnings(&route)?;
     debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
@@ -965,6 +978,10 @@ use oem_reference_tests::*;
 #[cfg(test)]
 #[path = "matrix_tests.rs"]
 mod matrix_tests;
+
+#[cfg(test)]
+#[path = "receiver_gate_tests.rs"]
+mod receiver_gate_tests;
 
 fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
     // This is the firmware receiver's 48-byte identity response, not the
