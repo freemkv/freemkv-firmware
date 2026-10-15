@@ -158,6 +158,42 @@ impl crate::backend::Confirm for TerminalConfirm {
         let is_tty = std::io::stdin().is_terminal();
         confirm_with(is_tty, &mut std::io::stdin().lock())
     }
+
+    fn proceed_without_backup(&mut self, reason: &str) -> anyhow::Result<bool> {
+        use std::io::IsTerminal;
+        println!(
+            "{}",
+            crate::style::amber(&format!(
+                "This drive cannot be backed up: {reason}\n\
+                 Flashing can still proceed, with every other safety check in place, but you will \
+                 NOT be able to roll this drive back to its current firmware."
+            ))
+        );
+        // No backup is a bigger decision than the normal flash confirmation, so
+        // it needs an explicit human yes: never auto-proceed on a non-terminal.
+        if !std::io::stdin().is_terminal() {
+            println!(
+                "{}",
+                crate::style::dim(
+                    "stdin is not a TTY; cannot ask whether to flash without a backup — aborting."
+                )
+            );
+            return Ok(false);
+        }
+        proceed_without_backup_with(&mut std::io::stdin().lock())
+    }
+}
+
+/// The `proceed_without_backup` prompt with its input injected (TTY path).
+pub(crate) fn proceed_without_backup_with(reader: &mut impl io::BufRead) -> anyhow::Result<bool> {
+    print!("Flash without a backup? [y/N] ");
+    let _ = io::stdout().flush();
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 /// [`TerminalConfirm`] with the terminal check and input injected.

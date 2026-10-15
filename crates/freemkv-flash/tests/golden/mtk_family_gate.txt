@@ -445,10 +445,11 @@ MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 MSG      firmware now: unrecognized  [e4ac4faaf4fd288571d118c6e6b8fafe848b8742cde21779bd8a190e5111178f]
---- scsi transcript (786) ---
+--- scsi transcript (787) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -1680,10 +1681,11 @@ MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 MSG      firmware now: unrecognized  [e1651b0806c38d86849b6428b217d642796631fcd7d1192a1e6f9a673037cca7]
---- scsi transcript (786) ---
+--- scsi transcript (787) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -2725,10 +2727,11 @@ MSG
 MSG        ** POINT OF NO RETURN **
 MSG        The drive erases and reprograms its flash the instant the full 2 MiB upload
 MSG        lands. This cannot be undone.
---- scsi transcript (519) ---
+--- scsi transcript (520) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096

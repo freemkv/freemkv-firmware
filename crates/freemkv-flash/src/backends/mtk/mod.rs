@@ -25,6 +25,7 @@ pub(crate) mod file_info;
 #[path = "fixture_tests.rs"]
 pub(crate) mod fixture;
 mod flash;
+pub mod fwdump;
 pub(crate) use flash::decide_offline;
 
 /// The routing facts the offline crossflash pre-filter compares: the hardware

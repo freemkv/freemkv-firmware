@@ -28,12 +28,12 @@ fn saved() -> SavedBackup {
 #[test]
 fn flash_grant_requires_execute_and_acknowledgement() {
     let mut mock = MockScsiDevice::new();
-    assert!(flash(&mut mock, &request(false, true), &saved()).is_err());
-    let error = flash(&mut mock, &request(true, false), &saved())
+    assert!(flash(&mut mock, &request(false, true), Some(&saved())).is_err());
+    let error = flash(&mut mock, &request(true, false), Some(&saved()))
         .err()
         .unwrap();
     assert!(error.to_string().contains("SAFETY GATE"), "{error}");
-    let mut writer = flash(&mut mock, &request(true, true), &saved()).unwrap();
+    let mut writer = flash(&mut mock, &request(true, true), Some(&saved())).unwrap();
     writer.command_out(&cdb::enter_update(), &[0; 256]).unwrap();
     assert_eq!(mock.writes.len(), 1);
 }

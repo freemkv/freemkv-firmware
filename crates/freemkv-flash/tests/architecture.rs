@@ -1654,13 +1654,13 @@ fn pioneer_optical_stays_pinned() {
         .lines()
         .find(|l| l.trim_start().starts_with("pioneer-optical"))
         .expect("pioneer-optical dependency");
-    // 0.12.1 pins the unpublished pioneer-optical 0.15.0 by exact git rev
-    // (reproducible). This SHOULD return to a crates.io `version = "=0.15.0"`
-    // pin before 0.12.1 is tagged (see the note in crates/freemkv-flash/Cargo.toml).
+    // 0.12.x pins the unpublished pioneer-optical 0.15.1 by exact git rev
+    // (reproducible). This SHOULD return to a crates.io `version = "=0.15.1"`
+    // pin once published (see the note in crates/freemkv-flash/Cargo.toml).
     assert!(
-        line.contains("rev = \"9d008cf26fa376f0afe0358e44fbf3e3fc0d8afd\"")
-            || line.contains("version = \"=0.15.0\""),
-        "pioneer-optical must stay pinned (exact git rev, or =0.15.0 once published): {line}"
+        line.contains("rev = \"6c8c2be0243aafc82b2f33bdf757a50712a03a6e\"")
+            || line.contains("version = \"=0.15.1\""),
+        "pioneer-optical must stay pinned (exact git rev, or =0.15.1 once published): {line}"
     );
 }
 

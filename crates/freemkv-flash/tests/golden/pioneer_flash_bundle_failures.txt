@@ -1,6 +1,6 @@
 
 === Pioneer execute: installed backup is Kernel-only ===
-result: ERR backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update; aborting flash: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
+result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 --- text (6) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware

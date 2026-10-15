@@ -166,9 +166,21 @@ impl BackupArtifact {
 }
 
 /// Read every firmware byte, then rebuild the flashable OEM image from it.
+///
+/// The read source depends on the drive: a drive already running freemkv
+/// firmware is read through its injected `DumpAll` command (stock MediaTek
+/// firmware exposes no full-flash read — see [`super::fwdump`]); any other drive
+/// is read through the OEM `READ BUFFER` path. Both return the same bytes, so
+/// everything afterward — `oem::rebuild` (boot page from the catalog,
+/// drive-written regions reset to factory) and validation — is identical.
 pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
-    let (read, readable, gaps) =
-        crate::probe::read_full_image(dev).context("reading the drive's firmware")?;
+    let (read, readable, gaps) = if super::fwdump::is_freemkv(dev) {
+        crate::diagnostics::record("MTK backup: drive runs freemkv firmware; reading via DumpAll");
+        super::fwdump::capture_full_image(dev)
+            .context("reading the drive's firmware via the freemkv dump command")?
+    } else {
+        crate::probe::read_full_image(dev).context("reading the drive's firmware")?
+    };
     if read.len() != super::IMAGE_SIZE || readable != read.len() || !gaps.is_empty() {
         return Err(incomplete_read(readable, &gaps));
     }

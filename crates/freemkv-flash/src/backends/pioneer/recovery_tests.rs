@@ -60,6 +60,19 @@ fn fixture_pair_sat(gated: bool, marker: u8, sat: &[u8; 20]) -> Update {
 /// build a second receiver class (the offsets ARE the class; see
 /// `kernel_xor_branches`). Both must be distinct and 4-aligned.
 fn fixture_pair_class(gated: bool, marker: u8, sat: &[u8; 20], xor_offsets: [u32; 2]) -> Update {
+    fixture_pair_class_with(gated, marker, sat, xor_offsets, |_| {})
+}
+
+/// As `fixture_pair_class`, but `tweak` may edit the decoded Kernel body (before
+/// its checksum is balanced) — used to plant a loader's receive-transport
+/// fingerprint so the detector picks the two-region 10xx transport.
+fn fixture_pair_class_with(
+    gated: bool,
+    marker: u8,
+    sat: &[u8; 20],
+    xor_offsets: [u32; 2],
+    tweak: impl FnOnce(&mut [u8]),
+) -> Update {
     let mut kernel = vec![0; 0x10000];
     kernel[0x1000..0x1014].copy_from_slice(sat);
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
@@ -95,6 +108,7 @@ fn fixture_pair_class(gated: bool, marker: u8, sat: &[u8; 20], xor_offsets: [u32
         kernel[0x3000..0x3000 + MARKER_CHECK.len()].copy_from_slice(MARKER_CHECK);
     }
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
+    tweak(&mut kernel);
     balance(&mut kernel);
     let mut normal = vec![0; 0x2000];
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
@@ -207,6 +221,63 @@ fn kernel_recovery_writes_both_components_without_entry_or_firmware_reads() {
         assert_eq!(actual, expected);
     }
 }
+/// Plant the BD 10xx kernel-loader fingerprint into a free region of a decoded
+/// Kernel body so the transport detector selects the two-region transport.
+fn plant_two_region_signature(kernel: &mut [u8]) {
+    kernel[0x5000..0x5006].copy_from_slice(&[0x7a, 0x10, 0x00, 0x01, 0x02, 0x00]);
+    kernel[0x5010..0x5014].copy_from_slice(&0x0001_1200u32.to_be_bytes());
+    kernel[0x5020..0x5024].copy_from_slice(&0x0002_0400u32.to_be_bytes());
+    kernel[0x5030..0x5034].copy_from_slice(&0x0041_0000u32.to_be_bytes());
+}
+
+#[test]
+fn two_region_kernel_recovery_sends_body_then_front_at_0x10200() {
+    // A 10xx-signature target Kernel must be delivered as body (offset 0) then
+    // the front-key block at offset 0x10200 — NOT a linear stream ending at
+    // 0x10000 (which the loader rejects). Recovery must detect this on the
+    // decoded body and emit the same two-region plan the flash path does.
+    let target = fixture_pair_class_with(
+        false,
+        0,
+        b"SAT FFFEGENERAL 0000",
+        [0x400, 0x800],
+        plant_two_region_signature,
+    );
+    let plan = Plan::from_updates(fixture_pair(false, 1), target).unwrap();
+    let mut drive = Drive {
+        updating: true,
+        ..Default::default()
+    };
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+
+    let kernel_writes: Vec<_> = drive.writes.iter().filter(|(c, _)| c[2] == 0xfe).collect();
+    // First Kernel write is the body at offset 0.
+    assert_eq!(&kernel_writes.first().unwrap().0[3..6], &[0, 0, 0]);
+    // The front block is delivered at offset 0x10200 (bytes 01 02 00), exactly
+    // once, and is the first 0x1200 bytes of the wire image.
+    let front: Vec<_> = kernel_writes
+        .iter()
+        .filter(|(c, _)| c[3..6] == [0x01, 0x02, 0x00])
+        .collect();
+    assert_eq!(front.len(), 1, "exactly one front-block write at 0x10200");
+    assert_eq!(front[0].1, plan.kernel_transfer[..0x1200]);
+    // No write ever targets the rejected linear tail offset 0x10000.
+    assert!(
+        !kernel_writes
+            .iter()
+            .any(|(c, _)| c[3..6] == [0x01, 0x00, 0x00]),
+        "no write at the rejected 0x10000 offset"
+    );
+    // Body chunks (every 0xFE write before the front) reconstruct wire[0x1200..].
+    let body: Vec<u8> = kernel_writes
+        .iter()
+        .filter(|(c, _)| c[3..6] != [0x01, 0x02, 0x00])
+        .flat_map(|(_, b)| b.iter().copied())
+        .collect();
+    assert_eq!(body, plan.kernel_transfer[0x1200..]);
+}
+
 #[test]
 fn normal_recovery_enters_first_and_uses_supplied_receiver_control() {
     let plan = recovery_plan();

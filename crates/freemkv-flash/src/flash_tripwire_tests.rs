@@ -26,7 +26,11 @@ fn pioneer_plan(target: Vec<u8>) -> FlashPlan {
 fn authorize(plan: FlashPlan, installed: Vec<u8>) -> Result<AuthorizedPlan> {
     let mut dev = MockScsiDevice::new();
     let saved = crate::engine::gates::saved_for_tests(installed);
-    let result = Pioneer::new().authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, &saved);
+    let result = Pioneer::new().authorize(
+        &mut ReadDevice::without_unlocks(&mut dev),
+        plan,
+        Some(&saved),
+    );
     assert!(dev.reads.is_empty() && dev.writes.is_empty());
     result
 }
@@ -207,6 +211,35 @@ fn flash_never_writes_without_saved_backup() {
         crate::engine::flash(&mut dev, &FailingBackup, &req, &mut Decline::default()).unwrap_err();
     assert!(format!("{error:#}").contains("no capture"), "{error:#}");
     assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn flash_proceeds_without_backup_when_the_operator_consents() {
+    // A backend whose backup capture fails: with the operator's consent at the
+    // prompt, the flash proceeds with NO backup and still writes — every other
+    // gate (plan, authorize, execute grant) having passed. No backup file is
+    // written.
+    struct Consent;
+    impl Confirm for Consent {
+        fn confirm(&mut self, _plan: &AuthorizedPlan) -> Result<bool> {
+            Ok(true)
+        }
+        fn proceed_without_backup(&mut self, _reason: &str) -> Result<bool> {
+            Ok(true)
+        }
+    }
+
+    let dir = scratch("proceed-without-backup");
+    let mut dev = MockScsiDevice::echoing();
+    let mut req = confirming_request();
+    req.predump_out = Some(dir.join("fails.bin"));
+    crate::engine::flash(&mut dev, &FailingBackup, &req, &mut Consent)
+        .expect("consented no-backup flash proceeds");
+    assert!(!dev.writes.is_empty(), "the flash must still write");
+    assert!(
+        !dir.join("fails.bin").exists(),
+        "no backup file is written when none could be captured"
+    );
 }
 
 #[test]
@@ -509,7 +542,7 @@ macro_rules! test_backend {
                 &self,
                 _: &mut ReadDevice<'_>,
                 plan: FlashPlan,
-                _: &SavedBackup,
+                _: Option<&SavedBackup>,
             ) -> Result<AuthorizedPlan> {
                 let mut authorized = AuthorizedPlan::new(plan, ());
                 authorized.confirmation = Some(CONFIRM_TEXT.into());

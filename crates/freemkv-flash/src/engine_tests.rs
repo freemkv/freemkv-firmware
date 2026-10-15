@@ -1047,7 +1047,15 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
 fn flash_requires_successful_backup() {
     let req = bin_req(backup_firmware(), true);
     let mut dev = MockScsiDevice::new();
-    assert!(capture_required_backup(&mut dev, &Mtk, &Mtk, &FlashPlan::new(()), &req).is_err());
+    assert!(capture_required_backup(
+        &mut dev,
+        &Mtk,
+        &Mtk,
+        &FlashPlan::new(()),
+        &req,
+        &mut crate::workflow::Preconfirmed
+    )
+    .is_err());
     assert!(!dev.reads.is_empty());
     assert!(dev.writes.is_empty());
 }
@@ -1144,7 +1152,7 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
             &self,
             _: &mut ReadDevice<'_>,
             _: FlashPlan,
-            _: &SavedBackup,
+            _: Option<&SavedBackup>,
         ) -> Result<AuthorizedPlan> {
             panic!("authorize after a refused coverage check")
         }
@@ -1157,7 +1165,14 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
     let backend = RejectUpdate { path: path.clone() };
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let plan = FlashPlan::new(());
-    let Err(error) = capture_required_backup(&mut dev, &backend, &backend, &plan, &req) else {
+    let Err(error) = capture_required_backup(
+        &mut dev,
+        &backend,
+        &backend,
+        &plan,
+        &req,
+        &mut crate::workflow::Preconfirmed,
+    ) else {
         panic!("an incomplete rollback was accepted");
     };
     let message = format!("{error:#}");

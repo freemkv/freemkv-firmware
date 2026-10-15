@@ -444,11 +444,17 @@ pub fn flash(
     if let Err(block) = check_safety(req.acknowledged_risk) {
         bail!("SAFETY GATE: {}", block.0);
     }
-    let saved = capture_required_backup(dev, drive, facet, &plan, req)?;
-    emit_plan(&plan.after_backup, saved.summary());
+    let saved = capture_required_backup(dev, drive, facet, &plan, req, confirm)?;
+    let backup_line = match &saved {
+        Some(s) => s.summary().to_string(),
+        None => {
+            "NONE — flashing without a rollback backup (this drive cannot be rolled back)".into()
+        }
+    };
+    emit_plan(&plan.after_backup, &backup_line);
     let reader = &mut ReadDevice::for_backend(dev, drive);
-    let mut authorized = facet.authorize(reader, plan, &saved)?;
-    authorized.set_backup(saved.summary());
+    let mut authorized = facet.authorize(reader, plan, saved.as_ref())?;
+    authorized.set_backup(&backup_line);
     for warning in &authorized.warnings {
         eprintln!("{}", style::amber(warning));
     }
@@ -462,7 +468,7 @@ pub fn flash(
     // The last tray check sits right before the first write: the backup and
     // the confirmation left a window for a disc to be loaded.
     guard_no_medium(dev, true)?;
-    let mut writer = gates::flash(dev, req, &saved)?;
+    let mut writer = gates::flash(dev, req, saved.as_ref())?;
     facet.execute(&mut writer, &authorized)
 }
 
@@ -557,13 +563,22 @@ pub fn render_plan_line(line: &PlanLine, backup: &str) -> String {
 
 /// Capture, save, read back and coverage-check the mandatory pre-flash backup.
 /// The proof carries the captured bytes (the installed firmware).
+/// Capture, save, read back and coverage-check the pre-flash backup.
+///
+/// `Ok(Some(_))`: a usable rollback was saved. `Ok(None)`: the backup could not
+/// be produced (a drive whose firmware can't be read back, or a capture that is
+/// not a usable rollback) AND the operator chose, at the prompt, to flash
+/// anyway without one — every other safety gate still runs, there is just no
+/// rollback. `Err`: no backup and the operator declined, or an environment
+/// failure (missing path, disk) that is not the operator's to wave through.
 fn capture_required_backup(
     dev: &mut dyn ScsiDevice,
     drive: &dyn Backend,
     flash: &dyn FlashFacet,
     plan: &FlashPlan,
     req: &FlashRequest,
-) -> Result<SavedBackup> {
+    confirm: &mut dyn Confirm,
+) -> Result<Option<SavedBackup>> {
     let out = req
         .predump_out
         .as_ref()
@@ -582,9 +597,14 @@ fn capture_required_backup(
             drive.descriptor().id
         )
     })?;
-    let bytes = backup
-        .capture(&mut ReadDevice::for_backend(dev, drive))
-        .context("pre-flash backup failed; aborting flash")?;
+    // The drive-side backup problems (can't read the firmware back, or the read
+    // isn't a usable rollback) are the ones the operator may consent past. A
+    // missing path or a disk write failure is an environment error and still
+    // hard-aborts.
+    let bytes = match backup.capture(&mut ReadDevice::for_backend(dev, drive)) {
+        Ok(bytes) => bytes,
+        Err(error) => return offer_flash_without_backup(confirm, error),
+    };
     let target_model = drive
         .identity(&mut ReadDevice::for_backend(dev, drive))
         .product;
@@ -592,13 +612,37 @@ fn capture_required_backup(
         .context("pre-flash backup failed; aborting flash")?;
     // A partial capture stays saved, but cannot authorize writing a region it
     // does not cover. No update command has been issued at this point.
-    flash.verify_backup(plan, &bytes).with_context(|| {
-        format!(
-            "backup saved to {}, but it is not a usable rollback for this update; aborting flash",
+    if let Err(error) = flash.verify_backup(plan, &bytes) {
+        let error = error.context(format!(
+            "backup saved to {}, but it is not a usable rollback for this update",
             out.display()
-        )
-    })?;
-    Ok(SavedBackup::new(out, bytes, saved_len))
+        ));
+        return offer_flash_without_backup(confirm, error);
+    }
+    Ok(Some(SavedBackup::new(out, bytes, saved_len)))
+}
+
+/// Ask the operator whether to flash without a rollback backup. `Ok(None)` on
+/// yes (proceed, no backup); the original `error` on no.
+fn offer_flash_without_backup(
+    confirm: &mut dyn Confirm,
+    error: anyhow::Error,
+) -> Result<Option<SavedBackup>> {
+    let reason = format!("{error:#}");
+    if confirm.proceed_without_backup(&reason)? {
+        eprintln!(
+            "{}",
+            style::amber(
+                "Proceeding WITHOUT a rollback backup at your request. Every other safety check \
+                 still applies.",
+            )
+        );
+        Ok(None)
+    } else {
+        Err(error.context(
+            "pre-flash backup failed and flashing without one was declined; aborting flash",
+        ))
+    }
 }
 
 /// Refuse to flash while a disc is loaded or the tray is open: reprogramming

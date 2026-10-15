@@ -65,7 +65,7 @@ fn grant<'d>(dev: &'d mut dyn ScsiDevice, limit: Option<&'static [CdbPattern]>) 
 pub(in crate::engine) fn flash<'d>(
     dev: &'d mut dyn ScsiDevice,
     req: &FlashRequest,
-    _backup: &SavedBackup,
+    _backup: Option<&SavedBackup>,
 ) -> Result<WriteDevice<'d>> {
     if !req.execute {
         bail!("refusing to write firmware on a dry run");

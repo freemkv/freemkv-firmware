@@ -445,10 +445,11 @@ MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 MSG      firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
---- scsi transcript (786) ---
+--- scsi transcript (787) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -1675,10 +1676,11 @@ MSG      warning: could not parse the post-flash REQUEST SENSE response (16 byte
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
 MSG      warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 MSG      verifying...
---- scsi transcript (784) ---
+--- scsi transcript (785) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -2910,10 +2912,11 @@ MSG      verifying...
 MSG        flash complete ........... 60 KiB of integrity-protected regions verified
 MSG        Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 MSG      firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
---- scsi transcript (786) ---
+--- scsi transcript (787) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -3732,7 +3735,7 @@ result: ERR SAFETY GATE: refusing to flash without --i-understand-risk (flashing
 MEDIUM -> ClosedEmpty
 
 === Pioneer execute: pre-flash backup cannot be read ===
-result: ERR pre-flash backup failed; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
+result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (2) ---

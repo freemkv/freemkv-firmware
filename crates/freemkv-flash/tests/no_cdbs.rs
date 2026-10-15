@@ -10,9 +10,10 @@
 //! This scans the production code of every Pioneer and MediaTek backend source
 //! file (test modules and `*_tests.rs` are the byte-level oracles and are
 //! exempt) for WRITE BUFFER / READ BUFFER opcode literals (`0x3B` / `0x3C`, or
-//! the hex-text form `3B 0x` / `3C 0x`). Research tooling (`probe.rs`) and the
-//! declarative brand catalog (`flashset.rs`) describe CDBs as data and are out
-//! of scope.
+//! the hex-text form `3B 0x` / `3C 0x`). Research tooling (`probe.rs`), the
+//! declarative brand catalog (`flashset.rs`) and freemkv's own injected-command
+//! reader (`fwdump.rs`, pinned cross-crate by `fwdump_wire_guard.rs`) describe
+//! or own their CDBs deliberately and are out of scope.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -33,8 +34,14 @@ fn backend_sources(root: &Path) -> Vec<PathBuf> {
             let in_backend_dir = path
                 .parent()
                 .is_some_and(|p| p.file_name().is_some_and(|n| n == "pioneer" || n == "mtk"));
+            // `fwdump.rs` is freemkv's OWN injected READ BUFFER (0x3C) command —
+            // not an OEM protocol, so it cannot live in `mediatek-optical`. Its
+            // opcode mirrors `freemkv_fw::abi` and is pinned byte-for-byte by the
+            // cross-crate `fwdump_wire_guard.rs`, which is the real protection
+            // this scan would otherwise provide. It is out of scope here.
             if name.ends_with(".rs")
                 && !name.ends_with("_tests.rs")
+                && name != "fwdump.rs"
                 && (name.starts_with("pioneer") || in_backend_dir || path.ends_with(ADAPTER))
             {
                 out.push(path);

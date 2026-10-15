@@ -535,6 +535,13 @@ impl AuthorizedPlan {
 pub trait Confirm {
     /// Whether to write. The engine has already shown the warnings and text.
     fn confirm(&mut self, plan: &AuthorizedPlan) -> Result<bool>;
+    /// Whether to flash WITHOUT a rollback backup, after the pre-flash backup
+    /// could not be captured (`reason` explains why). Default: refuse, so a
+    /// front-end that cannot ask a human never silently flashes an
+    /// unrecoverable drive. The CLI prompts; the GUI shows a sheet.
+    fn proceed_without_backup(&mut self, _reason: &str) -> Result<bool> {
+        Ok(false)
+    }
     /// Whether to be asked about every authorized flash, including one whose
     /// backend words no confirmation (a GUI's sheet). The CLI asks only when
     /// there is text.
@@ -573,7 +580,7 @@ pub trait FlashFacet {
         &self,
         dev: &mut ReadDevice<'_>,
         plan: FlashPlan,
-        backup: &SavedBackup,
+        backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan>;
     /// Write, then verify the result.
     fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<()>;

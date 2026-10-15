@@ -899,9 +899,9 @@ impl FlashFacet for Pioneer {
         &self,
         _dev: &mut ReadDevice<'_>,
         plan: FlashPlan,
-        backup: &SavedBackup,
+        backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan> {
-        authorize_installed(plan, Some(backup.bytes()))
+        authorize_installed(plan, backup.map(|b| b.bytes()))
     }
 
     fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<()> {

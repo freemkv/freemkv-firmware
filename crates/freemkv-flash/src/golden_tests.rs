@@ -2679,7 +2679,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
-    "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS", "M-FAM", "M-CHIP",
+    "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS", "M-FAM", "M-CHIP", "M-BAK",
 ];
 
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
@@ -2688,7 +2688,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// [`RECOVER_HINT`]; P4, the synthetic Kernel fixtures gained a 0.15.0 receiver
 /// rotation decode-loop, so only fixture-derived digests differ (commands and
 /// messages unchanged).
-const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4"];
+const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5"];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
 /// v0.11.2 could not reach that flash mode either: its CLI and GUI always

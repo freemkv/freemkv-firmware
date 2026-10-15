@@ -128,7 +128,7 @@ impl FlashFacet for Mtk {
         &self,
         _dev: &mut ReadDevice<'_>,
         plan: FlashPlan,
-        backup: &SavedBackup,
+        backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan> {
         let state: &Plan = plan.state()?;
         let mut authorized = authorize_bytes(
@@ -136,7 +136,7 @@ impl FlashFacet for Mtk {
             &state.drive_product,
             state.verdict,
             &state.image,
-            backup.bytes(),
+            backup.map(|b| b.bytes()),
         )?;
         if state.enc {
             authorized.prepared = authorized.prepared.encrypted();
@@ -228,15 +228,30 @@ pub(super) fn authorize_bytes(
     drive_product: &str,
     verdict: Verdict,
     image: &[u8],
-    backup: &[u8],
+    backup: Option<&[u8]>,
 ) -> Result<Authorized> {
-    let installed = InstalledFirmware::new(live.clone(), backup)
+    // Without a backup (the operator consented to flash an un-backup-able drive)
+    // the installed firmware is unavailable, so the target image stands in for it
+    // to prepare the write. The chip/size/integrity gates inside
+    // `PreparedUpdate::prepare` (via `check`) still run against the live drive;
+    // only the installed-family equality and the crossflash rollback simulation —
+    // both of which need the installed firmware — are skipped.
+    let installed_bytes = backup.unwrap_or(image);
+    let installed = InstalledFirmware::new(live.clone(), installed_bytes)
         .map_err(refusal)
-        .context("the pre-flash backup cannot serve as this drive's installed firmware")?;
+        .context(if backup.is_some() {
+            "the pre-flash backup cannot serve as this drive's installed firmware"
+        } else {
+            "the firmware image cannot be prepared for this drive"
+        })?;
     let prepared = PreparedUpdate::prepare(image, &installed).map_err(refusal)?;
-    let expect = match verdict {
-        Verdict::SameModel => None,
-        Verdict::Crossflash => Some(authorize_crossflash(drive_product, verdict, backup, image)?),
+    let expect = match (verdict, backup) {
+        (Verdict::Crossflash, Some(backup)) => {
+            Some(authorize_crossflash(drive_product, verdict, backup, image)?)
+        }
+        // Same-model, or a crossflash the operator is taking without a backup:
+        // there is no installed firmware to simulate the rollback against.
+        _ => None,
     };
     Ok(Authorized { prepared, expect })
 }
@@ -304,7 +319,7 @@ pub(crate) fn decide_offline(installed: &[u8], image: &[u8]) -> Result<()> {
         &Build::of_drive(&live),
         &Build::of_image(image)?,
     )?;
-    authorize_bytes(&live, &drive_product, verdict, image, installed).map(|_| ())
+    authorize_bytes(&live, &drive_product, verdict, image, Some(installed)).map(|_| ())
 }
 
 /// The update gates for the backup as the update, with the drive running

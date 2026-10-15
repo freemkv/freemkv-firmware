@@ -57,3 +57,15 @@ fn confirm_on_a_tty_requires_an_explicit_yes() {
         assert!(!confirm_with(true, &mut bytes).unwrap());
     }
 }
+
+#[test]
+fn proceed_without_backup_prompt_requires_an_explicit_yes() {
+    for input in ["y\n", "yes\n", "Y\n", "YES\n"] {
+        let mut bytes = input.as_bytes();
+        assert!(proceed_without_backup_with(&mut bytes).unwrap());
+    }
+    for input in ["\n", "n\n", "no\n", "nope\n"] {
+        let mut bytes = input.as_bytes();
+        assert!(!proceed_without_backup_with(&mut bytes).unwrap());
+    }
+}

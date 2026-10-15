@@ -431,7 +431,7 @@ impl FlashFacet for SheetBackend {
         &self,
         _: &mut ReadDevice<'_>,
         plan: FlashPlan,
-        _: &SavedBackup,
+        _: Option<&SavedBackup>,
     ) -> anyhow::Result<AuthorizedPlan> {
         let mut authorized = AuthorizedPlan::new(plan, ());
         authorized.warnings = vec![BARRIER.into()];

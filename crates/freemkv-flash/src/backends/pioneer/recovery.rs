@@ -17,11 +17,13 @@ use crate::backends::pioneer::classify_flash_input;
 use crate::platform::ScsiDevice;
 use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use anyhow::{anyhow, bail, ensure, Context, Result};
+use pioneer_optical::drive::Segment;
 use pioneer_optical::envelope::builder::{
     encode_normal_for_kernel, NormalKeySource, NormalSignature,
 };
 use pioneer_optical::envelope::signature::SigningKey;
 use pioneer_optical::envelope::{decode_envelope_with_kernel, Envelope, Update, UpdateError};
+use pioneer_optical::receiver::transport as kernel_transport;
 use pioneer_optical::{cdb, image::ReceiverControl, Identity, Role};
 use std::time::Duration;
 
@@ -29,6 +31,10 @@ pub(crate) struct Plan {
     control: [u8; 256],
     kernel_transfer: Vec<u8>,
     normal_transfer: Vec<u8>,
+    /// How the installed loader receives a Kernel, decided from the decoded
+    /// Kernel body (same family as the installed drive, enforced by the family
+    /// gate), so the write segments match the loader — not a linear stream.
+    receive: kernel_transport::KernelReceive,
     /// True when the Normal was re-encoded for the installed Kernel's receiver
     /// transport rather than written as the target package shipped it.
     reencoded: bool,
@@ -150,6 +156,9 @@ impl Plan {
             control,
             kernel_transfer: target.kernel_transfer().to_vec(),
             normal_transfer,
+            // Detect on the decoded Kernel body (the loader's own code), never
+            // the transformed wire bytes, or the fingerprint would be scrambled.
+            receive: kernel_transport::detect(&target.kernel().image),
             reencoded,
         })
     }
@@ -179,37 +188,67 @@ impl Plan {
                 .context("update entry failed; no firmware transferred")?;
             sleep(Duration::from_secs(1));
         }
-        let transfers = [
-            (Role::Kernel, self.kernel_transfer.as_slice()),
-            (Role::Normal, self.normal_transfer.as_slice()),
-        ];
-        // Validate BOTH transfer sizes before the first write: an oversized or
-        // empty Normal must be refused up front, never discovered only after the
-        // Kernel is already written (which would leave the drive half-flashed in
-        // update mode).
-        for (_, bytes) in transfers {
-            // Same bound as the flash path (`IMAGE_MIN..=IMAGE_MAX`, 256-byte
-            // aligned): the transfer offset is a 24-bit CDB field, so a length
-            // above IMAGE_MAX (0x00ff_ff00) or not 256-aligned would truncate the
-            // offset mid-session — after the Kernel is already written.
+        // The installed loader decides how a Kernel is received. Most BD 10xx
+        // loaders stage it in two regions at distinct wire offsets rather than
+        // one linear stream; the shared planner emits the exact segments (same
+        // logic the non-recover flash path uses), so flash and recover deliver a
+        // Kernel identically.
+        let mut storage = [Segment::PLACEHOLDER; 3];
+        let plan = kernel_transport::plan(
+            Some(self.kernel_transfer.as_slice()),
+            self.normal_transfer.as_slice(),
+            self.receive,
+            &mut storage,
+        )
+        .map_err(|_| {
+            anyhow!(
+                "recover refused: the installed Kernel's receive layout is not recognised, so a \
+                 safe transfer plan cannot be built; refusing before any write"
+            )
+        })?;
+        // Validate every segment before the first write: an oversized, empty or
+        // misaligned span must be refused up front, never discovered only after
+        // the Kernel is already written (which would leave the drive half-flashed
+        // in update mode). The transfer offset is a 24-bit CDB field, so a length
+        // above IMAGE_MAX (0x00ff_ff00) or an offset/length not 256-aligned would
+        // truncate the offset mid-session.
+        for segment in plan.segments {
+            let end = segment.dest_offset as usize + segment.bytes.len();
             ensure!(
-                (super::IMAGE_MIN..=super::IMAGE_MAX).contains(&bytes.len())
-                    && bytes.len().is_multiple_of(0x100),
+                (super::IMAGE_MIN..=super::IMAGE_MAX).contains(&segment.bytes.len())
+                    && segment.bytes.len().is_multiple_of(0x100)
+                    && (segment.dest_offset as usize).is_multiple_of(0x100)
+                    && end <= super::IMAGE_MAX,
                 "invalid transfer size"
             );
         }
-        for (role, bytes) in transfers {
-            let mut progress = crate::style::Progress::new(
-                match role {
-                    Role::Kernel => "Recovering Kernel",
-                    Role::Normal => "Recovering Normal",
-                },
-                bytes.len(),
-            );
-            for (index, chunk) in bytes.chunks(super::FLASH_CHUNK).enumerate() {
-                let offset = index * super::FLASH_CHUNK;
+        let last_kernel = plan.segments.iter().rposition(|s| s.role == Role::Kernel);
+        let mut current: Option<Role> = None;
+        let mut progress = crate::style::Progress::new("Recovering", 0);
+        let mut done = 0usize;
+        for (index, segment) in plan.segments.iter().enumerate() {
+            if current != Some(segment.role) {
+                current = Some(segment.role);
+                done = 0;
+                let total: usize = plan
+                    .segments
+                    .iter()
+                    .filter(|s| s.role == segment.role)
+                    .map(|s| s.bytes.len())
+                    .sum();
+                progress = crate::style::Progress::new(
+                    match segment.role {
+                        Role::Kernel => "Recovering Kernel",
+                        Role::Normal => "Recovering Normal",
+                    },
+                    total,
+                );
+            }
+            let role = segment.role;
+            for (chunk_index, chunk) in segment.bytes.chunks(super::FLASH_CHUNK).enumerate() {
+                let offset = segment.dest_offset + (chunk_index * super::FLASH_CHUNK) as u32;
                 let sent = dev.command_out_strict(
-                    &cdb::transfer(role, offset as u32, chunk.len() as u32),
+                    &cdb::transfer_with_id(segment.buffer_id, offset, chunk.len() as u32),
                     chunk,
                 );
                 match &sent {
@@ -224,9 +263,10 @@ impl Plan {
                     )),
                 }
                 sent.with_context(|| format!("{role:?} write failed at {offset:#x}; firmware may be partial; write was not retried"))?;
-                progress.set(offset + chunk.len());
+                done += chunk.len();
+                progress.set(done);
             }
-            if role == Role::Kernel {
+            if Some(index) == last_kernel {
                 sleep(Duration::from_secs(2));
             }
         }

@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-10-14
+
 ### freemkv-fw
 - `create` now refuses an image where no change can be applied: it exits
   non-zero and writes no output file, instead of exiting 0 with a copy of the
@@ -51,6 +53,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failure. The message names the status, decodes the sense data when the drive
   returns any, and says so when it returns none. The diagnostic log now records
   every firmware write chunk (offset, length, result).
+- Pioneer **Kernel** flashing now follows the installed loader's real receive
+  transport instead of one linear stream. The BD 10xx-generation loader (BDR-205
+  through the S06/206 family) stages the Kernel body at transfer offset 0 and its
+  front-key block at `0x10200`; sending the block at the linear `0x10000` lands
+  in a reserved gap and the drive rejects it (the `SCSI transport failure …
+  cdb=[3b,07,fe,01,00,00,…]` seen when recovering a 206 Kernel onto a 205). The
+  transport is detected from the installed Kernel's own code, so loaders that do
+  want a linear stream are unaffected, and an unrecognised Kernel layout is
+  refused rather than written. Flash and recover now build the Kernel transfer
+  with the same shared plan.
+- `flash` can proceed **without a rollback backup** when the drive hides its
+  flash from backup and the operator explicitly consents. The CLI shows an amber
+  warning and requires a typed `y`; without a TTY (or in the GUI) it fails
+  closed. Required file and drive-protocol checks still run; only the backup
+  rollback simulation is skipped. The plan prints `NONE — flashing without a
+  rollback backup`.
+- MediaTek `backup` of a drive already running freemkv firmware reads the image
+  back through freemkv's own injected command, so a drive whose stock firmware
+  never exposed its flash can still be backed up once modified.
 
 ## [0.12.2] - 2026-10-14
 

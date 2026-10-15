@@ -432,7 +432,7 @@ fn the_flash_path_decides_every_jb8_pair_like_the_pure_gates() {
                 )
                 .and_then(|(live, verdict)| {
                     // The backup of a catalog build is its OEM image.
-                    authorize_bytes(&live, &drive.product, verdict, image, drive_image)
+                    authorize_bytes(&live, &drive.product, verdict, image, Some(drive_image))
                         .map(|a| (verdict, a.expect))
                 });
             let pure = decide(&drive, &target).ok();

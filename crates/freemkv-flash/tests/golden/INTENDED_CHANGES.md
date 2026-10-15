@@ -23,6 +23,8 @@ differ only for P1 to P4; a MediaTek scenario only for R1 to R8, M-RS and M-FAM:
 | M-RS | MediaTek REQUEST SENSE (STATUS) is sent as the OEM updaters send it, `03 00 00 00 10 80` padded to 12 bytes: allocation length `0x10` in byte 4, `0x80` in the control byte. We sent `03 00 00 10 80 00`, one byte off. Evidence: LG's MT19xx updater v1.081 (`WH16NS40.exe`, sha256 `281c668c…806bac`, file offset `0x1383`) builds it as `c6 45 f0 03` / `66 c7 45 f4 10 80` (`cdb[0] = 03`, `cdb[4..6] = 10 80`); v1.074 (`BH16NS40(1.03-A0).exe`) the same with allocation `0x12`. Every other MT1959 command and payload is byte-identical |
 | M-FAM | MediaTek same-hardware-family crossflash gate. v0.11.2 refused any image of another model by name; now an image of another model is admitted when it is the drive's hardware family (and refused, before any write, when it is not). A different-family dry run reads the drive's boot banner (its loader tells apart families that share a platform) and refuses with "this image is for a different hardware family" instead of the wrong-model message |
 | M-CHIP | MediaTek chip generation (MT1959 vs MT1939) is now decided by the boot loader banner at 0x3000, never the stale `MTEKMT19xx` identity tag (which is shown only as a curiosity). Consequences visible in the goldens: the `chipset` line reads "from boot banner; identity tag …" (was "via identity string; tag …"); the `banner` row shows the real banner (the chip gate always reads it, so the SCSI transcript gains one `3c06…3000…2000` read even when the descriptor has a tag); a legacy `.tar` backup is described from its rebuilt image, so a synthetic fixture with no 0x3000 banner now reads as unrecognized rather than keying on the embedded tag; and an image/drive whose banner names the chip is labelled by that banner (an MT1939-tagged JB8 build is MT1959) |
+| M-BAK | MediaTek backup/dump now probes for freemkv-modified firmware before reading: a READ BUFFER Identity knock (`3c 0e c0 de 01 00 00 00 60 00`, alloc 96) precedes the OEM read on every capture, so a drive already running freemkv firmware is read through its injected `DumpAll` command (stock MediaTek firmware exposes no full-flash read). The transcript gains one `3c0ec0de010000006000 alloc=96` read; on a stock/mock drive the reply is not the `freemkv` magic, so it falls through to the OEM read and the rest of the sequence is unchanged. Also: when a MediaTek pre-flash backup cannot be captured, the operator may consent to flash without one (every other gate still runs), so a declined/failed capture now aborts with "pre-flash backup failed and flashing without one was declined; aborting flash: <cause>" |
+| P5 | Pioneer: when the pre-flash backup cannot be captured, the flow now offers to flash without a rollback backup; the default (non-interactive / scripted front-end) declines, so the abort message reads "pre-flash backup failed and flashing without one was declined; aborting flash: <cause>" (was the bare cause). No device commands change |
 
 The baseline set was produced by copying `src/golden_tests.rs` into a
 `git worktree` of the v0.11.2 tag and changing only its COMPAT shims
@@ -126,7 +128,7 @@ reason: R8
 ```
 
 ### MTK backup: drive-read image
-reason: R1, R8
+reason: R1, R8, M-BAK
 ```diff
 -backup sha256: 338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +backup sha256: 4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
@@ -136,8 +138,11 @@ reason: R1, R8
 +MSG      backup sha256: 4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 -FIELD    Backup validation = OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 -MSG      OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
+---- scsi transcript (516) ---
 +FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
++--- scsi transcript (517) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -saved file: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +saved file: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
 ```
@@ -414,16 +419,17 @@ reason: P4
 ## flash_execute.txt
 
 ### MTK execute: .bin with pre-flash backup
-reason: R2, R8, M-RS, M-CHIP
+reason: R2, R8, M-RS, M-CHIP, M-BAK
 ```diff
 -firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
 +firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
 -MSG      firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
 ---- scsi transcript (784) ---
 +MSG      firmware now: unrecognized  [ba0abd036f48046a5be5412efed175cf54c40776e6514d010a8538cdcfa89238]
-+--- scsi transcript (786) ---
++--- scsi transcript (787) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
@@ -2935,14 +2941,15 @@ reason: R3, M-CHIP
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2, R8, M-RS, M-CHIP
+reason: R2, R8, M-RS, M-CHIP, M-BAK
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 +result: ERR read-back verify FAILED at 0x01105E: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61346 of 61440 protected bytes differ).
 ---- scsi transcript (782) ---
-+--- scsi transcript (784) ---
++--- scsi transcript (785) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=4735da6c2da93ef256c9800f189a7a727f3b60ff2cd6a6ea330f26e1e3ee7aa3 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
@@ -2958,16 +2965,17 @@ reason: R2, R8, M-RS, M-CHIP
 ```
 
 ### MTK execute: restore the saved .tar
-reason: R2, R8, M-RS, M-CHIP
+reason: R2, R8, M-RS, M-CHIP, M-BAK
 ```diff
 -firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
 +firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
 -MSG      firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
 ---- scsi transcript (784) ---
 +MSG      firmware now: unrecognized  [acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf]
-+--- scsi transcript (786) ---
++--- scsi transcript (787) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=a4cb3cc52bb7eb6b5653aa3ae08de21602c9e35b2554c26e436da86f17db43bf -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=6d0a58a40c8d493d1e4020bf2df55806488f025a07b38762237be67ee64747e4 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=b9e553f7d1a5cc04a848712b55885a676f216144d11abac0a94d2c73c01522d3 -> ok
@@ -2980,6 +2988,13 @@ reason: R2, R8, M-RS, M-CHIP
 +IN   cdb=030000001080000000000000 alloc=16 -> ok 16
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +saved pre-flash backup: 2097152 bytes sha256=4745407e94ab8647c22e602b8f133ac5974acbefa5e3fb853e2ef50fcc296897
+```
+
+### Pioneer execute: pre-flash backup cannot be read
+reason: P5
+```diff
+-result: ERR pre-flash backup failed; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
++result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 ```
 
 ## info_file.txt
@@ -3209,7 +3224,7 @@ reason: R5, R7, R8, M-CHIP
 ## mtk_backup_variants.txt
 
 ### MTK backup: MT1939 drive read (build not in the catalog)
-reason: R1, R4, R8, M-CHIP
+reason: R1, R4, R8, M-CHIP, M-BAK
 ```diff
 -result: ERR unrecognized boot page (sha256 233fadcb958146c4a25a7bde190f956ab7d684fdacb35452f2a39f39ebf81812); no restorable backup can be built for this firmware
 ---- text (102) ---
@@ -3226,7 +3241,8 @@ reason: R1, R4, R8, M-CHIP
 +MSG      wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
 +FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
-+--- scsi transcript (516) ---
++--- scsi transcript (517) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -saved file: <not created>
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
@@ -3234,7 +3250,7 @@ reason: R1, R4, R8, M-CHIP
 ```
 
 ### MTK backup: MT1959 drive read
-reason: R1, R4, R8, M-CHIP
+reason: R1, R4, R8, M-CHIP, M-BAK
 ```diff
 -result: ERR unrecognized boot page (sha256 0bd0297c45ac0fe82554dd385bac39bdbd1b5ee852596f8d5e4630c01ebde361); no restorable backup can be built for this firmware
 ---- text (102) ---
@@ -3251,18 +3267,30 @@ reason: R1, R4, R8, M-CHIP
 +MSG      wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
 +FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
-+--- scsi transcript (516) ---
++--- scsi transcript (517) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -saved file: <not created>
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 +saved file: 2097152 bytes sha256=28335b8294725272c76efefa42026d602073b98d6e1ba085dcfc62cb3107981a
 ```
 
+### MTK backup: firmware read fails at 0x100000
+reason: M-BAK
+```diff
+---- scsi transcript (522) ---
++--- scsi transcript (523) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
+```
+
 ### MTK backup: unknown boot page
-reason: R1, R4
+reason: R1, R4, M-BAK
 ```diff
 -result: ERR unrecognized boot page (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033); no restorable backup can be built for this firmware
 +result: ERR rebuilding the OEM image from the drive read: boot page is neither a stored page nor a drive read's mirror (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033)
+---- scsi transcript (514) ---
++--- scsi transcript (515) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ### MTK dump: MT1939 drive read (build not in the catalog)
@@ -3932,8 +3960,10 @@ reason: P2
 ## pioneer_flash_bundle_failures.txt
 
 ### Pioneer execute: installed backup is Kernel-only
-reason: P4
+reason: P4, P5
 ```diff
+-result: ERR backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update; aborting flash: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
++result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 -saved pre-flash backup: 71680 bytes sha256=1ca0f8fd812313de0e9f42418df7eb1d378763bb0629b9b7dc25bc61799c43f2
 +saved pre-flash backup: 71680 bytes sha256=d827e8c5d589e922a0cd54a305164cac456c163227798d10ac30bab07c2d1909
 ```
