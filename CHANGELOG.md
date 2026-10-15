@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-10-15
+
+### freemkv-flash
+- MediaTek **INTM** (interim OEM) builds are now gated like any other MediaTek
+  build. An INTM image is a complete, CMAC-valid build, and refusing it on either
+  side of a crossflash had no reason of its own. INTM builds now pass the same
+  family, chip, CMAC, OEM boot page, banner, rollback and post-flash identity
+  checks as every other build, so a drive running an INTM build can be
+  crossflashed back.
+
 ## [0.12.3] - 2026-10-14
 
 ### freemkv-fw
