@@ -196,9 +196,7 @@ fn incomplete_read(readable: usize, gaps: &[(usize, usize)]) -> anyhow::Error {
         anyhow::anyhow!(
             "this drive's firmware does not expose its flash to the read command freemkv \
              uses (only {readable} of {} bytes answered: {gaps:#x?}), so a backup is not \
-             possible on this firmware yet. Run `freemkv-flash dump --read-map` and send the \
-             output to support so it can be added; `freemkv-flash dump` saves what the drive \
-             returns",
+             possible on this drive. `freemkv-flash dump` saves what the drive returns",
             super::IMAGE_SIZE
         )
     } else {
