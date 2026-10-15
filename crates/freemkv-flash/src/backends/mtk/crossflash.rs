@@ -96,10 +96,6 @@ impl Build {
         }
     }
 
-    fn is_intm(&self) -> bool {
-        self.revision.eq_ignore_ascii_case("INTM")
-    }
-
     /// `vendor product revision`, safe to print.
     pub(crate) fn label(&self) -> String {
         crate::backend::sanitize_ascii(&format!(
@@ -177,8 +173,9 @@ fn unknown_family(error: PrepareError) -> String {
 /// the plan — where the drive is only its descriptor — on the family fields the
 /// descriptor carries (platform and boot banner; the chip is already matched by
 /// `PreparedUpdate::check`). The full family is re-checked once the backup is
-/// read. An unknown drive model, an inconsistent identity, an INTM or
-/// unknown-identity image, an unknown or different family is refused.
+/// read. An unknown drive model, an inconsistent identity, an identity-less
+/// image, an unknown or different family is refused. An INTM (interim OEM)
+/// build on either side is gated like any other build.
 pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> Result<Verdict> {
     let product = drive_product.trim();
     if product.is_empty() {
@@ -187,10 +184,10 @@ pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> 
     if same_model(&target.product, product) {
         return Ok(Verdict::SameModel);
     }
-    // A crossflash candidate: another model. An INTM or identity-less image is
-    // refused as a wrong-model image, exactly as before crossflash existed.
+    // A crossflash candidate: another model. An identity-less image is refused
+    // as a wrong-model image, exactly as before crossflash existed.
     let legacy = wrong_model(&target.product, product);
-    if target.is_intm() || target.product.is_empty() {
+    if target.product.is_empty() {
         bail!("{legacy}");
     }
     // The INQUIRY product and the identity descriptor's model must agree. They
@@ -203,9 +200,6 @@ pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> 
              descriptor reads {:?} — refusing to flash another model",
             crate::backend::sanitize_ascii(&live.product)
         );
-    }
-    if live.is_intm() {
-        bail!("{legacy}");
     }
     // The image's family must be known: a crossflash fails closed otherwise.
     let Some(image_family) = target.family else {

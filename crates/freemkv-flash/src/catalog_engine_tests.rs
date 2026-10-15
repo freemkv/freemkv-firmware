@@ -206,10 +206,6 @@ fn is_descriptor_read(cdb: &[u8]) -> bool {
     cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x1E, 0xC0, 0x00][..])
 }
 
-fn is_intm(revision: &str) -> bool {
-    revision.eq_ignore_ascii_case("INTM")
-}
-
 /// A same-family crossflash of `image` onto a drive running `drive` through the
 /// engine: the dry-run names it, and the execute streams the image verbatim and
 /// confirms the drive's new identity.
@@ -404,8 +400,8 @@ fn crossflash_family_gate_holds_on_real_images() {
 
     // Every ordered pair of the corpus through the gate (the engine's own
     // decision function, `Build::of_image` + `decide`): admitted as a crossflash
-    // exactly when the two are one family, of different models, and neither is
-    // an INTM build; refused otherwise.
+    // exactly when the two are one family, of different models; refused
+    // otherwise.
     let builds: Vec<Build> = corpus
         .iter()
         .map(|(.., image)| Build::of_image(image).unwrap())
@@ -415,9 +411,7 @@ fn crossflash_family_gate_holds_on_real_images() {
         for bb in &builds {
             let expected = decide_model(&bb.product, &ba.product).is_err()
                 && ba.family.is_some()
-                && ba.family == bb.family
-                && !is_intm(&ba.revision)
-                && !is_intm(&bb.revision);
+                && ba.family == bb.family;
             let label = || format!("{} onto {}", bb.label(), ba.label());
             match gate::decide(ba, bb) {
                 Ok(Verdict::Crossflash) => {

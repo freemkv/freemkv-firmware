@@ -73,13 +73,6 @@ fn refusal(result: Result<Verdict>) -> String {
     format!("{:#}", result.expect_err("refused"))
 }
 
-fn legacy(target: &Build, drive: &Build) -> String {
-    format!(
-        "{:#}",
-        decide_model(&target.product, &drive.product).unwrap_err()
-    )
-}
-
 // ---- the families the fixtures build ------------------------------------------
 
 #[test]
@@ -206,18 +199,18 @@ fn an_inconsistent_drive_identity_is_refused() {
 }
 
 #[test]
-fn an_intm_build_on_either_side_is_refused_for_a_crossflash() {
+fn an_intm_build_on_either_side_crosses_like_any_other_build() {
     let intm = |b: Build| Build {
         revision: "INTM".into(),
         ..b
     };
+    // An INTM build is a complete OEM image: onto and off a drive it passes the
+    // same family, chip, CMAC, boot-page and rollback gates as any other build.
     for (drive, target) in [
         (wh16ns60_103(), intm(wh16ns58_1v5())),
         (intm(wh16ns60_103()), wh16ns58_1v5()),
     ] {
-        let err = refusal(decide(&drive, &target));
-        // An INTM crossflash is refused exactly as a wrong-model image was.
-        assert_eq!(err, legacy(&target, &drive), "{err}");
+        assert!(matches!(decide(&drive, &target), Ok(Verdict::Crossflash)));
     }
 }
 
@@ -359,13 +352,9 @@ fn catalog_facts() -> Vec<(fixture::CatalogBuild, Build)> {
 }
 
 /// A crossflash is admitted exactly when the two builds are one hardware
-/// family, of different models, and neither is an INTM build.
+/// family, of different models. An INTM build is gated like any other.
 fn should_cross(a: &Build, b: &Build) -> bool {
-    decide_model(&b.product, &a.product).is_err()
-        && a.family.is_some()
-        && a.family == b.family
-        && !a.is_intm()
-        && !b.is_intm()
+    decide_model(&b.product, &a.product).is_err() && a.family.is_some() && a.family == b.family
 }
 
 #[test]
@@ -401,9 +390,9 @@ fn every_catalog_pair_crosses_exactly_within_one_family() {
 }
 
 /// The count admitted among the 69 embedded-catalog stand-ins: every ordered
-/// pair that is one family, different models, neither INTM. A regression guard;
-/// see [`every_catalog_pair_crosses_exactly_within_one_family`].
-const EXPECTED_CROSS: usize = 752;
+/// pair that is one family and different models (INTM builds included). A
+/// regression guard; see [`every_catalog_pair_crosses_exactly_within_one_family`].
+const EXPECTED_CROSS: usize = 840;
 
 /// The flash path itself (plan against a drive, then authorize on the backup)
 /// agrees with [`decide`] on every pair of the JB8 family.

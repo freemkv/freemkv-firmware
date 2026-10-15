@@ -115,7 +115,7 @@ are the same hardware family, which freemkv derives from the firmware itself (a
 content hash of chip, platform, loader, interface, medium and BD-write), not
 from a curated list — the firmware encodes no finer hardware distinction, so a
 same-family crossflash is safe by derivation. A crossflash still needs a valid
-AES-CMAC, a boot page a known OEM build stores, one boot banner, no INTM build,
+AES-CMAC, a boot page a known OEM build stores, one boot banner,
 and a backup that can be flashed back; the plan shows the crossflash, and the
 drive must identify as the new model afterwards. A different family fails with
 "this image is for a different hardware family", an unknown family fails closed,
