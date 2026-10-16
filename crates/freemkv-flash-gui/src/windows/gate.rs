@@ -79,7 +79,24 @@ fn run(me: &Shell, dir: &Path) {
     );
 
     for task in gui_gate::TABS {
-        me.send(Input::SelectTask(task));
+        // Exercise the native hit-test and TCN_SELCHANGE handler, not a direct
+        // model dispatch that would pass even with broken tab event wiring.
+        let index = Task::ALL.iter().position(|t| *t == task).unwrap();
+        let mut rect = w::RECT::default();
+        let hit = unsafe {
+            me.tabs.hwnd().SendMessage(msg::TcmGetItemRect {
+                index: index as u32,
+                rect: &mut rect,
+            })
+        };
+        g.check("tab-hit-rectangle", hit.is_ok(), format!("{task:?}"));
+        if hit.is_ok() {
+            let x = (rect.left + rect.right) / 2;
+            let y = (rect.top + rect.bottom) / 2;
+            let point = ((y as u32 & 0xffff) << 16 | (x as u32 & 0xffff)) as isize;
+            send_raw(me.tabs.hwnd(), 0x0201, 1, point); // WM_LBUTTONDOWN, MK_LBUTTON
+            send_raw(me.tabs.hwnd(), 0x0202, 0, point); // WM_LBUTTONUP
+        }
         pump(SETTLE_MS);
         let v = me.view();
         let index = Task::ALL.iter().position(|t| *t == task);

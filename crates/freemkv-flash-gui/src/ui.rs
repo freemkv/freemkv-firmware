@@ -832,7 +832,7 @@ impl App {
                 self.discover();
                 return self.start_profile();
             }
-            Input::SelectTask(task) if !self.busy() && self.offers(task) => {
+            Input::SelectTask(task) if !self.busy() => {
                 self.task = task;
             }
             Input::Choose(pick) => return self.choose(pick),
@@ -1018,7 +1018,13 @@ impl App {
                 self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
                 self.recovery_input = Some(path);
             }
-            Pick::Backup | Pick::Dump => {
+            Pick::Backup | Pick::Dump
+                if self.offers(if pick == Pick::Dump {
+                    Task::Dump
+                } else {
+                    Task::Backup
+                }) =>
+            {
                 // The native save panel has already confirmed replacing an existing file.
                 let replace = path.symlink_metadata().is_ok();
                 let (label, job) = if pick == Pick::Dump {
@@ -1028,6 +1034,7 @@ impl App {
                 };
                 return self.start_job(label, self.device.clone(), job);
             }
+            Pick::Backup | Pick::Dump => {}
             Pick::AnalysisFile(i) => self.set_source(i, Source::File(path)),
             Pick::AnalysisDrive(i) if self.drive_source_allowed(i) => {
                 let device = self.device.clone();
@@ -1415,7 +1422,7 @@ impl App {
                 .map(|&task| Tab {
                     task,
                     title: task.title(),
-                    enabled: enabled && self.offers(task),
+                    enabled,
                 })
                 .collect(),
             task: self.task,
@@ -1439,6 +1446,22 @@ impl App {
     }
 
     fn panel(&self, enabled: bool) -> Vec<Item> {
+        // Navigation is not authorization. In particular, native Windows tabs
+        // cannot be disabled individually: never silently snap a click back.
+        // Unavailable operations have no action controls, and dispatch retains
+        // its independent capability checks.
+        if !self.offers(self.task) {
+            let reason = match &self.profile {
+                ProfileState::NoDrive => "Select an optical drive to use this operation.",
+                ProfileState::Probing => "Reading the drive's capabilities…",
+                ProfileState::Failed => "The drive profile could not be read. Select Refresh to retry; see the diagnostic log for details.",
+                ProfileState::Ready(_) => "The selected drive does not currently offer this operation. See the capability labels beside the drive; Recovery may be available for a drive in BOOT mode.",
+            };
+            return vec![
+                Item::Heading(self.task.title().into()),
+                Item::Note(reason.into()),
+            ];
+        }
         let selected = self.selected();
         let path = |text: &str, pick, on: bool, file: &Option<PathBuf>| Item::Path {
             button: Button::new(text, Input::Choose(pick), enabled && on),

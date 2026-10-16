@@ -173,7 +173,7 @@ fn enabled_tabs(app: &App) -> Vec<Task> {
 }
 
 #[test]
-fn tabs_come_from_the_drive_profile() {
+fn tabs_navigate_even_when_the_drive_does_not_offer_the_operation() {
     let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
     assert_eq!(app.start(), [Effect::StartTicking]);
     assert_eq!(app.view().drives.chips, [PROBING]);
@@ -188,12 +188,16 @@ fn tabs_come_from_the_drive_profile() {
     };
     app.answer_profile(Ok(backup_only));
     assert_eq!(app.view().drives.chips, ["Family", "Backup"]);
-    assert_eq!(
-        enabled_tabs(&app),
-        [Task::Info, Task::Inspect, Task::Compare, Task::Backup]
-    );
+    assert_eq!(enabled_tabs(&app), Task::ALL);
     app.dispatch(Input::SelectTask(Task::Flash));
-    assert_eq!(app.task, Task::Info);
+    assert_eq!(app.task, Task::Flash);
+    assert!(app
+        .view()
+        .panel
+        .iter()
+        .any(|item| matches!(item, Item::Note(text) if text.contains("does not currently offer"))));
+    assert!(app.dispatch(Input::FlashNow).is_empty());
+    assert!(app.dispatch(Input::Choose(Pick::Dump)).is_empty());
     app.dispatch(Input::SelectTask(Task::Backup));
     assert_eq!(app.task, Task::Backup);
 }
@@ -207,10 +211,7 @@ fn recovery_is_offered_for_an_unsupported_identified_drive() {
         tasks: vec![Task::Recovery],
         ..Profile::default()
     }));
-    assert_eq!(
-        enabled_tabs(&app),
-        [Task::Info, Task::Inspect, Task::Compare, Task::Recovery]
-    );
+    assert_eq!(enabled_tabs(&app), Task::ALL);
     app.dispatch(Input::SelectTask(Task::Recovery));
     assert_eq!(app.task, Task::Recovery);
 }
@@ -222,10 +223,7 @@ fn a_new_profile_without_the_current_task_falls_back_to_info() {
     assert_eq!(app.dispatch(Input::SelectDrive(1)), [Effect::StartTicking]);
     app.answer_profile(Ok(Profile::default()));
     assert_eq!(app.task, Task::Info);
-    assert_eq!(
-        enabled_tabs(&app),
-        [Task::Info, Task::Inspect, Task::Compare]
-    );
+    assert_eq!(enabled_tabs(&app), Task::ALL);
 }
 
 #[test]
@@ -242,10 +240,7 @@ fn a_failed_profile_is_shown_and_logged() {
     );
     assert_eq!(app.view().drives.chips, ["Profile unavailable"]);
     assert!(app.log.iter().any(|l| l.ends_with("permission denied")));
-    assert_eq!(
-        enabled_tabs(&app),
-        [Task::Info, Task::Inspect, Task::Compare]
-    );
+    assert_eq!(enabled_tabs(&app), Task::ALL);
 }
 
 #[test]
@@ -282,7 +277,15 @@ fn no_drive_cannot_start_drive_jobs() {
     assert_eq!(app.log.last().unwrap(), "No optical drive selected.");
     assert_eq!(app.view().drives.chips, Vec::<String>::new());
     app.dispatch(Input::SelectTask(Task::Backup));
-    assert_eq!(app.task, Task::Info, "no drive, no backup tab");
+    assert_eq!(
+        app.task,
+        Task::Backup,
+        "navigation does not start a drive job"
+    );
+    assert!(has_text(
+        &app.view(),
+        "Select an optical drive to use this operation."
+    ));
     assert!(app.dispatch(Input::Choose(Pick::Backup)).is_empty());
 }
 
@@ -668,7 +671,10 @@ fn flash_needs_a_selected_drive() {
     let mut app = dry(Vec::new());
     app.task = Task::Flash;
     app.flash_input = Some("firmware.bin".into());
-    assert!(!button(&app.view(), "Flash now").enabled);
+    assert!(has_text(
+        &app.view(),
+        "Select an optical drive to use this operation."
+    ));
     app.dispatch(Input::FlashNow);
     assert!(app.pending.is_none() && !app.running());
 }

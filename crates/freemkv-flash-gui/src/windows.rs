@@ -947,8 +947,8 @@ impl Shell {
                     .SendMessage(msg::TcmSetCurSel { index: i as u32 });
             }
         }
-        // Win32 tabs cannot be disabled one by one: the strip follows the model's lock, and
-        // a tab the model refuses snaps back to the task it keeps.
+        // Navigation follows the model's busy lock. Unsupported operations show
+        // their availability explanation instead of silently snapping back.
         self.tabs
             .hwnd()
             .EnableWindow(v.controls_enabled && v.tabs.iter().any(|t| t.enabled));
