@@ -1,0 +1,253 @@
+{
+  "title": "Receiver-derived MediaTek transfer plans with Pioneer API parity",
+  "status": "APPROVED; implementation in progress under the active user goal; permissive PREPARE responses remain evidence-gated",
+  "date": "2026-10-16",
+  "scope": {
+    "included": [
+      "Align the human-facing Rust API and lifecycle with Pioneer: Envelope, Receiver, PreparedUpdate, transfer plan, flash and verification.",
+      "Derive MT1939/MT1959 entry commands, stream encoding, image acceptance and completion behavior from positive receiver evidence.",
+      "Use one preparation/execution engine for Flash and Recovery, with explicit differences in host policy.",
+      "Preserve extraction-derived INTM pairing and re-identify the running receiver between firmware stages.",
+      "Collect bounded, read-only failure diagnostics while preserving the original error and programming state."
+    ],
+    "outside_scope": [
+      "Claiming support for every MediaTek chip or every OEM updater; older and unrecognized protocols remain separately classified.",
+      "Automatic rollback, trial firmware writes, trying alternate encodings after a failed write, or a universal ignore-PREPARE switch.",
+      "Changing Pioneer wire behavior as part of the MTK implementation.",
+      "Publishing a new release before the separate release decision."
+    ],
+    "state_of_existing_work": "The earlier partial diagnostics scaffold is isolated in the recovery-diagnostics worktree and is not integrated or validated. This design supersedes assumptions in the earlier 0.12.5 recovery design; it does not assert that scaffold is complete."
+  },
+  "evidence": {
+    "source_repositories": {
+      "pioneer_optical": "dev ab22223: src/receiver.rs, receiver/preparation.rs, receiver/execution.rs, receiver/transport.rs, envelope and drive Plan/Segment",
+      "mediatek_optical": "dev a4c641c: src/receiver.rs, recovery.rs, update.rs, update/flash.rs, drive.rs and cdb.rs",
+      "flasher": "dev 6ae05bd: src/transport.rs, platform/adapter.rs, platform/mod.rs and backends/mtk/flash.rs/recovery.rs"
+    },
+    "oem_audit_directory": "/Users/matthew/Developer/firmware-extractor/internal/review/v9-boot/oem-prepare-audit",
+    "oem_coverage": {
+      "unique_extracted_pe_files_screened": 142,
+      "updater_binaries_with_recognized_prepare": 86,
+      "distinct_executable_section_hashes": 32,
+      "located_prepare_callers": 102,
+      "prepare_callers_checking_result": 102,
+      "separately_verified_exception": "The vpscan.dll extracted from signed WH16NS58 1.V9 uses a common PREPARE call in both rounds and ignores its return value. STREAM writes are checked.",
+      "limits": "56 unmatched PE files include packed Lite-On/Plextor executables and installer/support programs. A missing signature is unresolved, not proof that PREPARE is absent. Whole executable-section hashes identify build variants, not 32 independent protocol designs. Some archive copies contain patched host programs."
+    },
+    "paired_packages": {
+      "count": 15,
+      "lg_engine": "14 packages; both intermediate and final PREPARE callers check the result and stop on failure",
+      "vinpower_engine": "1 package, signed 1.V9; both intermediate and final rounds ignore PREPARE result",
+      "conclusion": "INTM presence or stage role does not identify a permissive entry policy."
+    },
+    "current_published_corpus": {
+      "packages": 130,
+      "paired_packages": 15,
+      "bin_members_including_duplicates": 145,
+      "unique_bin_hashes": 136,
+      "unique_intermediate_hashes": 6,
+      "source": "/Users/matthew/Developer/firmware-extractor/internal/review/mediatek-all/release-stage/payloads/fw/mediatek",
+      "limit": "The previous encoding audit predates this complete package set. Its coverage is not evidence of complete entry/acceptance/response-policy coverage."
+    },
+    "affected_drive": "Windows log proves complete INQUIRY and receiver-memory reads, BOOT + encrypted detection, then CHECK CONDITION with no meaningful sense on PREPARE before any firmware payload. It does not establish the physical connection, whether PREPARE changed internal state, or successful OEM recovery on this same drive."
+  },
+  "confirmed_gaps": [
+    {
+      "id": "G1",
+      "gap": "Transport direction is lost for empty writes",
+      "today": "mediatek-optical emits Data::Out(&[]) and its Step describes Direction::Out; the flasher adapter changes an empty payload to Direction::None.",
+      "required": "Keep command direction independent of payload length across the platform boundary. Preserve true no-data commands as a separate explicit case. Verify native SPTI, SG_IO and IOKit mapping, including zero-length commands.",
+      "history": "The empty-payload normalization predates 0.12.5 and is present in initial tracked flasher commit 0d9de4e."
+    },
+    {
+      "id": "G2",
+      "gap": "The command dialect is fixed while encoding is selected separately",
+      "today": "DriveClass::Mt19 chooses one sequence. PreparedUpdate::encrypted changes outgoing bytes but never changes PREPARE.",
+      "required": "Receiver preparation selects a complete compatible command-and-envelope recipe. Detecting AES code alone must not be treated as proof that every entry command enables the required receive path."
+    },
+    {
+      "id": "G3",
+      "gap": "Different OEM entry recipes exist",
+      "today": "Our PREPARE is always 3B 01 00 00 00 00 00 00 00 0B 00 00.",
+      "required": "Recognize legacy entry and encrypted application entry 3B 06 67 00 00 00 00 00 00 0B 00 00, including receivers supporting a conditional choice.",
+      "limit": "An encrypted BOOT receiver is not automatically a 06/67 receiver. V9 BOOT rejects nonzero buffer-id in its inspected handler."
+    },
+    {
+      "id": "G4",
+      "gap": "Generic strict-write policy cannot express a verified entry exception",
+      "today": "Every nonzero PREPARE status aborts; Vinpower's matching host routine ignores PREPARE return in both rounds.",
+      "required": "Each plan step owns a typed response policy. Keep STREAM strict. An entry exception requires a recognized receiver/completion contract and a narrowly specified outcome predicate.",
+      "limit": "No signature proving that a failed PREPARE can be continued safely has yet been established. Host behavior alone is insufficient."
+    },
+    {
+      "id": "G5",
+      "gap": "Structured error evidence is discarded across boundaries",
+      "today": "ScsiSenseError retains only a triplet and text. MTK Recovery formats its error as text. This cannot reliably distinguish absent sense, valid NO SENSE, SCSI CHECK CONDITION, OS transport failure, and partial transfer for command-specific policy.",
+      "required": "Preserve structured response metadata and typed error causes through native transport, flasher adapter and protocol execution. Never parse diagnostic strings to select a write path."
+    },
+    {
+      "id": "G6",
+      "gap": "Recovery lacks the complete receiver image-acceptance contract",
+      "today": "Recovery validates size, CMAC, stored-image form and chip, but does not yet recover all the marker, descriptor/sentinel and preservation rules seen in receiver disassembly.",
+      "required": "Envelope validation and receiver acceptance are separate checks; prepare enforces both. Recovery relaxes host model/family/rollback policy, not the receiver's mechanical acceptance rules."
+    },
+    {
+      "id": "G7",
+      "gap": "Prepared operations do not uniformly carry their receiver",
+      "today": "MTK normal Flash stores Receiver beside PreparedUpdate in the app and revalidates externally. Recovery has a separate receiver wrapper and embedded revalidation. A recovery boolean chooses execution entry behavior.",
+      "required": "A prepared operation carries its receiver evidence, recipe, canonical image, transfer bytes and verification contract. One executor consumes it for either operation."
+    },
+    {
+      "id": "G8",
+      "gap": "Timing, programming boundaries and verification are class-wide",
+      "today": "One class selects chunking, readiness timing, COMMIT tolerance and verification floor; the native adapter uses a 30-second command timeout while audited OEM examples use command-specific timeouts, often 100 seconds for streaming.",
+      "required": "Record per-step command timeout, receive limits, program-trigger boundary, settle/poll rules and readback mapping in the plan, with provenance. Preserve unit-specific regions explicitly. Do not change all timings to a new universal constant."
+    },
+    {
+      "id": "G9",
+      "gap": "Failure logging does not diagnose the remaining command surface",
+      "today": "The affected operation stops at PREPARE; there is no immediate REQUEST SENSE or bounded capability sweep after the failure.",
+      "required": "Retain the original failure and progress state, capture sense before other probes disturb it, then collect known read-only command outcomes within a fixed budget."
+    },
+    {
+      "id": "G10",
+      "gap": "Pioneer already supplies the architectural pattern, but not every proposed common method exists today",
+      "today": "Pioneer has Envelope, Receiver.detect/from_installed, prepare, PreparedUpdate.flash and Plan/Segment. Its transport plan is currently constructed inside execution; an inspectable PreparedUpdate.transfer_plan method is a proposed common surface.",
+      "required": "Mirror established Pioneer ownership and naming first; expose plan inspection consistently if needed. Retain legitimate component-shape differences and prove unchanged Pioneer wire behavior."
+    }
+  ],
+  "proposed_api": {
+    "principle": "Same names, lifecycle and responsibilities in both protocol crates. Protocol-specific types and payload shapes may differ. Avoid introducing a new universal protocol engine or dependency cycle just to share names.",
+    "normal_flow": [
+      "Envelope::load(input) -> validated canonical firmware envelope",
+      "Receiver::detect(evidence) -> receiver with unique positively established contract",
+      "receiver.prepare(target) -> PreparedUpdate with all compatibility and protocol checks applied",
+      "prepared.transfer_plan() -> inspectable validated plan",
+      "prepared.flash(FlashTransport { reads, writes }, runtime) -> VerifiedUpdate"
+    ],
+    "recovery_flow": "The same Receiver and PreparedUpdate lifecycle, using receiver.prepare_for_recovery(target) as an explicit preparation policy. Pioneer may still need Current evidence; MTK recovery continues to require no backup. Existing named Pioneer APIs can remain forwarding compatibility wrappers.",
+    "evidence_acquisition": "Read-only acquisition is separate from pure detection/preparation. Evidence may come from an installed capture bound to the live identity, or bounded live receiver-code reads in BOOT. The exact evidence constructor differs for Kernel+Normal versus a 2 MiB MTK image; the detector's responsibility does not.",
+    "no_toggles": "The ordinary caller supplies no enc boolean, PREPARE opcode, force-entry flag or updater brand. Receiver preparation decides these from evidence.",
+    "pioneer_differences_requiring_justification": [
+      "Pioneer Kernel+Normal components versus one MTK image: actual format difference.",
+      "Pioneer restoration passes versus MTK INTM startup transitions: actual receiver lifecycle difference, represented as passes and verification conditions.",
+      "Pioneer Current requirements versus bounded MTK BOOT reads: actual available evidence difference.",
+      "Raw CDB, key/CMAC/encoding and readback details remain protocol-private."
+    ]
+  },
+  "objects": {
+    "Envelope": {
+      "owns": ["Recognized input framing and original bytes", "Canonical stored-image bytes and hash", "Chip/hardware/build metadata", "CMAC/integrity evidence and protected ranges", "Optional receiver analyzable BOOT/application code"],
+      "rules": "Input encoding is distinct from output encoding. A recognized OEM encrypted input is decoded and validated before use; unknown or ambiguous framing is rejected. Raw drive reads are not silently treated as update images. No per-unit rewrite or signature mutation follows from merely loading an envelope."
+    },
+    "Receiver": {
+      "owns": ["Execution mode and live identity binding", "Code signatures with matched addresses and captured bytes", "Entry recipes and their enablement effects", "Stream encoding, framing, alignment and limits", "Image acceptance predicates", "Writable/preserved regions and program trigger", "Response, completion and verification requirements"],
+      "rules": "Each writable decision needs positive evidence. Missing evidence is Unknown; conflicting evidence is Ambiguous. Prefer small structural signatures with recovered operands, branch targets and bounded validation over whole-file/model/version lists. Do not make one huge exact-build fingerprint the only source of support."
+    },
+    "PreparedUpdate": {
+      "owns": ["Receiver contract and evidence binding", "Validated target and immutable canonical bytes", "Receiver-specific transfer representation", "Exact command plan and response policies", "Required verification and expected next receiver state"],
+      "rules": "Preparation performs no writes. Revalidate the binding immediately before entry. Encoding and entry dialect cannot be independently changed afterward."
+    },
+    "TransferPlan": {
+      "step_fields": ["Step and pass identifiers", "Exact CDB and explicit direction", "Payload reference/range or expected allocation", "Target offset, chunk size, alignment and maximum transfer", "Timeout and read retry policy", "Permitted response predicate", "Firmware modification boundary", "Evidence references", "Required postcondition"],
+      "rules": "Use typed protocol steps, not arbitrary injected scripts. Preview and execution must resolve the same plan. Rendering logs/JSON must show hashes, lengths and evidence without embedding the firmware payload. Execution may lower prepared typed steps lazily to avoid materializing hundreds of copies."
+    },
+    "CommandOutcome": {
+      "fields": ["Exact CDB and requested direction", "Requested byte count", "Reported byte count or Unknown", "SCSI status when available", "Raw sense and whether its format/declared length is valid", "Parsed sense when valid", "OS/transport error independently of SCSI result", "Elapsed time and timeout"],
+      "rules": "Data are usable only with a successful validated status/count. Preserve absence of sense rather than creating a 00/00/00 success. Native errors remain distinguishable from device rejection. A transport lacking metadata reports Unknown, never invents it."
+    },
+    "VerifiedUpdate": {
+      "fields": ["Final identity and receiver mode", "Verified protected ranges/count", "Unverified or unobservable regions", "Completed passes and transitions", "Preserved-region expectations", "Warnings supported by explicit outcome evidence"],
+      "rules": "Returning to INQUIRY alone is insufficient. Remaining BOOT is incomplete recovery. Readback must account for remapping and preserved data. No broad success claim for unobserved boot bytes."
+    }
+  },
+  "receiver_research": {
+    "required_signature_groups": [
+      {"name": "mode/binding", "evidence": "INQUIRY plus readable chip banner, current receiver entry/dispatch code and revalidation"},
+      {"name": "legacy entry", "evidence": "Command dispatcher accepts WRITE BUFFER mode 01/buffer 00 and copies byte-9 flags to receiver update state"},
+      {"name": "encrypted application entry", "evidence": "Dispatcher accepts 06/67, shows exactly how it enables the encrypted receive path, and ties that state to stream/header decoding"},
+      {"name": "stream encoding", "evidence": "Positive plaintext comparison or staged-header decrypt call plus validated AES routine; inspect controlling branch/state as well as existence of AES"},
+      {"name": "image acceptance", "evidence": "Header/banner, descriptor sentinel, marker, CMAC and bounds predicates reached before programming"},
+      {"name": "completion", "evidence": "Entry return/status paths and how completion/error/sense are produced, including any independently readable post-entry state"},
+      {"name": "programming/readback", "evidence": "Staging geometry, final trigger, boot/per-unit preservation and readable verification mapping"}
+    ],
+    "matching_strategy": "Trace representatives manually, define structural signatures for the proven behaviors, then scan every current corpus image in both BOOT and application roles. Record unique matches, absence, ambiguity and behavior operands. A match to a crypto helper does not automatically establish an entry or acceptance contract.",
+    "profiles": "Compose separately proven entry, envelope and verification facts into a valid receiver profile. Permit only combinations supported by control-flow evidence, not the Cartesian product of independent signatures.",
+    "coverage_report": "For every published package and each unique component, report BOOT/application contract, supported entry recipes, required encoding, acceptance rules, response policy, evidence origin and unknowns. Include all 15 transitions and all six unique INTMs."
+  },
+  "prepare_response_design": {
+    "default": "Require a successful entry response with the expected zero-length acceptance. Preserve the requested data-out direction even with zero payload.",
+    "candidate_policy": "A receiver-specific EntryResponsePolicy may accept one precisely defined non-GOOD response only after its receiver completion semantics and OEM behavior are understood, and any required readiness/state evidence is checked.",
+    "not_yet_approved_as_behavior": "Do not assign a permissive policy to a Vinpower filename, V9 target, INTM role, BOOT string, AES signature or all-zero sense alone.",
+    "research_to_close": [
+      "Compare the actual V9-compatible BOOT PREPARE and command-completion code with ordinary LG/ASUS receivers, including code shared across OEM host programs.",
+      "Determine whether zero-sense CHECK CONDITION reflects receiver status, OS/bridge interpretation of direction, or command state that actually changed.",
+      "Find and validate any read-only post-entry confirmation. If it is unavailable, state that the permissive path remains unproven rather than substituting a successful INQUIRY for update readiness.",
+      "If receivers have identical semantics but hosts differ, classify this as a narrowly documented response-policy difference; do not invent a receiver signature that cannot distinguish them."
+    ],
+    "always_stop": ["STREAM error or short/unknown acceptance", "Unrecognized response", "Lost transport or wrong/stale drive binding", "Unsupported receiver contract"],
+    "program_trigger_caution": "A failed STREAM response can occur after a command reached the drive. Track acceptance as unknown where necessary; never label an error as proof that nothing was written.",
+    "commit": "Keep COMMIT handling distinct from PREPARE: a trailing handshake may fail after programming was triggered. A contract can proceed to settle/readback checks without treating that handshake failure as successful firmware programming."
+  },
+  "multiple_images": {
+    "package_role": "Extraction-derived manifest supplies intermediate/final roles and exact hashes. Merely seeing two binaries never authorizes a two-stage update.",
+    "flash": [
+      "Validate all envelope contents and package pairing before any write.",
+      "Prepare and execute INTM against the currently running receiver.",
+      "Settle and verify INTM, then confirm its expected running identity/build.",
+      "Read and detect the new live receiver; do not inherit the previous encoding or entry recipe.",
+      "Prepare and execute the final envelope against that receiver, then verify final startup and protected ranges."
+    ],
+    "preflight": "An offline examination of the target INTM can establish a predicted next-stage contract before the first write; it cannot substitute for live re-identification. If the final stage cannot be prepared with the INTM's proven expected receiver, reject the package before starting.",
+    "plan_shape": "Each PreparedUpdate contains a concrete single-receiver plan. The package workflow holds both validated targets and explicit transition conditions; the final live-bound plan is created after transition. This avoids pretending the future receiver is already live.",
+    "bin": "Flash only the selected BIN; no automatic companion search.",
+    "recovery": "Flash only the explicitly selected TAR member or BIN. No backup and no automatic next member. After it starts, a new operation obtains fresh evidence."
+  },
+  "failure_diagnostics": {
+    "trigger": "After an authorized recovery attempt fails. Pre-write identification failures may also produce the same read-only report; no diagnostics bypass authorization or issue a write. Dry-run validation errors should not launch a lengthy hardware sweep by default.",
+    "first": "Log the original command outcome and pass/stage/offset before anything else. Capture REQUEST SENSE immediately when the failure stage permits it, before INQUIRY or other probes can clear pending sense. If the device may still be programming, follow the proven settle/status sequence before the broader sweep.",
+    "bounds": {"maximum_commands_including_sense_reads": 50, "total_sweep_budget_ms": 20000, "per_probe_timeout_ms": 1500, "maximum_reply_bytes_per_probe": 1024},
+    "budget_notes": "Stop scheduling at the deadline; one in-flight command can overrun it and OS timeout enforcement is platform-dependent. Capture omissions explicitly. No automatic probe retries or whole-image dump. A shorter timeout belongs to diagnostic probes only, never firmware transfers.",
+    "standard_probes": ["REQUEST SENSE, preserving raw and parsed forms", "INQUIRY with supported short/normal allocation and known 6-/12-byte host variants", "TEST UNIT READY and its sense", "GET CONFIGURATION header and the known serial/date features", "Read-only supported VPD pages where implemented", "Known MODE SENSE or GET EVENT STATUS reads that help identify command coverage"],
+    "receiver_probes": ["BOOT banner and identified receiver signature windows", "Known header/descriptor/marker regions needed for the contract", "Known readback aliases and small samples with explicit offsets", "A proven entry-state/status read when available"],
+    "excluded": ["WRITE BUFFER in any mode", "Another PREPARE", "COMMIT", "Reset or power-cycle", "Tray movement or spin-up", "Mode selection or settings writes", "Arbitrary undocumented register sweeps", "Unlock writes introduced solely for diagnostics"],
+    "report": "For each named probe log CDB, direction, timeout, raw response, validated transfer count, SCSI status, sense, elapsed time and classification: valid response, short/malformed, rejected, transport failure, timed out or skipped. Separate responds-to-INQUIRY, memory-readable and proven-update-ready; never call them equivalent. Preserve the original recovery error as the operation result."
+  },
+  "ownership": {
+    "mediatek_optical": "Envelope recognition, receiver code analysis, receiver image-acceptance rules, prepared recipes, exact command sequences and protocol verification. Normal and recovery share these.",
+    "pioneer_optical": "Reference API semantics and existing protocol implementation. Only additive API alignment needed for plan inspection; preserve wire behavior.",
+    "freemkv_flash": "Input package/member selection, pairing provenance, drive acquisition/exclusivity, host Flash versus Recovery policy, backup/risk/tray rules, cross-platform adapter, diagnostic persistence and CLI/GUI presentation.",
+    "libfreemkv": "Native SCSI execution and accurate native response metadata. No firmware model, encoding or receiver-policy decisions.",
+    "shared_model": "Use equivalent protocol-facing API shapes and common app-level plan/report concepts. Introduce a shared crate or trait only if real duplicate mechanics justify it; naming parity does not require erasing protocol-specific evidence."
+  },
+  "implementation_order_after_sign_off": [
+    "Complete receiver entry/completion and input-acceptance evidence, publish corpus coverage and unresolved profiles.",
+    "Add validated Envelope/Receiver/PreparedUpdate ownership in mediatek-optical following Pioneer; keep mechanical details private.",
+    "Represent plan steps and structured responses; preserve direction/count/status/sense and per-command timing through platform adapters.",
+    "Connect Flash and Recovery to the same receiver-derived plan and executor; retire independently selected encoding and recovery booleans.",
+    "Use explicit per-stage receiver transitions for paired packages and add bounded failure diagnostics.",
+    "Run corpus/command-trace/platform validation, then an authorized affected-drive test to validate actual recovery behavior."
+  ],
+  "acceptance": [
+    "Both crates expose the same Envelope -> Receiver -> prepare -> inspect plan -> flash lifecycle with documented reasons for data-shape differences.",
+    "Corpus report covers all current 130 packages, 136 unique image binaries, both receiver modes where present, all 15 pairs and all six distinct INTMs. Unknowns and unsupported older chips are explicit.",
+    "Byte-level replay fixtures from independent OEM disassembly prove PREPARE CDB, direction, payload, stream offsets, timeouts and stage transitions. Tests must not merely assert constants copied from our implementation.",
+    "Same target yields the correct different transfer plans for distinct live receiver contracts; target filename/model never supplies the receiver policy.",
+    "A public prepared operation cannot be reconfigured with an incompatible encoding or entry command after preparation.",
+    "Matched signatures validate control-flow relationships and recovered operands; corrupt, ambiguous, short and relocated cases are checked meaningfully.",
+    "Receiver-specific marker/descriptor/bounds failures are reported before the first firmware write.",
+    "Zero-length data-out remains data-out through real native adapters on Windows/macOS/Linux. Explicit no-data remains a separate command direction.",
+    "Response fixtures distinguish GOOD, valid NO SENSE, missing/invalid sense, CHECK CONDITION, OS failure, timeout, short transfer and unknown transfer count.",
+    "PREPARE exception tests exist only after the exact permissive contract is proven. Unknown error types remain failures. STREAM writes are never retried.",
+    "Between-stage changed/BOOT/unreadable receiver blocks final firmware. Recovery sends only the selected member and produces no backup.",
+    "Failure diagnostics start with the original error/sense, respect programming state and budget, issue no writes/resets, and never turn an operation failure into success.",
+    "Pioneer command-trace fixtures and existing compatibility behavior remain unchanged; Windows GUI native regression matrix remains green.",
+    "Before any build, check the latest stable pioneer-optical requirement and lockfile as required by the repository instructions, recording any development revision needed for this work.",
+    "Record hardware evidence separately from offline/corpus coverage. Successful mocks do not establish that the affected V9 BOOT drive recovered."
+  ],
+  "sign_off": {
+    "requested": "Approve this architecture, research completion criteria and bounded implementation scope; implementation starts only after the user signs off.",
+    "unresolved_behavior": "No approval of a blanket PREPARE-failure bypass is implied. The permissive receiver/completion contract remains a research gate.",
+    "not_requested": "No release, deployment or hardware write is requested as part of this design review."
+  }
+}
