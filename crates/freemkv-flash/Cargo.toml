@@ -38,13 +38,13 @@ cmac = "0.7"
 cipher = "0.4"
 sha2 = "0.10"
 getrandom = "0.3"
-# Pin the OEM-verified Kernel receive-placement correction until its crate release.
-pioneer-optical = { git = "https://github.com/MattJackson/pioneer-optical.git", rev = "9100f74493deb487dc71a92422aef7ecbff12471", features = ["drive", "envelope", "analysis", "firmware-info"] }
+# Exact released Pioneer receive-placement correction, verified against OEM images.
+pioneer-optical = { version = "=0.15.2", features = ["drive", "envelope", "analysis", "firmware-info"] }
 # Shared step-1 chipset detection (MTEKMT19xx family key) — the same detector
 # freemkv-fw uses, so the flash tool and the modify tool never disagree on a
 # firmware image's family. Detection-only crate (std + anyhow); no cycle.
 freemkv-chipset = { path = "../freemkv-chipset" }
-mediatek-optical = { version = "=0.7.0", features = ["drive", "image", "enc", "oem"] }
+mediatek-optical = { version = "=0.7.1", features = ["drive", "image", "enc", "oem"] }
 # The SCSI pass-through transport (SG_IO / IOKit / SPTI + the macOS shim) is the
 # `scsi` feature of libfreemkv — the single source of truth for that layer.
 # freemkv-flash used to carry a trimmed copy of those backends; now it adapts

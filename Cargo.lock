@@ -2421,9 +2421,9 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "mediatek-optical"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0744d502728363a83039c1610175a9b7ba4bbcd360f0977a8cef94447f20942"
+checksum = "90a98c202b8a2ba4f0ac0d3431479b31f1fb134669a578f0973c6d07b19a9f77"
 dependencies = [
  "aes",
  "cmac",
@@ -3165,8 +3165,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pioneer-optical"
-version = "0.15.1"
-source = "git+https://github.com/MattJackson/pioneer-optical.git?rev=9100f74493deb487dc71a92422aef7ecbff12471#9100f74493deb487dc71a92422aef7ecbff12471"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4ea0f6fef73c5aad4da8c4d3121825406a6f1a0a5210ca4b0f5ab0bc33a3e3f"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",

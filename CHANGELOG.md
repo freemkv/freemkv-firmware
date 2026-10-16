@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   family, chip, CMAC, OEM boot page, banner, rollback and post-flash identity
   checks as every other build, so a drive running an INTM build can be
   crossflashed back.
+- Pioneer drives whose OEM receiver uses the two-part Kernel transfer now send
+  the header and key first, followed by the body at the receiver-selected
+  offset. The prior ordering could reject a valid 2.05 → 2.06 update.
+- Slot-loading drives now accept the MMC no-medium status as closed and empty;
+  a physical tray remains subject to the closed-tray safety check.
+- Update to `pioneer-optical 0.15.2` and `mediatek-optical 0.7.1`, both
+  firmware-backed releases used by the flashing path.
 
 ## [0.12.3] - 2026-10-14
 

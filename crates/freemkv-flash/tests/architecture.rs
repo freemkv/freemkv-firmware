@@ -1644,7 +1644,7 @@ fn vendor_scan_skips_comments_and_tests() {
 }
 
 // ---------------------------------------------------------------------------
-// R11: pioneer-optical stays pinned through the migration
+// R11: Pioneer receive-placement correction stays pinned through the release
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1654,11 +1654,12 @@ fn pioneer_optical_stays_pinned() {
         .lines()
         .find(|l| l.trim_start().starts_with("pioneer-optical"))
         .expect("pioneer-optical dependency");
-    // Require the OEM-verified receive-placement fix until its crate release.
-    // The older 0.15.1 release still contains the incorrect two-part offsets.
+    // The OEM-verified receive-placement fix shipped in 0.15.2.  Keep an
+    // exact registry version so Cargo cannot silently resolve the older
+    // 0.15.1 release with its incorrect two-part offsets.
     assert!(
-        line.contains("rev = \"9100f74493deb487dc71a92422aef7ecbff12471\""),
-        "pioneer-optical must pin the OEM-verified receive-placement fix: {line}"
+        line.contains("version = \"=0.15.2\"") && !line.contains("git ="),
+        "pioneer-optical must use the released OEM-verified receive-placement fix: {line}"
     );
 }
 
