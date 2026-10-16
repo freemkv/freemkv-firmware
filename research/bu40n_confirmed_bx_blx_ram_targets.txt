@@ -1,0 +1,20 @@
+# Confirmed BX/BLX targets in the 2 MiB BU40N OEM fixture
+
+Criterion: an instruction must lie in a confirmed executable code region, decode as
+BX/BLX in the correct instruction set, and have a statically resolved target in
+0x02000000..0x02ffffff.
+
+Result: NONE CONFIRMED.
+
+Excluded from this result:
+- 68 whole-image ARM-mode decode candidates. Their surrounding bytes do not form
+  confirmed ARM code regions; they are raw decode artifacts.
+- Whole-image Thumb candidates decoded without a function/code-region proof.
+- Register-indirect BX/BLX instructions whose target cannot be resolved statically.
+
+Confirmed code checks performed:
+- Decoded OEM command-table handler windows in Thumb mode.
+- Decoded known ARM veneer/helper regions, including the fixed literal veneers.
+- Resolved fixed veneer literals before classifying their destinations.
+
+No confirmed BX/BLX target landed in the requested CPU RAM range.

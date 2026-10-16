@@ -1,0 +1,17 @@
+{
+  "device": "/dev/sg0",
+  "image_sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+  "cave_offset": "0x153968",
+  "marker_hex": "52414d2d504f432d3130302d30303032",
+  "cave_before_hex": "ffffffffffffffffffffffffffffffff",
+  "stage_before_hex": "52414d2d504f432d3130302d30303031",
+  "speed_site_before_hex": "322a6dd8",
+  "write_sent": true,
+  "cave_after_hex": "ffffffffffffffffffffffffffffffff",
+  "stage_after_hex": "52414d2d504f432d3130302d30303032",
+  "speed_site_after_hex": "322a6dd8",
+  "marker_visible_at_xip_address": false,
+  "marker_visible_in_staging_aperture": true,
+  "xip_cave_unchanged": true,
+  "speed_site_unchanged": true
+}
