@@ -51,4 +51,18 @@ pub fn crc32(data: &[u8]) -> u32 {
 #[path = "golden_tests.rs"]
 mod golden_tests;
 
+#[cfg(test)]
+pub(crate) fn kernel_handoff_fixture(kernel: &mut [u8]) {
+    // Synthetic startup and RAM-programmer signatures, kept away from decoder
+    // fixtures. Every test that authorizes Kernel replacement needs this proof.
+    kernel[0x20..0x30].copy_from_slice(&[
+        1, 0, 0x6d, 0xf3, 1, 0, 0x6d, 0xf4, 0x7a, 7, 0, 0, 0x80, 0, 4, 0x80,
+    ]);
+    kernel[0xe000..0xe016].copy_from_slice(&[
+        0x7a, 0, 0, 0x40, 0xe1, 0, 0x7a, 1, 0, 0x40, 0xe1, 0x10, 0x7a, 2, 0, 0, 0x28, 0, 0x5e,
+        0x40, 0xf0, 0,
+    ]);
+    kernel[0xe100..0xe108].copy_from_slice(&[0xf9, 0x80, 3, 9, 0x5e, 0x40, 0, 0x20]);
+}
+
 pub mod package;

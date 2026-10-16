@@ -33,7 +33,7 @@ result: OK
 --- text (11) ---
 file: <TMP>/info-file/pioneer_bundle_signed_pair.tar
 size: 143 KiB
-sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
+sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 family: Pioneer
 firmware model: BDR-TEST
 hardware: SAT FFFE
@@ -47,7 +47,7 @@ MSG      file: <TMP>/info-file/pioneer_bundle_signed_pair.tar
 MSG      size: 143 KiB
 FIELD    File = <TMP>/info-file/pioneer_bundle_signed_pair.tar
 FIELD    Size = 143 KiB
-MSG      sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
+MSG      sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 MSG      family: Pioneer
 MSG      firmware model: BDR-TEST
 MSG      hardware: SAT FFFE

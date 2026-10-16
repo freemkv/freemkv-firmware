@@ -11,7 +11,7 @@ differ only for P1 to P4; a MediaTek scenario only for R1 to R8, M-RS and M-FAM:
 | P1 | Pioneer: a package that cannot be read is refused at the plan, before the backup, so no backup file is saved and no `backup:` line is shown |
 | P2 | Pioneer: the last tray check runs after the confirmation, right before the first write. A successful flash issues the same device commands. When authorize refuses (or the user declines), there is one fewer tray check. With a disc inserted after the backup, the `backup:` line, the confirmation text and the prompt appear before the refusal |
 | P3 | Pioneer: a drive that does not identify as a BD or DVR generation is refused without the dead `--recover` hint. v0.11.2: `the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write`; now: `the drive does not identify as a BD or DVR generation; refusing before any write` (954f51d). The hint named a flash mode no user could reach since 0.11.0: the CLI always passed `force: false` (v0.11.2 main.rs:198), the GUI forced it off (app.rs:292), and a forced Pioneer flash was refused anyway (workflow.rs:284). A P3 scenario may differ only by lines that drop the hint, so its device commands are identical |
-| P4 | Pioneer: the synthetic Kernel test fixtures gained a receiver rotation decode-loop at Kernel offset `0x114` (an `AND.W #0x1F` key mask, a `MOV` of the count, and a shift-helper `JSR`), required by pioneer-optical 0.15.0, which refuses a Kernel whose Normal rotation direction is undetectable (`UnknownRotation`). Only fixture-derived bytes differ — the Kernel, backup and write-payload digests and the firmware fingerprint — while every device command, message and refusal is byte-identical. The Pioneer analogue of R8 |
+| P4 | Pioneer: the synthetic Kernel test fixtures gained a receiver rotation decode-loop at Kernel offset `0x114` (an `AND.W #0x1F` key mask, a `MOV` of the count, and a shift-helper `JSR`), required by pioneer-optical 0.15.0, which refuses a Kernel whose Normal rotation direction is undetectable (`UnknownRotation`). The fixtures also gained a synthetic RAM-programmer handoff and startup signature for the generic Kernel replacement gate. Only fixture-derived bytes differ — the Kernel, backup and write-payload digests and the firmware fingerprint — while every device command, message and refusal is byte-identical. The Pioneer analogue of R8 |
 | R1 | MT1939 / generic MediaTek backup rebuilt from the OEM catalog |
 | R2 | always-on MT1959/MT1939 chip gate and its extra identity reads |
 | R3 | raw-drive-read refusal |
@@ -340,9 +340,9 @@ reason: R7, M-CHIP
 reason: P4
 ```diff
 -sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
++sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 -MSG      sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+MSG      sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
++MSG      sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 ```
 
 ## classify_and_unknown_info.txt
@@ -656,18 +656,18 @@ reason: M-FAM
 reason: P4
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 ```
 
 ### Pioneer dry run: signed Kernel+Normal bundle
 reason: P4
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 ```
 
 ## flash_execute.txt
@@ -3910,9 +3910,9 @@ reason: R7, M-CHIP
 reason: P4
 ```diff
 -sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
++sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 -MSG      sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+MSG      sha256: 572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
++MSG      sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 ```
 
 ## info_mtk.txt
@@ -4471,18 +4471,18 @@ reason: R4, R2
 reason: P4
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 ```
 
 ### Pioneer dry run: tray open
 reason: P4
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: e32a27b62c92a3c3b2dddea8d631c0fe4f430115411b9aa57f37eb358719c528
++MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 ```
 
 ## pioneer_corpus.txt
@@ -4844,37 +4844,45 @@ reason: P2
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=8978c09f57b0ddeff68858b054b808167beb39ca597976560631e74efa0a55cc -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=23e695a20242d812cd6055bc762fadedac537a7aa7d2e46d89d3aced9164cdb8 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ### Pioneer execute: Kernel+Normal update
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=8978c09f57b0ddeff68858b054b808167beb39ca597976560631e74efa0a55cc -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=23e695a20242d812cd6055bc762fadedac537a7aa7d2e46d89d3aced9164cdb8 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ### Pioneer execute: Kernel+Normal update with kernel restoration pass
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=c0a16b5e48c7b204741c44fa37f58d6402a2828c64c1aa21a96f3c2e884a1897 -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=64ebdee8491190bb71fd231dc45564e375f758d5848f7d8bf1f4541353411c65 -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=23e695a20242d812cd6055bc762fadedac537a7aa7d2e46d89d3aced9164cdb8 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=e1887edb7ac462db6d799efbb3841854de8cb55146151090ec99089d0fb4056d -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=8978c09f57b0ddeff68858b054b808167beb39ca597976560631e74efa0a55cc -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=23e695a20242d812cd6055bc762fadedac537a7aa7d2e46d89d3aced9164cdb8 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
-+saved pre-flash backup: 146432 bytes sha256=96194fc8db04f06c88fd17ddec226c2769f83b2b622789707f7235a198aa82b6
++saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 ```
 
 ### Pioneer execute: Normal for another Kernel tag, refused after the backup
@@ -4884,14 +4892,14 @@ reason: P2
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ### Pioneer execute: Normal-only update
 reason: P4
 ```diff
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ### Pioneer execute: disc inserted after the backup
@@ -4906,7 +4914,7 @@ reason: P2
 +MSG      backup: saved <TMP>/pioneer-execute/backup_4.tar (146432 bytes)
 +MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ## pioneer_execute_tty.txt
@@ -4918,18 +4926,20 @@ reason: P2
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ### Pioneer CLI execute: TTY answers y
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=8978c09f57b0ddeff68858b054b808167beb39ca597976560631e74efa0a55cc -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=23e695a20242d812cd6055bc762fadedac537a7aa7d2e46d89d3aced9164cdb8 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ### Pioneer CLI execute: disc inserted after the backup, TTY answers y
@@ -4941,7 +4951,7 @@ reason: P2
 +This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 +Proceed? [y/N] 
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
++saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
 
 ## pioneer_flash_bundle_failures.txt
@@ -4952,7 +4962,7 @@ reason: P4, P5
 -result: ERR backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update; aborting flash: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 +result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 -saved pre-flash backup: 71680 bytes sha256=1ca0f8fd812313de0e9f42418df7eb1d378763bb0629b9b7dc25bc61799c43f2
-+saved pre-flash backup: 71680 bytes sha256=d827e8c5d589e922a0cd54a305164cac456c163227798d10ac30bab07c2d1909
++saved pre-flash backup: 71680 bytes sha256=262d81dcf0bbe4661d5a92cbd3018fcdf8a833a03c02ee4311016ea47d661aeb
 ```
 
 ### Pioneer execute: target is a header-only bundle
@@ -4962,7 +4972,7 @@ reason: P2
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
-+saved pre-flash backup: 146432 bytes sha256=96194fc8db04f06c88fd17ddec226c2769f83b2b622789707f7235a198aa82b6
++saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 ```
 
 ### Pioneer execute: target is garbage
@@ -5016,20 +5026,22 @@ reason: P1
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3322ba5603d28bfebd97ba3633c0c60f5c9c09ab41c54c12f0c13e0bc6ecf39f -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=141a156c55e3e8ccff00cc94a79c9ba630f08714e26ae8764f86b051ff9894de -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=23ec2bedd92e6f32f54fcf35b1d633d87df58bc1aeb0d37dc542d65d513b6c60 -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=79f2251b2edefec88f24ed8fddcc83182da76ab707ca8c13bb869962d3c07e40 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=487ae0970cb0db11d54874c2c5c4a99c0c04939e70bbece3a8528aba7fad8394 -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=a2d4fc2b731e9335c971975897e4bdf41d8311cf9589c7df88c8ac3a4b609261 -> ok
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
-+saved pre-flash backup: 146432 bytes sha256=96194fc8db04f06c88fd17ddec226c2769f83b2b622789707f7235a198aa82b6
++saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 ```
 
 ### Pioneer flash: dry-run request
 reason: P4
 ```diff
 -SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
-+SHA-256: 52d698397cdc7dccefa39db6ee1becaee3ef7876a99eda1deb86df6b05735cc6
++SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
 -MSG      SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
-+MSG      SHA-256: 52d698397cdc7dccefa39db6ee1becaee3ef7876a99eda1deb86df6b05735cc6
++MSG      SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
 ```
 
 ## pioneer_plan_and_gates.txt
@@ -5038,18 +5050,18 @@ reason: P4
 reason: P4
 ```diff
 -validate_backup: ok, 71680 bytes sha256=952200ac9b58e01e226c6dcc111684d274b3d0336c6382adc314c94a9bc803f9
-+validate_backup: ok, 71680 bytes sha256=08916ebe74ba874bde6a5e480755e3738f7ab926a13bef2bc0cd3f75451c866d
++validate_backup: ok, 71680 bytes sha256=c1ec202edd046d128003e6e488f961f02f93fa7533f42c967527b6919eb98ae8
 -MSG      validate_backup: ok, 71680 bytes sha256=952200ac9b58e01e226c6dcc111684d274b3d0336c6382adc314c94a9bc803f9
-+MSG      validate_backup: ok, 71680 bytes sha256=08916ebe74ba874bde6a5e480755e3738f7ab926a13bef2bc0cd3f75451c866d
++MSG      validate_backup: ok, 71680 bytes sha256=c1ec202edd046d128003e6e488f961f02f93fa7533f42c967527b6919eb98ae8
 ```
 
 ### backup_notice + validate_backup: full backup
 reason: P4
 ```diff
 -validate_backup: ok, 146432 bytes sha256=4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+validate_backup: ok, 146432 bytes sha256=572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
++validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 -MSG      validate_backup: ok, 146432 bytes sha256=4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+MSG      validate_backup: ok, 146432 bytes sha256=572d34b590bcfc94a4966eb50eeb4e711ab8eed6827309ace7d44643895906d5
++MSG      validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 ```
 
 ## pioneer_recover.txt
@@ -5058,23 +5070,29 @@ reason: P4
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=6bea1e885099668081e0d031e5b563c1ae8bba29bd8d810c8550c0ec1520400f -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=4c1f6fb75e5b0c94534f703bd40c63e8d9278cbd36bcc695c9ed0d46e312d058 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
 ```
 
 ### Pioneer recover execute: receiver in normal mode
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=6bea1e885099668081e0d031e5b563c1ae8bba29bd8d810c8550c0ec1520400f -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
-+OUTS cdb=3b07fe01000000120000 len=4608 sha256=4c1f6fb75e5b0c94534f703bd40c63e8d9278cbd36bcc695c9ed0d46e312d058 -> ok
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
++OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
 ```
 
 ### Pioneer recover execute: write fails on the 2nd command
 reason: P4
 ```diff
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
-+OUTS cdb=3b07fe00000000800000 len=32768 sha256=6bea1e885099668081e0d031e5b563c1ae8bba29bd8d810c8550c0ec1520400f -> ok
+-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> err
++OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
++OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> err
 ```

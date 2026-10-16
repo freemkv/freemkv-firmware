@@ -88,6 +88,15 @@ writing. Unknown, unreadable or conflicting signatures refuse the flash.
 Normal flash retains its compatibility checks. The explicit recovery command
 uses the separate recovery path described below.
 
+Pioneer Kernel replacement also requires a signature-derived programming handoff
+match: the installed updater's restart address must equal the incoming Kernel's
+recognized startup entry. Flash, Recovery and offline crossflash admission refuse
+unknown or mismatched handoffs before update entry. Hardware-family equality does
+not override this check. Every automatic Kernel restoration pass is checked too.
+Offline decisions distinguish `yes`, `soft_no` (a known handoff mismatch requiring
+a future intermediate transfer), and `hard_no` (other or unknown incompatibility).
+Only `yes` permits writing; catalogue graphs expose soft refusals as future options.
+
 ## Usage
 
 ```sh

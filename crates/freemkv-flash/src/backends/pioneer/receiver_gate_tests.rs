@@ -194,13 +194,13 @@ fn hoard_receiver_gate_refuses_only_cross_class_pairs() {
     eprintln!(
         "receiver gate over {} packages: self-decode {self_admitted}, \
          same-model pairs {same_model_pairs} admitted; cross-edition same-class {same_class_admit} admitted, \
-         different-contract {cross_class_refuse} refused; 207M<->PR1ML refused and 205<->206 admitted both ways",
+         different-contract {cross_class_refuse} refused; 207M<->PR1ML encoding refused; 205<->206 encoding matches but handoff refuses",
         pkgs.len(),
     );
 
     // 5. BDR-205 (SAT 1014, the S05XLB) <-> BDR-206 (SAT 1030): one family, one
-    //    receiver class, different SAT. A hardware family spans several SATs and
-    //    crossflashing across them is the 0.11.x rule, so this is admitted both ways.
+    //    receiver class, different SAT. Encoding equality is insufficient:
+    //    the independent Kernel handoff check must refuse this transition.
     let k205 = pkgs
         .iter()
         .find(|p| p.model == "BDR-205" && p.sat == "1014")
@@ -213,4 +213,8 @@ fn hoard_receiver_gate_refuses_only_cross_class_pairs() {
     assert_eq!(k205.class, k206.class, "205 and 206 share a receiver class");
     assert!(check_receiver(Some(&k205.kernel), Some(&k206.kernel), &k206.normal).is_ok());
     assert!(check_receiver(Some(&k206.kernel), Some(&k205.kernel), &k205.normal).is_ok());
+    let a = envelope::decode_envelope(&k205.kernel).unwrap();
+    let b = envelope::decode_envelope(&k206.kernel).unwrap();
+    assert!(pioneer_optical::image::check_kernel_handoff(&a.image, &b.image).is_err());
+    assert!(pioneer_optical::image::check_kernel_handoff(&b.image, &a.image).is_err());
 }

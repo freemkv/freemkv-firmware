@@ -70,8 +70,14 @@ where
     E: std::error::Error + Send + Sync + CodedError + 'static,
 {
     let code = error.code();
+    let status = crate::crossflash::refusal_status(&error);
+    let guidance = if status == crate::crossflash::CompatibilityStatus::SoftNo {
+        "Intermediate transfer is required but not implemented. No firmware was written."
+    } else {
+        "No firmware was written. Check that the firmware package is complete and compatible with this drive"
+    };
     anyhow::Error::new(error).context(format!(
-        "Cannot prepare this firmware update [{code}]. No firmware was written. Check that the firmware package is complete and compatible with this drive"
+        "Cannot prepare this firmware update [{code}]. {guidance}"
     ))
 }
 

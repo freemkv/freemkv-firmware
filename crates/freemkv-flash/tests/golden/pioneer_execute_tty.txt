@@ -47,9 +47,9 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 OUTS cdb=3b04ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
 IN   cdb=120000006000 alloc=96 -> ok 96
-OUTS cdb=3b07fe00000000800000 len=32768 sha256=8978c09f57b0ddeff68858b054b808167beb39ca597976560631e74efa0a55cc -> ok
-OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
-OUTS cdb=3b07fe01000000120000 len=4608 sha256=23e695a20242d812cd6055bc762fadedac537a7aa7d2e46d89d3aced9164cdb8 -> ok
+OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
+OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
+OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
 OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
 OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
 OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
@@ -62,7 +62,7 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
-saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer CLI execute: TTY answers n ===
 result: ERR flash aborted at confirmation prompt
@@ -98,7 +98,7 @@ IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 IN   cdb=120000006000 alloc=96 -> ok 96
-saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer CLI execute: disc inserted after the backup, TTY answers y ===
 result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
@@ -135,4 +135,4 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 IN   cdb=120000006000 alloc=96 -> ok 96
 MEDIUM -> DiscPresent
-saved pre-flash backup: 146432 bytes sha256=e8801b3e01c1b28e40816abb391751a69642b769cbec75ba95644ec7ef4fa761
+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1

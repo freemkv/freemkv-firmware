@@ -836,6 +836,7 @@ fn pair_signature(kind: &str, gated: bool, marker: u8) -> Vec<u8> {
 
 fn fixture_pair(gated: bool, marker: u8) -> Update {
     let mut kernel = vec![0; 0x10000];
+    crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
@@ -959,6 +960,7 @@ impl ScsiDevice for RecoveryDrive {
 
 fn prepared_pair(gated: bool, marker: u8) -> Update {
     let mut kernel = vec![0; 0x10000];
+    crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
@@ -2197,6 +2199,7 @@ fn golden_pioneer_plan_and_gates() {
 /// layout from the former, and authorize needs the latter.
 fn ud04_images(gated: bool, marker: u8, tag: &[u8; 8]) -> (Vec<u8>, Vec<u8>) {
     let (mut kernel, mut normal) = bounded_backup_fixture();
+    crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1008..0x1010].copy_from_slice(tag);
     let finalizer = if gated {
         GATED_FINALIZER
@@ -2686,8 +2689,8 @@ const ALLOWED_REASONS: &[&str] = &[
 /// that cannot be read is refused before the backup; P2, the last tray check
 /// runs after the confirmation; P3, a refusal no longer carries
 /// [`RECOVER_HINT`]; P4, the synthetic Kernel fixtures gained a 0.15.0 receiver
-/// rotation decode-loop, so only fixture-derived digests differ (commands and
-/// messages unchanged).
+/// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
+/// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5"];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.

@@ -510,16 +510,26 @@ pub(crate) fn authorize_installed(
             let target =
                 pioneer_optical::envelope::Update::load(kernel.expect("selected Kernel"), normal)
                     .map_err(preparation_error)?;
-            Prepared {
-                complete: Some(receiver.prepare(target).map_err(preparation_error)?),
+            receiver.prepare(target).map(|complete| Prepared {
+                complete: Some(complete),
                 normal: None,
-            }
+            })
         }
-        FlashSelection::NormalOnly => Prepared {
+        FlashSelection::NormalOnly => receiver.prepare_normal(normal).map(|normal| Prepared {
             complete: None,
-            normal: Some(receiver.prepare_normal(normal).map_err(preparation_error)?),
-        },
+            normal: Some(normal),
+        }),
     };
+    // A known handoff mismatch is a candidate for future adaptation, but all
+    // other gates must also pass before advertising it as such. No Prepared
+    // write grant is produced for that candidate.
+    if let Err(error) = &prepared {
+        if crate::crossflash::refusal_status(error)
+            != crate::crossflash::CompatibilityStatus::SoftNo
+        {
+            return Err(preparation_error(error.clone()));
+        }
+    }
     // Receiver gate: before any write, prove the drive's currently-installed
     // Kernel can receive every component this flash sends (see
     // `flash_plan::check_receiver`). Runs after the library's own preparation so
@@ -535,6 +545,7 @@ pub(crate) fn authorize_installed(
     .map_err(|reason| anyhow!("refusing to flash: {reason}"))?;
     let route = resolve_flash_plan(installed, kernel, Some(normal))?;
     let mut warnings = routing_warnings(&route)?;
+    let prepared = prepared.map_err(preparation_error)?;
     debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
         &route
     ));

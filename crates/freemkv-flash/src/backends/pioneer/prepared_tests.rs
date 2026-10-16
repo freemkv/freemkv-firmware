@@ -58,6 +58,7 @@ fn balance(bytes: &mut [u8]) {
 }
 pub(super) fn pair(gated: bool, marker: u8) -> Update {
     let mut kernel = vec![0; 0x10000];
+    crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);

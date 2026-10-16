@@ -152,6 +152,12 @@ impl Plan {
         }
         let (normal_transfer, reencoded) =
             normal_transfer_for_installed(installed_kernel, &target, target_normal_bytes)?;
+        pioneer_optical::image::check_kernel_handoff(
+            &installed_kernel.image,
+            &target.kernel().image,
+        )
+        .map_err(pioneer_optical::receiver::PreparationError::KernelHandoff)
+        .map_err(super::flash::preparation_error)?;
         Ok(Self {
             control,
             kernel_transfer: target.kernel_transfer().to_vec(),

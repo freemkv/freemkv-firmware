@@ -1,4 +1,4 @@
-//! `freemkv-crossflash <dir>`: print every crossflash `flash` admits between
+//! `freemkv-crossflash <dir>`: print admitted and known future crossflashes between
 //! the firmware packages in `<dir>`, as JSON.
 //!
 //! Input is a content-addressed package tree (`pioneer/<sha256>.tar`,
@@ -10,12 +10,24 @@
 //! for one pair (refusal reason, or "admitted").
 
 use anyhow::{bail, Context, Result};
-use freemkv_flash::crossflash::{admits, links, Platform};
+use freemkv_flash::crossflash::{admits, classified_links, decide, CompatibilityStatus, Platform};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let [flag, json, installed, target] = args.as_slice() {
+        if flag == "--why" && json == "--json" {
+            let installed = std::fs::read(installed)?;
+            let target = std::fs::read(target)?;
+            let platform = platform(&target);
+            println!(
+                "{}",
+                serde_json::to_string(&decide(platform, &installed, &target))?
+            );
+            return Ok(());
+        }
+    }
     if let [flag, installed, target] = args.as_slice() {
         if flag == "--why" {
             return why(Path::new(installed), Path::new(target));
@@ -24,27 +36,37 @@ fn main() -> Result<()> {
     let [root] = args.as_slice() else {
         bail!(
             "usage: freemkv-crossflash <package directory>\n       \
-             freemkv-crossflash --why <installed> <target>"
+             freemkv-crossflash --why [--json] <installed> <target>"
         );
     };
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut future: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (dir, ext, platform) in [
         ("pioneer", "tar", Platform::Pioneer),
         ("mediatek", "tar", Platform::Mediatek),
     ] {
         let (ids, bytes) = read_packages(&Path::new(root).join(dir), ext)?;
         let refs: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
-        let found = links(platform, &refs);
+        let found = classified_links(platform, &refs);
         eprintln!("{dir}: {} packages, {} links", ids.len(), found.len());
-        for (i, j) in found {
-            out.entry(ids[i].clone()).or_default().push(ids[j].clone());
+        for (i, j, status) in found {
+            let graph = if status == CompatibilityStatus::Yes {
+                &mut out
+            } else {
+                &mut future
+            };
+            graph
+                .entry(ids[i].clone())
+                .or_default()
+                .push(ids[j].clone());
         }
     }
     let doc = serde_json::json!({
         "format": "freemkv-crossflash-links",
-        "version": 1,
+        "version": 2,
         "freemkv_flash": env!("CARGO_PKG_VERSION"),
         "links": out,
+        "future": future,
     });
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())
@@ -55,18 +77,22 @@ fn why(installed: &Path, target: &Path) -> Result<()> {
     let read = |p: &Path| std::fs::read(p).with_context(|| format!("reading {}", p.display()));
     let installed = read(installed)?;
     let target = read(target)?;
-    let platform = if freemkv_flash::mediatek_package::Package::parse(&target).is_ok()
-        || target.get(257..262) != Some(b"ustar")
-    {
-        Platform::Mediatek
-    } else {
-        Platform::Pioneer
-    };
+    let platform = platform(&target);
     match admits(platform, &installed, &target) {
         Ok(()) => println!("admitted"),
         Err(e) => println!("refused: {e:#}"),
     }
     Ok(())
+}
+
+fn platform(target: &[u8]) -> Platform {
+    if freemkv_flash::mediatek_package::Package::parse(target).is_ok()
+        || target.get(257..262) != Some(b"ustar")
+    {
+        Platform::Mediatek
+    } else {
+        Platform::Pioneer
+    }
 }
 
 /// Every `<sha256>.<ext>` in `dir`, sorted by name: (ids, bytes).

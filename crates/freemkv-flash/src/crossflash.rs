@@ -6,6 +6,57 @@
 
 use anyhow::Result;
 
+/// Shared direct-transfer compatibility result. Only Yes permits writing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompatibilityStatus {
+    /// The existing flash path admits the transfer.
+    Yes,
+    /// Known same-hardware transition requiring an unimplemented adapter.
+    SoftNo,
+    /// Incompatible, invalid, or insufficiently understood transition.
+    HardNo,
+}
+
+/// Offline decision returned to catalogue and diagnostic consumers.
+#[derive(Debug, serde::Serialize)]
+pub struct Decision {
+    /// Yes, soft_no or hard_no.
+    pub status: CompatibilityStatus,
+    /// Explanation for a refusal; absent for an admitted transfer.
+    pub reason: Option<String>,
+}
+
+/// Classify typed errors, never message text. Unknown evidence is a hard no.
+pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> CompatibilityStatus {
+    loop {
+        if matches!(
+            error.downcast_ref::<pioneer_optical::image::KernelHandoffError>(),
+            Some(pioneer_optical::image::KernelHandoffError::Mismatch { .. })
+        ) {
+            return CompatibilityStatus::SoftNo;
+        }
+        match error.source() {
+            Some(source) => error = source,
+            None => return CompatibilityStatus::HardNo,
+        }
+    }
+}
+
+/// Run the same complete admission checks as Flash and retain refusal kind.
+pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
+    match admits(platform, installed, target) {
+        Ok(()) => Decision {
+            status: CompatibilityStatus::Yes,
+            reason: None,
+        },
+        Err(error) => Decision {
+            status: refusal_status(error.as_ref()),
+            reason: Some(format!("{error:#}")),
+        },
+    }
+}
+
 /// The firmware platform a set of packages belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Platform {
@@ -52,6 +103,17 @@ pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()>
 /// into `packages`, sorted. Pairs the family gate refuses are skipped without a
 /// full decision (a cheap, exact pre-filter); every other pair runs [`admits`].
 pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
+    classified_links(platform, packages)
+        .into_iter()
+        .filter_map(|(i, j, status)| (status == CompatibilityStatus::Yes).then_some((i, j)))
+        .collect()
+}
+
+/// Admitted and known future-adapter candidates; hard refusals stay unlisted.
+pub fn classified_links(
+    platform: Platform,
+    packages: &[&[u8]],
+) -> Vec<(usize, usize, CompatibilityStatus)> {
     let keys: Vec<Prefilter> = packages
         .iter()
         .map(|p| Prefilter::of(platform, p))
@@ -62,7 +124,7 @@ pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
         .collect();
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     let chunk = candidates.len().div_ceil(workers).max(1);
-    let mut admitted: Vec<(usize, usize)> = std::thread::scope(|scope| {
+    let mut admitted: Vec<(usize, usize, CompatibilityStatus)> = std::thread::scope(|scope| {
         let handles: Vec<_> = candidates
             .chunks(chunk)
             .map(|pairs| {
@@ -70,7 +132,10 @@ pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
                     pairs
                         .iter()
                         .copied()
-                        .filter(|&(i, j)| admits(platform, packages[i], packages[j]).is_ok())
+                        .filter_map(|(i, j)| {
+                            let status = decide(platform, packages[i], packages[j]).status;
+                            (status != CompatibilityStatus::HardNo).then_some((i, j, status))
+                        })
                         .collect::<Vec<_>>()
                 })
             })
@@ -80,7 +145,7 @@ pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
             .flat_map(|h| h.join().expect("crossflash worker panicked"))
             .collect()
     });
-    admitted.sort_unstable();
+    admitted.sort_unstable_by_key(|&(i, j, _)| (i, j));
     admitted
 }
 

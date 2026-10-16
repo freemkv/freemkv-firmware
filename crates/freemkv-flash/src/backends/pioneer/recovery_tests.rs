@@ -74,6 +74,7 @@ fn fixture_pair_class_with(
     tweak: impl FnOnce(&mut [u8]),
 ) -> Update {
     let mut kernel = vec![0; 0x10000];
+    crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1000..0x1014].copy_from_slice(sat);
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
@@ -188,6 +189,87 @@ impl ScsiDevice for Drive {
 }
 fn recovery_plan() -> Plan {
     Plan::from_updates(fixture_pair(false, 1), fixture_pair(false, 0)).unwrap()
+}
+
+#[test]
+fn handoff_mismatch_refuses_flash_offline_and_recovery_preparation() {
+    let current = fixture_pair(false, 1);
+    let target = fixture_pair_class_with(
+        false,
+        1,
+        b"SAT FFFEGENERAL 0000",
+        [0x100, 0x200],
+        |kernel| {
+            kernel.copy_within(0x20..0x30, 0x2a);
+            kernel[0x20..0x2a].fill(0);
+        },
+    );
+    let current = archive(&current, false);
+    let target = archive(&target, false);
+    let error = Plan::prepare(&current, &target)
+        .err()
+        .expect("Recovery must refuse during preparation");
+    let text = format!("{error:#}");
+    assert!(
+        text.contains("handoff mismatch") && text.contains("0x400020") && text.contains("0x40002a"),
+        "{text}"
+    );
+    let decision =
+        crate::crossflash::decide(crate::crossflash::Platform::Pioneer, &current, &target);
+    assert_eq!(
+        decision.status,
+        crate::crossflash::CompatibilityStatus::SoftNo
+    );
+    let error = super::super::decide_offline(&current, &target).unwrap_err();
+    assert!(format!("{error:#}").contains("handoff mismatch"));
+}
+
+#[test]
+fn unknown_programmer_is_not_bypassed_by_recovery() {
+    let current = fixture_pair_class_with(
+        false,
+        1,
+        b"SAT FFFEGENERAL 0000",
+        [0x100, 0x200],
+        |kernel| {
+            kernel[0xe000..0xe016].fill(0);
+        },
+    );
+    let error = Plan::from_updates(current, fixture_pair(false, 1))
+        .err()
+        .unwrap();
+    assert!(format!("{error:#}").contains("installed Kernel programming handoff is unsupported"));
+}
+
+#[test]
+fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
+    use crate::crossflash::{decide, CompatibilityStatus::*, Platform};
+    let installed = archive(&fixture_pair(false, 1), false);
+    let same = archive(&fixture_pair(false, 1), false);
+    assert_eq!(decide(Platform::Pioneer, &installed, &same).status, Yes);
+    let unknown = archive(
+        &fixture_pair_class_with(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200], |k| {
+            k[0xe000..0xe016].fill(0)
+        }),
+        false,
+    );
+    assert_eq!(decide(Platform::Pioneer, &unknown, &same).status, HardNo);
+    assert!(Plan::prepare(&unknown, &same).is_err());
+    // A known startup mismatch alone is soft, but a distinct receiver class
+    // still makes the pair hard: an adapter for the startup cannot fix that.
+    let incompatible = archive(
+        &fixture_pair_class_with(false, 1, b"SAT FFFEGENERAL 0000", [0x104, 0x204], |k| {
+            k.copy_within(0x20..0x30, 0x2a);
+            k[0x20..0x2a].fill(0);
+        }),
+        false,
+    );
+    assert_eq!(
+        decide(Platform::Pioneer, &installed, &incompatible).status,
+        HardNo
+    );
+    assert!(Plan::prepare(&installed, &incompatible).is_err());
+    assert_eq!(decide(Platform::Pioneer, b"invalid", &same).status, HardNo);
 }
 
 #[test]
