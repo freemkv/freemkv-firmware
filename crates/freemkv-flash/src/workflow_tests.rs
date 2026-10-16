@@ -1,6 +1,32 @@
 use super::*;
 
 #[test]
+fn mediatek_boot_without_mmc_feature_still_offers_independent_recovery() {
+    use crate::{backends::mtk, platform::MockScsiDevice};
+    let mut image = mtk::fixture::image(&mtk::fixture::BU3, "BU40N", 1);
+    let signature = image[0x9a300..0x9a30e].to_vec();
+    image[0x3500..0x350e].copy_from_slice(&signature);
+    let mut inquiry = vec![0; 36];
+    inquiry[0] = 5;
+    inquiry[4] = 31;
+    inquiry[8..16].copy_from_slice(b"ASUS    ");
+    inquiry[16..32].fill(b' ');
+    inquiry[16..25].copy_from_slice(b"BW-16D1HT");
+    inquiry[32..36].copy_from_slice(b"BOOT");
+    let mut dev = MockScsiDevice::new()
+        .with_firmware_image(image)
+        .on(|c| c.first() == Some(&0x12), inquiry)
+        // Exact header from the user's BOOT log: no feature descriptor.
+        .on(|c| c.first() == Some(&0x46), vec![0, 0, 0, 4, 0, 0, 0, 0]);
+    let profile = profile_on(&mut dev).unwrap();
+    assert!(profile.backend.is_none());
+    assert_eq!(profile.capabilities, crate::backend::Capabilities::NONE);
+    assert_eq!(profile.recovery.map(|d| d.id), Some(mtk::DESCRIPTOR.id));
+    assert!(!recovery_requires_current(&profile));
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
 fn automatic_backup_path_does_not_reuse_an_existing_backup() {
     let input = std::env::temp_dir().join(format!("fmkv-workflow-{}.bin", std::process::id()));
     let first = default_backup_path(&input, "tar").unwrap();

@@ -191,13 +191,12 @@ fn tabs_navigate_even_when_the_drive_does_not_offer_the_operation() {
     assert_eq!(enabled_tabs(&app), Task::ALL);
     app.dispatch(Input::SelectTask(Task::Flash));
     assert_eq!(app.task, Task::Flash);
-    assert!(app
-        .view()
-        .panel
-        .iter()
-        .any(|item| matches!(item, Item::Note(text) if text.contains("does not currently offer"))));
+    assert!(button(&app.view(), "Choose firmware…").enabled);
     assert!(app.dispatch(Input::FlashNow).is_empty());
-    assert!(app.dispatch(Input::Choose(Pick::Dump)).is_empty());
+    assert!(matches!(
+        app.dispatch(Input::Choose(Pick::Dump)).as_slice(),
+        [Effect::SaveFile { .. }]
+    ));
     app.dispatch(Input::SelectTask(Task::Backup));
     assert_eq!(app.task, Task::Backup);
 }
@@ -217,12 +216,12 @@ fn recovery_is_offered_for_an_unsupported_identified_drive() {
 }
 
 #[test]
-fn a_new_profile_without_the_current_task_falls_back_to_info() {
+fn a_new_profile_without_the_current_task_preserves_navigation() {
     let mut app = ready(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
     app.dispatch(Input::SelectTask(Task::Flash));
     assert_eq!(app.dispatch(Input::SelectDrive(1)), [Effect::StartTicking]);
     app.answer_profile(Ok(Profile::default()));
-    assert_eq!(app.task, Task::Info);
+    assert_eq!(app.task, Task::Flash);
     assert_eq!(enabled_tabs(&app), Task::ALL);
 }
 
@@ -282,10 +281,7 @@ fn no_drive_cannot_start_drive_jobs() {
         Task::Backup,
         "navigation does not start a drive job"
     );
-    assert!(has_text(
-        &app.view(),
-        "Select an optical drive to use this operation."
-    ));
+    assert!(!button(&app.view(), "Save backup…").enabled);
     assert!(app.dispatch(Input::Choose(Pick::Backup)).is_empty());
 }
 
@@ -329,7 +325,10 @@ fn backup_and_dump_names_come_from_the_profile() {
         &other.dispatch(Input::Choose(Pick::Backup))[..],
         [Effect::SaveFile { file_name, .. }] if file_name == "Other_2.00.candidate.tar"
     ));
-    assert!(other.dispatch(Input::Choose(Pick::Dump)).is_empty());
+    assert!(matches!(
+        &other.dispatch(Input::Choose(Pick::Dump))[..],
+        [Effect::SaveFile { file_name, .. }] if file_name == "drive-dump.bin"
+    ));
 }
 
 // ── flash: acknowledgement and confirmation ───────────────────────────────
@@ -671,10 +670,7 @@ fn flash_needs_a_selected_drive() {
     let mut app = dry(Vec::new());
     app.task = Task::Flash;
     app.flash_input = Some("firmware.bin".into());
-    assert!(has_text(
-        &app.view(),
-        "Select an optical drive to use this operation."
-    ));
+    assert!(!button(&app.view(), "Flash now").enabled);
     app.dispatch(Input::FlashNow);
     assert!(app.pending.is_none() && !app.running());
 }
@@ -738,6 +734,34 @@ fn drive_choice_and_confirmation_show_the_os_name_of_identical_drives() {
 }
 
 // ── recovery ──────────────────────────────────────────────────────────────
+
+#[test]
+fn unknown_or_failed_profile_does_not_gate_recovery_or_flash_preparation() {
+    for profile in [Ok(Profile::default()), Err("feature probe failed".into())] {
+        let mut app = dry(vec![drive("drive-a", "drive-a", "ASUS BOOT")]);
+        app.start();
+        app.answer_profile(profile);
+        app.dispatch(Input::SelectTask(Task::Recovery));
+        app.recovery_input = Some("intm.tar".into());
+        assert!(button(&app.view(), "Recover").enabled);
+        app.dispatch(Input::Recover);
+        assert!(matches!(
+            app.pending.as_ref().map(|p| &p.sheet),
+            Some(Sheet::Recovery(CurrentFirmware::NotRequired))
+        ));
+        app.dispatch(Input::CancelConfirm);
+        app.dispatch(Input::SelectTask(Task::Flash));
+        app.flash_input = Some("firmware.tar".into());
+        assert!(button(&app.view(), "Flash now").enabled);
+        app.dispatch(Input::FlashNow);
+        let (_, device, job) = last_job(&app);
+        assert_eq!(device, "drive-a");
+        assert!(
+            matches!(job, Job::PlanFlash(_)),
+            "live backend must decide whether Flash is supported"
+        );
+    }
+}
 
 #[test]
 fn recovery_requires_both_inputs_and_a_drive() {

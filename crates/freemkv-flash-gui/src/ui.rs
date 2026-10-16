@@ -731,9 +731,6 @@ impl App {
                 ProfileState::Failed
             }
         };
-        if !self.offers(self.task) {
-            self.task = Task::Info;
-        }
     }
 
     fn ready_profile(&self) -> Option<&Profile> {
@@ -741,15 +738,6 @@ impl App {
             ProfileState::Ready(profile) => Some(profile),
             _ => None,
         }
-    }
-
-    /// Whether `task` is offered: Info, Inspect and Compare always; the rest
-    /// only when the drive's profile offers them.
-    fn offers(&self, task: Task) -> bool {
-        matches!(task, Task::Info | Task::Inspect | Task::Compare)
-            || self
-                .ready_profile()
-                .is_some_and(|p| p.tasks.contains(&task))
     }
 
     pub fn running(&self) -> bool {
@@ -862,7 +850,7 @@ impl App {
                     return self.start_job("Check file", String::new(), Job::InfoFile { input });
                 }
             }
-            Input::FlashNow if !self.busy() && self.selected() && self.offers(Task::Flash) => {
+            Input::FlashNow if !self.busy() && self.selected() => {
                 if let Some(input) = self.flash_input.clone() {
                     return self.plan_flash(FlashOptions {
                         input,
@@ -876,15 +864,15 @@ impl App {
                     self.recovery_member = Some(member);
                 }
             }
-            Input::Recover
-                if !self.busy() && self.recovery_ready() && self.offers(Task::Recovery) =>
-            {
+            Input::Recover if !self.busy() && self.recovery_ready() => {
                 let current = if self.recovery_without_current() {
                     CurrentFirmware::NotRequired
                 } else if self.recovery_read {
                     CurrentFirmware::ReadFromDrive
+                } else if let Some(current) = self.recovery_current.clone() {
+                    CurrentFirmware::File(current)
                 } else {
-                    CurrentFirmware::File(self.recovery_current.clone().unwrap_or_default())
+                    CurrentFirmware::NotRequired
                 };
                 let target = self.target(FlashOptions {
                     input: self.recovery_input.clone().unwrap_or_default(),
@@ -971,7 +959,11 @@ impl App {
                     Pick::Backup => profile.and_then(|p| p.backup_name.as_deref()),
                     _ => profile.and_then(|p| p.dump_name.as_deref()),
                 };
-                name.map(save).unwrap_or_default()
+                save(name.unwrap_or(if pick == Pick::Dump {
+                    "drive-dump.bin"
+                } else {
+                    "drive-backup.tar"
+                }))
             }
             Pick::AnalysisDrive(i) if self.drive_source_allowed(i) => save("inspection.backup.tar"),
             Pick::DiagnosticLog => save("freemkv-flash-diagnostic.log"),
@@ -1018,13 +1010,7 @@ impl App {
                 self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
                 self.recovery_input = Some(path);
             }
-            Pick::Backup | Pick::Dump
-                if self.offers(if pick == Pick::Dump {
-                    Task::Dump
-                } else {
-                    Task::Backup
-                }) =>
-            {
+            Pick::Backup | Pick::Dump if self.selected() => {
                 // The native save panel has already confirmed replacing an existing file.
                 let replace = path.symlink_metadata().is_ok();
                 let (label, job) = if pick == Pick::Dump {
@@ -1091,7 +1077,10 @@ impl App {
             && (self.recovery_members.len() < 2 || self.recovery_member.is_some())
             && (self.recovery_without_current()
                 || self.recovery_read
-                || self.recovery_current.is_some())
+                || self.recovery_current.is_some()
+                || !self
+                    .ready_profile()
+                    .is_some_and(|p| p.tasks.contains(&Task::Recovery)))
     }
 
     /// The selected drive and `options`, frozen; consent always starts unticked.
@@ -1446,22 +1435,9 @@ impl App {
     }
 
     fn panel(&self, enabled: bool) -> Vec<Item> {
-        // Navigation is not authorization. In particular, native Windows tabs
-        // cannot be disabled individually: never silently snap a click back.
-        // Unavailable operations have no action controls, and dispatch retains
-        // its independent capability checks.
-        if !self.offers(self.task) {
-            let reason = match &self.profile {
-                ProfileState::NoDrive => "Select an optical drive to use this operation.",
-                ProfileState::Probing => "Reading the drive's capabilities…",
-                ProfileState::Failed => "The drive profile could not be read. Select Refresh to retry; see the diagnostic log for details.",
-                ProfileState::Ready(_) => "The selected drive does not currently offer this operation. See the capability labels beside the drive; Recovery may be available for a drive in BOOT mode.",
-            };
-            return vec![
-                Item::Heading(self.task.title().into()),
-                Item::Note(reason.into()),
-            ];
-        }
+        // Profile labels are advisory. Each operation performs its own live
+        // identification and authorization; a BOOT or failed profile must not
+        // prevent reaching Recovery or preparing a Flash operation.
         let selected = self.selected();
         let path = |text: &str, pick, on: bool, file: &Option<PathBuf>| Item::Path {
             button: Button::new(text, Input::Choose(pick), enabled && on),

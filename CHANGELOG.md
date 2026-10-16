@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Next release: **0.13.0**.
+
+### freemkv-flash GUI
+- Keep every tab and its controls accessible when the selected drive's profile
+  is unsupported or could not be read. Operations perform their own live checks
+  and report refusals; normal classification no longer prevents Recovery.
+
 ## [0.12.5] - 2026-10-16
 
 ### freemkv-flash
