@@ -30,7 +30,7 @@
       "mediatek_optical": "dev a4c641c: src/receiver.rs, recovery.rs, update.rs, update/flash.rs, drive.rs and cdb.rs",
       "flasher": "dev 6ae05bd: src/transport.rs, platform/adapter.rs, platform/mod.rs and backends/mtk/flash.rs/recovery.rs"
     },
-    "oem_audit_directory": "/Users/matthew/Developer/firmware-extractor/internal/review/v9-boot/oem-prepare-audit",
+    "oem_audit_directory": "firmware-extractor:internal/review/v9-boot/oem-prepare-audit",
     "oem_coverage": {
       "unique_extracted_pe_files_screened": 142,
       "updater_binaries_with_recognized_prepare": 86,
@@ -52,7 +52,7 @@
       "bin_members_including_duplicates": 145,
       "unique_bin_hashes": 136,
       "unique_intermediate_hashes": 6,
-      "source": "/Users/matthew/Developer/firmware-extractor/internal/review/mediatek-all/release-stage/payloads/fw/mediatek",
+      "source": "firmware-extractor:internal/review/mediatek-all/release-stage/payloads/fw/mediatek",
       "limit": "The previous encoding audit predates this complete package set. Its coverage is not evidence of complete entry/acceptance/response-policy coverage."
     },
     "affected_drive": "Windows log proves complete INQUIRY and receiver-memory reads, BOOT + encrypted detection, then CHECK CONDITION with no meaningful sense on PREPARE before any firmware payload. It does not establish the physical connection, whether PREPARE changed internal state, or successful OEM recovery on this same drive."
