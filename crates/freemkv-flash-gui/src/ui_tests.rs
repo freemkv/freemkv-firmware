@@ -344,7 +344,7 @@ fn flash_starts_with_a_firmware_chooser() {
             pick: Pick::FlashFirmware,
             filter: Some(FileFilter {
                 name: "Firmware or backup",
-                extensions: vec!["tar"],
+                extensions: vec!["tar", "bin"],
             })
         }]
     );

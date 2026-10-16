@@ -953,7 +953,7 @@ impl App {
         match pick {
             Pick::CheckFile => open(None),
             Pick::FlashFirmware => {
-                let extensions = vec!["tar"];
+                let extensions = vec!["tar", "bin"];
                 open(Some(FileFilter {
                     name: "Firmware or backup",
                     extensions,

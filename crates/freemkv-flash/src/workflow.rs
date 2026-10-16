@@ -414,9 +414,6 @@ fn open_flash(
 )> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
-    if input.get(257..262) != Some(b"ustar") {
-        bail!("Flash accepts TAR packages only; supply a firmware release package");
-    }
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;

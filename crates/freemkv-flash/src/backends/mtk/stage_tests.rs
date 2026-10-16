@@ -133,3 +133,33 @@ fn final_stage_redetects_and_encrypts_for_the_new_receiver() {
     mediatek_optical::enc::encrypt(&mut expected).unwrap();
     assert_eq!(dev.wire_stages[1], expected);
 }
+
+#[test]
+fn standalone_bin_plans_only_the_requested_image() {
+    let initial = image(b"1.00", 1);
+    for revision in [b"INTM", b"1.05"] {
+        let target = image(revision, 2);
+        let mut dev = MockScsiDevice::new().with_firmware_image(initial.clone());
+        let request = FlashRequest {
+            input: target.clone(),
+            input_format: &super::super::IMAGE,
+            mode: crate::manifest::FlashMode::Full,
+            execute: false,
+            acknowledged_risk: false,
+            enc_override: None,
+            drive_model: "BD-RE BU40N".into(),
+            verbose: false,
+            predump_out: None,
+        };
+        let plan = Mtk
+            .plan(&mut ReadDevice::without_unlocks(&mut dev), &request)
+            .unwrap();
+        let state: &Plan = plan.state().unwrap();
+        assert_eq!(state.image, target);
+        assert!(
+            state.final_image.is_none(),
+            "a standalone BIN must not infer another stage"
+        );
+        assert!(dev.writes.is_empty());
+    }
+}

@@ -259,7 +259,7 @@ mod v0_11_2 {
 
     /// File-picker filters: Flash (`app.rs:538`), Recovery (`app.rs:553`) and
     /// analysis (`analysis_ui.rs:49`).
-    // The old BIN/ENC picker was intentionally replaced by TAR-only Flash.
+    // Flash offers TAR packages and standalone BIN images.
     pub const FIRMWARE_FILTER: (&str, &[&str]) = ("Firmware", &["tar", "enc", "bin"]);
     /// Save-panel names: `analysis_ui.rs:66`, `:172`, `:175` and `app.rs:87`.
     pub const DRIVE_CAPTURE: &str = "inspection.backup.tar";
@@ -503,17 +503,17 @@ fn pioneer_dump_runs_the_0_11_2_job_under_the_cli_name() {
 // ── flash ─────────────────────────────────────────────────────────────────
 
 #[test]
-fn flash_picker_accepts_only_tar_packages() {
+fn flash_picker_accepts_tar_packages_and_bin_images() {
     let mut app = pioneer_app();
     app.dispatch(Input::SelectTask(Task::Flash));
     covers(
         open_filter(&press(&mut app, "Choose firmware…")),
-        ("Firmware or backup", &["tar"]),
+        ("Firmware or backup", &["tar", "bin"]),
     );
     app.dispatch(Input::Chosen(Pick::FlashFirmware, "/fw/a.tar".into()));
     covers(
         open_filter(&press(&mut app, "Change file…")),
-        ("Firmware or backup", &["tar"]),
+        ("Firmware or backup", &["tar", "bin"]),
     );
 }
 

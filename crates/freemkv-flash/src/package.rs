@@ -63,7 +63,7 @@ pub fn recovery_members(input: &[u8]) -> Result<Vec<String>> {
     Ok(Vec::new())
 }
 
-/// Wrap a standalone final image or saved BIN backup for TAR-only Flash.
+/// Optionally wrap a standalone final image or saved BIN backup as a TAR.
 /// No intermediate relationship is invented by this conversion.
 pub fn wrap_image(image: Vec<u8>) -> Result<Vec<u8>> {
     use crate::mediatek_package::{digest, Component, Manifest, Package, Role, FORMAT};

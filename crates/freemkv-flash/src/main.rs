@@ -97,7 +97,7 @@ enum Command {
     Recover(RecoveryArgs),
 }
 
-/// Flash a firmware release package or roll back firmware from a backup TAR.
+/// Flash a TAR release package, standalone BIN image, or supported backup.
 /// Per-unit data in the archive is retained as reference, not auto-written.
 ///
 /// Without `--execute` this is a DRY RUN: it prints the full plan and a read-only

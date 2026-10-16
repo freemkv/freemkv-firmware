@@ -27,7 +27,7 @@ the separate `freemkv-fw` binary in this workspace.
 | `freemkv-flash dump <dev> [-o out.bin]` | RAM logging only, when supported | — | captures memory and diagnostic responses in one address-oriented file; not flashable |
 | `freemkv-flash check <file>` | no | firmware file | inspect without a drive |
 | `freemkv-flash recover <dev> --current <current.tar> -i <target.tar>` | with `--execute` | Pioneer Kernel + Normal packages | experimental recovery without backups |
-| `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.tar` | validate and plan; execute only after fresh backup |
+| `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.tar` or `.bin` | validate and plan; execute only after fresh backup |
 
 - `backup` produces one firmware file. Pioneer candidates with zero signatures
   are usable as Current references, but targets must pass transfer authentication.
@@ -106,8 +106,7 @@ freemkv-flash flash /dev/sg0 -i firmware.tar \
     --execute --i-understand-risk
 
 # Reflash the firmware image captured in that backup
-freemkv-flash package backup.bin backup.tar
-freemkv-flash flash /dev/sg0 -i backup.tar --execute --i-understand-risk
+freemkv-flash flash /dev/sg0 -i backup.bin --execute --i-understand-risk
 
 # Review a Pioneer OEM transfer against the connected drive; no writes
 freemkv-flash flash /dev/sg0 -i update.enc
@@ -251,5 +250,10 @@ never continues to the other member and does not create a backup.
 
 Modify accepts BIN or TAR and returns the same format. With a TAR it modifies
 only final firmware, preserves INTM bytes and pairing provenance, and updates the
-final member hash. Existing standalone BIN backups can be wrapped offline with
+final member hash. Standalone BIN images and backups can be flashed directly, or optionally wrapped offline with
 `freemkv-flash package backup.bin backup.tar`; this never guesses an INTM pairing.
+
+Flash accepts TAR packages and standalone BIN images. TARs follow their explicit
+package sequence; a BIN flashes only the supplied image, with the usual backup,
+validation and automatic transfer-encoding checks. No intermediate is inferred
+for a BIN. Website downloads remain TAR packages.
