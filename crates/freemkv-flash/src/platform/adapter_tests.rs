@@ -36,6 +36,7 @@ fn dev_with(sense: ScsiSense) -> TransportDevice {
 /// medium detection (probe → spin-up → re-probe) is deterministic.
 struct ScriptedTransport {
     tur: std::collections::VecDeque<Option<(u8, u8, u8)>>,
+    configuration: Option<Vec<u8>>,
 }
 fn fixed_sense(k: u8, a: u8, q: u8) -> [u8; 32] {
     let mut s = [0u8; 32];
@@ -50,9 +51,26 @@ impl ScsiTransport for ScriptedTransport {
         &mut self,
         cdb: &[u8],
         _dir: DataDirection,
-        _buf: &mut [u8],
+        buf: &mut [u8],
         _timeout_ms: u32,
     ) -> libfreemkv::error::Result<ScsiResult> {
+        if cdb.first() == Some(&0x46) {
+            assert_eq!(cdb, [0x46, 2, 0, 3, 0, 0, 0, 0, 16, 0]);
+            if let Some(reply) = &self.configuration {
+                let len = reply.len().min(buf.len());
+                buf[..len].copy_from_slice(&reply[..len]);
+                return Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: len,
+                    sense: [0u8; 32],
+                });
+            }
+            return Ok(ScsiResult {
+                status: CHECK_CONDITION,
+                bytes_transferred: 0,
+                sense: fixed_sense(5, 0x20, 0),
+            });
+        }
         if cdb.first() == Some(&0x1B) {
             // START STOP UNIT ack (spin-up).
             return Ok(ScsiResult {
@@ -76,9 +94,30 @@ impl ScsiTransport for ScriptedTransport {
     }
 }
 fn dev_scripted(tur: impl IntoIterator<Item = Option<(u8, u8, u8)>>) -> TransportDevice {
+    dev_scripted_mechanism(tur, None)
+}
+fn dev_scripted_mechanism(
+    tur: impl IntoIterator<Item = Option<(u8, u8, u8)>>,
+    mechanism: Option<u8>,
+) -> TransportDevice {
+    dev_scripted_configuration(tur, mechanism.map(mechanism_reply))
+}
+fn mechanism_reply(mechanism: u8) -> Vec<u8> {
+    let mut reply = vec![0u8; 16];
+    reply[3] = 12;
+    reply[9] = 3;
+    reply[11] = 4;
+    reply[12] = mechanism << 5;
+    reply
+}
+fn dev_scripted_configuration(
+    tur: impl IntoIterator<Item = Option<(u8, u8, u8)>>,
+    configuration: Option<Vec<u8>>,
+) -> TransportDevice {
     TransportDevice {
         inner: Box::new(ScriptedTransport {
             tur: tur.into_iter().collect(),
+            configuration,
         }),
         path: "test".to_string(),
     }
@@ -136,6 +175,73 @@ fn open_tray_is_tray_open() {
         dev.medium_status().unwrap(),
         MediumStatus::TrayOpen
     ));
+}
+
+#[test]
+fn empty_slot_loader_is_not_mistaken_for_an_open_tray() {
+    let no_disc = Some((0x2, 0x3A, 0x02));
+    let mut slot = dev_scripted_mechanism([no_disc, no_disc], Some(0));
+    assert_eq!(slot.medium_status().unwrap(), MediumStatus::ClosedEmpty);
+
+    let mut tray = dev_scripted_mechanism([no_disc], Some(1));
+    assert_eq!(tray.medium_status().unwrap(), MediumStatus::TrayOpen);
+}
+
+#[test]
+fn slot_loader_still_refuses_a_disc_that_becomes_ready() {
+    let mut slot = dev_scripted_mechanism([Some((0x2, 0x3A, 0x02)), None], Some(0));
+    assert_eq!(slot.medium_status().unwrap(), MediumStatus::DiscPresent);
+}
+
+#[test]
+fn slot_loader_rechecks_empty_sense_variants_after_spinup() {
+    for first in [0, 1, 2] {
+        for second in [0, 1, 2] {
+            let mut slot =
+                dev_scripted_mechanism([Some((2, 0x3a, first)), Some((2, 0x3a, second))], Some(0));
+            assert_eq!(slot.medium_status().unwrap(), MediumStatus::ClosedEmpty);
+        }
+    }
+}
+
+#[test]
+fn slot_loader_refuses_loaded_or_unsettled_media() {
+    for second in [
+        None,
+        Some((2, 4, 1)),
+        Some((3, 0x11, 0)),
+        Some((6, 0x28, 0)),
+    ] {
+        let mut slot =
+            dev_scripted_mechanism([Some((2, 0x3a, 2)), second, Some((2, 4, 1))], Some(0));
+        assert_eq!(slot.medium_status().unwrap(), MediumStatus::DiscPresent);
+    }
+}
+
+#[test]
+fn tray_or_unknown_mechanisms_do_not_bypass_open_tray_guard() {
+    for mechanism in 1..8 {
+        let mut dev = dev_scripted_mechanism([Some((2, 0x3a, 2))], Some(mechanism));
+        assert_eq!(dev.medium_status().unwrap(), MediumStatus::TrayOpen);
+    }
+}
+
+#[test]
+fn missing_or_malformed_configuration_does_not_bypass_tray_guard() {
+    let valid = mechanism_reply(0);
+    let mut replies = vec![None, Some(vec![])];
+    for length in 1..16 {
+        replies.push(Some(valid[..length].to_vec()));
+    }
+    for (offset, value) in [(3, 11), (8, 1), (9, 4), (11, 0), (11, 3), (11, 8)] {
+        let mut bad = valid.clone();
+        bad[offset] = value;
+        replies.push(Some(bad));
+    }
+    for reply in replies {
+        let mut dev = dev_scripted_configuration([Some((2, 0x3a, 2))], reply);
+        assert_eq!(dev.medium_status().unwrap(), MediumStatus::TrayOpen);
+    }
 }
 
 /// After spin-up a disc may still be BECOMING READY (0x04/0x01) — that is a

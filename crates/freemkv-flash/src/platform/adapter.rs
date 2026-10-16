@@ -311,16 +311,21 @@ impl ScsiDevice for TransportDevice {
         // FAIL-CLOSED: TEST UNIT READY alone can't tell an empty tray from a
         // loaded-but-SPUN-DOWN disc (both answer "medium not present", 0x3A), so
         // a first no-medium verdict is re-checked after a spin-up (see below).
-        match self.probe_tur()? {
+        let first = self.probe_tur()?;
+        let slot_loading = matches!(first, Tur::TrayOpen) && self.is_slot_loading();
+        match first {
             Tur::Present => Ok(MediumStatus::DiscPresent),
-            Tur::TrayOpen => Ok(MediumStatus::TrayOpen),
-            Tur::NoMedium => {
+            Tur::TrayOpen if !slot_loading => Ok(MediumStatus::TrayOpen),
+            Tur::NoMedium | Tur::TrayOpen => {
                 self.spin_up_best_effort();
                 match self.probe_tur()? {
                     // Still no medium after spin-up → genuinely empty. Anything
                     // else (became ready / unsettled) is a loaded disc — never
                     // flash unless empty is PROVEN.
                     Tur::NoMedium => Ok(MediumStatus::ClosedEmpty),
+                    Tur::TrayOpen if slot_loading || self.is_slot_loading() => {
+                        Ok(MediumStatus::ClosedEmpty)
+                    }
                     _ => Ok(MediumStatus::DiscPresent),
                 }
             }
@@ -338,6 +343,28 @@ enum Tur {
 }
 
 impl TransportDevice {
+    /// A slot loader has no tray to close. Some such drives still return the
+    /// tray-open no-medium sense (3A/02). Accept that sense as empty only when
+    /// GET CONFIGURATION positively identifies a caddy/slot mechanism; an
+    /// absent, malformed or failed feature response leaves the tray guard on.
+    fn is_slot_loading(&mut self) -> bool {
+        // MMC Removable Medium feature 0003h: eight-byte configuration header,
+        // four-byte descriptor header, then Loading Mechanism Type in bits 7:5.
+        let cdb = [0x46, 0x02, 0x00, 0x03, 0, 0, 0, 0, 16, 0];
+        let Ok(data) = self.command_in(&cdb, 16) else {
+            return false;
+        };
+        if data.len() < 16 {
+            return false;
+        }
+        let declared = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+        declared >= 12
+            && data[8..10] == [0, 3]
+            && data[11] >= 4
+            && declared >= 8 + u32::from(data[11])
+            && data[12] >> 5 == 0
+    }
+
     /// One TEST UNIT READY (opcode 0x00), classified into [`Tur`]. A self-
     /// clearing UNIT ATTENTION (key 0x6) is retried once. A senseless transport
     /// failure (dead bus) propagates as `Err`.

@@ -231,11 +231,9 @@ fn plant_two_region_signature(kernel: &mut [u8]) {
 }
 
 #[test]
-fn two_region_kernel_recovery_sends_body_then_front_at_0x10200() {
-    // A 10xx-signature target Kernel must be delivered as body (offset 0) then
-    // the front-key block at offset 0x10200 — NOT a linear stream ending at
-    // 0x10000 (which the loader rejects). Recovery must detect this on the
-    // decoded body and emit the same two-region plan the flash path does.
+fn two_region_kernel_recovery_preserves_oem_header_key_body_placement() {
+    // OEM receivers add their staging base to CDB offsets and consume the key
+    // at base+0x200 and body at base+0x1200. See pioneer-optical OEM_PLACEMENT.md.
     let target = fixture_pair_class_with(
         false,
         0,
@@ -252,30 +250,20 @@ fn two_region_kernel_recovery_sends_body_then_front_at_0x10200() {
         .unwrap();
 
     let kernel_writes: Vec<_> = drive.writes.iter().filter(|(c, _)| c[2] == 0xfe).collect();
-    // First Kernel write is the body at offset 0.
-    assert_eq!(&kernel_writes.first().unwrap().0[3..6], &[0, 0, 0]);
-    // The front block is delivered at offset 0x10200 (bytes 01 02 00), exactly
-    // once, and is the first 0x1200 bytes of the wire image.
-    let front: Vec<_> = kernel_writes
+    assert_eq!(kernel_writes.len(), 3);
+    for ((cdb, bytes), (offset, range)) in kernel_writes.iter().zip([
+        ([0x00, 0x00, 0x00], 0..0x1200),
+        ([0x00, 0x12, 0x00], 0x1200..0x9200),
+        ([0x00, 0x92, 0x00], 0x9200..0x11200),
+    ]) {
+        assert_eq!(&cdb[3..6], &offset);
+        assert_eq!(bytes.as_slice(), &plan.kernel_transfer[range]);
+    }
+    let received: Vec<u8> = kernel_writes
         .iter()
-        .filter(|(c, _)| c[3..6] == [0x01, 0x02, 0x00])
+        .flat_map(|(_, bytes)| bytes.iter().copied())
         .collect();
-    assert_eq!(front.len(), 1, "exactly one front-block write at 0x10200");
-    assert_eq!(front[0].1, plan.kernel_transfer[..0x1200]);
-    // No write ever targets the rejected linear tail offset 0x10000.
-    assert!(
-        !kernel_writes
-            .iter()
-            .any(|(c, _)| c[3..6] == [0x01, 0x00, 0x00]),
-        "no write at the rejected 0x10000 offset"
-    );
-    // Body chunks (every 0xFE write before the front) reconstruct wire[0x1200..].
-    let body: Vec<u8> = kernel_writes
-        .iter()
-        .filter(|(c, _)| c[3..6] != [0x01, 0x02, 0x00])
-        .flat_map(|(_, b)| b.iter().copied())
-        .collect();
-    assert_eq!(body, plan.kernel_transfer[0x1200..]);
+    assert_eq!(received, plan.kernel_transfer);
 }
 
 #[test]
