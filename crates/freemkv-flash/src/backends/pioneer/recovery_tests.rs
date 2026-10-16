@@ -399,7 +399,10 @@ fn supplied_real_recovery_packages_prepare_and_transfer_without_reads() {
     let target = std::fs::read(target).unwrap();
     let plan = Plan::prepare(&current, &target).unwrap();
     let (update, _) = load_target(&target).unwrap();
-    assert!(!plan.was_reencoded(), "paired Normal must retain its OEM encoding");
+    assert!(
+        !plan.was_reencoded(),
+        "paired Normal must retain its OEM encoding"
+    );
     assert_eq!(plan.normal_transfer, update.normal_transfer());
     crate::crossflash::admits(crate::crossflash::Platform::Pioneer, &current, &target)
         .expect("Flash must prepare the same paired Normal as Recovery");

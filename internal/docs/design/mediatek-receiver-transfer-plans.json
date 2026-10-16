@@ -1,6 +1,12 @@
 {
   "title": "Receiver-derived MediaTek transfer plans with Pioneer API parity",
-  "status": "APPROVED; implementation in progress under the active user goal; permissive PREPARE responses remain evidence-gated",
+  "status": "APPROVED; implementation in progress; explicit Recovery-only PREPARE continuation approved for 0.13.0",
+  "policy_revision_2026_10_16": {
+    "user_direction": "Get everything done and solid for 0.13.0. Recovery only must continue after PREPARE failure; Flash remains strict. The affected user will run Recovery with INTM, confirm startup, then a separate Recovery with V9.",
+    "supersedes": "Earlier response-policy and sign-off statements in this historical design that require a receiver-specific completion proof before implementing PREPARE continuation. Continuation is now an explicit Recovery host policy, not a claim that failed entry is safe or always succeeds.",
+    "invariants": ["Log the complete PREPARE error before proceeding", "Never retry PREPARE or try another entry command", "No automatic change of encoding after failure", "Data-transfer errors remain fatal and are not retried", "Readback and target startup remain required", "Recovery sends only the selected member and makes no backup", "Normal Flash retains strict PREPARE handling"],
+    "priority": "Complete implementation, validation and dev integration first; investigate the original V9 startup failure last. Physical recovery remains unvalidated. No hardware writes or firmware release performed by the agent."
+  },
   "date": "2026-10-16",
   "scope": {
     "included": [

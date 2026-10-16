@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Next release: **0.13.0**.
 
+### freemkv-flash
+- In explicit MediaTek Recovery, log a failed PREPARE and proceed once with the
+  selected firmware. Normal Flash still stops on PREPARE failure; firmware-data
+  failures stop both paths without retries. Recovery still requires protected
+  readback and confirmed target startup. Physical-drive validation is pending.
+- Prepare Pioneer Normal encoding for the Kernel that receives it: the incoming
+  Kernel in paired updates, or the installed Kernel for Normal-only updates.
+
 ### freemkv-flash GUI
 - Keep every tab and its controls accessible when the selected drive's profile
   is unsupported or could not be read. Operations perform their own live checks

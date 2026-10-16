@@ -487,6 +487,14 @@ impl FlashRuntime<anyhow::Error> for Runtime {
     fn progress(&mut self, written: usize, _total: usize) {
         self.progress.set(written);
     }
+    fn recovery_entry_failed(&mut self, error: &DriveError<anyhow::Error>) {
+        let message = format!(
+            "MediaTek Recovery PREPARE failed: {}; recovery policy continues with the selected image; PREPARE will not be retried",
+            text(error)
+        );
+        crate::diagnostics::record(&message);
+        eprintln!("{message}");
+    }
     fn commit_failed(&mut self, error: &DriveError<anyhow::Error>) {
         eprintln!(
             "MediaTek commit trailer returned an error: {}; checking completion and read-back",

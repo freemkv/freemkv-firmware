@@ -249,8 +249,14 @@ capture. Image integrity, controller generation, receiver revalidation, transfer
 protected-region readback and target startup remain checked. Model/family comparison
 against the installed firmware is bypassed.
 
+Explicit Recovery reports a PREPARE error and continues once with the selected
+image. It does not retry PREPARE or ignore firmware-data failures. Normal Flash
+still stops on PREPARE failure. This recovery policy does not establish that a
+failed PREPARE successfully armed the physical receiver.
+
 The proposed ASUS BOOT recovery is BH16NS40 INTM through recovery, confirmation that
-INTM starts, then a separate normal flash to WH16NS58 1.V9. This sequence has not
+INTM starts, then a separate Recovery selecting WH16NS58 1.V9. Each operation
+flashes only its selected TAR member and detects the live receiver again. This sequence has not
 been validated on a physical drive. The MediaTek dependency is pinned to a development
 Git revision; no release is implied. Pioneer retains its Current-reference requirement.
 
