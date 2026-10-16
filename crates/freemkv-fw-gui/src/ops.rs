@@ -21,8 +21,9 @@ pub fn execute(job: &Job) -> Result<()> {
     diagnostics::run(operation, || {
         match job {
             Job::Verify(input) => {
-                let image = diagnostics::read(input)?;
-                let outcome = api::verify(&image, None)?;
+                let artifact = freemkv_fw::artifact::Artifact::parse(diagnostics::read(input)?)?;
+                let image = artifact.image();
+                let outcome = api::verify(image, None)?;
                 field("Firmware image", input.display().to_string());
                 field("Integrity scheme", outcome.scheme);
                 for verdict in &outcome.verdicts {
@@ -45,8 +46,9 @@ pub fn execute(job: &Job) -> Result<()> {
                 );
             }
             Job::Create { input, output } => {
-                let image = diagnostics::read(input)?;
-                let outcome = api::create(&image)?;
+                let artifact = freemkv_fw::artifact::Artifact::parse(diagnostics::read(input)?)?;
+                let image = artifact.image();
+                let outcome = api::create(image)?;
                 field("Engine", outcome.engine);
                 if let Some(chip) = &outcome.chip {
                     field(
@@ -58,16 +60,17 @@ pub fn execute(job: &Job) -> Result<()> {
                     "Verification",
                     format!("{} regions verified", outcome.verdicts.len()),
                 );
-                diagnostics::write(output, outcome.image())?;
+                diagnostics::write(output, &artifact.output(outcome.image().to_vec())?)?;
                 field("Saved firmware", output.display().to_string());
                 field("Image size", format!("{} bytes", outcome.image().len()));
             }
             Job::Sign { input, output } => {
-                let image = diagnostics::read(input)?;
-                let outcome = api::sign(&image, None)?;
+                let artifact = freemkv_fw::artifact::Artifact::parse(diagnostics::read(input)?)?;
+                let image = artifact.image();
+                let outcome = api::sign(image, None)?;
                 field("Integrity scheme", outcome.scheme);
                 field("Re-signed regions", outcome.changes.len().to_string());
-                diagnostics::write(output, &outcome.image)?;
+                diagnostics::write(output, &artifact.output(outcome.image.clone())?)?;
                 field("Saved firmware", output.display().to_string());
                 field("Verification", "Signed image self-verifies");
             }

@@ -344,13 +344,13 @@ fn flash_starts_with_a_firmware_chooser() {
             pick: Pick::FlashFirmware,
             filter: Some(FileFilter {
                 name: "Firmware or backup",
-                extensions: vec!["bin"],
+                extensions: vec!["tar"],
             })
         }]
     );
     app.dispatch(Input::Chosen(
         Pick::FlashFirmware,
-        "/fw/firmware.bin".into(),
+        "/fw/firmware.tar".into(),
     ));
     let view = app.view();
     for text in ["Change file…", "Flash now", "Check file"] {
@@ -359,7 +359,7 @@ fn flash_starts_with_a_firmware_chooser() {
     assert_eq!(button(&view, "Check file").style, ButtonStyle::Link);
     assert!(view.panel.iter().any(|i| matches!(
         i,
-        Item::Path { path: Some(p), .. } if p.name == "firmware.bin" && p.full == "/fw/firmware.bin"
+        Item::Path { path: Some(p), .. } if p.name == "firmware.tar" && p.full == "/fw/firmware.tar"
     )));
 }
 
@@ -474,7 +474,7 @@ impl Flashing {
 /// Press Flash now on `app`, let the plan pass, and run the backup-and-
 /// authorize job until its sheet opens.
 fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flashing {
-    app.flash_input = Some("firmware.bin".into());
+    app.flash_input = Some("firmware.tar".into());
     app.dispatch(Input::FlashNow);
     plan_passes(app);
     let worker = app.worker.take().expect("the flash job's worker");
@@ -595,7 +595,7 @@ fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
         confirm.details,
         [
             "Drive: drive-a  Drive A".to_string(),
-            "Image: firmware.bin".into(),
+            "Image: firmware.tar".into(),
             "== flash plan ==".into(),
             saved,
         ]

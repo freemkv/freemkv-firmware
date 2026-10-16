@@ -31,6 +31,7 @@ pub mod flashset;
 pub mod imageid;
 pub mod inspection;
 pub mod manifest;
+pub mod mediatek_package;
 pub mod platform;
 pub mod probe;
 pub mod report;
@@ -49,3 +50,5 @@ pub fn crc32(data: &[u8]) -> u32 {
 #[cfg(test)]
 #[path = "golden_tests.rs"]
 mod golden_tests;
+
+pub mod package;

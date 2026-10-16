@@ -2,7 +2,7 @@
 //! the firmware packages in `<dir>`, as JSON.
 //!
 //! Input is a content-addressed package tree (`pioneer/<sha256>.tar`,
-//! `mediatek/<sha256>.bin`). Each package stands in
+//! `mediatek/<sha256>.tar`). Each package stands in
 //! for a drive running it; a link `installed -> target` means `flash` would
 //! admit `target` on that drive (see `freemkv_flash::crossflash`).
 //!
@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (dir, ext, platform) in [
         ("pioneer", "tar", Platform::Pioneer),
-        ("mediatek", "bin", Platform::Mediatek),
+        ("mediatek", "tar", Platform::Mediatek),
     ] {
         let (ids, bytes) = read_packages(&Path::new(root).join(dir), ext)?;
         let refs: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
@@ -52,13 +52,17 @@ fn main() -> Result<()> {
 
 /// Print the flasher's verdict for one installed/target pair.
 fn why(installed: &Path, target: &Path) -> Result<()> {
-    let platform = match target.extension().and_then(|e| e.to_str()) {
-        Some("tar") => Platform::Pioneer,
-        Some("bin") => Platform::Mediatek,
-        _ => bail!("target must be a Pioneer .tar or a MediaTek .bin"),
-    };
     let read = |p: &Path| std::fs::read(p).with_context(|| format!("reading {}", p.display()));
-    match admits(platform, &read(installed)?, &read(target)?) {
+    let installed = read(installed)?;
+    let target = read(target)?;
+    let platform = if freemkv_flash::mediatek_package::Package::parse(&target).is_ok()
+        || target.get(257..262) != Some(b"ustar")
+    {
+        Platform::Mediatek
+    } else {
+        Platform::Pioneer
+    };
+    match admits(platform, &installed, &target) {
         Ok(()) => println!("admitted"),
         Err(e) => println!("refused: {e:#}"),
     }

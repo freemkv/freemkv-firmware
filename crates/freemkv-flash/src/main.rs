@@ -81,6 +81,8 @@ enum Command {
         /// Firmware or backup file to inspect.
         input: PathBuf,
     },
+    /// Wrap a standalone BIN firmware or backup in a TAR (offline; no drive access).
+    Package { input: PathBuf, output: PathBuf },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
     /// Recover a Pioneer drive using Current firmware or an explicit drive read.
@@ -95,7 +97,7 @@ enum Command {
     Recover(RecoveryArgs),
 }
 
-/// Flash a firmware image (.bin) or roll back firmware from a backup .tar.
+/// Flash a firmware release package or roll back firmware from a backup TAR.
 /// Per-unit data in the archive is retained as reference, not auto-written.
 ///
 /// Without `--execute` this is a DRY RUN: it prints the full plan and a read-only
@@ -136,6 +138,9 @@ struct FlashArgs {
 
 #[derive(clap::Args, Debug)]
 struct RecoveryArgs {
+    /// Exact member to flash from a paired MediaTek package.
+    #[arg(long)]
+    member: Option<String>,
     /// Drive name or id from list; omitted when only one drive is connected.
     device: Option<String>,
     /// Target MediaTek image or Pioneer package containing Kernel and Normal.
@@ -171,6 +176,7 @@ fn main() -> ExitCode {
             freemkv_flash::workflow::recover(freemkv_flash::workflow::RecoveryOptions {
                 device: args.device,
                 input: args.input,
+                member: args.member,
                 current: match args.current {
                     Some(path) => freemkv_flash::workflow::CurrentFirmware::File(path),
                     None if args.read_from_drive => {
@@ -181,6 +187,9 @@ fn main() -> ExitCode {
                 execute: args.execute,
                 acknowledged_risk: args.i_understand_risk,
             })
+        }
+        Some(Command::Package { input, output }) => {
+            freemkv_flash::workflow::package_image(&input, &output)
         }
         Some(Command::Flash(args)) => {
             freemkv_flash::workflow::flash(args.into(), &mut freemkv_flash::output::TerminalConfirm)

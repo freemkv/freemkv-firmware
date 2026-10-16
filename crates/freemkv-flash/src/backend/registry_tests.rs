@@ -214,7 +214,7 @@ fn classify_unknown_when_no_discriminator() {
 fn flash_input_formats_follow_the_drive_and_foreign_package_names() {
     let path = std::path::Path::new;
     let format = |b: &dyn Backend, p| flash_input_format(b, path(p), b"").unwrap().unwrap().id;
-    assert_eq!(format(&MTK, "dump.tar"), "mtk-legacy-tar");
+    assert_eq!(format(&MTK, "dump.tar"), "mtk-package");
     assert_eq!(format(&MTK, "fw.bin"), "mtk-image");
     assert_eq!(format(&MTK, "image"), "mtk-image");
     // A Pioneer package name is a Pioneer package even on a MediaTek drive.

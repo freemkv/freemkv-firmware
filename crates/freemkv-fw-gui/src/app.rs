@@ -128,7 +128,7 @@ impl FwApp {
 
     fn choose_image(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Firmware image", &["bin"])
+            .add_filter("Firmware image", &["bin", "tar"])
             .pick_file()
         {
             self.input = Some(path);
@@ -275,8 +275,11 @@ impl FwApp {
                     let stem = input.file_stem().unwrap_or_default().to_string_lossy();
                     let suffix = if create { "freemkv" } else { "signed" };
                     if let Some(output) = rfd::FileDialog::new()
-                        .set_file_name(format!("{stem}.{suffix}.bin"))
-                        .add_filter("Firmware image", &["bin"])
+                        .set_file_name(format!(
+                            "{stem}.{suffix}.{}",
+                            input.extension().and_then(|e| e.to_str()).unwrap_or("bin")
+                        ))
+                        .add_filter("Firmware image", &["bin", "tar"])
                         .save_file()
                     {
                         let job = if create {

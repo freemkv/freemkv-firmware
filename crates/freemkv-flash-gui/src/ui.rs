@@ -183,6 +183,7 @@ pub enum Input {
     FlashNow,
     CheckFlashFile,
     Recover,
+    RecoveryMember(String),
     RunAnalysis,
     CancelAnalysis,
     Confirm,
@@ -563,6 +564,8 @@ pub struct App {
     pub(crate) recovery_input: Option<PathBuf>,
     pub(crate) recovery_current: Option<PathBuf>,
     pub(crate) recovery_read: bool,
+    recovery_member: Option<String>,
+    recovery_members: Vec<String>,
     pub(crate) capture_as_backup: bool,
     pub(crate) sources: [Option<Source>; 2],
     pub(crate) analysis: Option<ResultView>,
@@ -634,6 +637,8 @@ impl App {
             recovery_input: None,
             recovery_current: None,
             recovery_read: false,
+            recovery_member: None,
+            recovery_members: Vec::new(),
             capture_as_backup: false,
             sources: [None, None],
             analysis: None,
@@ -866,6 +871,11 @@ impl App {
                     });
                 }
             }
+            Input::RecoveryMember(member) if !self.busy() => {
+                if self.recovery_members.contains(&member) {
+                    self.recovery_member = Some(member);
+                }
+            }
             Input::Recover
                 if !self.busy() && self.recovery_ready() && self.offers(Task::Recovery) =>
             {
@@ -943,11 +953,7 @@ impl App {
         match pick {
             Pick::CheckFile => open(None),
             Pick::FlashFirmware => {
-                let extensions = self
-                    .ready_profile()
-                    .map(|p| p.flash_extensions.clone())
-                    .filter(|e| !e.is_empty())
-                    .unwrap_or_else(workflow::file_extensions);
+                let extensions = vec!["tar"];
                 open(Some(FileFilter {
                     name: "Firmware or backup",
                     extensions,
@@ -1007,7 +1013,11 @@ impl App {
             }
             Pick::FlashFirmware => self.flash_input = Some(path),
             Pick::RecoveryCurrent => self.recovery_current = Some(path),
-            Pick::RecoveryInput => self.recovery_input = Some(path),
+            Pick::RecoveryInput => {
+                self.recovery_member = None;
+                self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
+                self.recovery_input = Some(path);
+            }
             Pick::Backup | Pick::Dump => {
                 // The native save panel has already confirmed replacing an existing file.
                 let replace = path.symlink_metadata().is_ok();
@@ -1071,6 +1081,7 @@ impl App {
     fn recovery_ready(&self) -> bool {
         self.selected()
             && self.recovery_input.is_some()
+            && (self.recovery_members.len() < 2 || self.recovery_member.is_some())
             && (self.recovery_without_current()
                 || self.recovery_read
                 || self.recovery_current.is_some())
@@ -1143,6 +1154,7 @@ impl App {
                 let job = Job::Recovery(RecoveryOptions {
                     device: None,
                     input: target.options.input,
+                    member: self.recovery_member.clone(),
                     current,
                     execute: true,
                     acknowledged_risk: true,
@@ -1525,6 +1537,33 @@ impl App {
                         "Reads installed firmware for protocol analysis. No backup file is saved."
                             .into(),
                     ));
+                }
+                if self.recovery_members.len() > 1 {
+                    items.push(Item::Note(
+                        "Select exactly one image to recover. No second stage will run.".into(),
+                    ));
+                    items.push(Item::Buttons {
+                        label: Some("Recovery image".into()),
+                        buttons: self
+                            .recovery_members
+                            .iter()
+                            .map(|name| {
+                                Button::primary(
+                                    &format!(
+                                        "{}{}",
+                                        if self.recovery_member.as_ref() == Some(name) {
+                                            "Selected: "
+                                        } else {
+                                            ""
+                                        },
+                                        name
+                                    ),
+                                    Input::RecoveryMember(name.clone()),
+                                    enabled,
+                                )
+                            })
+                            .collect(),
+                    });
                 }
                 items.extend([
                     Item::Heading(

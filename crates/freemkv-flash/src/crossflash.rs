@@ -18,6 +18,33 @@ pub enum Platform {
 /// Whether `flash` admits `target` on a drive whose installed firmware is
 /// `installed` (refusal reason on `Err`).
 pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()> {
+    if platform == Platform::Mediatek {
+        let installed_package = (installed.get(257..262) == Some(b"ustar"))
+            .then(|| crate::mediatek_package::Package::parse(installed))
+            .transpose()?;
+        let target_package = (target.get(257..262) == Some(b"ustar"))
+            .then(|| crate::mediatek_package::Package::parse(target))
+            .transpose()?;
+        let installed = installed_package
+            .as_ref()
+            .map_or(installed, |p| p.firmware());
+        if let Some(package) = &target_package {
+            if let Some(intermediate) = package.intermediate() {
+                crate::backend::registry::decide_offline(platform, installed, intermediate)?;
+                return crate::backend::registry::decide_offline(
+                    platform,
+                    intermediate,
+                    package.firmware(),
+                );
+            }
+            return crate::backend::registry::decide_offline(
+                platform,
+                installed,
+                package.firmware(),
+            );
+        }
+        return crate::backend::registry::decide_offline(platform, installed, target);
+    }
     crate::backend::registry::decide_offline(platform, installed, target)
 }
 
@@ -73,6 +100,11 @@ pub(crate) struct Prefilter {
 
 impl Prefilter {
     fn of(platform: Platform, bytes: &[u8]) -> Self {
+        if platform == Platform::Mediatek {
+            if let Ok(package) = crate::mediatek_package::Package::parse(bytes) {
+                return crate::backend::registry::offline_prefilter(platform, package.firmware());
+            }
+        }
         crate::backend::registry::offline_prefilter(platform, bytes)
     }
 

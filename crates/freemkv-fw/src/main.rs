@@ -54,9 +54,9 @@ enum Command {
     /// Create freemkv firmware from an OEM image: hijack the `READ BUFFER`
     /// (`0x3C`) handler via the platform engine and re-sign.
     Create {
-        /// Source OEM firmware image (.bin).
+        /// Source OEM firmware image (.bin) or release package (.tar).
         input: PathBuf,
-        /// Output path (default: `<input-stem>.freemkv.bin`).
+        /// Output path (default preserves the input BIN/TAR format).
         output: Option<PathBuf>,
         /// Rewrite the input image in place.
         #[arg(long)]
@@ -257,6 +257,8 @@ fn cmd_verify(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 
 fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
     let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let artifact = freemkv_fw::artifact::Artifact::parse(image)?;
+    let image = artifact.image().to_vec();
     let (scheme_name, verdicts) = verify_image(&image, family)?;
 
     println!("{}", style::kv("scheme", scheme_name));
@@ -568,6 +570,9 @@ fn cmd_sign(
 ) -> Result<ExitCode> {
     let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
 
+    let artifact = freemkv_fw::artifact::Artifact::parse(image)?;
+    let image = artifact.image().to_vec();
+
     // Resolve the output path before doing work so we fail fast on conflicts.
     let out_path = if in_place {
         if out.is_some() {
@@ -607,7 +612,7 @@ fn cmd_sign(
         }
     }
 
-    diagnostics::write(&out_path, &signed)
+    diagnostics::write(&out_path, &artifact.output(signed.clone())?)
         .with_context(|| format!("writing {}", out_path.display()))?;
     println!("wrote {} ({} bytes)", out_path.display(), signed.len());
     Ok(ExitCode::SUCCESS)
@@ -619,7 +624,10 @@ fn default_signed_path(input: &Path) -> PathBuf {
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "image".to_string());
-    input.with_file_name(format!("{stem}.signed.bin"))
+    input.with_file_name(format!(
+        "{stem}.signed.{}",
+        input.extension().and_then(|e| e.to_str()).unwrap_or("bin")
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -632,7 +640,10 @@ fn default_created_path(input: &Path) -> PathBuf {
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "image".to_string());
-    input.with_file_name(format!("{stem}.freemkv.bin"))
+    input.with_file_name(format!(
+        "{stem}.freemkv.{}",
+        input.extension().and_then(|e| e.to_str()).unwrap_or("bin")
+    ))
 }
 
 fn cmd_create(
@@ -644,6 +655,9 @@ fn cmd_create(
     audit: bool,
 ) -> Result<ExitCode> {
     let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
+
+    let artifact = freemkv_fw::artifact::Artifact::parse(image)?;
+    let image = artifact.image().to_vec();
 
     // Resolve the output path up front so we fail fast on conflicts.
     let out_path = if in_place {
@@ -669,7 +683,7 @@ fn cmd_create(
     if base {
         let outcome = api::create(&image).context("building freemkv BASE firmware")?;
         diagnostics::record(base_report_json(&outcome));
-        diagnostics::write(&out_path, outcome.image())
+        diagnostics::write(&out_path, &artifact.output(outcome.image().to_vec())?)
             .with_context(|| format!("writing {}", out_path.display()))?;
         if json {
             println!("{}", base_report_json(&outcome));
@@ -738,7 +752,7 @@ fn cmd_create(
         }
     }
 
-    diagnostics::write(&out_path, &report.image)
+    diagnostics::write(&out_path, &artifact.output(report.image.clone())?)
         .with_context(|| format!("writing {}", out_path.display()))?;
 
     if json {

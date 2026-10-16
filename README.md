@@ -27,7 +27,7 @@ the separate `freemkv-fw` binary in this workspace.
 | `freemkv-flash dump <dev> [-o out.bin]` | RAM logging only, when supported | — | captures memory and diagnostic responses in one address-oriented file; not flashable |
 | `freemkv-flash check <file>` | no | firmware file | inspect without a drive |
 | `freemkv-flash recover <dev> --current <current.tar> -i <target.tar>` | with `--execute` | Pioneer Kernel + Normal packages | experimental recovery without backups |
-| `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.bin` or `.tar` | validate and plan; execute only after fresh backup |
+| `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.tar` | validate and plan; execute only after fresh backup |
 
 - `backup` produces one firmware file. Pioneer candidates with zero signatures
   are usable as Current references, but targets must pass transfer authentication.
@@ -68,7 +68,7 @@ validates integrity and model compatibility before writing. An image of another
 model is admitted only when it is the drive's own hardware family — derived from
 the firmware itself (a content hash of chip, platform, loader, interface, medium
 and BD-write capability), not from a curated list — and only with the full
-content-integrity and rollback gates. A different family, an INTM build or an
+content-integrity and rollback gates. A different family or an
 unknown-identity image is refused, an unknown family fails closed, and nothing
 switches the gate off. Its workflow is:
 
@@ -99,14 +99,15 @@ freemkv-flash info /dev/sg0
 freemkv-flash backup /dev/sg0 -o backup.bin
 
 # Dry-run a flash (prints the plan, issues no writes)
-freemkv-flash flash /dev/sg0 -i firmware.bin
+freemkv-flash flash /dev/sg0 -i firmware.tar
 
 # Actually flash (all gates must pass)
-freemkv-flash flash /dev/sg0 -i firmware.bin \
+freemkv-flash flash /dev/sg0 -i firmware.tar \
     --execute --i-understand-risk
 
 # Reflash the firmware image captured in that backup
-freemkv-flash flash /dev/sg0 -i backup.bin --execute --i-understand-risk
+freemkv-flash package backup.bin backup.tar
+freemkv-flash flash /dev/sg0 -i backup.tar --execute --i-understand-risk
 
 # Review a Pioneer OEM transfer against the connected drive; no writes
 freemkv-flash flash /dev/sg0 -i update.enc
@@ -236,3 +237,19 @@ The proposed ASUS BOOT recovery is BH16NS40 INTM through recovery, confirmation 
 INTM starts, then a separate normal flash to WH16NS58 1.V9. This sequence has not
 been validated on a physical drive. The MediaTek dependency is pinned to a development
 Git revision; no release is implied. Pioneer retains its Current-reference requirement.
+
+MediaTek downloads are TAR packages with an explicit manifest. A paired release
+runs its extraction-linked INTM first, confirms its live INQUIRY identity, then
+re-detects receiver encoding before flashing the final image. A failure stops the
+sequence. This has simulated-transport coverage; physical drive validation remains
+outstanding.
+
+Recovery accepts the same TAR but writes exactly one selected member:
+`freemkv-flash recover DEVICE -i release.tar --member intermediate.bin`.
+Add `--execute --i-understand-risk` only after reviewing the preview. Recovery
+never continues to the other member and does not create a backup.
+
+Modify accepts BIN or TAR and returns the same format. With a TAR it modifies
+only final firmware, preserves INTM bytes and pairing provenance, and updates the
+final member hash. Existing standalone BIN backups can be wrapped offline with
+`freemkv-flash package backup.bin backup.tar`; this never guesses an INTM pairing.

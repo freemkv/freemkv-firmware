@@ -31,6 +31,7 @@ use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
 /// What `plan` decided, for `authorize`.
 struct Plan {
     image: Vec<u8>,
+    final_image: Option<Vec<u8>>,
     live: Identity,
     receiver: mediatek_optical::receiver::Receiver,
     drive_product: String,
@@ -55,6 +56,7 @@ impl FlashFacet for Mtk {
             );
         }
         let mut notes = Vec::new();
+        let mut final_image = None;
         let image = match format.role {
             // A backup archive restores its firmware image only; its per-unit
             // members are reference data, never written.
@@ -65,7 +67,20 @@ impl FlashFacet for Mtk {
                 ));
                 firmware
             }
-            FormatRole::Image | FormatRole::Package => req.input.clone(),
+            FormatRole::Package => {
+                let package = crate::mediatek_package::Package::parse(&req.input)?;
+                if let Some(intermediate) = package.intermediate() {
+                    check_image(intermediate)?;
+                    decide_offline(intermediate, package.firmware())
+                        .context("checking intermediate-to-final transition before any write")?;
+                    final_image = Some(package.firmware().to_vec());
+                    notes.push(PlanLine::Text("Two-stage update: intermediate, confirm startup, then final firmware with freshly detected transfer encoding".into()));
+                    intermediate.to_vec()
+                } else {
+                    package.firmware().to_vec()
+                }
+            }
+            FormatRole::Image => req.input.clone(),
         };
         let (live, verdict) = self.validate_image(dev, &image, &req.drive_model)?;
         let steps = live
@@ -106,6 +121,7 @@ impl FlashFacet for Mtk {
         block.push(PlanLine::Block(describe_sequence(&steps, req.verbose)));
         let mut plan = FlashPlan::new(Plan {
             image,
+            final_image,
             live,
             receiver,
             drive_product: req.drive_model.clone(),
@@ -160,61 +176,105 @@ impl FlashFacet for Mtk {
     fn execute(&self, dev: &mut WriteDevice<'_>, authorized: &AuthorizedPlan) -> Result<()> {
         let Authorized { prepared, expect } = authorized.state()?;
         let state: &Plan = authorized.plan.state()?;
-        {
-            let shared = SharedDevice::new(dev);
-            let mut reads = ScsiTransport::reads(&shared);
-            state
-                .receiver
-                .revalidate(&mut reads)
-                .map_err(|e| anyhow!("{e}"))?;
+        execute_stage(self, dev, prepared, expect, &state.receiver)?;
+        if let Some(final_image) = &state.final_image {
+            let reader = &mut ReadDevice::without_unlocks(dev);
+            let inquiry = reader.command_in(&cdb::inquiry(36), 36)?;
+            if inquiry.get(8..36) != state.image.get(0x1ec000..0x1ec01c) {
+                bail!("intermediate firmware startup was not confirmed by INQUIRY; final stage not written");
+            }
+            let intermediate_live = live_identity(reader);
+            let expected = &state.image[0x1ec000..0x1ec058];
+            if &intermediate_live.descriptor_bytes()[..0x58] != expected {
+                bail!("intermediate firmware startup was not confirmed; final stage not written");
+            }
+            let drive_product = Build::of_image(&state.image)?.product;
+            let (live, verdict) = self.validate_image(reader, final_image, &drive_product)?;
+            let receiver = detect_receiver(reader)?;
+            if receiver.mode() != mediatek_optical::receiver::Mode::Firmware {
+                bail!("drive remains in BOOT; final stage not written");
+            }
+            let mut next = authorize_bytes(
+                &live,
+                &drive_product,
+                verdict,
+                final_image,
+                Some(&state.image),
+            )?;
+            if receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted {
+                next.prepared = next.prepared.encrypted();
+            }
+            execute_stage(self, dev, &next.prepared, &next.expect, &receiver)?;
+            let reader = &mut ReadDevice::without_unlocks(dev);
+            let inquiry = reader.command_in(&cdb::inquiry(36), 36)?;
+            if inquiry.get(8..36) != final_image.get(0x1ec000..0x1ec01c) {
+                bail!("final firmware startup was not confirmed by INQUIRY");
+            }
         }
-        let verified = {
-            let shared = SharedDevice::new(dev);
-            let (mut reads, mut writes) =
-                (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
-            let io = FlashTransport {
-                reads: &mut reads,
-                writes: &mut writes,
-            };
-            let mut runtime = Runtime::new();
-            prepared
-                .flash(io, &mut runtime)
-                .map_err(|e| flash_error(e, prepared))?
+        Ok(())
+    }
+}
+
+fn execute_stage(
+    backend: &Mtk,
+    dev: &mut WriteDevice<'_>,
+    prepared: &PreparedUpdate,
+    expect: &Option<String>,
+    receiver: &mediatek_optical::receiver::Receiver,
+) -> Result<()> {
+    {
+        let shared = SharedDevice::new(dev);
+        let mut reads = ScsiTransport::reads(&shared);
+        receiver
+            .revalidate(&mut reads)
+            .map_err(|e| anyhow!("{e}"))?;
+    }
+    let verified = {
+        let shared = SharedDevice::new(dev);
+        let (mut reads, mut writes) =
+            (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
+        let io = FlashTransport {
+            reads: &mut reads,
+            writes: &mut writes,
         };
-        if verified.ranges == 0 {
-            println!(
-                "{}",
-                style::dim_line(
-                    "  read-back cross-check: image carries no integrity table; \
-                     relying on the drive's firmware identity below."
-                )
-            );
-        } else {
-            println!(
-                "{}",
-                style::status_line(
-                    "flash complete",
-                    &format!(
-                        "{} of integrity-protected regions verified",
-                        style::human_size(verified.checked)
-                    ),
-                    style::Status::Ok
-                )
-            );
-        }
+        let mut runtime = Runtime::new();
+        prepared
+            .flash(io, &mut runtime)
+            .map_err(|e| flash_error(e, prepared))?
+    };
+    if verified.ranges == 0 {
         println!(
             "{}",
             style::dim_line(
-                "  Integrity is enforced on-device: the drive recomputes CMAC at boot and \
-                 rejects a bad image. The firmware identity below is the real result."
+                "  read-back cross-check: image carries no integrity table; \
+                     relying on the drive's firmware identity below."
             )
         );
-        let reader = &mut ReadDevice::without_unlocks(dev);
-        confirm_identity(self, reader)?;
-        match expect {
-            Some(model) => confirm_crossflash(reader, model),
-            None => Ok(()),
-        }
+    } else {
+        println!(
+            "{}",
+            style::status_line(
+                "flash complete",
+                &format!(
+                    "{} of integrity-protected regions verified",
+                    style::human_size(verified.checked)
+                ),
+                style::Status::Ok
+            )
+        );
+    }
+    println!(
+        "{}",
+        style::dim_line(
+            "  Integrity is enforced on-device: the drive recomputes CMAC at boot and \
+                 rejects a bad image. The firmware identity below is the real result."
+        )
+    );
+    let reader = &mut ReadDevice::without_unlocks(dev);
+    confirm_identity(backend, reader)?;
+    match expect {
+        Some(model) => confirm_crossflash(reader, model),
+        None => Ok(()),
     }
 }
 
@@ -663,9 +723,14 @@ impl Mtk {
 pub(super) fn test_plan(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<FlashPlan> {
     Ok(FlashPlan::new(Plan {
         image: image.to_vec(),
+        final_image: None,
         live: identity_of_image(image)?,
         receiver: detect_receiver(&mut ReadDevice::without_unlocks(dev))?,
         drive_product: "BD-RE BU40N".into(),
         verdict: Verdict::SameModel,
     }))
 }
+
+#[cfg(test)]
+#[path = "stage_tests.rs"]
+mod stage_tests;

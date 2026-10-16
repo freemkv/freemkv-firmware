@@ -1772,18 +1772,23 @@ fn lenders_find_closures_and_returns_that_hand_out_a_device() {
 const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
     (
         "src/backends/mtk/flash.rs",
-        "fn execute",
+        "fn execute_stage",
         "FlashTransport",
         1,
     ),
     (
         "src/backends/mtk/flash.rs",
-        "fn execute",
+        "fn execute_stage",
         "ScsiTransport",
         3,
     ),
     // Read-only receiver revalidation precedes the existing flash transport.
-    ("src/backends/mtk/flash.rs", "fn execute", "SharedDevice", 2),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn execute_stage",
+        "SharedDevice",
+        2,
+    ),
     // Detector adapters borrow only ReadDevice; library detection issues data-in only.
     (
         "src/backends/mtk/mod.rs",

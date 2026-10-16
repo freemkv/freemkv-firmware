@@ -414,6 +414,9 @@ fn open_flash(
 )> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
+    if input.get(257..262) != Some(b"ustar") {
+        bail!("Flash accepts TAR packages only; supply a firmware release package");
+    }
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
@@ -554,6 +557,8 @@ pub struct RecoveryOptions {
     pub device: Option<String>,
     /// Firmware to write: MediaTek image or Pioneer Kernel and Normal.
     pub input: PathBuf,
+    /// Exact MediaTek TAR member to recover; required for paired packages.
+    pub member: Option<String>,
     /// Where to obtain the current receiver's firmware.
     pub current: CurrentFirmware,
     /// Issue writes; otherwise prepare without writing.
@@ -569,7 +574,11 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
             bail!("refusing recovery without acknowledging the risk");
         }
         crate::diagnostics::record(format!("recovery options: {args:?}"));
-        let target = read_capped(&args.input)?;
+        let input = read_capped(&args.input)?;
+        if input.get(257..262) != Some(b"ustar") {
+            bail!("Recovery accepts TAR packages only");
+        }
+        let target = recovery_target(&input, args.member.as_deref())?;
         let supplied = match &args.current {
             CurrentFirmware::File(path) => Some(read_capped(path)?),
             CurrentFirmware::ReadFromDrive | CurrentFirmware::NotRequired => None,
@@ -606,6 +615,16 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
     })
 }
 
+/// Select exactly one member from a package with independent recovery images.
+pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
+    crate::package::recovery_target(input, member)
+}
+
+/// Recovery choices for a bounded input file.
+pub fn recovery_members(path: &Path) -> Result<Vec<String>> {
+    crate::package::recovery_members(&read_capped(path)?)
+}
+
 /// Whether the identified recovery backend requires an installed reference.
 pub fn recovery_requires_current(profile: &DriveProfile) -> bool {
     profile
@@ -613,4 +632,17 @@ pub fn recovery_requires_current(profile: &DriveProfile) -> bool {
         .and_then(|d| registry::backends().find(|b| b.descriptor().id == d.id))
         .and_then(|b| b.recovery())
         .is_none_or(|r| r.requires_current())
+}
+
+/// Package a standalone firmware image without opening a drive or overwriting output.
+pub fn package_image(input: &Path, output: &Path) -> Result<()> {
+    use std::io::Write;
+    let bytes = crate::package::wrap_image(read_capped(input)?)?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output)?;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
+    Ok(())
 }

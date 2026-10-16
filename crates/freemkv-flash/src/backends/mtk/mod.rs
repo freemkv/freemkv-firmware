@@ -844,6 +844,14 @@ pub const IMAGE: FileFormat = FileFormat {
     role: FormatRole::Image,
 };
 
+/// A validated release TAR, containing final firmware and an optional intermediate.
+pub const PACKAGE: FileFormat = FileFormat {
+    id: "mtk-package",
+    label: "MediaTek release package",
+    extensions: &["tar"],
+    role: FormatRole::Package,
+};
+
 /// A freemkv 0.10.x MediaTek backup archive, restored through its firmware.
 pub const LEGACY_TAR: FileFormat = FileFormat {
     id: "mtk-legacy-tar",
@@ -857,7 +865,7 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
     id: BackendId("mtk19xx"),
     display_name: "MediaTek MT19xx",
     flash_summary: Some("MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)"),
-    formats: &[IMAGE, LEGACY_TAR],
+    formats: &[IMAGE, PACKAGE, LEGACY_TAR],
 };
 
 /// The MediaTek MT19xx drive family.
@@ -917,6 +925,12 @@ impl FileFacet for Mtk {
     /// chip signature found anywhere else is heuristic.
     fn recognize(&self, bytes: &[u8]) -> Option<crate::backend::Recognized> {
         use crate::backend::{Confidence, Recognized};
+        if crate::mediatek_package::Package::parse(bytes).is_ok() {
+            return Some(Recognized {
+                format: &PACKAGE,
+                confidence: Confidence::Structural,
+            });
+        }
         if is_legacy_archive(bytes) {
             return Some(Recognized {
                 format: &LEGACY_TAR,
@@ -934,6 +948,9 @@ impl FileFacet for Mtk {
         // banner (the chip signal) is not at a fixed offset of the archive, so
         // rebuild the flashable image first and describe that. A raw .bin is
         // described directly.
+        if let Ok(package) = crate::mediatek_package::Package::parse(image) {
+            return file_info::describe(package.firmware());
+        }
         if is_legacy_archive(image) {
             let rebuilt = match backup::backup_image(image, IMAGE_SIZE) {
                 Ok(img) => img,
@@ -944,9 +961,15 @@ impl FileFacet for Mtk {
         file_info::describe(image)
     }
 
-    fn classify_input(&self, path: &std::path::Path, _bytes: &[u8]) -> &'static FileFormat {
+    fn classify_input(&self, path: &std::path::Path, bytes: &[u8]) -> &'static FileFormat {
         match path.extension().and_then(|e| e.to_str()) {
-            Some(ext) if ext.eq_ignore_ascii_case("tar") => &LEGACY_TAR,
+            Some(ext) if ext.eq_ignore_ascii_case("tar") => {
+                if is_legacy_archive(bytes) {
+                    &LEGACY_TAR
+                } else {
+                    &PACKAGE
+                }
+            }
             _ => &IMAGE,
         }
     }

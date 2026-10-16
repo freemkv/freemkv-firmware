@@ -20,3 +20,5 @@ pub mod api;
 
 /// Shared automatic diagnostics for firmware authoring operations.
 pub mod diagnostics;
+
+pub mod artifact;
