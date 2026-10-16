@@ -255,8 +255,8 @@ fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
     );
     assert_eq!(decide(Platform::Pioneer, &unknown, &same).status, HardNo);
     assert!(Plan::prepare(&unknown, &same).is_err());
-    // A known startup mismatch alone is soft, but a distinct receiver class
-    // still makes the pair hard: an adapter for the startup cannot fix that.
+    // A receiver-class change does not add a hard refusal to a paired update:
+    // the incoming Kernel receives its own Normal after the handoff.
     let incompatible = archive(
         &fixture_pair_class_with(false, 1, b"SAT FFFEGENERAL 0000", [0x104, 0x204], |k| {
             k.copy_within(0x20..0x30, 0x2a);
@@ -266,7 +266,7 @@ fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
     );
     assert_eq!(
         decide(Platform::Pioneer, &installed, &incompatible).status,
-        HardNo
+        SoftNo
     );
     assert!(Plan::prepare(&installed, &incompatible).is_err());
     assert_eq!(decide(Platform::Pioneer, b"invalid", &same).status, HardNo);
@@ -395,11 +395,14 @@ fn supplied_real_recovery_packages_prepare_and_transfer_without_reads() {
     ) else {
         return;
     };
-    let plan = Plan::prepare(
-        &std::fs::read(current).unwrap(),
-        &std::fs::read(target).unwrap(),
-    )
-    .unwrap();
+    let current = std::fs::read(current).unwrap();
+    let target = std::fs::read(target).unwrap();
+    let plan = Plan::prepare(&current, &target).unwrap();
+    let (update, _) = load_target(&target).unwrap();
+    assert!(!plan.was_reencoded(), "paired Normal must retain its OEM encoding");
+    assert_eq!(plan.normal_transfer, update.normal_transfer());
+    crate::crossflash::admits(crate::crossflash::Platform::Pioneer, &current, &target)
+        .expect("Flash must prepare the same paired Normal as Recovery");
     let mut drive = Drive {
         updating: true,
         ..Default::default()
@@ -805,10 +808,10 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
         &std::fs::read(&metas[a].path).unwrap(),
         &std::fs::read(&metas[b].path).unwrap(),
     )
-    .expect("installed 207M must admit a re-encoded PR1ML Normal");
+    .expect("installed 207M must admit the paired PR1ML update");
     assert!(
-        plan.was_reencoded(),
-        "207M <- PR1ML must take the cross-receiver re-encode path"
+        !plan.was_reencoded(),
+        "207M -> PR1ML must preserve Normal for the incoming PR1ML Kernel"
     );
 
     if let Ok(report) = std::env::var("FREEMKV_PIONEER_HOARD_REPORT") {
@@ -917,13 +920,9 @@ fn check_receiver_admits_a_different_sat_same_receiver_class() {
 }
 
 #[test]
-fn check_receiver_refuses_a_different_receiver_class() {
-    use crate::backends::pioneer::flash_plan::{receiver_class, RECEIVER_INCOMPATIBLE};
-    // Same SAT, DIFFERENT receiver class (different XOR-skip offsets): the
-    // installed Kernel cannot decode the target's Normal, so check_receiver must
-    // refuse with RECEIVER_INCOMPATIBLE — the cross-class brick case. Synthetic,
-    // non-hoard regression guard for the receiver_gate refusal arm (previously
-    // proven only under FREEMKV_PIONEER_HOARD).
+fn paired_normal_uses_incoming_receiver_class() {
+    use crate::backends::pioneer::flash_plan::receiver_class;
+    // Different XOR-skip rules prove that the old Kernel is not Normal's receiver.
     let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
     let target = fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]);
     let ik = installed
@@ -944,31 +943,39 @@ fn check_receiver_refuses_a_different_receiver_class() {
     );
     assert_eq!(
         check_receiver(Some(&ik), Some(&tk), &tn),
-        Err(RECEIVER_INCOMPATIBLE.to_string()),
-        "a same-SAT but different-receiver-class target must be refused as incompatible"
+        Ok(()),
+        "the incoming Kernel receives its paired Normal"
     );
 }
 
 #[test]
-fn authorize_installed_enforces_the_receiver_gate_but_not_sat() {
-    // Wiring guard: the receiver gate is enforced THROUGH authorize_installed, not
-    // only as a pure function. A different receiver class must make it refuse (so
-    // deleting the check_receiver call site fails CI), while a different SAT with
-    // the same receiver class must be admitted (the 0.11.x crossflash rule).
+fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
     use crate::backend::FlashPlan;
-    use crate::backends::pioneer::flash_plan::RECEIVER_INCOMPATIBLE;
     use crate::backends::pioneer::{authorize_installed, execute_plan};
     let target = fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]);
     let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
     let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
-    let err = match authorize_installed(plan, Some(&archive(&installed, false))) {
-        Ok(_) => panic!("authorize_installed must refuse a different receiver class"),
-        Err(e) => format!("{e:#}"),
-    };
-    assert!(
-        err.contains("refusing to flash") && err.contains(RECEIVER_INCOMPATIBLE),
-        "authorize_installed must enforce the receiver gate, got: {err}"
+    let authorized = authorize_installed(plan, Some(&archive(&installed, false))).unwrap();
+    let prepared = authorized.state::<super::super::Prepared>().unwrap();
+    assert_eq!(
+        prepared.complete.as_ref().unwrap().normal_transfer(),
+        target.normal_transfer()
     );
+    let recovery = Plan::prepare(&archive(&installed, false), &archive(&target, false)).unwrap();
+    assert!(!recovery.was_reencoded());
+    assert_eq!(recovery.normal_transfer, target.normal_transfer());
+    let bytes = target.normal().repack(&target.normal().image).unwrap();
+    let converted =
+        super::super::normal_prepare::prepare(installed.kernel(), target.normal(), &bytes).unwrap();
+    assert_ne!(
+        converted, bytes,
+        "a Normal-only conversion really changes encoding"
+    );
+    let proof =
+        pioneer_optical::envelope::Envelope::load_with_kernel(&converted, installed.kernel())
+            .unwrap();
+    assert_eq!(proof.image, target.normal().image);
+    assert!(be32_sum_zero(&proof.image));
 
     let target = fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000");
     let installed = fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000");
@@ -1014,7 +1021,7 @@ fn be32_sum_zero_fails_closed_on_degenerate_bodies() {
 fn crossflash_links_follow_the_flash_gates() {
     // Crossflash links come from the flasher's own offline
     // decision: a different SAT with the same receiver class links both ways; a
-    // different receiver class (same SAT) never links.
+    // different receiver class also links when the incoming Kernel receives Normal.
     use crate::crossflash::{links, Platform};
     let sat_a = archive(&fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000"), false);
     let sat_b = archive(&fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000"), false);
@@ -1028,7 +1035,7 @@ fn crossflash_links_follow_the_flash_gates() {
         "{found:?}"
     );
     assert!(
-        !found.contains(&(0, 2)) && !found.contains(&(2, 0)),
+        found.contains(&(0, 2)) && found.contains(&(2, 0)),
         "{found:?}"
     );
 }

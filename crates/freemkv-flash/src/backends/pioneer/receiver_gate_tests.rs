@@ -1,11 +1,8 @@
-//! Real-package proof of the installed-Kernel receiver gate, env-gated like the
-//! other OEM-corpus tests. Point `FREEMKV_PIONEER_HOARD` at a firmware-extractor
-//! hoard root (the directory holding `index/packages.json`); unset is a no-op.
-//!
-//! The gate must: refuse the real BDR-207M 1.60 <-> BDR-PR1ML 1.30 pair in both
+//! Real-package proof that paired Normal is validated under its incoming Kernel.
+//! Uses the real BDR-207M 1.60 <-> BDR-PR1ML 1.30 pair in both
 //! directions (their receiver classes differ inside family `cee5c9016d0174c9`);
 //! leave every same-model reflash and every same-receiver-class crossflash
-//! admitted; and refuse every different-receiver-class same-family crossflash.
+//! admitted, including different receiver classes when the incoming pair matches.
 
 use super::flash_plan::{
     check_receiver, receiver_class, receiver_evidence, receiver_gate, ReceiverClass,
@@ -88,7 +85,7 @@ fn load_hoard(root: &Path) -> Vec<Pkg> {
 }
 
 #[test]
-fn hoard_receiver_gate_refuses_only_cross_class_pairs() {
+fn hoard_paired_normal_uses_target_receiver() {
     let Ok(root) = std::env::var("FREEMKV_PIONEER_HOARD") else {
         eprintln!("FREEMKV_PIONEER_HOARD not set; real-package receiver-gate test skipped");
         return;
@@ -120,8 +117,8 @@ fn hoard_receiver_gate_refuses_only_cross_class_pairs() {
         self_admitted += 1;
     }
 
-    // 2. Every same-model pair (same SAT+destination+model, any revision pair)
-    //    stays admitted — the gate never touches like-for-like updates.
+    // 2. Every same-model pair supplies Normal for its incoming Kernel.
+    //    This checks Normal decoding; Kernel handoff is a separate gate.
     let mut by_model: HashMap<(&str, &str, &str), Vec<usize>> = HashMap::new();
     for (i, p) in pkgs.iter().enumerate() {
         by_model
@@ -144,9 +141,9 @@ fn hoard_receiver_gate_refuses_only_cross_class_pairs() {
         }
     }
 
-    // 3. Cross-edition within one family and SAT: admitted exactly when the
-    //    installed and target Kernels share the full receive contract.
-    let (mut same_class_admit, mut cross_class_refuse) = (0usize, 0usize);
+    // 3. Paired cross-edition Normal is received by its incoming Kernel,
+    //    including when its encoding differs from the installed Kernel.
+    let (mut same_class_admit, mut cross_class_admit) = (0usize, 0usize);
     let mut violations: Vec<String> = Vec::new();
     for (i, a) in pkgs.iter().enumerate() {
         for (j, t) in pkgs.iter().enumerate() {
@@ -154,22 +151,20 @@ fn hoard_receiver_gate_refuses_only_cross_class_pairs() {
                 continue;
             }
             let same = a.class == t.class;
-            match (same, admits(i, j)) {
-                (true, true) => same_class_admit += 1,
-                (false, false) => cross_class_refuse += 1,
-                (true, false) => {
-                    violations.push(format!("{} -> {}: same contract refused", a.name, t.name))
+            if admits(i, j) {
+                if same {
+                    same_class_admit += 1;
+                } else {
+                    cross_class_admit += 1;
                 }
-                (false, true) => violations.push(format!(
-                    "{} -> {}: different contract admitted",
-                    a.name, t.name
-                )),
+            } else {
+                violations.push(format!("{} -> {}: paired Normal refused", a.name, t.name));
             }
         }
     }
     assert!(violations.is_empty(), "{violations:#?}");
 
-    // 4. The named real case, both directions, must be refused.
+    // 4. The named real case, both directions, must preserve paired encoding.
     let find = |needle: &str| {
         pkgs.iter()
             .find(|p| p.name.starts_with(needle))
@@ -183,18 +178,18 @@ fn hoard_receiver_gate_refuses_only_cross_class_pairs() {
     );
     assert_eq!(a.family, b.family, "the named case must share a family");
     assert!(
-        check_receiver(Some(&a.kernel), Some(&b.kernel), &b.normal).is_err(),
-        "207M -> PR1ML must be refused"
+        check_receiver(Some(&a.kernel), Some(&b.kernel), &b.normal).is_ok(),
+        "207M -> PR1ML must preserve paired encoding"
     );
     assert!(
-        check_receiver(Some(&b.kernel), Some(&a.kernel), &a.normal).is_err(),
-        "PR1ML -> 207M must be refused"
+        check_receiver(Some(&b.kernel), Some(&a.kernel), &a.normal).is_ok(),
+        "PR1ML -> 207M must preserve paired encoding"
     );
 
     eprintln!(
         "receiver gate over {} packages: self-decode {self_admitted}, \
          same-model pairs {same_model_pairs} admitted; cross-edition same-class {same_class_admit} admitted, \
-         different-contract {cross_class_refuse} refused; 207M<->PR1ML encoding refused; 205<->206 encoding matches but handoff refuses",
+         different-contract {cross_class_admit} admitted; 207M<->PR1ML paired encoding admitted; 205<->206 encoding matches but handoff refuses",
         pkgs.len(),
     );
 

@@ -297,11 +297,7 @@ pub struct ReceiverEvidence {
 /// The receiver gate's message for a drive whose installed Kernel cannot decode
 /// the incoming firmware.
 pub const RECEIVER_INCOMPATIBLE: &str =
-    "the drive's currently-installed Kernel cannot receive this firmware: the incoming Normal \
-     does not decode to a valid image under the installed Kernel's receiver rules (a different \
-     un-XORed-offset/rotation receiver class). Flashing it would leave the drive stuck in boot \
-     mode. Refused. If this is the same hardware family, Recover can install it instead \
-     (it re-encodes the firmware for the installed Kernel's receiver).";
+    "the receiving Kernel cannot decode the incoming Normal to the intended zero-checksum firmware body; refusing to flash.";
 
 /// The receiver gate's message when the installed Kernel cannot be established.
 pub const RECEIVER_UNKNOWN: &str =
@@ -352,26 +348,10 @@ pub fn receiver_evidence(
     }
 }
 
-/// The receiver gate over raw envelope bytes: refuse unless the installed Kernel
-/// can receive every component the flash writes. A `None` target Kernel (a
-/// Normal-only flash) is always admitted here — the installed Kernel *is* the
-/// receiver, and the library's Normal-only preparation already authenticates
-/// against it.
-///
-/// For a Kernel+Normal flash the installed Kernel receives both components, so
-/// the target Normal must decode under the installed Kernel's receiver rules to
-/// the body the target Kernel decodes, with a zero checksum. A same-family pair
-/// whose receiver encoding differs (BDR-207M <-> BDR-PR1ML) fails this and is
-/// sent to Recover, which re-encodes. The hardware version (SAT) is NOT gated:
-/// a hardware family spans several SATs and crossflashing across them is the
-/// 0.11.x behaviour, proven in the field.
-///
-/// The installed Kernel's *authentication* policy is deliberately not checked:
-/// OEM same-model updates change policy in one session (BDR-XS06 ID69 1.10
-/// signs key+ciphertext, 1.11 ciphertext only), so it is not proven to apply to
-/// an incoming Normal.
-///
-/// An identical installed and target Kernel is trivially its own receiver.
+/// Validate Normal against the Kernel that receives it. Paired updates load the
+/// incoming Kernel before Normal; Normal-only updates are checked separately
+/// by Receiver::prepare_normal against the installed Kernel. Kernel handoff,
+/// family and routing checks remain separate mandatory gates.
 pub fn check_receiver(
     installed_kernel: Option<&[u8]>,
     target_kernel: Option<&[u8]>,
@@ -383,9 +363,11 @@ pub fn check_receiver(
     if installed_kernel == Some(target_kernel) {
         return Ok(());
     }
-    let installed = installed_kernel.ok_or_else(|| RECEIVER_UNKNOWN.to_string())?;
+    installed_kernel.ok_or_else(|| RECEIVER_UNKNOWN.to_string())?;
+    // After a Kernel write, its successor receives Normal. Installed-Kernel
+    // handoff compatibility is enforced separately by Receiver::prepare.
     receiver_gate(&receiver_evidence(
-        Some(installed),
+        Some(target_kernel),
         target_normal,
         target_kernel,
     ))

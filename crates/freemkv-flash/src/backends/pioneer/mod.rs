@@ -40,6 +40,7 @@ pub(crate) mod k;
 pub(crate) mod keys;
 /// Embedded OEM normal seed/signature table (n.bin), loaded lazily for Pioneer.
 pub(crate) mod n;
+mod normal_prepare;
 pub(crate) mod recovery;
 pub mod transfer;
 
@@ -507,18 +508,27 @@ pub(crate) fn authorize_installed(
     let receiver = installed_receiver(installed)?;
     let prepared = match p.selection {
         FlashSelection::KernelAndNormal => {
-            let target =
-                pioneer_optical::envelope::Update::load(kernel.expect("selected Kernel"), normal)
-                    .map_err(preparation_error)?;
+            let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
             receiver.prepare(target).map(|complete| Prepared {
                 complete: Some(complete),
                 normal: None,
             })
         }
-        FlashSelection::NormalOnly => receiver.prepare_normal(normal).map(|normal| Prepared {
-            complete: None,
-            normal: Some(normal),
-        }),
+        FlashSelection::NormalOnly => {
+            let (installed_kernel, _) =
+                classify_flash_input(installed.context("installed firmware is required")?)?;
+            let k = pioneer_optical::envelope::Envelope::load(
+                installed_kernel
+                    .as_deref()
+                    .context("installed Kernel is required")?,
+            )?;
+            let source = pioneer_optical::envelope::Envelope::load_with_kernel(normal, &k)?;
+            let bytes = normal_prepare::prepare(&k, &source, normal)?;
+            receiver.prepare_normal(&bytes).map(|normal| Prepared {
+                complete: None,
+                normal: Some(normal),
+            })
+        }
     };
     // A known handoff mismatch is a candidate for future adaptation, but all
     // other gates must also pass before advertising it as such. No Prepared
@@ -986,7 +996,7 @@ impl RecoveryFacet for Pioneer {
         if plan.was_reencoded() {
             crate::output::field(
                 "Recovery",
-                "Normal re-encoded for the installed Kernel's receiver transport \
+                "Normal re-encoded for the receiving Kernel's transport \
                  (experimental, offline-proven, hardware-unproven)",
             );
         }

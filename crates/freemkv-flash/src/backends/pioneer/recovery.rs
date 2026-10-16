@@ -1,28 +1,13 @@
 //! Recovery with user-supplied receiver evidence, no implicit firmware reads.
-//!
-//! EXPERIMENTAL cross-receiver recover (hardware-unproven). When the drive's
-//! installed Kernel belongs to a different receiver class than the target
-//! package (a drive stuck after a same-hardware crossflash), `recover`
-//! re-encodes the target Normal into the installed Kernel's receive transport
-//! (its XOR-skip offsets, rotation, derived-key pad and authentication) so the
-//! installed loader decodes it to the identical zero-checksum body, then writes
-//! the untouched target Kernel and the re-encoded Normal. The end-state resident
-//! body is byte-identical OEM. The re-encode is PROVEN OFFLINE here (it must
-//! decode under the installed Kernel to the identical body with a zero BE32
-//! checksum, or recover refuses); it is not yet proven on hardware, so it stays
-//! recover-only. A fresh, caller-owned signature is applied: the drive's
-//! acceptance of it is part of what is hardware-unproven.
+//! The installed Kernel receives its replacement, then the incoming Kernel
+//! receives Normal. Preserve the paired Normal's encoding and OEM signature.
 use crate::backend::WriteDevice;
 use crate::backends::pioneer::classify_flash_input;
 use crate::platform::ScsiDevice;
 use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use pioneer_optical::drive::Segment;
-use pioneer_optical::envelope::builder::{
-    encode_normal_for_kernel, NormalKeySource, NormalSignature,
-};
-use pioneer_optical::envelope::signature::SigningKey;
-use pioneer_optical::envelope::{decode_envelope_with_kernel, Envelope, Update, UpdateError};
+use pioneer_optical::envelope::{Envelope, Update, UpdateError};
 use pioneer_optical::receiver::transport as kernel_transport;
 use pioneer_optical::{cdb, image::ReceiverControl, Identity, Role};
 use std::time::Duration;
@@ -35,7 +20,7 @@ pub(crate) struct Plan {
     /// Kernel body (same family as the installed drive, enforced by the family
     /// gate), so the write segments match the loader — not a linear stream.
     receive: kernel_transport::KernelReceive,
-    /// True when the Normal was re-encoded for the installed Kernel's receiver
+    /// True when the Normal was re-encoded for the receiving Kernel's receiver
     /// transport rather than written as the target package shipped it.
     reencoded: bool,
 }
@@ -43,6 +28,7 @@ pub(crate) struct Plan {
 /// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
 /// before it programs a decoded body. Single source of truth in `flash_plan`
 /// (empty body and trailing partial word both fail).
+#[cfg(test)]
 fn be32_sum_zero(body: &[u8]) -> bool {
     crate::backends::pioneer::flash_plan::be32_sum_zero(body)
 }
@@ -110,7 +96,7 @@ impl Plan {
         Self::assemble(current.kernel(), &current.normal().image, target, None)
     }
 
-    /// True when the Normal was re-encoded for the installed Kernel.
+    /// True when the Normal was re-encoded for the receiving Kernel.
     pub(crate) fn was_reencoded(&self) -> bool {
         self.reencoded
     }
@@ -122,14 +108,7 @@ impl Plan {
         target_normal_bytes: Option<&[u8]>,
     ) -> Result<Self> {
         let control = control_from_image(installed_normal_image)?;
-        // Family gate. A hardware family spans several SATs, and recover (like
-        // flash) may cross them; it may also cross receiver class, which the
-        // re-encode below bridges. The offline re-encode proof re-encodes the
-        // TARGET body into the installed Kernel's transport,
-        // so it does NOT by itself prove the target line — this gate does. Refuse
-        // a different family and the asymmetric one-side-unprofiled case (fail
-        // closed). Both unprofiled is the synthetic/test path, backstopped by the
-        // Kernel-ABI check and the re-encode proof.
+        // Same hardware family remains mandatory across the Kernel handoff.
         match (
             pioneer_optical::image::family(installed_normal_image),
             target.family(),
@@ -150,8 +129,21 @@ impl Plan {
                 }
             ),
         }
-        let (normal_transfer, reencoded) =
-            normal_transfer_for_installed(installed_kernel, &target, target_normal_bytes)?;
+        // Kernel programming hands off before Normal is transferred. The target
+        // Kernel, not the old installed Kernel, receives this Normal.
+        let (normal_transfer, reencoded) = if let Some(bytes) = target_normal_bytes {
+            let encoded = super::normal_prepare::prepare(target.kernel(), target.normal(), bytes)?;
+            let changed = encoded != bytes;
+            let normal = Envelope::load_with_kernel(&encoded, target.kernel())?;
+            (
+                normal
+                    .normal_transfer_image()
+                    .context("Normal has no transfer representation")?,
+                changed,
+            )
+        } else {
+            (target.normal_transfer().to_vec(), false)
+        };
         pioneer_optical::image::check_kernel_handoff(
             &installed_kernel.image,
             &target.kernel().image,
@@ -332,77 +324,6 @@ fn control_from_image(image: &[u8]) -> Result<[u8; 256]> {
         control[16..20].copy_from_slice(&key);
     }
     Ok(control)
-}
-
-/// The Normal transfer the installed Kernel will receive. When the installed
-/// Kernel already decodes the target Normal to the identical zero-checksum body
-/// (same receiver transport), the target's own transfer is written unchanged.
-/// Otherwise the target Normal body is re-encoded for the installed Kernel's
-/// receiver transport and proven offline to decode, under that Kernel, to the
-/// identical zero-checksum body before its continuous transfer is returned.
-///
-/// Returns the transfer bytes and whether a re-encode was performed.
-fn normal_transfer_for_installed(
-    installed_kernel: &Envelope,
-    target: &Update,
-    target_normal_bytes: Option<&[u8]>,
-) -> Result<(Vec<u8>, bool)> {
-    let want = &target.normal().image;
-    // Fast path: the installed Kernel is the target's own receiver class, so it
-    // decodes the shipped Normal to the identical zero-checksum body. (Without
-    // the raw target Normal — the in-process test path — assume this path; the
-    // re-encode below needs the raw bytes.)
-    let Some(bytes) = target_normal_bytes else {
-        return Ok((target.normal_transfer().to_vec(), false));
-    };
-    if decode_envelope_with_kernel(bytes, installed_kernel)
-        .is_some_and(|d| &d.image == want && be32_sum_zero(&d.image))
-    {
-        return Ok((target.normal_transfer().to_vec(), false));
-    }
-    // Cross-receiver recover: re-encode the target Normal body for the installed
-    // Kernel's receiver transport.
-    let header = bytes
-        .get(..super::IMAGE_MIN)
-        .context("target Normal has no header")?;
-    let key = match target.normal().encoding_seed() {
-        Some(seed) => NormalKeySource::Seed(seed),
-        None => bail!(
-            "recover refused: the target Normal has no recoverable encoding seed, so it cannot \
-             be re-encoded for the installed Kernel's receiver transport"
-        ),
-    };
-    // A fresh, caller-owned signature: self-consistent for the installed Kernel's
-    // authentication scheme. Whether the drive trusts it is hardware-unproven.
-    let signer = SigningKey::random()
-        .map_err(|e| anyhow!("recover: could not create a signing key: {e}"))?;
-    let reencoded = encode_normal_for_kernel(
-        &installed_kernel.image,
-        want,
-        header,
-        key,
-        NormalSignature::Sign(&signer),
-    )
-    .map_err(|e| {
-        anyhow!(
-            "recover refused: the target Normal cannot be re-encoded for the installed Kernel's \
-             receiver transport (not offline-provable): {e:?}"
-        )
-    })?;
-    // Offline proof under the ACTUAL installed Kernel: the re-encoded Normal must
-    // decode to the identical body with a zero BE32 checksum.
-    let proof = decode_envelope_with_kernel(&reencoded, installed_kernel).context(
-        "recover refused: the re-encoded Normal does not decode under the installed Kernel",
-    )?;
-    ensure!(
-        &proof.image == want && be32_sum_zero(&proof.image),
-        "recover refused: the re-encoded Normal does not decode to the identical zero-checksum \
-         body under the installed Kernel"
-    );
-    let transfer = proof.normal_transfer_image().context(
-        "recover refused: the re-encoded Normal has no continuous transfer representation",
-    )?;
-    Ok((transfer, true))
 }
 
 /// The refusal for a drive that is not a Pioneer receiver.

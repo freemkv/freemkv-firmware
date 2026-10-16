@@ -143,6 +143,14 @@ reporting update mode. No firmware memory reads or readback occur with a supplie
 Current file; identity/status queries remain necessary. The user is responsible
 for supplying the correct receiver reference.
 
+Pioneer Kernel + Normal updates hand off to the incoming Kernel before sending
+Normal. Flash and Recovery therefore preserve the paired Normal's OEM encoding
+and signature. Normal-only preparation uses the installed Kernel. The shared
+Normal reencoder requires a complete, receiver-decoded source image and proves
+identical contents after conversion; a bare Normal that cannot be decoded with
+the available Kernel is refused rather than guessed. Encoding conversion does
+not bypass the Kernel handoff, hardware-family, integrity or authentication gates.
+
 ```sh
 freemkv-flash recover /dev/sg0 --current current.tar -i restore.tar --execute --i-understand-risk
 # Explicit alternative to supplying Current (reads firmware, saves no backup):
