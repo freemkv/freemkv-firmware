@@ -79,24 +79,7 @@ fn run(me: &Shell, dir: &Path) {
     );
 
     for task in gui_gate::TABS {
-        // Exercise the native hit-test and TCN_SELCHANGE handler, not a direct
-        // model dispatch that would pass even with broken tab event wiring.
-        let index = Task::ALL.iter().position(|t| *t == task).unwrap();
-        let mut rect = w::RECT::default();
-        let hit = unsafe {
-            me.tabs.hwnd().SendMessage(msg::TcmGetItemRect {
-                index: index as u32,
-                rect: &mut rect,
-            })
-        };
-        g.check("tab-hit-rectangle", hit.is_ok(), format!("{task:?}"));
-        if hit.is_ok() {
-            let x = (rect.left + rect.right) / 2;
-            let y = (rect.top + rect.bottom) / 2;
-            let point = ((y as u32 & 0xffff) << 16 | (x as u32 & 0xffff)) as isize;
-            send_raw(me.tabs.hwnd(), 0x0201, 1, point); // WM_LBUTTONDOWN, MK_LBUTTON
-            send_raw(me.tabs.hwnd(), 0x0202, 0, point); // WM_LBUTTONUP
-        }
+        click_tab(me, task, &mut g);
         pump(SETTLE_MS);
         let v = me.view();
         let index = Task::ALL.iter().position(|t| *t == task);
@@ -119,12 +102,85 @@ fn run(me: &Shell, dir: &Path) {
         );
     }
 
+    profile_navigation_checks(me, dir, &mut g);
     me.send(Input::SelectTask(Task::Flash));
     let first = sheet(me, dir, true, &mut g);
     let reopened = sheet(me, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     g.no_drive_io("end", &me.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+fn click_tab(me: &Shell, task: Task, g: &mut Gate) {
+    // Exercise the native hit-test and TCN_SELCHANGE handler, not a direct
+    // model dispatch that would pass even with broken tab event wiring.
+    let index = Task::ALL.iter().position(|t| *t == task).unwrap();
+    let mut rect = w::RECT::default();
+    let hit = unsafe {
+        me.tabs.hwnd().SendMessage(msg::TcmGetItemRect {
+            index: index as u32,
+            rect: &mut rect,
+        })
+    };
+    g.check("tab-hit-rectangle", hit.is_ok(), format!("{task:?}"));
+    if hit.is_ok() {
+        let x = (rect.left + rect.right) / 2;
+        let y = (rect.top + rect.bottom) / 2;
+        let point = ((y as u32 & 0xffff) << 16 | (x as u32 & 0xffff)) as isize;
+        send_raw(me.tabs.hwnd(), 0x0201, 1, point); // WM_LBUTTONDOWN, MK_LBUTTON
+        send_raw(me.tabs.hwnd(), 0x0202, 0, point); // WM_LBUTTONUP
+    }
+}
+
+fn profile_navigation_checks(me: &Shell, dir: &Path, g: &mut Gate) {
+    use crate::ui::{Profile, ProfileState};
+    let ready = me.app.borrow().profile.clone();
+    let fixed = std::env::var_os("FREEMKV_GATE_FIXED_NAVIGATION").is_some();
+    for (name, profile) in [
+        ("unsupported", ProfileState::Ready(Profile::default())),
+        ("failed", ProfileState::Failed),
+        ("no-drive", ProfileState::NoDrive),
+    ] {
+        me.app.borrow_mut().profile = profile;
+        for task in [Task::Flash, Task::Backup, Task::Dump] {
+            me.send(Input::SelectTask(Task::Info));
+            click_tab(me, task, g);
+            pump(SETTLE_MS);
+            let observed = me.view().task;
+            let expected = if fixed { task } else { Task::Info };
+            g.check(
+                "profile-navigation",
+                observed == expected,
+                format!("{name}: clicked={task:?} observed={observed:?} expected={expected:?}"),
+            );
+            g.save(
+                dir,
+                &format!("{name}-{}", gui_gate::tab_name(task)),
+                capture(me.wnd.hwnd()).as_ref(),
+            );
+        }
+    }
+    me.app.borrow_mut().profile = ready.clone();
+    me.send(Input::SelectTask(Task::Info));
+    let (_tx, rx) = std::sync::mpsc::channel();
+    me.app.borrow_mut().profile = ProfileState::Probing;
+    me.app.borrow_mut().profile_rx = Some(rx);
+    me.render();
+    g.check(
+        "probing-disables-tabs",
+        !me.tabs.hwnd().IsWindowEnabled(),
+        "pending profile",
+    );
+    click_tab(me, Task::Flash, g);
+    pump(SETTLE_MS);
+    g.check(
+        "probing-does-not-navigate",
+        me.view().task == Task::Info,
+        format!("{:?}", me.view().task),
+    );
+    me.app.borrow_mut().profile_rx = None;
+    me.app.borrow_mut().profile = ready;
+    me.render();
 }
 
 /// Ask the confirmation over the synthetic plan and let the shell open its dialog as it

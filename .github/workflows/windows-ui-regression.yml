@@ -1,0 +1,45 @@
+name: Windows UI regression
+on:
+  push:
+    branches: [ui-regression-test]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tabs:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [v0.12.4, v0.12.5, 6ae05bd46234bab086d99c1aba87c423ab424328]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: harness
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+          path: app
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+          key: windows-ui-regression-${{ matrix.ref }}
+      - name: Use identical native click harness with each version
+        shell: pwsh
+        run: Copy-Item harness/crates/freemkv-flash-gui/src/windows/gate.rs app/crates/freemkv-flash-gui/src/windows/gate.rs -Force
+      - name: Build
+        working-directory: app
+        run: cargo build --locked -p freemkv-flash-gui --features native
+      - name: Native tab clicks and capability states
+        working-directory: app
+        shell: pwsh
+        run: |
+          if ('${{ matrix.ref }}' -eq '6ae05bd46234bab086d99c1aba87c423ab424328') { $env:FREEMKV_GATE_FIXED_NAVIGATION = '1' }
+          python tests/gui_gate.py target/debug/freemkv-flash-gui.exe "$env:RUNNER_TEMP/gui-gate"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-ui-${{ matrix.ref }}
+          path: ${{ runner.temp }}/gui-gate/
