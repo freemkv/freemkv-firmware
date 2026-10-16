@@ -539,6 +539,8 @@ mod tests;
 /// Receiver reference used by Recovery. Reading the drive is always explicit.
 #[derive(Clone, Debug)]
 pub enum CurrentFirmware {
+    /// No installed firmware reference. Supported by receivers that identify live.
+    NotRequired,
     /// User-supplied copy of the receiver's firmware; no firmware reads.
     File(PathBuf),
     /// Read firmware into memory for protocol analysis; do not save a backup.
@@ -550,7 +552,7 @@ pub enum CurrentFirmware {
 pub struct RecoveryOptions {
     /// Device selector.
     pub device: Option<String>,
-    /// Firmware to write, including Kernel and Normal.
+    /// Firmware to write: MediaTek image or Pioneer Kernel and Normal.
     pub input: PathBuf,
     /// Where to obtain the current receiver's firmware.
     pub current: CurrentFirmware,
@@ -570,7 +572,7 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         let target = read_capped(&args.input)?;
         let supplied = match &args.current {
             CurrentFirmware::File(path) => Some(read_capped(path)?),
-            CurrentFirmware::ReadFromDrive => None,
+            CurrentFirmware::ReadFromDrive | CurrentFirmware::NotRequired => None,
         };
         let selector = resolve_device(args.device.as_deref())?;
         let mut dev = platform::open(&selector, args.execute)?;
@@ -584,6 +586,10 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
             if let Some(receiver) =
                 facet.identify(&mut ReadDevice::for_backend(dev.as_mut(), backend))?
             {
+                if facet.requires_current() && matches!(args.current, CurrentFirmware::NotRequired)
+                {
+                    bail!("this recovery backend requires --current or --read-from-drive");
+                }
                 return engine::recover_identified(
                     dev.as_mut(),
                     backend,
@@ -598,4 +604,13 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         }
         bail!(refusal.unwrap_or("no protocol backend offers recovery for this drive"))
     })
+}
+
+/// Whether the identified recovery backend requires an installed reference.
+pub fn recovery_requires_current(profile: &DriveProfile) -> bool {
+    profile
+        .recovery
+        .and_then(|d| registry::backends().find(|b| b.descriptor().id == d.id))
+        .and_then(|b| b.recovery())
+        .is_none_or(|r| r.requires_current())
 }

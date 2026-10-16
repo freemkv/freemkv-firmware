@@ -86,6 +86,8 @@ pub(crate) struct Profile {
     pub(crate) chips: Vec<String>,
     /// The drive tasks offered; Info, Inspect and Compare need no profile.
     pub(crate) tasks: Vec<Task>,
+    /// Recovery identifies its receiver without an installed firmware reference.
+    pub(crate) recovery_without_current: bool,
     /// A live capture can feed Inspect and Compare.
     pub(crate) inspect: bool,
     /// The suggested backup and dump file names, from the backup format.
@@ -867,7 +869,9 @@ impl App {
             Input::Recover
                 if !self.busy() && self.recovery_ready() && self.offers(Task::Recovery) =>
             {
-                let current = if self.recovery_read {
+                let current = if self.recovery_without_current() {
+                    CurrentFirmware::NotRequired
+                } else if self.recovery_read {
                     CurrentFirmware::ReadFromDrive
                 } else {
                     CurrentFirmware::File(self.recovery_current.clone().unwrap_or_default())
@@ -1059,10 +1063,17 @@ impl App {
         self.analysis_notice = None;
     }
 
+    fn recovery_without_current(&self) -> bool {
+        self.ready_profile()
+            .is_some_and(|p| p.recovery_without_current)
+    }
+
     fn recovery_ready(&self) -> bool {
         self.selected()
             && self.recovery_input.is_some()
-            && (self.recovery_read || self.recovery_current.is_some())
+            && (self.recovery_without_current()
+                || self.recovery_read
+                || self.recovery_current.is_some())
     }
 
     /// The selected drive and `options`, frozen; consent always starts unticked.
@@ -1507,14 +1518,23 @@ impl App {
                         &self.recovery_current,
                     ),
                 ];
-                if self.recovery_read {
+                if self.recovery_without_current() {
+                    items.clear();
+                } else if self.recovery_read {
                     items.push(Item::Note(
                         "Reads installed firmware for protocol analysis. No backup file is saved."
                             .into(),
                     ));
                 }
                 items.extend([
-                    Item::Heading("Firmware to flash (Kernel + Normal)".into()),
+                    Item::Heading(
+                        if self.recovery_without_current() {
+                            "Firmware to flash"
+                        } else {
+                            "Firmware to flash (Kernel + Normal)"
+                        }
+                        .into(),
+                    ),
                     path(
                         "Choose firmware…",
                         Pick::RecoveryInput,
@@ -1652,6 +1672,9 @@ impl App {
         let (recovery, warnings, prompt) = match &pending.sheet {
             Sheet::Recovery(current) => {
                 details.push(match current {
+                    CurrentFirmware::NotRequired => {
+                        "Receiver detected directly; no Current firmware required".into()
+                    }
                     CurrentFirmware::File(path) => format!("Current: {}", path.display()),
                     CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
                 });

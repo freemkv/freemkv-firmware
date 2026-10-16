@@ -57,12 +57,10 @@ fn enc_transform_needs_block_multiple_and_changes_bytes() {
 }
 
 #[test]
-fn enc_needed_defaults_to_plaintext() {
+fn unreadable_receiver_does_not_default_to_plaintext() {
     let mut dev = MockScsiDevice::new();
-    assert!(
-        !enc_needed(&mut dev),
-        "enc must default off until research lands"
-    );
+    assert!(detect_receiver(&mut ReadDevice::without_unlocks(&mut dev)).is_err());
+    assert!(dev.writes.is_empty());
 }
 
 // ---- dump / tar -------------------------------------------------------------
@@ -313,10 +311,10 @@ fn flash_stream_aborts_without_writing_when_preflight_fails() {
 
 #[test]
 fn firmware_writes_reject_status_that_a_lenient_transport_would_tolerate() {
-    struct Rejected;
+    struct Rejected(MockScsiDevice);
     impl crate::platform::ScsiDevice for Rejected {
-        fn command_in(&mut self, _cdb: &[u8], alloc: usize) -> anyhow::Result<Vec<u8>> {
-            Ok(vec![0; alloc])
+        fn command_in(&mut self, cdb: &[u8], alloc: usize) -> anyhow::Result<Vec<u8>> {
+            self.0.command_in(cdb, alloc)
         }
         fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
             panic!("firmware write used lenient status handling")
@@ -329,7 +327,11 @@ fn firmware_writes_reject_status_that_a_lenient_transport_would_tolerate() {
         }
     }
     // PREPARE is the first data-out; it goes strict and its status aborts.
-    assert!(stream(&mut Rejected).is_err());
+    let image = fixture::image(&fixture::BU3, "BD-RE BU40N", 1);
+    assert!(stream_configured(&mut Rejected(
+        MockScsiDevice::new().with_firmware_image(image)
+    ))
+    .is_err());
 }
 
 fn descriptor(feature: u16, payload_len: u8) -> Vec<u8> {
@@ -471,7 +473,7 @@ fn inquiry_backup_rejects_truncated_or_inconsistent_identity() {
 #[test]
 fn short_preflight_rom_read_prevents_prepare_write() {
     let mut dev = MockScsiDevice::new().on(
-        |cdb| cdb.first() == Some(&0x3c),
+        |command| command == cdb::probe(),
         vec![0; cdb::PROBE_LEN - 1],
     );
     let error = format!("{:#}", stream(&mut dev).unwrap_err());
@@ -502,14 +504,21 @@ fn fixed_sense_with_valid_information_bit_preserves_hardware_fault() {
 }
 
 /// Run the prepared update of a BU40N fixture through `Mtk::execute`.
-fn stream(dev: &mut dyn crate::platform::ScsiDevice) -> anyhow::Result<()> {
-    use crate::backend::{AuthorizedPlan, FlashFacet, FlashPlan};
+fn stream(dev: &mut MockScsiDevice) -> anyhow::Result<()> {
+    let image = fixture::image(&fixture::BU3, "BD-RE BU40N", 1);
+    *dev = std::mem::take(dev).with_firmware_image(image.clone());
+    stream_configured(dev)
+}
+
+fn stream_configured(dev: &mut dyn crate::platform::ScsiDevice) -> anyhow::Result<()> {
+    use crate::backend::{AuthorizedPlan, FlashFacet};
     use mediatek_optical::update::{InstalledFirmware, PreparedUpdate};
     let image = fixture::image(&fixture::BU3, "BD-RE BU40N", 1);
+    let plan = super::flash::test_plan(dev, &image)?;
     let installed = InstalledFirmware::new(fixture::identity(&image), &image).unwrap();
     let prepared = PreparedUpdate::prepare(&image, &installed).unwrap();
     let authorized = AuthorizedPlan::new(
-        FlashPlan::new(()),
+        plan,
         super::flash::Authorized {
             prepared,
             expect: None,
@@ -531,5 +540,5 @@ fn flash_stream_sends_the_oem_sequence() {
     assert_eq!(cdbs[1], cdb::transfer(0, CHUNK as u16));
     assert_eq!(cdbs[2], cdb::transfer(CHUNK as u32, CHUNK as u16));
     assert_eq!(cdbs[129], cdb::finish());
-    assert_eq!(dev.reads[0], cdb::probe());
+    assert!(dev.reads.iter().any(|c| *c == cdb::probe()));
 }

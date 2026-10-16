@@ -28,6 +28,7 @@ impl Profile {
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
             flash_extensions: vec!["bin"],
+            recovery_without_current: false,
             notes: Vec::new(),
         }
     }

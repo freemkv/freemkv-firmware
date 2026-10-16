@@ -38,9 +38,9 @@ fn check_file_needs_no_drive_and_flash_keeps_safety_gates() {
 }
 
 #[test]
-fn recovery_requires_exactly_one_current_source() {
+fn recovery_allows_no_current_but_rejects_conflicting_sources() {
     let base = ["freemkv-flash", "recover", "-i", "target.tar"];
-    assert!(Cli::try_parse_from(base).is_err());
+    assert!(Cli::try_parse_from(base).is_ok());
     assert!(Cli::try_parse_from(base.into_iter().chain(["--current", "current.tar"])).is_ok());
     assert!(Cli::try_parse_from(base.into_iter().chain(["--read-from-drive"])).is_ok());
     assert!(Cli::try_parse_from(base.into_iter().chain([

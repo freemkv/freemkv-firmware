@@ -24,6 +24,7 @@ use crate::ui::{
 /// A recovery's current-firmware source, as the workflow receives it.
 #[derive(Clone, Debug, PartialEq)]
 enum Current {
+    NotRequired,
     File(PathBuf),
     ReadFromDrive,
 }
@@ -136,6 +137,7 @@ fn call(job: &Job) -> Call {
             device: o.device.clone(),
             input: o.input.clone(),
             current: match &o.current {
+                CurrentFirmware::NotRequired => Current::NotRequired,
                 CurrentFirmware::File(path) => Current::File(path.clone()),
                 CurrentFirmware::ReadFromDrive => Current::ReadFromDrive,
             },

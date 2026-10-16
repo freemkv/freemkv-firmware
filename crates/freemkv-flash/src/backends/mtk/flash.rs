@@ -17,7 +17,7 @@ use mediatek_optical::Identity;
 
 use super::crossflash::{Build, Verdict};
 use super::{
-    backup, cdb, crossflash, describe_sequence, enc_needed, ensure_flashable_boot_page,
+    backup, cdb, crossflash, describe_sequence, detect_receiver, ensure_flashable_boot_page,
     live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE, ROM_003000_LEN, ROM_003000_OFFSET,
 };
 use crate::backend::{
@@ -32,7 +32,7 @@ use crate::transport::{mtk_err, ScsiTransport, SharedDevice};
 struct Plan {
     image: Vec<u8>,
     live: Identity,
-    enc: bool,
+    receiver: mediatek_optical::receiver::Receiver,
     drive_product: String,
     verdict: Verdict,
 }
@@ -72,10 +72,23 @@ impl FlashFacet for Mtk {
             .class()
             .context("the drive names no update dialect; refusing")?
             .steps();
-        let enc = req.enc_override.unwrap_or_else(|| enc_needed(dev));
+        let receiver = detect_receiver(dev)?;
+        let enc = receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted;
+        if req.enc_override.is_some_and(|requested| requested != enc) {
+            bail!("encoding override contradicts the active MediaTek receiver");
+        }
         let mut block = vec![
             PlanLine::Header("== flash plan ==".into()),
             PlanLine::Field("device", dev.describe()),
+            PlanLine::Field(
+                "receiver",
+                format!(
+                    "{:?} ({:?}, signature at {:#x})",
+                    receiver.mode(),
+                    receiver.encoding(),
+                    receiver.signature_address()
+                ),
+            ),
             PlanLine::Field("drive", style::ident_or_unknown(&req.drive_model).into()),
             PlanLine::Field(
                 "firmware",
@@ -94,7 +107,7 @@ impl FlashFacet for Mtk {
         let mut plan = FlashPlan::new(Plan {
             image,
             live,
-            enc,
+            receiver,
             drive_product: req.drive_model.clone(),
             verdict,
         });
@@ -138,7 +151,7 @@ impl FlashFacet for Mtk {
             &state.image,
             backup.map(|b| b.bytes()),
         )?;
-        if state.enc {
+        if state.receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted {
             authorized.prepared = authorized.prepared.encrypted();
         }
         Ok(AuthorizedPlan::new(plan, authorized))
@@ -146,6 +159,15 @@ impl FlashFacet for Mtk {
 
     fn execute(&self, dev: &mut WriteDevice<'_>, authorized: &AuthorizedPlan) -> Result<()> {
         let Authorized { prepared, expect } = authorized.state()?;
+        let state: &Plan = authorized.plan.state()?;
+        {
+            let shared = SharedDevice::new(dev);
+            let mut reads = ScsiTransport::reads(&shared);
+            state
+                .receiver
+                .revalidate(&mut reads)
+                .map_err(|e| anyhow!("{e}"))?;
+        }
         let verified = {
             let shared = SharedDevice::new(dev);
             let (mut reads, mut writes) =
@@ -374,13 +396,13 @@ fn text(error: &DriveError<anyhow::Error>) -> String {
 }
 
 /// Progress and diagnostics for the crate's flash, in the flasher's words.
-struct Runtime {
+pub(super) struct Runtime {
     start: std::time::Instant,
     progress: style::Progress,
 }
 
 impl Runtime {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             start: std::time::Instant::now(),
             progress: style::Progress::new("flashing firmware", 0),
@@ -635,4 +657,15 @@ impl Mtk {
         let _ = dev.command_in(&cdb::test_unit_ready(), 0)?;
         Ok(())
     }
+}
+
+#[cfg(test)]
+pub(super) fn test_plan(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<FlashPlan> {
+    Ok(FlashPlan::new(Plan {
+        image: image.to_vec(),
+        live: identity_of_image(image)?,
+        receiver: detect_receiver(&mut ReadDevice::without_unlocks(dev))?,
+        drive_product: "BD-RE BU40N".into(),
+        verdict: Verdict::SameModel,
+    }))
 }

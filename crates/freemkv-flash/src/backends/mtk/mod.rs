@@ -6,7 +6,7 @@
 //!
 //! The flash is a verbatim writer: it never modifies the image (no downgrade
 //! byte, per-unit splice or CMAC re-sign). It backs up, writes the bytes and
-//! verifies. [`enc_needed`] currently always selects plaintext.
+//! verifies. The active receiver determines the transport encoding.
 //!
 //! `mediatek_optical::update` owns the update: the gates against the installed
 //! firmware (chip, hardware family), the session's commands, readiness timing
@@ -26,6 +26,7 @@ pub(crate) mod file_info;
 pub(crate) mod fixture;
 mod flash;
 pub mod fwdump;
+mod recovery;
 pub(crate) use flash::decide_offline;
 
 /// The routing facts the offline crossflash pre-filter compares: the hardware
@@ -103,13 +104,14 @@ pub fn enc_transform(image: &mut [u8]) -> Result<()> {
     mediatek_optical::enc::encrypt(image).map_err(|e| anyhow!(e))
 }
 
-/// Select the format for the implemented MTK update route.
-///
-/// This route sends a validated plaintext image. There is no general-purpose
-/// encryption probe here; a different controller's protocol must provide its
-/// own transport policy rather than asking the user to guess.
-pub fn enc_needed(_dev: &mut dyn ScsiDevice) -> bool {
-    false
+/// Read the active receiver and its required transfer encoding.
+/// Detection belongs to `mediatek_optical`; this adapter supplies shared SCSI I/O.
+pub fn detect_receiver(dev: &mut ReadDevice<'_>) -> Result<mediatek_optical::receiver::Receiver> {
+    let shared = crate::transport::SharedDevice::new(dev);
+    let mut transport = crate::transport::ScsiTransport::reads(&shared);
+    let mode =
+        mediatek_optical::receiver::detect_mode(&mut transport).map_err(|e| anyhow!("{e}"))?;
+    mediatek_optical::receiver::detect_encoding(&mut transport, &mode).map_err(|e| anyhow!("{e}"))
 }
 
 // ---- Dump plan --------------------------------------------------------------
@@ -884,6 +886,10 @@ impl Backend for Mtk {
         let mut identity = read_identity(dev);
         identity.banner = read_mt19_banner(dev);
         identity
+    }
+
+    fn recovery(&self) -> Option<&dyn crate::backend::RecoveryFacet> {
+        Some(self)
     }
 
     fn files(&self) -> Option<&dyn FileFacet> {

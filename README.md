@@ -81,8 +81,12 @@ switches the gate off. Its workflow is:
 ### Transport format
 
 The backend chooses the transport format; there is no encryption selector.
-The implemented MTK route sends a validated plaintext image. This is a protocol
-choice, not a universal encryption-detection probe for every MediaTek drive.
+MediaTek uses `mediatek-optical` to detect BOOT versus running firmware and
+read the active receiver's code signature. It sends plaintext or the encrypted
+transport envelope accordingly, and rechecks the identity and signature before
+writing. Unknown, unreadable or conflicting signatures refuse the flash.
+Normal flash retains its compatibility checks. The explicit recovery command
+uses the separate recovery path described below.
 
 ## Usage
 
@@ -219,3 +223,16 @@ mask variable. It preserves unrelated mask bits and verifies the live setting.
 Missing support or any logging failure is recorded as skipped and never fails
 the dump. There is no model/version allowlist, logging flag or checkbox. The
 persistent logging API is separate and is never a fallback used by dump.
+
+### MediaTek recovery development status
+
+Recovery identifies the live BOOT/application receiver and selects plaintext or encrypted
+transfer automatically. It requires no Current image and creates no backup or partial
+capture. Image integrity, controller generation, receiver revalidation, transfer status,
+protected-region readback and target startup remain checked. Model/family comparison
+against the installed firmware is bypassed.
+
+The proposed ASUS BOOT recovery is BH16NS40 INTM through recovery, confirmation that
+INTM starts, then a separate normal flash to WH16NS58 1.V9. This sequence has not
+been validated on a physical drive. The MediaTek dependency is pinned to a development
+Git revision; no release is implied. Pioneer retains its Current-reference requirement.

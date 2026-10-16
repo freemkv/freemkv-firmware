@@ -250,6 +250,7 @@ impl ScsiDevice for MockScsiDevice {
         if self.firmware_image.is_some() && cdb.first() == Some(&0x12) {
             let mut inquiry = vec![0u8; alloc_len];
             if inquiry.len() >= 36 {
+                inquiry[0] = 5;
                 inquiry[4] = (inquiry.len() - 5) as u8;
                 inquiry[8..16].copy_from_slice(b"HL-DT-ST");
                 let product = self.product.as_deref().unwrap_or("BD-RE BU40N");

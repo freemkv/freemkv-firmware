@@ -38,10 +38,11 @@ MEDIUM -> ClosedEmpty
 
 === MTK dry run: disc loaded ===
 result: OK
---- text (14) ---
+--- text (15) ---
 WARNING: a disc is loaded. An actual flash requires a closed, empty tray.
 == flash plan ==
 device: mock://in-memory
+receiver: Firmware (Plaintext, signature at 0x9a300)
 drive: BU40N
 firmware: 2 MiB (plaintext envelope)
 backup: not captured (dry run)
@@ -53,10 +54,11 @@ upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
   preflight ................ transport ready; backup capture is checked only on execute
 
 DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
---- events (14) ---
+--- events (15) ---
 MSG      WARNING: a disc is loaded. An actual flash requires a closed, empty tray.
 MSG      == flash plan ==
 MSG      device: mock://in-memory
+MSG      receiver: Firmware (Plaintext, signature at 0x9a300)
 MSG      drive: BU40N
 MSG      firmware: 2 MiB (plaintext envelope)
 MSG      backup: not captured (dry run)
@@ -68,19 +70,135 @@ MSG        lands. This cannot be undone.
 MSG        preflight ................ transport ready; backup capture is checked only on execute
 MSG      
 MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
---- scsi transcript (5) ---
+--- scsi transcript (120) ---
 MEDIUM -> DiscPresent
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c060009800000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009840000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009880000044000 alloc=1088 -> ok 1088
+IN   cdb=3c0600098c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009900000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009940000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009980000044000 alloc=1088 -> ok 1088
+IN   cdb=3c0600099c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009a00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009a40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009a80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009ac0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009b00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009b40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009b80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009bc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009c00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009c40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009c80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009cc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009d00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009d40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009d80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009dc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009e00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009e40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009e80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009ec0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009f00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009f40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009f80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009fc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a000000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a040000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a080000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a0c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a100000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a140000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a180000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a1c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a200000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a240000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a280000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a2c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a300000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a340000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a380000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a3c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a400000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a440000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a480000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a4c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a500000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a540000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a580000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a5c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a600000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a640000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a680000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a6c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a700000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a740000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a780000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a7c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a800000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a840000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a880000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a8c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a900000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a940000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a980000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a9c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aa00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aa40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aa80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aac0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ab00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ab40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ab80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000abc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ac00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ac40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ac80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000acc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ad00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ad40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ad80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000adc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ae00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ae40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ae80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aec0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000af00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000af40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000af80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000afc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b000000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b040000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b080000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b0c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b100000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b140000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b180000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b1c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b200000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b240000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b280000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b2c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b300000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b340000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b380000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b3c0000040000 alloc=1024 -> ok 1024
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c060009a30000000e00 alloc=14 -> ok 14
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 
 === MTK dry run: tray open ===
 result: OK
---- text (14) ---
+--- text (15) ---
 WARNING: the tray is OPEN. An actual flash requires a closed, empty tray.
 == flash plan ==
 device: mock://in-memory
+receiver: Firmware (Plaintext, signature at 0x9a300)
 drive: BU40N
 firmware: 2 MiB (plaintext envelope)
 backup: not captured (dry run)
@@ -92,10 +210,11 @@ upload:    2 MiB streamed verbatim as 128 x 16 KiB chunks, then commit + verify
   preflight ................ transport ready; backup capture is checked only on execute
 
 DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
---- events (14) ---
+--- events (15) ---
 MSG      WARNING: the tray is OPEN. An actual flash requires a closed, empty tray.
 MSG      == flash plan ==
 MSG      device: mock://in-memory
+MSG      receiver: Firmware (Plaintext, signature at 0x9a300)
 MSG      drive: BU40N
 MSG      firmware: 2 MiB (plaintext envelope)
 MSG      backup: not captured (dry run)
@@ -107,10 +226,125 @@ MSG        lands. This cannot be undone.
 MSG        preflight ................ transport ready; backup capture is checked only on execute
 MSG      
 MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
---- scsi transcript (5) ---
+--- scsi transcript (120) ---
 MEDIUM -> TrayOpen
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c060009800000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009840000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009880000044000 alloc=1088 -> ok 1088
+IN   cdb=3c0600098c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009900000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009940000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009980000044000 alloc=1088 -> ok 1088
+IN   cdb=3c0600099c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009a00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009a40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009a80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009ac0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009b00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009b40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009b80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009bc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009c00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009c40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009c80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009cc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009d00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009d40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009d80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009dc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009e00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009e40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009e80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009ec0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009f00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009f40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009f80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c060009fc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a000000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a040000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a080000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a0c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a100000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a140000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a180000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a1c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a200000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a240000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a280000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a2c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a300000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a340000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a380000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a3c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a400000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a440000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a480000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a4c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a500000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a540000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a580000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a5c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a600000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a640000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a680000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a6c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a700000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a740000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a780000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a7c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a800000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a840000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a880000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a8c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a900000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a940000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a980000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000a9c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aa00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aa40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aa80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aac0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ab00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ab40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ab80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000abc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ac00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ac40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ac80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000acc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ad00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ad40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ad80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000adc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ae00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ae40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000ae80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000aec0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000af00000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000af40000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000af80000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000afc0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b000000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b040000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b080000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b0c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b100000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b140000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b180000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b1c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b200000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b240000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b280000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b2c0000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b300000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b340000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b380000044000 alloc=1088 -> ok 1088
+IN   cdb=3c06000b3c0000040000 alloc=1024 -> ok 1024
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c060009a30000000e00 alloc=14 -> ok 14
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 

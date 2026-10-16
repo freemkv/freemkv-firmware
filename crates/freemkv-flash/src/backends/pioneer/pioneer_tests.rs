@@ -1229,8 +1229,12 @@ fn recover_without_current_never_reads_firmware_from_an_unrecognized_drive() {
 }
 
 #[test]
-fn mediatek_has_no_recovery_path() {
-    assert!(crate::backends::mtk::Mtk.recovery().is_none());
+fn mediatek_recovery_needs_no_current_but_pioneer_still_does() {
+    assert!(!crate::backends::mtk::Mtk
+        .recovery()
+        .unwrap()
+        .requires_current());
+    assert!(Pioneer::new().recovery().unwrap().requires_current());
 }
 
 /// Pioneer's dump with an ungated write grant, as the old raw-device API ran it.

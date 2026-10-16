@@ -1,0 +1,162 @@
+{
+  "status": "design complete; implementation and hardware validation pending",
+  "problem": "FreeMKV normal MTK probe requires MMC feature 0x010C; affected ASUS BW-16D1HT BOOT returns 8-byte empty feature response and is rejected before writes. MTK has no RecoveryFacet implementation.",
+  "entry": "Implement RecoveryFacet on Mtk and expose it via Backend::recovery; preserve ordinary flash detection policy.",
+  "identify": [
+    "Read INQUIRY independent of normal backend probe. BOOT revision is evidence of recovery state, not sufficient controller proof.",
+    "Read MT1959 boot banner and bounded receiver code windows using the inspected boot READ BUFFER route; log exact CDB, length, status and sense.",
+    "Fingerprint plaintext ASUS vs encrypted INTM/V9 receiver from actual code; do not infer transport from target filename or current application descriptor.",
+    "Missing 0x010C, serial feature, damaged application descriptor and absent full backup must not prevent recovery identification."
+  ],
+  "plan": [
+    "Validate target size, chip/banner, CMAC, raw-read versus stored-image form, and receiver-specific descriptor/marker gates.",
+    "Use receiver/hardware evidence for compatibility; do not require old and new application identities to agree.",
+    "No backup or partial capture in recovery; read only for receiver identification, validation and result verification.",
+    "Preview chosen payload, transport, preservation ranges and evidence before writing.",
+    "No target-as-installed substitution: add recovery-specific preparation API to mediatek-optical if reusing PreparedUpdate."
+  ],
+  "execute": [
+    "Reuse verified WRITE BUFFER sequence, but choose transport from active receiver.",
+    "Preserve boot by default; same-chip banner may cause receiver to clear requested boot-update flag.",
+    "Follow per-unit preservation behavior only after tracing actual flash primitive.",
+    "Wait for readiness then re-read INQUIRY and descriptor; remaining BOOT is incomplete recovery, not success.",
+    "Re-identify receiver between stages; do not automatically send encrypted V9 if INTM never started."
+  ],
+  "paths": [
+    {
+      "path": "ASUS BOOT -> INTM -> V9",
+      "first": "plaintext INTM c3a18eed",
+      "second": "original encrypted V9 payload from pcupdate891.bin after running INTM is confirmed",
+      "evidence": "OEM sequence plus INTM crypto receiver and ASUS plaintext receiver disassembly",
+      "unknown": "Actual retained ASUS boot revision; hardware startup compatibility and write acceptance."
+    },
+    {
+      "path": "ASUS BOOT -> matching ASUS firmware",
+      "candidate": "ASUS 3.10 37a32bfd passes inspected receiver static checks",
+      "unknown": "Actual receiver revision/hardware and original per-unit data."
+    },
+    {
+      "path": "ASUS BOOT -> V1",
+      "limitation": "ASUS3.10 marker gate rejects stock V1 missing eight-byte marker. Older ASUS receivers inspected do not have that marker gate; runtime receiver identification is essential."
+    }
+  ],
+  "tests": [
+    "BOOT + empty 0x010C routes to recovery without weakening normal probe",
+    "Unknown/unrelated controller never selected by BOOT text alone",
+    "Dry run produces zero data-out commands",
+    "Receiver format selected independently of target",
+    "V1 rejected by actual marker-requiring receiver, INTM accepted by static gates",
+    "No backup/full app descriptor required",
+    "Partial transfer/check condition never reported as success",
+    "Stage2 suppressed unless INTM running identity established",
+    "Record preserved unit regions and final identity"
+  ],
+  "live_evidence_needed": [
+    "Exact freemkv version and connection SATA/USB",
+    "INQUIRY plus boot banner and receiver code reads with sense responses",
+    "Read-only preparation against chosen target",
+    "Explicit hardware execution and post-write identity/readback to validate recovery"
+  ],
+  "scope_order": [
+    "Automatic plaintext/encrypted selection shared by normal flash and recovery",
+    "Explicit MediaTek BOOT recovery backend",
+    "User flashes INTM and confirms successful startup, then separately flashes V9 with fresh automatic selection"
+  ],
+  "automatic_transport": {
+    "result": "Plaintext, Aes128Ecb, or Unknown; no implicit plaintext fallback",
+    "inputs": [
+      "Live INQUIRY and current operating state",
+      "Live receiver code fingerprint when readable",
+      "Verified installed image/profile bound to live identity when application code cannot be read directly"
+    ],
+    "policy": [
+      "Select based on active receiver, not target file revision or filename",
+      "BOOT state uses boot receiver; running INTM uses its application receiver even when ASUS boot persists",
+      "Target image stays canonical plaintext for integrity validation and verification; transform only outgoing transfer buffer",
+      "Re-read binding evidence before execute to prevent stale plans",
+      "Unknown reports what evidence is missing rather than presenting a guess as detection",
+      "User never chooses enc/no-enc"
+    ],
+    "validation": [
+      "Original OEM encrypted V9 payload must decrypt to canonical V9 and be reproduced by selected transform",
+      "Plaintext ASUS/old V1 and encrypted INTM/V9 receiver fixtures",
+      "Same target encoded differently for different receivers",
+      "Normal and recovery routes share selection result",
+      "Post-INTM V9 operation starts with fresh probe"
+    ],
+    "profile_strategy": [
+      "Profiles distinguish boot receivers from application receivers and include readable code fingerprints, transport encoding, marker/sentinel checks and writable regions.",
+      "Prefer live code fingerprint; fallback only to an audited exact installed identity/build profile bound to live non-BOOT metadata. Never use a blanket model/date cutoff to infer encryption.",
+      "No trial write, wrong-format retry, or encrypt-on-error fallback. Unknown needs additional receiver support, not a toggle.",
+      "Host may accept validated plaintext or recognized encrypted firmware input, but always decode to canonical plaintext first; receiver selection independently controls outgoing format."
+    ]
+  },
+  "read_only_probe": "probe_mtk_boot.py captures BOOT inquiry, omitted feature, boot code windows, descriptor and calibration sample on Windows; opcode allowlist excludes writes. Local packet-layout and allowlist checks passed; Windows/hardware run not yet performed.",
+  "platforms": {
+    "supported": [
+      "Windows",
+      "macOS",
+      "Linux"
+    ],
+    "implementation": "Shared Rust protocol logic through ScsiDevice -> libfreemkv::scsi transport adapter (SPTI, IOKit, SG_IO). Same decisions for CLI and GUI.",
+    "windows_probe": "Research-only diagnostic helper, not a product dependency or required workflow."
+  },
+  "ownership": {
+    "mediatek-optical": "Receiver profiles, input acceptance predicates, transport encoding and validated update/recovery plan. Proposed ReceiverProfile/TransportEncoding/ReceiverEvidence and recovery-specific prepare API.",
+    "freemkv-flash": "Acquire live receiver evidence through ScsiDevice, expose info diagnostics, bind/revalidate plans, implement Mtk RecoveryFacet, execute and verify through shared engine.",
+    "CLI and GUI": "Present the same backend capabilities and operation result; no frontend protocol heuristics or encoding switches."
+  },
+  "frontend_changes": [
+    "Recover input must accept a MediaTek 2 MiB image, not require Pioneer Kernel+Normal wording.",
+    "Make current-firmware input backend-dependent: optional for MediaTek when live boot evidence suffices. Preserve Pioneer requirements.",
+    "Expose Recovery when its receiver matches, even if ordinary flash classification is Unknown.",
+    "Show selected transfer encoding and evidence as read-only plan details.",
+    "After recovering INTM, refresh drive profile; user selects V9 in a separate normal flash operation."
+  ],
+  "user_path": [
+    {
+      "operation": "Recover",
+      "input": "BH16NS40_INTM_c3a18eed.bin",
+      "behavior": "Recognize actual ASUS BOOT receiver without 0x010C; automatically select its transport (plaintext for the inspected ASUS receivers); validate INTM, preview, and execute on explicit user action.",
+      "success": "INQUIRY changes from BOOT to BH16NS40 INTM, stable readiness plus supported readback verification. If it remains BOOT or verification fails, stop and record sense/status."
+    },
+    {
+      "operation": "Flash",
+      "input": "WH16NS58_1.V9_97b28707.bin",
+      "behavior": "Fresh identification recognizes the running INTM application profile; automatically wrap canonical V9 with AES-128-ECB. No encryption control or manual .enc preparation. Revalidate receiver before sending.",
+      "success": "INQUIRY reports WH16NS58 1.V9, stable readiness and supported readback verification. No automatic second flash or retry."
+    }
+  ],
+  "evidence_summary": [
+    "Affected log proves host classification refusal before firmware writes.",
+    "OEM updater sends plaintext INTM then encrypted V9 for the stocked V1 date.",
+    "ASUS BOOT code includes READ BUFFER and WRITE BUFFER handlers.",
+    "INTM application performs crypto transform before header checks.",
+    "All CMAC table entries verify for supplied INTM and V9.",
+    "AES-128-ECB encoding canonical V9 reproduces original OEM transport payload byte-for-byte (transport-proof.json)."
+  ],
+  "implementation_acceptance": [
+    "All transport and recovery logic shared across Windows/macOS/Linux; existing per-OS adapter remains sole OS boundary.",
+    "Normal flash and recovery call one selector; no internal bypass that silently forces plaintext.",
+    "Golden receiver vectors cover both encodings and wrong/unknown state; canonical V9 encryption exactly matches OEM.",
+    "BOOT without 0x010C identified through receiver evidence; unrelated BOOT devices never selected by name alone.",
+    "Dry run and identification produce no firmware-write commands.",
+    "Recovery tolerates broken application metadata and missing restorable backup; does not save a backup or partial capture.",
+    "Reject corrupt/incompatible target or marker failure with precise receiver-specific cause.",
+    "Stale receiver state after planning invalidates execute.",
+    "INTM running state required before user proceeds to V9; final BOOT state never counted as success.",
+    "Platform CI compiles/tests shared flow and frontend parity; physical-drive test needed before advertising proven recovery."
+  ],
+  "release": "0.12.5",
+  "title": "Automatic MediaTek transfer selection and BOOT recovery",
+  "release_scope": {
+    "deliverable": "Design for release 0.12.5; does not assert implementation or hardware recovery is complete.",
+    "includes": [
+      "Automatic plaintext/encrypted transfer selection for normal MediaTek flashing and recovery",
+      "MediaTek recovery independent of healthy application metadata",
+      "Cross-platform shared implementation and CLI/GUI parity",
+      "User-operated INTM recovery followed by separate V9 flash"
+    ],
+    "release_validation": "Before shipping, implement and pass acceptance checks; record real affected-drive INTM startup and V9 startup. Until hardware validation, label recovery experimental rather than proven."
+  }
+}

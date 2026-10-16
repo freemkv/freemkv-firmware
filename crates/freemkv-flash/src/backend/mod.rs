@@ -194,7 +194,8 @@ pub struct FlashRequest {
     pub execute: bool,
     /// User acknowledged the bricking risk.
     pub acknowledged_risk: bool,
-    /// Hidden expert override for the enc envelope (`Some(true/false)` forces).
+    /// Legacy encoding assertion. MediaTek rejects a value that contradicts
+    /// live receiver detection; CLI and GUI leave this unset.
     pub enc_override: Option<bool>,
     /// Drive model (INQUIRY product), shown in the flash plan.
     pub drive_model: String,
@@ -612,6 +613,11 @@ impl RecoveryTarget {
 
 /// Recovery without automatic backups or installed-versus-target policy.
 pub trait RecoveryFacet {
+    /// Whether recovery needs an explicit Current file or permission to read it.
+    fn requires_current(&self) -> bool {
+        true
+    }
+
     /// Read-only, with no protocol probe (the drive may be too damaged to
     /// classify): `Some` when this is a receiver this backend recovers.
     fn identify(&self, dev: &mut ReadDevice<'_>) -> Result<Option<RecoveryTarget>>;

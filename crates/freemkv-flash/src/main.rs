@@ -138,15 +138,11 @@ struct FlashArgs {
 struct RecoveryArgs {
     /// Drive name or id from list; omitted when only one drive is connected.
     device: Option<String>,
-    /// Target package containing Kernel and Normal.
+    /// Target MediaTek image or Pioneer package containing Kernel and Normal.
     #[arg(short, long)]
     input: PathBuf,
     /// Copy of the firmware currently running on the drive.
-    #[arg(
-        long,
-        required_unless_present = "read_from_drive",
-        conflicts_with = "read_from_drive"
-    )]
+    #[arg(long, conflicts_with = "read_from_drive")]
     current: Option<PathBuf>,
     /// Explicitly read Current firmware instead of supplying a file.
     #[arg(long)]
@@ -177,7 +173,10 @@ fn main() -> ExitCode {
                 input: args.input,
                 current: match args.current {
                     Some(path) => freemkv_flash::workflow::CurrentFirmware::File(path),
-                    None => freemkv_flash::workflow::CurrentFirmware::ReadFromDrive,
+                    None if args.read_from_drive => {
+                        freemkv_flash::workflow::CurrentFirmware::ReadFromDrive
+                    }
+                    None => freemkv_flash::workflow::CurrentFirmware::NotRequired,
                 },
                 execute: args.execute,
                 acknowledged_risk: args.i_understand_risk,

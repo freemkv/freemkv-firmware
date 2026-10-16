@@ -560,14 +560,12 @@ fn flash_execute_tolerates_readback_mismatch_outside_protected_ranges() {
 
 #[test]
 fn flash_execute_streams_enc_payload_not_plaintext() {
-    // enc_override=Some(true): the FIRST streamed chunk must be the
-    // AES-transformed payload, not a slice of the plaintext image (proves the
-    // enc transform actually ran end-to-end through the streaming loop).
-    let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
+    // The live receiver signature, without an override, selects AES transfer.
+    let mut image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
+    crate::backends::mtk::fixture::encrypted_receiver(&mut image);
     // The device exposes decoded firmware, not the encrypted wire envelope.
     let mut dev = MockScsiDevice::new().with_firmware_image(image.clone());
-    let mut req = bin_req(image.clone(), true);
-    req.enc_override = Some(true);
+    let req = bin_req(image.clone(), true);
     flash(&mut dev, &Mtk, &req).unwrap();
 
     let first_chunk = dev
@@ -839,7 +837,7 @@ fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(backup_firmware())
         .on_fail(
-            |cdb: &[u8]| is_mode6_read(cdb) && !is_identity_read(cdb),
+            |cdb: &[u8]| is_mode6_read(cdb) && !is_identity_read(cdb) && !is_receiver_read(cdb),
             "dump read refused",
         );
     let req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
@@ -1018,25 +1016,28 @@ fn existing_preflash_destination_fails_before_capturing_the_drive() {
     // Only the chip-gate identity reads (banner + descriptor) precede the
     // collision check; never the multi-minute firmware read.
     assert!(
-        dev.reads.iter().all(|c| is_identity_read(c)),
+        dev.reads
+            .iter()
+            .all(|c| is_identity_read(c) || is_receiver_read(c) || c.first() == Some(&0x12)),
         "do not spend minutes reading before finding a path collision"
     );
     // Two identity windows, each read at most twice (one retry).
-    assert!(dev.reads.len() <= 4, "{} reads", dev.reads.len());
+    assert!(dev.reads.iter().filter(|c| is_identity_read(c)).count() <= 4);
     assert!(dev.writes.is_empty());
 }
 
 #[test]
 fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
+    let mut firmware = backup_firmware();
+    crate::backends::mtk::fixture::encrypted_receiver(&mut firmware);
     let want = offset_bytes(0x10000);
     let mut dev = MockScsiDevice::new()
-        .with_firmware_image(backup_firmware())
+        .with_firmware_image(firmware.clone())
         .on_after_stream(
             move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
             vec![0xff; CHUNK],
         );
-    let mut req = bin_req(backup_firmware(), true);
-    req.enc_override = Some(true);
+    let req = bin_req(firmware, true);
     let error = flash(&mut dev, &Mtk, &req)
         .expect_err("encrypted transport must not disable integrity verification");
     let _ = std::fs::remove_file(req.predump_out.unwrap());
@@ -1455,4 +1456,38 @@ fn chip_gate_identifies_from_the_banner_with_or_without_a_tag() {
     let err = ensure_same_chip(&mut banner_only, &tag_no_banner).unwrap_err();
     assert!(format!("{err:#}").contains("MT19"), "{err:#}");
     assert!(banner_only.writes.is_empty());
+}
+
+fn is_receiver_read(cdb: &[u8]) -> bool {
+    if !is_mode6_read(cdb) || cdb.len() < 9 {
+        return false;
+    }
+    let off = ((cdb[3] as u32) << 16) | ((cdb[4] as u32) << 8) | cdb[5] as u32;
+    (0x98000..0xb4000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1088)
+}
+
+#[test]
+fn unknown_receiver_refuses_before_backup_or_write() {
+    let mut installed = backup_firmware();
+    installed[0x9a300..0x9a340].fill(0);
+    let mut dev = MockScsiDevice::new().with_firmware_image(installed);
+    let req = bin_req(backup_firmware(), true);
+    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(
+        error.to_string().contains("receiver signature"),
+        "{error:#}"
+    );
+    assert!(dev.writes.is_empty());
+    assert!(!req.predump_out.unwrap().exists());
+}
+
+#[test]
+fn encoding_override_cannot_contradict_live_receiver() {
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let mut req = bin_req(backup_firmware(), true);
+    req.enc_override = Some(true);
+    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(error.to_string().contains("contradicts"), "{error:#}");
+    assert!(dev.writes.is_empty());
+    assert!(!req.predump_out.unwrap().exists());
 }

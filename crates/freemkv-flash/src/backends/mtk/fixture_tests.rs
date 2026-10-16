@@ -93,6 +93,11 @@ pub(crate) fn hardware(board: &Board) -> Vec<u8> {
 /// Give `img` `board`'s boot banner, descriptor platform code and hardware
 /// record. The caller signs the image afterwards.
 pub(crate) fn stamp(img: &mut [u8], board: &Board) {
+    // A direct plaintext header comparison in the synthetic application.
+    let signature = [
+        3, 0x21, 9, 3, 0x61, 0x18, 9, 0xa8, 0, 0x5d, 9, 0x78, 0x88, 0x42,
+    ];
+    img[0x9a300..0x9a300 + signature.len()].copy_from_slice(&signature);
     let banner = mediatek_optical::layout::BANNER;
     img[banner.start..banner.end()].fill(0);
     img[banner.start..banner.start + board.banner.len()].copy_from_slice(board.banner.as_bytes());
@@ -287,4 +292,23 @@ fn stamped_boards_have_their_families() {
             "{board:?}"
         );
     }
+}
+
+/// A synthetic decrypt-before-banner receiver for automatic-encoding tests.
+pub(crate) fn encrypted_receiver(img: &mut [u8]) {
+    img[0x9a300..0x9a340].fill(0);
+    let call = 0x9a320usize;
+    let target = 0x9b024usize;
+    img[call - 12..call]
+        .copy_from_slice(&[0xeb, 0x69, 0x10, 0x22, 1, 0xa9, 3, 0x20, 0, 3, 0x18, 0x18]);
+    let delta = target - call - 4;
+    img[call..call + 2].copy_from_slice(&(0xf000u16 | (delta >> 12) as u16).to_le_bytes());
+    img[call + 2..call + 4]
+        .copy_from_slice(&(0xf800u16 | ((delta >> 1) as u16 & 2047)).to_le_bytes());
+    let routine = [
+        0xf7, 0xb5, 6, 0, 0x14, 0, 0, 0x48, 0x11, 0, 0x84, 0xb0, 0, 0, 0, 0, 0, 0x2c, 1, 0xd0,
+        0x20, 7, 2, 0xd0, 0, 0x20, 7, 0xb0, 0xf0, 0xbd, 0xa0, 8, 1, 0x22, 0x92, 6, 2, 0x90, 0x10,
+        0x68, 0x10, 0x21, 0x88, 0x43, 0x10, 0x60,
+    ];
+    img[target..target + routine.len()].copy_from_slice(&routine);
 }

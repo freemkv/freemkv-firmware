@@ -104,7 +104,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 28335b8294725272c76efefa42026d602073b98d6e1ba085dcfc62cb3107981a
+backup sha256: 525a4b28a807b3d3080da26788c9766808e3bb1ee2b47e2bf6be594a1626ff24
 wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
 this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 --- events (107) ---
@@ -210,7 +210,7 @@ PROGRESS reading drive memory 2035712/2097152
 PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
-MSG      backup sha256: 28335b8294725272c76efefa42026d602073b98d6e1ba085dcfc62cb3107981a
+MSG      backup sha256: 525a4b28a807b3d3080da26788c9766808e3bb1ee2b47e2bf6be594a1626ff24
 FIELD    Saved to = <TMP>/mtk-backup/mt1959.bak
 MSG      wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
 FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
@@ -733,7 +733,7 @@ IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-saved file: 2097152 bytes sha256=28335b8294725272c76efefa42026d602073b98d6e1ba085dcfc62cb3107981a
+saved file: 2097152 bytes sha256=525a4b28a807b3d3080da26788c9766808e3bb1ee2b47e2bf6be594a1626ff24
 
 === MTK dump: MT1959 drive read ===
 result: OK
@@ -840,7 +840,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+backup sha256: 66e0a09e74586ce61f86742ce01845b6f6bfbaa5f97ce4a818d3b8b31e56a060
 wrote <TMP>/mtk-backup/dump_mt1959.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (108) ---
@@ -947,7 +947,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: 8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+MSG      backup sha256: 66e0a09e74586ce61f86742ce01845b6f6bfbaa5f97ce4a818d3b8b31e56a060
 FIELD    Saved to = <TMP>/mtk-backup/dump_mt1959.bak
 MSG      wrote <TMP>/mtk-backup/dump_mt1959.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -1467,7 +1467,7 @@ IN   cdb=3c06001fc00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fd00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
-saved file: 2097152 bytes sha256=8ce1e95d6d51eeba189b7033243e60eb546e8ea60adbac035a1f0c393e33cd94
+saved file: 2097152 bytes sha256=66e0a09e74586ce61f86742ce01845b6f6bfbaa5f97ce4a818d3b8b31e56a060
 
 === MTK backup: MT1939 drive read (build not in the catalog) ===
 result: OK
@@ -1574,7 +1574,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: b1a084f567992bce6cbecfeb441c832d9400e287b53a1d447af4ed88f76c873d
+backup sha256: d5a250da6c7800e6411a55a61ff0ab06b694f4bedf2779dca859ede1a717cf17
 wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
 this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 --- events (107) ---
@@ -1680,7 +1680,7 @@ PROGRESS reading drive memory 2035712/2097152
 PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
-MSG      backup sha256: b1a084f567992bce6cbecfeb441c832d9400e287b53a1d447af4ed88f76c873d
+MSG      backup sha256: d5a250da6c7800e6411a55a61ff0ab06b694f4bedf2779dca859ede1a717cf17
 FIELD    Saved to = <TMP>/mtk-backup/mt1939.bak
 MSG      wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
 FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
@@ -2203,7 +2203,7 @@ IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-saved file: 2097152 bytes sha256=b1a084f567992bce6cbecfeb441c832d9400e287b53a1d447af4ed88f76c873d
+saved file: 2097152 bytes sha256=d5a250da6c7800e6411a55a61ff0ab06b694f4bedf2779dca859ede1a717cf17
 
 === MTK dump: MT1939 drive read (build not in the catalog) ===
 result: OK
@@ -2310,7 +2310,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 3292ad51b79283df960099820f1cabb2a90e0552cc5340ef1c7fd1d1c5c6f066
+backup sha256: 881697b8fa1810bec72ae0f172a748fc5831faf7f2d2db84bdb7b59a428f8ec1
 wrote <TMP>/mtk-backup/dump_mt1939.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (108) ---
@@ -2417,7 +2417,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: 3292ad51b79283df960099820f1cabb2a90e0552cc5340ef1c7fd1d1c5c6f066
+MSG      backup sha256: 881697b8fa1810bec72ae0f172a748fc5831faf7f2d2db84bdb7b59a428f8ec1
 FIELD    Saved to = <TMP>/mtk-backup/dump_mt1939.bak
 MSG      wrote <TMP>/mtk-backup/dump_mt1939.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -2937,7 +2937,7 @@ IN   cdb=3c06001fc00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fd00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
-saved file: 2097152 bytes sha256=3292ad51b79283df960099820f1cabb2a90e0552cc5340ef1c7fd1d1c5c6f066
+saved file: 2097152 bytes sha256=881697b8fa1810bec72ae0f172a748fc5831faf7f2d2db84bdb7b59a428f8ec1
 
 === MTK backup: unknown boot page ===
 result: ERR rebuilding the OEM image from the drive read: boot page is neither a stored page nor a drive read's mirror (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033)
@@ -3770,7 +3770,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 2f3236449fb4692d142d1acc938afff060417cfdc6567ac26b2bedbc26e4a153
+backup sha256: 7a7256f4571dfe41517607500773096dd55a6d3e5ac6ec5f6a7e41da9c01f175
 wrote <TMP>/mtk-backup/dump_unknown_boot.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (108) ---
@@ -3877,7 +3877,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: 2f3236449fb4692d142d1acc938afff060417cfdc6567ac26b2bedbc26e4a153
+MSG      backup sha256: 7a7256f4571dfe41517607500773096dd55a6d3e5ac6ec5f6a7e41da9c01f175
 FIELD    Saved to = <TMP>/mtk-backup/dump_unknown_boot.bak
 MSG      wrote <TMP>/mtk-backup/dump_unknown_boot.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -4397,7 +4397,7 @@ IN   cdb=3c06001fc00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fd00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
-saved file: 2097152 bytes sha256=2f3236449fb4692d142d1acc938afff060417cfdc6567ac26b2bedbc26e4a153
+saved file: 2097152 bytes sha256=7a7256f4571dfe41517607500773096dd55a6d3e5ac6ec5f6a7e41da9c01f175
 
 === MTK backup: firmware read fails at 0x100000 ===
 result: ERR backup needs every firmware byte, but read 2096640 of 2097152; unreadable ranges [
@@ -5249,7 +5249,7 @@ Unreadable ranges filled with FF: [
         0x100200,
     ),
 ]
-backup sha256: 7ac803a619301d63664494022d704b678902be2ac1156d447571bd6c80ad0461
+backup sha256: e1a0daf109e9e01ce7c5598f5b5efbab731ae7024f0a4cc0606f3686f79ddd60
 wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (115) ---
@@ -5368,7 +5368,7 @@ MSG              0x100000,
 MSG              0x100200,
 MSG          ),
 MSG      ]
-MSG      backup sha256: 7ac803a619301d63664494022d704b678902be2ac1156d447571bd6c80ad0461
+MSG      backup sha256: e1a0daf109e9e01ce7c5598f5b5efbab731ae7024f0a4cc0606f3686f79ddd60
 FIELD    Saved to = <TMP>/mtk-backup/dump_read_fail.bak
 MSG      wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -5896,4 +5896,4 @@ IN   cdb=3c06001fc00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fd00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
-saved file: 2097152 bytes sha256=7ac803a619301d63664494022d704b678902be2ac1156d447571bd6c80ad0461
+saved file: 2097152 bytes sha256=e1a0daf109e9e01ce7c5598f5b5efbab731ae7024f0a4cc0606f3686f79ddd60

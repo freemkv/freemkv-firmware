@@ -30,3 +30,7 @@ lto = "thin"
 codegen-units = 1
 
 
+
+# Pin the reviewed MediaTek development implementation until its crate release.
+[patch.crates-io]
+mediatek-optical = { git = "https://github.com/MattJackson/mediatek-optical.git", rev = "a4c641c" }

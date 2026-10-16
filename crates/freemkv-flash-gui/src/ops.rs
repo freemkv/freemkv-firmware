@@ -51,6 +51,7 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
             .map(|path| path.display().to_string())
     };
     Profile {
+        recovery_without_current: !workflow::recovery_requires_current(p),
         chips,
         tasks,
         inspect: caps.inspect,

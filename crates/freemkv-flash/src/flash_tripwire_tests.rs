@@ -57,8 +57,7 @@ fn text_index(outcome: &Outcome, needle: &str) -> usize {
 #[test]
 fn flash_plan_needs_no_backup() {
     // MediaTek: an execute plan with no backup destination reads only the chip
-    // identity (the descriptor and the boot banner, which decides the chip); the
-    // firmware is never read.
+    // identity and receiver code, without capturing a full backup.
     let image = make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N");
     let req = mtk_request(image.clone(), true, None);
     let mut dev = Rec::new(mtk_drive());
@@ -67,7 +66,10 @@ fn flash_plan_needs_no_backup() {
         .expect("plan without a backup");
     assert!(plan.after_backup.contains(&PlanLine::Backup));
     assert_eq!(
-        dev.transcript(),
+        dev.transcript()
+            .into_iter()
+            .filter(|l| !receiver_probe_line(l))
+            .collect::<Vec<_>>(),
         [
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
             "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
@@ -90,7 +92,10 @@ fn flash_plan_needs_no_backup() {
     });
     assert_eq!(outcome.result, "OK");
     assert_eq!(
-        transcript,
+        transcript
+            .into_iter()
+            .filter(|l| !receiver_probe_line(l))
+            .collect::<Vec<_>>(),
         [
             "MEDIUM -> ClosedEmpty",
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
@@ -392,7 +397,10 @@ fn dry_run_keeps_tray_warning_and_mtk_preflight() {
         .unwrap()
         .starts_with("DRY RUN: no firmware writes"));
     assert_eq!(
-        transcript,
+        transcript
+            .into_iter()
+            .filter(|l| !receiver_probe_line(l))
+            .collect::<Vec<_>>(),
         [
             "MEDIUM -> DiscPresent",
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
@@ -670,4 +678,17 @@ fn unknown_families_are_refused_before_any_write() {
         // An image without a family is refused at the plan, before the backup.
         assert_eq!(backup.exists(), which == "installed", "{which}");
     }
+}
+
+// These additional read-only commands inspect the active receiver; golden
+// transcripts and the detector tests separately verify their exact contents.
+fn receiver_probe_line(line: &str) -> bool {
+    [
+        "IN   cdb=120000002400",
+        "IN   cdb=3c060009",
+        "IN   cdb=3c06000a",
+        "IN   cdb=3c06000b",
+    ]
+    .iter()
+    .any(|prefix| line.starts_with(prefix))
 }
