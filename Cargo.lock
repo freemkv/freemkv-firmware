@@ -1354,7 +1354,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.12.5"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "mediatek-optical",
@@ -1362,7 +1362,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.12.5"
+version = "0.13.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -1388,7 +1388,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.12.5"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.12.5"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1420,7 +1420,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.12.5"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "eframe",
@@ -2421,8 +2421,9 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "mediatek-optical"
-version = "0.7.1"
-source = "git+https://github.com/MattJackson/mediatek-optical.git?rev=8eec4f212642043b821d2685581263bf54162e97#8eec4f212642043b821d2685581263bf54162e97"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e81877d3c57a0b53f37ffb102c146f43cf5cff253bf50921861ff4b7b093480"
 dependencies = [
  "aes",
  "cmac",
@@ -3164,8 +3165,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pioneer-optical"
-version = "0.15.2"
-source = "git+https://github.com/MattJackson/pioneer-optical.git?rev=ab22223eca9700a86669f36c40f804ba3e00bba1#ab22223eca9700a86669f36c40f804ba3e00bba1"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "507a315c4907a7bac4e91191c66cd42c78d1af98ac18d8149f147cc579c640c8"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",

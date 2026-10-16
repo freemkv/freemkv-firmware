@@ -1654,11 +1654,10 @@ fn pioneer_optical_stays_pinned() {
         .lines()
         .find(|l| l.trim_start().starts_with("pioneer-optical"))
         .expect("pioneer-optical dependency");
-    // The OEM-verified receive-placement fix shipped in 0.15.2.  Keep an
-    // exact registry version so Cargo cannot silently resolve the older
-    // 0.15.1 release with its incorrect two-part offsets.
+    // Keep the released receiver handoff checks and receive-placement fix;
+    // an older dependency must not silently remove either safety gate.
     assert!(
-        line.contains("version = \"=0.15.2\"") && !line.contains("git ="),
+        line.contains("version = \"=0.16.0\"") && !line.contains("git ="),
         "pioneer-optical must use the released OEM-verified receive-placement fix: {line}"
     );
 }
@@ -1770,6 +1769,32 @@ fn lenders_find_closures_and_returns_that_hand_out_a_device() {
 /// keying by item means dropping a mention from one item (a `use` replaced by
 /// a full path) frees no slot for a new one, so this list is closed-world.
 const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
+    // Authorization revalidates the planning probe before completing live entry detection.
+    (
+        "src/backends/mtk/flash.rs",
+        "fn authorize",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn authorize",
+        "ScsiTransport",
+        1,
+    ),
+    // Dry-run encoding detection remains read-only and precedes backup capture.
+    (
+        "src/backends/mtk/mod.rs",
+        "fn probe_receiver_encoding",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/mtk/mod.rs",
+        "fn probe_receiver_encoding",
+        "ScsiTransport",
+        1,
+    ),
     (
         "src/backends/mtk/flash.rs",
         "fn execute_stage",

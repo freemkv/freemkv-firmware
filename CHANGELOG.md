@@ -8,12 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Next release: **0.13.0**.
+## [0.13.0] - 2026-10-16
 
 ### freemkv-flash
 - Bind normal MediaTek Flash stages to the detected receiver's library transfer
   plan. Revalidate that receiver before writing and detect it again after INTM;
   the app no longer selects encrypted transfer independently.
+- Select the MediaTek PREPARE dialect from the running BOOT or application
+  receiver's entry signatures. Preserve data-out direction for empty PREPARE
+  commands and collect bounded read-only diagnostics after recovery failure.
+- Use released `mediatek-optical 0.8.0` and `pioneer-optical 0.16.0`.
 - In explicit MediaTek Recovery, log a failed PREPARE and proceed once with the
   selected firmware. Normal Flash still stops on PREPARE failure; firmware-data
   failures stop both paths without retries. Recovery still requires protected

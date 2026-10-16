@@ -90,9 +90,27 @@ pub(crate) fn hardware(board: &Board) -> Vec<u8> {
     out
 }
 
+/// Operand-checked receiver instruction excerpts for live-plan tests.
+pub(crate) fn stamp_receiver_entries(img: &mut [u8]) {
+    for (address, hex) in [
+        (0x352a, "e548f0b5827889b00127e349002a72d142781207120f42704278e04e012a49d0022a01d0062af2d1"),
+        (0x35de, "b16909090901b161417ac90702d0b1693943b161417a890703d5b16902221143b161417a490703d5b16904221143b161407a000703d5b06908210843b06109b0f0bd"),
+        (0x38c0, "fc0d0002800d000240200004"),
+        (0x9ba38, "0122022804d0052805d00a280ad108e08f2907d105e0042903d0052901d0062900d1002210007047"),
+        (0x9ca02, "564bf0b599788fb05878c006c00efff712f80126634f002808d059781800cb06db0e042100255f4c092b00d3f9e3"),
+        (0x9ca30, "5b007b449b885b009f44ac0508002900ac052f001401ee02ac057104"),
+        (0x9ca4c, "574a93691b091b019361437adb0702d0936933439361437a9b0703d59369022423439361437a5b0702d5936919439161407a000703d590690821084390610fb0f0bd"),
+        (0x9cb5c, "f40c0002"), (0x9cba4, "220c0002380c000240200004"),
+        (0x9d018, "8178002904d1"), (0x155ba8, "3b01000003ca0900"),
+    ] {
+        for i in (0..hex.len()).step_by(2) { img[address + i / 2] = u8::from_str_radix(&hex[i..i + 2], 16).unwrap(); }
+    }
+}
+
 /// Give `img` `board`'s boot banner, descriptor platform code and hardware
 /// record. The caller signs the image afterwards.
 pub(crate) fn stamp(img: &mut [u8], board: &Board) {
+    stamp_receiver_entries(img);
     // A direct plaintext header comparison in the synthetic application.
     let signature = [
         3, 0x21, 9, 3, 0x61, 0x18, 9, 0xa8, 0, 0x5d, 9, 0x78, 0x88, 0x42,

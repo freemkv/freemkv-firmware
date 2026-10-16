@@ -704,8 +704,8 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
     // family hash) that re-encode cannot bridge and that `flash` also refuses.
     // These are legitimately not crossflashable, so they are excluded from the
     // re-encode provable-ratio rather than counted as re-encode failures.
-    let (mut same_class, mut cross_proven, mut cross_total, mut cross_abi) =
-        (0usize, 0usize, 0usize, 0usize);
+    let (mut same_class, mut cross_proven, mut cross_total, mut cross_abi, mut cross_no_seed) =
+        (0usize, 0usize, 0usize, 0usize, 0usize);
     let mut failures: Vec<String> = Vec::new();
     // Full per-pair matrix (family, installed X, target Y, verdict), emitted to
     // FREEMKV_PIONEER_HOARD_REPORT when set. AS-IS = installed Kernel decodes the
@@ -771,7 +771,7 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
                 .and_then(|k| decode_envelope_with_kernel(nj, &k))
                 .and_then(|n| n.encoding_seed());
             let Some(seed) = seed else {
-                failures.push(format!("{} <- {}: no seed", metas[j].name, metas[i].name));
+                cross_no_seed += 1;
                 rows.push(format!(
                     "{}\t{}\t{}\tREFUSED: no recoverable encoding seed",
                     metas[i].family, metas[i].name, metas[j].name
@@ -863,9 +863,10 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
              # AS-IS = installed Kernel decodes shipped Normal unchanged; \
              REENCODE = X->Y needs re-encode; REFUSED = not offline-provable (cause)\n\
              # totals: same-class(AS-IS) {same_class}; cross-receiver proven \
-             {cross_proven}/{} re-encodable; {cross_abi} AbiMismatch (structural, \
-             not crossflashable); {} other not-provable\n{}\n",
-            cross_total - cross_abi,
+             {cross_proven}/{} seed-available ABI-compatible candidates; \
+             {cross_abi} AbiMismatch (structural refusal); {cross_no_seed} \
+             no recoverable seed (refused); {} unexpected encode/proof failures\n{}\n",
+            cross_total - cross_abi - cross_no_seed,
             failures.len(),
             rows.join("\n"),
         );
@@ -875,26 +876,28 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
             rows.len()
         );
     }
-    let cross_reencodable = cross_total - cross_abi;
+    let seeded_candidates = cross_total - cross_abi - cross_no_seed;
     eprintln!(
         "recover KAT: same-class(AS-IS) {same_class}; cross-receiver re-encode proven \
-         {cross_proven}/{cross_reencodable} re-encodable; {cross_abi} AbiMismatch \
-         (structural, not crossflashable); {} other not-provable",
+         {cross_proven}/{seeded_candidates} seed-available ABI-compatible candidates; \
+         {cross_abi} AbiMismatch (structural refusal); {cross_no_seed} no recoverable \
+         seed (refused); {} unexpected encode/proof failures",
         failures.len()
     );
     assert!(
-        cross_proven >= 1,
-        "expected at least one cross-receiver re-encode to be proven"
+        seeded_candidates >= 700,
+        "far fewer cross-receiver pairs have a recoverable seed and compatible ABI than expected \
+         ({seeded_candidates}; {cross_abi} AbiMismatch, {cross_no_seed} seed-unavailable)"
     );
-    // Of the re-encodable cross pairs (AbiMismatch excluded — a structural
-    // incompatibility re-encode cannot bridge and that `flash` also refuses),
-    // the overwhelming majority must prove; the rest are a few legitimately
-    // not-re-encodable packages (e.g. no recoverable seed).
+    assert_eq!(
+        cross_proven, seeded_candidates,
+        "every seed-available ABI-compatible cross-receiver re-encode must prove; \
+         {cross_abi} AbiMismatch and {cross_no_seed} seed-unavailable pairs were refused: \
+         {failures:#?}"
+    );
     assert!(
-        cross_reencodable == 0 || cross_proven * 5 >= cross_reencodable * 4,
-        "too many cross-receiver re-encode failures ({}/{cross_reencodable}; \
-         {cross_abi} AbiMismatch excluded): {failures:#?}",
-        cross_reencodable - cross_proven
+        failures.is_empty(),
+        "unexpected encode/proof failures: {failures:#?}"
     );
     // Both arms of the receiver-class split must actually be exercised, or the
     // ratio above is vacuous.
@@ -902,15 +905,6 @@ fn hoard_recover_admits_offline_provable_same_family_pairs() {
         same_class > 0 && cross_total > 0,
         "receiver-class split exercised neither arm (same_class={same_class}, \
          cross_total={cross_total})"
-    );
-    // The re-encodable cross set must stay large. A regression that misclassified
-    // most pairs as AbiMismatch would shrink `cross_reencodable` and otherwise
-    // slip past both the ratio and the `cross_proven >= 1` floor.
-    assert!(
-        cross_reencodable >= 100,
-        "far fewer cross-receiver re-encodable pairs than expected \
-         ({cross_reencodable}; cross_abi={cross_abi}) — a regression may be \
-         misclassifying them as AbiMismatch"
     );
 }
 

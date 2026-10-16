@@ -111,6 +111,18 @@ pub fn detect_receiver(dev: &mut ReadDevice<'_>) -> Result<mediatek_optical::rec
     let mut transport = crate::transport::ScsiTransport::reads(&shared);
     let mode =
         mediatek_optical::receiver::detect_mode(&mut transport).map_err(|e| anyhow!("{e}"))?;
+    mediatek_optical::receiver::detect(&mut transport, &mode).map_err(|e| anyhow!("{e}"))
+}
+
+/// Lightweight read-only planning probe. Executable authorization completes
+/// entry detection after the backup destination and capture gates.
+pub fn probe_receiver_encoding(
+    dev: &mut ReadDevice<'_>,
+) -> Result<mediatek_optical::receiver::Receiver> {
+    let shared = crate::transport::SharedDevice::new(dev);
+    let mut transport = crate::transport::ScsiTransport::reads(&shared);
+    let mode =
+        mediatek_optical::receiver::detect_mode(&mut transport).map_err(|e| anyhow!("{e}"))?;
     mediatek_optical::receiver::detect_encoding(&mut transport, &mode).map_err(|e| anyhow!("{e}"))
 }
 

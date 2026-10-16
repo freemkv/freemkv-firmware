@@ -110,7 +110,7 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_flashable.bin
 size: 2 MiB
-sha256: 72ec2653aa2ced621182e53529b9d840466eab8f55b2a183f85e76eff823b714
+sha256: 44e1e4a31c091612a17399e9bf9be1b2660ad9a173aba738fae16b42c9a8612a
 chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
@@ -123,7 +123,7 @@ MSG      file: <TMP>/info-file/mtk_flashable.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_flashable.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 72ec2653aa2ced621182e53529b9d840466eab8f55b2a183f85e76eff823b714
+MSG      sha256: 44e1e4a31c091612a17399e9bf9be1b2660ad9a173aba738fae16b42c9a8612a
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = <unknown>
@@ -141,7 +141,7 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_bad_cmac.bin
 size: 2 MiB
-sha256: 744a80d713d8e75a6b8f5e07991a5c719f4e9bc9e59e25d3dcb915e17f28f9a4
+sha256: 0c909a8f4d6a1b96d777afa3e4148360d891d84ec8b3afb6b20eaeab7d331f5f
 chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
@@ -154,7 +154,7 @@ MSG      file: <TMP>/info-file/mtk_bad_cmac.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_bad_cmac.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 744a80d713d8e75a6b8f5e07991a5c719f4e9bc9e59e25d3dcb915e17f28f9a4
+MSG      sha256: 0c909a8f4d6a1b96d777afa3e4148360d891d84ec8b3afb6b20eaeab7d331f5f
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = <unknown>
@@ -202,7 +202,7 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_drive_read_backup.bin
 size: 2 MiB
-sha256: 66e0a09e74586ce61f86742ce01845b6f6bfbaa5f97ce4a818d3b8b31e56a060
+sha256: 2ee511da4bb09cdbd2d276ef6f7efcdf2712535232d249f505c94749085c1dd8
 chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
@@ -215,7 +215,7 @@ MSG      file: <TMP>/info-file/mtk_drive_read_backup.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_drive_read_backup.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 66e0a09e74586ce61f86742ce01845b6f6bfbaa5f97ce4a818d3b8b31e56a060
+MSG      sha256: 2ee511da4bb09cdbd2d276ef6f7efcdf2712535232d249f505c94749085c1dd8
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = ����
@@ -233,7 +233,7 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_mt1959_stored.bin
 size: 2 MiB
-sha256: 0c2d362b0a18b303d81a8fc8fb5d3de2099128674462ee208930106afb9bd1fb
+sha256: 0044c16092c2b689229ffe6ad3b1f0702a9279c26a6e810ad8449a40c4698f2a
 chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='��������' model='BD-RE BU40N' rev='����'
@@ -246,7 +246,7 @@ MSG      file: <TMP>/info-file/mtk_mt1959_stored.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_mt1959_stored.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 0c2d362b0a18b303d81a8fc8fb5d3de2099128674462ee208930106afb9bd1fb
+MSG      sha256: 0044c16092c2b689229ffe6ad3b1f0702a9279c26a6e810ad8449a40c4698f2a
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = ����
@@ -264,7 +264,7 @@ result: OK
 --- text (10) ---
 file: <TMP>/info-file/mtk_mt1939_stored.bin
 size: 2 MiB
-sha256: 60149efd29ab87ad136b88216bc3d437361a00526bd6f9e266bd21fb24108012
+sha256: e4041d87d866955512ad7cb96cd11e1c1573377a2cb33d230f3c8adeb73ace2d
 chipset: MediaTek MT1939 (from boot banner; identity tag MTEKMT1939)
 banner: MT1939 Boot Code
 descriptor: vendor='��������' model='BD-RE BE14NU40' rev='����'
@@ -277,7 +277,7 @@ MSG      file: <TMP>/info-file/mtk_mt1939_stored.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/info-file/mtk_mt1939_stored.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 60149efd29ab87ad136b88216bc3d437361a00526bd6f9e266bd21fb24108012
+MSG      sha256: e4041d87d866955512ad7cb96cd11e1c1573377a2cb33d230f3c8adeb73ace2d
 FIELD    Chipset = MT1939
 FIELD    Model = BD-RE BE14NU40
 FIELD    Firmware version = ����

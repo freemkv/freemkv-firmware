@@ -106,7 +106,7 @@ impl FlashFacet for Mtk {
             .class()
             .context("the drive names no update dialect; refusing")?
             .steps();
-        let receiver = detect_receiver(dev)?;
+        let receiver = super::probe_receiver_encoding(dev)?;
         let enc = receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted;
         if req.enc_override.is_some_and(|requested| requested != enc) {
             bail!("encoding override contradicts the active MediaTek receiver");
@@ -174,11 +174,20 @@ impl FlashFacet for Mtk {
     /// reads no byte a rebuild replaces, and it is the artifact the user keeps.
     fn authorize(
         &self,
-        _dev: &mut ReadDevice<'_>,
+        dev: &mut ReadDevice<'_>,
         plan: FlashPlan,
         backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan> {
         let state: &Plan = plan.state()?;
+        {
+            let shared = SharedDevice::new(dev);
+            let mut transport = ScsiTransport::reads(&shared);
+            state
+                .receiver
+                .revalidate(&mut transport)
+                .map_err(|e| anyhow!("{e}"))?;
+        }
+        let receiver = detect_receiver(dev)?;
         let authorized = authorize_bytes(
             &state.live,
             &state.drive_product,
@@ -186,7 +195,7 @@ impl FlashFacet for Mtk {
             &state.image,
             backup.map(|b| b.bytes()),
         )?
-        .bind(&state.receiver)?;
+        .bind(&receiver)?;
         Ok(AuthorizedPlan::new(plan, authorized))
     }
 
@@ -750,7 +759,7 @@ pub(super) fn test_plan(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<FlashP
         image: image.to_vec(),
         final_image: None,
         live: identity_of_image(image)?,
-        receiver: detect_receiver(&mut ReadDevice::without_unlocks(dev))?,
+        receiver: super::probe_receiver_encoding(&mut ReadDevice::without_unlocks(dev))?,
         drive_product: "BD-RE BU40N".into(),
         verdict: Verdict::SameModel,
     }))

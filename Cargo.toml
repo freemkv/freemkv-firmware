@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 # freemkv-firmware versions INDEPENDENTLY of the rest of the freemkv stack.
-version = "0.12.5"
+version = "0.13.0"
 edition = "2021"
 rust-version = "1.94"
 license = "MIT"
@@ -28,10 +28,3 @@ all = "warn"
 strip = true
 lto = "thin"
 codegen-units = 1
-
-
-
-# Pin reviewed optical development implementations until their crate releases.
-[patch.crates-io]
-pioneer-optical = { git = "https://github.com/MattJackson/pioneer-optical.git", rev = "ab22223eca9700a86669f36c40f804ba3e00bba1" }
-mediatek-optical = { git = "https://github.com/MattJackson/mediatek-optical.git", rev = "8eec4f212642043b821d2685581263bf54162e97" }
