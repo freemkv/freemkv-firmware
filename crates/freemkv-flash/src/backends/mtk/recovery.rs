@@ -60,18 +60,33 @@ impl RecoveryFacet for Mtk {
 }
 
 fn execute(writer: &mut WriteDevice<'_>, plan: &recovery::PreparedRecovery) -> Result<()> {
-    let shared = SharedDevice::new(writer);
-    let (mut reads, mut writes) = (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
-    let mut runtime = super::flash::Runtime::new();
-    let verified = plan
-        .flash(
+    let result = {
+        let shared = SharedDevice::new(&mut *writer);
+        let (mut reads, mut writes) =
+            (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
+        let mut runtime = super::flash::Runtime::new();
+        plan.flash(
             FlashTransport {
                 reads: &mut reads,
                 writes: &mut writes,
             },
             &mut runtime,
         )
-        .map_err(|e| anyhow!("MediaTek recovery failed: {e}"))?;
+    };
+    let verified = match result {
+        Ok(verified) => verified,
+        Err(error) => {
+            if matches!(
+                &error,
+                recovery::Error::Flash(mediatek_optical::update::FlashError::Entry(_))
+            ) {
+                crate::recovery_diagnostics::entry_failure(writer, &error.to_string());
+            } else {
+                crate::diagnostics::record(format!("Recovery original failure: {error}; broad diagnostics skipped because programming state is not proven idle"));
+            }
+            return Err(anyhow!("MediaTek recovery failed: {error}"));
+        }
+    };
     crate::output::field(
         "Recovery",
         format!(

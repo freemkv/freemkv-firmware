@@ -84,6 +84,12 @@ pub trait ScsiDevice {
     /// Issue a data-in command; returns up to `alloc_len` bytes.
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>>;
 
+    /// One diagnostic read, with a short timeout and no automatic retries.
+    /// Platform transports override this; simulated devices may use the normal read.
+    fn diagnostic_in(&mut self, cdb: &[u8], alloc_len: usize, _timeout_ms: u32) -> Result<Vec<u8>> {
+        self.command_in(cdb, alloc_len)
+    }
+
     /// Issue a data-out command, sending `data` to the device.
     fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()>;
 
@@ -94,6 +100,13 @@ pub trait ScsiDevice {
     /// it with the strict policy.
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
         self.command_out(cdb, data)
+    }
+
+    /// Strict data-out preserving the requested direction even for zero bytes.
+    /// MediaTek OEM PREPARE/COMMIT use this form. Existing protocol calls retain
+    /// their historical empty-payload convention through `command_out_strict`.
+    fn command_out_directed(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        self.command_out_strict(cdb, data)
     }
 
     /// Human-readable identity of the underlying transport/device path.

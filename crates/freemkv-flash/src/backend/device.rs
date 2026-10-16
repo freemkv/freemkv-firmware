@@ -88,6 +88,11 @@ impl<'d> ReadDevice<'d> {
 }
 
 impl ScsiDevice for ReadDevice<'_> {
+    fn diagnostic_in(&mut self, cdb: &[u8], alloc_len: usize, timeout_ms: u32) -> Result<Vec<u8>> {
+        check_no_data(cdb, alloc_len)?;
+        self.dev.diagnostic_in(cdb, alloc_len, timeout_ms)
+    }
+
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
         check_no_data(cdb, alloc_len)?;
         self.dev.command_in(cdb, alloc_len)

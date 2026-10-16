@@ -148,7 +148,7 @@ impl mediatek_optical::drive::Transport for ScsiTransport<'_, '_> {
             MtkData::None => d.command_in(cdb, 0).map(|_| 0),
             MtkData::Out(bytes) => {
                 if strict {
-                    d.command_out_strict(cdb, bytes)?;
+                    d.command_out_directed(cdb, bytes)?;
                 } else {
                     d.command_out(cdb, bytes)?;
                 }

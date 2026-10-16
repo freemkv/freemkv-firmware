@@ -288,6 +288,31 @@ impl TransportDevice {
 }
 
 impl ScsiDevice for TransportDevice {
+    fn diagnostic_in(&mut self, cdb: &[u8], alloc_len: usize, timeout_ms: u32) -> Result<Vec<u8>> {
+        let mut buf = vec![0; alloc_len];
+        let result = self.execute_logged(cdb, DataDirection::FromDevice, &mut buf, timeout_ms);
+        // Keep the snapshot even on an error, explicitly untrusted without a
+        // successful status and transfer count. Never retry a diagnostic probe.
+        crate::diagnostics::record(format!(
+            "Recovery diagnostic buffer: cdb={cdb:02x?} raw={buf:02x?} (buffer snapshot; status/count validation required)"
+        ));
+        let result = result.map_err(|e| anyhow!("{}", super::describe_scsi_error(&e)))?;
+        anyhow::ensure!(
+            result.bytes_transferred <= buf.len(),
+            "invalid diagnostic transfer count: {} > {}",
+            result.bytes_transferred,
+            buf.len()
+        );
+        anyhow::ensure!(
+            result.status == 0,
+            "diagnostic SCSI status=0x{:02x} sense={:02x?}",
+            result.status,
+            result.sense
+        );
+        buf.truncate(result.bytes_transferred);
+        Ok(buf)
+    }
+
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
         let mut buf = vec![0u8; alloc_len];
         let n = self.run(cdb, Direction::FromDevice, &mut buf)?;
@@ -301,6 +326,17 @@ impl ScsiDevice for TransportDevice {
 
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
         self.data_out(cdb, data, true)
+    }
+
+    fn command_out_directed(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        let mut buf = data.to_vec();
+        let n = self.run_inner(cdb, Direction::ToDevice, &mut buf, true)?;
+        anyhow::ensure!(
+            n == data.len(),
+            "short directed write: accepted {n} of {} bytes",
+            data.len()
+        );
+        Ok(())
     }
 
     fn describe(&self) -> String {

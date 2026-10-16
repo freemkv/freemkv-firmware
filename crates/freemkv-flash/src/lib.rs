@@ -19,6 +19,7 @@
 pub mod output;
 
 pub mod diagnostics;
+pub mod recovery_diagnostics;
 
 pub mod backend;
 pub mod backends;

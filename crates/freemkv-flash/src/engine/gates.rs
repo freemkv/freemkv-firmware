@@ -122,6 +122,11 @@ impl WriteDevice<'_> {
 }
 
 impl ScsiDevice for WriteDevice<'_> {
+    fn diagnostic_in(&mut self, cdb: &[u8], alloc_len: usize, timeout_ms: u32) -> Result<Vec<u8>> {
+        check_no_data(cdb, alloc_len)?;
+        self.dev.diagnostic_in(cdb, alloc_len, timeout_ms)
+    }
+
     fn command_in(&mut self, cdb: &[u8], alloc_len: usize) -> Result<Vec<u8>> {
         // A limited (dump) grant is read-only beyond its declared commands.
         if self.limit.is_some() {
@@ -138,6 +143,11 @@ impl ScsiDevice for WriteDevice<'_> {
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
         self.check(cdb, data)?;
         self.dev.command_out_strict(cdb, data)
+    }
+
+    fn command_out_directed(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        self.check(cdb, data)?;
+        self.dev.command_out_directed(cdb, data)
     }
 
     fn describe(&self) -> String {

@@ -2,6 +2,41 @@ use super::*;
 use libfreemkv::error::Error as FError;
 use libfreemkv::scsi::{ScsiResult, ScsiSense};
 
+#[test]
+fn mediatek_oem_empty_prepare_preserves_out_without_changing_legacy_no_data() {
+    struct CheckDirection(std::collections::VecDeque<DataDirection>);
+    impl ScsiTransport for CheckDirection {
+        fn execute(
+            &mut self,
+            cdb: &[u8],
+            dir: DataDirection,
+            buf: &mut [u8],
+            _: u32,
+        ) -> libfreemkv::error::Result<ScsiResult> {
+            // vptransport write_buffer_plds builds a 12-byte CDB and supplies
+            // SPTI DataIn=0 (OUT), including an empty PREPARE. Independent OEM
+            // evidence: v9-boot/oem-prepare-audit, transport RVA 0x7577.
+            assert_eq!(cdb, [0x3b, 1, 0, 0, 0, 0, 0, 0, 0, 0x0b, 0, 0]);
+            assert!(buf.is_empty());
+            assert_eq!(dir, self.0.pop_front().unwrap());
+            Ok(ScsiResult {
+                status: 0,
+                bytes_transferred: 0,
+                sense: [0; 32],
+            })
+        }
+    }
+    let mut dev = TransportDevice {
+        inner: Box::new(CheckDirection(
+            [DataDirection::ToDevice, DataDirection::None].into(),
+        )),
+        path: "test".into(),
+    };
+    let cdb = [0x3b, 1, 0, 0, 0, 0, 0, 0, 0, 0x0b, 0, 0];
+    dev.command_out_directed(&cdb, &[]).unwrap();
+    dev.command_out_strict(&cdb, &[]).unwrap();
+}
+
 /// A transport that surfaces a CHECK CONDITION as `Err(ScsiError)` with a
 /// caller-chosen sense — exactly how libfreemkv's real Linux SG_IO / Windows
 /// SPTI backends report one (they do NOT return `Ok { status: CC }`).
