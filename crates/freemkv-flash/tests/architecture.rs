@@ -1654,13 +1654,11 @@ fn pioneer_optical_stays_pinned() {
         .lines()
         .find(|l| l.trim_start().starts_with("pioneer-optical"))
         .expect("pioneer-optical dependency");
-    // 0.12.x pins the unpublished pioneer-optical 0.15.1 by exact git rev
-    // (reproducible). This SHOULD return to a crates.io `version = "=0.15.1"`
-    // pin once published (see the note in crates/freemkv-flash/Cargo.toml).
+    // Require the OEM-verified receive-placement fix until its crate release.
+    // The older 0.15.1 release still contains the incorrect two-part offsets.
     assert!(
-        line.contains("rev = \"6c8c2be0243aafc82b2f33bdf757a50712a03a6e\"")
-            || line.contains("version = \"=0.15.1\""),
-        "pioneer-optical must stay pinned (exact git rev, or =0.15.1 once published): {line}"
+        line.contains("rev = \"9100f74493deb487dc71a92422aef7ecbff12471\""),
+        "pioneer-optical must pin the OEM-verified receive-placement fix: {line}"
     );
 }
 
