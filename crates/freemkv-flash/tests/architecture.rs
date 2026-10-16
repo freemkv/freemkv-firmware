@@ -1780,14 +1780,14 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
         "src/backends/mtk/flash.rs",
         "fn execute_stage",
         "ScsiTransport",
-        3,
+        2,
     ),
-    // Read-only receiver revalidation precedes the existing flash transport.
+    // The bound library plan revalidates using this shared read transport.
     (
         "src/backends/mtk/flash.rs",
         "fn execute_stage",
         "SharedDevice",
-        2,
+        1,
     ),
     // Detector adapters borrow only ReadDevice; library detection issues data-in only.
     (
