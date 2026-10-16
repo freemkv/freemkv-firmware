@@ -582,7 +582,45 @@ fn recover_hook_dry_run_writes_nothing_and_execute_writes() {
 //    with a zero BE32 checksum. Every such cross-receiver pair is proven here.
 //
 // The real same-SAT cross-receiver case BDR-207M <- BDR-PR1ML is additionally
-// driven end-to-end through `Plan::prepare` and must take the re-encode path.
+// driven end-to-end through `Plan::prepare`; paired Normal keeps the incoming
+// Kernel's OEM encoding, while Normal-only preparation may need re-encoding.
+#[test]
+fn hoard_207m_160_to_pr1ml_175_preserves_normal_for_incoming_kernel() {
+    use sha2::{Digest, Sha256};
+    let Ok(root) = std::env::var("FREEMKV_PIONEER_HOARD") else {
+        return;
+    };
+    let root = std::path::Path::new(&root);
+    let current_hash = "a82b29011251ae3e15fd4f891a29239d974f34e83e1e155725ae3627145d1c7f";
+    let target_hash = "a1fea2b6390c668cb3c499e46c77ec4dcae0e9522b08a6c19928feb0b1ccdd00";
+    let current = std::fs::read(root.join(format!(
+        "packages/pioneer/8000/ID43/1.60/{current_hash}.installer.tar"
+    )))
+    .unwrap();
+    let target = std::fs::read(root.join(format!(
+        "packages/pioneer/8000/ID88/1.75/{target_hash}.installer.tar"
+    )))
+    .unwrap();
+    assert_eq!(format!("{:x}", Sha256::digest(&current)), current_hash);
+    assert_eq!(format!("{:x}", Sha256::digest(&target)), target_hash);
+    let (expected, _) = load_target(&target).unwrap();
+    let plan = Plan::prepare(&current, &target).unwrap();
+    assert!(!plan.was_reencoded());
+    assert_eq!(plan.normal_transfer, expected.normal_transfer());
+    // The user's log sent this exact target Kernel, then a Normal explicitly
+    // re-encoded for installed ID43. The incoming ID88 Kernel receives Normal.
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&plan.kernel_transfer[..32768])),
+        "12bfbcbe3f35c89fe1ecc53854a13ed00bbc5baa97279d78adb83cb9f04937b7"
+    );
+    let normal_chunk = format!("{:x}", Sha256::digest(&plan.normal_transfer[..32768]));
+    assert_ne!(
+        normal_chunk,
+        "0b2a978c54a16e8585c3d68a418161111abadae7a35e01983acb177149e6a22e"
+    );
+    eprintln!("PR1ML 1.75 OEM Normal first chunk: {normal_chunk}");
+}
+
 #[test]
 fn hoard_recover_admits_offline_provable_same_family_pairs() {
     use crate::backends::pioneer::classify_flash_input;
