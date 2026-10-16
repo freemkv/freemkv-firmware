@@ -51,6 +51,13 @@ fn image(revision: &[u8; 4], code: u8) -> Vec<u8> {
     mediatek_optical::image::cmac::resign(&bytes).unwrap()
 }
 fn run(boot: bool, encrypted_after: bool) -> (Result<()>, Drive, Vec<u8>, Vec<u8>) {
+    run_with_changed_receiver(boot, encrypted_after, false)
+}
+fn run_with_changed_receiver(
+    boot: bool,
+    encrypted_after: bool,
+    changed: bool,
+) -> (Result<()>, Drive, Vec<u8>, Vec<u8>) {
     let initial = image(b"1.00", 1);
     let mut intermediate = image(b"INTM", 2);
     if encrypted_after {
@@ -74,7 +81,14 @@ fn run(boot: bool, encrypted_after: bool) -> (Result<()>, Drive, Vec<u8>, Vec<u8
         &intermediate,
         Some(&initial),
     )
+    .unwrap()
+    .bind(&receiver)
     .unwrap();
+    if changed {
+        let mut changed_image = initial.clone();
+        changed_image[receiver.signature_address() as usize] ^= 1;
+        dev.inner = MockScsiDevice::echoing().with_firmware_image(changed_image);
+    }
     let plan = FlashPlan::new(Plan {
         image: intermediate.clone(),
         final_image: Some(final_image.clone()),
@@ -89,6 +103,14 @@ fn run(boot: bool, encrypted_after: bool) -> (Result<()>, Drive, Vec<u8>, Vec<u8
         &authorized,
     );
     (result, dev, intermediate, final_image)
+}
+
+#[test]
+fn changed_receiver_rejects_the_bound_plan_before_any_write() {
+    let (result, dev, _, _) = run_with_changed_receiver(true, false, true);
+    assert!(result.unwrap_err().to_string().contains("changed"));
+    assert!(dev.inner.writes.is_empty());
+    assert!(dev.stages.is_empty());
 }
 #[test]
 fn stages_write_intermediate_then_final() {

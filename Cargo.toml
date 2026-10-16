@@ -34,4 +34,4 @@ codegen-units = 1
 # Pin reviewed optical development implementations until their crate releases.
 [patch.crates-io]
 pioneer-optical = { git = "https://github.com/MattJackson/pioneer-optical.git", rev = "ab22223eca9700a86669f36c40f804ba3e00bba1" }
-mediatek-optical = { git = "https://github.com/MattJackson/mediatek-optical.git", rev = "3aca65872cb93ad953e1c22c81b3b18606bac51e" }
+mediatek-optical = { git = "https://github.com/MattJackson/mediatek-optical.git", rev = "8eec4f212642043b821d2685581263bf54162e97" }

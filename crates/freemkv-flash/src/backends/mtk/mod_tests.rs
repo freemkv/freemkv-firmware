@@ -511,19 +511,10 @@ fn stream(dev: &mut MockScsiDevice) -> anyhow::Result<()> {
 }
 
 fn stream_configured(dev: &mut dyn crate::platform::ScsiDevice) -> anyhow::Result<()> {
-    use crate::backend::{AuthorizedPlan, FlashFacet};
-    use mediatek_optical::update::{InstalledFirmware, PreparedUpdate};
+    use crate::backend::FlashFacet;
     let image = fixture::image(&fixture::BU3, "BD-RE BU40N", 1);
     let plan = super::flash::test_plan(dev, &image)?;
-    let installed = InstalledFirmware::new(fixture::identity(&image), &image).unwrap();
-    let prepared = PreparedUpdate::prepare(&image, &installed).unwrap();
-    let authorized = AuthorizedPlan::new(
-        plan,
-        super::flash::Authorized {
-            prepared,
-            expect: None,
-        },
-    );
+    let authorized = Mtk.authorize(&mut ReadDevice::without_unlocks(dev), plan, None)?;
     Mtk.execute(
         &mut crate::engine::gates::ungated_for_tests(dev),
         &authorized,

@@ -41,8 +41,27 @@ struct Plan {
 /// What `authorize` decided, for `execute`.
 pub(super) struct Authorized {
     pub(super) prepared: PreparedUpdate,
+    installed: InstalledFirmware,
     /// A crossflash's target model, which the drive must report afterwards.
     pub(super) expect: Option<String>,
+}
+
+struct Executable {
+    prepared: mediatek_optical::receiver::PreparedUpdate,
+    expect: Option<String>,
+}
+
+impl Authorized {
+    fn bind(self, receiver: &mediatek_optical::receiver::Receiver) -> Result<Executable> {
+        let envelope = mediatek_optical::envelope::Envelope::load(self.prepared.image())
+            .map_err(|e| anyhow!("{e}"))?;
+        Ok(Executable {
+            prepared: receiver
+                .prepare(&envelope, &self.installed)
+                .map_err(refusal)?,
+            expect: self.expect,
+        })
+    }
 }
 
 impl FlashFacet for Mtk {
@@ -160,23 +179,21 @@ impl FlashFacet for Mtk {
         backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan> {
         let state: &Plan = plan.state()?;
-        let mut authorized = authorize_bytes(
+        let authorized = authorize_bytes(
             &state.live,
             &state.drive_product,
             state.verdict,
             &state.image,
             backup.map(|b| b.bytes()),
-        )?;
-        if state.receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted {
-            authorized.prepared = authorized.prepared.encrypted();
-        }
+        )?
+        .bind(&state.receiver)?;
         Ok(AuthorizedPlan::new(plan, authorized))
     }
 
     fn execute(&self, dev: &mut WriteDevice<'_>, authorized: &AuthorizedPlan) -> Result<()> {
-        let Authorized { prepared, expect } = authorized.state()?;
+        let Executable { prepared, expect } = authorized.state()?;
         let state: &Plan = authorized.plan.state()?;
-        execute_stage(self, dev, prepared, expect, &state.receiver)?;
+        execute_stage(self, dev, prepared, expect)?;
         if let Some(final_image) = &state.final_image {
             let reader = &mut ReadDevice::without_unlocks(dev);
             let inquiry = reader.command_in(&cdb::inquiry(36), 36)?;
@@ -194,17 +211,15 @@ impl FlashFacet for Mtk {
             if receiver.mode() != mediatek_optical::receiver::Mode::Firmware {
                 bail!("drive remains in BOOT; final stage not written");
             }
-            let mut next = authorize_bytes(
+            let next = authorize_bytes(
                 &live,
                 &drive_product,
                 verdict,
                 final_image,
                 Some(&state.image),
-            )?;
-            if receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted {
-                next.prepared = next.prepared.encrypted();
-            }
-            execute_stage(self, dev, &next.prepared, &next.expect, &receiver)?;
+            )?
+            .bind(&receiver)?;
+            execute_stage(self, dev, &next.prepared, &next.expect)?;
             let reader = &mut ReadDevice::without_unlocks(dev);
             let inquiry = reader.command_in(&cdb::inquiry(36), 36)?;
             if inquiry.get(8..36) != final_image.get(0x1ec000..0x1ec01c) {
@@ -218,17 +233,9 @@ impl FlashFacet for Mtk {
 fn execute_stage(
     backend: &Mtk,
     dev: &mut WriteDevice<'_>,
-    prepared: &PreparedUpdate,
+    prepared: &mediatek_optical::receiver::PreparedUpdate,
     expect: &Option<String>,
-    receiver: &mediatek_optical::receiver::Receiver,
 ) -> Result<()> {
-    {
-        let shared = SharedDevice::new(dev);
-        let mut reads = ScsiTransport::reads(&shared);
-        receiver
-            .revalidate(&mut reads)
-            .map_err(|e| anyhow!("{e}"))?;
-    }
     let verified = {
         let shared = SharedDevice::new(dev);
         let (mut reads, mut writes) =
@@ -238,9 +245,12 @@ fn execute_stage(
             writes: &mut writes,
         };
         let mut runtime = Runtime::new();
-        prepared
-            .flash(io, &mut runtime)
-            .map_err(|e| flash_error(e, prepared))?
+        prepared.flash(io, &mut runtime).map_err(|e| match e {
+            mediatek_optical::receiver::ExecuteError::Receiver(e) => anyhow!("{e}"),
+            mediatek_optical::receiver::ExecuteError::Flash(e) => {
+                flash_error(e, prepared.plan().class())
+            }
+        })?
     };
     if verified.ranges == 0 {
         println!(
@@ -335,7 +345,11 @@ pub(super) fn authorize_bytes(
         // there is no installed firmware to simulate the rollback against.
         _ => None,
     };
-    Ok(Authorized { prepared, expect })
+    Ok(Authorized {
+        prepared,
+        installed,
+        expect,
+    })
 }
 
 /// A crossflash, re-decided on the backup's bytes: the plan's family decision
@@ -554,7 +568,10 @@ impl FlashRuntime<anyhow::Error> for Runtime {
 }
 
 /// A failed flash, with what the user must do about it.
-fn flash_error(error: FlashError<anyhow::Error>, prepared: &PreparedUpdate) -> anyhow::Error {
+fn flash_error(
+    error: FlashError<anyhow::Error>,
+    class: mediatek_optical::DriveClass,
+) -> anyhow::Error {
     let describe = |(key, asc, ascq): (u8, u8, u8)| crate::platform::describe_sense(key, asc, ascq);
     match error {
         FlashError::Entry(e) => mtk_err(e).context(
@@ -587,7 +604,7 @@ fn flash_error(error: FlashError<anyhow::Error>, prepared: &PreparedUpdate) -> a
              back Ok. The flash may have FAILED, or the drive is hung; do NOT trust the exit \
              code as success. Physically power-cycle the drive and re-verify its firmware \
              identity before shipping. Last error: {}",
-            prepared.class().ready_timeout().as_secs(),
+            class.ready_timeout().as_secs(),
             text(&e)
         ),
         FlashError::Mismatch {
