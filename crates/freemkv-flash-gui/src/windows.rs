@@ -65,6 +65,7 @@ const LVSCW_AUTOSIZE_USEHEADER: isize = -2;
 /// How a label's text is coloured (`WM_CTLCOLORSTATIC`).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tone {
+    Success,
     Normal,
     Secondary,
     Caution,
@@ -1286,6 +1287,27 @@ impl Shell {
         let row_h = s.px(lay::ROW_H);
         for item in items {
             match item {
+                Item::Origin(origin) => {
+                    let Some(lbl) = self.texts.get(t) else {
+                        continue;
+                    };
+                    t += 1;
+                    let text = origin.label();
+                    if fresh {
+                        set_text(lbl, text);
+                        set_font(lbl.hwnd(), s.dpi(), Face::Bold);
+                        self.tone(
+                            lbl,
+                            match origin {
+                                crate::ui::FileOrigin::OemLikely => Tone::Success,
+                                crate::ui::FileOrigin::UserBackupLikely => Tone::Caution,
+                                crate::ui::FileOrigin::Unknown => Tone::Secondary,
+                            },
+                        );
+                    }
+                    let h = measure(lbl.hwnd(), text, Some(col.w)).1;
+                    put(lbl, col.take(h));
+                }
                 Item::Text(text) | Item::Heading(text) | Item::Note(text) | Item::Warning(text) => {
                     let Some(lbl) = self.texts.get(t) else {
                         continue;
@@ -1591,6 +1613,15 @@ impl Shell {
     fn apply_fonts(&self, dpi: u32) {
         self.dpi.set(dpi);
         apply_ui_font(self.wnd.hwnd(), dpi);
+        // Native tabs otherwise crowd their labels against the borders. Reapply
+        // their internal padding with the fonts when changing monitor DPI.
+        let s = Scale::new(dpi);
+        unsafe {
+            self.tabs.hwnd().SendMessage(msg::TcmSetPadding {
+                horizontal: s.px(12) as u16,
+                vertical: s.px(3) as u16,
+            });
+        }
         set_font(self.log.hwnd(), dpi, Face::Mono);
         set_font(self.status.hwnd(), dpi, Face::Bold);
         self.memo.borrow_mut().panel = None;
@@ -1794,6 +1825,7 @@ impl Shell {
                 Some(Tone::Secondary) => w::GetSysColor(co::COLOR::GRAYTEXT),
                 Some(Tone::Caution) => w::COLORREF::from_rgb(160, 70, 0),
                 Some(Tone::Error) => w::COLORREF::from_rgb(170, 30, 30),
+                Some(Tone::Success) => w::COLORREF::from_rgb(20, 125, 55),
                 Some(Tone::Normal) | None => w::GetSysColor(co::COLOR::WINDOWTEXT),
             };
             let _ = p.hdc.SetTextColor(color);

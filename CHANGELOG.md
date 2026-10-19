@@ -6,7 +6,42 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.13.1] - 2026-10-19
+
+### freemkv-flash
+- Complete paired MediaTek Flash transitions through restricted INTM receivers:
+  analyze the validated intermediate just installed when live code detection
+  is unavailable, and recheck its live identity and build metadata before entry.
+- Honor Recovery's explicit Current firmware file, with separate Current and
+  target TAR-member selection. Reject a stale original firmware reference when
+  INTM is running. Do not guess encoding or use the target as Current.
+- Keep verification reads on the physical drive. When protected readback is
+  unavailable after a paired stage or Recovery, require target application
+  startup and build metadata, and report incomplete byte verification clearly.
+  Transfer failures, programming faults and readback mismatches remain fatal.
+- Explain receiver detection failures and log complete, short and failed probe
+  reads, plus the hash and provenance of file-derived receiver evidence.
+- Detect Pioneer protocols from vendor identity and the read-only hardware
+  response, without a product-name allowlist. Publisher and unfamiliar model
+  names now reach the probe; the vendor name alone does not authorize backup
+  or firmware writes.
+- Restore structurally valid Pioneer backups with zeroed Normal signatures by
+  signing an in-memory transfer copy for its receiving Kernel. Preserve decoded
+  firmware and original files; keep integrity and receiver checks mandatory.
+  Invalid nonzero signatures still fail with actionable guidance.
+- Refresh OEM reconstruction metadata to cover all 459 authenticated,
+  byte-exact rebuildable Normal images and 232 Kernels in the held corpus,
+  including S12JX 1.05. Preserve non-LCG keys and original OEM headers.
+  Unsupported legacy layouts and unauthenticated captures are not OEM evidence.
+
+### freemkv-flash GUI
+- Allow selecting an optional Current reference and its TAR member for MediaTek
+  Recovery; explain that INTM is Current and 1.V9 is the target.
+- Add DPI-scaled horizontal padding to native Windows tabs.
+- Show selected firmware origin in Flash, Recovery and confirmation: green
+  "OEM likely", orange "User provided", or neutral "Origin unknown".
+  Explain that captured firmware and transfer-generated signatures do not prove
+  an original OEM release, and that origin does not establish compatibility.
 
 ## [0.13.0] - 2026-10-16
 

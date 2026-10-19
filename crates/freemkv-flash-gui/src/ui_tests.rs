@@ -62,6 +62,74 @@ fn one_drive() -> App {
     ready(vec![drive("drive-a", "drive-a", "Drive A")])
 }
 
+#[test]
+fn selected_file_origin_is_visible_on_flash_recovery_and_confirmation() {
+    use workflow::FileOrigin;
+    let mut app = one_drive();
+    app.flash_input = Some("oem.tar".into());
+    app.flash_origin = Some(Ok(FileOrigin::OemLikely));
+    app.task = Task::Flash;
+    assert!(app
+        .view()
+        .panel
+        .contains(&Item::Origin(FileOrigin::OemLikely)));
+    app.recovery_input = Some("capture.tar".into());
+    app.recovery_read = true;
+    app.recovery_origin = Some(Ok(FileOrigin::UserBackupLikely));
+    app.task = Task::Recovery;
+    let panel = app.view().panel;
+    assert!(panel.contains(&Item::Origin(FileOrigin::UserBackupLikely)));
+    assert!(panel.contains(&Item::Note(
+        FileOrigin::UserBackupLikely.explanation().into()
+    )));
+    app.dispatch(Input::Recover);
+    let confirm = app.view().confirm.expect("recovery confirmation");
+    assert!(confirm
+        .details
+        .iter()
+        .any(|line| line.contains("User provided")
+            && line.contains("rather than identified as an original OEM release")));
+}
+
+#[test]
+fn origin_workers_do_not_relabel_a_new_selection_and_both_tabs_finish() {
+    use workflow::FileOrigin;
+    let mut app = one_drive();
+    app.flash_input = Some("new.tar".into());
+    app.recovery_input = Some("capture.tar".into());
+    let (old_tx, old_rx) = mpsc::channel();
+    let (flash_tx, flash_rx) = mpsc::channel();
+    let (recovery_tx, recovery_rx) = mpsc::channel();
+    app.origin_rx = vec![old_rx, flash_rx, recovery_rx];
+    old_tx
+        .send((
+            Pick::FlashFirmware,
+            "old.tar".into(),
+            Ok(FileOrigin::OemLikely),
+        ))
+        .unwrap();
+    recovery_tx
+        .send((
+            Pick::RecoveryInput,
+            "capture.tar".into(),
+            Ok(FileOrigin::UserBackupLikely),
+        ))
+        .unwrap();
+    assert!(app.poll_origin());
+    assert_eq!(app.flash_origin, None);
+    assert_eq!(app.recovery_origin, Some(Ok(FileOrigin::UserBackupLikely)));
+    flash_tx
+        .send((
+            Pick::FlashFirmware,
+            "new.tar".into(),
+            Ok(FileOrigin::Unknown),
+        ))
+        .unwrap();
+    assert!(app.poll_origin());
+    assert_eq!(app.flash_origin, Some(Ok(FileOrigin::Unknown)));
+    assert!(app.origin_rx.is_empty());
+}
+
 /// One GUI report row in `group`.
 fn row(label: &str, value: &str, group: Group) -> report::Row {
     report::Row::gui("test", label, value.into()).in_group(group)
@@ -600,6 +668,11 @@ fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
             "Image: firmware.tar".into(),
             "== flash plan ==".into(),
             saved,
+            format!(
+                "File origin: {}. {}",
+                workflow::FileOrigin::Unknown.label(),
+                workflow::FileOrigin::Unknown.explanation()
+            ),
         ]
     );
     assert_eq!(confirm.danger, FLASH_DANGER);
@@ -831,6 +904,48 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
 }
 
 // ── job lifecycle and events ──────────────────────────────────────────────
+
+#[test]
+fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
+    let mut app = one_drive();
+    let mut profile = Profile::every_task();
+    profile.recovery_without_current = true;
+    app.set_profile(Ok(profile));
+    app.task = Task::Recovery;
+    app.recovery_input = Some("1.V9.tar".into());
+    app.recovery_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.dispatch(Input::RecoveryMember("firmware.bin".into()));
+    assert!(has_text(
+        &app.view(),
+        "Current firmware (optional receiver reference)"
+    ));
+    app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "1.V9.tar".into()));
+    app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    assert!(!button(&app.view(), "Recover").enabled);
+    app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
+    assert!(button(&app.view(), "Recover").enabled);
+    app.dispatch(Input::Recover);
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm
+        .details
+        .iter()
+        .any(|s| s.contains("Current member (receiver reference): intermediate.bin")));
+    assert!(confirm
+        .details
+        .iter()
+        .any(|s| s.contains("Target member (will be flashed): firmware.bin")));
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::Confirm);
+    let (_, _, job) = last_job(&app);
+    let Job::Recovery(options) = job else {
+        panic!("Recovery job required")
+    };
+    assert!(
+        matches!(&options.current, CurrentFirmware::File(path) if path==&PathBuf::from("1.V9.tar"))
+    );
+    assert_eq!(options.current_member.as_deref(), Some("intermediate.bin"));
+    assert_eq!(options.member.as_deref(), Some("firmware.bin"));
+}
 
 #[test]
 fn job_lifecycle_reports_progress_then_completion() {

@@ -409,7 +409,7 @@ MSG      DRY RUN: no device I/O or writes.
 --- scsi transcript (0) ---
 
 === Pioneer dry run: header-only bundle ===
-result: ERR Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
+result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---

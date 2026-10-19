@@ -2691,7 +2691,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// [`RECOVER_HINT`]; P4, the synthetic Kernel fixtures gained a 0.15.0 receiver
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
-const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5"];
+const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5", "P6"];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
 /// v0.11.2 could not reach that flash mode either: its CLI and GUI always

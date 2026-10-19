@@ -345,7 +345,7 @@ pub fn backup_with_replace(
     );
     // Provenance line, computed from the produced bytes: a byte-exact OEM
     // capture prints a green confirmation; anything reconstructed prints an
-    // amber "unverified" advisory naming what is not OEM.
+    // amber origin note describing the reconstructed update metadata.
     let Some(facet) = facet else {
         crate::output::field("Artifact", "Raw memory dump — not a flashable backup");
         println!(
@@ -358,11 +358,11 @@ pub fn backup_with_replace(
     };
     match facet.notice(&bytes) {
         BackupNotice::VerifiedOem(msg) => {
-            crate::output::field("Backup validation", &msg);
+            crate::output::field("Backup origin", &msg);
             println!("{}", style::green(&msg));
         }
         BackupNotice::Unverified(msg) => {
-            crate::output::field("Backup warning", &msg);
+            crate::output::field("Backup origin", &msg);
             println!("{}", style::amber(&msg));
         }
         BackupNotice::None => {}
@@ -409,7 +409,7 @@ pub fn recover_identified(
         match receiver {
             Some(receiver) => Ok(receiver),
             None => facet
-                .identify(&mut ReadDevice::for_backend(dev, drive))?
+                .identify_with_current(&mut ReadDevice::for_backend(dev, drive), current)?
                 .with_context(|| facet.unidentified()),
         }
     };

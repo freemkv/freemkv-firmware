@@ -946,6 +946,16 @@ impl Controller {
         let mtm = self.mtm();
         let width = 820.0;
         let view: Retained<NSView> = match item {
+            Item::Origin(origin) => {
+                let l = bold(mtm, origin.label());
+                let color = match origin {
+                    crate::ui::FileOrigin::OemLikely => NSColor::systemGreenColor(),
+                    crate::ui::FileOrigin::UserBackupLikely => NSColor::systemOrangeColor(),
+                    crate::ui::FileOrigin::Unknown => NSColor::secondaryLabelColor(),
+                };
+                l.setTextColor(Some(&color));
+                view_of(&l)
+            }
             Item::Text(t) => view_of(&wrapping(mtm, t, width)),
             Item::Heading(t) => view_of(&bold(mtm, t)),
             Item::Note(t) => view_of(&small(mtm, t, width)),

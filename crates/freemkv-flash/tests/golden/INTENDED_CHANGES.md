@@ -1,5 +1,7 @@
 # Intended behaviour changes since v0.11.2
 
+P6 (0.13.1): clearer pre-write errors and provenance-only backup messages; no device-command or safety-gate changes.
+
 `tests/golden/v0.11.2/` holds the golden scenarios recorded with the same
 harness against the v0.11.2 tag. `golden_parity_with_0_11_2` requires that
 every difference is listed below, under its golden file and scenario, line
@@ -141,7 +143,7 @@ reason: R1, R8, M-BAK, M-ENC
 -FIELD    Backup validation = OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 -MSG      OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 ---- scsi transcript (516) ---
-+FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
++FIELD    Backup origin = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +--- scsi transcript (517) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -165,8 +167,14 @@ reason: P4
 ```diff
 -candidate sha256: d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
 +candidate sha256: f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
+-UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
++User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 -MSG      candidate sha256: d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
 +MSG      candidate sha256: f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
+-FIELD    Backup warning = UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+-MSG      UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
++FIELD    Backup origin = User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
++MSG      User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 -saved file: 146432 bytes sha256=d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
 +saved file: 146432 bytes sha256=f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
 ```
@@ -659,6 +667,13 @@ reason: P4
 +SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+```
+
+### Pioneer dry run: header-only bundle
+reason: P6
+```diff
+-result: ERR Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
++result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 ```
 
 ### Pioneer dry run: signed Kernel+Normal bundle
@@ -9393,7 +9408,7 @@ reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC
 +MSG      backup sha256: 438806b454c56fb80b5d029c642cdf4dff8774a25c22324a576815ae7f2c37bc
 +FIELD    Saved to = <TMP>/mtk-backup/mt1939.bak
 +MSG      wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
-+FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
++FIELD    Backup origin = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +--- scsi transcript (517) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -9419,7 +9434,7 @@ reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC
 +MSG      backup sha256: 20c8f58b8bdffa1ddddce862a463b50de4b78cd10c1dbf192add19ebe2eb3c11
 +FIELD    Saved to = <TMP>/mtk-backup/mt1959.bak
 +MSG      wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
-+FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
++FIELD    Backup origin = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 +--- scsi transcript (517) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -10467,10 +10482,23 @@ reason: P4
 ### backup_notice + validate_backup: full backup
 reason: P4
 ```diff
+-Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 -validate_backup: ok, 146432 bytes sha256=4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
++Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 +validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
+-MSG      Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 -MSG      validate_backup: ok, 146432 bytes sha256=4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
++MSG      Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 +MSG      validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
+```
+
+### backup_notice + validate_backup: garbage backup
+reason: P6
+```diff
+-Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
++Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
+-MSG      Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
++MSG      Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 ```
 
 ## pioneer_recover.txt

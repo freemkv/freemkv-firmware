@@ -7,7 +7,7 @@ use crate::platform::ScsiDevice;
 use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use pioneer_optical::drive::Segment;
-use pioneer_optical::envelope::{Envelope, Update, UpdateError};
+use pioneer_optical::envelope::{Envelope, Update};
 use pioneer_optical::receiver::transport as kernel_transport;
 use pioneer_optical::{cdb, image::ReceiverControl, Identity, Role};
 use std::time::Duration;
@@ -20,8 +20,8 @@ pub(crate) struct Plan {
     /// Kernel body (same family as the installed drive, enforced by the family
     /// gate), so the write segments match the loader — not a linear stream.
     receive: kernel_transport::KernelReceive,
-    /// True when the Normal was re-encoded for the receiving Kernel's receiver
-    /// transport rather than written as the target package shipped it.
+    /// True when Normal's transport encoding or authentication was prepared
+    /// locally rather than written as the target package shipped it.
     reencoded: bool,
 }
 
@@ -43,19 +43,7 @@ fn load_target(bytes: &[u8]) -> Result<(Update, Vec<u8>)> {
     let (kernel, normal) = classify_flash_input(bytes)?;
     let kernel = kernel.context("Firmware to flash must include Kernel and Normal")?;
     let normal = normal.context("Firmware to flash must include Kernel and Normal")?;
-    let result = Update::load(&kernel, &normal);
-    // 0x170..0x1c0 is the Normal envelope's signature field (layout owned by
-    // pioneer-optical). An all-zero field on an Authentication failure means the
-    // package is unsigned, so give the actionable "use a signed OEM package"
-    // guidance instead of the generic decode error.
-    if matches!(result, Err(UpdateError::Authentication))
-        && normal
-            .get(0x170..0x1c0)
-            .is_some_and(|signature| signature.iter().all(|b| *b == 0))
-    {
-        bail!("Firmware to flash has no Normal signature, but its Kernel requires one. Use a signed OEM package for the firmware to flash; an unsigned backup can still be used as Current firmware");
-    }
-    let update = result.context("cannot decode Firmware to flash")?;
+    let update = super::normal_prepare::load_pair(&kernel, &normal)?;
     crate::backends::pioneer::flash_plan::validate_component_headers(Some(&kernel), Some(&normal))
         .map_err(|e| anyhow!("Firmware to flash: {e}"))?;
     // Refuse a target whose envelope tail cannot be reproduced, exactly as the
@@ -96,7 +84,7 @@ impl Plan {
         Self::assemble(current.kernel(), &current.normal().image, target, None)
     }
 
-    /// True when the Normal was re-encoded for the receiving Kernel.
+    /// True when Normal's transfer encoding or authentication changed locally.
     pub(crate) fn was_reencoded(&self) -> bool {
         self.reencoded
     }

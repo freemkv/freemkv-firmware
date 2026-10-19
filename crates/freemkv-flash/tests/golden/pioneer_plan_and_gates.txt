@@ -90,10 +90,10 @@ result: OK
 === backup_notice + validate_backup: full backup ===
 result: OK
 --- text (2) ---
-Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 --- events (2) ---
-MSG      Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+MSG      Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 MSG      validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 
 === verify_preflash_backup: Kernel-only (partial) backup vs Kernel+Normal bundle ===
@@ -147,8 +147,8 @@ result: ERR pre-flash backup is incomplete: the Normal region (which the flash o
 === backup_notice + validate_backup: garbage backup ===
 result: OK
 --- text (2) ---
-Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 validate_backup: failed to read entire block
 --- events (2) ---
-MSG      Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
+MSG      Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 MSG      validate_backup: failed to read entire block

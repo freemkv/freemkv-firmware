@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use freemkv_flash::report::{self, Group};
+pub use freemkv_flash::workflow::FileOrigin;
 use freemkv_flash::workflow::{
     self, AuthorizedPlan, Control, CurrentFirmware, DriveChoice, Event, FlashOptions, FlashSheet,
     RecoveryOptions, Source,
@@ -184,6 +185,7 @@ pub enum Input {
     CheckFlashFile,
     Recover,
     RecoveryMember(String),
+    RecoveryCurrentMember(String),
     RunAnalysis,
     CancelAnalysis,
     Confirm,
@@ -307,6 +309,8 @@ impl PathView {
 /// One line of a task form.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item {
+    /// Origin evidence, colored by all shells without implying compatibility.
+    Origin(workflow::FileOrigin),
     Text(String),
     Heading(String),
     /// Small, secondary text.
@@ -552,8 +556,14 @@ pub(crate) struct Pending {
 /// Called from the worker after each event so an event-driven shell repaints.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
+/// Async file-origin result, tied to the chooser and path that requested it.
+type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
+
 /// The whole application state. The shells hold none of their own.
 pub struct App {
+    origin_rx: Vec<Receiver<OriginReply>>,
+    flash_origin: Option<Result<workflow::FileOrigin, String>>,
+    recovery_origin: Option<Result<workflow::FileOrigin, String>>,
     pub(crate) profile: ProfileState,
     pub(crate) profile_rx: Option<Receiver<Result<Profile, String>>>,
     pub(crate) drives: Vec<DriveChoice>,
@@ -566,6 +576,8 @@ pub struct App {
     pub(crate) recovery_read: bool,
     recovery_member: Option<String>,
     recovery_members: Vec<String>,
+    recovery_current_members: Vec<String>,
+    recovery_current_member: Option<String>,
     pub(crate) capture_as_backup: bool,
     pub(crate) sources: [Option<Source>; 2],
     pub(crate) analysis: Option<ResultView>,
@@ -627,6 +639,9 @@ impl App {
     pub(crate) fn with_drives(drives: Vec<DriveChoice>) -> Self {
         let device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
         Self {
+            origin_rx: Vec::new(),
+            flash_origin: None,
+            recovery_origin: None,
             profile: ProfileState::NoDrive,
             profile_rx: None,
             drives,
@@ -639,6 +654,8 @@ impl App {
             recovery_read: false,
             recovery_member: None,
             recovery_members: Vec::new(),
+            recovery_current_members: Vec::new(),
+            recovery_current_member: None,
             capture_as_backup: false,
             sources: [None, None],
             analysis: None,
@@ -864,10 +881,13 @@ impl App {
                     self.recovery_member = Some(member);
                 }
             }
+            Input::RecoveryCurrentMember(member) if !self.busy() => {
+                if self.recovery_current_members.contains(&member) {
+                    self.recovery_current_member = Some(member);
+                }
+            }
             Input::Recover if !self.busy() && self.recovery_ready() => {
-                let current = if self.recovery_without_current() {
-                    CurrentFirmware::NotRequired
-                } else if self.recovery_read {
+                let current = if self.recovery_read && !self.recovery_without_current() {
                     CurrentFirmware::ReadFromDrive
                 } else if let Some(current) = self.recovery_current.clone() {
                     CurrentFirmware::File(current)
@@ -1003,12 +1023,22 @@ impl App {
             Pick::CheckFile => {
                 return self.start_job("Check file", String::new(), Job::InfoFile { input: path })
             }
-            Pick::FlashFirmware => self.flash_input = Some(path),
-            Pick::RecoveryCurrent => self.recovery_current = Some(path),
+            Pick::FlashFirmware => {
+                self.flash_input = Some(path.clone());
+                return self.read_origin(pick, path);
+            }
+            Pick::RecoveryCurrent => {
+                self.recovery_read = false;
+                self.recovery_current_members =
+                    workflow::recovery_members(&path).unwrap_or_default();
+                self.recovery_current_member = None;
+                self.recovery_current = Some(path);
+            }
             Pick::RecoveryInput => {
                 self.recovery_member = None;
                 self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
-                self.recovery_input = Some(path);
+                self.recovery_input = Some(path.clone());
+                return self.read_origin(pick, path);
             }
             Pick::Backup | Pick::Dump if self.selected() => {
                 // The native save panel has already confirmed replacing an existing file.
@@ -1075,6 +1105,9 @@ impl App {
         self.selected()
             && self.recovery_input.is_some()
             && (self.recovery_members.len() < 2 || self.recovery_member.is_some())
+            && (self.recovery_read
+                || self.recovery_current_members.len() < 2
+                || self.recovery_current_member.is_some())
             && (self.recovery_without_current()
                 || self.recovery_read
                 || self.recovery_current.is_some()
@@ -1151,6 +1184,7 @@ impl App {
                     device: None,
                     input: target.options.input,
                     member: self.recovery_member.clone(),
+                    current_member: self.recovery_current_member.clone(),
                     current,
                     execute: true,
                     acknowledged_risk: true,
@@ -1232,6 +1266,7 @@ impl App {
 
     /// Drain the worker's events; call on every tick or repaint.
     pub fn poll(&mut self) -> Vec<Effect> {
+        let origin_done = self.poll_origin();
         let profiled = self.poll_profile();
         let mut finished = false;
         let mut planned = None;
@@ -1296,10 +1331,78 @@ impl App {
         if self.diagnostics_open && due {
             self.refresh_diagnostic_view();
         }
-        if (finished || profiled) && !self.running() && self.profile_rx.is_none() {
+        if (finished || profiled || origin_done)
+            && !self.running()
+            && self.profile_rx.is_none()
+            && self.origin_rx.is_empty()
+        {
             vec![Effect::StopTicking]
         } else {
             Vec::new()
+        }
+    }
+
+    fn read_origin(&mut self, pick: Pick, path: PathBuf) -> Vec<Effect> {
+        match pick {
+            Pick::FlashFirmware => self.flash_origin = None,
+            Pick::RecoveryInput => self.recovery_origin = None,
+            _ => return Vec::new(),
+        }
+        let (tx, rx) = mpsc::channel();
+        self.origin_rx.push(rx);
+        let waker = self.waker.clone();
+        std::thread::spawn(move || {
+            let result = std::panic::catch_unwind(|| workflow::selected_file_origin(&path))
+                .map_err(|_| "File origin inspection stopped unexpectedly.".to_string())
+                .and_then(|r| r.map_err(|e| format!("{e:#}")));
+            let _ = tx.send((pick, path, result));
+            if let Some(wake) = waker {
+                wake();
+            }
+        });
+        vec![Effect::StartTicking]
+    }
+
+    fn poll_origin(&mut self) -> bool {
+        let mut done = false;
+        for rx in std::mem::take(&mut self.origin_rx) {
+            match rx.try_recv() {
+                Ok((pick, path, result)) => match pick {
+                    Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
+                        self.flash_origin = Some(result)
+                    }
+                    Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
+                        self.recovery_origin = Some(result)
+                    }
+                    _ => {}
+                },
+                Err(TryRecvError::Empty) => {
+                    self.origin_rx.push(rx);
+                    continue;
+                }
+                Err(TryRecvError::Disconnected) => {}
+            }
+            done = true;
+        }
+        done
+    }
+
+    fn origin_items(&self, recovery: bool) -> Vec<Item> {
+        let origin = if recovery {
+            &self.recovery_origin
+        } else {
+            &self.flash_origin
+        };
+        match origin {
+            Some(Ok(origin)) => vec![
+                Item::Origin(*origin),
+                Item::Note(origin.explanation().into()),
+            ],
+            Some(Err(error)) => vec![
+                Item::Origin(workflow::FileOrigin::Unknown),
+                Item::Note(format!("Could not inspect file origin: {error}")),
+            ],
+            None => vec![Item::Note("Checking file origin…".into())],
         }
     }
 
@@ -1491,9 +1594,15 @@ impl App {
                 ]
             }
             Task::Flash => match &self.flash_input {
-                Some(_) => vec![
-                    path("Change file…", Pick::FlashFirmware, true, &self.flash_input),
-                    Item::Buttons {
+                Some(_) => {
+                    let mut items = vec![path(
+                        "Change file…",
+                        Pick::FlashFirmware,
+                        true,
+                        &self.flash_input,
+                    )];
+                    items.extend(self.origin_items(false));
+                    items.push(Item::Buttons {
                         label: None,
                         buttons: vec![
                             Button::primary("Flash now", Input::FlashNow, enabled && selected),
@@ -1502,8 +1611,9 @@ impl App {
                                 ..Button::link("Check file", Input::CheckFlashFile)
                             },
                         ],
-                    },
-                ],
+                    });
+                    items
+                }
                 None => vec![Item::Buttons {
                     label: None,
                     buttons: vec![Button::primary(
@@ -1530,12 +1640,40 @@ impl App {
                     ),
                 ];
                 if self.recovery_without_current() {
-                    items.clear();
+                    items = vec![
+                        Item::Heading("Current firmware (optional receiver reference)".into()),
+                        path("Choose Current file or TAR…", Pick::RecoveryCurrent, true, &self.recovery_current),
+                        Item::Note("If live receiver code cannot be read, select the firmware currently running—not the firmware to install. For BH16NS40 INTM, select the TAR's intermediate.bin.".into()),
+                    ];
                 } else if self.recovery_read {
                     items.push(Item::Note(
                         "Reads installed firmware for protocol analysis. No backup file is saved."
                             .into(),
                     ));
+                }
+                if self.recovery_current_members.len() > 1 && !self.recovery_read {
+                    items.push(Item::Buttons {
+                        label: Some("Current firmware member".into()),
+                        buttons: self
+                            .recovery_current_members
+                            .iter()
+                            .map(|name| {
+                                Button::primary(
+                                    &format!(
+                                        "{}{}",
+                                        if self.recovery_current_member.as_ref() == Some(name) {
+                                            "Selected: "
+                                        } else {
+                                            ""
+                                        },
+                                        name
+                                    ),
+                                    Input::RecoveryCurrentMember(name.clone()),
+                                    enabled,
+                                )
+                            })
+                            .collect(),
+                    });
                 }
                 if self.recovery_members.len() > 1 {
                     items.push(Item::Note(
@@ -1579,6 +1717,11 @@ impl App {
                         true,
                         &self.recovery_input,
                     ),
+                ]);
+                if self.recovery_input.is_some() {
+                    items.extend(self.origin_items(true));
+                }
+                items.extend([
                     Item::Warning(FORCE_WARNING.into()),
                     Item::Buttons {
                         label: None,
@@ -1716,6 +1859,12 @@ impl App {
                     CurrentFirmware::File(path) => format!("Current: {}", path.display()),
                     CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
                 });
+                if let Some(member) = &self.recovery_current_member {
+                    details.push(format!("Current member (receiver reference): {member}"));
+                }
+                if let Some(member) = &self.recovery_member {
+                    details.push(format!("Target member (will be flashed): {member}"));
+                }
                 (true, vec![FORCE_WARNING.to_string()], None)
             }
             Sheet::Flash { sheet, .. } => {
@@ -1723,6 +1872,21 @@ impl App {
                 (false, sheet.warnings.clone(), sheet.confirmation.clone())
             }
         };
+        let origin = if recovery {
+            &self.recovery_origin
+        } else {
+            &self.flash_origin
+        };
+        let origin = origin
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .copied()
+            .unwrap_or(workflow::FileOrigin::Unknown);
+        details.push(format!(
+            "File origin: {}. {}",
+            origin.label(),
+            origin.explanation()
+        ));
         Confirm {
             title: if recovery {
                 "Confirm recovery"

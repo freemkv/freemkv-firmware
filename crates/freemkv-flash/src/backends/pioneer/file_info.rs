@@ -7,6 +7,59 @@ use sha2::{Digest, Sha256};
 use crate::backend::{FileFormat, PlanLine};
 use crate::style;
 
+/// Conservative origin evidence, never inferred from mathematical signature validity.
+pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
+    use super::bundle::Role;
+    use crate::workflow::FileOrigin;
+    use pioneer_optical::envelope;
+    let components = match super::bundle::Bundle::from_backup_tar_bytes(bytes) {
+        Ok(bundle) => bundle
+            .components
+            .into_iter()
+            .map(|c| (c.role, c.bytes))
+            .collect::<Vec<_>>(),
+        Err(_) => {
+            let Some(header) = envelope::header_info(bytes) else {
+                return FileOrigin::Unknown;
+            };
+            let role = match header.kind {
+                Some(pioneer_optical::ComponentKind::Normal) => Role::Main,
+                Some(pioneer_optical::ComponentKind::Kernel) => Role::Kernel,
+                _ => return FileOrigin::Unknown,
+            };
+            vec![(role, bytes.to_vec())]
+        }
+    };
+    let Some((_, normal)) = components.iter().find(|(role, _)| *role == Role::Main) else {
+        return FileOrigin::Unknown;
+    };
+    let signature = normal.get(envelope::builder::NORMAL_SIGNATURE_RANGE);
+    if signature.is_some_and(|sig| sig.iter().all(|&b| b == 0)) {
+        return FileOrigin::UserBackupLikely;
+    }
+    let kernel = components
+        .iter()
+        .find(|(role, _)| *role == Role::Kernel)
+        .and_then(|(_, bytes)| envelope::decode_envelope(bytes));
+    let Some(kernel) = kernel else {
+        return FileOrigin::Unknown;
+    };
+    let kernel_oem = super::k::recognize(&kernel.image).is_some_and(|m| !m.generation_patched);
+    let normal_oem =
+        envelope::decode_envelope_with_kernel(normal, &kernel).is_some_and(|decoded| {
+            super::n::lookup(&format!("{:x}", Sha256::digest(&decoded.image)))
+                .is_some_and(|entry| signature == Some(entry.signature.as_slice()))
+        });
+    if kernel_oem
+        && normal_oem
+        && envelope::builder::normal_authentication_valid(normal, &kernel.image)
+    {
+        FileOrigin::OemLikely
+    } else {
+        FileOrigin::Unknown
+    }
+}
+
 /// Print the Pioneer bundle report for `image`, or `None` when it is not one.
 pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
     let bundle = super::bundle::Bundle::from_tar_bytes(image).ok()?;

@@ -142,7 +142,16 @@ fn classify_pioneer_from_read_buffer_f1() {
 
 #[test]
 fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
-    for product in ["BD-RW   BDR-UD04", "BD-ROM  BDC-S02", "DVD-RW  DVR-216"] {
+    for product in [
+        "BD-RW   BDR-UD04",
+        "BD-ROM  BDC-S02",
+        "DVD-RW  DVR-216",
+        "BDE-PR1EP  PP100",
+        "BDW-PR1EPDVPP100",
+        "BDR-PR1EPA PP100",
+        "NEW-MODEL PP200",
+        "",
+    ] {
         let mut inq = vec![b' '; 96];
         inq[0] = 0x05;
         inq[8..16].copy_from_slice(b"PIONEER ");
@@ -170,6 +179,34 @@ fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
             .iter()
             .any(|cdb| { cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0, 0x30, 0][..]) }));
         assert!(dev.writes.is_empty());
+    }
+}
+
+#[test]
+fn publisher_drive_identity_still_requires_pioneer_hardware_response() {
+    for vendor in [b"PIONEER ", b"ACME    "] {
+        for response in [f1_sat(), vec![0xA5; 48], vec![0; 8]] {
+            let mut inquiry = vec![b' '; 96];
+            inquiry[0] = 0x05;
+            inquiry[8..16].copy_from_slice(vendor);
+            inquiry[16..32].copy_from_slice(b"BDE-PR1EP  PP100");
+            let mut dev = MockScsiDevice::new()
+                .on(|cdb| cdb.first() == Some(&0x12), inquiry)
+                .on(
+                    |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
+                    response.clone(),
+                );
+            let result = resolve(&mut dev).unwrap();
+            assert_eq!(
+                result.is_some(),
+                vendor == b"PIONEER " && response == f1_sat()
+            );
+            assert_eq!(
+                dev.reads.iter().any(|cdb| cdb.first() == Some(&0x3C)),
+                vendor == b"PIONEER "
+            );
+            assert!(dev.writes.is_empty());
+        }
     }
 }
 

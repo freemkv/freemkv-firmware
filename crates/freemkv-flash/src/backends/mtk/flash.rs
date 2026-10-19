@@ -93,7 +93,7 @@ impl FlashFacet for Mtk {
                     decide_offline(intermediate, package.firmware())
                         .context("checking intermediate-to-final transition before any write")?;
                     final_image = Some(package.firmware().to_vec());
-                    notes.push(PlanLine::Text("Two-stage update: intermediate, confirm startup, then final firmware with freshly detected transfer encoding".into()));
+                    notes.push(PlanLine::Text("Two-stage update: intermediate, confirm startup, then final firmware; use the just-installed intermediate for receiver analysis if live code reads are restricted".into()));
                     intermediate.to_vec()
                 } else {
                     package.firmware().to_vec()
@@ -202,7 +202,14 @@ impl FlashFacet for Mtk {
     fn execute(&self, dev: &mut WriteDevice<'_>, authorized: &AuthorizedPlan) -> Result<()> {
         let Executable { prepared, expect } = authorized.state()?;
         let state: &Plan = authorized.plan.state()?;
-        execute_stage(self, dev, prepared, expect)?;
+        execute_stage(
+            self,
+            dev,
+            prepared,
+            expect,
+            None,
+            state.final_image.is_some(),
+        )?;
         if let Some(final_image) = &state.final_image {
             let reader = &mut ReadDevice::without_unlocks(dev);
             let inquiry = reader.command_in(&cdb::inquiry(36), 36)?;
@@ -216,7 +223,25 @@ impl FlashFacet for Mtk {
             }
             let drive_product = Build::of_image(&state.image)?.product;
             let (live, verdict) = self.validate_image(reader, final_image, &drive_product)?;
-            let receiver = detect_receiver(reader)?;
+            let (receiver, reference) = match detect_receiver(reader) {
+                Ok(receiver) => (receiver, None),
+                Err(error)
+                    if matches!(
+                        error.downcast_ref::<mediatek_optical::receiver::Error<anyhow::Error>>(),
+                        Some(
+                            mediatek_optical::receiver::Error::Unknown
+                                | mediatek_optical::receiver::Error::UnknownEntry
+                                | mediatek_optical::receiver::Error::Read(_)
+                        )
+                    ) =>
+                {
+                    crate::diagnostics::record(format!("MediaTek second-stage live receiver detection failed: {error:#}; analyze just-installed intermediate"));
+                    let (receiver, reference) =
+                        super::receiver_reference::detect(reader, &state.image)?;
+                    (receiver, Some(reference))
+                }
+                Err(error) => return Err(error),
+            };
             if receiver.mode() != mediatek_optical::receiver::Mode::Firmware {
                 bail!("drive remains in BOOT; final stage not written");
             }
@@ -228,7 +253,14 @@ impl FlashFacet for Mtk {
                 Some(&state.image),
             )?
             .bind(&receiver)?;
-            execute_stage(self, dev, &next.prepared, &next.expect)?;
+            execute_stage(
+                self,
+                dev,
+                &next.prepared,
+                &next.expect,
+                reference.as_ref(),
+                true,
+            )?;
             let reader = &mut ReadDevice::without_unlocks(dev);
             let inquiry = reader.command_in(&cdb::inquiry(36), 36)?;
             if inquiry.get(8..36) != final_image.get(0x1ec000..0x1ec01c) {
@@ -244,22 +276,46 @@ fn execute_stage(
     dev: &mut WriteDevice<'_>,
     prepared: &mediatek_optical::receiver::PreparedUpdate,
     expect: &Option<String>,
+    reference: Option<&super::receiver_reference::Reference>,
+    allow_limited_verification: bool,
 ) -> Result<()> {
     let verified = {
         let shared = SharedDevice::new(dev);
-        let (mut reads, mut writes) =
-            (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
+        let (mut reads, writes) = (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
+        if let Some(reference) = reference {
+            reference.revalidate(&mut reads)?;
+        }
+        let analysis = std::cell::Cell::new(true);
+        let mut reads = reads.receiver_source(
+            reference.map(super::receiver_reference::Reference::image),
+            &analysis,
+        );
+        let mut writes = writes.starts_session(&analysis);
         let io = FlashTransport {
             reads: &mut reads,
             writes: &mut writes,
         };
         let mut runtime = Runtime::new();
-        prepared.flash(io, &mut runtime).map_err(|e| match e {
+        prepared.flash(io, &mut runtime)
+    };
+    let verified = match verified {
+        Err(mediatek_optical::receiver::ExecuteError::Flash(
+            ref error @ FlashError::Incomplete { .. },
+        )) if allow_limited_verification => {
+            super::receiver_reference::confirm_started(dev, prepared.plan().image())?;
+            super::receiver_reference::limited_verification(&error.to_string());
+            let reader = &mut ReadDevice::without_unlocks(dev);
+            return match expect {
+                Some(model) => confirm_crossflash(reader, model),
+                None => Ok(()),
+            };
+        }
+        other => other.map_err(|e| match e {
             mediatek_optical::receiver::ExecuteError::Receiver(e) => anyhow!("{e}"),
             mediatek_optical::receiver::ExecuteError::Flash(e) => {
                 flash_error(e, prepared.plan().class())
             }
-        })?
+        })?,
     };
     if verified.ranges == 0 {
         println!(

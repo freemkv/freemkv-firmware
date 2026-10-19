@@ -1769,6 +1769,19 @@ fn lenders_find_closures_and_returns_that_hand_out_a_device() {
 /// keying by item means dropping a mention from one item (a `use` replaced by
 /// a full path) frees no slot for a new one, so this list is closed-world.
 const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
+    // File-derived receiver analysis takes only a ReadDevice grant.
+    (
+        "src/backends/mtk/receiver_reference.rs",
+        "fn detect",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/mtk/receiver_reference.rs",
+        "fn detect",
+        "ScsiTransport",
+        2,
+    ),
     // Authorization revalidates the planning probe before completing live entry detection.
     (
         "src/backends/mtk/flash.rs",
@@ -1830,15 +1843,15 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
     ("src/backends/mtk/flash.rs", "use", "FlashTransport", 1),
     (
         "src/backends/mtk/recovery.rs",
-        "fn identify",
+        "fn identify_with_current",
         "SharedDevice",
         1,
     ),
     (
         "src/backends/mtk/recovery.rs",
-        "fn identify",
+        "fn identify_with_current",
         "ScsiTransport",
-        1,
+        2,
     ),
     (
         "src/backends/mtk/recovery.rs",

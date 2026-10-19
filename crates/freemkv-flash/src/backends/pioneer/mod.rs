@@ -174,7 +174,7 @@ fn validate_kernel_normal(kernel: &[u8], normal: &[u8]) -> Result<()> {
     check_normal_size(normal)?;
     crate::backends::pioneer::flash_plan::validate_bundle(Some(kernel), Some(normal))
         .map_err(anyhow::Error::msg)?;
-    pioneer_optical::envelope::Update::load(kernel, normal)?;
+    normal_prepare::load_pair(kernel, normal)?;
     Ok(())
 }
 
@@ -187,7 +187,7 @@ pub fn offline_pair_data_out<'a>(
 ) -> Result<Vec<OemTransfer<'a>>> {
     validate_kernel_normal(kernel, normal)?;
     let control = [0; CONTROL_LEN]; // Offline placeholder; the live key belongs to the installed receiver.
-    let update = pioneer_optical::envelope::Update::load(kernel, normal)?;
+    let update = normal_prepare::load_pair(kernel, normal)?;
     let steps = transfer::data_out(
         &control,
         update.normal_transfer(),
@@ -647,22 +647,16 @@ impl Backend for Pioneer {
     }
 
     fn probe(&self, dev: &mut ReadDevice<'_>, identity: &Identity) -> Result<Option<Match>> {
-        let pioneer_model = identity
-            .product
-            .split_whitespace()
-            .last()
-            .is_some_and(|model| {
-                ["BDR-", "BDC-", "DVR-"]
-                    .iter()
-                    .any(|prefix| model.starts_with(prefix))
-            });
-        Ok((identity.vendor.eq_ignore_ascii_case("PIONEER")
-            && pioneer_model
-            && read_buffer_f1_ok(dev))
-        .then_some(Match {
-            backend: DESCRIPTOR.id,
-            evidence: "PIONEER BDR/BDC/DVR INQUIRY + READ BUFFER 02/F1 hardware",
-        }))
+        // Vendor identity selects the read-only probe; the hardware response
+        // establishes the protocol. Product names are display text, not gates.
+        Ok(
+            (identity.vendor.eq_ignore_ascii_case("PIONEER") && read_buffer_f1_ok(dev)).then_some(
+                Match {
+                    backend: DESCRIPTOR.id,
+                    evidence: "PIONEER vendor INQUIRY + READ BUFFER 02/F1 hardware",
+                },
+            ),
+        )
     }
 
     fn allowed_data_out(&self) -> &'static [CdbPattern] {
@@ -843,22 +837,22 @@ impl BackupFacet for Pioneer {
         }
         match (p.kernel_oem, p.normal_oem) {
             (true, true) => BackupNotice::VerifiedOem(
-                "OEM-VERIFIED: kernel and normal are byte-exact OEM originals."
+                "OEM likely: Kernel and Normal match known OEM references."
                     .to_string(),
             ),
             (true, false) => BackupNotice::Unverified(
-                "PARTIAL OEM: kernel is a byte-exact OEM original; the normal is NOT recognized OEM \
-                 (zero seed + zeroed signature sentinel). Physical restore and drive acceptance are untested."
+                "User provided: firmware captured from this drive; Kernel matches a known OEM reference. \
+                 Normal update metadata was reconstructed."
                     .to_string(),
             ),
             (false, true) => BackupNotice::Unverified(
-                "PARTIAL OEM: normal is a byte-exact OEM original; the kernel is NOT recognized OEM \
-                 (zero placeholders). Physical restore and drive acceptance are untested."
+                "User provided: firmware captured from this drive; Normal matches a known OEM reference. \
+                 Kernel update metadata was reconstructed."
                     .to_string(),
             ),
             (false, false) => BackupNotice::Unverified(
-                "UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed \
-                 signature sentinel). Physical restore and drive acceptance are untested."
+                "User provided: firmware captured from this drive; update metadata was reconstructed. \
+                 Not identified as an original OEM release."
                     .to_string(),
             ),
         }
@@ -996,7 +990,7 @@ impl RecoveryFacet for Pioneer {
         if plan.was_reencoded() {
             crate::output::field(
                 "Recovery",
-                "Normal re-encoded for the receiving Kernel's transport \
+                "Normal transfer encoding or local signature prepared for the receiving Kernel \
                  (experimental, offline-proven, hardware-unproven)",
             );
         }

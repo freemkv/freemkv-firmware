@@ -229,7 +229,11 @@ pub fn panel_needs(items: &[Item]) -> Needs {
     let mut n = Needs::default();
     for item in items {
         match item {
-            Item::Text(_) | Item::Heading(_) | Item::Note(_) | Item::Warning(_) => n.text += 1,
+            Item::Origin(_)
+            | Item::Text(_)
+            | Item::Heading(_)
+            | Item::Note(_)
+            | Item::Warning(_) => n.text += 1,
             Item::Check { .. } => n.checks += 1,
             Item::Path { path, .. } => {
                 n.buttons += 1;

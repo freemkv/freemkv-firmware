@@ -567,6 +567,15 @@ impl Shell {
         match item {
             Item::Text(t) => widgets::label(t, &[]).upcast(),
             Item::Heading(t) => widgets::label(t, &["heading"]).upcast(),
+            Item::Origin(origin) => widgets::label(
+                origin.label(),
+                &[match origin {
+                    crate::ui::FileOrigin::OemLikely => "success",
+                    crate::ui::FileOrigin::UserBackupLikely => "warning",
+                    crate::ui::FileOrigin::Unknown => "dim-label",
+                }],
+            )
+            .upcast(),
             Item::Note(t) => widgets::label(t, &["caption", "dim-label"]).upcast(),
             Item::Warning(t) => widgets::label(t, &["warning"]).upcast(),
             Item::Check {

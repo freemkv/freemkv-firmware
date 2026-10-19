@@ -599,6 +599,19 @@ fn header_only_normal(sat: &str, date: &str) -> Vec<u8> {
 }
 
 #[test]
+fn file_origin_does_not_infer_oem_from_a_header_or_nonzero_signature() {
+    use crate::workflow::FileOrigin;
+    let mut normal = header_only_normal("SAT 8A10", "22/01/01");
+    assert_eq!(
+        file_info::file_origin(&normal),
+        FileOrigin::UserBackupLikely
+    );
+    normal[pioneer_optical::envelope::builder::NORMAL_SIGNATURE_RANGE].fill(0x42);
+    assert_eq!(file_info::file_origin(&normal), FileOrigin::Unknown);
+    assert_eq!(file_info::file_origin(b"not firmware"), FileOrigin::Unknown);
+}
+
+#[test]
 fn installed_facts_none_without_backup() {
     assert!(installed_facts(None).is_none());
 }

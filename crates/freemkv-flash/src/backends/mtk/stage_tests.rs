@@ -10,9 +10,29 @@ struct Drive {
     boot_intermediate: bool,
     encrypted_after: bool,
     wire_stages: Vec<Vec<u8>>,
+    restricted: bool,
 }
 impl ScsiDevice for Drive {
     fn command_in(&mut self, cdb: &[u8], n: usize) -> Result<Vec<u8>> {
+        if self.restricted
+            && !self.stages.is_empty()
+            && cdb.len() >= 10
+            && cdb[..3] == super::cdb::read_memory(0, 0)[..3]
+        {
+            let off = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            let end = off + n;
+            anyhow::ensure!(
+                [
+                    (0x3000, 0x3020),
+                    (0x1ec000, 0x1ec100),
+                    (0x1e84e4, 0x1e85e4),
+                    (0x1f0000, 0x200000)
+                ]
+                .iter()
+                .any(|&(lo, hi)| off >= lo && off < hi && end <= hi),
+                "restricted live code read {off:#x}"
+            );
+        }
         self.inner.command_in(cdb, n)
     }
     fn command_out(&mut self, command: &[u8], data: &[u8]) -> Result<()> {
@@ -58,6 +78,14 @@ fn run_with_changed_receiver(
     encrypted_after: bool,
     changed: bool,
 ) -> (Result<()>, Drive, Vec<u8>, Vec<u8>) {
+    run_with_restricted_receiver(boot, encrypted_after, changed, false)
+}
+fn run_with_restricted_receiver(
+    boot: bool,
+    encrypted_after: bool,
+    changed: bool,
+    restricted: bool,
+) -> (Result<()>, Drive, Vec<u8>, Vec<u8>) {
     let initial = image(b"1.00", 1);
     let mut intermediate = image(b"INTM", 2);
     if encrypted_after {
@@ -71,6 +99,7 @@ fn run_with_changed_receiver(
         boot_intermediate: boot,
         encrypted_after,
         wire_stages: Vec::new(),
+        restricted,
     };
     let receiver = detect_receiver(&mut ReadDevice::without_unlocks(&mut dev)).unwrap();
     let live = fixture::identity(&initial);
@@ -154,6 +183,180 @@ fn final_stage_redetects_and_encrypts_for_the_new_receiver() {
     let mut expected = final_image;
     mediatek_optical::enc::encrypt(&mut expected).unwrap();
     assert_eq!(dev.wire_stages[1], expected);
+}
+
+#[test]
+fn restricted_intm_to_final_uses_just_installed_image_and_encrypted_wire() {
+    let (result, dev, intermediate, final_image) =
+        run_with_restricted_receiver(true, true, false, true);
+    result.unwrap();
+    assert_eq!(dev.stages, vec![intermediate, final_image.clone()]);
+    let mut encrypted = final_image;
+    mediatek_optical::enc::encrypt(&mut encrypted).unwrap();
+    assert_eq!(dev.wire_stages[1], encrypted);
+}
+
+#[test]
+fn recovery_uses_selected_current_intm_without_reflashing_it() {
+    let mut current = image(b"INTM", 2);
+    encrypted_receiver(&mut current);
+    let target = image(b"1.V9", 3);
+    let mut inquiry = vec![0; 36];
+    inquiry[0] = 5;
+    inquiry[4] = 31;
+    inquiry[8..36].copy_from_slice(&current[0x1ec000..0x1ec01c]);
+    let mut dev = Drive {
+        inner: MockScsiDevice::echoing()
+            .with_firmware_image(current.clone())
+            .on(|c| c.first() == Some(&0x12), inquiry),
+        written: vec![0; IMAGE_SIZE],
+        stages: vec![current.clone()],
+        boot_intermediate: true,
+        encrypted_after: true,
+        wire_stages: vec![],
+        restricted: true,
+    };
+    crate::engine::recover(&mut dev, &Mtk, Some(&current), &target, true, true).unwrap();
+    assert_eq!(dev.stages, vec![current, target.clone()]);
+    assert_eq!(dev.wire_stages.len(), 1);
+    let mut encrypted = target;
+    mediatek_optical::enc::encrypt(&mut encrypted).unwrap();
+    assert_eq!(dev.wire_stages[0], encrypted);
+}
+
+#[test]
+fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
+    let mut current = image(b"INTM", 2);
+    encrypted_receiver(&mut current);
+    let original = image(b"1.V1", 1);
+    let target = image(b"1.V9", 3);
+    let mut inquiry = vec![0; 36];
+    inquiry[0] = 5;
+    inquiry[4] = 31;
+    inquiry[8..36].copy_from_slice(&current[0x1ec000..0x1ec01c]);
+    let mut dev = Drive {
+        inner: MockScsiDevice::echoing()
+            .with_firmware_image(current.clone())
+            .on(|c| c.first() == Some(&0x12), inquiry),
+        written: vec![0; IMAGE_SIZE],
+        stages: vec![current],
+        boot_intermediate: true,
+        encrypted_after: true,
+        wire_stages: vec![],
+        restricted: true,
+    };
+    let error =
+        crate::engine::recover(&mut dev, &Mtk, Some(&original), &target, true, true).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Current firmware does not match"),
+        "{error:#}"
+    );
+    assert!(dev.wire_stages.is_empty());
+    assert!(dev.inner.writes.is_empty());
+}
+
+#[test]
+#[ignore = "requires FREEMKV_HOARD with the production 1.V9 package"]
+fn production_intm_recovery_streams_exact_oem_v9_ciphertext() {
+    let root = std::path::PathBuf::from(std::env::var_os("FREEMKV_HOARD").expect("FREEMKV_HOARD"));
+    let tar = std::fs::read(root.join(
+        "packages/mediatek/ef64ae9e3f5471e0a1cd091544f577757a969cba6e2faca34d18028ecb755270.tar",
+    ))
+    .unwrap();
+    let current = crate::workflow::current_firmware_image(&tar, Some("intermediate.bin")).unwrap();
+    let target = crate::workflow::recovery_target(&tar, Some("firmware.bin")).unwrap();
+    assert_eq!(
+        crate::mediatek_package::digest(&current),
+        "c3a18eed17251d1508964647e833ffdfe01b13c28dff9a717dfac6336e7c70e6"
+    );
+    let mut inquiry = vec![0; 36];
+    inquiry[0] = 5;
+    inquiry[4] = 31;
+    inquiry[8..36].copy_from_slice(&current[0x1ec000..0x1ec01c]);
+    let mut dev = Drive {
+        inner: MockScsiDevice::echoing()
+            .with_firmware_image(current.clone())
+            .on(|c| c.first() == Some(&0x12), inquiry),
+        written: vec![0; IMAGE_SIZE],
+        stages: vec![current.clone()],
+        boot_intermediate: true,
+        encrypted_after: true,
+        wire_stages: vec![],
+        restricted: true,
+    };
+    crate::engine::recover(&mut dev, &Mtk, Some(&current), &target, true, true).unwrap();
+    assert_eq!(dev.stages, vec![current, target]);
+    assert_eq!(dev.wire_stages.len(), 1);
+    assert_eq!(
+        crate::mediatek_package::digest(&dev.wire_stages[0]),
+        "5567d28100b951757a5be4950cd1cb89a3d2fdb34d27abc2b68416d8d3c98bfa"
+    );
+}
+
+#[test]
+#[ignore = "requires FREEMKV_HOARD with production V1 and paired V9 images"]
+fn production_v1_paired_flash_runs_intm_then_oem_v9_with_restricted_reads() {
+    let root = std::path::PathBuf::from(std::env::var_os("FREEMKV_HOARD").expect("FREEMKV_HOARD"));
+    let tar = std::fs::read(root.join(
+        "packages/mediatek/ef64ae9e3f5471e0a1cd091544f577757a969cba6e2faca34d18028ecb755270.tar",
+    ))
+    .unwrap();
+    let initial=std::fs::read(root.join("images/mediatek/MT1959/HL-DT-ST_WH16NS58_MT1959_JB8_JB8/GENERAL/1.V1/main/4041c0f122a902288ca8439888f68f7760616a0a37c366b825d6497b51157e46.bin")).unwrap();
+    let package = crate::mediatek_package::Package::parse(&tar).unwrap();
+    let mut dev = Drive {
+        inner: MockScsiDevice::echoing().with_firmware_image(initial.clone()),
+        written: vec![0; IMAGE_SIZE],
+        stages: vec![],
+        boot_intermediate: true,
+        encrypted_after: true,
+        wire_stages: vec![],
+        restricted: true,
+    };
+    let req = FlashRequest {
+        input: tar,
+        input_format: &super::super::PACKAGE,
+        mode: crate::manifest::FlashMode::Full,
+        execute: true,
+        acknowledged_risk: true,
+        enc_override: None,
+        drive_model: Build::of_image(&initial).unwrap().product,
+        verbose: false,
+        predump_out: None,
+    };
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    let state = plan.state::<Plan>().unwrap();
+    let receiver = detect_receiver(&mut ReadDevice::without_unlocks(&mut dev)).unwrap();
+    let prepared = authorize_bytes(
+        &state.live,
+        &state.drive_product,
+        state.verdict,
+        &state.image,
+        Some(&initial),
+    )
+    .unwrap()
+    .bind(&receiver)
+    .unwrap();
+    Mtk.execute(
+        &mut crate::engine::gates::ungated_for_tests(&mut dev),
+        &AuthorizedPlan::new(plan, prepared),
+    )
+    .unwrap();
+    assert_eq!(
+        dev.stages,
+        vec![
+            package.intermediate().unwrap().to_vec(),
+            package.firmware().to_vec()
+        ]
+    );
+    assert_eq!(dev.wire_stages[0], package.intermediate().unwrap());
+    assert_eq!(
+        crate::mediatek_package::digest(&dev.wire_stages[1]),
+        "5567d28100b951757a5be4950cd1cb89a3d2fdb34d27abc2b68416d8d3c98bfa"
+    );
 }
 
 #[test]

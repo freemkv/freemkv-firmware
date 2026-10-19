@@ -18,6 +18,44 @@ use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Evidence about a selected file's origin, separate from flash compatibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileOrigin {
+    /// Known OEM firmware bodies and the stored OEM Normal signature match.
+    OemLikely,
+    /// A reconstructed capture has no original Normal signature.
+    UserBackupLikely,
+    /// The available evidence cannot establish an origin.
+    Unknown,
+}
+
+impl FileOrigin {
+    /// Short user-facing badge text; this is deliberately not a certification.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::OemLikely => "OEM likely",
+            Self::UserBackupLikely => "User provided",
+            Self::Unknown => "Origin unknown",
+        }
+    }
+
+    /// Explain the evidence and its practical limits before flashing.
+    pub fn explanation(self) -> &'static str {
+        match self {
+            Self::OemLikely => "Firmware bodies and the original Normal signature match known OEM references. A backup can also preserve OEM bytes. Origin does not establish drive compatibility.",
+            Self::UserBackupLikely => "Firmware supplied by a user or captured from a drive, rather than identified as an original OEM release. Update metadata may have been reconstructed. Origin is separate from drive compatibility.",
+            Self::Unknown => "The file's origin could not be established. A valid transfer signature alone does not prove an original OEM release. This label does not establish drive compatibility.",
+        }
+    }
+}
+
+/// Inspect the original selected bytes; never classify a transfer-signed copy.
+/// This reads only a local file and does not contact a drive.
+pub fn selected_file_origin(path: &Path) -> Result<FileOrigin> {
+    let bytes = read_capped(path).with_context(|| format!("Cannot read {}", path.display()))?;
+    Ok(registry::file_origin(&bytes))
+}
+
 /// One optical drive, discovered even when its tray is empty.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DriveChoice {
@@ -240,17 +278,25 @@ pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
     // Identification errors only mean "not offered": a profile never fails
     // merely because a drive is unsupported.
     let mut recovery_errors = Vec::new();
-    let recovery = registry::backends().find_map(|b| {
-        let facet = b.recovery()?;
-        match facet.identify(&mut ReadDevice::for_backend(dev, b)) {
-            Ok(Some(_)) => Some(b.descriptor()),
-            Ok(None) => None,
-            Err(e) => {
-                recovery_errors.push(format!("{}: {e:#}", b.descriptor().display_name));
-                None
+    let recovery = registry::backends()
+        .find_map(|b| {
+            let facet = b.recovery()?;
+            match facet.identify(&mut ReadDevice::for_backend(dev, b)) {
+                Ok(Some(_)) => Some(b.descriptor()),
+                Ok(None) => None,
+                Err(e) => {
+                    recovery_errors.push(format!("{}: {e:#}", b.descriptor().display_name));
+                    None
+                }
             }
-        }
-    });
+        })
+        .or_else(|| {
+            let backend = resolved.as_ref()?.backend;
+            backend
+                .recovery()?
+                .accepts_current_for_identification()
+                .then(|| backend.descriptor())
+        });
     let backend = resolved.as_ref().map(|r| r.backend);
     Ok(DriveProfile {
         identity,
@@ -558,6 +604,8 @@ pub struct RecoveryOptions {
     pub member: Option<String>,
     /// Where to obtain the current receiver's firmware.
     pub current: CurrentFirmware,
+    /// Exact member of a Current MediaTek TAR, separate from the target member.
+    pub current_member: Option<String>,
     /// Issue writes; otherwise prepare without writing.
     pub execute: bool,
     /// Explicit acknowledgement of firmware-update risk.
@@ -577,7 +625,13 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
         }
         let target = recovery_target(&input, args.member.as_deref())?;
         let supplied = match &args.current {
-            CurrentFirmware::File(path) => Some(read_capped(path)?),
+            CurrentFirmware::File(path) => {
+                let bytes = read_capped(path)?;
+                Some(current_firmware_image(
+                    &bytes,
+                    args.current_member.as_deref(),
+                )?)
+            }
             CurrentFirmware::ReadFromDrive | CurrentFirmware::NotRequired => None,
         };
         let selector = resolve_device(args.device.as_deref())?;
@@ -589,9 +643,10 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
             let Some(facet) = backend.recovery() else {
                 continue;
             };
-            if let Some(receiver) =
-                facet.identify(&mut ReadDevice::for_backend(dev.as_mut(), backend))?
-            {
+            if let Some(receiver) = facet.identify_with_current(
+                &mut ReadDevice::for_backend(dev.as_mut(), backend),
+                supplied.as_deref(),
+            )? {
                 if facet.requires_current() && matches!(args.current, CurrentFirmware::NotRequired)
                 {
                     bail!("this recovery backend requires --current or --read-from-drive");
@@ -615,6 +670,20 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
 /// Select exactly one member from a package with independent recovery images.
 pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
     crate::package::recovery_target(input, member)
+}
+
+/// Resolve a Current reference without ever treating the target as installed.
+pub fn current_firmware_image(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
+    if input.get(257..262) == Some(b"ustar") {
+        recovery_target(input, member)
+            .context("selecting Current firmware: use --current-member for a paired TAR")
+    } else {
+        anyhow::ensure!(
+            member.is_none(),
+            "--current-member requires a Current TAR package"
+        );
+        Ok(input.to_vec())
+    }
 }
 
 /// Recovery choices for a bounded input file.

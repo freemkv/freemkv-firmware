@@ -613,6 +613,10 @@ impl RecoveryTarget {
 
 /// Recovery without automatic backups or installed-versus-target policy.
 pub trait RecoveryFacet {
+    /// A classified drive may need a Current file before its receiver can be identified.
+    fn accepts_current_for_identification(&self) -> bool {
+        false
+    }
     /// Whether recovery needs an explicit Current file or permission to read it.
     fn requires_current(&self) -> bool {
         true
@@ -621,6 +625,15 @@ pub trait RecoveryFacet {
     /// Read-only, with no protocol probe (the drive may be too damaged to
     /// classify): `Some` when this is a receiver this backend recovers.
     fn identify(&self, dev: &mut ReadDevice<'_>) -> Result<Option<RecoveryTarget>>;
+    /// Identify with an explicitly supplied installed-firmware reference.
+    /// Backends that do not need it retain their existing identification path.
+    fn identify_with_current(
+        &self,
+        dev: &mut ReadDevice<'_>,
+        _current: Option<&[u8]>,
+    ) -> Result<Option<RecoveryTarget>> {
+        self.identify(dev)
+    }
     /// The refusal when [`RecoveryFacet::identify`] finds no receiver.
     fn unidentified(&self) -> &'static str;
     /// Prepare the transfer from `current` (read from the drive when `None`)

@@ -1,7 +1,12 @@
 //! Refresh backup reconstruction metadata from a current directory of OEM .enc files.
-//! Usage: cargo run -p freemkv-flash --example pioneer_oem_tables -- <images> <existing-tables> <output>
+//! Usage: cargo run --release -p freemkv-flash --example pioneer_oem_tables -- <images> <existing-tables> <output> [--check]
 //! No device I/O. Existing historical rows are preserved; every new candidate
 //! must reconstruct its source envelope byte-for-byte before being admitted.
+//! `--check` fails if an eligible Normal is absent from the existing table.
+//! Then exercise the actual backup builder against every eligible source with:
+//! FREEMKV_OEM_AUDIT=<output>/report.json cargo test --release -p freemkv-flash --lib production_every_audited_normal_rebuilds_through_backup -- --ignored
+//! Coverage is of authenticated, rebuildable H8 images, not unsupported legacy
+//! layouts or unauthenticated captures. report.json records every exclusion.
 use anyhow::{bail, Context, Result};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pioneer_optical::{
@@ -102,8 +107,9 @@ fn sum_zero(image: &[u8]) -> bool {
 }
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    if args.len() != 3 {
-        bail!("usage: pioneer_oem_tables <OEM-images-directory> <existing-tables-directory> <output-directory>");
+    let check = args.len() == 4 && args[3] == "--check";
+    if args.len() != 3 && !check {
+        bail!("usage: pioneer_oem_tables <OEM-images-directory> <existing-tables-directory> <output-directory> [--check]");
     }
     let root = Path::new(&args[0]);
     let existing = Path::new(&args[1]);
@@ -197,10 +203,7 @@ fn main() -> Result<()> {
                 continue;
             }
             matched_hash = Some(hash(&normal.image));
-            let Some(seed) = normal.encoding_seed() else {
-                status = "unrecoverable_normal_seed";
-                continue;
-            };
+            let seed = normal.encoding_seed();
             let signature = bytes
                 .get(NORMAL_SIGNATURE_RANGE)
                 .context("short signature")?;
@@ -212,28 +215,31 @@ fn main() -> Result<()> {
                 status = "normal_authentication_failed";
                 continue;
             }
-            let input = BuildInputs {
-                kernel_image: &kernel.decoded.image,
-                normal_image: &normal.image,
-                envelope_id: &header.id,
-                normal_revision: &header.revision,
-                normal_date: &header.generated_date,
-                kernel: KernelBuild::from_seed(0),
-                normal_key_seed: seed,
+            let key = match seed {
+                Some(seed) => NormalKeySource::Seed(seed),
+                None => NormalKeySource::RawKey(normal.encoding_key()),
             };
-            let Ok(pair) = encode_encrypted_pair(&input, NormalSignature::Oem(signature)) else {
+            let Ok(rebuilt) = encode_normal_for_kernel(
+                &kernel.decoded.image,
+                &normal.image,
+                &bytes[..0x200],
+                key,
+                NormalSignature::Oem(signature),
+            ) else {
                 status = "normal_build_unsupported";
                 continue;
             };
-            if pair.normal != bytes {
+            if rebuilt != bytes {
                 status = "normal_not_byte_exact";
                 continue;
             }
-            admit(
-                &mut nt,
-                matched_hash.clone().unwrap(),
-                json!({"version":header.revision,"date":header.generated_date,"seed":format!("0x{seed:06X}"),"sig_hex":hex(signature)}),
-            );
+            let mut row = json!({"version":header.revision,"date":header.generated_date,"sig_hex":hex(signature),"header_hex":hex(&bytes[..0x200])});
+            if let Some(seed) = seed {
+                row["seed"] = json!(format!("0x{seed:06X}"));
+            } else {
+                row["key_hex"] = json!(hex(normal.encoding_key()));
+            }
+            admit(&mut nt, matched_hash.clone().unwrap(), row);
             status = "normal_byte_exact";
             break;
         }
@@ -241,6 +247,12 @@ fn main() -> Result<()> {
     }
     let old_k = read_table(existing, "k.bin")?;
     let old_n = read_table(existing, "n.bin")?;
+    let eligible_normal_images: Vec<_> = nt.keys().cloned().collect();
+    let missing_normal_images: Vec<_> = nt
+        .keys()
+        .filter(|h| !old_n.contains_key(*h))
+        .cloned()
+        .collect();
     // Do not delete historical OEM metadata just because its source is absent
     // from today's corpus. Preserve existing canonical choices for shared bodies.
     let verified_k = kt.len();
@@ -264,9 +276,20 @@ fn main() -> Result<()> {
     write_table(output, "k.bin", &kt)?;
     write_table(output, "n.bin", &nt)?;
     std::fs::write(
+        output.join("normal-coverage.json"),
+        serde_json::to_vec_pretty(&json!({
+            "format":"freemkv-pioneer-normal-coverage-v1",
+            "eligible_normal_images":eligible_normal_images,
+            "missing_before_refresh":missing_normal_images,
+        }))?,
+    )?;
+    std::fs::write(
         output.join("report.json"),
         serde_json::to_vec_pretty(&json!({"summary":summary,"files":report}))?,
     )?;
     println!("{}", serde_json::to_string_pretty(&summary)?);
+    if check && !missing_normal_images.is_empty() {
+        bail!("OEM Normal coverage incomplete: {} eligible image hashes are absent from the embedded table",missing_normal_images.len());
+    }
     Ok(())
 }

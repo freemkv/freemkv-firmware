@@ -289,6 +289,14 @@ fn button(ui: &mut egui::Ui, b: &Button, out: &mut Vec<Input>) {
 
 fn panel_item(ui: &mut egui::Ui, item: &Item, out: &mut Vec<Input>) {
     match item {
+        Item::Origin(origin) => {
+            let color = match origin {
+                crate::ui::FileOrigin::OemLikely => egui::Color32::from_rgb(35, 150, 75),
+                crate::ui::FileOrigin::UserBackupLikely => CAUTION,
+                crate::ui::FileOrigin::Unknown => ui.visuals().weak_text_color(),
+            };
+            ui.colored_label(color, egui::RichText::new(origin.label()).strong());
+        }
         Item::Text(t) => {
             ui.label(t);
         }

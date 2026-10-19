@@ -26,6 +26,7 @@ pub(crate) mod file_info;
 pub(crate) mod fixture;
 mod flash;
 pub mod fwdump;
+mod receiver_reference;
 mod recovery;
 pub(crate) use flash::decide_offline;
 
@@ -110,8 +111,8 @@ pub fn detect_receiver(dev: &mut ReadDevice<'_>) -> Result<mediatek_optical::rec
     let shared = crate::transport::SharedDevice::new(dev);
     let mut transport = crate::transport::ScsiTransport::reads(&shared);
     let mode =
-        mediatek_optical::receiver::detect_mode(&mut transport).map_err(|e| anyhow!("{e}"))?;
-    mediatek_optical::receiver::detect(&mut transport, &mode).map_err(|e| anyhow!("{e}"))
+        mediatek_optical::receiver::detect_mode(&mut transport).map_err(anyhow::Error::new)?;
+    mediatek_optical::receiver::detect(&mut transport, &mode).map_err(anyhow::Error::new)
 }
 
 /// Lightweight read-only planning probe. Executable authorization completes

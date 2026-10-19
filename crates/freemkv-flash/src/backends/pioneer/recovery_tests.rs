@@ -138,6 +138,70 @@ fn fixture_pair_class_with(
     Update::load(&encoded.kernel, &encoded.normal).unwrap()
 }
 
+#[test]
+fn unsigned_targets_are_signed_only_for_transfer_and_invalid_signatures_still_fail() {
+    let pair = fixture_pair(false, 1);
+    let kernel = pair.kernel_transfer();
+    let signed = pair.normal_transfer();
+    assert!(super::super::normal_prepare::load_pair(kernel, signed).is_ok());
+    for zeroed in [true, false] {
+        let mut normal = signed.to_vec();
+        if zeroed {
+            normal[0x170..0x1c0].fill(0);
+        } else {
+            normal[0x170] ^= 1;
+        }
+        if zeroed {
+            let prepared = super::super::normal_prepare::load_pair(kernel, &normal).unwrap();
+            assert_eq!(prepared.normal().image, pair.normal().image);
+            assert_eq!(prepared.kernel().image, pair.kernel().image);
+            let transfer = prepared.normal_transfer();
+            assert_eq!(&transfer[..0x170], &normal[..0x170]);
+            assert_eq!(&transfer[0x1c0..], &normal[0x1c0..]);
+            assert!(normal[0x170..0x1c0].iter().all(|b| *b == 0));
+            assert!(Update::load(kernel, transfer).is_ok());
+            assert!(super::super::offline_pair_data_out(kernel, &normal).is_ok());
+            let installed = archive(&pair, false);
+            let plan = crate::backend::FlashPlan::new(super::super::execute_plan(&normal).unwrap());
+            let authorized = super::super::authorize_installed(plan, Some(&installed)).unwrap();
+            let prepared = authorized.state::<super::super::Prepared>().unwrap();
+            assert!(
+                prepared.normal.is_some(),
+                "Normal-only backup must be prepared"
+            );
+            let unsigned_pair = archive(&pair, true);
+            let plan =
+                crate::backend::FlashPlan::new(super::super::execute_plan(&unsigned_pair).unwrap());
+            let authorized = super::super::authorize_installed(plan, Some(&installed)).unwrap();
+            let prepared = authorized.state::<super::super::Prepared>().unwrap();
+            assert!(
+                prepared.complete.is_some(),
+                "Paired backup must be prepared"
+            );
+            // A missing signature does not excuse a corrupt body/key table.
+            let mut corrupt = normal.clone();
+            let last = corrupt.len() - 4;
+            corrupt[last] ^= 1;
+            assert!(super::super::normal_prepare::load_pair(kernel, &corrupt).is_err());
+            continue;
+        }
+        for error in [
+            super::super::normal_prepare::load_pair(kernel, &normal).unwrap_err(),
+            super::super::offline_pair_data_out(kernel, &normal).unwrap_err(),
+        ] {
+            let message = error.to_string();
+            assert!(message.contains("No firmware was written"), "{error:#}");
+            assert!(message.contains("signed"), "{error:#}");
+            assert!(matches!(
+                error.downcast_ref::<pioneer_optical::envelope::UpdateError>(),
+                Some(pioneer_optical::envelope::UpdateError::Authentication)
+            ));
+            assert!(message.contains("could not be verified"));
+            assert!(message.contains("nonzero invalid signature"));
+        }
+    }
+}
+
 #[derive(Default)]
 struct Drive {
     updating: bool,
@@ -463,12 +527,17 @@ fn archive(update: &Update, unsigned: bool) -> Vec<u8> {
 }
 
 #[test]
-fn unsigned_backup_is_valid_current_evidence_but_not_a_signed_target() {
+fn unsigned_backup_is_valid_current_evidence_and_restorable_target() {
     let update = fixture_pair(false, 1);
     let unsigned = archive(&update, true);
     let signed = archive(&update, false);
     assert!(Plan::prepare(&unsigned, &signed).is_ok());
-    assert!(Plan::prepare(&signed, &unsigned).is_err());
+    let restored = Plan::prepare(&signed, &unsigned).unwrap();
+    assert!(Update::load(update.kernel_transfer(), &restored.normal_transfer).is_ok());
+    assert_eq!(
+        &restored.normal_transfer[0x1c0..],
+        &update.normal_transfer()[0x1c0..]
+    );
 }
 
 struct UnsupportedDrive {

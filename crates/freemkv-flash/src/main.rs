@@ -149,6 +149,9 @@ struct RecoveryArgs {
     /// Copy of the firmware currently running on the drive.
     #[arg(long, conflicts_with = "read_from_drive")]
     current: Option<PathBuf>,
+    /// Exact installed-firmware member of the --current TAR (e.g. intermediate.bin).
+    #[arg(long, requires = "current")]
+    current_member: Option<String>,
     /// Explicitly read Current firmware instead of supplying a file.
     #[arg(long)]
     read_from_drive: bool,
@@ -177,6 +180,7 @@ fn main() -> ExitCode {
                 device: args.device,
                 input: args.input,
                 member: args.member,
+                current_member: args.current_member,
                 current: match args.current {
                     Some(path) => freemkv_flash::workflow::CurrentFirmware::File(path),
                     None if args.read_from_drive => {

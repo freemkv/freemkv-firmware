@@ -33,7 +33,7 @@ pub fn construct_signed_candidate(
         &str,
     ) = match normal_oem {
         Some(entry) => (
-            entry.seed,
+            entry.seed.unwrap_or(0),
             pioneer_optical::envelope::builder::NormalSignature::Oem(&entry.signature),
             &entry.revision,
             &entry.date,
@@ -59,8 +59,35 @@ pub fn construct_signed_candidate(
         kernel: kernel_build,
         normal_key_seed: normal_seed,
     };
-    let pair = pioneer_optical::envelope::builder::encode_encrypted_pair(&input, normal_signature)
+    let signature = if normal_oem.is_some_and(|entry| entry.header.is_some()) {
+        pioneer_optical::envelope::builder::NormalSignature::Zeroed
+    } else {
+        normal_signature
+    };
+    let mut pair = pioneer_optical::envelope::builder::encode_encrypted_pair(&input, signature)
         .map_err(|e| anyhow::anyhow!(e))?;
+    if let Some(entry) = normal_oem {
+        if let Some(header) = &entry.header {
+            use pioneer_optical::envelope::builder::{
+                encode_normal_for_kernel, NormalKeySource, NormalSignature,
+            };
+            let key = match (&entry.key, entry.seed) {
+                (Some(key), None) => NormalKeySource::RawKey(key),
+                (None, Some(seed)) => NormalKeySource::Seed(seed),
+                _ => bail!("invalid OEM encoding metadata"),
+            };
+            pair.normal = encode_normal_for_kernel(
+                kernel,
+                normal,
+                header,
+                key,
+                NormalSignature::Oem(&entry.signature),
+            )
+            .map_err(|e| anyhow::anyhow!("OEM Normal reconstruction: {e}"))?;
+            pioneer_optical::envelope::builder::validate_encrypted_pair(&pair, kernel, normal)
+                .map_err(|e| anyhow::anyhow!("OEM reconstruction validation: {e}"))?;
+        }
+    }
     let out = assemble_tar(&[pair.kernel, pair.normal])?;
     let parsed = Bundle::from_tar_bytes(&out)?;
     if parsed.components.len() != 2 {

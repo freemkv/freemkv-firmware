@@ -960,6 +960,106 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
 }
 
 #[test]
+#[ignore = "requires FREEMKV_HOARD OEM corpus"]
+fn production_s12jx_105_backup_reproduces_both_oem_envelopes() {
+    let root = std::path::PathBuf::from(std::env::var_os("FREEMKV_HOARD").unwrap())
+        .join("images/pioneer/sat/8F01/ID72/1.05");
+    let kernel = std::fs::read(
+        root.join("kernel/2d8b2749bb35c787a2a216e777018443fe9582ae52988d93b32f26b8fdc58e72.enc"),
+    )
+    .unwrap();
+    let normal = std::fs::read(
+        root.join("normal/a44eacdd94bc91a1484e3ed7c1762df61c5cab71155deacc3da99e23e000b380.enc"),
+    )
+    .unwrap();
+    let k = pioneer_optical::envelope::decode_envelope(&kernel).unwrap();
+    let n = pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &k).unwrap();
+    let header = pioneer_optical::envelope::header_info(&normal).unwrap();
+    let output =
+        construct_signed_candidate(&k.image, &n.image, &header.id, &header.revision).unwrap();
+    let rebuilt = Bundle::from_tar_bytes(&output).unwrap();
+    assert_eq!(
+        rebuilt
+            .components
+            .iter()
+            .find(|c| c.role == Role::Kernel)
+            .unwrap()
+            .bytes,
+        kernel
+    );
+    assert_eq!(
+        rebuilt
+            .components
+            .iter()
+            .find(|c| c.role == Role::Main)
+            .unwrap()
+            .bytes,
+        normal
+    );
+    let provenance = package_provenance(&output);
+    assert!(provenance.kernel_oem && provenance.normal_oem);
+}
+
+#[test]
+#[ignore = "requires FREEMKV_OEM_AUDIT report.json from pioneer_oem_tables"]
+fn production_every_audited_normal_rebuilds_through_backup() {
+    use pioneer_optical::envelope::{decode_envelope, decode_envelope_with_kernel, header_info};
+    let report: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(std::env::var_os("FREEMKV_OEM_AUDIT").unwrap()).unwrap(),
+    )
+    .unwrap();
+    let files = report["files"].as_array().unwrap();
+    let kernels: Vec<_> = files
+        .iter()
+        .filter(|r| r["status"] == "kernel_byte_exact" || r["status"] == "kernel_not_byte_exact")
+        .map(|r| {
+            let bytes = std::fs::read(r["path"].as_str().unwrap()).unwrap();
+            (
+                header_info(&bytes).unwrap(),
+                decode_envelope(&bytes).unwrap(),
+            )
+        })
+        .collect();
+    let mut rebuilt_hashes = std::collections::HashSet::new();
+    for row in files.iter().filter(|r| r["status"] == "normal_byte_exact") {
+        let bytes = std::fs::read(row["path"].as_str().unwrap()).unwrap();
+        let h = header_info(&bytes).unwrap();
+        let expected_hash = row["image_sha256"].as_str().unwrap();
+        let (k, n) = kernels
+            .iter()
+            .filter(|(kh, _)| {
+                kh.hardware_version == h.hardware_version
+                    && kh.kernel_version == h.kernel_version
+                    && kh.kernel_version2 == h.kernel_version2
+            })
+            .find_map(|(_, k)| {
+                let n = decode_envelope_with_kernel(&bytes, k)?;
+                (format!("{:x}", Sha256::digest(&n.image)) == expected_hash).then_some((k, n))
+            })
+            .unwrap_or_else(|| panic!("no audited Kernel for {}", row["path"]));
+        let output = construct_signed_candidate(&k.image, &n.image, &h.id, &h.revision)
+            .unwrap_or_else(|e| panic!("{}: {e:#}", row["path"]));
+        let bundle = Bundle::from_tar_bytes(&output).unwrap();
+        let normal = &bundle
+            .components
+            .iter()
+            .find(|c| c.role == Role::Main)
+            .unwrap()
+            .bytes;
+        assert!(pioneer_optical::envelope::builder::normal_authentication_valid(normal, &k.image));
+        let decoded = decode_envelope_with_kernel(normal, k).unwrap();
+        assert_eq!(decoded.image, n.image, "{}", row["path"]);
+        assert!(package_provenance(&output).normal_oem);
+        rebuilt_hashes.insert(expected_hash.to_owned());
+    }
+    assert_eq!(
+        rebuilt_hashes.len(),
+        459,
+        "full eligible corpus must be exercised"
+    );
+}
+
+#[test]
 fn self_signed_live_capture_is_a_verified_offline_candidate_when_configured() {
     let Ok(path) = std::env::var("PIONEER_LIVE_DUMP_FIXTURE") else {
         return;

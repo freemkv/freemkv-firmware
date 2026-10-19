@@ -213,7 +213,7 @@ PROGRESS reading drive memory 2097152/2097152
 MSG      backup sha256: 20c8f58b8bdffa1ddddce862a463b50de4b78cd10c1dbf192add19ebe2eb3c11
 FIELD    Saved to = <TMP>/mtk-backup/mt1959.bak
 MSG      wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
-FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
+FIELD    Backup origin = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 --- scsi transcript (517) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -1683,7 +1683,7 @@ PROGRESS reading drive memory 2097152/2097152
 MSG      backup sha256: 438806b454c56fb80b5d029c642cdf4dff8774a25c22324a576815ae7f2c37bc
 FIELD    Saved to = <TMP>/mtk-backup/mt1939.bak
 MSG      wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
-FIELD    Backup warning = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
+FIELD    Backup origin = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 MSG      this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 --- scsi transcript (517) ---
 IN   cdb=120000006000 alloc=96 -> ok 96

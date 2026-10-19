@@ -17,6 +17,11 @@ use crate::platform::ScsiDevice;
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
+/// Origin evidence is supplied by protocol file analysis, not the front end.
+pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
+    pioneer::file_info::file_origin(bytes)
+}
+
 /// The whole `flash` decision with no device (see [`crate::crossflash`]).
 pub(crate) fn decide_offline(
     platform: crate::crossflash::Platform,

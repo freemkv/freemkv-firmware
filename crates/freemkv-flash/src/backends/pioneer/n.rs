@@ -1,6 +1,6 @@
 //! Embedded OEM normal table (`n.bin`): a gzip'd JSON map from a
 //! decoded-normal-image SHA-256 to that normal's true OEM revision/date, its LCG
-//! encoding seed, and the verbatim OEM ECDSA signature block needed to rebuild a
+//! encoding seed (or verbatim non-LCG key), header, and OEM signature needed to rebuild a
 //! byte-exact OEM normal envelope.
 //!
 //! Built ONLY from our hoard's OEM normal update files, so every entry is fact.
@@ -27,7 +27,11 @@ pub struct NormalEntry {
     /// Real OEM "Generated Date" (`YY/MM/DD`, earliest release).
     pub date: String,
     /// 24-bit LCG seed; expanded to the normal key table by the codec.
-    pub seed: u32,
+    pub seed: Option<u32>,
+    /// Verbatim non-LCG encoding key, when no seed reproduces it.
+    pub key: Option<Vec<u8>>,
+    /// Original envelope header, including noncanonical OEM framing.
+    pub header: Option<Vec<u8>>,
     /// Verbatim OEM signature block (`0x50` bytes at `0x170..0x1c0`).
     pub signature: Vec<u8>,
 }
@@ -36,7 +40,9 @@ pub struct NormalEntry {
 struct RawEntry {
     version: String,
     date: String,
-    seed: String,
+    seed: Option<String>,
+    key_hex: Option<String>,
+    header_hex: Option<String>,
     sig_hex: String,
 }
 
@@ -58,8 +64,22 @@ fn parse(gz: &[u8]) -> Result<HashMap<String, NormalEntry>, String> {
         serde_json::from_str(&json).map_err(|e| format!("n.bin json: {e}"))?;
     let mut out = HashMap::with_capacity(raw.len());
     for (hash, v) in raw {
-        let hex = v.seed.strip_prefix("0x").unwrap_or(&v.seed);
-        let seed = u32::from_str_radix(hex, 16).map_err(|e| format!("seed {}: {e}", v.seed))?;
+        let seed = v
+            .seed
+            .as_deref()
+            .map(|value| {
+                u32::from_str_radix(value.strip_prefix("0x").unwrap_or(value), 16)
+                    .map_err(|e| format!("seed {value}: {e}"))
+            })
+            .transpose()?;
+        let key = v.key_hex.as_deref().map(hex_decode).transpose()?;
+        if seed.is_some() == key.is_some() {
+            return Err(format!("{hash}: exactly one seed or raw key required"));
+        }
+        let header = v.header_hex.as_deref().map(hex_decode).transpose()?;
+        if header.as_ref().is_some_and(|h| h.len() != 0x200) {
+            return Err(format!("{hash}: invalid OEM header length"));
+        }
         let signature = hex_decode(&v.sig_hex)?;
         if signature.len() != 0x50 {
             return Err(format!("{hash}: signature must be 0x50 bytes"));
@@ -70,6 +90,8 @@ fn parse(gz: &[u8]) -> Result<HashMap<String, NormalEntry>, String> {
                 revision: v.version,
                 date: v.date,
                 seed,
+                key,
+                header,
                 signature,
             },
         );

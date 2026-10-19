@@ -243,28 +243,37 @@ persistent logging API is separate and is never a fallback used by dump.
 
 ### MediaTek recovery development status
 
-Recovery identifies the live BOOT/application receiver and selects plaintext or encrypted
-transfer automatically. It requires no Current image and creates no backup or partial
-capture. Image integrity, controller generation, receiver revalidation, transfer status,
-protected-region readback and target startup remain checked. Model/family comparison
-against the installed firmware is bypassed.
+Recovery first identifies the live BOOT/application receiver and selects plaintext or
+encrypted transfer from its code. If application code reads are restricted, supply
+the exact firmware currently running with `--current`. Its validated image provides
+receiver instructions; live INQUIRY, boot banner and build metadata must match, and
+are rechecked before entry. This does not prove every installed byte matches the file.
+Recovery creates no backup. Model/family comparison against installed firmware is bypassed.
 
 Explicit Recovery reports a PREPARE error and continues once with the selected
 image. It does not retry PREPARE or ignore firmware-data failures. Normal Flash
 still stops on PREPARE failure. This recovery policy does not establish that a
 failed PREPARE successfully armed the physical receiver.
 
-The proposed ASUS BOOT recovery is BH16NS40 INTM through recovery, confirmation that
-INTM starts, then a separate Recovery selecting WH16NS58 1.V9. Each operation
-flashes only its selected TAR member and detects the live receiver again. This sequence has not
-been validated on a physical drive. The MediaTek dependency is pinned to a development
-Git revision; no release is implied. Pioneer retains its Current-reference requirement.
+For a drive already running BH16NS40 INTM, preview recovery to 1.V9 with:
+
+```sh
+freemkv-flash recover DEVICE -i 1.V9.tar --member firmware.bin \
+  --current 1.V9.tar --current-member intermediate.bin
+```
+
+The Current member is receiver evidence, not another image to flash. A stale original
+1.V1 reference is rejected if INTM is running. Pioneer retains its Current requirement.
 
 MediaTek downloads are TAR packages with an explicit manifest. A paired release
-runs its extraction-linked INTM first, confirms its live INQUIRY identity, then
-re-detects receiver encoding before flashing the final image. A failure stops the
-sequence. This has simulated-transport coverage; physical drive validation remains
-outstanding.
+runs its extraction-linked INTM first, confirms startup, then flashes the final image.
+When INTM restricts live code reads, Flash analyzes the exact intermediate it just
+installed. It does not substitute reference bytes into post-write verification.
+Protected readback is attempted on the physical drive. If unavailable, paired Flash
+and Recovery require the target's live application identity and build metadata and
+explicitly warn that full byte verification was not completed. Transfer errors,
+programming faults and byte mismatches remain fatal. These paths have simulated
+transport coverage; physical drive validation remains outstanding.
 
 Recovery accepts the same TAR but writes exactly one selected member:
 `freemkv-flash recover DEVICE -i release.tar --member intermediate.bin`.
