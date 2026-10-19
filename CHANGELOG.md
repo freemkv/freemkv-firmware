@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   byte-exact rebuildable Normal images and 232 Kernels in the held corpus,
   including S12JX 1.05. Preserve non-LCG keys and original OEM headers.
   Unsupported legacy layouts and unauthenticated captures are not OEM evidence.
+- Accept receiver-decoded reverse-layout Pioneer backups, including WX1DM
+  1.01; retain checksum, authentication and exact round-trip validation.
+  Explain which backup validation failed instead of a combined mismatch error.
 
 ### freemkv-flash GUI
 - Allow selecting an optional Current reference and its TAR member for MediaTek

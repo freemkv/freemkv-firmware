@@ -1039,6 +1039,8 @@ fn production_every_audited_normal_rebuilds_through_backup() {
             .unwrap_or_else(|| panic!("no audited Kernel for {}", row["path"]));
         let output = construct_signed_candidate(&k.image, &n.image, &h.id, &h.revision)
             .unwrap_or_else(|e| panic!("{}: {e:#}", row["path"]));
+        validate_envelope_package(&output, &h.model)
+            .unwrap_or_else(|e| panic!("backup validation {}: {e:#}", row["path"]));
         let bundle = Bundle::from_tar_bytes(&output).unwrap();
         let normal = &bundle
             .components
@@ -1229,6 +1231,56 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
     normal[24..32].copy_from_slice(b"GENERAL ");
     fix(&mut normal);
     (kernel, normal)
+}
+
+#[test]
+fn reverse_rotation_backup_validates_without_relaxing_integrity() {
+    use pioneer_optical::envelope::{builder, Layout};
+    let (mut kernel, normal) = bounded_backup_fixture();
+    // Change the independent receiver fixture's shift helper from right to left.
+    assert_eq!(&kernel[0x122..0x124], &[0x11, 0x70]);
+    kernel[0x122] = 0x10;
+    let end = kernel.len() - 4;
+    kernel[end..].fill(0);
+    let sum = kernel
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .fold(0u32, |s, w| s.wrapping_add(u32::from_be_bytes(*w)));
+    kernel[end..].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+    assert_eq!(
+        builder::normal_rotation_from_kernel(&kernel),
+        Some(builder::NormalRotation::Reverse)
+    );
+    let archive =
+        construct_signed_candidate(&kernel, &normal, "PIONEER BD-RW   BDR-UD04", "1.00").unwrap();
+    validate_envelope_package(&archive, "BD-RW BDR-UD04").unwrap();
+    let bundle = Bundle::from_tar_bytes(&archive).unwrap();
+    let k = &bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap()
+        .bytes;
+    let n = &bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap()
+        .bytes;
+    let decoded_kernel = pioneer_optical::envelope::decode_envelope(k).unwrap();
+    let decoded =
+        pioneer_optical::envelope::decode_envelope_with_kernel(n, &decoded_kernel).unwrap();
+    assert_eq!(decoded.info().layout, Layout::NormalReverse);
+    assert_eq!(decoded.image, normal);
+    let mut corrupted = n.clone();
+    *corrupted.last_mut().unwrap() ^= 1;
+    assert!(validate_envelope_pair(k, &corrupted, "BD-RW BDR-UD04").is_err());
+    let mut bad_signature = n.clone();
+    bad_signature[0x170] = 1;
+    let error = validate_envelope_pair(k, &bad_signature, "BD-RW BDR-UD04").unwrap_err();
+    assert!(error.to_string().contains("Normal's signature"));
+    assert!(error.to_string().contains("Use Dump"));
 }
 
 struct BoundedBackupReplay {

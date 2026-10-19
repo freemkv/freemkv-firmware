@@ -382,25 +382,40 @@ pub fn validate_envelope_pair(kernel: &[u8], normal: &[u8], product: &str) -> Re
     let sentinel_signature = normal
         .get(pioneer_optical::envelope::builder::NORMAL_SIGNATURE_RANGE)
         .is_some_and(|sig| sig.iter().all(|&b| b == 0));
-    if (!sentinel_signature
+    // Receiver-aware decoding can legitimately select the reverse-rotation
+    // codec. A valid reverse image is not a corrupt standard-layout image.
+    let supported_normal_layout = if let Some(geometry) =
+        pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(
+            &decoded_kernel.image,
+        ) {
+        decoded_normal.info().layout == pioneer_optical::envelope::Layout::NormalScaledKey
+            || (geometry.key_len == 0x10000
+                && decoded_normal.info().layout == pioneer_optical::envelope::Layout::Normal)
+    } else {
+        matches!(
+            decoded_normal.info().layout,
+            pioneer_optical::envelope::Layout::Normal
+                | pioneer_optical::envelope::Layout::NormalReverse
+        )
+    };
+    if !sentinel_signature
         && !pioneer_optical::envelope::builder::normal_authentication_valid(
             normal,
             &decoded_kernel.image,
-        ))
-        || decoded_normal.info().layout
-            != if pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(
-                &decoded_kernel.image,
-            )
-            .is_some()
-            {
-                pioneer_optical::envelope::Layout::NormalScaledKey
-            } else {
-                pioneer_optical::envelope::Layout::Normal
-            }
-        || !zero_be32_sum(&decoded_kernel.image)
-        || !zero_be32_sum(&decoded_normal.image)
+        )
     {
-        bail!("Pioneer signature, image integrity or layout mismatch");
+        bail!("Backup validation failed: Normal's signature does not satisfy the captured Kernel. Use Dump to preserve the readable bytes for diagnosis; do not treat this artifact as a validated restore backup.");
+    }
+    if !supported_normal_layout {
+        bail!("Backup validation failed: the captured Normal uses unsupported layout {:?}. Use Dump to preserve the readable bytes for diagnosis.", decoded_normal.info().layout);
+    }
+    for (role, image) in [
+        ("Kernel", &decoded_kernel.image),
+        ("Normal", &decoded_normal.image),
+    ] {
+        if !zero_be32_sum(image) {
+            bail!("Backup validation failed: the captured {role} firmware checksum is invalid. Use Dump to preserve the readable bytes for diagnosis; the capture may be incomplete or inconsistent.");
+        }
     }
     if decoded_kernel.repack(&decoded_kernel.image).as_deref() != Some(kernel)
         || decoded_normal.repack(&decoded_normal.image).as_deref() != Some(normal)
