@@ -10,6 +10,12 @@ ignore = [
     # pulled by egui/epaint. Upstream's migration path is skrifa; until egui
     # switches, there is nothing to update to. Re-review when egui bumps.
     "RUSTSEC-2026-0192",
+    # Maintenance-only: egui -> AccessKit -> AT-SPI still requires zbus 5.
+    # These crates merged into zbus 6; no compatible patched release exists.
+    # Remove when the GUI accessibility stack migrates to zbus 6.
+    "RUSTSEC-2026-0370", # zvariant
+    "RUSTSEC-2026-0371", # zbus_names
+    "RUSTSEC-2026-0372", # zvariant_derive
 ]
 
 [licenses]
