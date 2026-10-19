@@ -462,12 +462,27 @@ fn supplied_real_recovery_packages_prepare_and_transfer_without_reads() {
     let current = std::fs::read(current).unwrap();
     let target = std::fs::read(target).unwrap();
     let plan = Plan::prepare(&current, &target).unwrap();
-    let (update, _) = load_target(&target).unwrap();
-    assert!(
-        !plan.was_reencoded(),
-        "paired Normal must retain its OEM encoding"
-    );
-    assert_eq!(plan.normal_transfer, update.normal_transfer());
+    let (update, original_normal) = load_target(&target).unwrap();
+    let transferred = Update::load(update.kernel_transfer(), &plan.normal_transfer)
+        .expect("prepared Normal must satisfy its receiving Kernel's integrity and authentication");
+    assert_eq!(transferred.normal().image, update.normal().image);
+    if original_normal[0x170..0x1c0].iter().all(|byte| *byte == 0) {
+        assert!(
+            plan.was_reencoded(),
+            "unsigned target needs transfer authentication"
+        );
+        assert_eq!(
+            &plan.normal_transfer[0x1c0..],
+            &original_normal[0x1c0..],
+            "signing must preserve the firmware ciphertext"
+        );
+    } else {
+        assert!(
+            !plan.was_reencoded(),
+            "paired Normal must retain its OEM encoding"
+        );
+        assert_eq!(plan.normal_transfer, update.normal_transfer());
+    }
     crate::crossflash::admits(crate::crossflash::Platform::Pioneer, &current, &target)
         .expect("Flash must prepare the same paired Normal as Recovery");
     let mut drive = Drive {
