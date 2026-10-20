@@ -354,7 +354,7 @@ pub(crate) fn resolve_flash_plan(
     Ok(plan)
 }
 
-/// Pure routing core of [`resolve_flash_plan`]: no installed facts means the
+/// Pure routing core: no installed facts means the
 /// installed family is unknown, so the family gate refuses.
 fn plan_for(
     installed: Option<&crate::backends::pioneer::flash_plan::Installed>,
