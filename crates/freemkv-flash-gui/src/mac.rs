@@ -927,7 +927,6 @@ impl Controller {
             .constraintEqualToConstant(110.0)
             .setActive(true);
         log_scroll.setHidden(true);
-        fill(&root, &log_scroll, 2.0 * PAD);
 
         let iv = self.ivars();
         *iv.drive_popup.borrow_mut() = Some(popup);
