@@ -1130,11 +1130,33 @@ fn hiding_imports(code: &str) -> Vec<String> {
 const HIDDEN_TYPES: &[&str] = &["Device", "FlashTransport", "ScsiTransport", "SharedDevice"];
 
 /// Wrappers allowed to hold a device type, each with why it cannot write ungated.
-const ALLOWED_WRAPPERS: &[(&str, &str, &str)] = &[(
-    "src/backends/pioneer/flash.rs",
-    "struct Runtime<'a, 'd>",
-    "built only inside execute_prepared from its WriteDevice; its methods only read",
-)];
+const ALLOWED_WRAPPERS: &[(&str, &str, &str)] = &[
+    (
+        "src/backends/pioneer/flash.rs",
+        "struct Runtime<'a, 'd>",
+        "built only inside execute_prepared from its WriteDevice; its methods only read",
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "struct MigrationDevice<'a, 't, T: Transport>",
+        "built only inside run from the migration guard over an authorized WriteDevice",
+    ),
+];
+
+/// Recovery's private adapter accepts either its WriteDevice grant or the
+/// migration transport derived from that grant. Both paths stay in `run`.
+const ALLOWED_MIGRATION_ISSUERS: &[(&str, &str, &str)] = &[
+    (
+        "src/backends/pioneer/recovery.rs",
+        "run_after_identity",
+        "called only from run with its WriteDevice or guarded migration adapter",
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "command_out",
+        "MigrationDevice forwards through command_out_strict and the migration guard",
+    ),
+];
 
 /// Every `type` alias of, or struct wrapping, a [`HIDDEN_TYPES`] type in lexed
 /// `code`; outside the device layer these are refused like a renaming `use`.
@@ -1203,7 +1225,8 @@ fn renamed_self(stmt: &str) -> bool {
 #[test]
 fn write_issuers_take_the_write_grant() {
     let sources = production_sources();
-    let (mut problems, mut issuers, mut wrappers) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut problems, mut issuers, mut wrappers, mut migration_issuers) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for s in &sources {
         for import in hiding_imports(&s.code) {
             problems.push(format!("{}: `{import}` hides a write call", s.path));
@@ -1223,7 +1246,14 @@ fn write_issuers_take_the_write_grant() {
         }
         for f in write_issuers(&s.code) {
             if let Some(why) = refusal(&f) {
-                problems.push(format!("{}: fn {}({}) {why}", s.path, f.name, f.params));
+                if ALLOWED_MIGRATION_ISSUERS
+                    .iter()
+                    .any(|(path, name, _)| s.path == *path && f.name == *name)
+                {
+                    migration_issuers.push((s.path.clone(), f.name.clone()));
+                } else {
+                    problems.push(format!("{}: fn {}({}) {why}", s.path, f.name, f.params));
+                }
             }
             issuers.push((f.name, f.writes));
         }
@@ -1249,6 +1279,12 @@ fn write_issuers_take_the_write_grant() {
         assert!(
             wrappers.contains(&entry),
             "stale wrapper allowance: {entry}"
+        );
+    }
+    for (path, name, _) in ALLOWED_MIGRATION_ISSUERS {
+        assert!(
+            migration_issuers.contains(&(path.to_string(), name.to_string())),
+            "stale migration issuer allowance: {path}: {name}"
         );
     }
 }
@@ -1657,7 +1693,7 @@ fn pioneer_optical_stays_pinned() {
     // Keep the released receiver handoff checks and receive-placement fix;
     // an older dependency must not silently remove either safety gate.
     assert!(
-        line.contains("version = \"=0.16.1\"") && !line.contains("git ="),
+        line.contains("version = \"=0.16.2\"") && !line.contains("git ="),
         "pioneer-optical must use the released OEM-verified receive-placement fix: {line}"
     );
 }
@@ -1927,6 +1963,24 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
         "src/backends/pioneer/recovery.rs",
         "fn run",
         "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "fn run_after_identity",
+        "ScsiTransport",
+        1,
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "fn run_after_identity",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/pioneer/recovery.rs",
+        "struct MigrationDevice",
+        "FlashTransport",
         1,
     ),
     (
