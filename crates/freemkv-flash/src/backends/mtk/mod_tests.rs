@@ -477,10 +477,7 @@ fn short_preflight_rom_read_prevents_prepare_write() {
         vec![0; cdb::PROBE_LEN - 1],
     );
     let error = format!("{:#}", stream(&mut dev).unwrap_err());
-    assert!(
-        error.contains("before any firmware data was sent"),
-        "{error}"
-    );
+    assert!(error.contains("before any firmware data"), "{error}");
     assert!(error.contains("short transfer"), "{error}");
     assert!(dev.writes.is_empty());
 }
@@ -519,6 +516,7 @@ fn stream_configured(dev: &mut dyn crate::platform::ScsiDevice) -> anyhow::Resul
         &mut crate::engine::gates::ungated_for_tests(dev),
         &authorized,
     )
+    .map(|_| ())
 }
 
 #[test]

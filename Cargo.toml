@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 # freemkv-firmware versions INDEPENDENTLY of the rest of the freemkv stack.
-version = "0.13.3"
+version = "0.13.4"
 edition = "2021"
 rust-version = "1.94"
 license = "MIT"
@@ -28,3 +28,24 @@ all = "warn"
 strip = true
 lto = "thin"
 codegen-units = 1
+
+# Catalog tests authenticate thousands of full firmware images. Optimize only
+# the image/crypto dependencies; workspace tests keep debug assertions and
+# overflow checks, and GUI dependencies avoid an expensive optimized build.
+[profile.test.package.mediatek-optical]
+opt-level = 2
+
+[profile.test.package.pioneer-optical]
+opt-level = 2
+
+[profile.test.package.cmac]
+opt-level = 2
+
+[profile.test.package.aes]
+opt-level = 2
+
+[profile.test.package.sha2]
+opt-level = 2
+
+[profile.test.package.digest]
+opt-level = 2

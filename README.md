@@ -198,8 +198,24 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 ```
 
-CI (GitHub Actions, `.github/workflows/ci.yml`) runs fmt, clippy (`-D
-warnings`), build, and test on the **stable** Rust toolchain.
+CI (`.github/workflows/ci.yml`) runs formatting and tests at the workspace's
+`rust-version`, Clippy on stable (`-D warnings`), locked dependency resolution,
+and dependency audits. Promotion PRs reuse their branch's CI; feature PRs and
+forks run their own checks. Coverage runs on QA and main.
+
+QA (`.github/workflows/qa.yml`) runs release tests with all targets and features
+on Linux, macOS, and Windows, plus native GUI gates and every release package's
+build/install smoke tests. Release packaging runs on QA, packaging feature PRs,
+and release tags, rather than repeating on dev pushes. Linux GUI compilation starts alongside the archive
+matrix, then packaging joins the compiled GUI and static CLI artifacts. No
+firmware Release is published by a branch build.
+
+The test profile optimizes the optical-image and AES-CMAC dependencies to keep
+exhaustive catalog authentication fast. Workspace test code retains debug
+assertions and overflow checks; release tests use the shipped release profile.
+In-memory golden fixtures explicitly scope a virtual clock: settle waits advance
+the runtime clock without sleeping. Production and hardware tests retain real
+waits; simulation is available only inside library unit tests.
 
 ## License
 
@@ -284,6 +300,38 @@ Recovery accepts the same TAR but writes exactly one selected member:
 `freemkv-flash recover DEVICE -i release.tar --member intermediate.bin`.
 Add `--execute --i-understand-risk` only after reviewing the preview. Recovery
 never continues to the other member and does not create a backup.
+
+Modify's **Boot settings** are applied every time the drive starts. Select
+Unrestricted access, HRL checking, Encryption, Read speed, and Region in the
+Create form. **Reset to defaults** restores unrestricted access to On and the
+other settings to OEM behavior. The button changes the form; Create writes them
+to the generated firmware. Saved drive settings do not override these boot
+choices; applications can still change settings during a session.
+
+The CLI uses repeatable `--default FEATURE=VALUE` options:
+
+```sh
+freemkv-fw create original.bin custom.bin --default hrl=off --default encryption=off
+freemkv-fw create original.bin custom.bin --default region=free --dry-run
+```
+
+Supported values are `unrestricted`, `hrl`, and `encryption` = `on|off|oem`,
+`speed=oem|uncapped`, and `region=oem|free`. HRL Off skips checking; Encryption
+Off selects bypass. `enc` aliases `encryption`, and `passthrough` aliases `oem`.
+Omitted settings use shipping defaults. Duplicate assignments, invalid values,
+and explicit settings unavailable on the selected firmware are errors.
+`--dry-run` validates and reports the build without writing the output;
+`--json` includes resolved boot settings and availability.
+
+Newly generated images carry a versioned settings record and can be reopened
+in Modify to adjust their boot settings. Older modified images without this
+record require the original OEM image. Region selection is limited to OEM
+behavior or region-free; specific regions are not exposed.
+
+`--base` requires the complete freemkv base to build successfully; it does not
+select a smaller set of modifications. On supported firmware such as BU40N
+1.00, normal creation and `--base` produce identical output for identical boot
+settings. Ordinary creation can return partial modifications on other images.
 
 Modify accepts BIN or TAR and returns the same format. With a TAR it modifies
 only final firmware, preserves INTM bytes and pairing provenance, and updates the

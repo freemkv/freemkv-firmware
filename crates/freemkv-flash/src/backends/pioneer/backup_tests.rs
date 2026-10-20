@@ -1,4 +1,5 @@
 use super::*;
+use anyhow::ensure;
 
 /// A Kernel-only partial capture is validatable and named by the backup notice
 /// (a Kernel-only tar is still not a flashable `Bundle::from_tar_bytes`).
@@ -206,55 +207,76 @@ fn deep_read_bails_when_the_whole_region_is_unreadable() {
     assert!(format!("{err:#}").contains("entirely unreadable"));
 }
 
+/// Refuses any command after the two identity reads and records writes so the
+/// unsupported-capture tests exercise production preflight without firmware I/O.
+struct IdentityOnlyCapture {
+    inquiry: Vec<u8>,
+    f1: Vec<u8>,
+    commands: usize,
+    writes: usize,
+}
+impl ScsiDevice for IdentityOnlyCapture {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        self.commands += 1;
+        match self.commands {
+            1 => {
+                assert_eq!(cdb, [0x12, 0, 0, 0, 36, 0]);
+                assert_eq!(len, 36);
+                Ok(self.inquiry.clone())
+            }
+            2 => {
+                assert_eq!(cdb, [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0]);
+                assert_eq!(len, 48);
+                Ok(self.f1.clone())
+            }
+            _ => panic!("unsupported identity must not trigger firmware or service reads"),
+        }
+    }
+    fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+        self.writes += 1;
+        bail!("unsupported identity must not trigger service entry or writes")
+    }
+    fn command_out_strict(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+        self.command_out(cdb, bytes)
+    }
+    fn describe(&self) -> String {
+        "identity-only test transport".into()
+    }
+}
+
 #[test]
 fn unsupported_capture_identity_stops_before_service_entry_or_memory_reads() {
-    struct IdentityOnly {
-        f1: Vec<u8>,
-        commands: usize,
-    }
-    impl ScsiDevice for IdentityOnly {
-        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-            self.commands += 1;
-            match self.commands {
-                1 => {
-                    assert_eq!(cdb, [0x12, 0, 0, 0, 36, 0]);
-                    assert_eq!(len, 36);
-                    let mut inquiry = vec![b' '; 36];
-                    inquiry[8..16].copy_from_slice(b"PIONEER ");
-                    Ok(inquiry)
-                }
-                2 => {
-                    assert_eq!(cdb, [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0]);
-                    assert_eq!(len, 48);
-                    Ok(self.f1.clone())
-                }
-                _ => panic!("unsupported identity must not trigger memory reads"),
-            }
-        }
-        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
-            panic!("unsupported identity must not trigger service entry")
-        }
-        fn describe(&self) -> String {
-            "identity-only test transport".into()
-        }
-    }
+    let mut inquiry = vec![b' '; 36];
+    inquiry[0] = 5;
+    inquiry[8..16].copy_from_slice(b"PIONEER ");
+    inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
+    inquiry[32..36].copy_from_slice(b"1.00");
     for hardware in [b"ATA 0009", b"SCSI0001", b"UNKNOWN "] {
         let mut f1 = vec![0; 48];
         f1[16..24].copy_from_slice(hardware);
-        let mut dev = IdentityOnly { f1, commands: 0 };
-        assert!(read_h8_image_pair(&mut dev)
+        let mut dev = IdentityOnlyCapture {
+            inquiry: inquiry.clone(),
+            f1,
+            commands: 0,
+            writes: 0,
+        };
+        assert!(capture_signed_candidate(&mut dev)
             .unwrap_err()
             .to_string()
             .contains("H8/SAT hardware identity"));
         assert_eq!(dev.commands, 2);
+        assert_eq!(dev.writes, 0);
     }
     for length in [0, 16, 23, 47, 49] {
-        let mut dev = IdentityOnly {
+        let mut dev = IdentityOnlyCapture {
+            inquiry: inquiry.clone(),
             f1: vec![0; length],
             commands: 0,
+            writes: 0,
         };
-        assert!(read_h8_image_pair(&mut dev).is_err());
+        assert!(capture_signed_candidate(&mut dev).is_err());
         assert_eq!(dev.commands, 2);
+        assert_eq!(dev.writes, 0);
     }
 }
 
@@ -689,7 +711,12 @@ fn corpus_kernel_sharing_by_catalog_model_when_configured() {
     assert!(!groups.is_empty(), "no decoded Kernels in corpus");
     let shared = groups.values().filter(|models| models.len() > 1).count();
     let models: std::collections::BTreeSet<_> = groups.values().flatten().collect();
-    eprintln!("Kernel sharing: {} decoded image hashes, {} catalog models, {shared} cross-model groups, {} undecodable envelope hashes, {invalid_packages} invalid packages", groups.len(), models.len(), undecodable.len());
+    eprintln!(
+        "Kernel sharing: {} decoded image hashes, {} catalog models, {shared} cross-model groups, {} undecodable envelope hashes, {invalid_packages} invalid packages",
+        groups.len(),
+        models.len(),
+        undecodable.len()
+    );
     for (hash, models) in groups.iter().filter(|(_, m)| m.len() > 1) {
         eprintln!("shared Kernel {hash}: {models:?}");
     }
@@ -811,11 +838,16 @@ fn corpus_kernel_dispatcher_selects_recorded_wrapper_when_configured() {
     assert!(front > 0 && derived > 0);
     eprintln!("Undecodable unique Kernels by hardware: {unsupported_kernels:?}");
     eprintln!("Undecodable receiver Normal per unique Kernel: {unsupported_normals:?}");
-    eprintln!("Kernel header revision/date literals in decoded image: {kernel_revision_literals}/{kernel_date_literals}");
+    eprintln!(
+        "Kernel header revision/date literals in decoded image: {kernel_revision_literals}/{kernel_date_literals}"
+    );
     for (hash, labels) in raw_metadata.iter().filter(|(_, labels)| labels.len() > 1) {
         eprintln!("identical raw Kernel {hash}, envelope labels: {labels:?}");
     }
-    eprintln!("Kernel dispatcher corpus: {front} front, {derived} derived unique envelopes; {} unrecognized", unrecognized.len());
+    eprintln!(
+        "Kernel dispatcher corpus: {front} front, {derived} derived unique envelopes; {} unrecognized",
+        unrecognized.len()
+    );
     eprintln!(
         "OEM ID literal in Kernel: {literal_id_in_kernel}; missing in {} cases",
         missing_literal_ids.len()
@@ -828,6 +860,229 @@ fn corpus_kernel_dispatcher_selects_recorded_wrapper_when_configured() {
     }
 }
 
+/// Replay the production capture with a declared identity and real decoded
+/// image bytes. Only the read-unlock knock is permitted on the data-out path.
+struct DeclaredIdentityCapture {
+    inquiry: Vec<u8>,
+    hardware: String,
+    replay: CaptureReplay,
+    firmware_writes: usize,
+}
+impl ScsiDevice for DeclaredIdentityCapture {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        if cdb == pioneer_optical::cdb::inquiry(36) {
+            return Ok(self.inquiry.clone());
+        }
+        if cdb == pioneer_optical::cdb::vendor_identity() {
+            let mut bytes = vec![b' '; len];
+            bytes[16..24].copy_from_slice(self.hardware.as_bytes());
+            return Ok(bytes);
+        }
+        self.replay.command_in(cdb, len)
+    }
+    fn command_out(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+        if cdb != pioneer_optical::cdb::knock() || !bytes.is_empty() {
+            self.firmware_writes += 1;
+            bail!("identity mismatch must not issue firmware writes or service commands");
+        }
+        self.replay.command_out(cdb, bytes)
+    }
+    fn command_out_strict(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+        self.command_out(cdb, bytes)
+    }
+    fn describe(&self) -> String {
+        "declared identity / decoded-body capture replay".into()
+    }
+}
+
+/// A relabeled envelope is not capture evidence for its declared model. Admit
+/// this negative case only when another envelope pair has identical encoded
+/// payloads and supplies a different ID independently found in decoded bytes.
+fn prove_declared_identity_refusal(
+    source_path: &std::path::Path,
+    source_kernel: &[u8],
+    source_normal: &[u8],
+    inquiry: &[u8],
+    kernel: &[u8],
+    normal: &[u8],
+    declared: &pioneer_optical::envelope::HeaderInfo,
+) -> Result<()> {
+    let mut authentic = None;
+    for entry in std::fs::read_dir(source_path.parent().context("source has no directory")?)? {
+        let path = entry?.path();
+        if !path.to_string_lossy().ends_with(".installer.tar") {
+            continue;
+        }
+        let bundle = Bundle::from_tar_bytes(&std::fs::read(path)?)?;
+        let (Some(k), Some(n)) = (
+            bundle.components.iter().find(|c| c.role == Role::Kernel),
+            bundle.components.iter().find(|c| c.role == Role::Main),
+        ) else {
+            continue;
+        };
+        if k.bytes.get(512..) != source_kernel.get(512..)
+            || n.bytes.get(512..) != source_normal.get(512..)
+        {
+            continue;
+        }
+        let candidate = pioneer_optical::envelope::header_info(&n.bytes)
+            .context("matching-payload Normal has no parsed header")?;
+        if candidate.model == declared.model {
+            continue;
+        }
+        let (vendor, product) = candidate
+            .id
+            .split_once(' ')
+            .context("alternate identity has no vendor/product")?;
+        if pioneer_optical::ident::embedded_envelope_id(vendor, product, &[kernel, normal])
+            .is_ok_and(|id| id == candidate.id)
+        {
+            ensure!(
+                authentic.as_ref().is_none_or(
+                    |prior: &pioneer_optical::envelope::HeaderInfo| prior.id == candidate.id
+                ),
+                "multiple alternate payload-bound identities are embedded in the decoded body"
+            );
+            authentic = Some(candidate);
+        }
+    }
+    let authentic = authentic
+        .context("no matching-payload header identity is independently proven in decoded bytes")?;
+    ensure!(
+        authentic.model != declared.model,
+        "identity refusal is not a demonstrated header/body model disagreement"
+    );
+    ensure!(
+        authentic.hardware_version == declared.hardware_version
+            && authentic.kernel_version == declared.kernel_version,
+        "identity refusal differs beyond the demonstrated model relabeling"
+    );
+    let (vendor, product) = authentic
+        .id
+        .split_once(' ')
+        .context("OEM identity has no vendor/product")?;
+    let body_id = pioneer_optical::ident::embedded_envelope_id(vendor, product, &[kernel, normal])
+        .context("alternative OEM identity is absent from the actual decoded bytes")?;
+    ensure!(
+        body_id == authentic.id,
+        "embedded body identity differs from the identical-payload envelope header"
+    );
+    let original_error = embedded_envelope_id(inquiry, kernel, normal).unwrap_err();
+    ensure!(
+        original_error.to_string() == "captured firmware has no envelope identity matching INQUIRY",
+        "unexpected declared identity refusal: {original_error:#}"
+    );
+    ensure!(
+        kernel.len() == NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE,
+        "unsupported replay Kernel size"
+    );
+    let mut dump = vec![0; NORMAL_IMAGE_BASE + normal.len()];
+    dump[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE].copy_from_slice(kernel);
+    dump[NORMAL_IMAGE_BASE..].copy_from_slice(normal);
+    let mut dev = DeclaredIdentityCapture {
+        inquiry: inquiry.to_vec(),
+        hardware: declared.hardware_version.clone(),
+        replay: CaptureReplay {
+            dump,
+            reads: 0,
+            knocks: 0,
+            corrupt_second_pass: false,
+        },
+        firmware_writes: 0,
+    };
+    let error = capture_signed_candidate(&mut dev).unwrap_err();
+    ensure!(
+        error.to_string() == original_error.to_string(),
+        "production capture refused for another reason: {error:#}"
+    );
+    ensure!(
+        dev.replay.reads > 0 && dev.replay.knocks > 0,
+        "production capture did not inspect the decoded image bytes"
+    );
+    ensure!(
+        dev.firmware_writes == 0,
+        "production capture attempted firmware writes"
+    );
+    eprintln!(
+        "declared model {:?} refused; decoded body proves {:?}; only read-unlock data-out allowed",
+        declared.id, body_id
+    );
+    Ok(())
+}
+
+/// A checksum-invalid Normal cannot become a complete backup. The production
+/// capture must retain only the independently valid Kernel, with no firmware
+/// write or service command beyond its explicit read-unlock knock.
+fn prove_checksum_invalid_normal_refusal(
+    inquiry: &[u8],
+    kernel: &[u8],
+    normal: &[u8],
+    hardware: &str,
+    product: &str,
+) -> Result<()> {
+    use pioneer_optical::envelope::{Envelope, NormalLayout, NormalLayoutError};
+    ensure!(
+        zero_be32_sum(kernel),
+        "negative checksum case has an invalid Kernel"
+    );
+    ensure!(
+        !zero_be32_sum(normal),
+        "negative checksum case has no checksum defect"
+    );
+    let layout = NormalLayout::from_kernel(kernel, KERNEL_IMAGE_BASE as u32)?;
+    let region = layout.resolve(&normal[..24])?;
+    ensure!(
+        region.address() as usize == NORMAL_IMAGE_BASE && region.length() == normal.len(),
+        "negative checksum case has unproven geometry"
+    );
+    ensure!(
+        layout.validate(normal) == Err(NormalLayoutError::ImageChecksum),
+        "negative checksum case has another structural defect"
+    );
+    ensure!(
+        kernel.len() == NORMAL_IMAGE_BASE - KERNEL_IMAGE_BASE,
+        "unsupported replay Kernel size"
+    );
+    let mut dump = vec![0; NORMAL_IMAGE_BASE + normal.len()];
+    dump[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE].copy_from_slice(kernel);
+    dump[NORMAL_IMAGE_BASE..].copy_from_slice(normal);
+    let mut dev = DeclaredIdentityCapture {
+        inquiry: inquiry.to_vec(),
+        hardware: hardware.to_owned(),
+        replay: CaptureReplay {
+            dump,
+            reads: 0,
+            knocks: 0,
+            corrupt_second_pass: false,
+        },
+        firmware_writes: 0,
+    };
+    let output = capture_signed_candidate(&mut dev)?;
+    validate_envelope_package(&output, product)?;
+    let partial = Bundle::from_backup_tar_bytes(&output)?;
+    ensure!(
+        partial.components.len() == 1 && partial.components[0].role == Role::Kernel,
+        "production capture retained checksum-invalid Normal"
+    );
+    let restored = Envelope::load(&partial.components[0].bytes)?;
+    ensure!(
+        restored.image == kernel,
+        "production partial backup changed valid Kernel bytes"
+    );
+    ensure!(
+        dev.replay.reads > 0 && dev.replay.knocks > 0,
+        "production partial capture did not read firmware"
+    );
+    ensure!(
+        dev.firmware_writes == 0,
+        "production partial capture attempted firmware writes"
+    );
+    eprintln!(
+        "checksum-invalid Normal refused; production capture retained exact valid Kernel only; only read-unlock data-out allowed"
+    );
+    Ok(())
+}
+
 #[test]
 fn corpus_builder_reports_hardware_coverage_when_configured() {
     let Ok(root) = std::env::var("PIONEER_INSTALLER_CORPUS_KAT_ROOT") else {
@@ -837,6 +1092,14 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
     let mut seen_hardware = std::collections::HashSet::new();
     let all_pairs = std::env::var_os("PIONEER_ALL_PAIRS_KAT").is_some();
     let mut built = 0;
+    let mut eligible_sat_pairs = 0;
+    let mut refused_non_sat_pairs = 0;
+    let mut refused_relabelled_sat_pairs = 0;
+    let mut refused_checksum_sat_pairs = 0;
+    let mut refused_identity_shapes = 0;
+    let mut canonical_headers = 0;
+    let mut canonical_names = 0;
+    let mut unsigned_candidates = 0;
     let mut exact_text = 0;
     let mut exact_name = 0;
     let mut generated_name = 0;
@@ -884,11 +1147,17 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                 continue;
             }
             let words: Vec<_> = h.id.split_whitespace().collect();
-            if words.len() < 3 {
-                failures.push(format!(
-                    "{}: OEM ID has no vendor/media/model",
-                    h.hardware_version
-                ));
+            if words.len() < 2 {
+                // The declared ID provides no separate vendor. Do not invent
+                // whitespace or a vendor/product split to make a capture fit.
+                assert_eq!(
+                    pioneer_optical::ident::embedded_envelope_id("", &h.id, &[&k.image, &n.image]),
+                    Err(pioneer_optical::ident::IdentError::IncompleteIdentity),
+                    "{}: malformed declared identity was accepted",
+                    path.display()
+                );
+                refused_identity_shapes += 1;
+                eprintln!("declared identity parser refused missing vendor/product separation without I/O: {} ID={:?}",path.display(),h.id);
                 continue;
             }
             let vendor = words[0];
@@ -901,20 +1170,274 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                 continue;
             }
             let mut inquiry = [b' '; 36];
+            inquiry[0] = 5;
             inquiry[8..8 + vendor.len()].copy_from_slice(vendor.as_bytes());
             inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
-            let id = embedded_envelope_id(&inquiry, &k.image, &n.image)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            assert!(
+                h.revision.is_ascii() && h.revision.len() >= 4,
+                "{}: unusable INQUIRY revision {:?}",
+                path.display(),
+                h.revision
+            );
+            inquiry[32..36].copy_from_slice(&h.revision.as_bytes()[..4]);
+            // Match the production backup capability boundary exactly. Every
+            // non-SAT pair must prove refusal using its usable identity before
+            // any firmware access; every SAT pair keeps the reconstruction gate.
+            if !h.hardware_version.as_bytes().starts_with(b"SAT ") {
+                assert_eq!(
+                    h.hardware_version.len(),
+                    8,
+                    "{}: unusable hardware identity",
+                    path.display()
+                );
+                let mut f1 = vec![b' '; 48];
+                f1[16..24].copy_from_slice(h.hardware_version.as_bytes());
+                let mut dev = IdentityOnlyCapture {
+                    inquiry: inquiry.to_vec(),
+                    f1,
+                    commands: 0,
+                    writes: 0,
+                };
+                let error = capture_signed_candidate(&mut dev).unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains("H8/SAT hardware identity required"),
+                    "{}: unsupported capture did not reach the hardware preflight refusal: {error:#}",
+                    path.display()
+                );
+                assert_eq!(
+                    dev.commands,
+                    2,
+                    "{}: capture went beyond identity reads",
+                    path.display()
+                );
+                assert_eq!(
+                    dev.writes,
+                    0,
+                    "{}: unsupported capture issued a write",
+                    path.display()
+                );
+                refused_non_sat_pairs += 1;
+                eprintln!(
+                    "capture refused before firmware I/O: {} hardware={}",
+                    path.display(),
+                    h.hardware_version
+                );
+                continue;
+            }
+            eligible_sat_pairs += 1;
+            let id = match embedded_envelope_id(&inquiry, &k.image, &n.image) {
+                Ok(id) => id,
+                Err(error) => {
+                    prove_declared_identity_refusal(&path, &kernel.bytes, &normal.bytes, &inquiry, &k.image, &n.image, &h)
+                        .unwrap_or_else(|proof_error| panic!("{}: unexpected identity failure: {error:#}; negative evidence failed: {proof_error:#}", path.display()));
+                    refused_relabelled_sat_pairs += 1;
+                    eprintln!(
+                        "capture refused declared header/body disagreement: {}",
+                        path.display()
+                    );
+                    continue;
+                }
+            };
             assert_eq!(id, h.id);
             match construct_signed_candidate(&k.image, &n.image, &id, &h.revision) {
                 Ok(output) => {
-                    validate_envelope_package(&output, &product).unwrap();
+                    validate_envelope_package(&output, &product).unwrap_or_else(|error| {
+                        panic!(
+                            "{}: hardware={} reconstructed package validation failed: {error:#}",
+                            path.display(),
+                            h.hardware_version
+                        )
+                    });
                     let rebuilt = Bundle::from_tar_bytes(&output).unwrap();
                     let rebuilt_normal = rebuilt
                         .components
                         .iter()
                         .find(|c| c.role == Role::Main)
                         .unwrap();
+                    let rebuilt_kernel = rebuilt
+                        .components
+                        .iter()
+                        .find(|c| c.role == Role::Kernel)
+                        .unwrap();
+                    let decoded_kernel =
+                        pioneer_optical::envelope::Envelope::load(&rebuilt_kernel.bytes).unwrap();
+                    let decoded_normal = pioneer_optical::envelope::Envelope::load_with_kernel(
+                        &rebuilt_normal.bytes,
+                        &decoded_kernel,
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        decoded_kernel.image,
+                        k.image,
+                        "{}: restored Kernel bytes changed",
+                        path.display()
+                    );
+                    assert_eq!(
+                        decoded_normal.image,
+                        n.image,
+                        "{}: restored Normal bytes changed",
+                        path.display()
+                    );
+                    let image_hash = format!("{:x}", Sha256::digest(&n.image));
+                    let metadata = super::super::n::lookup(&image_hash);
+                    let source_verification =
+                        pioneer_optical::envelope::signature::verify_normal_signature(
+                            &normal.bytes,
+                        );
+                    let rebuilt_verification =
+                        pioneer_optical::envelope::signature::verify_normal_signature(
+                            &rebuilt_normal.bytes,
+                        );
+                    let source_authentication =
+                        pioneer_optical::envelope::builder::normal_authentication_valid(
+                            &normal.bytes,
+                            &k.image,
+                        );
+                    let rebuilt_authentication =
+                        pioneer_optical::envelope::builder::normal_authentication_valid(
+                            &rebuilt_normal.bytes,
+                            &k.image,
+                        );
+                    let signature_matches = if pioneer_optical::envelope::builder::normal_authentication_from_kernel(&k.image) == Some(pioneer_optical::envelope::builder::NormalAuthentication::ScaledChecksumOnly) {
+                        source_authentication && rebuilt_authentication
+                    } else {
+                        source_verification == rebuilt_verification
+                    };
+                    let rebuilt_header =
+                        pioneer_optical::envelope::header_info(&rebuilt_normal.bytes).unwrap();
+                    let actual_tag = std::str::from_utf8(&k.image[0x1008..0x1010])
+                        .unwrap()
+                        .trim_matches([' ', '\0']);
+                    let raw_header_matches = rebuilt_normal.bytes[..0x160] == normal.bytes[..0x160];
+                    let raw_name_matches =
+                        rebuilt_normal.bytes[0x1f0..0x200] == normal.bytes[0x1f0..0x200];
+                    if !raw_header_matches || !raw_name_matches {
+                        let catalog_header = metadata
+                            .and_then(|m| m.header.as_ref())
+                            .expect("unexpected header drift without catalog evidence");
+                        assert_ne!(
+                            h.kernel_version,
+                            actual_tag,
+                            "{}: no declared/body Kernel tag discrepancy",
+                            path.display()
+                        );
+                        assert_eq!(
+                            rebuilt_header.kernel_version,
+                            actual_tag,
+                            "{}: restored Normal not bound to captured Kernel",
+                            path.display()
+                        );
+                        assert_eq!(
+                            &rebuilt_normal.bytes[..0x160],
+                            &catalog_header[..0x160],
+                            "{}: canonical OEM header differs",
+                            path.display()
+                        );
+                        assert_eq!(
+                            &rebuilt_normal.bytes[0x1f0..0x200],
+                            &catalog_header[0x1f0..0x200],
+                            "{}: canonical OEM filename differs",
+                            path.display()
+                        );
+                        let mut expected = normal.bytes[..0x160].to_vec();
+                        for label in [
+                            b"Kernel Version : ".as_slice(),
+                            b"Destination : ".as_slice(),
+                        ] {
+                            let at = expected
+                                .windows(label.len())
+                                .position(|w| w == label)
+                                .unwrap()
+                                + label.len();
+                            assert_eq!(
+                                &expected[at..at + h.kernel_version.len()],
+                                h.kernel_version.as_bytes(),
+                                "{}: unrelated header drift",
+                                path.display()
+                            );
+                            assert_eq!(actual_tag.len(), h.kernel_version.len());
+                            expected[at..at + actual_tag.len()]
+                                .copy_from_slice(actual_tag.as_bytes());
+                        }
+                        assert_eq!(
+                            &rebuilt_normal.bytes[..0x160],
+                            expected,
+                            "{}: header changed beyond actual captured Kernel tag",
+                            path.display()
+                        );
+                        canonical_headers += usize::from(!raw_header_matches);
+                        canonical_names += usize::from(!raw_name_matches);
+                        eprintln!("canonical captured identity restored: {} declared_tag={} actual_body_tag={} (exact OEM catalog header/name and both decoded bodies)",path.display(),h.kernel_version,actual_tag);
+                    }
+                    if let Some(entry) = metadata {
+                        assert_eq!(
+                            &rebuilt_normal.bytes
+                                [pioneer_optical::envelope::builder::NORMAL_SIGNATURE_RANGE],
+                            entry.signature.as_slice(),
+                            "{}: catalog OEM signature bytes changed",
+                            path.display()
+                        );
+                        assert!(
+                            signature_matches && rebuilt_authentication,
+                            "{}: known OEM receiver authentication changed",
+                            path.display()
+                        );
+                        assert!(
+                            package_provenance(&output).normal_oem,
+                            "{}: exact catalog body/signature lost OEM provenance",
+                            path.display()
+                        );
+                        let update = pioneer_optical::envelope::Update::load(
+                            &rebuilt_kernel.bytes,
+                            &rebuilt_normal.bytes,
+                        )
+                        .unwrap_or_else(|e| {
+                            panic!("{}: strict OEM pair refused: {e}", path.display())
+                        });
+                        if !raw_header_matches || !raw_name_matches {
+                            pioneer_optical::receiver::Receiver::detect_with_kernel(
+                                update.normal(),
+                                update.kernel(),
+                            )
+                            .unwrap_or_else(|e| {
+                                panic!(
+                                    "{}: canonical captured receiver refused: {e}",
+                                    path.display()
+                                )
+                            });
+                        }
+                    } else {
+                        assert!(
+                            rebuilt_normal.bytes
+                                [pioneer_optical::envelope::builder::NORMAL_SIGNATURE_RANGE]
+                                .iter()
+                                .all(|&b| b == 0),
+                            "{}: unknown image was not explicitly unsigned",
+                            path.display()
+                        );
+                        assert!(
+                            !package_provenance(&output).normal_oem,
+                            "{}: unknown image falsely marked OEM",
+                            path.display()
+                        );
+                        let signed = super::super::normal_prepare::pair(&rebuilt_kernel.bytes,&rebuilt_normal.bytes).unwrap_or_else(|e|panic!("{}: unsigned candidate cannot prepare for captured receiver: {e:#}",path.display()));
+                        assert_eq!(
+                            signed.kernel().image,
+                            k.image,
+                            "{}: signing preparation changed Kernel",
+                            path.display()
+                        );
+                        assert_eq!(
+                            signed.normal().image,
+                            n.image,
+                            "{}: signing preparation changed Normal",
+                            path.display()
+                        );
+                        unsigned_candidates += 1;
+                        eprintln!("unsigned candidate proved: {} body_sha256={image_hash} zero signature, false OEM provenance, exact decoded bodies, strict receiver-valid signing preparation",path.display());
+                    }
                     built += 1;
                     exact_text +=
                         usize::from(rebuilt_normal.bytes[..0x160] == normal.bytes[..0x160]);
@@ -922,25 +1445,99 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                         rebuilt_normal.bytes[0x1f0..0x200] == normal.bytes[0x1f0..0x200],
                     );
                     if h.destination != "GENERAL" && !h.destination.starts_with("ID") {
-                        assert!(rebuilt_normal.bytes[0x1f0..].starts_with(
-                            format!("NORMAL.{}\0", h.revision.replace('.', "")).as_bytes()
-                        ));
-                        generated_name += 1;
-                    }
-                    signature_range_match += usize::from(if pioneer_optical::envelope::builder::normal_authentication_from_kernel(&k.image) == Some(pioneer_optical::envelope::builder::NormalAuthentication::ScaledChecksumOnly) {
-                            pioneer_optical::envelope::builder::normal_authentication_valid(&normal.bytes, &k.image)
-                                && pioneer_optical::envelope::builder::normal_authentication_valid(&rebuilt_normal.bytes, &k.image)
+                        let image_hash = format!("{:x}", Sha256::digest(&n.image));
+                        let captured_name = &normal.bytes[0x1f0..0x200];
+                        let rebuilt_name = &rebuilt_normal.bytes[0x1f0..0x200];
+                        if let Some(header) = super::super::n::lookup(&image_hash)
+                            .and_then(|entry| entry.header.as_ref())
+                        {
+                            // The baseline builder restores the hash-matched OEM header,
+                            // including its original embedded filename.
+                            assert_eq!(
+                                rebuilt_name,
+                                captured_name,
+                                "{}: hardware={} Normal body SHA256={image_hash}: captured OEM filename changed",
+                                path.display(),
+                                h.hardware_version
+                            );
+                            assert_eq!(
+                                rebuilt_name,
+                                &header[0x1f0..0x200],
+                                "{}: hardware={} Normal body SHA256={image_hash}: catalog OEM filename changed",
+                                path.display(),
+                                h.hardware_version
+                            );
                         } else {
-                            pioneer_optical::envelope::signature::verify_normal_signature(
-                                &rebuilt_normal.bytes,
-                            ) == pioneer_optical::envelope::signature::verify_normal_signature(&normal.bytes)
-                        });
+                            assert!(
+                                rebuilt_name.starts_with(
+                                    format!("NORMAL.{}\0", h.revision.replace('.', "")).as_bytes()
+                                ),
+                                "{}: hardware={} revision={} destination={:?} rebuilt embedded name={rebuilt_name:?}, original embedded name={captured_name:?}",
+                                path.display(),
+                                h.hardware_version,
+                                h.revision,
+                                h.destination
+                            );
+                            generated_name += usize::from(rebuilt_name != captured_name);
+                        }
+                    }
+                    signature_range_match += usize::from(metadata.is_some() && signature_matches);
                 }
-                Err(error) => failures.push(format!("{}: {error:#}", h.hardware_version)),
+                Err(error) => {
+                    if !zero_be32_sum(&n.image)
+                        && error.to_string()
+                            == "images do not satisfy Pioneer H8/SAT image structure"
+                    {
+                        prove_checksum_invalid_normal_refusal(
+                            &inquiry,
+                            &k.image,
+                            &n.image,
+                            &h.hardware_version,
+                            &product,
+                        )
+                        .unwrap_or_else(|proof| {
+                            panic!(
+                                "{}: checksum refusal proof failed: {proof:#}",
+                                path.display()
+                            )
+                        });
+                        refused_checksum_sat_pairs += 1;
+                        eprintln!(
+                            "capture refused checksum-invalid Normal: {}",
+                            path.display()
+                        );
+                        continue;
+                    }
+                    eprintln!(
+                        "structure diagnostic: {} kernel_len={} normal_len={} kernel_sum={} normal_sum={} kernel_hardware={:?} normal_descriptor={:?} normal_declared={} scaled={:?}",
+                        path.display(),
+                        k.image.len(),
+                        n.image.len(),
+                        zero_be32_sum(&k.image),
+                        zero_be32_sum(&n.image),
+                        &k.image[0x1000..0x1008],
+                        &n.image[..16],
+                        u32::from_be_bytes(n.image[20..24].try_into().unwrap()),
+                        pioneer_optical::envelope::builder::scaled_normal_geometry_from_kernel(
+                            &k.image
+                        )
+                    );
+                    failures.push(format!(
+                        "{}: hardware={}: {error:#}",
+                        path.display(),
+                        h.hardware_version
+                    ));
+                }
             }
         }
     }
-    eprintln!("builder corpus: {built} built, {} unsupported; {exact_text} exact textual headers, {exact_name} exact names, {signature_range_match} matching signature ranges", failures.len());
+    eprintln!(
+        "capture capability: {eligible_sat_pairs} SAT pairs ({refused_relabelled_sat_pairs} relabeled headers refused after decoded-body proof; {refused_checksum_sat_pairs} checksum-invalid Normals excluded with exact Kernel-only capture); {refused_non_sat_pairs} non-SAT pairs refused before firmware I/O"
+    );
+    eprintln!(
+        "builder corpus: {built} built, {} unsupported; {exact_text} exact textual headers, {exact_name} exact names, {signature_range_match} matching signature ranges",
+        failures.len()
+    );
     for failure in &failures {
         eprintln!("unsupported: {failure}");
     }
@@ -949,14 +1546,37 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
         "decoded OEM pairs failed reconstruction: {failures:?}"
     );
     assert!(built > 0);
-    assert_eq!(exact_text, built, "OEM textual header drift");
+    assert_eq!(
+        built + refused_relabelled_sat_pairs + refused_checksum_sat_pairs,
+        eligible_sat_pairs,
+        "SAT pairs lack reconstruction or explicit production refusal evidence"
+    );
+    assert_eq!(
+        exact_text + canonical_headers,
+        built,
+        "unexplained textual header drift"
+    );
     eprintln!("explicit generated Normal filenames: {generated_name}");
     assert_eq!(
-        exact_name + generated_name,
+        exact_name + generated_name + canonical_names,
         built,
         "unexplained embedded filename drift"
     );
-    assert_eq!(signature_range_match, built, "OEM signature range drift");
+    assert_eq!(
+        signature_range_match + unsigned_candidates,
+        built,
+        "unexplained signature change"
+    );
+    assert_eq!(
+        built
+            + refused_relabelled_sat_pairs
+            + refused_checksum_sat_pairs
+            + refused_non_sat_pairs
+            + refused_identity_shapes,
+        seen_hardware.len(),
+        "decoded pairs lack positive or explicit negative evidence"
+    );
+    eprintln!("final evidence: {built} reconstructed ({signature_range_match} OEM signatures, {unsigned_candidates} explicit unsigned candidates); {canonical_headers} canonical actual-body headers, {canonical_names} canonical filenames; {refused_non_sat_pairs} non-SAT preflight refusals, {refused_relabelled_sat_pairs} relabeled identity refusals, {refused_checksum_sat_pairs} invalid Normal checksums with Kernel-only preservation, {refused_identity_shapes} malformed declared identity parser refusals");
 }
 
 #[test]
@@ -1222,8 +1842,16 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
         0x114,
         "79 63 00 1f 0d 31 5e 40 01 22 01 f0 64 40 11 70 54 70",
     );
-    put(&mut kernel, 0x200, "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 20 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de");
-    put(&mut kernel, 0x400, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6");
+    put(
+        &mut kernel,
+        0x200,
+        "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 20 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de",
+    );
+    put(
+        &mut kernel,
+        0x400,
+        "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6",
+    );
     fix(&mut kernel);
     let mut normal = vec![0; 0x2000];
     normal[..16].copy_from_slice(&id[..16]);

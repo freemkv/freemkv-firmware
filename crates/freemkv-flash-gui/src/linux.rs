@@ -227,11 +227,12 @@ fn build_ui(gapp: &adw::Application) {
     root.append(&scroll);
 
     // Activity log.
-    root.append(&widgets::label(ui::LOG_TITLE, &["caption", "dim-label"]));
+    // Operation diagnostics are opened from the result action instead of
+    // consuming the bottom of every task.
     let (log_scroll, log) = widgets::text_pane();
     log_scroll.set_min_content_height(110);
     log_scroll.set_max_content_height(110);
-    root.append(&log_scroll);
+    log_scroll.set_visible(false);
 
     toolbar.set_content(Some(&root));
     window.set_content(Some(&toolbar));
@@ -312,6 +313,9 @@ impl Shell {
                     self.choose_file(pick, None, Some(file_name))
                 }
                 Effect::CopyText(text) => self.window.clipboard().set_text(&text),
+                Effect::OpenPath(path) => {
+                    let _ = crate::external::open_path(&path);
+                }
                 Effect::StartTicking => self.start_tick(),
                 Effect::StopTicking => {
                     if let Some(id) = self.tick.borrow_mut().take() {
@@ -641,6 +645,9 @@ impl Shell {
             self.results.append(&widgets::label(n, &["caption"]));
         }
         let b = self.button(&r.view_log);
+        b.set_halign(gtk::Align::Start);
+        self.results.append(&b);
+        let b = self.button(&r.submit_report);
         b.set_halign(gtk::Align::Start);
         self.results.append(&b);
     }

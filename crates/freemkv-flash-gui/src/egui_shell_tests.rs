@@ -140,7 +140,7 @@ fn failed_operation_offers_log_export_next_to_the_error() {
         text.iter().any(|(t, _)| t == "Save diagnostic log…"),
         "{text:?}"
     );
-    assert!(text.iter().any(|(t, _)| t == "View diagnostic log…"));
+    assert!(text.iter().any(|(t, _)| t == "View Log"));
     assert!(text.iter().any(|(t, _)| t == "Backup failed"));
 }
 
@@ -188,6 +188,15 @@ fn confirmation_window_shows_the_gate_texts() {
     s.app
         .dispatch(Input::Chosen(Pick::RecoveryCurrent, "old.tar".into()));
     s.app.dispatch(Input::Recover);
+    s.app
+        .worker
+        .take()
+        .unwrap()
+        .send(crate::ui::Msg::Done(Ok(Some(
+            freemkv_flash::workflow::UpdateOutcome::Planned,
+        ))))
+        .unwrap();
+    s.app.poll();
     let text = rendered_text(&mut s);
     for want in [
         "Confirm recovery",

@@ -139,6 +139,8 @@ pub(crate) fn image(board: &Board, model: &str, code: u8) -> Vec<u8> {
         .to_vec();
     img[..layout::BOOT_PAGE.len].copy_from_slice(&boot);
     let d = layout::DESCRIPTOR.start;
+    img[d..d + 8].copy_from_slice(b"HL-DT-ST");
+    img[d + 0x18..d + 0x1C].copy_from_slice(b"1.00");
     img[d + 0x08..d + 0x18].fill(b' ');
     img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
     img[d + 0x34..d + 0x3E].copy_from_slice(board.tag.as_bytes());

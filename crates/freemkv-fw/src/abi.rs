@@ -20,13 +20,10 @@
 //! richer states on top (an explicit Speed cap byte, the Region force-region
 //! block), but the three canonical values mean the same thing everywhere.
 //!
-//! At power-on the drive's SRAM flag table reads all-`0x00`, which under this
-//! grammar would mean "every feature OFF". The firmware's always-on boot-init hook
-//! therefore writes [`STATE_PASSTHROUGH`] (`0xFF`) into every flag at boot, so a
-//! freshly powered drive is byte-behaviour-identical to OEM until the host changes
-//! a flag — the invariant that keeps a flashed drive stealthy. [`Verb::Reset`]
-//! with [`RESET_TO_OEM`] returns every feature to passthrough (the same all-`0xFF`
-//! state); with [`RESET_TO_FLASH`] it reloads the saved flash config block instead.
+//! At power-on the boot hook initializes every flag to the image's selected
+//! boot settings. Runtime SET can change those values until the next restart.
+//! RESET_TO_DEFAULTS restores the image settings; RESET_TO_FLASH explicitly
+//! reloads a saved configuration, which never overrides startup automatically.
 //!
 //! ```text
 //!   cdb[0]    = 0x3C  (READ BUFFER)          ← standard opcode; bridge-safe
@@ -124,11 +121,8 @@ pub const CDB_ALLOC_LEN: usize = 7;
 pub const MIN_ALLOC_LEN: u16 = 64;
 
 /// Feature state: **passthrough / OEM** (`0xFF`) — the firmware does not touch
-/// this subsystem, so behaviour is exactly as the drive shipped. The value the
-/// always-on boot hook writes into every flag at power-on, and the value
-/// [`Verb::Reset`] restores everywhere. An image with all features at passthrough
-/// is byte-behaviour-identical to OEM (stealth). This is the OEM leg of the
-/// uniform `0xFF` / `0x01` / `0x00` tri-state.
+/// this subsystem, so behaviour is exactly as the drive shipped. RESET_TO_OEM
+/// restores this value everywhere; boot uses the image's selected settings.
 pub const STATE_PASSTHROUGH: u8 = 0xFF;
 
 /// Feature state: explicit **off / disabled** (`0x00`) — actively force the
@@ -136,11 +130,8 @@ pub const STATE_PASSTHROUGH: u8 = 0xFF;
 /// refuses a disc, Speed caps at the floor). Distinct from [`STATE_PASSTHROUGH`]
 /// (which merely leaves the subsystem untouched).
 ///
-/// `0x00` is also the drive's power-on SRAM value; the always-on boot-init hook
-/// overwrites every flag with [`STATE_PASSTHROUGH`] at boot, so a gate only ever
-/// sees `0x00` (OFF) when the host has explicitly set it — never at power-on. That
-/// boot hook is exactly what makes `0x00 == OFF` safe (the earlier design had to
-/// reserve `0x00` as an OEM alias because there was no boot hook).
+/// The boot hook initializes every flag explicitly, so uninitialized SRAM
+/// cannot accidentally select OFF. An image may intentionally choose OFF.
 pub const STATE_OFF: u8 = 0x00;
 
 /// Feature state: explicit **on / enabled** (the generic "activate" value; some
@@ -155,8 +146,8 @@ pub const RESET_TO_FLASH: u8 = 0x00;
 
 /// [`Verb::Reset`] mode (rides in the state slot `cdb[6]`): restore the baked
 /// per-create **defaults** (the create-time `DEFAULT_FLAGS`, e.g. UHD/BD on) into
-/// the RAM feature-state table. RAM-only — does not touch flash. This is what a
-/// never-saved drive boots to.
+/// the RAM feature-state table. RAM-only — does not touch flash. These are the settings
+/// applied on every boot, regardless of any saved configuration.
 pub const RESET_TO_DEFAULTS: u8 = 0x01;
 
 /// [`Verb::Reset`] mode (rides in the state slot `cdb[6]`): TRUE OEM. Forces every

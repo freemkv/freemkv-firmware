@@ -42,7 +42,7 @@ PureRead: Invalid or incomplete response
 MSG      device: mock://in-memory
 FIELD    Manufacturer = PIONEER
 FIELD    Model = BDR-UD04
-FIELD    Firmware version = 
+FIELD    Firmware version =
 FIELD    Drive family = Pioneer
 MSG      inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
 MSG      banner: <none>
@@ -177,8 +177,8 @@ PureRead: Invalid or incomplete response
 --- events (74) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = RENESAS
-FIELD    Model = 
-FIELD    Firmware version = 
+FIELD    Model =
+FIELD    Firmware version =
 FIELD    Drive family = Pioneer
 MSG      inquiry: vendor='RENESAS' product='' rev=''
 MSG      banner: <none>

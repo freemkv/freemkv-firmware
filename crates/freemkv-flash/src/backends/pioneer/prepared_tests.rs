@@ -4,10 +4,13 @@ use pioneer_optical::receiver::PreparedUpdate;
 const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 
 fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
-    crate::backends::pioneer::flash::execute_prepared(
+    crate::backends::pioneer::flash::execute_with_sleep(
         &mut crate::engine::gates::ungated_for_tests(dev),
         crate::backends::pioneer::flash::PreparedFlash::Complete(plan),
+        pioneer_optical::receiver::ExecutionMode::Flash,
+        &mut |_| {},
     )
+    .map(|_| ())
 }
 use pioneer_optical::envelope::{
     builder::{encode_encrypted_pair, BuildInputs, KernelBuild, NormalSignature},
@@ -127,8 +130,20 @@ struct Drive {
     reject_parameter_read: bool,
     reject_parameter_write: bool,
     memory: Vec<u8>,
+    normal_memory: Vec<u8>,
+    initial_identity: (
+        [u8; pioneer_optical::INQUIRY_LEN],
+        [u8; pioneer_optical::IDENTITY_LEN],
+    ),
+    target_identity: (
+        [u8; pioneer_optical::INQUIRY_LEN],
+        [u8; pioneer_optical::IDENTITY_LEN],
+    ),
     descriptor: Vec<u8>,
     kernel: Vec<u8>,
+    normal_wire: Vec<u8>,
+    updating: bool,
+    wrong_target_revision: bool,
     writes: Vec<(Vec<u8>, Vec<u8>)>,
     fail_at: Option<usize>,
     corrupt_after_finish: Option<usize>,
@@ -138,6 +153,15 @@ struct Drive {
 }
 impl Drive {
     fn new(plan: &PreparedUpdate) -> Self {
+        let mut inquiry = [0; pioneer_optical::INQUIRY_LEN];
+        inquiry[0] = 5;
+        inquiry[8..16].copy_from_slice(b"PIONEER ");
+        inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
+        inquiry[32..36].copy_from_slice(b"1.00");
+        let mut vendor = [0; pioneer_optical::IDENTITY_LEN];
+        vendor[16..24].copy_from_slice(b"SAT FFFE");
+        vendor[24..32].copy_from_slice(b"GENERAL ");
+        vendor[32..40].copy_from_slice(b"GENERAL ");
         Self {
             parameter: Some(0xffff),
             parameter_reads: 0,
@@ -145,8 +169,14 @@ impl Drive {
             reject_parameter_read: false,
             reject_parameter_write: false,
             memory: plan.first_kernel_image().to_vec(),
+            normal_memory: Vec::new(),
+            initial_identity: (inquiry, vendor),
+            target_identity: (inquiry, vendor),
             descriptor: b"PIONEER TEST-NEW".to_vec(),
             kernel: Vec::new(),
+            normal_wire: Vec::new(),
+            updating: false,
+            wrong_target_revision: false,
             writes: Vec::new(),
             fail_at: None,
             corrupt_after_finish: None,
@@ -154,6 +184,42 @@ impl Drive {
             medium_checks: 0,
             insert_disc_after_first_pass: false,
         }
+    }
+    fn with_firmware(mut self, current: &Update, target: &Update) -> Self {
+        fn identity(
+            update: &Update,
+        ) -> (
+            [u8; pioneer_optical::INQUIRY_LEN],
+            [u8; pioneer_optical::IDENTITY_LEN],
+        ) {
+            let mut inquiry = [b' '; pioneer_optical::INQUIRY_LEN];
+            inquiry[0] = 5;
+            inquiry[8..16].copy_from_slice(b"PIONEER ");
+            let info = update.normal().info();
+            let product = info
+                .model
+                .strip_prefix("PIONEER ")
+                .unwrap_or(&info.model)
+                .as_bytes();
+            assert!(product.len() <= 16);
+            inquiry[16..16 + product.len()].copy_from_slice(product);
+            inquiry[32..36].copy_from_slice(info.revision.as_bytes());
+            let mut vendor = [b' '; pioneer_optical::IDENTITY_LEN];
+            for (offset, field) in [
+                (16, &info.hardware_version),
+                (24, &update.kernel().info().kernel_version),
+                (32, &info.kernel_version),
+            ] {
+                assert!(field.len() <= 8);
+                vendor[offset..offset + field.len()].copy_from_slice(field.as_bytes());
+            }
+            (inquiry, vendor)
+        }
+        self.initial_identity = identity(current);
+        self.target_identity = identity(target);
+        self.memory = current.kernel().image.clone();
+        self.descriptor = current.normal().image[..16].to_vec();
+        self
     }
 }
 impl ScsiDevice for Drive {
@@ -184,14 +250,33 @@ impl ScsiDevice for Drive {
         }
         if cdb.len() == 10 && cdb[..3] == pioneer_optical::cdb::read_memory(0, 0)[..3] {
             let addr = u32::from_be_bytes([0, cdb[3], cdb[4], cdb[5]]);
+            if addr >= 0x0041_0000 {
+                let offset = (addr - 0x0041_0000) as usize;
+                return Ok(self.normal_memory[offset..offset + len].to_vec());
+            }
             let offset = (addr - pioneer_optical::image::KERNEL_BASE) as usize;
             return Ok(self.memory[offset..offset + len].to_vec());
         }
         let mut out = vec![0; len];
+        let (inquiry, vendor) = if self.finishes == 0 {
+            &self.initial_identity
+        } else {
+            &self.target_identity
+        };
         if cdb[0] == 0x12 {
-            out[8..16].copy_from_slice(b"PIONEER ");
-            out[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
-            out[32..36].copy_from_slice(b"000 ");
+            let count = out.len().min(inquiry.len());
+            out[..count].copy_from_slice(&inquiry[..count]);
+            if self.updating {
+                out[32..36].copy_from_slice(b"0000");
+            } else if self.finishes > 0 && self.wrong_target_revision {
+                out[32..36].copy_from_slice(b"9.99");
+            }
+        } else if cdb == pioneer_optical::cdb::vendor_identity() {
+            let count = out.len().min(vendor.len());
+            out[..count].copy_from_slice(&vendor[..count]);
+            if self.updating {
+                out[32..40].fill(b' ');
+            }
         }
         Ok(out)
     }
@@ -218,12 +303,21 @@ impl ScsiDevice for Drive {
         }
         if cdb == pioneer_optical::cdb::enter_update() {
             self.kernel.clear();
+            self.normal_wire.clear();
+            self.updating = true;
         }
         if cdb[..3] == [0x3b, 0x07, 0xfe] {
             self.kernel.extend_from_slice(data);
         }
+        if cdb[..3] == [0x3b, 0x07, 0xf0] {
+            self.normal_wire.extend_from_slice(data);
+        }
         if cdb == pioneer_optical::cdb::finish() {
-            self.memory = Envelope::load(&self.kernel).unwrap().image;
+            self.updating = false;
+            let kernel = Envelope::load(&self.kernel)?;
+            self.normal_memory = Envelope::load_with_kernel(&self.normal_wire, &kernel)?.image;
+            self.descriptor = self.normal_memory[..16].to_vec();
+            self.memory = kernel.image;
             self.finishes += 1;
             if self.corrupt_after_finish == Some(self.finishes) {
                 self.memory[0] ^= 1;
@@ -324,10 +418,37 @@ fn restoration_success_requires_pristine_readback_and_preserves_normal() {
     }
 }
 #[test]
-fn unpatched_update_completes_without_an_extra_session() {
+fn unpatched_update_reports_target_startup_and_readback_limits() {
     let plan = plan(false);
     let mut drive = Drive::new(&plan);
-    execute(&mut drive, &plan).unwrap();
+    let outcome = crate::backends::pioneer::flash::execute_with_sleep(
+        &mut crate::engine::gates::ungated_for_tests(&mut drive),
+        crate::backends::pioneer::flash::PreparedFlash::Complete(&plan),
+        pioneer_optical::receiver::ExecutionMode::Flash,
+        &mut |_| {},
+    )
+    .unwrap();
+    let crate::backend::UpdateOutcome::Completed(evidence) = outcome else {
+        panic!("execution only planned")
+    };
+    assert!(evidence.target_started);
+    assert_eq!(evidence.verified_regions, ["Kernel"]);
+    assert_eq!(evidence.unverified_regions, ["Normal"]);
+    assert!(!evidence.temporary_firmware);
+    assert_eq!(drive.finishes, 1);
+}
+
+#[test]
+fn different_running_revision_is_not_target_completion() {
+    let plan = plan(false);
+    let mut drive = Drive::new(&plan);
+    drive.wrong_target_revision = true;
+    let error = execute(&mut drive, &plan).unwrap_err();
+    let state = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert_eq!(state.phase, "target startup");
+    assert!(state.write_started);
     assert_eq!(drive.finishes, 1);
 }
 
@@ -339,7 +460,8 @@ fn newly_inserted_disc_blocks_restoration_and_explains_temporary_kernel() {
     let error = execute(&mut drive, &plan).unwrap_err();
     let message = format!("{error:#}");
     assert!(message.contains("a disc is loaded"));
-    assert!(message.contains("installed firmware state is uncertain"));
+    assert!(message.contains("temporary Kernel may remain installed"));
+    // Before migration, immediately before entry, and before restoration.
     assert_eq!(drive.medium_checks, 3);
     assert_eq!(drive.finishes, 1);
     assert_eq!(
@@ -381,8 +503,7 @@ fn real_package_flash_migrates_startup_word_in_both_directions() {
             .unwrap();
         assert_eq!(plan.startup_setting().unwrap().value, required);
         for scenario in 0..4 {
-            let mut drive = Drive::new(&plan);
-            drive.descriptor = source.normal().image[..16].to_vec();
+            let mut drive = Drive::new(&plan).with_firmware(source, target);
             drive.parameter = Some(original);
             drive.bad_parameter_verification = scenario == 1;
             drive.fail_at = (scenario == 2).then_some(1);
@@ -443,13 +564,12 @@ fn real_207m_to_pr1ml_flash_uses_a0_without_code_surface_match() {
     assert!(pioneer_optical::startup::surface::discover(&current.normal().image).is_none());
     let plan = Receiver::from_installed(&current)
         .unwrap()
-        .prepare(target)
+        .prepare(target.clone())
         .unwrap();
     let setting = plan.startup_setting().unwrap();
     assert_eq!((setting.parameter, setting.value), (0x9f, 0xff01));
 
-    let mut drive = Drive::new(&plan);
-    drive.descriptor = current.normal().image[..16].to_vec();
+    let mut drive = Drive::new(&plan).with_firmware(&current, &target);
     drive.parameter = Some(0xffff);
     execute(&mut drive, &plan).unwrap();
     assert_eq!(drive.parameter, Some(0xff01));

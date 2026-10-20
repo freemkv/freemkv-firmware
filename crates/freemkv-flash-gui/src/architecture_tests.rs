@@ -6,6 +6,7 @@ const MODEL: &[(&str, &str)] = &[
     ("ui.rs", include_str!("ui.rs")),
     ("ops.rs", include_str!("ops.rs")),
     ("gui_gate.rs", include_str!("gui_gate.rs")),
+    ("support.rs", include_str!("support.rs")),
 ];
 
 const SHELLS: &[(&str, &str)] = &[
@@ -18,6 +19,7 @@ const SHELLS: &[(&str, &str)] = &[
     ("linux.rs", include_str!("linux.rs")),
     ("linux/widgets.rs", include_str!("linux/widgets.rs")),
     ("linux/gate.rs", include_str!("linux/gate.rs")),
+    ("external.rs", include_str!("external.rs")),
 ];
 
 const TOOLKITS: &[&str] = &[
@@ -84,7 +86,10 @@ fn gui_model_imports_only_workflow_and_report() {
         for (n, line) in code(src) {
             for (at, _) in line.match_indices("freemkv_flash::") {
                 let rest = &line[at + "freemkv_flash::".len()..];
-                if !(rest.starts_with("workflow") || rest.starts_with("report")) {
+                if !(rest.starts_with("workflow")
+                    || rest.starts_with("report")
+                    || (*file == "support.rs" && rest.starts_with("diagnostics")))
+                {
                     hits.push(format!("{file}:{n}: {line}"));
                 }
             }

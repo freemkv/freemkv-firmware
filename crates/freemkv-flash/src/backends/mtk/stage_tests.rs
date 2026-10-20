@@ -1,5 +1,5 @@
 //! Exercise automatic stages with a simulated receiver that boots each write.
-use super::super::fixture;
+use super::super::{detect_receiver, fixture};
 use super::*;
 use crate::platform::MockScsiDevice;
 
@@ -9,6 +9,7 @@ struct Drive {
     stages: Vec<Vec<u8>>,
     boot_intermediate: bool,
     encrypted_after: bool,
+    header_only_after: bool,
     wire_stages: Vec<Vec<u8>>,
     restricted: bool,
 }
@@ -45,7 +46,11 @@ impl ScsiDevice for Drive {
         if command == cdb::finish() {
             self.wire_stages.push(self.written.clone());
             if self.encrypted_after && !self.stages.is_empty() {
-                mediatek_optical::enc::decrypt(&mut self.written).unwrap();
+                if self.header_only_after {
+                    mediatek_optical::enc::decrypt(&mut self.written[0x3000..0x3010]).unwrap();
+                } else {
+                    mediatek_optical::enc::decrypt(&mut self.written).unwrap();
+                }
             }
             self.stages.push(self.written.clone());
             if self.boot_intermediate || self.stages.len() > 1 {
@@ -70,14 +75,21 @@ fn image(revision: &[u8; 4], code: u8) -> Vec<u8> {
     bytes[0x1ec018..0x1ec01c].copy_from_slice(revision);
     mediatek_optical::image::cmac::resign(&bytes).unwrap()
 }
-fn run(boot: bool, encrypted_after: bool) -> (Result<()>, Drive, Vec<u8>, Vec<u8>) {
+fn running_inquiry(image: &[u8]) -> Vec<u8> {
+    let mut inquiry = vec![0; 36];
+    inquiry[0] = 5;
+    inquiry[4] = 31;
+    inquiry[8..36].copy_from_slice(&image[0x1ec000..0x1ec01c]);
+    inquiry
+}
+fn run(boot: bool, encrypted_after: bool) -> (Result<UpdateOutcome>, Drive, Vec<u8>, Vec<u8>) {
     run_with_changed_receiver(boot, encrypted_after, false)
 }
 fn run_with_changed_receiver(
     boot: bool,
     encrypted_after: bool,
     changed: bool,
-) -> (Result<()>, Drive, Vec<u8>, Vec<u8>) {
+) -> (Result<UpdateOutcome>, Drive, Vec<u8>, Vec<u8>) {
     run_with_restricted_receiver(boot, encrypted_after, changed, false)
 }
 fn run_with_restricted_receiver(
@@ -85,19 +97,24 @@ fn run_with_restricted_receiver(
     encrypted_after: bool,
     changed: bool,
     restricted: bool,
-) -> (Result<()>, Drive, Vec<u8>, Vec<u8>) {
+) -> (Result<UpdateOutcome>, Drive, Vec<u8>, Vec<u8>) {
     let initial = image(b"1.00", 1);
-    let mut intermediate = image(b"INTM", 2);
+    let mut intermediate = image(b"INTM", 1);
     if encrypted_after {
-        encrypted_receiver(&mut intermediate);
+        super::super::bulk_receiver_fixture::stamp(&mut intermediate);
     }
     let final_image = image(b"1.05", 3);
     let mut dev = Drive {
-        inner: MockScsiDevice::echoing().with_firmware_image(initial.clone()),
+        // Only Drive's successful boot branch may change the running identity;
+        // echoed staging bytes alone do not prove that firmware started.
+        inner: MockScsiDevice::echoing()
+            .with_firmware_image(initial.clone())
+            .on(|c| c.first() == Some(&0x12), running_inquiry(&initial)),
         written: vec![0; IMAGE_SIZE],
         stages: vec![],
         boot_intermediate: boot,
         encrypted_after,
+        header_only_after: false,
         wire_stages: Vec::new(),
         restricted,
     };
@@ -118,9 +135,13 @@ fn run_with_restricted_receiver(
         changed_image[receiver.signature_address() as usize] ^= 1;
         dev.inner = MockScsiDevice::echoing().with_firmware_image(changed_image);
     }
+    let final_prepared = match prepare_next_stage(&intermediate, &final_image) {
+        Ok(plan) => plan,
+        Err(error) => return (Err(error), dev, intermediate, final_image),
+    };
     let plan = FlashPlan::new(Plan {
         image: intermediate.clone(),
-        final_image: Some(final_image.clone()),
+        final_prepared: Some(final_prepared),
         live,
         receiver,
         drive_product: "BD-RE BU40N".into(),
@@ -137,7 +158,13 @@ fn run_with_restricted_receiver(
 #[test]
 fn changed_receiver_rejects_the_bound_plan_before_any_write() {
     let (result, dev, _, _) = run_with_changed_receiver(true, false, true);
-    assert!(result.unwrap_err().to_string().contains("changed"));
+    let error = result.unwrap_err();
+    assert!(format!("{error:#}").contains("changed"));
+    let failure = error
+        .downcast_ref::<UpdateFailure>()
+        .expect("structured failure");
+    assert!(!failure.write_started);
+    assert_eq!(failure.phase, "receiver revalidation");
     assert!(dev.inner.writes.is_empty());
     assert!(dev.stages.is_empty());
 }
@@ -150,10 +177,7 @@ fn stages_write_intermediate_then_final() {
 #[test]
 fn failed_intermediate_startup_prevents_final_write() {
     let (result, dev, intermediate, _) = run(false, false);
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("startup was not confirmed"));
+    assert!(format!("{:#}", result.unwrap_err()).contains("startup"));
     assert_eq!(dev.stages, vec![intermediate]);
 }
 
@@ -175,31 +199,39 @@ fn encrypted_receiver(image: &mut [u8]) {
     image[target..target + aes.len()].copy_from_slice(&aes);
 }
 #[test]
-fn final_stage_redetects_and_encrypts_for_the_new_receiver() {
-    let (result, dev, intermediate, final_image) = run(true, true);
-    result.unwrap();
-    assert_eq!(dev.stages, vec![intermediate.clone(), final_image.clone()]);
-    assert_eq!(dev.wire_stages[0], intermediate);
-    let mut expected = final_image;
-    mediatek_optical::enc::encrypt(&mut expected).unwrap();
-    assert_eq!(dev.wire_stages[1], expected);
+fn unsupported_final_receiver_contract_is_rejected_before_intermediate_write() {
+    let current = image(b"1.00", 1);
+    let mut intermediate = image(b"INTM", 2);
+    encrypted_receiver(&mut intermediate);
+    let target = image(b"1.05", 3);
+    let mut dev = MockScsiDevice::new().with_firmware_image(current);
+    let req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    assert!(Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .is_err());
+    assert!(dev.writes.is_empty());
 }
 
 #[test]
-fn restricted_intm_to_final_uses_just_installed_image_and_encrypted_wire() {
+fn restricted_intermediate_uses_prepared_reference_and_reports_limited_verification() {
     let (result, dev, intermediate, final_image) =
-        run_with_restricted_receiver(true, true, false, true);
-    result.unwrap();
-    assert_eq!(dev.stages, vec![intermediate, final_image.clone()]);
-    let mut encrypted = final_image;
-    mediatek_optical::enc::encrypt(&mut encrypted).unwrap();
-    assert_eq!(dev.wire_stages[1], encrypted);
+        run_with_restricted_receiver(true, false, false, true);
+    let UpdateOutcome::Completed(evidence) = result.unwrap() else {
+        panic!("expected completed operation")
+    };
+    assert!(evidence.target_started);
+    assert!(!evidence.unverified_regions.is_empty());
+    assert_eq!(
+        evidence.completed_stages,
+        ["intermediate", "final firmware"]
+    );
+    assert_eq!(dev.stages, vec![intermediate, final_image]);
 }
 
 #[test]
 fn recovery_uses_selected_current_intm_without_reflashing_it() {
     let mut current = image(b"INTM", 2);
-    encrypted_receiver(&mut current);
+    super::super::bulk_receiver_fixture::stamp(&mut current);
     let target = image(b"1.V9", 3);
     let mut inquiry = vec![0; 36];
     inquiry[0] = 5;
@@ -213,15 +245,16 @@ fn recovery_uses_selected_current_intm_without_reflashing_it() {
         stages: vec![current.clone()],
         boot_intermediate: true,
         encrypted_after: true,
+        header_only_after: false,
         wire_stages: vec![],
         restricted: true,
     };
     crate::engine::recover(&mut dev, &Mtk, Some(&current), &target, true, true).unwrap();
     assert_eq!(dev.stages, vec![current, target.clone()]);
     assert_eq!(dev.wire_stages.len(), 1);
-    let mut encrypted = target;
-    mediatek_optical::enc::encrypt(&mut encrypted).unwrap();
-    assert_eq!(dev.wire_stages[0], encrypted);
+    let mut expected = target;
+    mediatek_optical::enc::encrypt(&mut expected).unwrap();
+    assert_eq!(dev.wire_stages[0], expected);
 }
 
 #[test]
@@ -242,6 +275,7 @@ fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
         stages: vec![current],
         boot_intermediate: true,
         encrypted_after: true,
+        header_only_after: false,
         wire_stages: vec![],
         restricted: true,
     };
@@ -259,7 +293,7 @@ fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
 
 #[test]
 #[ignore = "requires FREEMKV_HOARD with the production 1.V9 package"]
-fn production_intm_recovery_streams_exact_oem_v9_ciphertext() {
+fn production_intm_recovery_streams_header_encrypted_body_plaintext() {
     let root = std::path::PathBuf::from(std::env::var_os("FREEMKV_HOARD").expect("FREEMKV_HOARD"));
     let tar = std::fs::read(root.join(
         "packages/mediatek/ef64ae9e3f5471e0a1cd091544f577757a969cba6e2faca34d18028ecb755270.tar",
@@ -283,21 +317,25 @@ fn production_intm_recovery_streams_exact_oem_v9_ciphertext() {
         stages: vec![current.clone()],
         boot_intermediate: true,
         encrypted_after: true,
+        header_only_after: true,
         wire_stages: vec![],
         restricted: true,
     };
     crate::engine::recover(&mut dev, &Mtk, Some(&current), &target, true, true).unwrap();
     assert_eq!(dev.stages, vec![current, target]);
     assert_eq!(dev.wire_stages.len(), 1);
+    let mut expected = dev.stages[1].clone();
+    mediatek_optical::enc::encrypt(&mut expected[0x3000..0x3010]).unwrap();
+    assert_eq!(dev.wire_stages[0], expected);
     assert_eq!(
-        crate::mediatek_package::digest(&dev.wire_stages[0]),
-        "5567d28100b951757a5be4950cd1cb89a3d2fdb34d27abc2b68416d8d3c98bfa"
+        &dev.wire_stages[0][0x10600..0x10608],
+        &dev.stages[1][0x10600..0x10608]
     );
 }
 
 #[test]
 #[ignore = "requires FREEMKV_HOARD with production V1 and paired V9 images"]
-fn production_v1_paired_flash_runs_intm_then_oem_v9_with_restricted_reads() {
+fn production_v1_paired_flash_runs_intm_then_mixed_v9_with_restricted_reads() {
     let root = std::path::PathBuf::from(std::env::var_os("FREEMKV_HOARD").expect("FREEMKV_HOARD"));
     let tar = std::fs::read(root.join(
         "packages/mediatek/ef64ae9e3f5471e0a1cd091544f577757a969cba6e2faca34d18028ecb755270.tar",
@@ -311,6 +349,7 @@ fn production_v1_paired_flash_runs_intm_then_oem_v9_with_restricted_reads() {
         stages: vec![],
         boot_intermediate: true,
         encrypted_after: true,
+        header_only_after: true,
         wire_stages: vec![],
         restricted: true,
     };
@@ -353,10 +392,9 @@ fn production_v1_paired_flash_runs_intm_then_oem_v9_with_restricted_reads() {
         ]
     );
     assert_eq!(dev.wire_stages[0], package.intermediate().unwrap());
-    assert_eq!(
-        crate::mediatek_package::digest(&dev.wire_stages[1]),
-        "5567d28100b951757a5be4950cd1cb89a3d2fdb34d27abc2b68416d8d3c98bfa"
-    );
+    let mut expected = package.firmware().to_vec();
+    mediatek_optical::enc::encrypt(&mut expected[0x3000..0x3010]).unwrap();
+    assert_eq!(dev.wire_stages[1], expected);
 }
 
 #[test]
@@ -382,9 +420,233 @@ fn standalone_bin_plans_only_the_requested_image() {
         let state: &Plan = plan.state().unwrap();
         assert_eq!(state.image, target);
         assert!(
-            state.final_image.is_none(),
+            state.final_prepared.is_none(),
             "a standalone BIN must not infer another stage"
         );
         assert!(dev.writes.is_empty());
     }
+}
+
+#[test]
+fn no_backup_crossflash_cannot_waive_installed_family_or_rollback() {
+    let current = image(b"1.00", 1);
+    let target = image(b"1.05", 2);
+    let error = authorize_bytes(
+        &fixture::identity(&current),
+        "BD-RE BU40N",
+        Verdict::Crossflash,
+        &target,
+        None,
+    )
+    .err()
+    .expect("missing crossflash evidence must refuse");
+    assert!(error.to_string().contains("does not waive compatibility"));
+}
+
+#[test]
+fn no_backup_same_model_uses_live_evidence_without_target_as_installed() {
+    let current = image(b"1.00", 1);
+    let target = image(b"1.05", 2);
+    let authorized = authorize_bytes(
+        &fixture::identity(&current),
+        "BD-RE BU40N",
+        Verdict::SameModel,
+        &target,
+        None,
+    )
+    .unwrap();
+    assert_eq!(authorized.prepared.image(), target);
+    let mut corrupt = target;
+    corrupt[0x11000] ^= 1;
+    assert!(authorize_bytes(
+        &fixture::identity(&current),
+        "BD-RE BU40N",
+        Verdict::SameModel,
+        &corrupt,
+        None
+    )
+    .is_err());
+}
+
+#[test]
+fn final_stage_redetects_and_encrypts_for_the_new_receiver() {
+    let (result, dev, intermediate, final_image) = run(true, true);
+    result.unwrap();
+    assert_eq!(dev.stages, vec![intermediate.clone(), final_image.clone()]);
+    assert_eq!(dev.wire_stages[0], intermediate);
+    let mut expected = final_image;
+    mediatek_optical::enc::encrypt(&mut expected).unwrap();
+    assert_eq!(dev.wire_stages[1], expected);
+}
+
+#[test]
+fn restricted_intm_to_final_uses_just_installed_image_and_encrypted_wire() {
+    let (result, dev, intermediate, final_image) =
+        run_with_restricted_receiver(true, true, false, true);
+    let UpdateOutcome::Completed(evidence) = result.unwrap() else {
+        panic!("expected completion")
+    };
+    assert!(!evidence.unverified_regions.is_empty());
+    assert_eq!(dev.stages, vec![intermediate, final_image.clone()]);
+    let mut expected = final_image;
+    mediatek_optical::enc::encrypt(&mut expected).unwrap();
+    assert_eq!(dev.wire_stages[1], expected);
+}
+
+fn request(input: Vec<u8>, input_format: &'static crate::backend::FileFormat) -> FlashRequest {
+    FlashRequest {
+        input,
+        input_format,
+        mode: crate::manifest::FlashMode::Full,
+        execute: true,
+        acknowledged_risk: true,
+        enc_override: None,
+        drive_model: "BD-RE BU40N".into(),
+        verbose: false,
+        predump_out: None,
+    }
+}
+
+fn package(intermediate: &[u8], target: &[u8]) -> Vec<u8> {
+    use crate::mediatek_package::{digest, Component, Manifest, Package, Role, FORMAT};
+    let components = vec![
+        Component {
+            path: "intermediate.bin".into(),
+            sha256: digest(intermediate),
+            role: Role::Intermediate,
+        },
+        Component {
+            path: "firmware.bin".into(),
+            sha256: digest(target),
+            role: Role::Firmware,
+        },
+    ];
+    let pairing = serde_json::json!({ "basis": "lg-rcdata-103-final-105-intermediate",
+        "source": { "sha256": "0".repeat(64) }, "container_sha256": "0".repeat(64),
+        "intermediate_sha256": digest(intermediate), "final_sha256": digest(target) });
+    Package::from_parts(
+        Manifest {
+            format: FORMAT.into(),
+            version: 1,
+            components,
+            pairing: Some(pairing),
+            metadata: Default::default(),
+        },
+        [
+            ("intermediate.bin".into(), intermediate.to_vec()),
+            ("firmware.bin".into(), target.to_vec()),
+        ]
+        .into(),
+    )
+    .unwrap()
+    .encode()
+    .unwrap()
+}
+
+#[test]
+fn unchanged_firmware_after_matching_protected_readback_is_not_success() {
+    let current = image(b"INTM", 1);
+    let target = image(b"1.V9", 1);
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(current.clone())
+        .on(|c| c.first() == Some(&0x12), running_inquiry(&current));
+    let receiver = detect_receiver(&mut ReadDevice::without_unlocks(&mut dev)).unwrap();
+    let plan = authorize_bytes(
+        &fixture::identity(&current),
+        "BD-RE BU40N",
+        Verdict::SameModel,
+        &target,
+        Some(&current),
+    )
+    .unwrap()
+    .bind(&receiver)
+    .unwrap();
+    let error = execute_stage(
+        &mut crate::engine::gates::ungated_for_tests(&mut dev),
+        &plan.prepared,
+        false,
+        vec![],
+    )
+    .unwrap_err();
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert!(failure.write_started);
+    assert_eq!(failure.phase, "target startup confirmation");
+    assert!(format!("{error:#}").contains("selected target"));
+}
+
+#[test]
+fn final_receiver_refusal_retains_previous_write_and_intermediate_evidence() {
+    let intermediate = image(b"INTM", 1);
+    let target = image(b"1.V9", 1);
+    let next = prepare_next_stage(&intermediate, &target).unwrap();
+    let stale = image(b"1.V1", 1);
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(stale);
+    let error = execute_stage(
+        &mut crate::engine::gates::ungated_for_tests(&mut dev),
+        &next.prepared,
+        true,
+        vec!["intermediate".into()],
+    )
+    .unwrap_err();
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert_eq!(failure.phase, "receiver revalidation");
+    assert!(
+        failure.write_started,
+        "the preceding intermediate stage already wrote firmware"
+    );
+    assert!(failure.temporary_firmware);
+    assert_eq!(failure.completed_stages, ["intermediate"]);
+    assert!(
+        dev.writes.is_empty(),
+        "the final stage must send no commands after a stale receiver refusal"
+    );
+}
+
+#[test]
+fn prepare_entry_failure_conservatively_records_possible_command_mutation() {
+    let error = mediatek_optical::update::FlashError::Entry(
+        mediatek_optical::drive::Error::Transport(anyhow!("prepare transport error")),
+    );
+    assert_eq!(failure_phase(&error), ("update entry", true));
+}
+
+#[test]
+fn planning_captures_code_once_and_execution_revalidates_once_before_writing() {
+    let target = image(b"1.00", 1);
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(target.clone());
+    let request = request(target, &super::super::IMAGE);
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &request)
+        .unwrap();
+    let code_block = cdb::read_memory(0x98000, 1024);
+    let captures = |dev: &MockScsiDevice| {
+        dev.reads
+            .iter()
+            .filter(|command| command.as_slice() == code_block)
+            .count()
+    };
+    assert_eq!(
+        captures(&dev),
+        1,
+        "planning must capture each full receiver code block only once"
+    );
+    let before_authorize = dev.reads.len();
+    let authorized = Mtk
+        .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
+        .unwrap();
+    assert_eq!(
+        dev.reads.len(),
+        before_authorize,
+        "authorization must reuse its loaded receiver facts"
+    );
+    Mtk.execute(
+        &mut crate::engine::gates::ungated_for_tests(&mut dev),
+        &authorized,
+    )
+    .unwrap();
+    assert_eq!(
+        captures(&dev),
+        2,
+        "the mandatory prewrite gate must revalidate the cached code exactly once"
+    );
 }

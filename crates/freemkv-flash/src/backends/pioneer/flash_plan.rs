@@ -373,6 +373,19 @@ pub fn check_receiver(
     ))
 }
 
+/// The same paired receiver gate using the validated, decoded update. Its
+/// Normal was already decoded and authenticated under this exact target Kernel
+/// by `Update::load`; there is no second receiving representation to compare.
+pub(super) fn check_loaded_receiver(
+    update: &pioneer_optical::envelope::Update,
+) -> Result<(), String> {
+    let known = pioneer_optical::envelope::KernelXorPolicy::from_kernel(update.kernel()).is_some();
+    receiver_gate(&ReceiverEvidence {
+        installed_checksum_zero: known.then(|| be32_sum_zero(&update.normal().image)),
+        bodies_match: true,
+    })
+}
+
 /// Whether a flash needs the vendor F3/F2 "kernel mode" unlock. Always `false`.
 ///
 /// The F3/F2 handshake is not cold-reachable on any Pioneer BD firmware (a live
@@ -581,6 +594,58 @@ pub fn target_from_components(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> R
             None => normal_family(n),
         }),
         required_kernel_tag: normal.and_then(component_kernel_tag),
+    })
+}
+
+/// Reuse loaded firmware for live authorization. The literal headers supply
+/// dates only; no body is decoded again to ask routing questions.
+pub(super) fn target_from_loaded(
+    kernel: Option<&pioneer_optical::envelope::Envelope>,
+    normal: &pioneer_optical::envelope::Envelope,
+    kernel_bytes: Option<&[u8]>,
+    normal_bytes: &[u8],
+) -> Result<Target> {
+    let controller_id = kernel
+        .and_then(|k| controller_id_from_sat(&k.info().hardware_version))
+        .or_else(|| controller_id_from_sat(&normal.info().hardware_version))
+        .context("bundle has no component with a resolvable SAT controller id")?;
+    let kernel = kernel
+        .map(|k| {
+            Ok::<_, anyhow::Error>(KernelInfo {
+                date: kernel_bytes.and_then(component_date),
+                marker: *k
+                    .image
+                    .get(0xFE)
+                    .context("decoded Kernel body is shorter than 0xFF bytes")?,
+            })
+        })
+        .transpose()?;
+    let tag = normal.info().kernel_version.trim();
+    Ok(Target {
+        controller_id,
+        normal: Some(ComponentInfo {
+            date: component_date(normal_bytes),
+        }),
+        kernel,
+        family: normal.family().map(|f| FamilyKey::new(f.to_string())),
+        required_kernel_tag: (!tag.is_empty()).then(|| tag.to_owned()),
+    })
+}
+
+pub(super) fn installed_from_loaded(
+    receiver: &pioneer_optical::receiver::Receiver,
+    normal_bytes: &[u8],
+) -> Option<Installed> {
+    let header = pioneer_optical::envelope::header_info(normal_bytes)?;
+    let tag = header.kernel_version.trim();
+    Some(Installed {
+        controller_id: controller_id_from_sat(&header.hardware_version)?,
+        receiver_new_gen: receiver
+            .installed_kernel()
+            .and_then(|k| super::k::receiver_generation(&k.image)),
+        normal_date: FwDate::parse(&header.generated_date),
+        family: receiver.family().map(|f| FamilyKey::new(f.to_string())),
+        kernel_tag: (!tag.is_empty()).then(|| tag.to_owned()),
     })
 }
 

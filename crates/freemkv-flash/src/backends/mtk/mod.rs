@@ -19,6 +19,8 @@ use std::io::{Read, Write};
 use anyhow::{anyhow, bail, Context, Result};
 
 pub(crate) mod backup;
+#[cfg(test)]
+pub(crate) mod bulk_receiver_fixture;
 pub(crate) mod crossflash;
 pub(crate) mod file_info;
 #[cfg(test)]
@@ -26,6 +28,7 @@ pub(crate) mod file_info;
 pub(crate) mod fixture;
 mod flash;
 pub mod fwdump;
+#[cfg(test)]
 mod receiver_reference;
 mod recovery;
 pub(crate) use flash::decide_offline;

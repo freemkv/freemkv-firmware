@@ -145,9 +145,9 @@ HD DVD-RW: Read: Unknown    Write: Unknown
 DVD region: Invalid or incomplete response
 --- events (62) ---
 MSG      device: mock://in-memory
-FIELD    Manufacturer = 
-FIELD    Model = 
-FIELD    Firmware version = 
+FIELD    Manufacturer =
+FIELD    Model =
+FIELD    Firmware version =
 FIELD    Drive family = Unknown
 MSG      inquiry: vendor='' product='' rev=''
 MSG      banner: <none>
@@ -261,9 +261,9 @@ HD DVD-RW: Read: Unknown    Write: Unknown
 DVD region: Invalid or incomplete response
 --- events (62) ---
 MSG      device: mock://in-memory
-FIELD    Manufacturer = 
-FIELD    Model = 
-FIELD    Firmware version = 
+FIELD    Manufacturer =
+FIELD    Model =
+FIELD    Firmware version =
 FIELD    Drive family = Unknown
 MSG      inquiry: vendor='' product='' rev=''
 MSG      banner: <none>
@@ -379,7 +379,7 @@ DVD region: Invalid or incomplete response
 MSG      device: mock://in-memory
 FIELD    Manufacturer = PIONEER
 FIELD    Model = BDR-UD04
-FIELD    Firmware version = 
+FIELD    Firmware version =
 FIELD    Drive family = Unknown
 MSG      inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
 MSG      banner: <none>
@@ -494,8 +494,8 @@ DVD region: Invalid or incomplete response
 --- events (62) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = RENESAS
-FIELD    Model = 
-FIELD    Firmware version = 
+FIELD    Model =
+FIELD    Firmware version =
 FIELD    Drive family = Unknown
 MSG      inquiry: vendor='RENESAS' product='' rev=''
 MSG      banner: <none>
@@ -611,7 +611,7 @@ DVD region: Invalid or incomplete response
 MSG      device: mock://in-memory
 FIELD    Manufacturer = PIONEER
 FIELD    Model = BDR-UD04
-FIELD    Firmware version = 
+FIELD    Firmware version =
 FIELD    Drive family = Unknown
 MSG      inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
 MSG      banner: <none>

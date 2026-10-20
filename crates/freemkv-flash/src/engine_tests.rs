@@ -16,7 +16,7 @@ use crate::platform::{MockScsiDevice, ScsiDevice};
 /// The engine's flash with consent already given (the confirmation is the
 /// front-end's; these tests exercise the gates around it).
 fn flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
-    super::flash(dev, drive, req, &mut crate::workflow::Preconfirmed)
+    super::flash(dev, drive, req, &mut crate::workflow::Preconfirmed).map(drop)
 }
 
 /// Observe the very first data-out command and prove the rollback file is
@@ -61,6 +61,10 @@ fn patterned_image(len: usize) -> Vec<u8> {
 /// `MTEKMT1959` family tag at +0x34, so the write-path model gate recognizes it.
 fn stamp_descriptor(img: &mut [u8], model: &str) {
     let d = ROM_1EC000_OFFSET as usize;
+    img[d..d + 0x58].fill(0);
+    img[d..d + 28].fill(b' ');
+    img[d..d + 8].copy_from_slice(b"HL-DT-ST");
+    img[d + 0x18..d + 0x1c].copy_from_slice(b"1.00");
     img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
     img[d + 0x34..d + 0x34 + 10].copy_from_slice(b"MTEKMT1959");
 }
@@ -328,7 +332,7 @@ fn flash_dry_run_rejects_bad_cmac_without_writes() {
     let mut image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
     image[0x11000] ^= 1; // inside the active authenticated range
     let err = flash(&mut dev, &Mtk, &bin_req(image, false)).unwrap_err();
-    assert!(err.to_string().contains("AES-CMAC"), "got: {err}");
+    assert!(format!("{err:#}").contains("AES-CMAC"), "got: {err}");
     assert!(dev.writes.is_empty());
 }
 
@@ -341,7 +345,7 @@ fn flash_dry_run_rejects_a_different_family_without_writes() {
     let image = make_flashable_other_family("WH16NS60");
     let err = flash(&mut dev, &Mtk, &bin_req(image, false)).unwrap_err();
     assert!(
-        err.to_string().contains("different hardware family"),
+        format!("{err:#}").contains("different hardware family"),
         "got: {err}"
     );
     assert!(dev.writes.is_empty());
@@ -436,7 +440,7 @@ fn flash_execute_requires_ack() {
     let mut req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
     req.acknowledged_risk = false;
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
-    assert!(err.to_string().contains("SAFETY GATE"), "got: {err}");
+    assert!(format!("{err:#}").contains("SAFETY GATE"), "got: {err}");
 }
 
 #[test]
@@ -496,25 +500,41 @@ fn flash_execute_fails_on_mismatch_inside_a_cmac_protected_range() {
     let req = bin_req(image, true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        err.to_string().contains("read-back verify FAILED"),
+        matches!(err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Mismatch { differing, .. }) if *differing > 0),
         "unexpected error: {err}"
     );
 }
 
-/// Codeaudit HIGH-4 (`tests` lens): the post-flash "unverified > 0" bail —
-/// added when `.warn+exit-0` was upgraded to `.bail!` — had no test path
-/// that would trigger it. This test forces a read-back to ERROR (not
-/// mismatch) on a protected chunk, so the engine's `differing`+`first_bad`
-/// path is not taken and `unverified` increments; the flash must then
-/// bail with the "read-back INCOMPLETE" message and NOT exit 0.
+/// Unreadable protected bytes must never become an unqualified success. If
+/// startup also cannot prove the selected target, the update remains a failure.
 #[test]
-fn flash_execute_bails_on_unverified_read_back_of_protected_chunk() {
-    let bad_offset = (CHUNK * 5) as u32; // 0x14000, inside a CMAC-active range
+fn flash_execute_requires_target_startup_when_protected_readback_is_unavailable() {
+    let bad_offset = (CHUNK * 5) as u32;
     let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
-    assert!((0x11000..=0x1FFFF).contains(&bad_offset));
     let want = offset_bytes(bad_offset);
-    // A refused read of a protected chunk leaves it unverified; with no
-    // differing byte, an incomplete read-back must still fail.
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(backup_firmware())
+        .on_after_stream(|cdb| cdb.first() == Some(&0x12), vec![0; 36])
+        .on_fail_after_stream(
+            move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
+            "simulated read-back transport error",
+        );
+    let req = bin_req(image, true);
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(
+        matches!(
+            err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(),
+            Some(mediatek_optical::update::FlashError::Startup(_))
+        ),
+        "{err:#}"
+    );
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
+}
+
+#[test]
+fn flash_execute_qualifies_unreadable_protected_bytes_after_exact_target_startup() {
+    let want = offset_bytes((CHUNK * 5) as u32);
+    let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
     let mut dev = MockScsiDevice::echoing()
         .with_firmware_image(backup_firmware())
         .on_fail_after_stream(
@@ -522,16 +542,15 @@ fn flash_execute_bails_on_unverified_read_back_of_protected_chunk() {
             "simulated read-back transport error",
         );
     let req = bin_req(image, true);
-    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
-    let msg = format!("{err:#}");
-    assert!(
-        msg.contains("read-back INCOMPLETE") || msg.contains("unverified"),
-        "expected the codeaudit-driven 'unverified > 0' bail, got: {msg}"
-    );
-    assert!(
-        !msg.contains("read-back verify FAILED"),
-        "must NOT be the 'differing bytes' bail — the mock errored, it didn't mismatch"
-    );
+    let outcome = super::flash(&mut dev, &Mtk, &req, &mut crate::workflow::Preconfirmed).unwrap();
+    assert!(!outcome.fully_verified());
+    assert!(outcome.safe_to_probe());
+    let crate::backend::UpdateOutcome::Completed(evidence) = outcome else {
+        panic!("actual update must carry evidence")
+    };
+    assert!(evidence.target_started && !evidence.target_identity.is_empty());
+    assert!(!evidence.unverified_regions.is_empty());
+    assert!(!evidence.verified_regions.is_empty());
 }
 
 #[test]
@@ -562,7 +581,7 @@ fn flash_execute_tolerates_readback_mismatch_outside_protected_ranges() {
 fn flash_execute_streams_enc_payload_not_plaintext() {
     // The live receiver signature, without an override, selects AES transfer.
     let mut image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
-    crate::backends::mtk::fixture::encrypted_receiver(&mut image);
+    crate::backends::mtk::bulk_receiver_fixture::stamp(&mut image);
     // The device exposes decoded firmware, not the encrypted wire envelope.
     let mut dev = MockScsiDevice::new().with_firmware_image(image.clone());
     let req = bin_req(image.clone(), true);
@@ -655,7 +674,7 @@ fn flash_execute_refuses_when_disc_loaded() {
     );
     let err = flash(&mut dev, &Mtk, &req).expect_err("disc-loaded flash must be refused");
     assert!(
-        err.to_string().contains("refusing to flash"),
+        format!("{err:#}").contains("refusing to flash"),
         "unexpected error: {err}"
     );
     assert!(
@@ -692,7 +711,7 @@ fn flash_execute_refuses_when_tray_open() {
     );
     let err = flash(&mut dev, &Mtk, &req).expect_err("tray-open flash must be refused");
     assert!(
-        err.to_string().contains("tray is OPEN"),
+        format!("{err:#}").contains("tray is OPEN"),
         "unexpected error: {err}"
     );
     assert!(
@@ -728,9 +747,8 @@ fn flash_close_fails_on_hardware_error_sense() {
         true,
     );
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
-    let msg = err.to_string();
     assert!(
-        msg.contains("HARDWARE ERROR") && msg.contains("flash may have FAILED"),
+        matches!(err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Fault { sense, .. }) if sense.0 == 4),
         "unexpected error: {err}"
     );
 }
@@ -751,7 +769,7 @@ fn flash_restore_tar_detects_readback_mismatch() {
     req.drive_model = "BD-RE BU40N".into();
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        err.to_string().contains("read-back verify FAILED"),
+        matches!(err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Mismatch { differing, .. }) if *differing > 0),
         "unexpected error: {err}"
     );
 }
@@ -769,7 +787,7 @@ fn model_gate_refuses_a_wrong_model_image() {
     // A valid MT19xx image built for a DIFFERENT model than the drive reports.
     let img = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE WH16NS60");
     let err = ensure_image_matches_drive(&img, "BU40N").unwrap_err();
-    assert!(err.to_string().contains("wrong-model"), "got: {err}");
+    assert!(format!("{err:#}").contains("wrong-model"), "got: {err}");
 }
 
 #[test]
@@ -794,8 +812,11 @@ fn model_gate_refuses_a_truncated_image() {
 #[test]
 fn model_mismatch_is_refused() {
     let err = decide_model("BD-RE BU40N", "WH16NS60").unwrap_err();
-    assert!(err.to_string().contains("wrong-model"), "got: {err}");
-    assert!(err.to_string().contains("compatible image"), "got: {err}");
+    assert!(format!("{err:#}").contains("wrong-model"), "got: {err}");
+    assert!(
+        format!("{err:#}").contains("compatible image"),
+        "got: {err}"
+    );
     assert!(decide_model("BD-RE BU40N", "BU40N").is_ok());
 }
 
@@ -823,7 +844,7 @@ fn flash_execute_refuses_an_unsigned_image_with_no_write() {
     let mut img = vec![0u8; IMAGE_SIZE];
     stamp_descriptor(&mut img, "BD-RE BU40N");
     let err = flash(&mut dev, &Mtk, &bin_req(img, true)).unwrap_err();
-    assert!(err.to_string().contains("AES-CMAC"), "got: {err}");
+    assert!(format!("{err:#}").contains("AES-CMAC"), "got: {err}");
     assert!(
         !dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)),
         "no firmware bytes may be streamed for an unsigned image"
@@ -865,7 +886,7 @@ fn dump_refuses_unreadable_firmware_without_creating_archive() {
         );
     let out = fresh_backup_path();
     let err = backup(&mut dev, &Mtk, &out, false).unwrap_err();
-    assert!(err.to_string().contains("backup needs every firmware byte"));
+    assert!(format!("{err:#}").contains("backup needs every firmware byte"));
     assert!(!out.exists());
     assert!(dev.writes.is_empty());
 }
@@ -951,7 +972,7 @@ fn flash_execute_refuses_a_different_family_image_with_no_write() {
     let img = make_flashable_other_family("BD-RE WH16NS60");
     let err = flash(&mut dev, &Mtk, &bin_req(img, true)).unwrap_err();
     assert!(
-        err.to_string().contains("different hardware family"),
+        format!("{err:#}").contains("different hardware family"),
         "got: {err}"
     );
     assert!(
@@ -1011,6 +1032,7 @@ fn existing_preflash_destination_fails_before_capturing_the_drive() {
     let path = req.predump_out.as_ref().unwrap();
     std::fs::write(path, b"keep this rollback").unwrap();
     let result = flash(&mut dev, &Mtk, &req);
+    assert_eq!(std::fs::read(path).unwrap(), b"keep this rollback");
     std::fs::remove_file(path).unwrap();
     assert!(result.is_err());
     // Only the chip-gate identity reads (banner + descriptor) precede the
@@ -1029,7 +1051,7 @@ fn existing_preflash_destination_fails_before_capturing_the_drive() {
 #[test]
 fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
     let mut firmware = backup_firmware();
-    crate::backends::mtk::fixture::encrypted_receiver(&mut firmware);
+    crate::backends::mtk::bulk_receiver_fixture::stamp(&mut firmware);
     let want = offset_bytes(0x10000);
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(firmware.clone())
@@ -1041,7 +1063,10 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
     let error = flash(&mut dev, &Mtk, &req)
         .expect_err("encrypted transport must not disable integrity verification");
     let _ = std::fs::remove_file(req.predump_out.unwrap());
-    assert!(error.to_string().contains("read-back verify FAILED"));
+    assert!(
+        matches!(error.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Mismatch { differing, .. }) if *differing > 0),
+        "{error:#}"
+    );
 }
 
 #[test]
@@ -1157,7 +1182,11 @@ fn capture_is_saved_before_target_dependent_rollback_check() {
         ) -> Result<AuthorizedPlan> {
             panic!("authorize after a refused coverage check")
         }
-        fn execute(&self, _: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> Result<()> {
+        fn execute(
+            &self,
+            _: &mut WriteDevice<'_>,
+            _: &AuthorizedPlan,
+        ) -> Result<crate::backend::UpdateOutcome> {
             panic!("update prohibited")
         }
     }
@@ -1239,7 +1268,7 @@ fn unknown_boot_pages_are_refused() {
             "BD-RE BU40N",
         )
         .unwrap_err();
-    assert!(err.to_string().contains("boot page"), "{err}");
+    assert!(format!("{err:#}").contains("boot page"), "{err}");
 }
 
 #[test]
@@ -1254,7 +1283,7 @@ fn chip_gate_refuses_when_the_banner_is_unreadable() {
             "banner read refused",
         );
     let err = ensure_same_chip(&mut dev, &img).unwrap_err();
-    assert!(err.to_string().contains("boot banner"), "{err}");
+    assert!(format!("{err:#}").contains("boot banner"), "{err}");
 }
 
 fn captured_output(op: impl FnOnce()) -> String {
@@ -1448,7 +1477,10 @@ fn chip_gate_identifies_from_the_banner_with_or_without_a_tag() {
         b"MT1939 Boot Code",
     ));
     let err = ensure_same_chip(&mut banner_only, &untagged).unwrap_err();
-    assert!(err.to_string().contains("target firmware family"), "{err}");
+    assert!(
+        format!("{err:#}").contains("target firmware family"),
+        "{err}"
+    );
 
     // A tag cannot stand in for the banner: an image with a tag but no banner
     // names no chip and is refused as unrecognizable.
@@ -1463,7 +1495,8 @@ fn is_receiver_read(cdb: &[u8]) -> bool {
         return false;
     }
     let off = ((cdb[3] as u32) << 16) | ((cdb[4] as u32) << 8) | cdb[5] as u32;
-    (0x98000..0xb4000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1088)
+    ((0x98000..0xb4000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1088))
+        || ((0x140000..0x1b0000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1024))
 }
 
 #[test]
@@ -1474,7 +1507,7 @@ fn unknown_receiver_refuses_before_backup_or_write() {
     let req = bin_req(backup_firmware(), true);
     let error = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        error.to_string().contains("receiver signature"),
+        format!("{error:#}").contains("receiver signature"),
         "{error:#}"
     );
     assert!(dev.writes.is_empty());
@@ -1487,7 +1520,7 @@ fn encoding_override_cannot_contradict_live_receiver() {
     let mut req = bin_req(backup_firmware(), true);
     req.enc_override = Some(true);
     let error = flash(&mut dev, &Mtk, &req).unwrap_err();
-    assert!(error.to_string().contains("contradicts"), "{error:#}");
+    assert!(format!("{error:#}").contains("contradicts"), "{error:#}");
     assert!(dev.writes.is_empty());
     assert!(!req.predump_out.unwrap().exists());
 }
