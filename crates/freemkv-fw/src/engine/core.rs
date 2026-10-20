@@ -3861,7 +3861,7 @@ impl Mt1959Engine {
     }
 
     /// Install the always-on boot-init hook: find the anchor, follow its `bmi` to the
-    /// cold/warm-boot convergence `bl <orig_init>`, inject [`Self::build_boot_init`]
+    /// cold/warm-boot convergence `bl <orig_init>`, inject [`Self::build_boot_init_with_defaults`]
     /// into covered free space, and repoint that `bl` at the stub. Returns
     /// `(conv, stub_va)` — the convergence detour site (the reported `boot_init_site`)
     /// and the stub address.
