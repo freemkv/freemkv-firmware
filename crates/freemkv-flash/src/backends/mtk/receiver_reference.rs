@@ -1,124 +1,28 @@
-//! Receiver analysis from an explicit current image, never target readback.
-//! The protocol crate still recognizes the actual encoding and entry grammars.
-//! Reference reads stop before the first session command, including PROBE.
+//! Explicit file-derived receiver evidence; transport always reads the drive.
 use anyhow::{anyhow, ensure, Context, Result};
-use mediatek_optical::{
-    cdb,
-    drive::{self, Transport},
-    envelope::Envelope,
-    layout, receiver,
-};
-use std::cell::Cell;
-
-/// Confirm application startup without claiming full protected readback.
-pub(super) fn confirm_started(
-    dev: &mut dyn crate::platform::ScsiDevice,
-    image: &[u8],
-) -> Result<()> {
-    let inquiry = dev.command_in(&cdb::inquiry(36), 36)?;
-    let descriptor = dev.command_in(
-        &cdb::read_memory(
-            layout::DESCRIPTOR.start as u32,
-            layout::DESCRIPTOR.len as u32,
-        ),
-        layout::DESCRIPTOR.len,
-    )?;
-    let expected = layout::DESCRIPTOR
-        .of(image)
-        .context("target descriptor missing")?;
-    ensure!(
-        inquiry.len() == 36
-            && inquiry[8..36] == expected[..28]
-            && &inquiry[32..36] != b"BOOT"
-            && descriptor.len() == layout::DESCRIPTOR.len
-            && descriptor[..0x58] == expected[..0x58],
-        "requested firmware startup was not confirmed by live INQUIRY and build metadata"
-    );
-    Ok(())
-}
-
-pub(super) fn limited_verification(error: &str) {
-    crate::diagnostics::record(format!("MediaTek limited verification: {error}; target application INQUIRY and build metadata confirmed; protected firmware readback remains incomplete"));
-    crate::output::field("Verification warning", "Target firmware is running, but protected code could not be fully read back. Full byte-for-byte verification was NOT completed.");
-}
-
-#[derive(Clone)]
-pub(super) struct Reference {
-    image: Vec<u8>,
-    inquiry: Vec<u8>,
-    banner: Vec<u8>,
-    descriptor: Vec<u8>,
-}
-
-impl Reference {
-    pub(super) fn image(&self) -> &[u8] {
-        &self.image
-    }
-    pub(super) fn bind<T: Transport<Error = anyhow::Error>>(
-        t: &mut T,
-        input: &[u8],
-    ) -> Result<Self> {
-        let image = Envelope::load(input)
-            .context("invalid Current MediaTek image")?
-            .image()
-            .to_vec();
-        let mode = receiver::detect_mode(t).map_err(|e| anyhow!("{e}"))?;
-        ensure!(
-            mode.mode() == receiver::Mode::Firmware,
-            "Current-file receiver fallback requires running application firmware, not BOOT"
-        );
-        let mut banner = vec![0; layout::BANNER.len];
-        drive::read_memory(t, layout::BANNER.start as u32, &mut banner)
-            .map_err(|e| anyhow!("{e}"))?;
-        let mut descriptor = vec![0; layout::DESCRIPTOR.len];
-        drive::read_memory(t, layout::DESCRIPTOR.start as u32, &mut descriptor)
-            .map_err(|e| anyhow!("{e}"))?;
-        ensure!(mode.inquiry()[8..36] == image[layout::DESCRIPTOR.start..layout::DESCRIPTOR.start + 28]
-            && banner[..16] == layout::BANNER.of(&image).expect("validated image")[..16]
-            && descriptor[..0x58] == image[layout::DESCRIPTOR.start..layout::DESCRIPTOR.start + 0x58],
-            "Current firmware does not match the running drive's identity, boot banner and build metadata. Select the firmware currently running (for BH16NS40 INTM, select intermediate.bin), not the original or target firmware");
-        crate::diagnostics::record(format!("MediaTek receiver source: explicit Current image sha256={}; live INQUIRY, banner and build metadata match; code analysis is file-derived, not a full live-image verification", crate::mediatek_package::digest(&image)));
-        Ok(Self {
-            image,
-            inquiry: mode.inquiry().to_vec(),
-            banner,
-            descriptor,
-        })
-    }
-
-    pub(super) fn revalidate<T: Transport<Error = anyhow::Error>>(&self, t: &mut T) -> Result<()> {
-        let current = Self::bind(t, &self.image)?;
-        ensure!(
-            current.inquiry[8..36] == self.inquiry[8..36]
-                && current.banner == self.banner
-                && current.descriptor[..0x58] == self.descriptor[..0x58],
-            "Current receiver changed before writing; re-plan the operation"
-        );
-        Ok(())
-    }
-}
+#[cfg(test)]
+use mediatek_optical::drive::Transport;
+use mediatek_optical::{cdb, envelope::Envelope, layout, receiver};
 
 pub(super) fn detect(
     dev: &mut crate::backend::ReadDevice<'_>,
     input: &[u8],
-) -> Result<(receiver::Receiver, Reference)> {
+) -> Result<receiver::Receiver> {
+    let envelope = Envelope::load(input).context("invalid Current MediaTek image")?;
     let shared = crate::transport::SharedDevice::new(dev);
     let mut live = crate::transport::ScsiTransport::reads(&shared);
-    let reference = Reference::bind(&mut live, input)?;
-    let analysis = Cell::new(true);
-    let mut reads = crate::transport::ScsiTransport::reads(&shared)
-        .receiver_source(Some(reference.image()), &analysis);
-    let mode = receiver::detect_mode(&mut reads).map_err(|e| anyhow!("{e}"))?;
-    let receiver = receiver::detect(&mut reads, &mode)
+    let receiver = receiver::reference::detect(&mut live, &envelope)
         .map_err(|e| anyhow!("Current image receiver analysis failed: {e}"))?;
-    reference.revalidate(&mut live)?;
-    Ok((receiver, reference))
+    crate::diagnostics::record(format!(
+        "MediaTek receiver source: explicit Current image sha256={}; live identity and build metadata match; receiver code is file-derived",
+        crate::mediatek_package::digest(envelope.image())
+    ));
+    Ok(receiver)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::{ScsiTransport, SharedDevice};
     use mediatek_optical::drive::Data;
     impl crate::platform::ScsiDevice for Restricted {
         fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
@@ -134,10 +38,7 @@ mod tests {
             "restricted fixture".into()
         }
     }
-    fn detect_device(
-        live: &mut Restricted,
-        input: &[u8],
-    ) -> Result<(receiver::Receiver, Reference)> {
+    fn detect_device(live: &mut Restricted, input: &[u8]) -> Result<receiver::Receiver> {
         detect(
             &mut crate::backend::ReadDevice::without_unlocks(live),
             input,
@@ -203,11 +104,19 @@ mod tests {
             writes: 0,
         };
         let mode = receiver::detect_mode(&mut live).unwrap();
-        assert!(matches!(
-            receiver::detect(&mut live, &mode),
-            Err(receiver::Error::Unknown)
-        ));
-        let (receiver, _) = detect_device(&mut live, &image).unwrap();
+        // Detection captures receiver code once before analyzing it. A refused
+        // physical capture retains the transport error instead of becoming an
+        // unknown signature after a scan of unreadable blocks.
+        let Err(error) = receiver::detect(&mut live, &mode) else {
+            panic!("restricted physical receiver detection must fail");
+        };
+        match error {
+            receiver::Error::Read(mediatek_optical::drive::Error::Transport(error)) => {
+                assert_eq!(error.to_string(), "restricted read at 0x98000");
+            }
+            other => panic!("expected refused physical code capture, got {other}"),
+        }
+        let receiver = detect_device(&mut live, &image).unwrap();
         assert_eq!(receiver.encoding(), receiver::Encoding::Plaintext);
         assert!(receiver.prepare_command().is_some());
         assert_eq!(live.writes, 0);
@@ -219,14 +128,15 @@ mod tests {
             image: image.clone(),
             writes: 0,
         };
-        let reference = Reference::bind(&mut live, &image).unwrap();
+        let reference =
+            receiver::reference::detect(&mut live, &Envelope::load(&image).unwrap()).unwrap();
         live.image[layout::DESCRIPTOR.start + 24..layout::DESCRIPTOR.start + 28]
             .copy_from_slice(b"1.V1");
         assert!(reference
             .revalidate(&mut live)
             .unwrap_err()
             .to_string()
-            .contains("does not match"));
+            .contains("changed"));
         assert!(detect_device(&mut live, &image).is_err());
         assert_eq!(live.writes, 0);
     }
@@ -238,7 +148,8 @@ mod tests {
             writes: 0,
         };
         live.image[0x3014] ^= 1;
-        let reference = Reference::bind(&mut live, &image).unwrap();
+        let reference =
+            receiver::reference::detect(&mut live, &Envelope::load(&image).unwrap()).unwrap();
         reference.revalidate(&mut live).unwrap();
         live.image[0x3014] ^= 2;
         assert!(
@@ -247,48 +158,34 @@ mod tests {
         );
     }
     #[test]
-    fn limited_verification_requires_actual_target_startup_and_build_metadata() {
-        let target = image();
-        let mut live = Restricted {
-            image: target.clone(),
-            writes: 0,
-        };
-        confirm_started(&mut live, &target).unwrap();
-        live.image[layout::DESCRIPTOR.start + 24..layout::DESCRIPTOR.start + 28]
-            .copy_from_slice(b"BOOT");
-        assert!(confirm_started(&mut live, &target).is_err());
-        live.image = target.clone();
-        live.image[layout::DESCRIPTOR.start + 0x40] ^= 1;
-        assert!(confirm_started(&mut live, &target).is_err());
-        assert_eq!(live.writes, 0);
-    }
-    #[test]
-    fn first_session_command_disables_file_reads_even_when_it_fails() {
+    fn reference_analysis_never_substitutes_physical_session_or_readback_bytes() {
         let image = image();
         let mut live = Restricted {
             image: image.clone(),
             writes: 0,
         };
-        let reference = Reference::bind(&mut live, &image).unwrap();
-        let analysis = Cell::new(true);
-        let cmd = cdb::read_memory(0x98000, 32);
+        let receiver = detect_device(&mut live, &image).unwrap();
+        assert_eq!(
+            receiver.provenance(),
+            receiver::reference::Provenance::CurrentReference
+        );
+        let shared = crate::transport::SharedDevice::new(&mut live);
+        let mut reads = crate::transport::ScsiTransport::reads(&shared);
         let mut buf = [0; 32];
-        let shared = SharedDevice::new(&mut live);
-        let mut reads =
-            ScsiTransport::reads(&shared).receiver_source(Some(reference.image()), &analysis);
-        let mut writes = ScsiTransport::flash(&shared).starts_session(&analysis);
-        mediatek_optical::drive::Transport::exec(&mut reads, &cmd, Data::In(&mut buf)).unwrap();
-        assert!(mediatek_optical::drive::Transport::exec(
-            &mut writes,
-            &cdb::enter_update(),
-            Data::None
+        assert!(Transport::exec(
+            &mut reads,
+            &cdb::read_memory(0x98000, 32),
+            Data::In(&mut buf)
         )
         .is_err());
-        assert!(!analysis.get());
-        assert!(
-            mediatek_optical::drive::Transport::exec(&mut reads, &cmd, Data::In(&mut buf)).is_err(),
-            "verification must never read reference bytes"
-        );
+        let mut writes = crate::transport::ScsiTransport::flash(&shared);
+        assert!(Transport::exec(&mut writes, &cdb::enter_update(), Data::Out(&[])).is_err());
+        assert!(Transport::exec(
+            &mut reads,
+            &cdb::read_memory(0x98000, 32),
+            Data::In(&mut buf)
+        )
+        .is_err());
     }
     #[test]
     #[ignore = "requires FREEMKV_HOARD with the production 1.V9 package"]
@@ -302,7 +199,7 @@ mod tests {
             image: image.to_vec(),
             writes: 0,
         };
-        let (receiver, _) = detect_device(&mut live, image).unwrap();
+        let receiver = detect_device(&mut live, image).unwrap();
         assert_eq!(receiver.encoding(), receiver::Encoding::Encrypted);
         assert!(receiver.prepare_command().is_some());
         assert_eq!(live.writes, 0);

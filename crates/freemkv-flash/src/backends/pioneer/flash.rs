@@ -8,16 +8,20 @@ use crate::backends::pioneer::FLASH_CHUNK;
 
 use crate::backend::WriteDevice;
 use crate::style;
-use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
-use anyhow::{anyhow, Context, Result};
-use pioneer_optical::drive::{UpdateError, UpdateOptions, UpdateRuntime};
+use crate::transport::{ScsiTransport, SharedDevice};
+#[cfg(test)]
+use anyhow::anyhow;
+use anyhow::Result;
+use pioneer_optical::drive::UpdateRuntime;
+#[cfg(test)]
+use pioneer_optical::drive::{UpdateError, UpdateOptions};
 use pioneer_optical::receiver::{
-    FlashError, FlashPass, FlashRuntime, FlashTransport, PreparedNormal, PreparedUpdate,
+    ExecutionMode, ExecutionRuntime, FlashPass, FlashTransport, PreparedNormal, PreparedUpdate,
 };
-use pioneer_optical::{CodedError, DriveClass, Role};
+#[cfg(test)]
+use pioneer_optical::{receiver::FlashError, DriveClass};
+use pioneer_optical::{CodedError, Role};
 use std::time::{Duration, Instant};
-
-const PARTIAL_HINT: &str = " — the drive may now hold a partial firmware; re-flash the captured pre-flash backup to restore it";
 
 /// A validated library plan selected by the app's input routing.
 pub(crate) enum PreparedFlash<'a> {
@@ -28,10 +32,17 @@ pub(crate) enum PreparedFlash<'a> {
 pub(crate) fn execute_prepared(
     dev: &mut WriteDevice<'_>,
     plan: PreparedFlash<'_>,
-    class: DriveClass,
-    initial_identity: &(String, String),
-    target_identity: Option<&(String, String)>,
-) -> Result<()> {
+    mode: ExecutionMode,
+) -> Result<crate::backend::UpdateOutcome> {
+    execute_with_sleep(dev, plan, mode, &mut std::thread::sleep)
+}
+
+pub(super) fn execute_with_sleep(
+    dev: &mut WriteDevice<'_>,
+    plan: PreparedFlash<'_>,
+    mode: ExecutionMode,
+    sleep: &mut dyn FnMut(Duration),
+) -> Result<crate::backend::UpdateOutcome> {
     let shared = SharedDevice::new(dev);
     let mut reads = ScsiTransport::reads(&shared);
     let mut writes = ScsiTransport::flash(&shared);
@@ -41,31 +52,57 @@ pub(crate) fn execute_prepared(
     };
     let mut runtime = Runtime {
         start: Instant::now(),
+        waited: Duration::ZERO,
+        completed_passes: 0,
         kernel: style::Progress::new("flashing kernel", 0),
         normal: style::Progress::new("flashing normal", 0),
         device: &shared,
-        class,
-        initial_identity: initial_identity.clone(),
-        target_identity: target_identity.cloned(),
+        sleep,
     };
-    match plan {
-        PreparedFlash::Complete(plan) => match plan.startup_setting() {
-            Some(setting) => {
-                report_startup_setting(setting);
-                plan.flash_with_parameter(io, &mut runtime, setting.parameter, setting.value)
-                    .map_err(startup_error)
-            }
-            None => plan.flash(io, &mut runtime).map_err(prepared_error),
-        },
-        PreparedFlash::Normal(plan) => match plan.startup_setting() {
-            Some(setting) => {
-                report_startup_setting(setting);
-                plan.flash_with_parameter(io, &mut runtime, setting.parameter, setting.value)
-                    .map_err(startup_error)
-            }
-            None => plan.flash(io, &mut runtime).map_err(prepared_error),
-        },
+    let restoration_required =
+        matches!(plan, PreparedFlash::Complete(p) if p.restoration_kernel_transfer().is_some());
+    let setting = match plan {
+        PreparedFlash::Complete(plan) => plan.startup_setting(),
+        PreparedFlash::Normal(plan) => plan.startup_setting(),
+    };
+    if let Some(setting) = setting {
+        report_startup_setting(setting);
     }
+    let outcome = match plan {
+        PreparedFlash::Complete(plan) => plan.execute(io, &mut runtime, mode),
+        PreparedFlash::Normal(plan) => plan.execute(io, &mut runtime),
+    }
+    .map_err(|error| execution_error(error, restoration_required, runtime.completed_passes))?;
+    println!("{}", super::post_flash_line(&outcome.identity));
+    let mut verified_regions = Vec::new();
+    if outcome.kernel_verified {
+        verified_regions.push("Kernel".to_string());
+    }
+    let mut unverified_regions = Vec::new();
+    if outcome.normal_verified {
+        verified_regions.push("Normal".to_string());
+    } else {
+        unverified_regions.push("Normal".to_string());
+    }
+    Ok(crate::backend::UpdateOutcome::Completed(
+        crate::backend::UpdateEvidence {
+            target_started: true,
+            target_identity: format!(
+                "{} {} ({}, Kernel {}, Normal {})",
+                style::printable(outcome.identity.product()),
+                style::printable(outcome.identity.revision()),
+                style::printable(outcome.identity.platform()),
+                style::printable(outcome.identity.kernel_tag()),
+                style::printable(outcome.identity.normal_tag())
+            ),
+            verified_regions,
+            unverified_regions,
+            completed_stages: (1..=outcome.completed_passes)
+                .map(|pass| format!("Pioneer update pass {pass}"))
+                .collect(),
+            temporary_firmware: false,
+        },
+    ))
 }
 
 pub(super) fn report_startup_setting(setting: pioneer_optical::startup::Setting) {
@@ -75,18 +112,11 @@ pub(super) fn report_startup_setting(setting: pioneer_optical::startup::Setting)
         "neutral default for target firmware"
     };
     let text = format!(
-        "word {:#04x} -> {:04X} ({source}); read/change/verify before firmware transfer",
+        "target word {:#04x} = {:04X} ({source})",
         setting.parameter, setting.value
     );
     crate::diagnostics::record(format!("Pioneer startup setting: {text}"));
     crate::output::field("Startup setting", crate::report::Value::text(&text));
-}
-
-fn startup_error(
-    error: pioneer_optical::startup::migration::Error<anyhow::Error, FlashError<anyhow::Error>>,
-) -> anyhow::Error {
-    let code = error.code();
-    anyhow::Error::new(error).context(format!("Pioneer startup-setting update [{code}]"))
 }
 
 pub(crate) fn preparation_error<E>(error: E) -> anyhow::Error
@@ -105,64 +135,34 @@ where
     ))
 }
 
-fn prepared_error(error: FlashError<anyhow::Error>) -> anyhow::Error {
+fn execution_error(
+    error: pioneer_optical::receiver::ExecutionError<anyhow::Error>,
+    restoration_required: bool,
+    completed_passes: usize,
+) -> anyhow::Error {
     let code = error.code();
-    let restoration = matches!(
-        &error,
-        FlashError::Preflight {
-            pass: FlashPass::Restoration,
-            ..
-        } | FlashError::DescriptorRead {
-            pass: FlashPass::Restoration,
-            ..
-        } | FlashError::DescriptorChanged {
-            pass: FlashPass::Restoration
-        } | FlashError::DescriptorMismatch {
-            pass: FlashPass::Restoration
-        } | FlashError::Update {
-            pass: FlashPass::Restoration,
-            ..
-        } | FlashError::Readback {
-            pass: FlashPass::Restoration,
-            ..
-        } | FlashError::ReadbackMismatch {
-            pass: FlashPass::Restoration,
-            ..
-        }
-    );
-    let error = match error {
-        FlashError::Preflight { pass, source } => {
-            source.context(format!("{pass:?} flash preflight refused"))
-        }
-        FlashError::DescriptorRead { pass, source } => flash_err(source).context(format!(
-            "{pass:?} receiver descriptor read failed; update entry was not attempted"
-        )),
-        FlashError::Update { pass, source } => {
-            update_error(source).context(format!("{pass:?} flash pass failed"))
-        }
-        FlashError::Readback { pass, source } => flash_err(source).context(format!(
-            "{pass:?} Kernel readback failed; drive state is not verified{PARTIAL_HINT}"
-        )),
-        error @ FlashError::ReadbackMismatch { .. } => anyhow::Error::new(error)
-            .context(format!("Kernel readback did not verify{PARTIAL_HINT}")),
-        error @ (FlashError::DescriptorChanged { .. } | FlashError::DescriptorMismatch { .. }) => anyhow::Error::new(error)
-            .context("the live drive no longer matches the captured firmware; this update pass was not started. Capture a fresh backup and retry"),
-        error => anyhow::Error::new(error),
+    let failure = crate::backend::UpdateFailure {
+        phase: error.phase().to_string(),
+        write_started: error.write_started(),
+        temporary_firmware: restoration_required && error.firmware_write_started(),
+        completed_stages: (1..=completed_passes)
+            .map(|pass| format!("Pioneer update pass {pass}"))
+            .collect(),
     };
-    let error = error.context(format!("[{code}]"));
-    if restoration {
-        error.context("pristine Kernel restoration did not complete; the temporary Kernel may remain installed. Re-flash the captured pre-flash backup to restore the drive")
+    let error = anyhow::Error::new(error).context(format!("Pioneer update [{code}]; completion was not verified. Keep the pre-flash backup and diagnostic log"));
+    if failure.temporary_firmware {
+        error.context("pristine Kernel restoration did not complete; the temporary Kernel may remain installed").context(failure)
     } else {
-        error
+        error.context(failure)
     }
 }
 
 struct Runtime<'a, 'd> {
     device: &'a SharedDevice<'d>,
-    class: DriveClass,
-    initial_identity: (String, String),
-    target_identity: Option<(String, String)>,
+    sleep: &'a mut dyn FnMut(Duration),
     start: Instant,
+    waited: Duration,
+    completed_passes: usize,
     kernel: style::Progress,
     normal: style::Progress,
 }
@@ -176,10 +176,11 @@ impl UpdateRuntime for Runtime<'_, '_> {
         self.normal = style::Progress::new("flashing normal", normal);
     }
     fn elapsed(&self) -> Duration {
-        self.start.elapsed()
+        self.start.elapsed().max(self.waited)
     }
     fn sleep(&mut self, duration: Duration) {
-        std::thread::sleep(duration);
+        self.waited += duration;
+        (self.sleep)(duration);
     }
     fn progress(&mut self, role: Role, written: usize, _: usize) {
         match role {
@@ -198,43 +199,28 @@ impl UpdateRuntime for Runtime<'_, '_> {
     }
 }
 
-impl FlashRuntime<anyhow::Error> for Runtime<'_, '_> {
-    fn prepare_pass(&mut self, pass: FlashPass) -> Result<UpdateOptions> {
+impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
+    fn verification_unavailable(
+        &mut self,
+        pass: FlashPass,
+        role: Role,
+        address: Option<u32>,
+        reason: &dyn std::fmt::Debug,
+    ) {
+        crate::diagnostics::record(format!("Pioneer verification unavailable: pass={pass:?} region={role:?} address={address:?} reason={reason:?}"));
+    }
+
+    fn check_pass(&mut self, pass: FlashPass) -> Result<()> {
+        if pass == FlashPass::Restoration {
+            self.completed_passes = 1;
+        }
         self.device
             .with(|dev| crate::engine::guard_no_medium(dev, true))?;
-        let identity = transport::identify_on(self.device)
-            .context("could not re-read the live Pioneer receiver before update entry")?;
-        let expected = if pass == FlashPass::Restoration {
-            self.target_identity
-                .as_ref()
-                .unwrap_or(&self.initial_identity)
-        } else {
-            &self.initial_identity
-        };
-        super::dialect::check_live_identity(&identity, &expected.0, &expected.1)?;
         if pass == FlashPass::Restoration {
             println!("{}", style::dim("restoring the unmodified target Kernel"));
         }
-        // The library's degraded-receiver mode is never requested.
-        Ok(UpdateOptions {
-            class: self.class,
-            recover: false,
-        })
+        Ok(())
     }
-}
-
-fn update_error(error: UpdateError<anyhow::Error>) -> anyhow::Error {
-    let code = error.code();
-    let result = match error {
-        UpdateError::Entry(source) => flash_err(source).context("could not enter firmware update mode; no firmware data was transferred. Check the connection and save the diagnostic log before retrying"),
-        UpdateError::EntryStateRead(source) => flash_err(source).context("could not confirm firmware update mode; no firmware data was transferred. Check the connection and save the diagnostic log before retrying"),
-        UpdateError::EntryState { revision } => anyhow!("drive did not report the expected post-entry update state (revision bytes {revision:02x?}); aborting before any transfer"),
-        UpdateError::Transfer { role, offset, length, source } => flash_err(source).context(format!("OEM {role:?} write failed at offset {offset:#x}, length {length}{PARTIAL_HINT}")),
-        UpdateError::Finish(source) => flash_err(source).context(format!("OEM Finish write failed{PARTIAL_HINT}")),
-        UpdateError::ReadyTimeout(source) => flash_err(source).context("firmware data was transferred, but the drive did not return ready within the post-flash poll timeout; completion could not be verified. Keep the captured pre-flash backup and diagnostic log for recovery"),
-        other => anyhow::Error::new(other),
-    };
-    result.context(format!("[{code}]"))
 }
 
 #[cfg(test)]

@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instruction-level coverage; physical drive validation remains outstanding.
 
 ### freemkv-flash
+- Update the report HTTP client to ureq 3 and current TLS roots, resolving
+  the dependency audit failure without suppressing the advisory.
 - Save session events and linked operation logs automatically, and prepare a
   report bundle for the user-approved website submission flow.
 - Simplify Flash and Recovery results to a current progress line, a concise
@@ -38,8 +40,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Select each Kernel transfer layout from the loader active for that pass.
   Cover the reported WX1DM `0000` to S12JX 1.03 case with the supplied files.
 
-The MediaTek INTM to 1.V9 final-write rejection remains under investigation;
-0.13.4 does not yet claim that drive transition is fixed.
+- Derive MediaTek header and body transfer encoding separately from receiver
+  code. INTM to 1.V9 now prepares an encrypted header with a plaintext body and
+  preserves the boot region. Validate the descriptor and programmed ranges
+  before transfer; do not retry a rejected write with a different encoding.
+- Preflight every known stage before an intermediate write, then revalidate the
+  physical receiver at each handoff. Keep Current-file evidence distinct from
+  live reads, and represent unavailable installed firmware explicitly.
+- Move Pioneer Flash and Recovery sequencing into one optical executor, including
+  startup settings, downgrade preparation, transfer layout, and OEM restoration.
+- Bind Pioneer OEM identities to their firmware headers, including PLEXTOR and
+  TEAC variants, and compare revisions using INQUIRY's four-byte field width.
+- Require target identity and verification evidence for completion. Report
+  unreadable regions as limited verification, retain the failed phase and any
+  temporary firmware state, and avoid automatic probing after an uncertain write.
+- Correlate saved logs and session events by operation ID. Surface persistence
+  failures and interrupted workers, retaining unsaved events for report export.
+- Add receiver, staged-update, verification, and diagnostics regressions while
+  retaining existing coverage. Offline tests cover the reported INTM to 1.V9
+  path; a successful physical transition still needs user validation.
 
 ## [0.13.3] - 2026-10-19
 

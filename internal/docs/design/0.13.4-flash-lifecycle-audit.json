@@ -1,0 +1,111 @@
+{
+  "title": "0.13.4 flash lifecycle audit remediation",
+  "status": "implemented",
+  "approved": "2026-10-20",
+  "ownership": {
+    "frontends": "Inputs, confirmation, progress and evidence-based result presentation",
+    "engine": "Host policy, backup persistence, exclusive access, lifecycle and diagnostics",
+    "adapters": "Translate app inputs and runtime services into optical APIs",
+    "optical": "Firmware facts, preflight, receiver transformations, ordered protocol execution and target verification"
+  },
+  "findings": [
+    {
+      "id": 1,
+      "requirement": "Derive header and body transfer transformations independently from the executing receiver; validate INTM to 1.V9 without model-string or manual encoding switches."
+    },
+    {
+      "id": 2,
+      "requirement": "Verify requested target startup and distinguish byte comparison, unreadable regions and readiness; reject wrong or unchanged firmware."
+    },
+    {
+      "id": 3,
+      "requirement": "Carry structured completion evidence through backend, engine and UI; incomplete readback cannot silently become fully verified success."
+    },
+    {
+      "id": 4,
+      "requirement": "Preflight every statically knowable stage before the first write; bind and revalidate the actual receiver at each handoff."
+    },
+    {
+      "id": 5,
+      "requirement": "Use one Pioneer optical executor for Flash and Recovery with explicit policy differences."
+    },
+    {
+      "id": 6,
+      "requirement": "Prepared plans own required migrations, dialect and pass order; safe execution cannot skip a required step."
+    },
+    {
+      "id": 7,
+      "requirement": "Reuse loaded firmware facts; separately verify newly generated wire representations when necessary."
+    },
+    {
+      "id": 8,
+      "requirement": "Represent unavailable installed evidence explicitly; never substitute target bytes for an installed capture."
+    },
+    {
+      "id": 9,
+      "requirement": "Represent Current references and provenance in optical APIs; physical transports must not impersonate live reads with file bytes."
+    },
+    {
+      "id": 10,
+      "requirement": "Allow post-operation probing only when the operation state permits it; errors and panics must not trigger unconditional enumeration."
+    },
+    {
+      "id": 11,
+      "requirement": "Expose diagnostic persistence failure, correlate operations with logs, and record interrupted operations without aborting a flash because logging failed."
+    }
+  ],
+  "regressions": [
+    "PR1 AME 1.05 is classified from decoded firmware signatures",
+    "WX1DM recovery uses temporary downgrade preparation followed by verified pristine restoration",
+    "INTM to 1.V9 uses receiver-correct header/body representation and boot preservation",
+    "Unsupported final stage is rejected before intermediate writes",
+    "Correct Kernel with unchanged or wrong Normal is not reported as verified success",
+    "Readiness with old firmware is not target completion",
+    "Limited readback retains a qualified result",
+    "Receiver changes invalidate prepared execution",
+    "Entry, transfer, finish and restoration failures retain phase and uncertainty",
+    "Logging failure and worker interruption remain visible and correlated",
+    "Input changes clear stale results",
+    "Authentic PLEXTOR and TEAC receiver identities are checked against firmware-derived vendor evidence",
+    "Five-character OEM revisions are projected to the four-byte INQUIRY field without dropping target readback checks"
+  ],
+  "validation": {
+    "rust": "Every pre-existing test suite must pass; preserve coverage while adapting APIs and explicitly documented bug-fix expectations. Add regressions as needed. Optical crate tests, app regression tests, workspace tests, fmt and clippy are required.",
+    "corpus": "Account for every held file; compare supported baseline separately from pre-existing unsupported framing and sizes",
+    "dev": "Use reproducible committed dependency pins, locked metadata and dev CI",
+    "ui": "Launch the built 0.13.4 GUI for review",
+    "limits": "Offline tests and firmware analysis do not establish a successful physical flash; no hardware write or public release is authorized by this goal"
+  },
+  "dependency_commits": {
+    "pioneer-optical": "f67a7bd5e73fce83f418af9dc6732c4f99922c7c",
+    "mediatek-optical": "3660c1c556f450bc17f7a2cea8b6e787f82c77e7"
+  },
+  "validation_evidence": {
+    "pioneer": "414 unit +35 integration +1 doc tests passed at f67a7bd5. External OEM checks comprise 290 Kernel, 324 Normal and 231 placement/control checks. Clippy and docs passed. Added exact vendor, four-byte revision, malformed revision and wrong-target executor regressions.",
+    "mediatek": "138 passed ordinary all-target/all-feature tests;136 private ignored cases explicitly run separately and passed. 136 published firmware members x2 receiver modes=272 states checked for Flash and Recovery. Formats:234 plain/plain,36 encrypted/encrypted,2 encrypted/plain. 1024 binaries accounted:136 valid envelopes,3 captures,40 unsupported framing,845 unsupported size. Clippy/docs/feature matrix passed.",
+    "historical_fixture_limit": "Original optional298-file MediaTek family corpus could not be located. Its optional test remains unchanged; current held corpus was validated separately.",
+    "hardware": "No hardware writes performed. Receiver analysis and instruction emulation do not emulate the opaque secure verifier or establish physical flash success.",
+    "engine": "68 generic engine tests passed, including early backup-path collision refusal and typed limited-readback outcomes.",
+    "architecture": "27 architecture tests passed. Removed obsolete app Recovery migration exceptions; unified optical executor still receives only an engine write grant.",
+    "native_gui": "Final native macOS synthetic-drive gate: 49 checks passed after Current-assisted routing; all seven tabs and confirmation/reopened confirmation inspected; no drive I/O.",
+    "pioneer_held_kernel_classification": "425 held Kernels passed firmware-derived dialect selection:324 BD-labeled,61 DVR-labeled,40 other labels. Product label is not the decision source.",
+    "transcript_review": "17 scenario snapshots and confirmation capture passed against pinned dependencies. Exact non-unlock firmware-write CDB ordering and payload hashes retained in these scenarios; readback and receiver-evidence reads are documented separately. Historical v0.11.2 snapshots remain unchanged. Every changed scenario has an exact classified ledger entry.",
+    "mediatek_followup": "Three further optical regressions pass for single receiver snapshot capture, physical stale-code refusal before mutation, and cross-chip prepared binding refusal. Full ordinary tests, Clippy/docs,272 receiver states and136 published envelopes passed at3660c1c. App final stage suite:18 passed including both real-hoard V9 paths and read-count checks.",
+    "current_reference_routing": "12 workflow tests and 129 GUI model tests passed. Current firmware selects one backend; that backend binds it to the physical drive before protocol-specific identification. Wrong vendor, invalid or replaced Current and raw MediaTek Current have regression coverage. File recognition alone grants no capability.",
+    "pioneer_cached_facts": "Authorization derives routing and receiver checks from already loaded Receiver/Envelope/Update facts. Raw-policy equivalence regressions cover paired and Normal-only targets across receiver generations and marker values.",
+    "pioneer_corpus_capture": "145 families, 1267 sections, 1122 operations: 1114 successes and eight expected refusals. Zero prior-success regressions; 67 previous refusals now succeed. Refusals: six OEM no-Current probes, one incompatible Kernel-version Normal and one corrupt zero-checksum Normal. A repeat run differed only in the 34 random authentication digests documented separately.",
+    "pioneer_receiver_matrix": "387 packages self-decode; 1355 same-model pairs, 3756 cross-edition same-class pairs and 1834 different receiver-contract pairs passed. Recovery matrix: 20260 rows, 16950 same-class candidates, 2338/2338 seed-available ABI-compatible re-encodes proven; 566 ABI mismatches and 406 unrecoverable-seed candidates explicitly refused; zero unexpected proof failures. Final opt-in module run: 204 passed, seven separately handled ignored cases.",
+    "pioneer_audited_backup": "All 462 audited Normal rows (459 unique decoded bodies, 305 Kernel references) and S12JX exact OEM envelope reconstruction passed. Broader builder capability coverage explicitly distinguishes complete restores, unsupported transport, relabeled input, malformed identity and corrupt Normal partial-Kernel preservation.",
+    "gui_launch": "Built the final production code and launched target/debug/freemkv-flash-gui for user review. No hardware flash initiated.",
+    "mediatek_reference_followup": "Five reference tests including held INTM passed; physical unreadable receiver capture now asserts typed Read/Transport instead of obsolete Unknown. All 18 stage tests re-passed. Exact chip-binding boot-banner read added to three transcript expectations; all 16 tripwire tests passed.",
+    "workspace": "Unfiltered cargo test --locked --tests --no-fail-fast passed across the complete workspace: 978 passed, zero failures, 22 pre-existing opt-in/hardware ignores, no filters. Final recorded-authentication fixture and corpus assertion followups are tested separately; exact final commit must pass dev CI.",
+    "pioneer_signature_repeatability": "The repeated corpus differed only in 34 locally signed Normal transfer digests; all other 52280 lines were identical. All 34 cases prove fresh signatures authenticate, exact decoded bodies match, and all bytes outside authentication range 0x170..0x1c0 match. Test-only recorded valid signatures are keyed by auth policy and every remaining transfer byte; real verification runs before and after substitution. Full prepared transfers repeated byte-identically. Cases are pinned in pioneer_signing_subset.tsv. Production entropy/signing is unchanged.",
+    "backup_source_label_correction": "Source ID76 envelope wraps a decoded Kernel whose actual tag is ID75. The existing backup correctly reconstructs Kernel/Normal as ID75, and strict Update::load plus Receiver::detect succeed. Speculative production changes were reverted; backup.rs remains unchanged. Explicit corpus evidence covers the source relabel and exact restored bodies."
+  },
+  "test_coverage_changes": {
+    "pioneer": "Four app tests renamed to express mandatory readback and structured outcomes; original entry,exact wire,finish count,Normalbody/signature and failure guidance assertions retained.",
+    "mediatek": "PREPARE policy test renamed and expanded from8 to16 cases. File-read interception test replaced by physical-read provenance test. Limited completion covered in optical and app. Real production tests retain exact wire assertions but now expect encrypted header/plain body.",
+    "generic": "Unreadable protected chunk coverage split into exact-target-startup with explicit limited evidence, and unconfirmed target refusal. Readable mismatches remain fatal. Backup path collision remains checked before receiver reads.",
+    "renamed_and_moved": "Source test-name census found nine replaced/renamed tests: four Pioneer wording/readback cases, two real MTK wire-format cases, one removed file-read interception case replaced by physical-read provenance, one target-startup check moved to optical completion tests, and one generic protected-readback test split into explicit limited evidence versus unconfirmed startup refusal. No historical golden snapshot changed."
+  }
+}

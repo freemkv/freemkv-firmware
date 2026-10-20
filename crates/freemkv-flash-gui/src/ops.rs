@@ -21,6 +21,15 @@ pub fn profile(device: &str) -> anyhow::Result<Profile> {
     workflow::profile(device).map(|p| profile_view(&p))
 }
 
+/// The same profile with an explicitly selected Current reference.
+pub fn profile_with_current(
+    device: &str,
+    current: &std::path::Path,
+    member: Option<&str>,
+) -> anyhow::Result<Profile> {
+    workflow::profile_with_current(device, current, member).map(|p| profile_view(&p))
+}
+
 /// The GUI's view of a profile. The family name comes from the backend's
 /// descriptor; Recovery is offered whenever a backend identified the receiver.
 pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
@@ -51,6 +60,7 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
             .map(|path| path.display().to_string())
     };
     Profile {
+        recovery_without_live_protocol: p.backend.is_none() && p.recovery.is_some(),
         recovery_without_current: !workflow::recovery_requires_current(p),
         chips,
         tasks,
@@ -113,15 +123,20 @@ pub enum Job {
     Recovery(RecoveryOptions),
 }
 
+/// A job result preserves update evidence separately from analysis views.
+pub enum JobResult {
+    Complete,
+    Analysis(ResultView),
+    Update(workflow::UpdateOutcome),
+}
+
 /// Run the same operation as the matching CLI command; an analysis returns
 /// its result. `confirm` answers an authorized flash before it writes.
-pub fn execute(
-    device: &str,
-    job: &Job,
-    confirm: &mut dyn Confirm,
-) -> anyhow::Result<Option<ResultView>> {
+pub fn execute(device: &str, job: &Job, confirm: &mut dyn Confirm) -> anyhow::Result<JobResult> {
     match job {
-        Job::Analysis { request, control } => return analyze(request, control).map(Some),
+        Job::Analysis { request, control } => {
+            return analyze(request, control).map(JobResult::Analysis)
+        }
         Job::Info => workflow::info(Some(device)),
         Job::InfoFile { input } => workflow::check_file(input),
         Job::Backup { out, replace } => {
@@ -133,7 +148,7 @@ pub fn execute(
         Job::Recovery(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
-            workflow::recover(options)
+            return workflow::recover(options).map(JobResult::Update);
         }
         Job::PlanFlash(options) => {
             let mut options = options.clone();
@@ -143,10 +158,10 @@ pub fn execute(
         Job::Flash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
-            workflow::flash(options, confirm)
+            return workflow::flash(options, confirm).map(JobResult::Update);
         }
     }?;
-    Ok(None)
+    Ok(JobResult::Complete)
 }
 
 #[cfg(test)]

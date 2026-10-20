@@ -338,7 +338,11 @@ fn sent(app: &App) -> Sent {
 }
 
 fn finish(app: &mut App, result: Result<(), String>) {
-    app.worker.take().unwrap().send(Msg::Done(result)).unwrap();
+    app.worker
+        .take()
+        .unwrap()
+        .send(Msg::Done(result.map(|_| None)))
+        .unwrap();
     app.poll();
 }
 

@@ -164,11 +164,10 @@ use crate::backends::mtk::crossflash::{decide_model, Build, Verdict};
 
 /// A drive running `image` and reporting `product`, as a full read shows it.
 fn drive_running(image: &[u8], product: &str) -> Rec<MockScsiDevice> {
-    Rec::new(
-        MockScsiDevice::echoing()
-            .with_firmware_image(drive_read(image))
-            .with_product(product),
-    )
+    assert_eq!(Build::of_image(image).unwrap().product, product);
+    // INQUIRY follows the installed descriptor, including the new product after
+    // a successful crossflash. Explicit overrides are reserved for stale-startup tests.
+    Rec::new(MockScsiDevice::echoing().with_firmware_image(drive_read(image)))
 }
 
 /// Flash `image` onto a drive running `drive`, backing up to `backup`; without
@@ -301,7 +300,17 @@ fn a_same_family_crossflash_runs_through_the_engine() {
     assert!(
         outcome
             .result
-            .contains("drive did not take the crossflash image"),
+            .contains("live firmware identity or build differs from the selected target"),
+        "{}",
+        outcome.result
+    );
+    assert!(
+        outcome.result.contains("target startup"),
+        "{}",
+        outcome.result
+    );
+    assert!(
+        outcome.result.contains("write started: true"),
         "{}",
         outcome.result
     );

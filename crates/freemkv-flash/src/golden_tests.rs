@@ -12,7 +12,8 @@
 //! review the diff of the golden files like any other code change.
 //!
 //! Determinism: ANSI escapes, scratch-directory paths and the timestamped
-//! diagnostic-log path are normalized away; everything else is raw.
+//! diagnostic-log path and trailing display padding are normalized away;
+//! everything else is raw.
 
 #![allow(clippy::type_complexity)]
 
@@ -147,7 +148,7 @@ impl Outcome {
 /// Run `op` with its output captured. `text` follows the exact rule of
 /// `output::capture` (Message lines, Progress as `label: N%`); `events` is the
 /// ordered structured stream.
-fn run(op: impl FnOnce() -> Result<()>) -> Outcome {
+fn run<T>(op: impl FnOnce() -> Result<T>) -> Outcome {
     let events = Rc::new(RefCell::new(Vec::<String>::new()));
     let text = Rc::new(RefCell::new(Vec::<String>::new()));
     let (ev, tx) = (events.clone(), text.clone());
@@ -176,7 +177,7 @@ fn run(op: impl FnOnce() -> Result<()>) -> Outcome {
         || result = Some(op()),
     );
     let result = match result.expect("operation ran") {
-        Ok(()) => "OK".to_string(),
+        Ok(_) => "OK".to_string(),
         Err(e) => format!("ERR {e:#}"),
     };
     let events = events.borrow().clone();
@@ -388,6 +389,7 @@ fn normalize_for(raw: &str, host: &Host) -> String {
     plain
         .lines()
         .map(|line| {
+            let line = line.trim_end();
             if let Some(i) = line.find("Diagnostic log") {
                 let rest = &line[i..];
                 let cut = [": ", " = "]
@@ -555,9 +557,15 @@ fn check(name: &str, golden: Golden) {
     // A Windows checkout may have turned the recorded line endings into CRLF.
     let expected = expected.replace("\r\n", "\n");
     if expected != actual {
+        let actual_path = std::env::temp_dir().join(format!(
+            "freemkv-golden-{}-{name}.actual.txt",
+            std::process::id()
+        ));
+        std::fs::write(&actual_path, &actual).expect("save mismatched golden for inspection");
         panic!(
-            "golden mismatch: {}\n(- recorded, + actual; regenerate only for an intentional change with FREEMKV_BLESS=1)\n{}",
+            "golden mismatch: {}\nactual output: {}\n(- recorded, + actual; regenerate only for an intentional change with FREEMKV_BLESS=1)\n{}",
             path.display(),
+            actual_path.display(),
             diff(&expected, &actual)
         );
     }
@@ -569,7 +577,10 @@ fn check(name: &str, golden: Golden) {
 
 fn stamp_descriptor(img: &mut [u8], model: &str) {
     let d = ROM_1EC000_OFFSET as usize;
+    img[d..d + 0x08].copy_from_slice(b"HL-DT-ST");
+    img[d + 0x08..d + 0x18].fill(b' ');
     img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
+    img[d + 0x18..d + 0x1c].copy_from_slice(b"1.00");
     img[d + 0x34..d + 0x34 + 10].copy_from_slice(b"MTEKMT1959");
 }
 
@@ -620,6 +631,7 @@ fn mtk_boot_page() -> Vec<u8> {
 /// Report `product` as the INQUIRY product (vendor HL-DT-ST, revision 1.00).
 fn with_inquiry_product(dev: MockScsiDevice, product: &str) -> MockScsiDevice {
     let mut inq = vec![0u8; 96];
+    inq[0] = 5;
     inq[4] = 91;
     inq[8..16].copy_from_slice(b"HL-DT-ST");
     inq[16..32].fill(b' ');
@@ -638,12 +650,12 @@ fn recover_via(
     target: &[u8],
     execute: bool,
 ) -> Result<()> {
-    crate::engine::recover(dev, &Pioneer::new(), current, target, execute, true)
+    crate::engine::recover(dev, &Pioneer::new(), current, target, execute, true).map(drop)
 }
 
 /// The engine's flash with consent collected up front.
 fn engine_flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> Result<()> {
-    crate::engine::flash(dev, drive, req, &mut crate::workflow::Preconfirmed)
+    crate::engine::flash(dev, drive, req, &mut crate::workflow::Preconfirmed).map(drop)
 }
 
 /// A signed image of `chip` (`MTEKMT1959` / `MTEKMT1939`) with the stored boot
@@ -652,8 +664,7 @@ fn stored_image(chip: &[u8; 10], model: &str, code: u8) -> Vec<u8> {
     let mut img: Vec<u8> = (0..IMAGE_SIZE).map(|i| (i % 251) as u8 ^ code).collect();
     img[..0x400].copy_from_slice(&mtk_boot_page());
     let d = ROM_1EC000_OFFSET as usize;
-    img[d + 0x08..d + 0x18].fill(b' ');
-    img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
+    stamp_descriptor(&mut img, model);
     img[d + 0x34..d + 0x3E].copy_from_slice(chip);
     let board = if chip == b"MTEKMT1939" {
         fixture::JB7
@@ -747,9 +758,9 @@ fn mtk_drive() -> MockScsiDevice {
 }
 
 /// Run `op` against a recording wrapper of `dev`, returning outcome + transcript.
-fn drive_run<D: ScsiDevice>(
+fn drive_run<D: ScsiDevice, T>(
     dev: D,
-    op: impl FnOnce(&mut Rec<D>) -> Result<()>,
+    op: impl FnOnce(&mut Rec<D>) -> Result<T>,
 ) -> (Outcome, Vec<String>) {
     let mut rec = Rec::new(dev);
     let outcome = run(|| op(&mut rec));
@@ -908,6 +919,8 @@ fn archive(update: &Update, unsigned: bool) -> Vec<u8> {
 // --- stateful receivers (copied from recovery_tests.rs / prepared_tests.rs) ---
 #[derive(Default)]
 struct RecoveryDrive {
+    kernel_wire: Vec<u8>,
+    normal_wire: Vec<u8>,
     updating: bool,
     finished: bool,
     stuck: bool,
@@ -939,14 +952,37 @@ impl ScsiDevice for RecoveryDrive {
             }
         } else if command == pioneer_optical::cdb::test_unit_ready() {
             return Err(crate::platform::ScsiSenseError::new(2, 0x3a, 0, "no medium").into());
+        } else if command.len() == 10 && command[..3] == [0x3c, 2, 0xb0] {
+            let address = u32::from_be_bytes([0, command[3], command[4], command[5]]) as usize;
+            if !self.finished {
+                assert_eq!(
+                    address, 0x410000,
+                    "only receiver descriptor reads before transfer"
+                );
+                return Ok(b"PIONEER TEST-NEW"[..len].to_vec());
+            }
+            let kernel = Envelope::load(&self.kernel_wire)?;
+            let (base, image) = if address >= 0x410000 {
+                (
+                    0x410000,
+                    Envelope::load_with_kernel(&self.normal_wire, &kernel)?.image,
+                )
+            } else {
+                (0x400000, kernel.image)
+            };
+            let offset = address.checked_sub(base).expect("firmware address");
+            return Ok(image[offset..offset + len].to_vec());
         } else if command != pioneer_optical::cdb::get_event_status()
             && command != pioneer_optical::cdb::request_sense(18)
         {
-            panic!("unexpected read (firmware reads forbidden): {command:02x?}");
+            panic!("unexpected read: {command:02x?}");
         }
         Ok(bytes)
     }
-    fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+    fn command_out(&mut self, command: &[u8], bytes: &[u8]) -> Result<()> {
+        if command == pioneer_optical::cdb::knock() && bytes.is_empty() {
+            return Ok(());
+        }
         panic!("lenient write forbidden")
     }
     fn command_out_strict(&mut self, command: &[u8], bytes: &[u8]) -> Result<()> {
@@ -959,6 +995,16 @@ impl ScsiDevice for RecoveryDrive {
             self.startup_word = Some(u16::from_be_bytes(bytes.try_into().unwrap()));
         }
         self.writes.push((command.to_vec(), bytes.to_vec()));
+        if command == pioneer_optical::cdb::enter_update() {
+            self.updating = true;
+            self.finished = false;
+            self.kernel_wire.clear();
+            self.normal_wire.clear();
+        } else if command.get(..3) == Some(&[0x3b, 0x07, 0xfe]) {
+            self.kernel_wire.extend_from_slice(bytes);
+        } else if command.get(..3) == Some(&[0x3b, 0x07, 0xf0]) {
+            self.normal_wire.extend_from_slice(bytes);
+        }
         if command == pioneer_optical::cdb::finish()
             && self.writes.iter().any(|(c, _)| c[2] == 0xf0)
         {
@@ -1474,8 +1520,13 @@ fn golden_flash_execute() {
     let target = archive(&pioneer_pair(false, 0), false);
     let mut no_ack = pioneer_request(target.clone(), &PIONEER_PACKAGE, true);
     no_ack.acknowledged_risk = false;
+    no_ack.predump_out = Some(dir.join("pioneer_no_ack.tar"));
     let mut with_backup = pioneer_request(target.clone(), &PIONEER_PACKAGE, true);
     with_backup.predump_out = Some(dir.join("pioneer_rollback.tar"));
+    let mut disc_loaded = pioneer_request(target.clone(), &PIONEER_PACKAGE, true);
+    disc_loaded.predump_out = Some(dir.join("pioneer_disc.tar"));
+    let mut wrong_family = pioneer_request(target.clone(), &PIONEER_PACKAGE, true);
+    wrong_family.predump_out = Some(dir.join("pioneer_on_mtk.tar"));
     for (title, req, dev) in [
         (
             "Pioneer execute: no risk acknowledgement",
@@ -1489,12 +1540,12 @@ fn golden_flash_execute() {
         ),
         (
             "Pioneer execute: disc loaded",
-            pioneer_request(target.clone(), &PIONEER_PACKAGE, true),
+            disc_loaded,
             MockScsiDevice::pioneer().with_medium_loaded(),
         ),
         (
             "MTK execute: Pioneer bundle sent to an MTK drive",
-            pioneer_request(target.clone(), &PIONEER_PACKAGE, true),
+            wrong_family,
             mtk_drive(),
         ),
     ] {
@@ -1504,6 +1555,20 @@ fn golden_flash_execute() {
             Box::new(Pioneer::new())
         };
         let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, family.as_ref(), &req));
+        let expected_refusal = match title {
+            "Pioneer execute: no risk acknowledgement" => "SAFETY GATE",
+            "Pioneer execute: pre-flash backup cannot be read" => "pre-flash backup failed",
+            "Pioneer execute: disc loaded" => "a disc is loaded",
+            "MTK execute: Pioneer bundle sent to an MTK drive" => {
+                "a Pioneer firmware bundle cannot be flashed to this mtk19xx drive"
+            }
+            _ => unreachable!(),
+        };
+        assert!(
+            outcome.result.contains(expected_refusal),
+            "{title}: {}",
+            outcome.result
+        );
         g.case(title, &outcome, Some(&transcript));
     }
     g.file(
@@ -2274,10 +2339,12 @@ const UD04_NORMAL_BASE: usize = 0x410000;
 /// scripted tray state; the last one repeats.
 struct Ud04Drive {
     memory: Vec<u8>,
+    revision: [u8; 4],
     startup_word: u16,
     knocks: usize,
     updating: bool,
     kernel: Vec<u8>,
+    normal: Vec<u8>,
     trays: Vec<MediumStatus>,
     tray_checks: usize,
     normal_unreadable: bool,
@@ -2292,10 +2359,12 @@ impl Ud04Drive {
     fn installed((kernel, normal): (Vec<u8>, Vec<u8>)) -> Self {
         Self {
             memory: [kernel, normal].concat(),
+            revision: *b"1.14",
             startup_word: 0xffff,
             knocks: 0,
             updating: false,
             kernel: Vec::new(),
+            normal: Vec::new(),
             trays: vec![MediumStatus::ClosedEmpty],
             tray_checks: 0,
             normal_unreadable: false,
@@ -2319,7 +2388,11 @@ impl ScsiDevice for Ud04Drive {
                 data[0] = 0x05;
                 data[8..16].copy_from_slice(b"PIONEER ");
                 data[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
-                data[32..36].copy_from_slice(if self.updating { b"000 " } else { b"1.14" });
+                data[32..36].copy_from_slice(if self.updating {
+                    b"000 "
+                } else {
+                    &self.revision
+                });
             }
             return Ok(data);
         }
@@ -2327,6 +2400,9 @@ impl ScsiDevice for Ud04Drive {
             let mut data = vec![0; 48];
             data[16..24].copy_from_slice(b"SAT 8A10");
             data[24..32].copy_from_slice(&self.memory[0x1008..0x1010]);
+            if !self.updating {
+                data[32..40].copy_from_slice(&self.memory[0x1008..0x1010]);
+            }
             return Ok(data);
         }
         if cdb == pioneer_optical::cdb::read_parameter_word(0x9f).unwrap() {
@@ -2374,12 +2450,30 @@ impl ScsiDevice for Ud04Drive {
         } else if cdb == pioneer_optical::cdb::enter_update() {
             self.updating = true;
             self.kernel.clear();
+            self.normal.clear();
         } else if cdb[..3] == [0x3b, 0x07, 0xfe] {
             self.kernel.extend_from_slice(data);
+        } else if cdb[..3] == [0x3b, 0x07, 0xf0] {
+            self.normal.extend_from_slice(data);
         } else if cdb == pioneer_optical::cdb::finish() {
             if !self.kernel.is_empty() {
                 let image = Envelope::load(&self.kernel)?.image;
                 self.memory[..image.len()].copy_from_slice(&image);
+            }
+            if !self.normal.is_empty() {
+                let kernel = if self.kernel.is_empty() {
+                    let mut source = ud04_target().kernel().clone();
+                    source.image = self.memory[..0x10000].to_vec();
+                    source
+                } else {
+                    Envelope::load(&self.kernel)?
+                };
+                let image = Envelope::load_with_kernel(&self.normal, &kernel)?.image;
+                let header = pioneer_optical::envelope::header_info(&self.normal)
+                    .expect("transferred Normal header");
+                self.revision.copy_from_slice(header.revision.as_bytes());
+                self.memory.truncate(0x10000);
+                self.memory.extend_from_slice(&image);
             }
             self.updating = false;
         }
@@ -2533,7 +2627,7 @@ fn golden_cli_child() {
     );
     marker(CLI_END);
     let mut report = match result {
-        Ok(()) => "result: OK\n".to_string(),
+        Ok(_) => "result: OK\n".to_string(),
         Err(e) => format!("result: ERR {e:#}\n"),
     };
     for line in rec.transcript() {
@@ -2704,7 +2798,21 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
-    "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "M-RS", "M-FAM", "M-CHIP", "M-BAK", "M-ENC",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "M-RS",
+    "M-FAM",
+    "M-CHIP",
+    "M-BAK",
+    "M-ENC",
+    "M-LIFECYCLE",
+    "FMT",
 ];
 
 /// The only reasons a Pioneer line may differ from v0.11.2: P1, a package
@@ -2713,7 +2821,9 @@ const ALLOWED_REASONS: &[&str] = &[
 /// [`RECOVER_HINT`]; P4, the synthetic Kernel fixtures gained a 0.15.0 receiver
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
-const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"];
+const PIONEER_REASONS: &[&str] = &[
+    "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10", "P11", "FMT",
+];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
 /// v0.11.2 could not reach that flash mode either: its CLI and GUI always

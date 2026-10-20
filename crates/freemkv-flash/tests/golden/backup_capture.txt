@@ -104,7 +104,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: ae84c027e30dac589d309bc5e17c95ac07a8cae5328da5bc5303b605d3aebc14
+backup sha256: 0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
 wrote <TMP>/backup/mtk_backup.tar (2 MiB).
 this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 --- events (107) ---
@@ -210,7 +210,7 @@ PROGRESS reading drive memory 2035712/2097152
 PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
-MSG      backup sha256: ae84c027e30dac589d309bc5e17c95ac07a8cae5328da5bc5303b605d3aebc14
+MSG      backup sha256: 0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
 FIELD    Saved to = <TMP>/backup/mtk_backup.tar
 MSG      wrote <TMP>/backup/mtk_backup.tar (2 MiB).
 FIELD    Backup origin = this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
@@ -733,7 +733,7 @@ IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-saved file: 2097152 bytes sha256=ae84c027e30dac589d309bc5e17c95ac07a8cae5328da5bc5303b605d3aebc14
+saved file: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
 
 === MTK dump (recover): raw memory ===
 result: OK
@@ -840,7 +840,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 44e1e4a31c091612a17399e9bf9be1b2660ad9a173aba738fae16b42c9a8612a
+backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
 wrote <TMP>/backup/mtk_dump.bin (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (108) ---
@@ -947,7 +947,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: 44e1e4a31c091612a17399e9bf9be1b2660ad9a173aba738fae16b42c9a8612a
+MSG      backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
 FIELD    Saved to = <TMP>/backup/mtk_dump.bin
 MSG      wrote <TMP>/backup/mtk_dump.bin (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -1467,14 +1467,14 @@ IN   cdb=3c06001fc00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fd00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001fe00000100000 alloc=4096 -> ok 4096
 IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
-saved file: 2097152 bytes sha256=44e1e4a31c091612a17399e9bf9be1b2660ad9a173aba738fae16b42c9a8612a
+saved file: 2097152 bytes sha256=98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
 
 === MTK backup: destination exists ===
 result: ERR backup <TMP>/backup/mtk_backup.tar already exists (backups are never overwritten); choose another -o path or remove it
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
-saved file: 2097152 bytes sha256=ae84c027e30dac589d309bc5e17c95ac07a8cae5328da5bc5303b605d3aebc14
+saved file: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
 
 === Pioneer backup: bounded replay of a UD04 ===
 result: OK

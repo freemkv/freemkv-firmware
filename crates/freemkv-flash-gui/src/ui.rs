@@ -100,6 +100,8 @@ pub(crate) struct Profile {
     pub(crate) tasks: Vec<Task>,
     /// Recovery identifies its receiver without an installed firmware reference.
     pub(crate) recovery_without_current: bool,
+    /// Recheck Current choices when Recovery lacks a normal live protocol match.
+    pub(crate) recovery_without_live_protocol: bool,
     /// A live capture can feed Inspect and Compare.
     pub(crate) inspect: bool,
     /// The suggested backup and dump file names, from the backup format.
@@ -537,11 +539,12 @@ impl Node {
 pub(crate) enum Msg {
     Event(Event),
     DriveAfter(String),
+    FailureEvidence(workflow::UpdateFailure),
     Analysis(ResultView),
     /// A flash passed every gate after its backup; the worker waits for the
     /// sheet's answer on the sender before writing.
     Authorized(FlashSheet, Sender<bool>),
-    Done(Result<(), String>),
+    Done(Result<Option<workflow::UpdateOutcome>, String>),
 }
 
 /// The drive and input an operation was started for, frozen when the user
@@ -581,6 +584,9 @@ type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
 /// The whole application state. The shells hold none of their own.
 pub struct App {
     journal: Option<Journal>,
+    logging_warning: Option<String>,
+    operation_id: Option<String>,
+    failure_evidence: Option<workflow::UpdateFailure>,
     report_rx: Option<Receiver<Result<String, String>>>,
     origin_rx: Vec<Receiver<OriginReply>>,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -659,12 +665,22 @@ impl App {
 
     pub(crate) fn with_drives(drives: Vec<DriveChoice>) -> Self {
         let device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
+        let (journal, logging_warning) = if cfg!(test) {
+            (None, None)
+        } else {
+            match Journal::open() {
+                Ok(journal) => (Some(journal), None),
+                Err(error) => (
+                    Some(Journal::memory()),
+                    Some(format!("Session history is not being saved: {error}")),
+                ),
+            }
+        };
         Self {
-            journal: if cfg!(test) {
-                None
-            } else {
-                Journal::open().ok()
-            },
+            journal,
+            logging_warning,
+            operation_id: None,
+            failure_evidence: None,
             report_rx: None,
             origin_rx: Vec::new(),
             flash_origin: None,
@@ -746,10 +762,23 @@ impl App {
             return vec![Effect::StartTicking];
         }
         let device = self.device.clone();
+        let current = (!self.recovery_read
+            && (self.recovery_current_members.len() < 2 || self.recovery_current_member.is_some()))
+        .then(|| self.recovery_current.clone())
+        .flatten();
+        let member = self.recovery_current_member.clone();
         let waker = self.waker.clone();
         std::thread::spawn(move || {
             let profile = std::panic::catch_unwind(|| {
-                workflow::capture_events(|_| {}, || ops::profile(&device))
+                workflow::capture_events(
+                    |_| {},
+                    || match current {
+                        Some(ref path) => {
+                            ops::profile_with_current(&device, path, member.as_deref())
+                        }
+                        None => ops::profile(&device),
+                    },
+                )
             });
             let _ = tx.send(match profile {
                 Ok(result) => result.map_err(|e| format!("{e:#}")),
@@ -839,9 +868,15 @@ impl App {
         );
     }
 
-    fn record_event(&mut self, kind: &str, data: serde_json::Value) {
+    fn record_event(&mut self, kind: &str, mut data: serde_json::Value) {
+        if let Some(id) = &self.operation_id {
+            data["operation_id"] = id.clone().into();
+        }
         if let Some(journal) = &mut self.journal {
-            let _ = journal.record(kind, data);
+            if let Err(error) = journal.record(kind, data) {
+                self.logging_warning
+                    .get_or_insert_with(|| format!("Session history could not be saved: {error}"));
+            }
         }
     }
 
@@ -886,6 +921,7 @@ impl App {
                     self.clear_flash_result();
                 }
                 self.recovery_read = on;
+                return self.refresh_current_profile();
             }
             Input::SetCheck(CheckId::RiskAck, on) if self.pending.is_some() => self.risk_ack = on,
             Input::SetCheck(CheckId::CaptureAsBackup, on) if !self.busy() => {
@@ -932,6 +968,7 @@ impl App {
                         self.clear_flash_result();
                     }
                     self.recovery_current_member = Some(member);
+                    return self.refresh_current_profile();
                 }
             }
             Input::Recover if !self.busy() && self.recovery_ready() => {
@@ -977,16 +1014,11 @@ impl App {
                 }
             }
             Input::SubmitReport if self.report_rx.is_none() => {
-                let Some(journal) = &mut self.journal else {
-                    self.diagnostic_notice =
-                        Some("Automatic report logging is unavailable.".into());
+                self.record_event("report_requested", serde_json::json!({}));
+                let Some(journal) = &self.journal else {
+                    self.diagnostic_notice = Some("Report history is unavailable.".into());
                     return Vec::new();
                 };
-                if let Err(error) = journal.record("report_requested", serde_json::json!({})) {
-                    self.diagnostic_notice =
-                        Some(format!("Could not save report request: {error}"));
-                    return Vec::new();
-                }
                 let source = journal.source();
                 let (tx, rx) = mpsc::channel();
                 self.report_rx = Some(rx);
@@ -1128,6 +1160,7 @@ impl App {
                     workflow::recovery_members(&path).unwrap_or_default();
                 self.recovery_current_member = None;
                 self.recovery_current = Some(path);
+                return self.refresh_current_profile();
             }
             Pick::RecoveryInput => {
                 self.clear_flash_result();
@@ -1190,6 +1223,16 @@ impl App {
         self.analysis_tree = result.as_ref().map(|r| Arc::new(analysis_tree(r)));
         self.analysis = result;
         self.analysis_notice = None;
+    }
+
+    fn refresh_current_profile(&mut self) -> Vec<Effect> {
+        if self.ready_profile().is_none_or(|profile| {
+            !profile.tasks.contains(&Task::Recovery) || profile.recovery_without_live_protocol
+        }) {
+            self.start_profile()
+        } else {
+            Vec::new()
+        }
     }
 
     fn recovery_without_current(&self) -> bool {
@@ -1339,6 +1382,7 @@ impl App {
         self.action = label.to_string();
         self.status = format!("{label}…");
         self.failure = None;
+        self.failure_evidence = None;
         self.log.clear();
         self.diagnostic_log = None;
         self.diagnostic_checked = None;
@@ -1347,6 +1391,7 @@ impl App {
         self.rows.clear();
         self.info_result = matches!(job, Job::Info);
         self.log.push(format!("{label}: {device}"));
+        self.operation_id = Some(workflow::new_operation_id());
         self.record_event(
             "operation_started",
             serde_json::json!({
@@ -1370,7 +1415,11 @@ impl App {
             return vec![Effect::StartTicking];
         }
         let waker = self.waker.clone();
-        std::thread::spawn(move || run_job(&device, job, tx, waker));
+        let operation_id = self
+            .operation_id
+            .clone()
+            .expect("started operation has an id");
+        std::thread::spawn(move || run_job(&device, job, tx, waker, operation_id));
         vec![Effect::StartTicking]
     }
 
@@ -1405,6 +1454,7 @@ impl App {
             loop {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => self.event(event),
+                    Ok(Msg::FailureEvidence(evidence)) => self.failure_evidence = Some(evidence),
                     Ok(Msg::DriveAfter(label)) => {
                         self.record_event("drive_after", serde_json::json!({"drive": label}))
                     }
@@ -1423,27 +1473,65 @@ impl App {
                         self.end_flash();
                         let cancelled = std::mem::take(&mut self.cancelled);
                         match &result {
-                            Ok(()) => self.status = format!("{} complete", self.action),
+                            Ok(Some(outcome)) => {
+                                self.status = format!("{} {}", self.action, outcome.summary())
+                            }
+                            Ok(None) => self.status = format!("{} complete", self.action),
                             Err(_) if cancelled => {
                                 self.status = format!("{} cancelled", self.action)
                             }
                             Err(error) => {
-                                self.status =
-                                    format!("{} failed — {}", self.action, short_failure(error));
+                                self.status = match &self.failure_evidence {
+                                    Some(evidence) => {
+                                        let consequence = if evidence.temporary_firmware {
+                                            " — temporary firmware may remain"
+                                        } else if evidence.write_started {
+                                            " — firmware may be partial"
+                                        } else {
+                                            " — update not started"
+                                        };
+                                        format!(
+                                            "{} failed during {}{consequence}",
+                                            self.action, evidence.phase
+                                        )
+                                    }
+                                    None => {
+                                        format!("{} failed — {}", self.action, short_failure(error))
+                                    }
+                                };
                                 self.failure = Some(error.clone());
                             }
                         }
+                        let update_evidence = result
+                            .as_ref()
+                            .ok()
+                            .and_then(Option::as_ref)
+                            .map(outcome_json);
+                        let result_kind = match &result {
+                            Err(_) if cancelled => "cancelled",
+                            Err(_) => "error",
+                            Ok(Some(workflow::UpdateOutcome::Planned)) => "planned",
+                            Ok(Some(outcome)) if !outcome.safe_to_probe() => "uncertain",
+                            Ok(Some(outcome)) if !outcome.fully_verified() => {
+                                "limited_verification"
+                            }
+                            Ok(_) => "success",
+                        };
                         self.log.push(match result {
-                            Ok(()) => "✓ done.".into(),
+                            Ok(Some(outcome)) => format!("{} {}", self.action, outcome.summary()),
+                            Ok(None) => "✓ done.".into(),
                             Err(_) if cancelled => CANCELLED.into(),
                             Err(e) => format!("✗ error: {e}"),
                         });
                         self.record_event("operation_finished", serde_json::json!({
                             "operation": self.action,
-                            "result": if self.failure.is_some() { "error" } else if cancelled { "cancelled" } else { "success" },
+                            "result": result_kind,
                             "summary": self.status,
                             "error": self.failure,
+                            "failure": self.failure.as_ref().map(|_| failure_json(self.failure_evidence.as_ref())),
+                            "update": update_evidence,
                         }));
+                        self.operation_id = None;
                         finished = true;
                         break;
                     }
@@ -1454,6 +1542,15 @@ impl App {
                         self.status = "Operation interrupted".into();
                         self.failure = Some(WORKER_GONE.into());
                         self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
+                        self.record_event(
+                            "operation_finished",
+                            serde_json::json!({
+                                "operation": self.action, "result": "interrupted",
+                                "summary": self.status, "error": self.failure,
+                                "failure": failure_json(self.failure_evidence.as_ref()),
+                            }),
+                        );
+                        self.operation_id = None;
                         finished = true;
                         break;
                     }
@@ -1598,6 +1695,9 @@ impl App {
             Event::Report(report) => {
                 for row in report.rows {
                     match row.gui_label.as_deref() {
+                        Some("Diagnostic warning") => {
+                            self.logging_warning = Some(row.value.plain())
+                        }
                         Some(DIAGNOSTIC_FIELD) => {
                             let path = row.value.plain();
                             self.record_event("diagnostic", serde_json::json!({"log_file": path}));
@@ -2013,7 +2113,11 @@ impl App {
                         true,
                     ),
                 }),
-            notice: self.diagnostic_notice.clone(),
+            notice: match (&self.logging_warning, &self.diagnostic_notice) {
+                (Some(warning), Some(notice)) => Some(format!("{warning}\n{notice}")),
+                (Some(warning), None) => Some(warning.clone()),
+                (None, notice) => notice.clone(),
+            },
             view_log: Button::new("View Log", Input::ViewLog, self.diagnostic_log.is_some()),
             submit_report: Button::new(
                 "Submit Report",
@@ -2104,7 +2208,11 @@ impl App {
                 .diagnostic_log
                 .as_ref()
                 .map(|p| p.display().to_string()),
-            notice: self.diagnostic_notice.clone(),
+            notice: match (&self.logging_warning, &self.diagnostic_notice) {
+                (Some(warning), Some(notice)) => Some(format!("{warning}\n{notice}")),
+                (Some(warning), None) => Some(warning.clone()),
+                (None, notice) => notice.clone(),
+            },
             lines: self.diagnostic_lines.clone(),
         }
     }
@@ -2116,8 +2224,47 @@ impl Default for App {
     }
 }
 
+fn failure_json(evidence: Option<&workflow::UpdateFailure>) -> serde_json::Value {
+    match evidence {
+        Some(e) => serde_json::json!({
+            "phase": e.phase, "write_started": e.write_started,
+            "temporary_firmware": e.temporary_firmware, "completed_stages": e.completed_stages,
+            "safe_to_probe": false,
+        }),
+        None => serde_json::json!({
+            "phase": "unknown", "write_started": null, "temporary_firmware": null,
+            "completed_stages": null, "safe_to_probe": false,
+        }),
+    }
+}
+
+fn outcome_json(outcome: &workflow::UpdateOutcome) -> serde_json::Value {
+    match outcome {
+        workflow::UpdateOutcome::Planned => serde_json::json!({"state": "planned"}),
+        workflow::UpdateOutcome::Completed(e) => serde_json::json!({
+            "state": "completed", "target_started": e.target_started,
+            "target_identity": e.target_identity,
+            "verified_regions": e.verified_regions, "unverified_regions": e.unverified_regions,
+            "completed_stages": e.completed_stages, "temporary_firmware": e.temporary_firmware,
+            "fully_verified": outcome.fully_verified(), "safe_to_probe": outcome.safe_to_probe(),
+        }),
+    }
+}
+
+fn post_update_snapshot(
+    result: &Result<Option<workflow::UpdateOutcome>, String>,
+    probe: impl FnOnce() -> String,
+) -> Option<String> {
+    result
+        .as_ref()
+        .ok()
+        .and_then(Option::as_ref)
+        .filter(|outcome| outcome.safe_to_probe())
+        .map(|_| probe())
+}
+
 /// The worker: one job, every event forwarded, a panic reported as a failure.
-fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
+fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operation_id: String) {
     let check_after = matches!(job, Job::Flash(_) | Job::Recovery(_));
     let wake = {
         let waker = waker.clone();
@@ -2140,26 +2287,40 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
                     tx: tx.clone(),
                     waker: waker.clone(),
                 };
-                if let Some(result) = ops::execute(device, &job, &mut sheet)? {
-                    let _ = tx.send(Msg::Analysis(result));
-                }
-                anyhow::Ok(())
+                workflow::with_operation_id(&operation_id, || {
+                    match ops::execute(device, &job, &mut sheet)? {
+                        ops::JobResult::Analysis(result) => {
+                            let _ = tx.send(Msg::Analysis(result));
+                            Ok(None)
+                        }
+                        ops::JobResult::Update(outcome) => Ok(Some(outcome)),
+                        ops::JobResult::Complete => Ok(None),
+                    }
+                })
             },
         )
     }));
     let result = match result {
-        Ok(result) => result.map_err(|e| format!("{e:#}")),
+        Ok(result) => result.map_err(|e: anyhow::Error| {
+            if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
+                let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
+            }
+            format!("{e:#}")
+        }),
         Err(_) => Err(WORKER_PANIC.into()),
     };
     if check_after {
-        let after = ops::enumerate()
-            .into_iter()
-            .find(|drive| drive.path == device)
-            .map_or_else(
-                || "Drive not detected after operation".to_owned(),
-                |drive| drive.display(),
-            );
-        let _ = tx.send(Msg::DriveAfter(after));
+        if let Some(after) = post_update_snapshot(&result, || {
+            ops::enumerate()
+                .into_iter()
+                .find(|drive| drive.path == device)
+                .map_or_else(
+                    || "Drive not detected after operation".to_owned(),
+                    |drive| drive.display(),
+                )
+        }) {
+            let _ = tx.send(Msg::DriveAfter(after));
+        }
     }
     let _ = tx.send(Msg::Done(result));
     wake();

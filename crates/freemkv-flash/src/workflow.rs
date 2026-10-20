@@ -4,7 +4,9 @@ use crate::backend::{
     registry, unsupported_family_error, Backend, BackendId, Capabilities, Descriptor, FlashRequest,
     Match, ReadDevice, UNKNOWN_FAMILY,
 };
-pub use crate::backend::{AuthorizedPlan, Confirm};
+pub use crate::backend::{AuthorizedPlan, Confirm, UpdateEvidence, UpdateFailure, UpdateOutcome};
+/// Correlation helpers keep a front-end's session events linked to operation logs.
+pub use crate::diagnostics::{new_operation_id, with_operation_id};
 /// Inspection inputs and results, so a front-end needs only this module and
 /// [`crate::report`] to run Inspect and Compare.
 pub use crate::inspection::{
@@ -268,6 +270,89 @@ pub fn profile(device: &str) -> Result<DriveProfile> {
     })
 }
 
+/// Profile with an explicitly selected installed-firmware reference. The file
+/// chooses the protocol implementation; that implementation must validate its
+/// receiver against the live drive before Recovery can be offered.
+pub fn profile_with_current(
+    device: &str,
+    current: &Path,
+    member: Option<&str>,
+) -> Result<DriveProfile> {
+    crate::diagnostics::run("profile", || {
+        let current = current_firmware_image(&read_capped(current)?, member)?;
+        let selector = resolve_device(Some(device))?;
+        let mut dev = platform::open(&selector, false)?;
+        profile_on_with_current(dev.as_mut(), &current)
+    })
+}
+
+/// Current-assisted profile on an open device. It never grants normal Flash,
+/// Backup or Dump capabilities merely because a file was recognized.
+pub fn profile_on_with_current(
+    dev: &mut dyn platform::ScsiDevice,
+    current: &[u8],
+) -> Result<DriveProfile> {
+    let backend = current_recovery_backend(current)?;
+    let identity = crate::backend::read_identity(&mut ReadDevice::without_unlocks(dev));
+    let facet = backend
+        .recovery()
+        .expect("Current recovery capability checked");
+    let mut recovery_errors = Vec::new();
+    let recovery = match facet
+        .identify_with_current(&mut ReadDevice::for_backend(dev, backend), Some(current))
+    {
+        Ok(Some(_)) => Some(backend.descriptor()),
+        Ok(None) => {
+            recovery_errors.push(facet.unidentified().into());
+            None
+        }
+        Err(error) => {
+            recovery_errors.push(format!("{error:#}"));
+            None
+        }
+    };
+    // An explicit Current file narrows all protocol I/O to its implementation.
+    // A stale or mismatched Current must not inherit a previous profile's offer.
+    let matched = if recovery.is_some() {
+        backend.probe(&mut ReadDevice::for_backend(dev, backend), &identity)?
+    } else {
+        None
+    };
+    if let Some(ref matched) = matched {
+        anyhow::ensure!(
+            matched.backend == backend.descriptor().id,
+            "backend probe returned an inconsistent backend id"
+        );
+    }
+    let offered = matched.as_ref().map(|_| backend);
+    Ok(DriveProfile {
+        identity,
+        backend: matched.map(|matched| (backend.descriptor(), matched)),
+        recovery,
+        capabilities: offered.map_or(Capabilities::NONE, Capabilities::of),
+        backup_format: offered.and_then(|b| b.backup()).map(|b| b.format()),
+        flash_formats: match offered {
+            Some(b) if b.flash().is_some() => b.descriptor().formats,
+            _ => &[],
+        },
+        recovery_errors,
+    })
+}
+
+/// Recognition selects an implementation, never proves drive compatibility.
+/// `identify_with_current` owns parsing and the live protocol binding checks.
+fn current_recovery_backend(current: &[u8]) -> Result<&'static dyn Backend> {
+    let (backend, _) = registry::recognize(current)?
+        .context("Current firmware has no recognized protocol format")?;
+    anyhow::ensure!(
+        backend
+            .recovery()
+            .is_some_and(|facet| facet.accepts_current_for_identification()),
+        "this firmware format cannot identify a recovery receiver"
+    );
+    Ok(backend)
+}
+
 /// [`profile`] on an open device.
 pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
     let resolved = registry::resolve(dev)?;
@@ -421,11 +506,11 @@ pub fn default_backup_name(
 /// Validate and execute the shared flash workflow. `confirm` answers the
 /// backend's confirmation once the backup is saved and every installed-firmware
 /// gate has passed.
-pub fn flash(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<()> {
+pub fn flash(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<UpdateOutcome> {
     crate::diagnostics::run("flash", || flash_inner(args, confirm))
 }
 
-fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<()> {
+fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<UpdateOutcome> {
     crate::diagnostics::record(format!(
         "flash options: input={:?} backup={:?} execute={} acknowledged_risk={}",
         args.input, args.backup, args.execute, args.acknowledged_risk
@@ -434,7 +519,9 @@ fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<()> {
         bail!("refusing to flash without acknowledging the risk");
     }
     let (mut dev, handler, req) = open_flash(&args)?;
-    engine::flash(dev.as_mut(), handler, &req, confirm)
+    engine::flash(dev.as_mut(), handler, &req, confirm).inspect(|outcome| {
+        crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
+    })
 }
 
 /// The read-only first stage for a front-end to show before asking for
@@ -613,7 +700,7 @@ pub struct RecoveryOptions {
 }
 
 /// Recover without automatic backups or installed-versus-target policy gates.
-pub fn recover(args: RecoveryOptions) -> Result<()> {
+pub fn recover(args: RecoveryOptions) -> Result<UpdateOutcome> {
     crate::diagnostics::run("recovery", || {
         if args.execute && !args.acknowledged_risk {
             bail!("refusing recovery without acknowledging the risk");
@@ -634,12 +721,17 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
             }
             CurrentFirmware::ReadFromDrive | CurrentFirmware::NotRequired => None,
         };
+        let candidates: Vec<_> = match supplied.as_deref() {
+            Some(current) => vec![current_recovery_backend(current)?],
+            None => registry::backends().collect(),
+        };
         let selector = resolve_device(args.device.as_deref())?;
         let mut dev = platform::open(&selector, args.execute)?;
         // Recovery serves drives too damaged to classify: no protocol probe,
-        // each recovery backend identifies the receiver itself.
+        // the file-selected backend, or each backend without a Current file,
+        // identifies the receiver itself. File selection never grants writes.
         let mut refusal = None;
-        for backend in registry::backends() {
+        for backend in candidates {
             let Some(facet) = backend.recovery() else {
                 continue;
             };
@@ -659,7 +751,10 @@ pub fn recover(args: RecoveryOptions) -> Result<()> {
                     &target,
                     args.execute,
                     args.acknowledged_risk,
-                );
+                )
+                .inspect(|outcome| {
+                    crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
+                });
             }
             refusal.get_or_insert(facet.unidentified());
         }

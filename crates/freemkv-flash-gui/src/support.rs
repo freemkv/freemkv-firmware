@@ -58,7 +58,8 @@ fn private_file(path: &Path, append: bool) -> io::Result<File> {
 
 pub struct Journal {
     dir: PathBuf,
-    file: File,
+    file: Option<File>,
+    unsaved: Vec<Value>,
     session_id: String,
 }
 
@@ -80,7 +81,8 @@ impl Journal {
         let file = private_file(&path, true)?;
         let mut journal = Self {
             dir,
-            file,
+            file: Some(file),
+            unsaved: Vec::new(),
             session_id,
         };
         journal.record(
@@ -94,6 +96,28 @@ impl Journal {
         Ok(journal)
     }
 
+    /// Keep this session reportable even when the events file cannot be opened.
+    pub fn memory() -> Self {
+        Self::memory_at(freemkv_flash::diagnostics::log_directory())
+    }
+
+    pub(crate) fn memory_at(dir: PathBuf) -> Self {
+        let mut journal = Self {
+            dir,
+            file: None,
+            unsaved: Vec::new(),
+            session_id: freemkv_flash::diagnostics::new_operation_id(),
+        };
+        let _ = journal.record(
+            "app_opened",
+            json!({
+                "version": env!("CARGO_PKG_VERSION"), "os": std::env::consts::OS,
+                "arch": std::env::consts::ARCH, "history_persistence": "unavailable",
+            }),
+        );
+        journal
+    }
+
     pub fn record(&mut self, kind: &str, data: Value) -> Result<()> {
         let line = json!({
             "schema": 1,
@@ -102,16 +126,32 @@ impl Journal {
             "event": kind,
             "data": data,
         });
-        serde_json::to_writer(&mut self.file, &line)?;
-        self.file.write_all(b"\n")?;
-        self.file.flush()?;
-        Ok(())
+        let result = (|| -> Result<()> {
+            let file = self
+                .file
+                .as_mut()
+                .context("Session history is available only in memory")?;
+            let mut encoded = serde_json::to_vec(&line)?;
+            encoded.push(b'\n');
+            file.write_all(&encoded)?;
+            file.flush()?;
+            Ok(())
+        })();
+        if result.is_err() {
+            self.file = None;
+            if self.unsaved.len() >= 10_000 {
+                self.unsaved.remove(0);
+            }
+            self.unsaved.push(line);
+        }
+        result
     }
 
     pub fn source(&self) -> BundleSource {
         BundleSource {
             dir: self.dir.clone(),
             session_id: self.session_id.clone(),
+            unsaved: self.unsaved.clone(),
         }
     }
 }
@@ -120,13 +160,27 @@ impl Journal {
 pub struct BundleSource {
     dir: PathBuf,
     session_id: String,
+    unsaved: Vec<Value>,
 }
 
 impl BundleSource {
     pub fn bundle(&self, scope: Scope) -> Result<PathBuf> {
-        let mut events = Vec::new();
+        let mut events = self.unsaved.clone();
         let mut logs = Vec::<PathBuf>::new();
-        for entry in fs::read_dir(&self.dir)? {
+        for event in &events {
+            if let Some(log) = event["data"]["log_file"].as_str() {
+                let path = PathBuf::from(log);
+                if valid_linked_log(&path, &self.dir) && !logs.contains(&path) {
+                    logs.push(path);
+                }
+            }
+        }
+        let entries = match fs::read_dir(&self.dir) {
+            Ok(entries) => Some(entries),
+            Err(_) if !self.unsaved.is_empty() => None,
+            Err(error) => return Err(error.into()),
+        };
+        for entry in entries.into_iter().flatten() {
             let path = entry?.path();
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name == "events.jsonl" || (name.starts_with("events-") && name.ends_with(".jsonl")) {
@@ -142,7 +196,7 @@ impl BundleSource {
                     }
                     if let Some(log) = event["data"]["log_file"].as_str() {
                         let path = PathBuf::from(log);
-                        if valid_log(&path, &self.dir) && !logs.contains(&path) {
+                        if valid_linked_log(&path, &self.dir) && !logs.contains(&path) {
                             logs.push(path);
                         }
                     }
@@ -168,9 +222,12 @@ impl BundleSource {
         if size > BUNDLE_LIMIT {
             bail!("The selected logs exceed 50 MiB. Choose this session or remove old logs.");
         }
-        let reports = self.dir.join("reports");
-        fs::create_dir_all(&reports)?;
-        let name = format!("freemkv-report-{}-{}.zip", stamp(), &self.session_id[..8]);
+        let mut reports = self.dir.join("reports");
+        if fs::create_dir_all(&reports).is_err() {
+            reports = std::env::temp_dir().join("freemkv-reports");
+            fs::create_dir_all(&reports)?;
+        }
+        let name = format!("freemkv-report-{}-{}.zip", stamp(), self.session_id);
         let path = reports.join(name);
         let file = private_file(&path, false)?;
         let mut zip = zip::ZipWriter::new(file);
@@ -228,7 +285,8 @@ pub fn submit(source: BundleSource, mut progress: impl FnMut(String)) -> Result<
     let request: Value = ureq::post(&format!("{base}/requests"))
         .send_json(json!({"application":"freemkv-flash","version":env!("CARGO_PKG_VERSION")}))
         .context("Could not start a report request")?
-        .into_json()?;
+        .body_mut()
+        .read_json()?;
     let id = request["id"]
         .as_str()
         .context("Missing report request ID")?;
@@ -239,21 +297,22 @@ pub fn submit(source: BundleSource, mut progress: impl FnMut(String)) -> Result<
         .as_str()
         .context("Missing approval URL")?;
     webbrowser::open(approval_url).context("Could not open report approval")?;
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(30))
-        .build();
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .build()
+        .into();
     let approved = (0..300)
         .find_map(|_| {
             std::thread::sleep(std::time::Duration::from_secs(2));
             let response = agent
                 .get(&format!("{base}/requests/{id}/poll"))
-                .set("Authorization", &format!("Bearer {poll_token}"))
+                .header("Authorization", &format!("Bearer {poll_token}"))
                 .call();
             match response {
-                Ok(reply) if reply.status() == 200 => {
-                    Some(reply.into_json::<Value>().map_err(Into::into))
+                Ok(mut reply) if reply.status() == 200 => {
+                    Some(reply.body_mut().read_json::<Value>().map_err(Into::into))
                 }
-                Ok(_) | Err(ureq::Error::Status(202, _)) => None,
+                Ok(_) => None,
                 Err(error) => Some(Err(anyhow::anyhow!("Report approval failed: {error}"))),
             }
         })
@@ -282,16 +341,16 @@ pub fn submit(source: BundleSource, mut progress: impl FnMut(String)) -> Result<
     for attempt in 1..=3 {
         let response = agent
             .put(&format!("{base}/requests/{id}/bundle"))
-            .set("Authorization", &format!("Bearer {upload_token}"))
-            .set("Content-Type", "application/zip")
-            .set("X-Content-SHA256", &checksum)
-            .send_bytes(&data);
+            .header("Authorization", &format!("Bearer {upload_token}"))
+            .header("Content-Type", "application/zip")
+            .header("X-Content-SHA256", &checksum)
+            .send(data.as_slice());
         match response {
-            Ok(response) => {
-                receipt = Some(response.into_json::<Value>()?);
+            Ok(mut response) => {
+                receipt = Some(response.body_mut().read_json::<Value>()?);
                 break;
             }
-            Err(ureq::Error::Status(503, _)) if attempt < 3 => {
+            Err(ureq::Error::StatusCode(503)) if attempt < 3 => {
                 progress("Report saved; retrying notification…".into());
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
@@ -308,6 +367,10 @@ pub fn submit(source: BundleSource, mut progress: impl FnMut(String)) -> Result<
         "Report {report_id} received. Local copy: {}",
         path.display()
     ))
+}
+
+fn valid_linked_log(path: &Path, dir: &Path) -> bool {
+    valid_log(path, dir) || valid_log(path, &std::env::temp_dir().join("freemkv-logs"))
 }
 
 fn valid_log(path: &Path, dir: &Path) -> bool {
@@ -378,6 +441,35 @@ mod tests {
         assert!(zip.by_name("logs/freemkv-flash-old.log").is_ok());
         drop(zip);
         drop(second);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn journal_write_failure_keeps_events_and_existing_logs_reportable() {
+        let dir = std::env::temp_dir().join(format!("freemkv-support-{}", random_id().unwrap()));
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        let log = dir.join("freemkv-flash-existing.log");
+        fs::write(&log, "operation_id=failed-journal-operation").unwrap();
+        journal.file = Some(File::open(dir.join("events.jsonl")).unwrap());
+        assert!(journal
+            .record(
+                "diagnostic",
+                json!({
+                    "log_file": log, "operation_id": "failed-journal-operation"
+                })
+            )
+            .is_err());
+        let path = journal.source().bundle(Scope::Session).unwrap();
+        let mut zip = zip::ZipArchive::new(File::open(path).unwrap()).unwrap();
+        assert!(zip.by_name("logs/freemkv-flash-existing.log").is_ok());
+        let mut events = String::new();
+        zip.by_name("events.jsonl")
+            .unwrap()
+            .read_to_string(&mut events)
+            .unwrap();
+        assert!(events.contains("failed-journal-operation"));
+        drop(zip);
+        drop(journal);
         fs::remove_dir_all(dir).unwrap();
     }
 

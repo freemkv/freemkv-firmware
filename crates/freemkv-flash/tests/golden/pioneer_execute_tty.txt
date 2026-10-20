@@ -1,7 +1,7 @@
 
 === Pioneer CLI execute: TTY answers y ===
 result: OK
---- terminal (12) ---
+--- terminal (11) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -9,12 +9,11 @@ Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   verifying kernel...
 backup: saved <TMP>/tty-yes/backup.tar (146432 bytes)
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-Proceed? [y/N] 
+Proceed? [y/N]
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
-flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
---- scsi transcript (56) ---
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- scsi transcript (58) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -71,6 +70,8 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer CLI execute: TTY answers n ===
@@ -83,7 +84,7 @@ Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   verifying kernel...
 backup: saved <TMP>/tty-no/backup.tar (146432 bytes)
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-Proceed? [y/N] 
+Proceed? [y/N]
 --- scsi transcript (22) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
@@ -119,7 +120,7 @@ Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   verifying kernel...
 backup: saved <TMP>/tty-disc/backup.tar (146432 bytes)
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-Proceed? [y/N] 
+Proceed? [y/N]
 --- scsi transcript (23) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36

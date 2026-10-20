@@ -551,6 +551,81 @@ pub trait Confirm {
     }
 }
 
+/// Evidence returned by an update executor; transferring bytes alone is not success.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdateOutcome {
+    /// Read-only preparation finished; no update was attempted.
+    Planned,
+    /// The procedure finished, with its verification limits retained.
+    Completed(UpdateEvidence),
+}
+
+/// Backend-owned facts about the requested target and every completed stage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateEvidence {
+    /// The requested target's startup identity was confirmed.
+    pub target_started: bool,
+    /// Target model, revision and/or descriptor identity matched at startup.
+    pub target_identity: String,
+    /// Regions compared against the expected target bytes.
+    pub verified_regions: Vec<String>,
+    /// Regions that could not be read back or compared.
+    pub unverified_regions: Vec<String>,
+    /// Successfully completed stages, in execution order.
+    pub completed_stages: Vec<String>,
+    /// An intermediate or temporary image remains installed.
+    pub temporary_firmware: bool,
+}
+
+impl UpdateOutcome {
+    /// Only a confirmed final target permits optional post-update probing.
+    pub fn safe_to_probe(&self) -> bool {
+        matches!(self, Self::Completed(e) if e.target_started && !e.target_identity.is_empty() && !e.temporary_firmware)
+    }
+
+    /// Full completion requires both target startup and readback evidence.
+    pub fn fully_verified(&self) -> bool {
+        matches!(self, Self::Completed(e) if e.target_started && !e.target_identity.is_empty() && !e.temporary_firmware
+            && !e.verified_regions.is_empty() && e.unverified_regions.is_empty())
+    }
+
+    /// A short result that never promotes limited verification to full success.
+    pub fn summary(&self) -> &'static str {
+        match self {
+            Self::Planned => "preflight complete",
+            Self::Completed(e) if e.temporary_firmware => "unfinished — temporary firmware remains",
+            Self::Completed(e) if !e.target_started || e.target_identity.is_empty() => {
+                "outcome uncertain — target startup not confirmed"
+            }
+            Self::Completed(_) if self.fully_verified() => "complete — target verified",
+            Self::Completed(_) => "target started — readback verification limited",
+        }
+    }
+}
+
+/// Failure context retained across generic layers. Unclassified failures must
+/// also be treated as unsafe for further automatic device probes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateFailure {
+    /// Stage or protocol phase where the failure occurred.
+    pub phase: String,
+    /// Whether a mutating command may have reached the drive.
+    pub write_started: bool,
+    /// Whether an intermediate or temporary image may remain installed.
+    pub temporary_firmware: bool,
+    /// Stages known to have completed before the failure.
+    pub completed_stages: Vec<String>,
+}
+
+impl std::fmt::Display for UpdateFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "update failed during {} (write started: {}; temporary firmware: {}; completed stages: {:?})",
+            self.phase, self.write_started, self.temporary_firmware, self.completed_stages)
+    }
+}
+
+impl std::error::Error for UpdateFailure {}
+
 /// Firmware update in two read-only stages, then the write.
 pub trait FlashFacet {
     /// Read-only and pre-backup: validate the input against the drive and
@@ -560,7 +635,8 @@ pub trait FlashFacet {
     fn dry_run_uses_device(&self) -> bool {
         true
     }
-    /// Read-only readiness check that ends a dry run, and its lines.
+    /// Read-only readiness check, used on dry runs and before actual backup/write.
+    /// The returned presentation lines are displayed only on a dry run.
     fn preflight(&self, _dev: &mut ReadDevice<'_>, _plan: &FlashPlan) -> Result<Vec<PlanLine>> {
         Ok(Vec::new())
     }
@@ -584,7 +660,7 @@ pub trait FlashFacet {
         backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan>;
     /// Write, then verify the result.
-    fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<()>;
+    fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<UpdateOutcome>;
 }
 
 /// A receiver a recovery backend identified, with what it read.
@@ -644,7 +720,7 @@ pub trait RecoveryFacet {
         receiver: &RecoveryTarget,
         current: Option<&[u8]>,
         target: &[u8],
-    ) -> Result<()>;
+    ) -> Result<UpdateOutcome>;
 }
 
 /// Firmware inspection.
@@ -662,5 +738,35 @@ pub trait InspectFacet {
     /// a backup. A raw read keeps the per-unit data a backup resets.
     fn raw_capture(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod outcome_tests {
+    use super::*;
+
+    #[test]
+    fn completion_requires_identity_and_readback_and_final_firmware() {
+        let mut evidence = UpdateEvidence {
+            target_started: true,
+            target_identity: String::new(),
+            verified_regions: vec!["kernel".into()],
+            unverified_regions: vec![],
+            completed_stages: vec!["target".into()],
+            temporary_firmware: false,
+        };
+        let missing_identity = UpdateOutcome::Completed(evidence.clone());
+        assert!(!missing_identity.fully_verified());
+        assert!(!missing_identity.safe_to_probe());
+        assert!(missing_identity.summary().contains("uncertain"));
+        evidence.target_identity = "expected model / revision".into();
+        assert!(UpdateOutcome::Completed(evidence.clone()).fully_verified());
+        evidence.unverified_regions.push("normal".into());
+        let partial = UpdateOutcome::Completed(evidence.clone());
+        assert!(!partial.fully_verified());
+        assert!(partial.safe_to_probe());
+        assert!(partial.summary().contains("limited"));
+        evidence.temporary_firmware = true;
+        assert!(!UpdateOutcome::Completed(evidence).safe_to_probe());
     }
 }

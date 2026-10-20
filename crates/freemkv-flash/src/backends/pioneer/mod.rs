@@ -4,7 +4,7 @@
 //! validates component integrity and compatibility, reads the receiver control
 //! descriptor/key, then streams validated components with strict transport errors.
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use pioneer_optical::receiver::Receiver;
 use pioneer_optical::Role;
 use std::borrow::Cow;
@@ -13,7 +13,8 @@ use crate::backend::{
     AuthorizedPlan, Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, CdbPattern,
     Confidence, Descriptor, DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat,
     FlashFacet, FlashPlan, FlashRequest, FormatRole, Identity, InspectFacet, Match, PlanLine,
-    ReadDevice, Recognized, RecoveryFacet, RecoveryTarget, SavedBackup, SettingsFacet, WriteDevice,
+    ReadDevice, Recognized, RecoveryFacet, RecoveryTarget, SavedBackup, SettingsFacet,
+    UpdateOutcome, WriteDevice,
 };
 use crate::platform::ScsiDevice;
 
@@ -23,6 +24,7 @@ pub mod backup;
 pub mod bundle;
 /// Pioneer's `info` rows and read-only settings.
 mod details;
+#[cfg(test)]
 mod dialect;
 /// Address-oriented Pioneer diagnostic captures.
 pub mod dump;
@@ -79,20 +81,24 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
     pioneer_optical::cdb::finish()
 }
 
+#[cfg(test)]
 fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
     let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")?;
     let (kernel, normal) = classify_flash_input(backup)?;
+    receiver_from_components(kernel.as_deref(), normal.as_deref())
+}
+
+fn receiver_from_components(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<Receiver> {
     let normal = normal.context(
         "installed backup has no Normal component; cannot recover the receiver control key",
     )?;
     let kernel = kernel
-        .as_deref()
         .map(pioneer_optical::envelope::Envelope::load)
         .transpose()
         .context("installed Kernel cannot be decoded for receiver control")?;
     let normal = match kernel.as_ref() {
-        Some(kernel) => pioneer_optical::envelope::Envelope::load_with_kernel(&normal, kernel),
-        None => pioneer_optical::envelope::Envelope::load(&normal),
+        Some(kernel) => pioneer_optical::envelope::Envelope::load_with_kernel(normal, kernel),
+        None => pioneer_optical::envelope::Envelope::load(normal),
     }
     .context("installed Normal cannot be decoded for receiver control")?;
     match kernel.as_ref() {
@@ -112,19 +118,6 @@ pub fn validate_normal_envelope(envelope: &[u8]) -> Result<()> {
         SignatureCheck::ValidKeyAndCiphertext | SignatureCheck::ValidCiphertextOnly => Ok(()),
         SignatureCheck::Invalid => bail!("Normal signature mismatch"),
         _ => bail!("Normal authentication requires a matching Kernel component"),
-    }
-}
-
-/// A Normal-only flash pairs with the installed Kernel: its headers must
-/// chain to the Kernel in the saved backup.
-fn validate_installed_kernel(normal: &[u8], backup: Option<&[u8]>) -> Result<()> {
-    use crate::backends::pioneer::flash_plan::validate_component_headers;
-    let captured = backup.map(classify_flash_input).transpose()?;
-    match captured.as_ref().and_then(|(k, _)| k.as_deref()) {
-        Some(k) => validate_component_headers(Some(k), Some(normal)).map_err(anyhow::Error::msg),
-        None => {
-            bail!("Normal-only flash needs the installed Kernel; supply a Kernel+Normal package")
-        }
     }
 }
 
@@ -283,17 +276,22 @@ pub(crate) fn flash_summary(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Str
 /// then route an all-unknown installed through the family gate, which REFUSES
 /// (fail closed) rather than proceeding, so an unidentifiable installed firmware
 /// never flashes.
+#[cfg(test)]
 pub(crate) fn installed_facts(
     backup: Option<&[u8]>,
 ) -> Option<crate::backends::pioneer::flash_plan::Installed> {
+    let (kernel, normal) = classify_flash_input(backup?).ok()?;
+    installed_component_facts(kernel.as_deref(), normal.as_deref())
+}
+
+#[cfg(test)]
+fn installed_component_facts(
+    installed_kernel: Option<&[u8]>,
+    installed_normal: Option<&[u8]>,
+) -> Option<crate::backends::pioneer::flash_plan::Installed> {
     use crate::backends::pioneer::flash_plan::{FwDate, Installed};
-    let (installed_kernel, installed_normal) = classify_flash_input(backup?).ok()?;
-    let header = |b: &Option<Vec<u8>>| {
-        b.as_deref()
-            .and_then(pioneer_optical::envelope::header_info)
-    };
-    let kinfo = header(&installed_kernel);
-    let ninfo = header(&installed_normal);
+    let kinfo = installed_kernel.and_then(pioneer_optical::envelope::header_info);
+    let ninfo = installed_normal.and_then(pioneer_optical::envelope::header_info);
     // Controller id from the Normal (preferred) or Kernel header.
     let controller_id = ninfo.as_ref().or(kinfo.as_ref()).and_then(|h| {
         crate::backends::pioneer::flash_plan::controller_id_from_sat(&h.hardware_version)
@@ -303,16 +301,12 @@ pub(crate) fn installed_facts(
         .and_then(|h| FwDate::parse(&h.generated_date));
     // Recognize the resident receiver code independently of marker edits.
     let receiver_new_gen = installed_kernel
-        .as_deref()
         .and_then(pioneer_optical::envelope::decode_envelope)
         .and_then(|d| crate::backends::pioneer::k::receiver_generation(&d.image));
     // Installed family: profile the decoded installed Normal body (the same
     // decode used for the target, so the two keys are directly comparable).
-    let family = installed_normal.as_deref().and_then(|n| {
-        crate::backends::pioneer::flash_plan::normal_family_with_kernel(
-            n,
-            installed_kernel.as_deref()?,
-        )
+    let family = installed_normal.and_then(|n| {
+        crate::backends::pioneer::flash_plan::normal_family_with_kernel(n, installed_kernel?)
     });
     // The installed Normal header's required-Kernel tag: for a paired release
     // it equals the drive's live `3C/02/F1` kernel tag byte for byte, which is
@@ -335,6 +329,7 @@ pub(crate) fn installed_facts(
 /// backup (the planner stays pure; the family keys are computed here, where the
 /// backup bytes are in hand). Without installed facts (no usable backup) the
 /// family cannot be proven, so the flash is refused.
+#[cfg(test)]
 pub(crate) fn resolve_flash_plan(
     installed_backup: Option<&[u8]>,
     kernel: Option<&[u8]>,
@@ -342,11 +337,11 @@ pub(crate) fn resolve_flash_plan(
 ) -> Result<crate::backends::pioneer::flash_plan::FlashPlan> {
     use crate::backends::pioneer::flash_plan::{normal_family_with_kernel, target_from_components};
 
-    let installed = installed_facts(installed_backup);
-    let captured_kernel = installed_backup
-        .and_then(|b| classify_flash_input(b).ok())
-        .and_then(|(k, _)| k);
-    let receiver_kernel = kernel.or(captured_kernel.as_deref());
+    let captured = installed_backup.and_then(|bytes| classify_flash_input(bytes).ok());
+    let captured_kernel = captured.as_ref().and_then(|(kernel, _)| kernel.as_deref());
+    let captured_normal = captured.as_ref().and_then(|(_, normal)| normal.as_deref());
+    let installed = installed_component_facts(captured_kernel, captured_normal);
+    let receiver_kernel = kernel.or(captured_kernel);
     let target_family = normal.and_then(|n| normal_family_with_kernel(n, receiver_kernel?));
     let mut target = target_from_components(kernel, normal)
         .context("could not read target bundle identity for flash routing")?;
@@ -491,9 +486,6 @@ pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
 struct Prepared {
     complete: Option<pioneer_optical::receiver::PreparedUpdate>,
     normal: Option<pioneer_optical::receiver::PreparedNormal>,
-    dialect: pioneer_optical::DriveClass,
-    initial_identity: (String, String),
-    target_identity: Option<(String, String)>,
 }
 
 /// The installed-firmware gates: the Kernel a Normal-only flash pairs with,
@@ -506,32 +498,47 @@ pub(crate) fn authorize_installed(
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
+    let (installed_kernel, installed_normal) = classify_flash_input(installed.context(
+        "installed firmware backup is required to recover the receiver control key; refusing update entry"
+    )?)?;
     if kernel.is_none() {
-        validate_installed_kernel(normal, installed)?;
+        flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
+            .map_err(anyhow::Error::msg)?;
     }
-    let receiver = installed_receiver(installed)?;
-    let mut target_dialect = None;
-    let prepared = match p.selection {
+    let receiver =
+        receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
+    let (prepared, target_facts, receiver_check) = match p.selection {
         FlashSelection::KernelAndNormal => {
             let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
-            target_dialect = Some(dialect::from_decoded(target.kernel())?);
-            receiver
+            let facts = flash_plan::target_from_loaded(
+                Some(target.kernel()),
+                target.normal(),
+                kernel,
+                normal,
+            )?;
+            let check = if installed_kernel.as_deref() == kernel {
+                // Preserve the existing identical-envelope fast path. The
+                // library still validates the complete pair and live plan.
+                Ok(())
+            } else {
+                flash_plan::check_loaded_receiver(&target)
+            };
+            let prepared = receiver
                 .prepare(target)
-                .map(|complete| (Some(complete), None))
+                .map(|complete| (Some(complete), None));
+            (prepared, facts, check)
         }
         FlashSelection::NormalOnly => {
-            let (installed_kernel, _) =
-                classify_flash_input(installed.context("installed firmware is required")?)?;
-            let k = pioneer_optical::envelope::Envelope::load(
-                installed_kernel
-                    .as_deref()
-                    .context("installed Kernel is required")?,
-            )?;
-            let source = pioneer_optical::envelope::Envelope::load_with_kernel(normal, &k)?;
-            let bytes = normal_prepare::prepare(&k, &source, normal)?;
-            receiver
+            let k = receiver
+                .installed_kernel()
+                .context("installed Kernel is required")?;
+            let source = pioneer_optical::envelope::Envelope::load_with_kernel(normal, k)?;
+            let facts = flash_plan::target_from_loaded(None, &source, None, normal)?;
+            let bytes = normal_prepare::prepare(k, &source, normal)?;
+            let prepared = receiver
                 .prepare_normal(&bytes)
-                .map(|normal| (None, Some(normal)))
+                .map(|normal| (None, Some(normal)));
+            (prepared, facts, Ok(()))
         }
     };
     // A known handoff mismatch is a candidate for future adaptation, but all
@@ -544,47 +551,22 @@ pub(crate) fn authorize_installed(
             return Err(preparation_error(error.clone()));
         }
     }
-    // Receiver gate: before any write, prove the drive's currently-installed
-    // Kernel can receive every component this flash sends (see
-    // `flash_plan::check_receiver`). Runs after the library's own preparation so
-    // a malformed package keeps its decode error. Fails closed.
-    let installed_kernel = installed
-        .and_then(|b| classify_flash_input(b).ok())
-        .and_then(|(k, _)| k);
-    crate::backends::pioneer::flash_plan::check_receiver(
-        installed_kernel.as_deref(),
-        kernel,
-        normal,
-    )
-    .map_err(|reason| anyhow!("refusing to flash: {reason}"))?;
-    let route = resolve_flash_plan(installed, kernel, Some(normal))?;
+    // The paired Normal is received by its incoming Kernel. Reuse the loaded
+    // Update proof; Normal-only preparation validates the installed receiver.
+    // Keep preparation errors ahead of the routing/receiver presentation.
+    receiver_check.map_err(|reason| anyhow!("refusing to flash: {reason}"))?;
+    let installed_facts = flash_plan::installed_from_loaded(
+        &receiver,
+        installed_normal
+            .as_deref()
+            .context("installed Normal is required")?,
+    );
+    let route = plan_for(installed_facts.as_ref(), &target_facts);
     let mut warnings = routing_warnings(&route)?;
     let (complete, prepared_normal) = prepared.map_err(preparation_error)?;
-    let installed_kernel_bytes = installed_kernel
-        .context("captured installed Kernel is required to establish the update-entry dialect")?;
-    let dialect =
-        dialect::from_decoded(receiver.installed_kernel().context(
-            "captured installed Kernel is required to establish the update-entry dialect",
-        )?)?;
-    let identity_fields = |bytes: &[u8]| -> Result<(String, String)> {
-        let header = pioneer_optical::envelope::header_info(bytes)
-            .context("Kernel has no usable identity header")?;
-        Ok((header.hardware_version, header.kernel_version))
-    };
-    let initial_identity = identity_fields(&installed_kernel_bytes)?;
-    let target_identity = kernel.map(identity_fields).transpose()?;
-    if let Some(target_dialect) = target_dialect {
-        ensure!(
-            dialect == target_dialect,
-            "installed and target Kernels use different update-entry dialects; refusing before any write"
-        );
-    }
     let prepared = Prepared {
         complete,
         normal: prepared_normal,
-        dialect,
-        initial_identity,
-        target_identity,
     };
     debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
         &route
@@ -949,7 +931,7 @@ impl FlashFacet for Pioneer {
         authorize_installed(plan, backup.map(|b| b.bytes()))
     }
 
-    fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<()> {
+    fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<UpdateOutcome> {
         use crate::backends::pioneer::flash::{execute_prepared, PreparedFlash};
         let prepared: &Prepared = plan.state()?;
         let selected = match (&prepared.complete, &prepared.normal) {
@@ -960,39 +942,39 @@ impl FlashFacet for Pioneer {
         execute_prepared(
             dev,
             selected,
-            prepared.dialect,
-            &prepared.initial_identity,
-            prepared.target_identity.as_ref(),
-        )?;
-        println!(
-            "{}",
-            crate::style::green("flash complete; drive returned ready.")
-        );
-        // Show what the rebooted drive now reports. A transient read error is
-        // a warning, not a failure: the write already committed.
-        match crate::transport::identify(dev) {
-            Ok(ident) => println!("{}", post_flash_line(&ident)),
-            Err(e) => eprintln!(
-                "{}",
-                crate::style::amber(&format!(
-                    "post-flash identify failed ({e:#}); the flash itself committed OK"
-                ))
-            ),
-        }
-        Ok(())
+            pioneer_optical::receiver::ExecutionMode::Flash,
+        )
     }
 }
 
 impl RecoveryFacet for Pioneer {
+    fn accepts_current_for_identification(&self) -> bool {
+        true
+    }
+
     fn identify(&self, dev: &mut ReadDevice<'_>) -> Result<Option<RecoveryTarget>> {
-        Ok(recovery::find_receiver(dev)?.map(|id| {
-            let label = format!(
-                "{} {}",
-                crate::style::printable(id.product()),
-                crate::style::printable(id.revision())
-            );
-            RecoveryTarget::new(label, ())
-        }))
+        self.identify_with_current(dev, None)
+    }
+
+    fn identify_with_current(
+        &self,
+        dev: &mut ReadDevice<'_>,
+        current: Option<&[u8]>,
+    ) -> Result<Option<RecoveryTarget>> {
+        let current = current
+            .map(recovery::Current::load)
+            .transpose()
+            .context("cannot establish Current receiver evidence; no firmware written")?;
+        Ok(
+            recovery::find_receiver_with_current(dev, current.as_ref())?.map(|id| {
+                let label = format!(
+                    "{} {}",
+                    crate::style::printable(id.product()),
+                    crate::style::printable(id.revision())
+                );
+                RecoveryTarget::new(label, current)
+            }),
+        )
     }
 
     fn unidentified(&self) -> &'static str {
@@ -1005,8 +987,8 @@ impl RecoveryFacet for Pioneer {
         receiver: &RecoveryTarget,
         current: Option<&[u8]>,
         target: &[u8],
-    ) -> Result<()> {
-        receiver.state::<()>()?;
+    ) -> Result<UpdateOutcome> {
+        let evidence = receiver.state::<Option<recovery::Current>>()?;
         let captured;
         let current: &[u8] = match current {
             Some(bytes) => bytes,
@@ -1018,7 +1000,10 @@ impl RecoveryFacet for Pioneer {
                 &captured
             }
         };
-        let plan = recovery::Plan::prepare(current, target)?;
+        let plan = match evidence {
+            Some(evidence) => recovery::Plan::with_current(evidence, target)?,
+            None => recovery::Plan::prepare(current, target)?,
+        };
         crate::output::field(
             "Recovery",
             "No automatic backup; compatibility policy bypassed",
@@ -1043,7 +1028,7 @@ impl RecoveryFacet for Pioneer {
                     "Recovery",
                     "Prepared Kernel + Normal; dry run, no firmware written",
                 );
-                Ok(())
+                Ok(UpdateOutcome::Planned)
             }
         }
     }
@@ -1097,3 +1082,8 @@ fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
 #[cfg(test)]
 #[path = "prepared_tests.rs"]
 mod prepared_tests;
+
+#[cfg(test)]
+pub(crate) fn test_oem_recovery_package(vendor: &str) -> Vec<u8> {
+    recovery::tests::oem_recovery_package(vendor)
+}

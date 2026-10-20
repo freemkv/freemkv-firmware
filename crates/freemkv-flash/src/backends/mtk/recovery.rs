@@ -1,14 +1,15 @@
 //! Explicit MediaTek recovery: no backup, installed-firmware or family policy.
-use super::receiver_reference::{self, Reference};
 use super::Mtk;
-use crate::backend::{DeviceAccess, ReadDevice, RecoveryFacet, RecoveryTarget, WriteDevice};
+use crate::backend::{
+    DeviceAccess, ReadDevice, RecoveryFacet, RecoveryTarget, UpdateFailure, UpdateOutcome,
+    WriteDevice,
+};
 use crate::transport::{ScsiTransport, SharedDevice};
 use anyhow::{anyhow, Result};
 use mediatek_optical::{recovery, update::FlashTransport};
 
 struct RecoveryReceiver {
     receiver: recovery::Receiver,
-    reference: Option<Reference>,
 }
 
 impl RecoveryFacet for Mtk {
@@ -34,7 +35,7 @@ impl RecoveryFacet for Mtk {
             reads.read_summary()
         ));
         let summary = reads.read_summary();
-        let (result, reference) = match result {
+        let result = match result {
             Err(error)
                 if matches!(
                     &error,
@@ -46,15 +47,11 @@ impl RecoveryFacet for Mtk {
                 ) && current.is_some() =>
             {
                 crate::diagnostics::record(format!("MediaTek live receiver analysis failed: {error}; checking explicit Current reference"));
-                let reference = Reference::bind(&mut reads, current.expect("guarded Current"))?;
-                let analysis = std::cell::Cell::new(true);
-                let mut source = ScsiTransport::reads(&shared)
-                    .receiver_source(Some(reference.image()), &analysis);
-                let result = recovery::Receiver::identify(&mut source);
-                reference.revalidate(&mut reads)?;
-                (result, Some(reference))
+                let envelope =
+                    mediatek_optical::envelope::Envelope::load(current.expect("guarded Current"))?;
+                recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
             }
-            other => (other, None),
+            other => other,
         };
         result
             .map_err(|e| anyhow!("Unable to read or identify the running firmware's receiver code from the drive. Select the firmware currently installed as Current instead of Read from drive. For BH16NS40 INTM, choose intermediate.bin from the TAR, not the original 1.V1 or target 1.V9. No target firmware was sent. Diagnostic detail: {e}. {summary}. Encoding was not guessed."))
@@ -67,7 +64,7 @@ impl RecoveryFacet for Mtk {
                             receiver.mode(),
                             receiver.encoding()
                         ),
-                        RecoveryReceiver { receiver, reference },
+                        RecoveryReceiver { receiver },
                     )
                 })
             })
@@ -81,12 +78,14 @@ impl RecoveryFacet for Mtk {
         receiver: &RecoveryTarget,
         _current: Option<&[u8]>,
         target: &[u8],
-    ) -> Result<()> {
+    ) -> Result<UpdateOutcome> {
         let bound = receiver.state::<RecoveryReceiver>()?;
         let plan = bound.receiver.prepare(target).map_err(|e| anyhow!("{e}"))?;
         crate::output::field(
             "Receiver code source",
-            if bound.reference.is_some() {
+            if plan.plan().receiver().provenance()
+                == mediatek_optical::receiver::reference::Provenance::CurrentReference
+            {
                 "Selected Current file; live identity and build metadata matched"
             } else {
                 "Live drive reads"
@@ -98,35 +97,35 @@ impl RecoveryFacet for Mtk {
         );
         crate::output::field(
             "Receiver",
-            format!("{:?}; {:?} transfer", plan.mode(), plan.encoding()),
+            format!(
+                "{:?}; header {:?}; body {:?}",
+                plan.mode(),
+                plan.plan().encoding().header,
+                plan.plan().encoding().body
+            ),
         );
         let Some(writer) = dev.writer() else {
             crate::output::field(
                 "Recovery",
                 "Prepared MediaTek image; dry run, no firmware written",
             );
-            return Ok(());
+            return Ok(UpdateOutcome::Planned);
         };
-        execute(writer, &plan, bound.reference.as_ref())
+        execute(writer, &plan)
     }
 }
 
 fn execute(
     writer: &mut WriteDevice<'_>,
     plan: &recovery::PreparedRecovery,
-    reference: Option<&Reference>,
-) -> Result<()> {
+) -> Result<UpdateOutcome> {
+    super::flash::log_transfer(plan.plan());
     let result = {
         let shared = SharedDevice::new(&mut *writer);
-        let (mut reads, writes) = (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
-        if let Some(reference) = reference {
-            reference.revalidate(&mut reads)?;
-        }
-        let analysis = std::cell::Cell::new(true);
-        let mut reads = reads.receiver_source(reference.map(Reference::image), &analysis);
-        let mut writes = writes.starts_session(&analysis);
+        let (mut reads, mut writes) =
+            (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
         let mut runtime = super::flash::Runtime::new();
-        plan.flash(
+        plan.flash_completed(
             FlashTransport {
                 reads: &mut reads,
                 writes: &mut writes,
@@ -134,33 +133,32 @@ fn execute(
             &mut runtime,
         )
     };
-    let verified = match result {
-        Ok(verified) => verified,
-        Err(recovery::Error::Flash(
-            ref error @ mediatek_optical::update::FlashError::Incomplete { .. },
-        )) => {
-            receiver_reference::confirm_started(writer, plan.plan().image())?;
-            receiver_reference::limited_verification(&error.to_string());
-            return Ok(());
+    let completion = result.map_err(|error| {
+        if matches!(
+            &error,
+            recovery::Error::Flash(mediatek_optical::update::FlashError::Entry(_))
+        ) {
+            crate::recovery_diagnostics::entry_failure(writer, &error.to_string());
         }
-        Err(error) => {
-            if matches!(
-                &error,
-                recovery::Error::Flash(mediatek_optical::update::FlashError::Entry(_))
-            ) {
-                crate::recovery_diagnostics::entry_failure(writer, &error.to_string());
-            } else {
-                crate::diagnostics::record(format!("Recovery original failure: {error}; broad diagnostics skipped because programming state is not proven idle"));
-            }
-            return Err(anyhow!("MediaTek recovery failed: {error}"));
-        }
-    };
-    crate::output::field(
-        "Recovery",
-        format!(
-            "Target firmware running; {} protected bytes verified",
-            verified.checked
-        ),
-    );
-    Ok(())
+        let (phase, write_started) = match &error {
+            recovery::Error::Flash(error) => super::flash::failure_phase(error),
+            recovery::Error::Startup => ("target startup confirmation", true),
+            _ => ("recovery receiver preflight", false),
+        };
+        let source = match error {
+            recovery::Error::Flash(error) => super::flash::flash_error(error),
+            error => anyhow::Error::new(error),
+        };
+        source
+            .context("MediaTek recovery failed")
+            .context(UpdateFailure {
+                phase: phase.into(),
+                write_started,
+                temporary_firmware: false,
+                completed_stages: vec![],
+            })
+    })?;
+    let mut evidence = super::flash::completion_evidence(completion);
+    evidence.completed_stages.push("recovery".into());
+    Ok(UpdateOutcome::Completed(evidence))
 }

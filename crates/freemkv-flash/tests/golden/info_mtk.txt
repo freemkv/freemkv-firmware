@@ -34,8 +34,8 @@ HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
 DVD region: Invalid or incomplete response
 chipset: MT1959
-firmware: unknown (unrecognized — not in the built-in catalog)
-          fingerprint acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf
+firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
+          fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
 --- events (67) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = HL-DT-ST
@@ -102,8 +102,8 @@ FIELD    DVD region = Invalid or incomplete response
 MSG      DVD region: Invalid or incomplete response
 FIELD    Chipset = MT1959
 MSG      chipset: MT1959
-MSG      firmware: unknown (unrecognized — not in the built-in catalog)
-MSG                fingerprint acc8b63b97ee72f1ac926fb0bffb08730ff7dac05497bd451ad49995c0ac0ebf
+MSG      firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
+MSG                fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
 --- scsi transcript (24) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
@@ -169,9 +169,9 @@ firmware: unknown (unrecognized — not in the built-in catalog)
           fingerprint fe47043787640c7d3f50b7a8e13ae22b07fc74f41826cb532effebf110816305
 --- events (67) ---
 MSG      device: mock://in-memory
-FIELD    Manufacturer = 
-FIELD    Model = 
-FIELD    Firmware version = 
+FIELD    Manufacturer =
+FIELD    Model =
+FIELD    Firmware version =
 FIELD    Drive family = MediaTek MT19xx
 MSG      inquiry: vendor='' product='' rev=''
 MSG      banner: MT1959 Boot BU5

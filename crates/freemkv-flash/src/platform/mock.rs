@@ -253,10 +253,29 @@ impl ScsiDevice for MockScsiDevice {
                 inquiry[0] = 5;
                 inquiry[4] = (inquiry.len() - 5) as u8;
                 inquiry[8..16].copy_from_slice(b"HL-DT-ST");
-                let product = self.product.as_deref().unwrap_or("BD-RE BU40N");
                 inquiry[16..32].fill(b' ');
-                inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
+                inquiry[16..27].copy_from_slice(b"BD-RE BU40N");
                 inquiry[32..36].copy_from_slice(b"1.00");
+                // A programmed descriptor becomes the running identity. Explicit
+                // INQUIRY rules and product overrides still simulate stale/wrong startup.
+                let descriptor = self
+                    .echo_store
+                    .get(&0x1ec000)
+                    .map(Vec::as_slice)
+                    .or_else(|| self.firmware_image.as_ref()?.get(0x1ec000..));
+                if let Some(identity) = descriptor.and_then(|d| d.get(..28)) {
+                    if identity[..8]
+                        .iter()
+                        .all(|b| b.is_ascii_graphic() || *b == b' ')
+                        && identity[..8].iter().any(u8::is_ascii_alphanumeric)
+                    {
+                        inquiry[8..36].copy_from_slice(identity);
+                    }
+                }
+                if let Some(product) = &self.product {
+                    inquiry[16..32].fill(b' ');
+                    inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
+                }
             }
             return Ok(inquiry);
         }

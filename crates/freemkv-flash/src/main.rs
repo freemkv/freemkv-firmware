@@ -163,6 +163,18 @@ struct RecoveryArgs {
     i_understand_risk: bool,
 }
 
+fn report_update(
+    label: &str,
+    outcome: freemkv_flash::workflow::UpdateOutcome,
+) -> anyhow::Result<()> {
+    use freemkv_flash::workflow::UpdateOutcome;
+    println!("{label} {}", outcome.summary());
+    if matches!(outcome, UpdateOutcome::Completed(_)) && !outcome.safe_to_probe() {
+        anyhow::bail!("{}", outcome.summary());
+    }
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
@@ -191,12 +203,14 @@ fn main() -> ExitCode {
                 execute: args.execute,
                 acknowledged_risk: args.i_understand_risk,
             })
+            .and_then(|outcome| report_update("Recovery", outcome))
         }
         Some(Command::Package { input, output }) => {
             freemkv_flash::workflow::package_image(&input, &output)
         }
         Some(Command::Flash(args)) => {
             freemkv_flash::workflow::flash(args.into(), &mut freemkv_flash::output::TerminalConfirm)
+                .and_then(|outcome| report_update("Flash", outcome))
         }
         None => freemkv_flash::workflow::info(cli.device.as_deref()),
     };

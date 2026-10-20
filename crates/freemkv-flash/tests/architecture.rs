@@ -1130,33 +1130,15 @@ fn hiding_imports(code: &str) -> Vec<String> {
 const HIDDEN_TYPES: &[&str] = &["Device", "FlashTransport", "ScsiTransport", "SharedDevice"];
 
 /// Wrappers allowed to hold a device type, each with why it cannot write ungated.
-const ALLOWED_WRAPPERS: &[(&str, &str, &str)] = &[
-    (
-        "src/backends/pioneer/flash.rs",
-        "struct Runtime<'a, 'd>",
-        "built only inside execute_prepared from its WriteDevice; its methods only read",
-    ),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "struct MigrationDevice<'a, 't, T: Transport>",
-        "built only inside run from the migration guard over an authorized WriteDevice",
-    ),
-];
+const ALLOWED_WRAPPERS: &[(&str, &str, &str)] = &[(
+    "src/backends/pioneer/flash.rs",
+    "struct Runtime<'a, 'd>",
+    "built only inside execute_with_sleep from its WriteDevice; its methods only read",
+)];
 
-/// Recovery's private adapter accepts either its WriteDevice grant or the
-/// migration transport derived from that grant. Both paths stay in `run`.
-const ALLOWED_MIGRATION_ISSUERS: &[(&str, &str, &str)] = &[
-    (
-        "src/backends/pioneer/recovery.rs",
-        "run_after_identity",
-        "called only from run with its WriteDevice or guarded migration adapter",
-    ),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "command_out",
-        "MigrationDevice forwards through command_out_strict and the migration guard",
-    ),
-];
+/// Migration now belongs to the optical executor. No app adapter may bypass
+/// the ordinary write-grant checks.
+const ALLOWED_MIGRATION_ISSUERS: &[(&str, &str, &str)] = &[];
 
 /// Every `type` alias of, or struct wrapping, a [`HIDDEN_TYPES`] type in lexed
 /// `code`; outside the device layer these are refused like a renaming `use`.
@@ -1261,8 +1243,8 @@ fn write_issuers_take_the_write_grant() {
     assert!(problems.is_empty(), "{problems:#?}");
     // The scan must still see the known executors, or it proves nothing.
     for (known, writes) in [
-        ("execute_prepared", true),
-        ("run", true),
+        ("execute_with_sleep", true),
+        ("execute_stage", true),
         ("execute", true),
         ("enable_logging", true),
         ("capture", false),
@@ -1690,13 +1672,13 @@ fn pioneer_optical_stays_pinned() {
         .lines()
         .find(|l| l.trim_start().starts_with("pioneer-optical"))
         .expect("pioneer-optical dependency");
-    // Until 0.16.3 is published, the exact reviewed commit carries the
-    // receiver-derived Kernel transfer layout and two-pass restoration fixes.
+    // Until 0.17.0 is published, the exact reviewed commit carries the
+    // unified verified executor, receiver layout and two-pass restoration fixes.
     // Neither a floating Git branch nor an older crate is acceptable.
-    let reviewed_commit = line.contains("rev = \"5847fe4\"")
-        && line.contains("version = \"=0.16.3\"")
+    let reviewed_commit = line.contains("rev = \"f67a7bd5e73fce83f418af9dc6732c4f99922c7c\"")
+        && line.contains("version = \"=0.17.0\"")
         && line.contains("git = \"https://github.com/MattJackson/pioneer-optical.git\"");
-    let released = line.contains("version = \"=0.16.3\"") && !line.contains("git =");
+    let released = line.contains("version = \"=0.17.0\"") && !line.contains("git =");
     assert!(
         reviewed_commit || released,
         "pioneer-optical must use the reviewed dialect API and OEM-verified receive-placement fix: {line}"
@@ -1821,19 +1803,6 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
         "src/backends/mtk/receiver_reference.rs",
         "fn detect",
         "ScsiTransport",
-        2,
-    ),
-    // Authorization revalidates the planning probe before completing live entry detection.
-    (
-        "src/backends/mtk/flash.rs",
-        "fn authorize",
-        "SharedDevice",
-        1,
-    ),
-    (
-        "src/backends/mtk/flash.rs",
-        "fn authorize",
-        "ScsiTransport",
         1,
     ),
     // Dry-run encoding detection remains read-only and precedes backup capture.
@@ -1892,7 +1861,7 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
         "src/backends/mtk/recovery.rs",
         "fn identify_with_current",
         "ScsiTransport",
-        2,
+        1,
     ),
     (
         "src/backends/mtk/recovery.rs",
@@ -1933,19 +1902,19 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
     ("src/backends/pioneer/dump.rs", "use", "SharedDevice", 1),
     (
         "src/backends/pioneer/flash.rs",
-        "fn execute_prepared",
+        "fn execute_with_sleep",
         "FlashTransport",
         1,
     ),
     (
         "src/backends/pioneer/flash.rs",
-        "fn execute_prepared",
+        "fn execute_with_sleep",
         "ScsiTransport",
         2,
     ),
     (
         "src/backends/pioneer/flash.rs",
-        "fn execute_prepared",
+        "fn execute_with_sleep",
         "SharedDevice",
         1,
     ),
@@ -1958,43 +1927,6 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
     ("src/backends/pioneer/flash.rs", "use", "FlashTransport", 1),
     ("src/backends/pioneer/flash.rs", "use", "ScsiTransport", 1),
     ("src/backends/pioneer/flash.rs", "use", "SharedDevice", 1),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "fn run",
-        "ScsiTransport",
-        1,
-    ),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "fn run",
-        "SharedDevice",
-        1,
-    ),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "fn run_after_identity",
-        "ScsiTransport",
-        1,
-    ),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "fn run_after_identity",
-        "SharedDevice",
-        1,
-    ),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "struct MigrationDevice",
-        "FlashTransport",
-        1,
-    ),
-    (
-        "src/backends/pioneer/recovery.rs",
-        "use",
-        "ScsiTransport",
-        1,
-    ),
-    ("src/backends/pioneer/recovery.rs", "use", "SharedDevice", 1),
     ("src/standard.rs", "fn with_device", "Device", 2),
     ("src/standard.rs", "fn with_device", "ScsiTransport", 2),
     ("src/standard.rs", "fn with_device", "SharedDevice", 1),

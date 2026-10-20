@@ -12,34 +12,34 @@ MSG      stdin is not a TTY; proceeding on the --execute / --i-understand-risk c
 result: OK
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N] 
+Proceed? [y/N]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N] 
+MSG      Proceed? [y/N]
 
 === Pioneer prompt: TTY answers yes ===
 result: OK
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N] 
+Proceed? [y/N]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N] 
+MSG      Proceed? [y/N]
 
 === Pioneer prompt: TTY answers n ===
 result: ERR flash aborted at confirmation prompt
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N] 
+Proceed? [y/N]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N] 
+MSG      Proceed? [y/N]
 
 === Pioneer prompt: TTY input ends ===
 result: ERR flash aborted at confirmation prompt
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N] 
+Proceed? [y/N]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N] 
+MSG      Proceed? [y/N]

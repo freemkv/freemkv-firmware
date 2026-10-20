@@ -29,6 +29,7 @@ impl Profile {
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
             flash_extensions: vec!["bin"],
             recovery_without_current: false,
+            recovery_without_live_protocol: false,
             notes: Vec::new(),
         }
     }
@@ -191,7 +192,11 @@ fn field_event(label: &str, value: &str) -> Event {
 }
 
 fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
-    app.worker.take().unwrap().send(Msg::Done(result)).unwrap();
+    app.worker
+        .take()
+        .unwrap()
+        .send(Msg::Done(result.map(|_| None)))
+        .unwrap();
     app.poll()
 }
 
@@ -509,9 +514,13 @@ impl FlashFacet for SheetBackend {
         authorized.confirmation = self.confirmation.map(str::to_owned);
         Ok(authorized)
     }
-    fn execute(&self, _: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> anyhow::Result<()> {
+    fn execute(
+        &self,
+        _: &mut WriteDevice<'_>,
+        _: &AuthorizedPlan,
+    ) -> anyhow::Result<workflow::UpdateOutcome> {
         self.executed.store(true, Ordering::SeqCst);
-        Ok(())
+        Ok(test_update(false))
     }
 }
 
@@ -587,8 +596,8 @@ fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flash
             },
         )
         .map_err(|e| format!("{e:#}"));
-        let _ = worker.send(Msg::Done(result.clone()));
-        let _ = done_tx.send(result);
+        let _ = worker.send(Msg::Done(result.clone().map(Some)));
+        let _ = done_tx.send(result.map(drop));
     });
     let start = Instant::now();
     while app.pending.is_none() {
@@ -625,7 +634,7 @@ fn execute_never_runs_without_confirm_after_authorize() {
         assert!(start.elapsed() < Duration::from_secs(20));
         app.poll();
     }
-    assert_eq!(app.status, "Firmware update complete");
+    assert_eq!(app.status, "Firmware update complete — target verified");
     let _ = std::fs::remove_file(&flashing.backup);
 }
 
@@ -1030,7 +1039,7 @@ fn completion_is_not_misreported_as_worker_disconnection() {
     let mut app = one_drive();
     app.dispatch(Input::ReadInfo);
     let tx = app.worker.take().unwrap();
-    tx.send(Msg::Done(Ok(()))).unwrap();
+    tx.send(Msg::Done(Ok(None))).unwrap();
     drop(tx);
     app.poll();
     assert!(!app.running());
@@ -1622,4 +1631,178 @@ fn profile_notes_reach_the_activity_log() {
         .log
         .iter()
         .any(|l| l == "Recovery not offered: could not identify the receiver (x)"));
+}
+
+fn test_update(limited: bool) -> workflow::UpdateOutcome {
+    workflow::UpdateOutcome::Completed(workflow::UpdateEvidence {
+        target_started: true,
+        target_identity: "TEST firmware 1.09".into(),
+        verified_regions: vec!["application".into()],
+        unverified_regions: if limited {
+            vec!["protected region".into()]
+        } else {
+            vec![]
+        },
+        completed_stages: vec!["final target".into()],
+        temporary_firmware: false,
+    })
+}
+
+#[test]
+fn post_update_probe_never_runs_after_failure_or_uncertain_completion() {
+    let mut uncertain = test_update(false);
+    if let workflow::UpdateOutcome::Completed(e) = &mut uncertain {
+        e.target_started = false;
+    }
+    for result in [
+        Err(WORKER_PANIC.into()),
+        Err("write failed".into()),
+        Ok(None),
+        Ok(Some(workflow::UpdateOutcome::Planned)),
+        Ok(Some(uncertain)),
+    ] {
+        assert!(post_update_snapshot(&result, || panic!("unsafe probe")).is_none());
+    }
+    assert_eq!(
+        post_update_snapshot(&Ok(Some(test_update(true))), || "observed".into()),
+        Some("observed".into())
+    );
+}
+
+#[test]
+fn limited_verification_survives_worker_completion_in_clean_status() {
+    let mut app = App::with_drives(Vec::new());
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    app.action = "Recovery".into();
+    tx.send(Msg::Done(Ok(Some(test_update(true))))).unwrap();
+    app.poll();
+    assert_eq!(
+        app.status,
+        "Recovery target started — readback verification limited"
+    );
+    assert!(app.failure.is_none());
+}
+
+#[test]
+fn logging_failure_retains_operation_and_terminal_interrupted_event() {
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-journal-interrupted-{}",
+        freemkv_flash::diagnostics::new_operation_id()
+    ));
+    let mut app = App::with_drives(Vec::new());
+    app.journal = Some(Journal::memory_at(dir.clone()));
+    app.operation_id = Some("correlated-operation".into());
+    app.record_event(
+        "operation_started",
+        serde_json::json!({"operation": "Recovery"}),
+    );
+    assert!(app.logging_warning.is_some());
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    drop(tx);
+    app.poll();
+    assert_eq!(app.status, "Operation interrupted");
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let events: Vec<serde_json::Value> = contents
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let terminal = events
+        .iter()
+        .find(|event| event["event"] == "operation_finished")
+        .unwrap();
+    assert_eq!(terminal["data"]["operation_id"], "correlated-operation");
+    assert_eq!(terminal["data"]["result"], "interrupted");
+    assert_eq!(terminal["data"]["failure"]["safe_to_probe"], false);
+    drop(zip);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn typed_failure_keeps_phase_and_completed_stages_in_report() {
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-failure-report-{}",
+        freemkv_flash::diagnostics::new_operation_id()
+    ));
+    let mut app = App::with_drives(Vec::new());
+    app.journal = Some(Journal::memory_at(dir.clone()));
+    app.operation_id = Some("stage-two-failure".into());
+    app.action = "Recovery".into();
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    tx.send(Msg::FailureEvidence(workflow::UpdateFailure {
+        phase: "final target upload".into(),
+        write_started: true,
+        temporary_firmware: true,
+        completed_stages: vec!["intermediate".into()],
+    }))
+    .unwrap();
+    tx.send(Msg::Done(Err("write rejected".into()))).unwrap();
+    app.poll();
+    assert_eq!(
+        app.status,
+        "Recovery failed during final target upload — temporary firmware may remain"
+    );
+    assert!(!app.status.contains("write_started"));
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let events: Vec<serde_json::Value> = contents
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let terminal = events
+        .iter()
+        .find(|event| event["event"] == "operation_finished")
+        .unwrap();
+    assert_eq!(terminal["data"]["operation_id"], "stage-two-failure");
+    let value = &terminal["data"]["failure"];
+    assert_eq!(value["completed_stages"][0], "intermediate");
+    assert_eq!(value["temporary_firmware"], true);
+    assert_eq!(value["phase"], "final target upload");
+    assert_eq!(value["safe_to_probe"], false);
+    drop(zip);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "OEM receiver")]);
+    app.start();
+    app.answer_profile(Ok(Profile::default()));
+    app.dispatch(Input::SelectTask(Task::Recovery));
+    app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "installed.tar".into()));
+    assert!(matches!(app.profile, ProfileState::Probing));
+    assert!(app.profile_worker.is_some());
+    let assisted = Profile {
+        tasks: vec![Task::Recovery],
+        recovery_without_live_protocol: true,
+        ..Profile::default()
+    };
+    app.answer_profile(Ok(assisted));
+    assert!(app.ready_profile().unwrap().tasks.contains(&Task::Recovery));
+    app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "other.tar".into()));
+    assert!(matches!(app.profile, ProfileState::Probing));
+    app.answer_profile(Ok(Profile::default()));
+    assert!(app.ready_profile().unwrap().tasks.is_empty());
+    assert_eq!(app.recovery_current, Some("other.tar".into()));
 }

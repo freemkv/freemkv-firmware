@@ -16,7 +16,7 @@
 //! source file, this one included, contains a WRITE BUFFER / READ BUFFER opcode
 //! literal.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 
 use anyhow::{anyhow, Result};
 use pioneer_optical::drive::{Data, Error, Transport};
@@ -46,9 +46,6 @@ pub struct ScsiTransport<'a, 'd> {
     dev: &'a SharedDevice<'d>,
     strict: bool,
     sense: Option<(u8, u8, u8)>,
-    receiver_image: Option<&'a [u8]>,
-    receiver_analysis: Option<&'a Cell<bool>>,
-    session_started: Option<&'a Cell<bool>>,
     read_counts: [usize; 3],
     last_read_problem: Option<String>,
 }
@@ -61,9 +58,6 @@ impl<'a, 'd> ScsiTransport<'a, 'd> {
             dev,
             strict: false,
             sense: None,
-            receiver_image: None,
-            receiver_analysis: None,
-            session_started: None,
             read_counts: [0; 3],
             last_read_problem: None,
         }
@@ -75,29 +69,9 @@ impl<'a, 'd> ScsiTransport<'a, 'd> {
             dev,
             strict: true,
             sense: None,
-            receiver_image: None,
-            receiver_analysis: None,
-            session_started: None,
             read_counts: [0; 3],
             last_read_problem: None,
         }
-    }
-
-    /// Supply only receiver-analysis code reads, never session/readback reads.
-    pub(crate) fn receiver_source(
-        mut self,
-        image: Option<&'a [u8]>,
-        analysis: &'a Cell<bool>,
-    ) -> Self {
-        self.receiver_image = image;
-        self.receiver_analysis = Some(analysis);
-        self
-    }
-
-    /// Disable reference reads before the first session command, even on failure.
-    pub(crate) fn starts_session(mut self, analysis: &'a Cell<bool>) -> Self {
-        self.session_started = Some(analysis);
-        self
     }
 
     /// Summarize actual input requests, without hiding short transfers or errors.
@@ -178,34 +152,10 @@ impl mediatek_optical::drive::Transport for ScsiTransport<'_, '_> {
 
     fn exec(&mut self, cdb: &[u8], data: mediatek_optical::drive::Data<'_>) -> Result<usize> {
         use mediatek_optical::drive::Data as MtkData;
-        if let Some(analysis) = self.session_started {
-            analysis.set(false);
-        }
         let requested = match &data {
             MtkData::In(buf) => Some(buf.len()),
             _ => None,
         };
-        if self.receiver_analysis.is_some_and(Cell::get) {
-            if let (Some(image), MtkData::In(buf)) = (self.receiver_image, &data) {
-                if cdb.len() >= 10 && cdb[..3] == mediatek_optical::cdb::read_memory(0, 0)[..3] {
-                    let offset =
-                        ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-                    let end = offset
-                        .checked_add(buf.len())
-                        .ok_or_else(|| anyhow!("receiver read overflow"))?;
-                    if (0x10000..0x1c0000).contains(&offset) && end <= 0x1c0000 {
-                        let MtkData::In(buf) = data else {
-                            unreachable!()
-                        };
-                        let source = image
-                            .get(offset..end)
-                            .ok_or_else(|| anyhow!("Current image lacks receiver code range"))?;
-                        buf.copy_from_slice(source);
-                        return Ok(buf.len());
-                    }
-                }
-            }
-        }
         let strict = self.strict;
         let result = self.dev.with(|d| match data {
             MtkData::In(buf) => {
