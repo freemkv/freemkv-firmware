@@ -1030,6 +1030,12 @@ impl RecoveryFacet for Pioneer {
                  (experimental, offline-proven, hardware-unproven)",
             );
         }
+        if plan.requires_restoration() {
+            crate::output::field(
+                "Recovery plan",
+                "Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel",
+            );
+        }
         match dev.writer() {
             Some(writer) => plan.execute(writer),
             None => {

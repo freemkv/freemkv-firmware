@@ -1690,11 +1690,11 @@ fn pioneer_optical_stays_pinned() {
         .lines()
         .find(|l| l.trim_start().starts_with("pioneer-optical"))
         .expect("pioneer-optical dependency");
-    // Until 0.16.3 is published, the exact reviewed commit carries the new
-    // decoded-dialect API on top of the released receiver safety fixes.
+    // Until 0.16.3 is published, the exact reviewed commit carries the
+    // receiver-derived Kernel transfer layout and two-pass restoration fixes.
     // Neither a floating Git branch nor an older crate is acceptable.
-    let reviewed_commit = line.contains("rev = \"8be691c\"")
-        && line.contains("version = \"=0.16.2\"")
+    let reviewed_commit = line.contains("rev = \"5847fe4\"")
+        && line.contains("version = \"=0.16.3\"")
         && line.contains("git = \"https://github.com/MattJackson/pioneer-optical.git\"");
     let released = line.contains("version = \"=0.16.3\"") && !line.contains("git =");
     assert!(

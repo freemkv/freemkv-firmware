@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   including the PR1AME 1.05 case, instead of the product name. Keep live
   identity and receiver compatibility checks before any write.
 - Clear a previous Flash or Recovery result when its selected inputs change.
+- Apply Pioneer Kernel generation downgrade preparation in Recovery. When the
+  installed receiver rejects a target `0xFF` or `0x00` marker, write and verify
+  a temporary `0x01` Kernel, then restore and verify the pristine OEM Kernel.
+  Select each Kernel transfer layout from the loader active for that pass.
+  Cover the reported WX1DM `0000` to S12JX 1.03 case with the supplied files.
 
 The MediaTek INTM to 1.V9 final-write rejection remains under investigation;
 0.13.4 does not yet claim that drive transition is fixed.

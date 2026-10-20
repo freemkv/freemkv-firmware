@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use pioneer_optical::drive::{Data, Segment, Transport};
 use pioneer_optical::envelope::{Envelope, Update};
 use pioneer_optical::receiver::transport as kernel_transport;
-use pioneer_optical::{cdb, image::ReceiverControl, Identity, Role};
+use pioneer_optical::{cdb, image::ReceiverControl, receiver::Receiver, Identity, Role};
 use std::time::Duration;
 
 pub(crate) struct Plan {
@@ -19,6 +19,16 @@ pub(crate) struct Plan {
     control: [u8; 256],
     kernel_transfer: Vec<u8>,
     normal_transfer: Vec<u8>,
+    /// A gated installed Kernel needs an accepted temporary marker before the
+    /// original OEM Kernel can be restored by the newly installed loader.
+    restoration_kernel_transfer: Option<Vec<u8>>,
+    first_kernel_image: Vec<u8>,
+    final_kernel_image: Vec<u8>,
+    restoration_control: Option<[u8; 256]>,
+    restoration_dialect: Option<pioneer_optical::DriveClass>,
+    restoration_hardware: String,
+    restoration_kernel_tag: String,
+    restoration_receive: kernel_transport::KernelReceive,
     /// How the installed loader receives a Kernel, decided from the decoded
     /// Kernel body (same family as the installed drive, enforced by the family
     /// gate), so the write segments match the loader — not a linear stream.
@@ -27,6 +37,14 @@ pub(crate) struct Plan {
     /// locally rather than written as the target package shipped it.
     reencoded: bool,
     startup_setting: pioneer_optical::startup::Setting,
+}
+
+struct Pass<'a> {
+    control: &'a [u8; 256],
+    kernel: &'a [u8],
+    normal: &'a [u8],
+    receive: kernel_transport::KernelReceive,
+    restoration: bool,
 }
 
 /// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
@@ -77,7 +95,7 @@ impl Plan {
         let (target, target_normal) = load_target(target)?;
         Self::assemble(
             &installed_kernel,
-            &installed_normal.image,
+            &installed_normal,
             target,
             Some(&target_normal),
         )
@@ -85,7 +103,7 @@ impl Plan {
 
     #[cfg(test)]
     fn from_updates(current: Update, target: Update) -> Result<Self> {
-        Self::assemble(current.kernel(), &current.normal().image, target, None)
+        Self::assemble(current.kernel(), current.normal(), target, None)
     }
 
     /// True when Normal's transfer encoding or authentication changed locally.
@@ -93,19 +111,23 @@ impl Plan {
         self.reencoded
     }
 
+    pub(crate) fn requires_restoration(&self) -> bool {
+        self.restoration_kernel_transfer.is_some()
+    }
+
     fn assemble(
         installed_kernel: &Envelope,
-        installed_normal_image: &[u8],
+        installed_normal: &Envelope,
         target: Update,
         target_normal_bytes: Option<&[u8]>,
     ) -> Result<Self> {
         let dialect = super::dialect::from_decoded(installed_kernel)?;
-        let control = control_from_image(installed_normal_image)?;
+        let control = control_from_image(&installed_normal.image)?;
         let startup_setting = pioneer_optical::startup::setting(&target.normal().image)
             .map_err(|_| anyhow!("target startup checks are ambiguous; no firmware was written"))?;
         // Same hardware family remains mandatory across the Kernel handoff.
         match (
-            pioneer_optical::image::family(installed_normal_image),
+            pioneer_optical::image::family(&installed_normal.image),
             target.family(),
         ) {
             (Some(i), Some(t)) => ensure!(
@@ -139,22 +161,45 @@ impl Plan {
         } else {
             (target.normal_transfer().to_vec(), false)
         };
-        pioneer_optical::image::check_kernel_handoff(
-            &installed_kernel.image,
-            &target.kernel().image,
-        )
-        .map_err(pioneer_optical::receiver::PreparationError::KernelHandoff)
-        .map_err(super::flash::preparation_error)?;
+        // Recovery must use the same receiver-derived marker and two-pass
+        // restoration policy as Flash. Sending an OEM 0xFF marker straight to
+        // a gated WX1DM loader is rejected at the final Kernel chunk.
+        let receiver = Receiver::detect_with_kernel(installed_normal, installed_kernel)
+            .context("Current firmware receiver requirements are unsupported")?;
+        let prepared = receiver
+            .prepare(target.clone())
+            .map_err(super::flash::preparation_error)?;
+        let restoration_kernel_transfer = prepared
+            .restoration_kernel_transfer()
+            .map(ToOwned::to_owned);
+        let restoration_control = if restoration_kernel_transfer.is_some() {
+            Some(control_from_image(&target.normal().image)?)
+        } else {
+            None
+        };
+        let restoration_dialect = if restoration_kernel_transfer.is_some() {
+            Some(super::dialect::from_decoded(target.kernel())?)
+        } else {
+            None
+        };
         Ok(Self {
             dialect,
             installed_hardware: installed_kernel.info().hardware_version.clone(),
             installed_kernel_tag: installed_kernel.info().kernel_version.clone(),
             control,
-            kernel_transfer: target.kernel_transfer().to_vec(),
+            kernel_transfer: prepared.kernel_transfer().to_vec(),
             normal_transfer,
+            restoration_kernel_transfer,
+            first_kernel_image: prepared.first_kernel_image().to_vec(),
+            final_kernel_image: prepared.final_kernel_image().to_vec(),
+            restoration_control,
+            restoration_dialect,
+            restoration_hardware: target.kernel().info().hardware_version.clone(),
+            restoration_kernel_tag: target.kernel().info().kernel_version.clone(),
+            restoration_receive: kernel_transport::detect(prepared.first_kernel_image()),
             // Detect on the decoded Kernel body (the loader's own code), never
             // the transformed wire bytes, or the fingerprint would be scrambled.
-            receive: kernel_transport::detect(&target.kernel().image),
+            receive: kernel_transport::detect(&installed_kernel.image),
             reencoded,
             startup_setting,
         })
@@ -168,6 +213,13 @@ impl Plan {
         let identity = identify_receiver(dev)?;
         crate::diagnostics::record(format!("Recovery receiver: product={} revision={} platform={} kernel_tag={} normal_tag={} code={}", identity.product(), identity.revision(), identity.platform(), identity.kernel_tag(), identity.normal_tag(), identity.code()));
         let updating = in_update_mode(&identity);
+        let first = Pass {
+            control: &self.control,
+            kernel: &self.kernel_transfer,
+            normal: &self.normal_transfer,
+            receive: self.receive,
+            restoration: false,
+        };
         if !updating {
             super::dialect::check_live_identity(
                 &identity,
@@ -178,19 +230,56 @@ impl Plan {
             super::flash::report_startup_setting(setting);
             let shared = SharedDevice::new(dev);
             let mut transport = ScsiTransport::flash(&shared);
-            return pioneer_optical::startup::migration::execute(
+            pioneer_optical::startup::migration::execute(
                 &mut transport,
                 setting.parameter,
                 setting.value,
                 |guard| {
                     let mut device = MigrationDevice { transport: guard };
-                    self.run_after_identity(&mut device, self.dialect, false, sleep)
+                    self.run_after_identity(&mut device, self.dialect, false, &first, sleep)
                 },
             )
-            .map_err(|error| anyhow!("Pioneer recovery startup-setting update: {error}"));
+            .map_err(|error| anyhow!("Pioneer recovery startup-setting update: {error}"))?;
+        } else {
+            crate::diagnostics::record("Recovery startup setting: skipped because the drive is already in update mode; Normal's parameter command is unavailable");
+            self.run_after_identity(dev, self.dialect, true, &first, sleep)?;
         }
-        crate::diagnostics::record("Recovery startup setting: skipped because the drive is already in update mode; Normal's parameter command is unavailable");
-        self.run_after_identity(dev, self.dialect, updating, sleep)
+        if let Some(kernel) = &self.restoration_kernel_transfer {
+            verify_kernel_readback(dev, &self.first_kernel_image)
+                .context("temporary Kernel was transferred but readback failed; pristine restoration was not started")?;
+            let identity = identify_receiver(dev).context(
+                "cannot identify the temporary receiver; pristine restoration was not started",
+            )?;
+            super::dialect::check_live_identity(
+                &identity,
+                &self.restoration_hardware,
+                &self.restoration_kernel_tag,
+            )
+            .context("temporary receiver identity changed; pristine restoration was not started")?;
+            let restoration = Pass {
+                control: self
+                    .restoration_control
+                    .as_ref()
+                    .expect("prepared restoration control"),
+                kernel,
+                normal: &self.normal_transfer,
+                receive: self.restoration_receive,
+                restoration: true,
+            };
+            crate::diagnostics::record("Recovery: restoring pristine OEM Kernel in a second pass");
+            self.run_after_identity(
+                dev,
+                self.restoration_dialect.expect("prepared restoration dialect"),
+                false,
+                &restoration,
+                sleep,
+            )
+            .context("pristine Kernel restoration did not complete; the temporary Kernel may remain installed")?;
+            verify_kernel_readback(dev, &self.final_kernel_image)
+                .context("pristine Kernel restoration finished but readback did not verify")?;
+            crate::output::field("Recovery", "Pristine OEM Kernel restored and verified");
+        }
+        Ok(())
     }
 
     fn run_after_identity(
@@ -198,6 +287,7 @@ impl Plan {
         dev: &mut dyn ScsiDevice,
         class: pioneer_optical::DriveClass,
         updating: bool,
+        pass: &Pass<'_>,
         sleep: &mut impl FnMut(Duration),
     ) -> Result<()> {
         crate::output::field(
@@ -211,7 +301,7 @@ impl Plan {
         if !updating {
             let shared = SharedDevice::new(dev);
             let mut transport = ScsiTransport::flash(&shared);
-            pioneer_optical::drive::enter_update(&mut transport, class, &self.control)
+            pioneer_optical::drive::enter_update(&mut transport, class, pass.control)
                 .map_err(flash_err)
                 .context("update entry failed; no firmware transferred")?;
             sleep(Duration::from_secs(1));
@@ -222,18 +312,14 @@ impl Plan {
         // logic the non-recover flash path uses), so flash and recover deliver a
         // Kernel identically.
         let mut storage = [Segment::PLACEHOLDER; 3];
-        let plan = kernel_transport::plan(
-            Some(self.kernel_transfer.as_slice()),
-            self.normal_transfer.as_slice(),
-            self.receive,
-            &mut storage,
-        )
-        .map_err(|_| {
-            anyhow!(
+        let plan =
+            kernel_transport::plan(Some(pass.kernel), pass.normal, pass.receive, &mut storage)
+                .map_err(|_| {
+                    anyhow!(
                 "recover refused: the installed Kernel's receive layout is not recognised, so a \
                  safe transfer plan cannot be built; refusing before any write"
             )
-        })?;
+                })?;
         // Validate every segment before the first write: an oversized, empty or
         // misaligned span must be refused up front, never discovered only after
         // the Kernel is already written (which would leave the drive half-flashed
@@ -298,7 +384,7 @@ impl Plan {
                 sleep(Duration::from_secs(2));
             }
         }
-        dev.command_out_strict(&cdb::finish(), &self.control)
+        dev.command_out_strict(&cdb::finish(), pass.control)
             .context("firmware transferred but finish command failed")?;
         sleep(Duration::from_secs(2));
         // No readback: prove normal operation through identity and readiness.
@@ -343,7 +429,13 @@ impl Plan {
                             && !id.revision().starts_with("000")
                             && !id.normal_tag().is_empty()
                         {
-                            crate::output::field("Recovery", crate::report::Value::text(&format!("Firmware transferred; normal mode reported (revision {}). No firmware readback performed.", id.revision())));
+                            if pass.restoration {
+                                crate::diagnostics::record(format!("Pristine Kernel restoration: normal mode reported (revision {})", id.revision()));
+                            } else if self.restoration_kernel_transfer.is_some() {
+                                crate::diagnostics::record(format!("Temporary Kernel pass: normal mode reported (revision {}); checking Kernel before OEM restoration", id.revision()));
+                            } else {
+                                crate::output::field("Recovery", crate::report::Value::text(&format!("Firmware transferred; normal mode reported (revision {}). No firmware readback performed.", id.revision())));
+                            }
                             return Ok(());
                         }
                         last_status = format!(
@@ -366,6 +458,25 @@ impl Plan {
         }
         bail!("firmware transferred, but return to normal mode could not be verified within {} seconds; last status: {last_status}. Do not repeat the flash automatically; save the diagnostic log", READINESS_POLLS / 2)
     }
+}
+
+/// A temporary compatibility Kernel is never followed by a second write until
+/// the drive reports its exact decoded bytes. Verify the pristine Kernel too.
+fn verify_kernel_readback(dev: &mut dyn ScsiDevice, expected: &[u8]) -> Result<()> {
+    ensure!(expected.len() == 0x10000, "invalid expected Kernel length");
+    for (index, chunk) in expected.chunks(0x8000).enumerate() {
+        let address = pioneer_optical::image::KERNEL_BASE + (index * 0x8000) as u32;
+        let actual = crate::transport::read_memory_exact(dev, address, chunk.len() as u32)
+            .with_context(|| format!("reading Kernel at {address:#x}"))?;
+        ensure!(
+            actual.len() == chunk.len(),
+            "short Kernel readback at {address:#x}"
+        );
+        if let Some(offset) = actual.iter().zip(chunk).position(|(a, b)| a != b) {
+            bail!("Kernel readback differs at {:#x}", address + offset as u32);
+        }
+    }
+    Ok(())
 }
 
 /// Send every recovery command through the migration guard so a failed update
