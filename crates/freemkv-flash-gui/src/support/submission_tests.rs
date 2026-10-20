@@ -6,12 +6,14 @@ struct Reply {
     status: u16,
     body: String,
     delay: Duration,
+    cancel: Option<Submission>,
 }
 fn reply(status: u16, body: Value) -> Reply {
     Reply {
         status,
         body: body.to_string(),
         delay: Duration::ZERO,
+        cancel: None,
     }
 }
 fn server(script: Vec<Reply>) -> (String, std::thread::JoinHandle<Vec<String>>) {
@@ -70,6 +72,9 @@ fn server(script: Vec<Reply>) -> (String, std::thread::JoinHandle<Vec<String>>) 
                 assert!(zip.by_name("manifest.json").is_ok());
             }
             seen.push(headers);
+            if let Some(control) = reply.cancel {
+                control.cancel();
+            }
             std::thread::sleep(reply.delay);
             let _ = write!(stream, "HTTP/1.1 {} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", reply.status, reply.body.len(), reply.body);
         }
@@ -155,6 +160,37 @@ fn expired_approval_never_uploads() {
     assert!(format!("{error:#}").contains("403"));
     assert_eq!(server.join().unwrap().len(), 2);
     assert!(!dir.join("reports").exists());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn receipt_is_not_misreported_as_cancelled_when_upload_was_already_accepted() {
+    let control = control();
+    let mut received = reply(200, json!({"report_id":"accepted-before-cancel"}));
+    received.cancel = Some(control.clone());
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(200, approved()),
+        received,
+    ]);
+    let (source, dir) = source();
+    let receipt = submit_at(source, &control, &base, |_| Ok(()), |_| {}).unwrap();
+    assert!(control.cancelled());
+    assert!(receipt.contains("accepted-before-cancel received"));
+    assert_eq!(server.join().unwrap().len(), 3);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn cancellation_during_an_unsuccessful_upload_prevents_retry() {
+    let control = control();
+    let mut failed = reply(503, json!({}));
+    failed.cancel = Some(control.clone());
+    let (base, server) = server(vec![reply(200, created()), reply(200, approved()), failed]);
+    let (source, dir) = source();
+    let error = submit_at(source, &control, &base, |_| Ok(()), |_| {}).unwrap_err();
+    assert!(error.to_string().contains("cancelled"));
+    assert_eq!(server.join().unwrap().len(), 3);
     std::fs::remove_dir_all(dir).unwrap();
 }
 

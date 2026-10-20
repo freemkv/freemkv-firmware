@@ -173,7 +173,11 @@ fn submit_at(
             .timeout_global(Some(control.timeout()?))
             .build()
             .send(data.as_slice());
-        control.check()?;
+        // A received upload receipt wins over a concurrent cancellation: the
+        // server has already accepted the report and may have sent its email.
+        if response.is_err() {
+            control.check()?;
+        }
         match response {
             Ok(mut response) => {
                 let receipt: Value = response.body_mut().read_json()?;

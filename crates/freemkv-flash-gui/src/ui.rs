@@ -1070,7 +1070,9 @@ impl App {
             Input::CancelReport => {
                 if let Some(control) = &self.report_control {
                     control.cancel();
-                    self.diagnostic_notice = Some("Cancelling report submission…".into());
+                    self.diagnostic_notice = Some(
+                        "Stopping report submission after the current request finishes…".into(),
+                    );
                 }
             }
             Input::CloseDiagnostics => self.diagnostics_open = false,
