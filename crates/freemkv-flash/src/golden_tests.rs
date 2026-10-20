@@ -914,6 +914,7 @@ struct RecoveryDrive {
     fail_write: Option<usize>,
     attempts: usize,
     writes: Vec<(Vec<u8>, Vec<u8>)>,
+    startup_word: Option<u16>,
 }
 impl ScsiDevice for RecoveryDrive {
     fn describe(&self) -> String {
@@ -922,7 +923,10 @@ impl ScsiDevice for RecoveryDrive {
     fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
         let mut bytes = vec![0; len];
         let kernel = (self.updating && !self.finished) || self.stuck;
-        if command == pioneer_optical::cdb::inquiry(len as u8) {
+        if command == pioneer_optical::cdb::read_parameter_word(0x9f).unwrap() {
+            assert!(!kernel, "Normal parameter read in update mode");
+            return Ok(self.startup_word.unwrap_or(0xffff).to_be_bytes().to_vec());
+        } else if command == pioneer_optical::cdb::inquiry(len as u8) {
             bytes[0] = 5;
             bytes[8..16].copy_from_slice(b"PIONEER ");
             bytes[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
@@ -949,6 +953,10 @@ impl ScsiDevice for RecoveryDrive {
         self.attempts += 1;
         if self.fail_write == Some(self.attempts) {
             bail!("injected write failure");
+        }
+        if command == pioneer_optical::cdb::write_parameter_word(0x9f).unwrap() {
+            assert!(!self.updating, "Normal parameter write in update mode");
+            self.startup_word = Some(u16::from_be_bytes(bytes.try_into().unwrap()));
         }
         self.writes.push((command.to_vec(), bytes.to_vec()));
         if command == pioneer_optical::cdb::finish()
