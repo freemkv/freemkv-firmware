@@ -29,6 +29,7 @@ use freemkv_flash::cmac;
 use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use crate::abi;
+use crate::boot::BootSettings;
 use crate::family::{Capability, ChipInfo, MediaClass};
 use thumb_asm::{self as thumb, Asm, BranchKind, CommandRecord};
 
@@ -236,8 +237,8 @@ const _: () = assert!(FLASHWRITE_ALLOW_LO.is_multiple_of(0x1000));
 const _: () = assert!(FLASHWRITE_ALLOW_HI.is_multiple_of(0x1000));
 
 /// SAVE home: base of the corpus-universal NV block. [`abi::Verb::Save`] programs the
-/// live flag table verbatim to this flash offset; boot and [`abi::RESET_TO_FLASH`]
-/// load it back. The engine resolves this per image by SIGNATURE via
+/// live flag table verbatim to this flash offset; [`abi::RESET_TO_FLASH`]
+/// loads it back explicitly. Boot always uses the image’s baked settings. The engine resolves this per image by SIGNATURE via
 /// [`Mt1959Engine::find_nv_block`] (the region record `00 04 05` at block+0x4B0 with a
 /// blank head) — it is NOT a hardcoded build input. This constant is the corpus-
 /// expected value (`0x1EA000` on all 118), used by the compile-time FlashWrite bound
@@ -248,38 +249,17 @@ const _: () = assert!(FLASHWRITE_ALLOW_HI.is_multiple_of(0x1000));
 pub(crate) const SAVE_HOME: u32 = 0x001E_A000;
 const _: () = assert!(SAVE_HOME >= FLASHWRITE_ALLOW_LO && SAVE_HOME < FLASHWRITE_ALLOW_HI);
 
-/// SAVE payload length: the full flag table (slot 0 marker + features `0x01..=0x06`),
-/// mirrored byte-for-byte. Slot 0 (formerly unused pad) now carries the
-/// [`NV_SAVED_MARKER`]: erased flash reads `0xFF` == never-saved, so the boot hook
-/// falls back to [`DEFAULT_FLAGS`]; any real SAVE stamps slot 0 non-`0xFF`, and the
-/// boot hook then applies the saved feature bytes verbatim (even an all-`0xFF`
-/// "everything passthrough" config the user deliberately saved).
+/// SAVE payload length, including the saved marker in slot zero. Explicit
+/// RESET_TO_FLASH uses this record; boot never overlays it onto image settings.
 pub(crate) const SAVE_LEN: u8 = NUM_FEATURES + 1;
 
-/// Per-create feature DEFAULTS the boot hook and [`abi::Verb::Reset`]
-/// ([`abi::RESET_TO_OEM`]) apply when no config has been SAVEd (slot-0 marker is
-/// `0xFF`). Index = feature id; slot 0 is the marker, unused as a feature. UHD
-/// (`0x03`) and BD (`0x04`) ship [`abi::STATE_ON`] so a flashed drive engages
-/// UHD/BD discs out of the box AND after every power-cycle — the fix for a
-/// rebooted drive reverting to OEM passthrough (UHD refused). Every other feature
-/// stays [`abi::STATE_PASSTHROUGH`] (stealth OEM behaviour).
-///
-/// This is a compile-time constant today (the create-time `--oem-uhd`/`--oem-bd`
-/// per-image override threads a runtime copy through the emitters — TODO). Baked
-/// into the boot/reset stubs, which are CMAC-covered, so it persists.
-#[allow(deprecated)] // `Feature::Bd` is deprecated in 0.9.2 but still occupies its own NV slot for wire-ABI round-trip.
-pub(crate) const DEFAULT_FLAGS: [u8; NUM_FEATURES as usize + 1] = {
-    let mut d = [abi::STATE_PASSTHROUGH; NUM_FEATURES as usize + 1];
-    d[abi::Feature::Unrestricted as usize] = abi::STATE_ON;
-    d[abi::Feature::Bd as usize] = abi::STATE_ON;
-    d
-};
+/// Shipping defaults used by existing golden tests. Production emitters take
+/// validated per-image settings from the shared boot model.
+#[cfg(test)]
+pub(crate) const DEFAULT_FLAGS: [u8; NUM_FEATURES as usize + 1] = BootSettings::standard().flags();
 
-/// Value stamped into NV slot 0 by [`abi::Verb::Save`] to mark "a config has been
-/// saved". Erased flash is `0xFF` (never saved → boot uses [`DEFAULT_FLAGS`]); any
-/// non-`0xFF` marker means the saved feature bytes are authoritative. `0x01` is the
-/// canonical stamp; the boot/reset load tests `!= 0xFF`, not `== 0x01`, so a future
-/// config-version bump in this byte still reads as "saved".
+/// SAVE marks a configuration for explicit RESET_TO_FLASH reload. An erased
+/// marker falls back to the image defaults. The record never overrides boot.
 pub(crate) const NV_SAVED_MARKER: u8 = 0x01;
 
 /// Byte offset from [`FLAG_TABLE_BASE`] of the 1-byte SRAM scratch cell the
@@ -2177,6 +2157,25 @@ impl Mt1959Engine {
             flag_base,
             boot_function_entry,
             identity_blob(),
+            &BootSettings::standard(),
+        )
+    }
+
+    pub(crate) fn build_handler_with_defaults(
+        &self,
+        image: &[u8],
+        oem_handler: u32,
+        flag_base: u32,
+        boot_function_entry: u32,
+        defaults: &BootSettings,
+    ) -> Result<Vec<u8>> {
+        self.build_handler_with_identity(
+            image,
+            oem_handler,
+            flag_base,
+            boot_function_entry,
+            identity_blob(),
+            defaults,
         )
     }
 
@@ -2188,6 +2187,7 @@ impl Mt1959Engine {
         flag_base: u32,
         boot_function_entry: u32,
         identity: Vec<u8>,
+        defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
         let cdb = self.find_cdb_base(image)?;
         let (writer, commit_off) = self.find_response_writer(image)?;
@@ -2424,7 +2424,7 @@ impl Mt1959Engine {
         //                              (e.g. UHD/BD on) into RAM. RAM-only.
         //   RESET_TO_FLASH    (0x00) → reload the saved config (marker-gated); a
         //                              never-saved drive (marker 0xFF) falls back to
-        //                              DEFAULT_FLAGS, mirroring the boot hook.
+        //                              the image defaults.
         // All fall through to clear → zeroed buffer.
         a.cmp_imm(4, abi::Verb::Reset as u8);
         a.bne(not_reset);
@@ -2455,13 +2455,13 @@ impl Mt1959Engine {
         a.cmp_imm(0, abi::RESET_TO_DEFAULTS);
         a.bne(reset_flash);
         a.ldr_lit(0, flag_base);
-        for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
+        for (off, &val) in defaults.flags().iter().enumerate() {
             a.movs_imm(1, val);
             a.strb_imm(1, 0, off as u16);
         }
         a.b(clr);
         // RESET_TO_FLASH (0x00, and the default for any other mode): marker-gated
-        // reload, mirroring the boot hook. Slot-0 marker 0xFF = never saved → restore
+        // reload, explicitly requested by the host. Slot-0 marker 0xFF = never saved → restore
         // DEFAULTS; else copy the saved feature bytes (1..=NUM_FEATURES) verbatim.
         a.bind(reset_flash);
         a.ldr_lit(6, flag_base); // r6 = flag-table base (SRAM), callee-saved
@@ -2470,7 +2470,7 @@ impl Mt1959Engine {
         a.cmp_imm(1, abi::STATE_PASSTHROUGH); // 0xFF == never saved
         a.bne(reset_flash_saved);
         // No saved config: restore DEFAULTS (r6 = flag base).
-        for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
+        for (off, &val) in defaults.flags().iter().enumerate() {
             a.movs_imm(1, val);
             a.strb_imm(1, 6, off as u16);
         }
@@ -3753,14 +3753,9 @@ impl Mt1959Engine {
     /// here (not the pre-clear reload at `anchor+4`) is what stops the clear from
     /// wiping the `0xFF` flag table this stub writes.
     ///
-    /// Under the tri-state, a flag value of `0x00` means **OFF** (actively disabled),
-    /// but the drive's SRAM flag table reads all-`0x00` at power-on — which would
-    /// wrongly disable every feature at boot. This stub therefore writes
-    /// [`abi::STATE_PASSTHROUGH`] (`0xFF`) into the whole flag table (`flag_base+0 ..=
-    /// flag_base+NUM_FEATURES`, i.e. the unused slot 0 plus every feature flag
-    /// `1..=7`) at boot, so a freshly powered drive is byte-behaviour-identical to
-    /// OEM and no gate ever sees `0x00` unless the host set it. It is NOT
-    /// feature-gated — it runs unconditionally on every boot.
+    /// Every boot writes the image’s selected settings after SRAM initialization.
+    /// Saved configurations do not participate; runtime SET remains available,
+    /// and explicit RESET_TO_FLASH can reload a saved session configuration.
     ///
     /// # Register / frame contract
     /// The detour replaces the original `bl <orig_init>`, so the stub must run
@@ -3775,11 +3770,21 @@ impl Mt1959Engine {
     /// instruction after the detoured call). The stub does NOT replay the boot-status
     /// reload `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` — that stays in place at the old
     /// `anchor+4` site, which is no longer touched.
+    #[cfg(test)]
     pub(crate) fn build_boot_init(
         &self,
         flag_base: u32,
         orig_init: u32,
-        save_home: u32,
+        _save_home: u32,
+    ) -> Result<Vec<u8>> {
+        self.build_boot_init_with_defaults(flag_base, orig_init, &BootSettings::standard())
+    }
+
+    pub(crate) fn build_boot_init_with_defaults(
+        &self,
+        flag_base: u32,
+        orig_init: u32,
+        defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         // push {r0,r1,r2,r3,r4,lr} — preserve orig_init's args + return addr,
@@ -3792,33 +3797,14 @@ impl Mt1959Engine {
         // sibling deny-reset stub (`build_deny_reset_stub` above) already
         // uses this same pattern for the same reason.
         a.push(0x011F); // push {r0-r4, lr}       6 words → sp 8-aligned
-                        // Fill the flag table with the baked per-create DEFAULTS (slot 0 marker +
-                        // features 1..=NUM_FEATURES). Per-byte because the values differ (UHD/BD =
-                        // 0x01, the rest 0xFF); slot 0's default is 0xFF (a fresh RAM marker,
-                        // overwritten only by SAVE). This REPLACES the old blind 0xFF-fill so a
-                        // never-saved drive boots with UHD/BD accepted instead of OEM-refused.
+                        // Initialize every flag, including the otherwise-unused saved marker.
         a.ldr_lit(0, flag_base); // r0 = &flag table (SRAM)
-        for (off, &val) in DEFAULT_FLAGS.iter().enumerate() {
-            a.movs_imm(1, val); // r1 = DEFAULT_FLAGS[off]
+        for (off, &val) in defaults.flags().iter().enumerate() {
+            a.movs_imm(1, val); // selected boot value
             a.strb_imm(1, 0, off as u16); // flag[off] = default
         }
-        // Overlay the persisted config ONLY when it exists: NV slot 0 (the saved
-        // marker) is 0xFF on erased/never-saved flash, in which case the baked
-        // DEFAULTS stand. Any non-0xFF marker means a real SAVE — apply the saved
-        // feature bytes (1..=NUM_FEATURES) verbatim, so a user's explicit config
-        // (even all-0xFF passthrough) wins across a power cycle. Flash is
-        // XIP-mapped, so this is a plain memory read (no PROGRAM call). r0 stays
-        // live from the fill.
-        let keep_defaults = a.label();
-        a.ldr_lit(2, save_home); // r2 = flash source base (NV/SAVE home)
-        a.ldrb_imm(1, 2, 0); // r1 = NV slot-0 saved marker
-        a.cmp_imm(1, abi::STATE_PASSTHROUGH); // 0xFF == never saved
-        a.beq(keep_defaults);
-        for off in 1..SAVE_LEN {
-            a.ldrb_imm(1, 2, off as u16); // r1 = saved flag[off]
-            a.strb_imm(1, 0, off as u16); // flag[off] = saved value
-        }
-        a.bind(keep_defaults);
+        // Boot choices are authoritative. Saved runtime settings are loaded only
+        // by an explicit RESET_TO_FLASH, never implicitly during startup.
         a.pop(0x000F); // pop {r0,r1,r2,r3}   restore the args orig_init may read
         a.ldr_lit(3, orig_init | 1); // r3 = orig_init (Thumb bit set for blx)
         a.blx(3); // tail-call orig_init at sp=S-8 (AAPCS-aligned); lr := &(pop {pc})
@@ -3875,7 +3861,7 @@ impl Mt1959Engine {
     }
 
     /// Install the always-on boot-init hook: find the anchor, follow its `bmi` to the
-    /// cold/warm-boot convergence `bl <orig_init>`, inject [`Self::build_boot_init`]
+    /// cold/warm-boot convergence `bl <orig_init>`, inject [`Self::build_boot_init_with_defaults`]
     /// into covered free space, and repoint that `bl` at the stub. Returns
     /// `(conv, stub_va)` — the convergence detour site (the reported `boot_init_site`)
     /// and the stub address.
@@ -3896,10 +3882,11 @@ impl Mt1959Engine {
     /// the finder (which is already complete).
     pub(crate) fn emit_boot_init(
         &self,
-        image: &[u8],
+        _image: &[u8],
         out: &mut [u8],
         flag_base: u32,
         boot_init_pair: (usize, u32),
+        defaults: &BootSettings,
     ) -> Result<(u32, u32)> {
         // Detour pair is pre-resolved by [`Self::resolve_boot_init_pair`]:
         // * Modern — the cold/warm-boot convergence `bl <orig_init>` (first
@@ -3908,8 +3895,7 @@ impl Mt1959Engine {
         //   at `anchor+4` — keeps the stub's 0xFF fill alive.
         // * Classic — the helper's unique caller `bl` (only when blessed).
         let (conv, orig_init) = boot_init_pair;
-        let save_home = self.find_nv_block(image)?;
-        let bytes = self.build_boot_init(flag_base, orig_init, save_home)?;
+        let bytes = self.build_boot_init_with_defaults(flag_base, orig_init, defaults)?;
         let stub_va = self.free_space(out, bytes.len() + 16)?;
         thumb::write(out, stub_va as usize, &bytes);
         // Decode-back guarded like every other install site. This one was the

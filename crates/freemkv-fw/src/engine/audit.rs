@@ -222,6 +222,19 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
         }
         let name = l.id.label();
         match l.id {
+            LeverId::BootSettings => {
+                let verified = crate::boot::inspect(img);
+                checks.push(AuditCheck {
+                    lever: name,
+                    what: "boot and reset settings match the signed record".into(),
+                    ok: matches!(verified, Ok(Some(_))),
+                    detail: match verified {
+                        Ok(Some(_)) => "versioned boot settings verified".into(),
+                        Ok(None) => "missing boot settings record".into(),
+                        Err(e) => format!("{e:#}"),
+                    },
+                });
+            }
             LeverId::Identity => {
                 // The hijacked record's handler pointer must now target the
                 // injected handler (VA | thumb-bit), and the injected handler

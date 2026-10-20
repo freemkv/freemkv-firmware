@@ -1,13 +1,24 @@
 //! Background authoring operations with structured results and automatic diagnostics.
 use anyhow::{bail, Result};
 use freemkv_flash::output::field;
-use freemkv_fw::{api, diagnostics};
+use freemkv_fw::{
+    api,
+    boot::{BootFeature, BootSettings},
+    diagnostics,
+};
 use std::path::PathBuf;
 
 pub enum Job {
     Verify(PathBuf),
-    Create { input: PathBuf, output: PathBuf },
-    Sign { input: PathBuf, output: PathBuf },
+    Create {
+        input: PathBuf,
+        output: PathBuf,
+        defaults: BootSettings,
+    },
+    Sign {
+        input: PathBuf,
+        output: PathBuf,
+    },
     Probe(String),
 }
 
@@ -45,24 +56,46 @@ pub fn execute(job: &Job) -> Result<()> {
                     format!("{} regions verified", outcome.verdicts.len()),
                 );
             }
-            Job::Create { input, output } => {
+            Job::Create {
+                input,
+                output,
+                defaults,
+            } => {
                 let artifact = freemkv_fw::artifact::Artifact::parse(diagnostics::read(input)?)?;
                 let image = artifact.image();
-                let outcome = api::create(image)?;
-                field("Engine", outcome.engine);
-                if let Some(chip) = &outcome.chip {
+                let (report, support) = api::modify_with_defaults(image, defaults)?;
+                if let Some(reason) = report.refusal() {
+                    if freemkv_fw::boot::inspect(image)?.is_none() {
+                        bail!("{reason}");
+                    }
+                }
+                let verification = api::verify(&report.image, None)?;
+                if !verification.ok {
+                    bail!("Generated firmware failed integrity verification");
+                }
+                field("Engine", report.engine);
+                field(
+                    "Firmware identity",
+                    format!("{} {} · {}", report.vendor, report.model, report.rev),
+                );
+                for feature in BootFeature::ALL {
                     field(
-                        "Firmware identity",
-                        format!("{} {} · {}", chip.vendor, chip.model, chip.rev),
+                        feature.label(),
+                        if support.supports(feature) {
+                            defaults.label(feature)
+                        } else {
+                            "Not supported by this firmware"
+                        },
                     );
                 }
+                diagnostics::record(defaults.report_json(&support, &report.to_json()));
                 field(
                     "Verification",
-                    format!("{} regions verified", outcome.verdicts.len()),
+                    format!("{} regions verified", verification.verdicts.len()),
                 );
-                diagnostics::write(output, &artifact.output(outcome.image().to_vec())?)?;
+                diagnostics::write(output, &artifact.output(report.image.clone())?)?;
                 field("Saved firmware", output.display().to_string());
-                field("Image size", format!("{} bytes", outcome.image().len()));
+                field("Image size", format!("{} bytes", report.image.len()));
             }
             Job::Sign { input, output } => {
                 let artifact = freemkv_fw::artifact::Artifact::parse(diagnostics::read(input)?)?;

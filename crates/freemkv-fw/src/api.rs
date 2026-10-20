@@ -121,16 +121,35 @@ impl CreateOutcome {
 pub fn create(image: &[u8]) -> Result<CreateOutcome> {
     diagnostics::run("create", || {
         diagnostics::image("input image", image);
-        create_inner(image)
+        create_inner(image, &crate::boot::BootSettings::standard())
     })
 }
 
-fn create_inner(image: &[u8]) -> Result<CreateOutcome> {
+/// Build a strict base with the selected settings applied on every boot.
+pub fn create_with_defaults(
+    image: &[u8],
+    defaults: &crate::boot::BootSettings,
+) -> Result<CreateOutcome> {
+    diagnostics::run("create", || create_inner(image, defaults))
+}
+
+fn create_inner(image: &[u8], defaults: &crate::boot::BootSettings) -> Result<CreateOutcome> {
     let eng = engine::detect(image).context("selecting a platform engine for this image")?;
     diagnostics::record(format!("create: engine={}", eng.name()));
     let chip = family::detect_chip(image).ok();
     diagnostics::record(format!("create: chip={chip:?}"));
-    let report = eng.create(image).context("building freemkv firmware")?;
+    let mut report = eng
+        .create_with_defaults(image, defaults)
+        .context("building freemkv firmware")?;
+    let support = crate::boot::BootSupport::from_create(&report);
+    defaults.validate(&support)?;
+    crate::boot::attach(
+        &mut report.image,
+        report.handler_va as usize,
+        report.boot_stub_va as usize,
+        defaults,
+        &support,
+    )?;
 
     let mut resolved_facts = report.clone();
     resolved_facts.image.clear();
@@ -205,3 +224,54 @@ fn probe_device_inner(device: &str) -> Result<ProbeOutcome> {
 #[cfg(test)]
 #[path = "api_tests.rs"]
 mod tests;
+
+/// Shared best-effort authoring path, including editable boot settings records.
+pub fn modify_with_defaults(
+    image: &[u8],
+    defaults: &crate::boot::BootSettings,
+) -> Result<(engine::ModifyReport, crate::boot::BootSupport)> {
+    let eng = engine::detect(image)?;
+    if let Some((output, support)) = crate::boot::update(image, defaults)? {
+        let mut report = eng.modify(image)?;
+        report.levers.push(if image == output {
+            engine::lever::LeverReport::already(engine::lever::LeverId::BootSettings, vec![])
+        } else {
+            engine::lever::LeverReport::applied(engine::lever::LeverId::BootSettings, vec![])
+        });
+        report.image = output;
+        return Ok((report, support));
+    }
+    anyhow::ensure!(!engine::core::is_freemkv_patched(image), "This firmware predates editable boot settings. Select its original OEM image to create firmware with boot settings.");
+    let mut report = eng.modify_with_defaults(image, defaults)?;
+    let support = crate::boot::BootSupport::from_modify(&report);
+    defaults.validate(&support)?;
+    let fact = |key: &str| {
+        report
+            .levers
+            .iter()
+            .flat_map(|l| &l.facts)
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| *v as usize)
+            .unwrap_or(0)
+    };
+    let handler = fact("handler_va");
+    let boot = fact("boot_stub_va");
+    crate::boot::attach(&mut report.image, handler, boot, defaults, &support)?;
+    if support.has_boot() {
+        report.levers.push(engine::lever::LeverReport::applied(
+            engine::lever::LeverId::BootSettings,
+            vec![],
+        ));
+    }
+    Ok((report, support))
+}
+
+/// Inspect existing settings or build a disposable preview to prove availability.
+pub fn boot_options(image: &[u8]) -> Result<(crate::boot::BootSettings, crate::boot::BootSupport)> {
+    if let Some(options) = crate::boot::inspect(image)? {
+        return Ok(options);
+    }
+    let defaults = crate::boot::BootSettings::standard();
+    let (_, support) = modify_with_defaults(image, &defaults)?;
+    Ok((defaults, support))
+}

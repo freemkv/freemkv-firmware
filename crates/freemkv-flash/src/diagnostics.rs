@@ -62,6 +62,39 @@ impl Log {
 
 thread_local! {
     static LOG: RefCell<Option<Log>> = const { RefCell::new(None) };
+    static OPERATION_ID: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// Correlates an application operation with its journal events and linked files.
+pub fn new_operation_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "{}-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Scope the journal correlation id to this worker, restoring it even on panic.
+pub fn with_operation_id<T>(id: &str, work: impl FnOnce() -> T) -> T {
+    struct Restore(Option<String>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            OPERATION_ID.with(|slot| *slot.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(OPERATION_ID.with(|slot| slot.replace(Some(id.to_owned()))));
+    work()
+}
+
+fn logging_failed(message: String) {
+    eprintln!("warning: {message}");
+    crate::output::field("Diagnostic warning", message);
 }
 
 /// Append a diagnostic without cluttering the UI. A failed log never interrupts a burn.
@@ -75,11 +108,14 @@ pub fn record(text: impl AsRef<str>) {
         error
     });
     if let Some(error) = error {
-        eprintln!("warning: diagnostic log write failed: {error}; file logging disabled for this operation");
+        logging_failed(format!(
+            "Diagnostic log write failed: {error}; file logging disabled for this operation"
+        ));
     }
 }
 
-fn log_directory() -> PathBuf {
+/// Directory containing automatically saved operation logs and support history.
+pub fn log_directory() -> PathBuf {
     #[cfg(target_os = "windows")]
     if let Some(base) = std::env::var_os("LOCALAPPDATA") {
         return PathBuf::from(base).join("freemkv").join("logs");
@@ -212,7 +248,7 @@ fn run_at_named<T>(
             Some(path)
         }
         Err(error) => {
-            eprintln!("warning: cannot create diagnostic log: {error}");
+            logging_failed(format!("Cannot create diagnostic log: {error}"));
             None
         }
     };
@@ -235,6 +271,10 @@ fn run_at_named<T>(
         std::env::consts::ARCH,
         SystemTime::now().duration_since(UNIX_EPOCH).ok()
     ));
+    let operation_id = OPERATION_ID
+        .with(|slot| slot.borrow().clone())
+        .unwrap_or_else(new_operation_id);
+    record(format!("operation_id={operation_id}"));
     record(system_details());
     if let Some(path) = &path {
         crate::output::field("Diagnostic log", path.clone());

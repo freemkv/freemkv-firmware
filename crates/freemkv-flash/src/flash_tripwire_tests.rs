@@ -73,6 +73,8 @@ fn flash_plan_needs_no_backup() {
         [
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
             "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
+            // The optical receiver profile independently binds its chip from the boot banner.
+            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
         ]
     );
 
@@ -99,6 +101,8 @@ fn flash_plan_needs_no_backup() {
         [
             "MEDIUM -> ClosedEmpty",
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
+            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
+            // The optical receiver profile independently binds its chip from the boot banner.
             "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
         ]
     );
@@ -256,15 +260,13 @@ fn post_flash_identity_check_fails_unconfirmed_flash() {
     let dev = MockScsiDevice::echoing()
         .with_firmware_image(backup_firmware())
         .on_fail_after_stream(
-            |cdb| cdb == crate::backends::mtk::cdb::read_memory(0x3000, 32).as_slice(),
+            |cdb| cdb.first() == Some(&0x12),
             "drive still re-enumerating",
         );
     let req = mtk_request(image, true, Some(dir.join("rollback.bin")));
     let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
     assert!(
-        outcome
-            .result
-            .contains("firmware-identity read-back errored"),
+        outcome.result.contains("target startup was not confirmed"),
         "{}",
         outcome.result
     );
@@ -272,7 +274,7 @@ fn post_flash_identity_check_fails_unconfirmed_flash() {
         transcript.iter().any(|l| l.starts_with("OUT")),
         "the image was written"
     );
-    assert!(outcome.text.iter().any(|l| l.contains("flash complete .")));
+    assert!(!outcome.text.iter().any(|l| l.contains("flash complete .")));
     assert!(!outcome.text.iter().any(|l| l.starts_with("firmware now")));
 }
 
@@ -405,6 +407,8 @@ fn dry_run_keeps_tray_warning_and_mtk_preflight() {
             "MEDIUM -> DiscPresent",
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
             "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
+            // The optical receiver profile independently binds its chip from the boot banner.
+            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
             "IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256",
             "IN   cdb=000000000000000000000000 alloc=0 -> ok 0",
         ]
@@ -507,6 +511,9 @@ static CONFIRMING: crate::backend::Descriptor = crate::backend::Descriptor {
 
 macro_rules! test_backend {
     ($ty:ty, $capture:expr) => {
+        test_backend!($ty, $capture, Ok(Vec::new()));
+    };
+    ($ty:ty, $capture:expr, $preflight:expr) => {
         impl Backend for $ty {
             fn descriptor(&self) -> &'static crate::backend::Descriptor {
                 &CONFIRMING
@@ -543,6 +550,13 @@ macro_rules! test_backend {
             }
         }
         impl FlashFacet for $ty {
+            fn preflight(
+                &self,
+                _: &mut ReadDevice<'_>,
+                _: &FlashPlan,
+            ) -> Result<Vec<crate::backend::PlanLine>> {
+                $preflight
+            }
             fn plan(&self, _: &mut ReadDevice<'_>, _: &FlashRequest) -> Result<FlashPlan> {
                 Ok(FlashPlan::new(()))
             }
@@ -556,8 +570,22 @@ macro_rules! test_backend {
                 authorized.confirmation = Some(CONFIRM_TEXT.into());
                 Ok(authorized)
             }
-            fn execute(&self, dev: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> Result<()> {
-                dev.command_out(&[0x3b, 0, 0, 0, 0, 0, 0, 0, 0, 0], &[0])
+            fn execute(
+                &self,
+                dev: &mut WriteDevice<'_>,
+                _: &AuthorizedPlan,
+            ) -> Result<crate::backend::UpdateOutcome> {
+                dev.command_out(&[0x3b, 0, 0, 0, 0, 0, 0, 0, 0, 0], &[0])?;
+                Ok(crate::backend::UpdateOutcome::Completed(
+                    crate::backend::UpdateEvidence {
+                        target_started: false,
+                        target_identity: String::new(),
+                        verified_regions: vec![],
+                        unverified_regions: vec!["test write".into()],
+                        completed_stages: vec!["test write".into()],
+                        temporary_firmware: false,
+                    },
+                ))
             }
         }
     };
@@ -601,11 +629,14 @@ fn same_line_reflash_sends_exactly_the_oem_session() {
         let image = fixture::image(&board, "BD-RE  BH16NS40", 9);
         let (outcome, transcript, _) = family_flash(&image, &image);
         assert_eq!(outcome.result, "OK", "{board:?}: {:#?}", outcome.text);
-        let probe = format!("IN   cdb={} alloc=256", hex(&cdb_probe()));
+        // Read-only preflight also probes. The OEM session begins two
+        // commands before the first PREPARE write (PROBE, TUR, PREPARE).
         let start = transcript
             .iter()
-            .position(|l| l.starts_with(&probe))
-            .expect("PROBE");
+            .position(|l| l.starts_with("OUT"))
+            .expect("PREPARE")
+            .checked_sub(2)
+            .expect("PROBE and TUR before PREPARE");
         let sent: Vec<String> = transcript[start..start + 134]
             .iter()
             .map(|l| {
@@ -622,10 +653,6 @@ fn same_line_reflash_sends_exactly_the_oem_session() {
         // The OEM updaters' REQUEST SENSE (INTENDED_CHANGES.md, M-RS).
         assert_eq!(sent[133], "IN   cdb=030000001080000000000000 alloc=16");
     }
-}
-
-fn cdb_probe() -> [u8; 12] {
-    crate::backends::mtk::cdb::probe()
 }
 
 #[test]
@@ -688,7 +715,31 @@ fn receiver_probe_line(line: &str) -> bool {
         "IN   cdb=3c060009",
         "IN   cdb=3c06000a",
         "IN   cdb=3c06000b",
+        "IN   cdb=3c060014",
+        "IN   cdb=3c060015",
+        "IN   cdb=3c060016",
+        "IN   cdb=3c060017",
+        "IN   cdb=3c060018",
+        "IN   cdb=3c060019",
+        "IN   cdb=3c06001a",
     ]
     .iter()
     .any(|prefix| line.starts_with(prefix))
+}
+
+#[test]
+fn execute_runs_readonly_preflight_before_backup_or_write() {
+    struct Unready;
+    test_backend!(
+        Unready,
+        panic!("backup must not start after refused preflight"),
+        bail!("receiver not ready")
+    );
+    let mut dev = MockScsiDevice::new();
+    let req = confirming_request();
+    let error = crate::engine::flash(&mut dev, &Unready, &req, &mut crate::workflow::Preconfirmed)
+        .unwrap_err();
+    assert_eq!(error.to_string(), "receiver not ready");
+    assert!(dev.writes.is_empty());
+    assert!(!req.predump_out.as_ref().unwrap().exists());
 }

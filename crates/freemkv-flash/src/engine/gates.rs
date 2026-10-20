@@ -60,8 +60,8 @@ fn grant<'d>(dev: &'d mut dyn ScsiDevice, limit: Option<&'static [CdbPattern]>) 
     WriteDevice { dev, limit }
 }
 
-/// Grant a flash write: requires `--execute`, the risk acknowledgement and the
-/// saved backup.
+/// Grant a flash write after the engine has saved a usable backup or obtained
+/// explicit consent to continue without one. Recheck execute and risk consent.
 pub(in crate::engine) fn flash<'d>(
     dev: &'d mut dyn ScsiDevice,
     req: &FlashRequest,

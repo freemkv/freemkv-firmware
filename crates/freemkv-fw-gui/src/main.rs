@@ -31,8 +31,9 @@ fn load_icon() -> Option<egui::IconData> {
 fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("freemkv Firmware Modifier")
-        .with_inner_size([720.0, 610.0])
-        .with_resizable(false);
+        .with_inner_size([720.0, 800.0])
+        .with_min_inner_size([720.0, 800.0])
+        .with_resizable(true);
     if let Some(icon) = load_icon() {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));
     }

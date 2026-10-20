@@ -22,3 +22,6 @@ pub mod api;
 pub mod diagnostics;
 
 pub mod artifact;
+
+/// Shared boot settings for authoring and desktop controls.
+pub mod boot;

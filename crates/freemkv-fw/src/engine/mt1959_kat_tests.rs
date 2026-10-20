@@ -44,8 +44,9 @@ const EXPECT_HANDLER_HEX: &str =
 // Re-signed 0.9.1: the AKE stub gained the per-session de-bus latch clear
 // (see `ake_stub_clears_the_debus_latch_and_preserves_lr`), so the injected
 // band moved. EXPECT_HANDLER_HEX is unchanged, confining the delta to the stub.
-const EXPECT_CMAC_1: &str = "1c5c12a290eb6bc729b4d7b71f82da44";
-const EXPECT_CMAC_15: &str = "bd3144fc3e6903400708c8fa44647a4d";
+// 0.13.4: boot no longer loads saved NV; shorter boot code relocates feature stubs.
+const EXPECT_CMAC_1: &str = "e4e6623efaa56bc612046743002b32b6";
+const EXPECT_CMAC_15: &str = "1799f48bebda26a7c9e1665b8d0721f7";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -1442,7 +1443,7 @@ fn find_boot_init_resolves_bu40n() {
 /// invariant that keeps tri-state `0x00 == OFF` safe). It must NOT replay the
 /// boot-status reload (that stays at the old `anchor+4` site).
 #[test]
-fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
+fn build_boot_init_fills_defaults_without_saved_overlay_and_tail_calls_orig() {
     let base = super::FLAG_TABLE_BASE;
     let orig_init = 0x000a_1dd0u32; // BU40N convergence bl target
     let stub = Mt1959Engine
@@ -1499,15 +1500,9 @@ fn build_boot_init_fills_defaults_marker_gated_and_tail_calls_orig() {
     for off in 0u16..=6 {
         assert!(has16(0x7001 | (off << 6)), "boot stub writes flag[{off}]");
     }
-    // Marker-gated overlay: loads SAVE_HOME as a literal, reads the slot-0 marker,
-    // and compares it to 0xFF (cmp r1,#0xFF = 0x29FF) — the "is a config saved?" gate.
     assert!(
-        has32(super::SAVE_HOME),
-        "boot stub loads the SAVE_HOME literal"
-    );
-    assert!(
-        has16(0x29FF),
-        "boot stub tests the saved-marker against 0xFF (marker-gated overlay)"
+        !has32(super::SAVE_HOME),
+        "boot must not load saved settings"
     );
     // Restores the args before the tail-call: `pop {r0,r1,r2,r3}` (0xBC0F).
     assert!(
@@ -1558,7 +1553,13 @@ fn emit_boot_init_installs_detour_on_bu40n() {
         .resolve_boot_init_pair(&img)
         .expect("resolve pair on BU40N");
     let (s, stub_va) = Mt1959Engine
-        .emit_boot_init(&img, &mut out, super::FLAG_TABLE_BASE, pair)
+        .emit_boot_init(
+            &img,
+            &mut out,
+            super::FLAG_TABLE_BASE,
+            pair,
+            &crate::boot::BootSettings::standard(),
+        )
         .expect("boot hook installs on BU40N");
     assert_eq!(s, conv as u32, "detour site is the convergence bl");
     assert!(stub_va != 0, "boot stub landed");

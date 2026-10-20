@@ -1,5 +1,69 @@
 use super::*;
 
+#[test]
+fn cached_authorization_facts_preserve_pair_and_normal_only_routes() {
+    use pioneer_optical::receiver::Receiver;
+    for installed_gated in [false, true] {
+        let installed = super::super::prepared_tests::pair(installed_gated, 1);
+        let receiver = Receiver::from_installed(&installed).unwrap();
+        let cached_installed = installed_from_loaded(&receiver, installed.normal_transfer());
+        let old_installed = super::super::installed_component_facts(
+            Some(installed.kernel_transfer()),
+            Some(installed.normal_transfer()),
+        );
+        assert_eq!(cached_installed, old_installed);
+        for target_gated in [false, true] {
+            for marker in [0, 1, 0xff] {
+                let target = super::super::prepared_tests::pair(target_gated, marker);
+                let cached = target_from_loaded(
+                    Some(target.kernel()),
+                    target.normal(),
+                    Some(target.kernel_transfer()),
+                    target.normal_transfer(),
+                )
+                .unwrap();
+                let old = target_from_components(
+                    Some(target.kernel_transfer()),
+                    Some(target.normal_transfer()),
+                )
+                .unwrap();
+                assert_eq!(cached, old);
+                assert_eq!(
+                    check_loaded_receiver(&target),
+                    check_receiver(
+                        Some(installed.kernel_transfer()),
+                        Some(target.kernel_transfer()),
+                        target.normal_transfer()
+                    )
+                );
+                assert_eq!(
+                    decide_flash_plan(cached_installed.as_ref().unwrap(), &cached),
+                    decide_flash_plan(old_installed.as_ref().unwrap(), &old)
+                );
+
+                let normal = pioneer_optical::envelope::Envelope::load_with_kernel(
+                    target.normal_transfer(),
+                    receiver.installed_kernel().unwrap(),
+                )
+                .unwrap();
+                let cached_normal =
+                    target_from_loaded(None, &normal, None, target.normal_transfer()).unwrap();
+                let mut old_normal =
+                    target_from_components(None, Some(target.normal_transfer())).unwrap();
+                old_normal.family = normal_family_with_kernel(
+                    target.normal_transfer(),
+                    installed.kernel_transfer(),
+                );
+                assert_eq!(cached_normal, old_normal);
+                assert_eq!(
+                    decide_flash_plan(cached_installed.as_ref().unwrap(), &cached_normal),
+                    decide_flash_plan(old_installed.as_ref().unwrap(), &old_normal)
+                );
+            }
+        }
+    }
+}
+
 fn date(s: &str) -> Option<FwDate> {
     FwDate::parse(s)
 }

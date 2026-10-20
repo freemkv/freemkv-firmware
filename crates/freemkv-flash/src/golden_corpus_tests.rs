@@ -297,6 +297,7 @@ fn padded<const N: usize>(text: &str) -> [u8; N] {
 /// Kernel's hardware, Kernel tag and code and the Normal's tag. Firmware reads
 /// unlock after a knock; an update installs what Finish completes.
 struct CorpusDrive {
+    startup_word: u16,
     vendor: [u8; 8],
     product: [u8; 16],
     revision: [u8; 4],
@@ -315,6 +316,7 @@ impl CorpusDrive {
             String::from_utf8_lossy(id.get(range).unwrap_or_default()).to_string()
         };
         Self {
+            startup_word: 0xffff,
             vendor: padded(&text(0..8.min(id.len()))),
             product: padded(&text(8.min(id.len())..24.min(id.len()))),
             revision: padded(&fw.revision),
@@ -401,10 +403,17 @@ impl ScsiDevice for CorpusDrive {
         if command == cdb::vendor_identity() {
             return Ok(self.identity(len));
         }
+        if command == cdb::read_parameter_word(0x9f).unwrap() {
+            assert!(!self.updating, "Normal A0 read in loader mode");
+            return Ok(self.startup_word.to_be_bytes().to_vec());
+        }
         if command == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
             bail!("Pioneer does not implement the MTK identity buffer");
         }
-        if command == cdb::test_unit_ready() || command == cdb::get_event_status() {
+        if command == cdb::test_unit_ready()
+            || command == cdb::get_event_status()
+            || command == cdb::request_sense(18)
+        {
             return Ok(vec![0; len]);
         }
         if self.knocks == 0 {
@@ -430,7 +439,10 @@ impl ScsiDevice for CorpusDrive {
     }
 
     fn command_out_strict(&mut self, command: &[u8], data: &[u8]) -> Result<()> {
-        if command == cdb::enter_update() {
+        if command == cdb::write_parameter_word(0x9f).unwrap() {
+            assert!(!self.updating, "Normal A0 write in loader mode");
+            self.startup_word = u16::from_be_bytes(data.try_into().unwrap());
+        } else if command == cdb::enter_update() {
             self.updating = true;
             self.sent = [Vec::new(), Vec::new()];
         } else if command.len() == 10 && command[..2] == [0x3b, 0x07] {

@@ -24,9 +24,10 @@ use freemkv_flash::workflow::{
 };
 
 use crate::ops::{self, Job, Request, ResultView};
+use crate::support::Journal;
 
 /// Shown wherever Recovery is offered or confirmed. Wording is part of the safety contract.
-pub const FORCE_WARNING: &str = "Recovery mode: no backups, compatibility checks overridden. Attempts to write the selected firmware to the drive. An incompatible image can leave the drive unusable. Required file and drive-protocol checks still apply.";
+pub const FORCE_WARNING: &str = "Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable.";
 /// The confirmation sheet's danger line.
 pub const FLASH_DANGER: &str =
     "Flashing can permanently disable the drive. Keep it connected and powered until completion.";
@@ -43,6 +44,16 @@ const WORKER_PANIC: &str = "Operation worker failed unexpectedly. If flashing wa
 const WORKER_GONE: &str = "The worker stopped before reporting a result. If a flash was underway, inspect the drive before retrying.";
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
 const DIAGNOSTIC_REFRESH: Duration = Duration::from_millis(500);
+
+fn short_failure(error: &str) -> String {
+    let summary = error.split(';').take(2).collect::<Vec<_>>().join(";");
+    let summary = summary.trim().trim_end_matches(':');
+    if summary.chars().count() <= 170 {
+        summary.to_owned()
+    } else {
+        format!("{}…", summary.chars().take(169).collect::<String>())
+    }
+}
 
 /// The application's tasks, in tab order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -89,6 +100,8 @@ pub(crate) struct Profile {
     pub(crate) tasks: Vec<Task>,
     /// Recovery identifies its receiver without an installed firmware reference.
     pub(crate) recovery_without_current: bool,
+    /// Recheck Current choices when Recovery lacks a normal live protocol match.
+    pub(crate) recovery_without_live_protocol: bool,
     /// A live capture can feed Inspect and Compare.
     pub(crate) inspect: bool,
     /// The suggested backup and dump file names, from the backup format.
@@ -150,6 +163,8 @@ pub enum Effect {
         file_name: String,
     },
     CopyText(String),
+    /// Open an automatically saved diagnostic in the system text viewer.
+    OpenPath(PathBuf),
     /// Call `App::poll` periodically until `StopTicking`.
     StartTicking,
     StopTicking,
@@ -190,7 +205,11 @@ pub enum Input {
     CancelAnalysis,
     Confirm,
     CancelConfirm,
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     OpenDiagnostics,
+    ViewLog,
+    SubmitReport,
+    CancelReport,
     CloseDiagnostics,
     CopyDiagnostics,
     OpenResults,
@@ -362,6 +381,7 @@ pub struct Results {
     pub failure: Option<Failure>,
     pub notice: Option<String>,
     pub view_log: Button,
+    pub submit_report: Button,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -421,6 +441,7 @@ pub struct MediaRow {
 pub const MEDIA_HEADER: &str = "R/W";
 pub const MEDIA_HINT: &str = "Read / Write";
 /// Title of the activity log pane.
+#[cfg(all(feature = "native", target_os = "macos"))]
 pub const LOG_TITLE: &str = "Activity log";
 /// Why the window will not close while a job runs.
 pub const CLOSE_BLOCKED: &str =
@@ -518,11 +539,13 @@ impl Node {
 /// Messages from the worker thread.
 pub(crate) enum Msg {
     Event(Event),
+    DriveAfter(String),
+    FailureEvidence(workflow::UpdateFailure),
     Analysis(ResultView),
     /// A flash passed every gate after its backup; the worker waits for the
     /// sheet's answer on the sender before writing.
     Authorized(FlashSheet, Sender<bool>),
-    Done(Result<(), String>),
+    Done(Result<Option<workflow::UpdateOutcome>, String>),
 }
 
 /// The drive and input an operation was started for, frozen when the user
@@ -537,8 +560,11 @@ pub(crate) struct Target {
 /// What a confirmation sheet asks.
 #[derive(Clone, Debug)]
 pub(crate) enum Sheet {
-    /// Recovery, asked before its job starts.
-    Recovery(CurrentFirmware),
+    /// Recovery, asked after its read-only preparation has passed.
+    Recovery {
+        options: RecoveryOptions,
+        plan: Vec<String>,
+    },
     /// An authorized flash; its worker waits on `reply`.
     Flash {
         sheet: FlashSheet,
@@ -561,6 +587,13 @@ type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
 
 /// The whole application state. The shells hold none of their own.
 pub struct App {
+    journal: Option<Journal>,
+    logging_warning: Option<String>,
+    operation_id: Option<String>,
+    failure_evidence: Option<workflow::UpdateFailure>,
+    report_rx: Option<Receiver<Result<String, String>>>,
+    report_control: Option<crate::support::Submission>,
+    recovery_planning: Option<(Target, RecoveryOptions)>,
     origin_rx: Vec<Receiver<OriginReply>>,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -638,7 +671,25 @@ impl App {
 
     pub(crate) fn with_drives(drives: Vec<DriveChoice>) -> Self {
         let device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
+        let (journal, logging_warning) = if cfg!(test) {
+            (None, None)
+        } else {
+            match Journal::open() {
+                Ok(journal) => (Some(journal), None),
+                Err(error) => (
+                    Some(Journal::memory()),
+                    Some(format!("Session history is not being saved: {error}")),
+                ),
+            }
+        };
         Self {
+            journal,
+            logging_warning,
+            operation_id: None,
+            failure_evidence: None,
+            report_rx: None,
+            report_control: None,
+            recovery_planning: None,
             origin_rx: Vec::new(),
             flash_origin: None,
             recovery_origin: None,
@@ -719,10 +770,23 @@ impl App {
             return vec![Effect::StartTicking];
         }
         let device = self.device.clone();
+        let current = (!self.recovery_read
+            && (self.recovery_current_members.len() < 2 || self.recovery_current_member.is_some()))
+        .then(|| self.recovery_current.clone())
+        .flatten();
+        let member = self.recovery_current_member.clone();
         let waker = self.waker.clone();
         std::thread::spawn(move || {
             let profile = std::panic::catch_unwind(|| {
-                workflow::capture_events(|_| {}, || ops::profile(&device))
+                workflow::capture_events(
+                    |_| {},
+                    || match current {
+                        Some(ref path) => {
+                            ops::profile_with_current(&device, path, member.as_deref())
+                        }
+                        None => ops::profile(&device),
+                    },
+                )
             });
             let _ = tx.send(match profile {
                 Ok(result) => result.map_err(|e| format!("{e:#}")),
@@ -804,6 +868,24 @@ impl App {
             self.pending = None;
         }
         self.drives = drives;
+        self.record_event(
+            "drives_observed",
+            serde_json::json!({
+                "drives": self.drives.iter().map(DriveChoice::display).collect::<Vec<_>>()
+            }),
+        );
+    }
+
+    fn record_event(&mut self, kind: &str, mut data: serde_json::Value) {
+        if let Some(id) = &self.operation_id {
+            data["operation_id"] = id.clone().into();
+        }
+        if let Some(journal) = &mut self.journal {
+            if let Err(error) = journal.record(kind, data) {
+                self.logging_warning
+                    .get_or_insert_with(|| format!("Session history could not be saved: {error}"));
+            }
+        }
     }
 
     pub(crate) fn device_label(&self) -> String {
@@ -843,7 +925,11 @@ impl App {
             Input::Choose(pick) => return self.choose(pick),
             Input::Chosen(pick, path) => return self.chosen(pick, path),
             Input::SetCheck(CheckId::RecoveryReadFromDrive, on) if !self.busy() => {
+                if self.recovery_read != on {
+                    self.clear_flash_result();
+                }
                 self.recovery_read = on;
+                return self.refresh_current_profile();
             }
             Input::SetCheck(CheckId::RiskAck, on) if self.pending.is_some() => self.risk_ack = on,
             Input::SetCheck(CheckId::CaptureAsBackup, on) if !self.busy() => {
@@ -878,12 +964,19 @@ impl App {
             }
             Input::RecoveryMember(member) if !self.busy() => {
                 if self.recovery_members.contains(&member) {
+                    if self.recovery_member.as_ref() != Some(&member) {
+                        self.clear_flash_result();
+                    }
                     self.recovery_member = Some(member);
                 }
             }
             Input::RecoveryCurrentMember(member) if !self.busy() => {
                 if self.recovery_current_members.contains(&member) {
+                    if self.recovery_current_member.as_ref() != Some(&member) {
+                        self.clear_flash_result();
+                    }
                     self.recovery_current_member = Some(member);
+                    return self.refresh_current_profile();
                 }
             }
             Input::Recover if !self.busy() && self.recovery_ready() => {
@@ -899,7 +992,24 @@ impl App {
                     execute: true,
                     ..Default::default()
                 });
-                self.ask(target, Sheet::Recovery(current));
+                let options = RecoveryOptions {
+                    device: None,
+                    input: target.options.input.clone(),
+                    member: self.recovery_member.clone(),
+                    current,
+                    current_member: self.recovery_current_member.clone(),
+                    execute: false,
+                    acknowledged_risk: false,
+                };
+                let effects = self.start_job(
+                    "Recovery plan",
+                    target.device.clone(),
+                    Job::Recovery(options.clone()),
+                );
+                if !effects.is_empty() {
+                    self.recovery_planning = Some((target, options));
+                }
+                return effects;
             }
             Input::Confirm => return self.confirm(),
             Input::CancelConfirm => {
@@ -922,6 +1032,48 @@ impl App {
                 self.diagnostics_open = true;
                 self.diagnostic_notice = None;
                 self.refresh_diagnostic_view();
+            }
+            Input::ViewLog => {
+                if let Some(path) = self.diagnostic_log.as_ref().filter(|p| p.is_file()) {
+                    return vec![Effect::OpenPath(path.clone())];
+                }
+                self.diagnostics_open = true;
+                self.refresh_diagnostic_view();
+            }
+            Input::SubmitReport if self.report_rx.is_none() => {
+                self.record_event("report_requested", serde_json::json!({}));
+                let Some(journal) = &self.journal else {
+                    self.diagnostic_notice = Some("Report history is unavailable.".into());
+                    return Vec::new();
+                };
+                let source = journal.source();
+                let (tx, rx) = mpsc::channel();
+                let control = crate::support::Submission::new();
+                self.report_control = Some(control.clone());
+                self.report_rx = Some(rx);
+                self.diagnostic_notice = Some("Opening report approval in your browser…".into());
+                let waker = self.waker.clone();
+                std::thread::spawn(move || {
+                    let result = crate::support::submit(source, control, |message| {
+                        let _ = tx.send(Ok(message));
+                        if let Some(wake) = &waker {
+                            wake();
+                        }
+                    });
+                    let _ = tx.send(result.map_err(|error| format!("{error:#}")));
+                    if let Some(wake) = &waker {
+                        wake();
+                    }
+                });
+                return vec![Effect::StartTicking];
+            }
+            Input::CancelReport => {
+                if let Some(control) = &self.report_control {
+                    control.cancel();
+                    self.diagnostic_notice = Some(
+                        "Stopping report submission after the current request finishes…".into(),
+                    );
+                }
             }
             Input::CloseDiagnostics => self.diagnostics_open = false,
             Input::CopyDiagnostics => match self.diagnostic_text() {
@@ -993,6 +1145,16 @@ impl App {
         }
     }
 
+    /// A previous flash result describes its original selection, not the new one.
+    fn clear_flash_result(&mut self) {
+        if self.result_task == self.task && matches!(self.task, Task::Flash | Task::Recovery) {
+            self.status = "Ready".into();
+            self.failure = None;
+            self.rows.clear();
+            self.progress = None;
+        }
+    }
+
     fn chosen(&mut self, pick: Pick, path: PathBuf) -> Vec<Effect> {
         match pick {
             Pick::DiagnosticLog => {
@@ -1024,17 +1186,21 @@ impl App {
                 return self.start_job("Check file", String::new(), Job::InfoFile { input: path })
             }
             Pick::FlashFirmware => {
+                self.clear_flash_result();
                 self.flash_input = Some(path.clone());
                 return self.read_origin(pick, path);
             }
             Pick::RecoveryCurrent => {
+                self.clear_flash_result();
                 self.recovery_read = false;
                 self.recovery_current_members =
                     workflow::recovery_members(&path).unwrap_or_default();
                 self.recovery_current_member = None;
                 self.recovery_current = Some(path);
+                return self.refresh_current_profile();
             }
             Pick::RecoveryInput => {
+                self.clear_flash_result();
                 self.recovery_member = None;
                 self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
                 self.recovery_input = Some(path.clone());
@@ -1094,6 +1260,16 @@ impl App {
         self.analysis_tree = result.as_ref().map(|r| Arc::new(analysis_tree(r)));
         self.analysis = result;
         self.analysis_notice = None;
+    }
+
+    fn refresh_current_profile(&mut self) -> Vec<Effect> {
+        if self.ready_profile().is_none_or(|profile| {
+            !profile.tasks.contains(&Task::Recovery) || profile.recovery_without_live_protocol
+        }) {
+            self.start_profile()
+        } else {
+            Vec::new()
+        }
     }
 
     fn recovery_without_current(&self) -> bool {
@@ -1178,17 +1354,11 @@ impl App {
             }
             Some(Pending {
                 target,
-                sheet: Sheet::Recovery(current),
+                sheet: Sheet::Recovery { mut options, .. },
             }) if !self.running() => {
-                let job = Job::Recovery(RecoveryOptions {
-                    device: None,
-                    input: target.options.input,
-                    member: self.recovery_member.clone(),
-                    current_member: self.recovery_current_member.clone(),
-                    current,
-                    execute: true,
-                    acknowledged_risk: true,
-                });
+                options.execute = true;
+                options.acknowledged_risk = true;
+                let job = Job::Recovery(options);
                 self.start_job("Recovery", target.device, job)
             }
             other => {
@@ -1243,6 +1413,7 @@ impl App {
         self.action = label.to_string();
         self.status = format!("{label}…");
         self.failure = None;
+        self.failure_evidence = None;
         self.log.clear();
         self.diagnostic_log = None;
         self.diagnostic_checked = None;
@@ -1251,6 +1422,21 @@ impl App {
         self.rows.clear();
         self.info_result = matches!(job, Job::Info);
         self.log.push(format!("{label}: {device}"));
+        self.operation_id = Some(workflow::new_operation_id());
+        self.record_event(
+            "operation_started",
+            serde_json::json!({
+                "operation": label,
+                "drive_before": self.device_label(),
+                "device": device,
+                "input": match &job {
+                    Job::Flash(o) | Job::PlanFlash(o) => Some(o.input.display().to_string()),
+                    Job::Recovery(o) => Some(o.input.display().to_string()),
+                    Job::InfoFile { input } => Some(input.display().to_string()),
+                    _ => None,
+                }
+            }),
+        );
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
         #[cfg(test)]
@@ -1260,20 +1446,52 @@ impl App {
             return vec![Effect::StartTicking];
         }
         let waker = self.waker.clone();
-        std::thread::spawn(move || run_job(&device, job, tx, waker));
+        let operation_id = self
+            .operation_id
+            .clone()
+            .expect("started operation has an id");
+        std::thread::spawn(move || run_job(&device, job, tx, waker, operation_id));
         vec![Effect::StartTicking]
     }
 
     /// Drain the worker's events; call on every tick or repaint.
     pub fn poll(&mut self) -> Vec<Effect> {
+        let mut report_done = false;
+        if let Some(rx) = self.report_rx.take() {
+            loop {
+                match rx.try_recv() {
+                    Ok(Ok(message)) => self.diagnostic_notice = Some(message),
+                    Ok(Err(error)) => {
+                        self.diagnostic_notice = Some(format!("Could not submit report: {error}"));
+                        report_done = true;
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        report_done = true;
+                        break;
+                    }
+                }
+            }
+            if !report_done {
+                self.report_rx = Some(rx);
+            } else {
+                self.report_control = None;
+            }
+        }
         let origin_done = self.poll_origin();
         let profiled = self.poll_profile();
         let mut finished = false;
         let mut planned = None;
+        let mut recovery_planned = None;
         if let Some(rx) = self.rx.take() {
             loop {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => self.event(event),
+                    Ok(Msg::FailureEvidence(evidence)) => self.failure_evidence = Some(evidence),
+                    Ok(Msg::DriveAfter(label)) => {
+                        self.record_event("drive_after", serde_json::json!({"drive": label}))
+                    }
                     Ok(Msg::Analysis(result)) => {
                         self.set_analysis(Some(result));
                         self.analysis_open = true;
@@ -1285,34 +1503,92 @@ impl App {
                         }
                     },
                     Ok(Msg::Done(result)) => {
+                        recovery_planned = self.recovery_planning.take().filter(|_| {
+                            matches!(result, Ok(Some(workflow::UpdateOutcome::Planned)))
+                        });
                         planned = self.planning.take().filter(|_| result.is_ok());
                         self.end_flash();
                         let cancelled = std::mem::take(&mut self.cancelled);
                         match &result {
-                            Ok(()) => self.status = format!("{} complete", self.action),
+                            Ok(Some(outcome)) => {
+                                self.status = format!("{} {}", self.action, outcome.summary())
+                            }
+                            Ok(None) => self.status = format!("{} complete", self.action),
                             Err(_) if cancelled => {
                                 self.status = format!("{} cancelled", self.action)
                             }
                             Err(error) => {
-                                self.status = format!("{} could not finish", self.action);
+                                self.status = match &self.failure_evidence {
+                                    Some(evidence) => {
+                                        let consequence = if evidence.temporary_firmware {
+                                            " — temporary firmware may remain"
+                                        } else if evidence.write_started {
+                                            " — firmware may be partial"
+                                        } else {
+                                            " — update not started"
+                                        };
+                                        format!(
+                                            "{} failed during {}{consequence}",
+                                            self.action, evidence.phase
+                                        )
+                                    }
+                                    None => {
+                                        format!("{} failed — {}", self.action, short_failure(error))
+                                    }
+                                };
                                 self.failure = Some(error.clone());
                             }
                         }
+                        let update_evidence = result
+                            .as_ref()
+                            .ok()
+                            .and_then(Option::as_ref)
+                            .map(outcome_json);
+                        let result_kind = match &result {
+                            Err(_) if cancelled => "cancelled",
+                            Err(_) => "error",
+                            Ok(Some(workflow::UpdateOutcome::Planned)) => "planned",
+                            Ok(Some(outcome)) if !outcome.safe_to_probe() => "uncertain",
+                            Ok(Some(outcome)) if !outcome.fully_verified() => {
+                                "limited_verification"
+                            }
+                            Ok(_) => "success",
+                        };
                         self.log.push(match result {
-                            Ok(()) => "✓ done.".into(),
+                            Ok(Some(outcome)) => format!("{} {}", self.action, outcome.summary()),
+                            Ok(None) => "✓ done.".into(),
                             Err(_) if cancelled => CANCELLED.into(),
                             Err(e) => format!("✗ error: {e}"),
                         });
+                        self.record_event("operation_finished", serde_json::json!({
+                            "operation": self.action,
+                            "result": result_kind,
+                            "summary": self.status,
+                            "error": self.failure,
+                            "failure": self.failure.as_ref().map(|_| failure_json(self.failure_evidence.as_ref())),
+                            "update": update_evidence,
+                        }));
+                        self.operation_id = None;
                         finished = true;
                         break;
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.planning = None;
+                        self.recovery_planning = None;
                         self.end_flash();
                         self.status = "Operation interrupted".into();
                         self.failure = Some(WORKER_GONE.into());
                         self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
+                        self.record_event(
+                            "operation_finished",
+                            serde_json::json!({
+                                "operation": self.action, "result": "interrupted",
+                                "summary": self.status, "error": self.failure,
+                                "failure": failure_json(self.failure_evidence.as_ref()),
+                            }),
+                        );
+                        self.operation_id = None;
                         finished = true;
                         break;
                     }
@@ -1325,16 +1601,26 @@ impl App {
         if let Some(target) = planned {
             self.back_up_and_authorize(target);
         }
+        if let Some((target, options)) = recovery_planned {
+            let plan = self
+                .rows
+                .iter()
+                .filter_map(gui_pair)
+                .map(|(label, value)| format!("{label}: {value}"))
+                .collect();
+            self.ask(target, Sheet::Recovery { options, plan });
+        }
         let due = self.diagnostic_checked.is_none_or(|checked| {
             finished || (self.running() && checked.elapsed() >= DIAGNOSTIC_REFRESH)
         });
         if self.diagnostics_open && due {
             self.refresh_diagnostic_view();
         }
-        if (finished || profiled || origin_done)
+        if (finished || profiled || origin_done || report_done)
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
+            && self.report_rx.is_none()
         {
             vec![Effect::StopTicking]
         } else {
@@ -1396,7 +1682,12 @@ impl App {
         match origin {
             Some(Ok(origin)) => vec![
                 Item::Origin(*origin),
-                Item::Note(origin.explanation().into()),
+                Item::Note(match origin {
+                    workflow::FileOrigin::OemLikely => {
+                        "Matches known OEM firmware; drive compatibility is unverified.".into()
+                    }
+                    _ => origin.explanation().into(),
+                }),
             ],
             Some(Err(error)) => vec![
                 Item::Origin(workflow::FileOrigin::Unknown),
@@ -1444,14 +1735,20 @@ impl App {
                 // activity log names it ("  reading normal...") like the small ones.
                 if self.progress.as_ref().is_none_or(|(l, _, _)| *l != label) {
                     self.log.push(format!("  {label}..."));
+                    self.record_event("stage", serde_json::json!({"name": label, "total": total}));
                 }
                 self.progress = Some((label, done, total));
             }
             Event::Report(report) => {
                 for row in report.rows {
                     match row.gui_label.as_deref() {
+                        Some("Diagnostic warning") => {
+                            self.logging_warning = Some(row.value.plain())
+                        }
                         Some(DIAGNOSTIC_FIELD) => {
-                            self.diagnostic_log = Some(row.value.plain().into())
+                            let path = row.value.plain();
+                            self.record_event("diagnostic", serde_json::json!({"log_file": path}));
+                            self.diagnostic_log = Some(path.into())
                         }
                         Some(_) => self.rows.push(row),
                         None => {}
@@ -1464,8 +1761,19 @@ impl App {
     }
 
     pub(crate) fn diagnostic_text(&self) -> std::io::Result<String> {
-        match &self.diagnostic_log {
-            Some(path) => std::fs::read_to_string(path),
+        let saved = self.diagnostic_log.as_ref().map(std::fs::read_to_string);
+        if let Some(Ok(text)) = saved.as_ref() {
+            return Ok(text.clone());
+        }
+        if self.failure.is_some() {
+            return Ok(format!(
+                "In-memory diagnostics; no diagnostic file was saved.\n{}\n{}",
+                self.log.join("\n"),
+                self.failure.as_deref().unwrap_or_default()
+            ));
+        }
+        match saved {
+            Some(result) => result,
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "No diagnostic log is available for this operation.",
@@ -1625,6 +1933,7 @@ impl App {
             },
             Task::Recovery => {
                 let mut items = vec![
+                    Item::Warning(FORCE_WARNING.into()),
                     Item::Heading("Current firmware".into()),
                     Item::Check {
                         id: CheckId::RecoveryReadFromDrive,
@@ -1641,6 +1950,7 @@ impl App {
                 ];
                 if self.recovery_without_current() {
                     items = vec![
+                        Item::Warning(FORCE_WARNING.into()),
                         Item::Heading("Current firmware (optional receiver reference)".into()),
                         path("Choose Current file or TAR…", Pick::RecoveryCurrent, true, &self.recovery_current),
                         Item::Note("If live receiver code cannot be read, select the firmware currently running—not the firmware to install. For BH16NS40 INTM, select the TAR's intermediate.bin.".into()),
@@ -1675,6 +1985,22 @@ impl App {
                             .collect(),
                     });
                 }
+                items.extend([
+                    Item::Heading(
+                        if self.recovery_without_current() {
+                            "Firmware to flash"
+                        } else {
+                            "Firmware to flash (Kernel + Normal)"
+                        }
+                        .into(),
+                    ),
+                    path(
+                        "Choose firmware…",
+                        Pick::RecoveryInput,
+                        true,
+                        &self.recovery_input,
+                    ),
+                ]);
                 if self.recovery_members.len() > 1 {
                     items.push(Item::Note(
                         "Select exactly one image to recover. No second stage will run.".into(),
@@ -1702,36 +2028,17 @@ impl App {
                             .collect(),
                     });
                 }
-                items.extend([
-                    Item::Heading(
-                        if self.recovery_without_current() {
-                            "Firmware to flash"
-                        } else {
-                            "Firmware to flash (Kernel + Normal)"
-                        }
-                        .into(),
-                    ),
-                    path(
-                        "Choose firmware…",
-                        Pick::RecoveryInput,
-                        true,
-                        &self.recovery_input,
-                    ),
-                ]);
                 if self.recovery_input.is_some() {
                     items.extend(self.origin_items(true));
                 }
-                items.extend([
-                    Item::Warning(FORCE_WARNING.into()),
-                    Item::Buttons {
-                        label: None,
-                        buttons: vec![Button::primary(
-                            "Recover",
-                            Input::Recover,
-                            enabled && self.recovery_ready(),
-                        )],
-                    },
-                ]);
+                items.extend([Item::Buttons {
+                    label: None,
+                    buttons: vec![Button::primary(
+                        "Recover",
+                        Input::Recover,
+                        enabled && self.recovery_ready(),
+                    )],
+                }]);
                 items
             }
         }
@@ -1797,16 +2104,35 @@ impl App {
     fn status_view(&self) -> Status {
         let running = self.running();
         let analysis = matches!(self.task, Task::Inspect | Task::Compare);
+        let text = if running {
+            match &self.progress {
+                Some((label, done, total)) if *total > 0 => {
+                    format!(
+                        "{} — {label} ({}%)",
+                        self.action,
+                        done.saturating_mul(100) / total
+                    )
+                }
+                Some((label, _, _)) => format!("{} — {label}", self.action),
+                None => self.status.clone(),
+            }
+        } else {
+            self.status.clone()
+        };
         Status {
-            text: self.status.clone(),
+            text,
             running,
             progress: running.then(|| match &self.progress {
                 Some((label, done, total)) => Progress {
-                    label: label.clone(),
+                    label: if label.is_empty() {
+                        "Working…".into()
+                    } else {
+                        String::new()
+                    },
                     fraction: Some(*done as f32 / (*total).max(1) as f32),
                 },
                 None => Progress {
-                    label: "Preparing…".into(),
+                    label: String::new(),
                     fraction: None,
                 },
             }),
@@ -1819,6 +2145,7 @@ impl App {
     fn results_view(&self) -> Results {
         let analysis = matches!(self.task, Task::Inspect | Task::Compare);
         let info = self.result_task == Task::Info && self.info_result && !self.rows.is_empty();
+        let concise = matches!(self.task, Task::Flash | Task::Recovery);
         Results {
             open_results: (analysis && self.analysis.is_some())
                 .then(|| Button::new("Open results…", Input::OpenResults, true)),
@@ -1827,7 +2154,7 @@ impl App {
             } else {
                 Vec::new()
             },
-            fields: if info {
+            fields: if info || concise {
                 Vec::new()
             } else {
                 self.rows.iter().filter_map(gui_pair).collect()
@@ -1840,8 +2167,25 @@ impl App {
                     true,
                 ),
             }),
-            notice: self.diagnostic_notice.clone(),
-            view_log: Button::new("View diagnostic log…", Input::OpenDiagnostics, true),
+            notice: match (&self.logging_warning, &self.diagnostic_notice) {
+                (Some(warning), Some(notice)) => Some(format!("{warning}\n{notice}")),
+                (Some(warning), None) => Some(warning.clone()),
+                (None, notice) => notice.clone(),
+            },
+            view_log: Button::new(
+                "View Log",
+                Input::ViewLog,
+                self.diagnostic_log.is_some() || self.failure.is_some(),
+            ),
+            submit_report: if self.report_rx.is_some() {
+                Button::new(
+                    "Cancel report",
+                    Input::CancelReport,
+                    self.report_control.as_ref().is_some_and(|c| !c.cancelled()),
+                )
+            } else {
+                Button::new("Submit Report", Input::SubmitReport, self.journal.is_some())
+            },
         }
     }
 
@@ -1851,18 +2195,19 @@ impl App {
             format!("Image: {}", pending.target.options.input.display()),
         ];
         let (recovery, warnings, prompt) = match &pending.sheet {
-            Sheet::Recovery(current) => {
-                details.push(match current {
+            Sheet::Recovery { options, plan } => {
+                details.extend(plan.iter().cloned());
+                details.push(match &options.current {
                     CurrentFirmware::NotRequired => {
                         "Receiver detected directly; no Current firmware required".into()
                     }
                     CurrentFirmware::File(path) => format!("Current: {}", path.display()),
                     CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
                 });
-                if let Some(member) = &self.recovery_current_member {
+                if let Some(member) = &options.current_member {
                     details.push(format!("Current member (receiver reference): {member}"));
                 }
-                if let Some(member) = &self.recovery_member {
+                if let Some(member) = &options.member {
                     details.push(format!("Target member (will be flashed): {member}"));
                 }
                 (true, vec![FORCE_WARNING.to_string()], None)
@@ -1926,7 +2271,11 @@ impl App {
                 .diagnostic_log
                 .as_ref()
                 .map(|p| p.display().to_string()),
-            notice: self.diagnostic_notice.clone(),
+            notice: match (&self.logging_warning, &self.diagnostic_notice) {
+                (Some(warning), Some(notice)) => Some(format!("{warning}\n{notice}")),
+                (Some(warning), None) => Some(warning.clone()),
+                (None, notice) => notice.clone(),
+            },
             lines: self.diagnostic_lines.clone(),
         }
     }
@@ -1938,8 +2287,48 @@ impl Default for App {
     }
 }
 
+fn failure_json(evidence: Option<&workflow::UpdateFailure>) -> serde_json::Value {
+    match evidence {
+        Some(e) => serde_json::json!({
+            "phase": e.phase, "write_started": e.write_started,
+            "temporary_firmware": e.temporary_firmware, "completed_stages": e.completed_stages,
+            "safe_to_probe": false,
+        }),
+        None => serde_json::json!({
+            "phase": "unknown", "write_started": null, "temporary_firmware": null,
+            "completed_stages": null, "safe_to_probe": false,
+        }),
+    }
+}
+
+fn outcome_json(outcome: &workflow::UpdateOutcome) -> serde_json::Value {
+    match outcome {
+        workflow::UpdateOutcome::Planned => serde_json::json!({"state": "planned"}),
+        workflow::UpdateOutcome::Completed(e) => serde_json::json!({
+            "state": "completed", "target_started": e.target_started,
+            "target_identity": e.target_identity,
+            "verified_regions": e.verified_regions, "unverified_regions": e.unverified_regions,
+            "completed_stages": e.completed_stages, "temporary_firmware": e.temporary_firmware,
+            "fully_verified": outcome.fully_verified(), "safe_to_probe": outcome.safe_to_probe(),
+        }),
+    }
+}
+
+fn post_update_snapshot(
+    result: &Result<Option<workflow::UpdateOutcome>, String>,
+    probe: impl FnOnce() -> String,
+) -> Option<String> {
+    result
+        .as_ref()
+        .ok()
+        .and_then(Option::as_ref)
+        .filter(|outcome| outcome.safe_to_probe())
+        .map(|_| probe())
+}
+
 /// The worker: one job, every event forwarded, a panic reported as a failure.
-fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
+fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operation_id: String) {
+    let check_after = matches!(job, Job::Flash(_) | Job::Recovery(_));
     let wake = {
         let waker = waker.clone();
         move || {
@@ -1961,17 +2350,41 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
                     tx: tx.clone(),
                     waker: waker.clone(),
                 };
-                if let Some(result) = ops::execute(device, &job, &mut sheet)? {
-                    let _ = tx.send(Msg::Analysis(result));
-                }
-                anyhow::Ok(())
+                workflow::with_operation_id(&operation_id, || {
+                    match ops::execute(device, &job, &mut sheet)? {
+                        ops::JobResult::Analysis(result) => {
+                            let _ = tx.send(Msg::Analysis(result));
+                            Ok(None)
+                        }
+                        ops::JobResult::Update(outcome) => Ok(Some(outcome)),
+                        ops::JobResult::Complete => Ok(None),
+                    }
+                })
             },
         )
     }));
     let result = match result {
-        Ok(result) => result.map_err(|e| format!("{e:#}")),
+        Ok(result) => result.map_err(|e: anyhow::Error| {
+            if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
+                let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
+            }
+            format!("{e:#}")
+        }),
         Err(_) => Err(WORKER_PANIC.into()),
     };
+    if check_after {
+        if let Some(after) = post_update_snapshot(&result, || {
+            ops::enumerate()
+                .into_iter()
+                .find(|drive| drive.path == device)
+                .map_or_else(
+                    || "Drive not detected after operation".to_owned(),
+                    |drive| drive.display(),
+                )
+        }) {
+            let _ = tx.send(Msg::DriveAfter(after));
+        }
+    }
     let _ = tx.send(Msg::Done(result));
     wake();
 }

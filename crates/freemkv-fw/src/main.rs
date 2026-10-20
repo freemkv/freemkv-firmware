@@ -36,6 +36,7 @@ use clap::{Parser, Subcommand};
 // *library* (see `src/lib.rs`), so this CLI and the desktop GUI share one code
 // path and cannot drift.
 use freemkv_flash::{platform, style};
+use freemkv_fw::boot::{BootFeature, BootSettings, BootSupport};
 use freemkv_fw::scheme::{
     select_scheme, Family, IntegrityScheme, MtkCmac, RegionChange, RegionVerdict,
 };
@@ -54,6 +55,13 @@ enum Command {
     /// Create freemkv firmware from an OEM image: hijack the `READ BUFFER`
     /// (`0x3C`) handler via the platform engine and re-sign.
     Create {
+        /// Boot setting (repeatable): unrestricted/hrl/encryption=on|off|oem,
+        /// speed=oem|uncapped, region=oem|free. Applied on every boot.
+        #[arg(long = "default", value_name = "FEATURE=VALUE")]
+        defaults: Vec<String>,
+        /// Build and validate the requested settings without writing an output file.
+        #[arg(long)]
+        dry_run: bool,
         /// Source OEM firmware image (.bin) or release package (.tar).
         input: PathBuf,
         /// Output path (default preserves the input BIN/TAR format).
@@ -151,7 +159,19 @@ fn main() -> ExitCode {
                 json,
                 base,
                 audit,
-            } => cmd_create(&input, output, in_place, json, base, audit),
+                defaults,
+                dry_run,
+            } => BootSettings::parse(&defaults).and_then(|defaults| {
+                cmd_create_configured(
+                    &input,
+                    output,
+                    in_place,
+                    json,
+                    base,
+                    audit,
+                    &CreateSettings { defaults, dry_run },
+                )
+            }),
             Command::Verify { path, family } => cmd_verify(&path, family),
             Command::Info {
                 device,
@@ -646,6 +666,12 @@ fn default_created_path(input: &Path) -> PathBuf {
     ))
 }
 
+struct CreateSettings {
+    defaults: BootSettings,
+    dry_run: bool,
+}
+
+#[cfg(test)]
 fn cmd_create(
     path: &Path,
     out: Option<PathBuf>,
@@ -653,6 +679,29 @@ fn cmd_create(
     json: bool,
     base: bool,
     audit: bool,
+) -> Result<ExitCode> {
+    cmd_create_configured(
+        path,
+        out,
+        in_place,
+        json,
+        base,
+        audit,
+        &CreateSettings {
+            defaults: BootSettings::standard(),
+            dry_run: false,
+        },
+    )
+}
+
+fn cmd_create_configured(
+    path: &Path,
+    out: Option<PathBuf>,
+    in_place: bool,
+    json: bool,
+    base: bool,
+    audit: bool,
+    settings: &CreateSettings,
 ) -> Result<ExitCode> {
     let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
 
@@ -681,14 +730,27 @@ fn cmd_create(
     // publish gate. On success the report's grounded facts tell us which feature
     // gates actually resolved for THIS image.
     if base {
-        let outcome = api::create(&image).context("building freemkv BASE firmware")?;
-        diagnostics::record(base_report_json(&outcome));
-        diagnostics::write(&out_path, &artifact.output(outcome.image().to_vec())?)
-            .with_context(|| format!("writing {}", out_path.display()))?;
+        let outcome = api::create_with_defaults(&image, &settings.defaults)
+            .context("building freemkv BASE firmware")?;
+        let support = BootSupport::from_create(&outcome.report);
+        let report_json = settings
+            .defaults
+            .report_json(&support, &base_report_json(&outcome));
+        diagnostics::record(&report_json);
+        if !settings.dry_run {
+            diagnostics::write(&out_path, &artifact.output(outcome.image().to_vec())?)
+                .with_context(|| format!("writing {}", out_path.display()))?;
+        }
         if json {
-            println!("{}", base_report_json(&outcome));
+            println!("{report_json}");
         } else {
-            print_base_report(&outcome, &out_path);
+            if !settings.dry_run {
+                print_base_report(&outcome, &out_path);
+            }
+            print_boot_settings(&settings.defaults, &support);
+            if settings.dry_run {
+                println!("Dry run: no output written");
+            }
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -701,14 +763,19 @@ fn cmd_create(
         "modify: engine={} audit={audit} base={base} json={json} output={out_path:?}",
         engine.name()
     ));
-    let report = engine.modify(&image).context("building freemkv firmware")?;
-    diagnostics::record(report.to_json());
+    let (report, support) = api::modify_with_defaults(&image, &settings.defaults)
+        .context("building freemkv firmware")?;
+    let report_json = settings.defaults.report_json(&support, &report.to_json());
+    diagnostics::record(&report_json);
 
     // Zero levers Applied: refuse and write nothing. `--json` still emits the
     // report so tooling can read why; the human report shows the per-lever table.
-    if let Some(why) = report.refusal() {
+    if let Some(why) = report
+        .refusal()
+        .filter(|_| freemkv_fw::boot::inspect(&image).ok().flatten().is_none())
+    {
         if json {
-            println!("{}", report.to_json());
+            println!("{report_json}");
         } else {
             print_modify_report(&report, None, 0);
             if why == engine::lever::NOT_MODIFIABLE {
@@ -752,16 +819,42 @@ fn cmd_create(
         }
     }
 
-    diagnostics::write(&out_path, &artifact.output(report.image.clone())?)
-        .with_context(|| format!("writing {}", out_path.display()))?;
+    if !settings.dry_run {
+        diagnostics::write(&out_path, &artifact.output(report.image.clone())?)
+            .with_context(|| format!("writing {}", out_path.display()))?;
+    }
 
     if json {
-        println!("{}", report.to_json());
+        println!("{report_json}");
     } else {
-        print_modify_report(&report, Some(&out_path), verdicts.len());
+        print_modify_report(
+            &report,
+            if settings.dry_run {
+                None
+            } else {
+                Some(&out_path)
+            },
+            verdicts.len(),
+        );
+        print_boot_settings(&settings.defaults, &support);
+        if settings.dry_run {
+            println!("Dry run: no output written");
+        }
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn print_boot_settings(defaults: &BootSettings, support: &BootSupport) {
+    println!("Boot settings (applied each time the drive starts):");
+    for feature in BootFeature::ALL {
+        let value = if support.supports(feature) {
+            defaults.label(feature)
+        } else {
+            "Not supported by this firmware"
+        };
+        println!("  {:<22} {value}", feature.label());
+    }
 }
 
 /// The truthful per-feature availability for a STRICT base build, derived from

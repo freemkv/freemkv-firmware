@@ -6,6 +6,68 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.4] - Unreleased
+
+### freemkv Modify
+- Reload each selected image's boot settings, including when a file is
+  reselected; discard settings and pending analysis from the previous image.
+- Add shared boot settings to the desktop Create form and repeatable CLI
+  `--default FEATURE=VALUE` options. Apply these choices on every boot without
+  overlaying saved drive settings. Runtime changes remain available.
+- Add Reset to defaults: unrestricted access On; HRL, encryption, speed, and
+  region use OEM behavior. Region choices are OEM behavior or region-free.
+- Check feature availability before creation, reject unsupported explicit
+  choices, and report resolved settings in human and JSON output. Add
+  `--dry-run` for previews without writing firmware.
+- Reopen newly generated BIN/TAR firmware to edit its boot settings. Preserve
+  intermediate firmware and package provenance; older modified images require
+  their original OEM source. Firmware behavior has automated structural and
+  instruction-level coverage; physical drive validation remains outstanding.
+
+### freemkv-flash
+- Prepare Recovery before confirmation and show its receiver, transfer layout,
+  and any temporary Kernel/restoration passes. Preparation cannot write firmware.
+- Keep detailed Flash/Recovery errors and exportable in-memory diagnostics
+  available when file logging fails.
+- Bound every report HTTP request and the overall submission, add Cancel report,
+  and bound history event size, selected history, scanned history, and log copying.
+- Update the report HTTP client to ureq 3 and current TLS roots, resolving
+  the dependency audit failure without suppressing the advisory.
+- Save session events and linked operation logs automatically, and prepare a
+  report bundle for the user-approved website submission flow.
+- Simplify Flash and Recovery results to a current progress line, a concise
+  result, and View Log / Submit Report actions. Place Recovery's warning at the
+  top and its archive image selector beside the firmware file it belongs to.
+- Derive Pioneer BD or DVR update entry from decoded installed Kernel evidence,
+  including the PR1AME 1.05 case, instead of the product name. Keep live
+  identity and receiver compatibility checks before any write.
+- Clear a previous Flash or Recovery result when its selected inputs change.
+- Apply Pioneer Kernel generation downgrade preparation in Recovery. When the
+  installed receiver rejects a target `0xFF` or `0x00` marker, write and verify
+  a temporary `0x01` Kernel, then restore and verify the pristine OEM Kernel.
+  Select each Kernel transfer layout from the loader active for that pass.
+  Cover the reported WX1DM `0000` to S12JX 1.03 case with the supplied files.
+
+- Derive MediaTek header and body transfer encoding separately from receiver
+  code. INTM to 1.V9 now prepares an encrypted header with a plaintext body and
+  preserves the boot region. Validate the descriptor and programmed ranges
+  before transfer; do not retry a rejected write with a different encoding.
+- Preflight every known stage before an intermediate write, then revalidate the
+  physical receiver at each handoff. Keep Current-file evidence distinct from
+  live reads, and represent unavailable installed firmware explicitly.
+- Move Pioneer Flash and Recovery sequencing into one optical executor, including
+  startup settings, downgrade preparation, transfer layout, and OEM restoration.
+- Bind Pioneer OEM identities to their firmware headers, including PLEXTOR and
+  TEAC variants, and compare revisions using INQUIRY's four-byte field width.
+- Require target identity and verification evidence for completion. Report
+  unreadable regions as limited verification, retain the failed phase and any
+  temporary firmware state, and avoid automatic probing after an uncertain write.
+- Correlate saved logs and session events by operation ID. Surface persistence
+  failures and interrupted workers, retaining unsaved events for report export.
+- Add receiver, staged-update, verification, and diagnostics regressions while
+  retaining existing coverage. Offline tests cover the reported INTM to 1.V9
+  path; a successful physical transition still needs user validation.
+
 ## [0.13.3] - 2026-10-19
 
 ### freemkv-flash

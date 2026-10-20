@@ -12,6 +12,8 @@
 /// Stable machine id for a lever, independent of the engine that implements it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LeverId {
+    /// Editable startup defaults in a recognized firmware image.
+    BootSettings,
     /// The vendor-command handler + DumpAll — the base that makes toggles addressable.
     Identity,
     /// Region-free (RPC-1).
@@ -28,6 +30,7 @@ impl LeverId {
     /// Human label used in the report.
     pub fn label(self) -> &'static str {
         match self {
+            LeverId::BootSettings => "Boot settings",
             LeverId::Identity => "Identity",
             LeverId::RegionFree => "Region Free",
             LeverId::RawRead => "Raw read",
@@ -39,6 +42,7 @@ impl LeverId {
     /// Stable serialization key.
     pub fn key(self) -> &'static str {
         match self {
+            LeverId::BootSettings => "BootSettings",
             LeverId::Identity => "Identity",
             LeverId::RegionFree => "RegionFree",
             LeverId::RawRead => "RawRead",

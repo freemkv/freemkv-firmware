@@ -24,9 +24,37 @@ fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
             source: pioneer_optical::drive::Error::Transport(source()),
         },
     ] {
-        let error = prepared_error(error);
+        let error = execution_error(
+            pioneer_optical::receiver::ExecutionError::Flash(error),
+            true,
+            1,
+        );
+        let typed = error
+            .downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>()
+            .unwrap();
+        let source = match typed {
+            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Preflight {
+                source,
+                ..
+            }) => source,
+            pioneer_optical::receiver::ExecutionError::Flash(
+                FlashError::DescriptorRead {
+                    source: pioneer_optical::drive::Error::Transport(source),
+                    ..
+                }
+                | FlashError::Readback {
+                    source: pioneer_optical::drive::Error::Transport(source),
+                    ..
+                },
+            ) => source,
+            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
+                source: UpdateError::Finish(pioneer_optical::drive::Error::Transport(source)),
+                ..
+            }) => source,
+            other => panic!("unexpected failure: {other:?}"),
+        };
         assert_eq!(
-            error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            source.downcast_ref::<std::io::Error>().unwrap().kind(),
             std::io::ErrorKind::BrokenPipe
         );
         assert!(format!("{error:#}").contains("temporary Kernel may remain installed"));
@@ -49,11 +77,14 @@ fn execute_flash(
     };
     crate::engine::guard_no_medium(dev, true)?;
     let shared = SharedDevice::new(dev);
-    let class = resolve_class(transport::identify_on(&shared))?;
+    let class = DriveClass::Bd;
     let mut port = ScsiTransport::flash(&shared);
     let mut runtime = Runtime {
         device: &shared,
+        sleep: &mut |_| {},
         start: Instant::now(),
+        waited: Duration::ZERO,
+        completed_passes: 0,
         kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
         normal: style::Progress::new("flashing normal", normal.len()),
     };
@@ -67,7 +98,191 @@ fn execute_flash(
             recover: false,
         },
     )
-    .map_err(update_error)
+    .map_err(|error| {
+        execution_error(
+            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
+                pass: FlashPass::Initial,
+                source: error,
+            }),
+            false,
+            0,
+        )
+    })
+}
+
+#[test]
+fn pr1ame_1_05_real_kernel_passes_flash_entry_preflight() {
+    struct Pr1ame {
+        device_type: u8,
+        hardware: &'static [u8; 8],
+        vendor: &'static [u8; 8],
+        product: &'static [u8; 16],
+        tag: &'static [u8; 8],
+        writes: usize,
+    }
+    impl ScsiDevice for Pr1ame {
+        fn medium_status(&mut self) -> Result<crate::platform::MediumStatus> {
+            Ok(crate::platform::MediumStatus::ClosedEmpty)
+        }
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            let mut out = vec![0; len];
+            if cdb[0] == 0x12 {
+                out[0] = self.device_type;
+                out[8..16].copy_from_slice(self.vendor);
+                out[16..32].copy_from_slice(self.product);
+                out[32..36].copy_from_slice(b"1.05");
+            } else if cdb == pioneer_optical::cdb::vendor_identity() {
+                out[16..24].copy_from_slice(self.hardware);
+                out[24..32].copy_from_slice(self.tag);
+                out[32..40].copy_from_slice(self.tag);
+            } else if cdb == pioneer_optical::cdb::read_memory(0x410000, 16) {
+                return Ok(b"PIONEER TEST-NEW".to_vec());
+            } else if cdb == pioneer_optical::cdb::read_parameter_word(0x9f).unwrap() {
+                return Ok(0xffffu16.to_be_bytes().to_vec());
+            } else {
+                anyhow::bail!("unexpected read {cdb:02x?}");
+            }
+            Ok(out)
+        }
+        fn command_out(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+            if cdb == pioneer_optical::cdb::knock() && bytes.is_empty() {
+                return Ok(());
+            }
+            self.writes += 1;
+            anyhow::bail!("preflight must not write")
+        }
+        fn command_out_strict(&mut self, cdb: &[u8], _: &[u8]) -> Result<()> {
+            assert_eq!(cdb, pioneer_optical::cdb::enter_update());
+            self.writes += 1;
+            anyhow::bail!("deliberate stop at update entry")
+        }
+        fn describe(&self) -> String {
+            "PR1AME 1.05".into()
+        }
+    }
+    const KERNEL: &[u8] = include_bytes!("../../../tests/fixtures/pioneer/pr1ame_1_05_kernel.enc");
+    use pioneer_optical::envelope::{
+        builder::{encode_normal_for_kernel, NormalKeySource, NormalSignature},
+        signature::SigningKey,
+        Envelope,
+    };
+    let installed = Envelope::load(KERNEL).unwrap();
+    let source = super::super::prepared_tests::pair(false, 1);
+    let mut normal_header = KERNEL[..512].to_vec();
+    let label = b"File Type : Kernel";
+    let offset = normal_header
+        .windows(label.len())
+        .position(|bytes| bytes == label)
+        .unwrap()
+        + label.len()
+        - 6;
+    normal_header[offset..offset + 6].copy_from_slice(b"Normal");
+    let mut scalar = [0; 20];
+    scalar[19] = 5;
+    let signer = SigningKey::from_bytes(scalar).unwrap();
+    let max_exception = pioneer_optical::envelope::kernel_xor_branches(&installed.image)[0]
+        .1
+        .into_iter()
+        .max()
+        .unwrap() as usize;
+    let length = (max_exception + 4).max(0x2000).div_ceil(0x100) * 0x100;
+    let mut normal_image = source.normal().image.clone();
+    let old_end = normal_image.len() - 4;
+    normal_image[old_end..].fill(0);
+    normal_image.resize(length, 0);
+    normal_image[20..24].copy_from_slice(&(length as u32).to_be_bytes());
+    let sum = normal_image
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
+        });
+    normal_image[length - 4..].copy_from_slice(&sum.wrapping_neg().to_be_bytes());
+    let normal_bytes = encode_normal_for_kernel(
+        &installed.image,
+        &normal_image,
+        &normal_header,
+        NormalKeySource::Seed(11),
+        NormalSignature::Sign(&signer),
+    )
+    .unwrap();
+    let normal = Envelope::load_with_kernel(&normal_bytes, &installed).unwrap();
+    let receiver =
+        pioneer_optical::receiver::Receiver::detect_with_kernel(&normal, &installed).unwrap();
+    let plan = receiver
+        .prepare_normal_without_family_check(&normal_bytes)
+        .unwrap();
+    for (device_type, vendor, product, hardware, tag, should_pass) in [
+        (
+            5,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID90    ",
+            true,
+        ),
+        (
+            5,
+            b"PIONEER ",
+            b"UNUSUAL PRODUCT ",
+            b"SAT 8000",
+            b"ID90    ",
+            true,
+        ),
+        (
+            5,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8800",
+            b"ID90    ",
+            false,
+        ),
+        (
+            5,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID88    ",
+            false,
+        ),
+        (
+            5,
+            b"NOTOEM  ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID90    ",
+            false,
+        ),
+        (
+            0,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID90    ",
+            false,
+        ),
+    ] {
+        let mut drive = Pr1ame {
+            device_type,
+            hardware,
+            vendor,
+            product,
+            tag,
+            writes: 0,
+        };
+        let error = execute_with_sleep(
+            &mut crate::engine::gates::ungated_for_tests(&mut drive),
+            PreparedFlash::Normal(&plan),
+            ExecutionMode::Flash,
+            &mut |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(drive.writes, usize::from(should_pass), "{error:#}");
+        if should_pass {
+            assert!(format!("{error:#}").contains("deliberate stop at update entry"));
+        }
+    }
 }
 
 /// A BD-generation INQUIRY response (36+ bytes): `PIONEER` / `BD-RW   BDR-UD04`
@@ -224,7 +439,15 @@ fn aborts_before_any_transfer_when_drive_not_in_update_state() {
     let normal = ud04_normal(0x0010_0000 + 0x100);
     let mut dev = BadEntry { writes: Vec::new() };
     let err = execute_flash(&mut dev, &ud04_control(), None, &normal).unwrap_err();
-    assert!(format!("{err:#}").contains("post-entry update state"));
+    assert!(matches!(
+        err.downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>(),
+        Some(pioneer_optical::receiver::ExecutionError::Flash(
+            FlashError::Update {
+                source: UpdateError::EntryState { .. },
+                ..
+            }
+        ))
+    ));
     // Only the entry write happened; NO Normal chunk or finish followed.
     assert_eq!(dev.writes.len(), 1);
     assert_eq!(dev.writes[0][..3], [0x3b, 0x04, 0xff]);
@@ -241,7 +464,7 @@ fn a_failed_mid_transfer_write_aborts_with_a_recovery_hint() {
     };
     let err = execute_flash(&mut dev, &ud04_control(), None, &normal).unwrap_err();
     let msg = format!("{err:#}");
-    assert!(msg.contains("Normal") && msg.contains("re-flash the captured"));
+    assert!(msg.contains("Normal") && msg.contains("pre-flash backup"));
     // No finish (05/FF) was sent after the failed transfer.
     assert!(!dev.writes.iter().any(|(c, _)| c[..3] == [0x3b, 0x05, 0xff]));
 }
@@ -403,7 +626,15 @@ fn post_entry_identity_gate_aborts_a_degraded_receiver() {
     // The post-entry identity gate aborts before any transfer.
     let mut normal_dev = Degraded::default();
     let err = execute_flash(&mut normal_dev, &ud04_control(), None, &normal).unwrap_err();
-    assert!(format!("{err:#}").contains("post-entry update state"));
+    assert!(matches!(
+        err.downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>(),
+        Some(pioneer_optical::receiver::ExecutionError::Flash(
+            FlashError::Update {
+                source: UpdateError::EntryState { .. },
+                ..
+            }
+        ))
+    ));
     assert!(!normal_dev.finished, "a gated flash must not reach finish");
 }
 
@@ -449,60 +680,48 @@ fn ud04_self_flash_control_and_wire_bytes_are_byte_exact() {
     assert_eq!(sent, normal);
 }
 
-/// A mock that answers INQUIRY / the vendor identity with a chosen product.
-struct Ident(&'static [u8; 16]);
-impl ScsiDevice for Ident {
-    fn command_in(&mut self, cdb: &[u8], alloc: usize) -> Result<Vec<u8>> {
-        let mut r = vec![0u8; alloc.max(36)];
-        if cdb.first() == Some(&0x12) {
-            r[8..16].copy_from_slice(b"PIONEER ");
-            r[16..32].copy_from_slice(self.0);
-        }
-        Ok(r)
-    }
-    fn command_out(&mut self, _cdb: &[u8], _d: &[u8]) -> Result<()> {
-        Ok(())
-    }
-    fn describe(&self) -> String {
-        "ident".into()
-    }
-}
-
 #[test]
-fn class_follows_an_unambiguous_identity() {
-    let id = transport::identify(&mut Ident(b"BD-RW   BDR-UD04")).unwrap();
-    // The target need not profile: the drive's own identity decides.
-    assert_eq!(resolve_class(Ok(id)).unwrap(), DriveClass::Bd);
-}
-
-#[test]
-fn ambiguous_identity_is_refused_before_any_write() {
-    // Neither BD nor DVD-R/DVR.
-    let id = transport::identify(&mut Ident(b"CD-RW   UNKNOWN1")).unwrap();
-    let err = resolve_class(Ok(id)).unwrap_err();
-    assert!(format!("{err:#}").contains("refusing before any write"));
-    // An unreadable identity is equally ambiguous.
-    let err = resolve_class(Err(anyhow::anyhow!("no identity"))).unwrap_err();
-    assert!(format!("{err:#}").contains("refusing before any write"));
-}
-
-#[test]
-fn error_guidance_distinguishes_no_transfer_from_unverified_completion() {
+fn error_guidance_retains_phase_and_uncertain_completion() {
     let cause = || pioneer_optical::drive::Error::Transport(anyhow!("device disconnected"));
-    for error in [
-        UpdateError::Entry(cause()),
-        UpdateError::EntryStateRead(cause()),
+    for (source, expected_code) in [
+        (UpdateError::Entry(cause()), "pioneer.transfer.entry"),
+        (
+            UpdateError::EntryStateRead(cause()),
+            "pioneer.transfer.entry_state_read",
+        ),
+        (
+            UpdateError::ReadyTimeout(cause()),
+            "pioneer.transfer.ready_timeout",
+        ),
     ] {
-        let message = format!("{:#}", update_error(error));
-        assert!(message.contains("no firmware data was transferred"));
+        let error = execution_error(
+            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
+                pass: FlashPass::Initial,
+                source,
+            }),
+            false,
+            0,
+        );
+        let typed = error
+            .downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>()
+            .unwrap();
+        let pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update { source, .. }) =
+            typed
+        else {
+            panic!("lost typed update cause")
+        };
+        assert_eq!(source.code(), expected_code);
+        let context = error
+            .downcast_ref::<crate::backend::UpdateFailure>()
+            .unwrap();
+        assert_eq!(context.phase, "firmware transfer");
+        assert!(context.write_started);
+        let message = format!("{error:#}");
         assert!(message.contains("device disconnected"));
-        assert!(message.contains("pioneer.transfer."));
-        assert!(!message.contains("partial firmware"));
+        assert!(message.contains("pioneer.flash.update"));
+        assert!(message.contains("completion was not verified"));
+        assert!(message.contains("pre-flash backup"));
     }
-    let message = format!("{:#}", update_error(UpdateError::ReadyTimeout(cause())));
-    assert!(message.contains("completion could not be verified"));
-    assert!(message.contains("pre-flash backup"));
-    assert!(!message.contains("no firmware data was transferred"));
 }
 
 #[test]

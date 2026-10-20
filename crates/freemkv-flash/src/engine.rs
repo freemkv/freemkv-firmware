@@ -379,7 +379,7 @@ pub fn recover(
     target: &[u8],
     execute: bool,
     acknowledged_risk: bool,
-) -> Result<()> {
+) -> Result<crate::backend::UpdateOutcome> {
     recover_identified(
         dev,
         drive,
@@ -401,7 +401,7 @@ pub fn recover_identified(
     target: &[u8],
     execute: bool,
     acknowledged_risk: bool,
-) -> Result<()> {
+) -> Result<crate::backend::UpdateOutcome> {
     let facet = drive
         .recovery()
         .with_context(|| format!("{} offers no recovery", drive.descriptor().id))?;
@@ -427,7 +427,8 @@ pub fn recover_identified(
 /// Run the `flash` command in two read-only stages around the backup:
 ///
 /// * dry run: tray warning, `plan`, the plan, the backend's preflight;
-/// * execute: tray, `plan`, acknowledgement, backup (saved, read back, and
+/// * execute: host output check, tray, `plan`, acknowledgement, readiness,
+///   backup (saved, read back, and
 ///   covering the update), the plan, `authorize`, the front-end's `confirm`,
 ///   tray again, then the write through a `gates::flash` grant.
 pub fn flash(
@@ -435,15 +436,19 @@ pub fn flash(
     drive: &dyn Backend,
     req: &FlashRequest,
     confirm: &mut dyn Confirm,
-) -> Result<()> {
+) -> Result<crate::backend::UpdateOutcome> {
     let facet = flash_facet(drive)?;
+    if req.execute {
+        required_backup_path(req)?;
+    }
     let plan = plan_flash(dev, drive, req)?;
     if !req.execute {
-        return dry_run(dev, drive, facet, &plan).map(drop);
+        return dry_run(dev, drive, facet, &plan).map(|_| crate::backend::UpdateOutcome::Planned);
     }
     if let Err(block) = check_safety(req.acknowledged_risk) {
         bail!("SAFETY GATE: {}", block.0);
     }
+    facet.preflight(&mut ReadDevice::for_backend(dev, drive), &plan)?;
     let saved = capture_required_backup(dev, drive, facet, &plan, req, confirm)?;
     let backup_line = match &saved {
         Some(s) => s.summary().to_string(),
@@ -561,8 +566,23 @@ pub fn render_plan_line(line: &PlanLine, backup: &str) -> String {
     }
 }
 
-/// Capture, save, read back and coverage-check the mandatory pre-flash backup.
-/// The proof carries the captured bytes (the installed firmware).
+/// Check host output before any potentially slow receiver reads; recheck before capture.
+fn required_backup_path(req: &FlashRequest) -> Result<&Path> {
+    let out = req
+        .predump_out
+        .as_deref()
+        .context("no preflash backup path supplied")?;
+    // Fail fast, before the multi-minute capture, if the destination is taken.
+    if out.symlink_metadata().is_ok() {
+        bail!(
+            "pre-flash backup path {} already exists (existing backups are never overwritten). \
+             Move/remove it or pass --backup <new-path>.",
+            out.display()
+        );
+    }
+    Ok(out)
+}
+
 /// Capture, save, read back and coverage-check the pre-flash backup.
 ///
 /// `Ok(Some(_))`: a usable rollback was saved. `Ok(None)`: the backup could not
@@ -579,18 +599,7 @@ fn capture_required_backup(
     req: &FlashRequest,
     confirm: &mut dyn Confirm,
 ) -> Result<Option<SavedBackup>> {
-    let out = req
-        .predump_out
-        .as_ref()
-        .context("no preflash backup path supplied")?;
-    // Fail fast, before the multi-minute capture, if the destination is taken.
-    if out.symlink_metadata().is_ok() {
-        bail!(
-            "pre-flash backup path {} already exists (existing backups are never overwritten). \
-             Move/remove it or pass --backup <new-path>.",
-            out.display()
-        );
-    }
+    let out = required_backup_path(req)?;
     let backup = drive.backup().with_context(|| {
         format!(
             "no proven restorable firmware backup for {}",

@@ -880,3 +880,102 @@ fn partial_note_is_absent_when_all_applied_or_none_applied() {
     let none = lever_report(vec![LeverReport::missed(LeverId::Speed, "x")]);
     assert!(partial_note(&none).is_none());
 }
+
+#[test]
+fn cli_boot_defaults_parse_and_dry_run_never_writes() {
+    let args = Cli::try_parse_from([
+        "freemkv-fw",
+        "create",
+        "in.bin",
+        "out.bin",
+        "--default",
+        "hrl=off",
+        "--default",
+        "enc=off",
+        "--dry-run",
+    ])
+    .unwrap();
+    let Command::Create {
+        defaults, dry_run, ..
+    } = args.command
+    else {
+        panic!("create")
+    };
+    let settings = CreateSettings {
+        defaults: BootSettings::parse(&defaults).unwrap(),
+        dry_run,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("input.bin");
+    let output = dir.path().join("output.bin");
+    std::fs::write(&input, bu40n_fixture()).unwrap();
+    std::fs::write(&output, b"keep existing output").unwrap();
+    cmd_create_configured(
+        &input,
+        Some(output.clone()),
+        false,
+        true,
+        false,
+        true,
+        &settings,
+    )
+    .unwrap();
+    assert_eq!(std::fs::read(output).unwrap(), b"keep existing output");
+    assert_eq!(std::fs::read(input).unwrap(), bu40n_fixture());
+}
+
+#[test]
+fn cli_custom_defaults_match_base_and_can_edit_a_generated_image() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("input.bin");
+    let normal = dir.path().join("normal.bin");
+    let strict = dir.path().join("base.bin");
+    let edited = dir.path().join("edited.bin");
+    std::fs::write(&input, bu40n_fixture()).unwrap();
+    let settings = CreateSettings {
+        defaults: BootSettings::parse(&["hrl=off".into(), "enc=off".into()]).unwrap(),
+        dry_run: false,
+    };
+    cmd_create_configured(
+        &input,
+        Some(normal.clone()),
+        false,
+        false,
+        false,
+        true,
+        &settings,
+    )
+    .unwrap();
+    cmd_create_configured(
+        &input,
+        Some(strict.clone()),
+        false,
+        true,
+        true,
+        false,
+        &settings,
+    )
+    .unwrap();
+    assert_eq!(
+        std::fs::read(&normal).unwrap(),
+        std::fs::read(strict).unwrap()
+    );
+    let reset = CreateSettings {
+        defaults: BootSettings::standard(),
+        dry_run: false,
+    };
+    cmd_create_configured(
+        &normal,
+        Some(edited.clone()),
+        false,
+        false,
+        false,
+        true,
+        &reset,
+    )
+    .unwrap();
+    let (read, _) = freemkv_fw::boot::inspect(&std::fs::read(edited).unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(read.flags(), reset.defaults.flags());
+}

@@ -1023,6 +1023,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
         bytes[at..at + 4].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
     }
     let mut kernel = vec![0; 0x10000];
+    crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
@@ -1261,5 +1262,5 @@ fn bundle_execute(drive: &Pioneer, dev: &mut dyn ScsiDevice, req: &FlashRequest)
     let plan = drive.plan(&mut ReadDevice::without_unlocks(dev), req)?;
     let authorized = authorize_installed(plan, None)?;
     let mut writer = crate::engine::gates::ungated_for_tests(dev);
-    drive.execute(&mut writer, &authorized)
+    drive.execute(&mut writer, &authorized).map(|_| ())
 }

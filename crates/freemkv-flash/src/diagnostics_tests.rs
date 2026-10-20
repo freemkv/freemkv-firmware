@@ -233,3 +233,59 @@ fn native_open_failure_is_in_the_operation_log() {
     assert!(text.contains("RESULT: error:"));
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn operation_id_is_in_actual_log_and_nested_scope_restores_after_panic() {
+    let directory = std::env::temp_dir().join(new_operation_id());
+    with_operation_id("outer-operation", || {
+        let _ = std::panic::catch_unwind(|| {
+            with_operation_id("inner-operation", || panic!("test unwind"));
+        });
+        run_at(&directory, "correlated", || Ok(())).unwrap();
+    });
+    let path = std::fs::read_dir(&directory)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let text = std::fs::read_to_string(path).unwrap();
+    assert!(text.contains("operation_id=outer-operation"));
+    assert!(!text.contains("operation_id=inner-operation"));
+    assert!(OPERATION_ID.with(|slot| slot.borrow().is_none()));
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn log_write_failure_surfaces_health_without_failing_the_operation() {
+    let directory = std::env::temp_dir().join(new_operation_id());
+    std::fs::create_dir_all(&directory).unwrap();
+    let readonly = directory.join("readonly");
+    std::fs::write(&readonly, "").unwrap();
+    let warnings = Arc::new(Mutex::new(Vec::new()));
+    let received = warnings.clone();
+    let result = crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic warning" {
+                        received.lock().unwrap().push(value);
+                    }
+                }
+            }
+        },
+        || {
+            run_at(&directory, "write failure", || {
+                LOG.with(|slot| {
+                    slot.borrow_mut().as_mut().unwrap().file = File::open(&readonly).unwrap()
+                });
+                record("This write fails, but must not abort an update.");
+                Ok(42)
+            })
+        },
+    );
+    assert_eq!(result.unwrap(), 42);
+    assert_eq!(warnings.lock().unwrap().len(), 1);
+    assert!(warnings.lock().unwrap()[0].contains("write failed"));
+    std::fs::remove_dir_all(directory).unwrap();
+}

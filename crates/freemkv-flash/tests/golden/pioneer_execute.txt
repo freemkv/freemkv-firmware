@@ -1,7 +1,7 @@
 
 === Pioneer execute: Kernel+Normal update ===
 result: OK
---- text (12) ---
+--- text (11) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -12,9 +12,8 @@ This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
-flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- events (13) ---
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- events (12) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -22,13 +21,12 @@ MSG        reading kernel...
 MSG        verifying kernel...
 MSG      backup: saved <TMP>/pioneer-execute/backup_0.tar (146432 bytes)
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
-MSG      
+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
+MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
-MSG      flash complete; drive returned ready.
-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- scsi transcript (56) ---
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- scsi transcript (58) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -85,11 +83,13 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer execute: Kernel+Normal update with kernel restoration pass ===
 result: OK
---- text (17) ---
+--- text (16) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -105,9 +105,8 @@ restoring the unmodified target Kernel
 
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
-flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- events (18) ---
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- events (17) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -116,17 +115,16 @@ MSG        verifying kernel...
 MSG      backup: saved <TMP>/pioneer-execute/backup_1.tar (146432 bytes)
 MSG      WARNING: this flash crosses the firmware generation barrier. The Kernel generation marker is patched temporarily for the first update. A second update restores the unmodified OEM Kernel, and readback must verify it before success is reported. Keep the pre-flash backup and dump until both updates complete.
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
-MSG      
+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
+MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
 MSG      restoring the unmodified target Kernel
-MSG      
+MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
-MSG      flash complete; drive returned ready.
-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- scsi transcript (79) ---
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- scsi transcript (85) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -181,6 +179,10 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -206,11 +208,13 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 
 === Pioneer execute: Normal-only update ===
 result: OK
---- text (12) ---
+--- text (11) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -221,9 +225,8 @@ This will flash: NORMAL only — no Kernel in the package
 
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
-flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- events (13) ---
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- events (12) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -231,13 +234,12 @@ MSG        reading kernel...
 MSG        verifying kernel...
 MSG      backup: saved <TMP>/pioneer-execute/backup_2.tar (146432 bytes)
 MSG      This will flash: NORMAL only — no Kernel in the package
-FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
-MSG      
+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
+MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
-MSG      flash complete; drive returned ready.
-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- scsi transcript (49) ---
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- scsi transcript (51) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -287,6 +289,8 @@ IN   cdb=4a000000100000000800 alloc=8 -> ok 8
 IN   cdb=000000000000 alloc=0 -> ok 0
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer execute: Normal for another Kernel tag, refused after the backup ===
@@ -376,7 +380,7 @@ saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132f
 
 === Pioneer CLI execute: stdin is not a TTY ===
 result: OK
---- terminal (13) ---
+--- terminal (12) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -388,9 +392,8 @@ stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
 
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
-flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- scsi transcript (56) ---
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
+--- scsi transcript (58) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -447,4 +450,6 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1

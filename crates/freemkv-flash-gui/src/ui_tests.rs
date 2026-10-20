@@ -29,6 +29,7 @@ impl Profile {
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
             flash_extensions: vec!["bin"],
             recovery_without_current: false,
+            recovery_without_live_protocol: false,
             notes: Vec::new(),
         }
     }
@@ -83,6 +84,9 @@ fn selected_file_origin_is_visible_on_flash_recovery_and_confirmation() {
         FileOrigin::UserBackupLikely.explanation().into()
     )));
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     let confirm = app.view().confirm.expect("recovery confirmation");
     assert!(confirm
         .details
@@ -191,7 +195,11 @@ fn field_event(label: &str, value: &str) -> Event {
 }
 
 fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
-    app.worker.take().unwrap().send(Msg::Done(result)).unwrap();
+    app.worker
+        .take()
+        .unwrap()
+        .send(Msg::Done(result.map(|_| None)))
+        .unwrap();
     app.poll()
 }
 
@@ -509,9 +517,13 @@ impl FlashFacet for SheetBackend {
         authorized.confirmation = self.confirmation.map(str::to_owned);
         Ok(authorized)
     }
-    fn execute(&self, _: &mut WriteDevice<'_>, _: &AuthorizedPlan) -> anyhow::Result<()> {
+    fn execute(
+        &self,
+        _: &mut WriteDevice<'_>,
+        _: &AuthorizedPlan,
+    ) -> anyhow::Result<workflow::UpdateOutcome> {
         self.executed.store(true, Ordering::SeqCst);
-        Ok(())
+        Ok(test_update(false))
     }
 }
 
@@ -587,8 +599,8 @@ fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flash
             },
         )
         .map_err(|e| format!("{e:#}"));
-        let _ = worker.send(Msg::Done(result.clone()));
-        let _ = done_tx.send(result);
+        let _ = worker.send(Msg::Done(result.clone().map(Some)));
+        let _ = done_tx.send(result.map(drop));
     });
     let start = Instant::now();
     while app.pending.is_none() {
@@ -625,7 +637,7 @@ fn execute_never_runs_without_confirm_after_authorize() {
         assert!(start.elapsed() < Duration::from_secs(20));
         app.poll();
     }
-    assert_eq!(app.status, "Firmware update complete");
+    assert_eq!(app.status, "Firmware update complete — target verified");
     let _ = std::fs::remove_file(&flashing.backup);
 }
 
@@ -818,9 +830,18 @@ fn unknown_or_failed_profile_does_not_gate_recovery_or_flash_preparation() {
         app.recovery_input = Some("intm.tar".into());
         assert!(button(&app.view(), "Recover").enabled);
         app.dispatch(Input::Recover);
+        if app.recovery_planning.is_some() {
+            recovery_plan_passes(&mut app);
+        }
         assert!(matches!(
             app.pending.as_ref().map(|p| &p.sheet),
-            Some(Sheet::Recovery(CurrentFirmware::NotRequired))
+            Some(Sheet::Recovery {
+                options: RecoveryOptions {
+                    current: CurrentFirmware::NotRequired,
+                    ..
+                },
+                ..
+            })
         ));
         app.dispatch(Input::CancelConfirm);
         app.dispatch(Input::SelectTask(Task::Flash));
@@ -854,6 +875,9 @@ fn recovery_requires_both_inputs_and_a_drive() {
     }
     assert!(!button(&view, "Recover").enabled);
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     assert!(app.pending.is_none());
 
     app.dispatch(Input::Chosen(Pick::RecoveryInput, "new.tar".into()));
@@ -882,6 +906,9 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.recovery_input = Some("new.tar".into());
     app.recovery_read = true;
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     let confirm = app.view().confirm.unwrap();
     assert_eq!(confirm.title, "Confirm recovery");
     assert_eq!(confirm.warnings, [FORCE_WARNING]);
@@ -925,6 +952,9 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
     assert!(button(&app.view(), "Recover").enabled);
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     let confirm = app.view().confirm.unwrap();
     assert!(confirm
         .details
@@ -945,6 +975,25 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     );
     assert_eq!(options.current_member.as_deref(), Some("intermediate.bin"));
     assert_eq!(options.member.as_deref(), Some("firmware.bin"));
+}
+
+#[test]
+fn changing_recovery_image_clears_the_previous_result() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.result_task = Task::Recovery;
+    app.recovery_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.recovery_member = Some("intermediate.bin".into());
+    app.status = "Recovery complete".into();
+    app.dispatch(Input::RecoveryMember("firmware.bin".into()));
+    assert_eq!(app.view().status.unwrap().text, "Ready");
+
+    app.status = "Recovery could not finish".into();
+    app.failure = Some("previous image failed".into());
+    app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
+    assert_eq!(app.view().status.unwrap().text, "Ready");
+    assert!(app.failure.is_none());
 }
 
 #[test]
@@ -970,7 +1019,7 @@ fn job_lifecycle_reports_progress_then_completion() {
     .unwrap();
     assert!(app.poll().is_empty());
     let progress = app.view().status.unwrap().progress.unwrap();
-    assert_eq!(progress.label, "Reading firmware");
+    assert_eq!(progress.label, "");
     assert_eq!(progress.fraction, Some(0.5));
     assert_eq!(finish(&mut app, Ok(())), [Effect::StopTicking]);
     let view = app.view();
@@ -990,8 +1039,8 @@ fn failed_job_offers_log_export_next_to_the_error() {
     let failure = results.failure.unwrap();
     assert_eq!(failure.text, "Backup failed");
     assert_eq!(failure.save_log.text, "Save diagnostic log…");
-    assert_eq!(results.view_log.text, "View diagnostic log…");
-    assert_eq!(app.status, "Drive information could not finish");
+    assert_eq!(results.view_log.text, "View Log");
+    assert!(app.status.starts_with("Drive information failed —"));
     assert_eq!(app.log.last().unwrap(), "✗ error: Backup failed");
 }
 
@@ -1011,7 +1060,7 @@ fn completion_is_not_misreported_as_worker_disconnection() {
     let mut app = one_drive();
     app.dispatch(Input::ReadInfo);
     let tx = app.worker.take().unwrap();
-    tx.send(Msg::Done(Ok(()))).unwrap();
+    tx.send(Msg::Done(Ok(None))).unwrap();
     drop(tx);
     app.poll();
     assert!(!app.running());
@@ -1106,7 +1155,7 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
         app.poll();
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
-    assert_eq!(app.status, "Drive information could not finish");
+    assert!(app.status.starts_with("Drive information failed —"));
     assert!(app.view().controls_enabled);
 }
 
@@ -1603,4 +1652,280 @@ fn profile_notes_reach_the_activity_log() {
         .log
         .iter()
         .any(|l| l == "Recovery not offered: could not identify the receiver (x)"));
+}
+
+fn test_update(limited: bool) -> workflow::UpdateOutcome {
+    workflow::UpdateOutcome::Completed(workflow::UpdateEvidence {
+        target_started: true,
+        target_identity: "TEST firmware 1.09".into(),
+        verified_regions: vec!["application".into()],
+        unverified_regions: if limited {
+            vec!["protected region".into()]
+        } else {
+            vec![]
+        },
+        completed_stages: vec!["final target".into()],
+        temporary_firmware: false,
+    })
+}
+
+#[test]
+fn post_update_probe_never_runs_after_failure_or_uncertain_completion() {
+    let mut uncertain = test_update(false);
+    if let workflow::UpdateOutcome::Completed(e) = &mut uncertain {
+        e.target_started = false;
+    }
+    for result in [
+        Err(WORKER_PANIC.into()),
+        Err("write failed".into()),
+        Ok(None),
+        Ok(Some(workflow::UpdateOutcome::Planned)),
+        Ok(Some(uncertain)),
+    ] {
+        assert!(post_update_snapshot(&result, || panic!("unsafe probe")).is_none());
+    }
+    assert_eq!(
+        post_update_snapshot(&Ok(Some(test_update(true))), || "observed".into()),
+        Some("observed".into())
+    );
+}
+
+#[test]
+fn limited_verification_survives_worker_completion_in_clean_status() {
+    let mut app = App::with_drives(Vec::new());
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    app.action = "Recovery".into();
+    tx.send(Msg::Done(Ok(Some(test_update(true))))).unwrap();
+    app.poll();
+    assert_eq!(
+        app.status,
+        "Recovery target started — readback verification limited"
+    );
+    assert!(app.failure.is_none());
+}
+
+#[test]
+fn logging_failure_retains_operation_and_terminal_interrupted_event() {
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-journal-interrupted-{}",
+        freemkv_flash::diagnostics::new_operation_id()
+    ));
+    let mut app = App::with_drives(Vec::new());
+    app.journal = Some(Journal::memory_at(dir.clone()));
+    app.operation_id = Some("correlated-operation".into());
+    app.record_event(
+        "operation_started",
+        serde_json::json!({"operation": "Recovery"}),
+    );
+    assert!(app.logging_warning.is_some());
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    drop(tx);
+    app.poll();
+    assert_eq!(app.status, "Operation interrupted");
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let events: Vec<serde_json::Value> = contents
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let terminal = events
+        .iter()
+        .find(|event| event["event"] == "operation_finished")
+        .unwrap();
+    assert_eq!(terminal["data"]["operation_id"], "correlated-operation");
+    assert_eq!(terminal["data"]["result"], "interrupted");
+    assert_eq!(terminal["data"]["failure"]["safe_to_probe"], false);
+    drop(zip);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn typed_failure_keeps_phase_and_completed_stages_in_report() {
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-failure-report-{}",
+        freemkv_flash::diagnostics::new_operation_id()
+    ));
+    let mut app = App::with_drives(Vec::new());
+    app.journal = Some(Journal::memory_at(dir.clone()));
+    app.operation_id = Some("stage-two-failure".into());
+    app.action = "Recovery".into();
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    tx.send(Msg::FailureEvidence(workflow::UpdateFailure {
+        phase: "final target upload".into(),
+        write_started: true,
+        temporary_firmware: true,
+        completed_stages: vec!["intermediate".into()],
+    }))
+    .unwrap();
+    tx.send(Msg::Done(Err("write rejected".into()))).unwrap();
+    app.poll();
+    assert_eq!(
+        app.status,
+        "Recovery failed during final target upload — temporary firmware may remain"
+    );
+    assert!(!app.status.contains("write_started"));
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let events: Vec<serde_json::Value> = contents
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let terminal = events
+        .iter()
+        .find(|event| event["event"] == "operation_finished")
+        .unwrap();
+    assert_eq!(terminal["data"]["operation_id"], "stage-two-failure");
+    let value = &terminal["data"]["failure"];
+    assert_eq!(value["completed_stages"][0], "intermediate");
+    assert_eq!(value["temporary_firmware"], true);
+    assert_eq!(value["phase"], "final target upload");
+    assert_eq!(value["safe_to_probe"], false);
+    drop(zip);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "OEM receiver")]);
+    app.start();
+    app.answer_profile(Ok(Profile::default()));
+    app.dispatch(Input::SelectTask(Task::Recovery));
+    app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "installed.tar".into()));
+    assert!(matches!(app.profile, ProfileState::Probing));
+    assert!(app.profile_worker.is_some());
+    let assisted = Profile {
+        tasks: vec![Task::Recovery],
+        recovery_without_live_protocol: true,
+        ..Profile::default()
+    };
+    app.answer_profile(Ok(assisted));
+    assert!(app.ready_profile().unwrap().tasks.contains(&Task::Recovery));
+    app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "other.tar".into()));
+    assert!(matches!(app.profile, ProfileState::Probing));
+    app.answer_profile(Ok(Profile::default()));
+    assert!(app.ready_profile().unwrap().tasks.is_empty());
+    assert_eq!(app.recovery_current, Some("other.tar".into()));
+}
+
+fn recovery_plan_passes(app: &mut App) {
+    let (_, _, job) = last_job(app);
+    assert!(matches!(job, Job::Recovery(o) if !o.execute && !o.acknowledged_risk));
+    let worker = app.worker.take().unwrap();
+    worker
+        .send(Msg::Event(field_event(
+            "Recovery plan",
+            "Two passes: temporary Kernel, then verified pristine restoration",
+        )))
+        .unwrap();
+    worker
+        .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
+        .unwrap();
+    app.poll();
+}
+
+#[test]
+fn recovery_prepares_before_consent_and_shows_required_restoration() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("new.tar".into());
+    app.recovery_read = true;
+    app.dispatch(Input::Recover);
+    assert!(app.pending.is_none());
+    assert!(app.running());
+    assert!(!app.view().controls_enabled);
+    recovery_plan_passes(&mut app);
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm
+        .details
+        .iter()
+        .any(|line| line.contains("Two passes") && line.contains("pristine restoration")));
+    assert!(!confirm.ack_checked && !confirm.confirm.enabled);
+    app.dispatch(Input::CancelConfirm);
+    assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
+}
+
+#[test]
+fn failed_recovery_preparation_never_opens_a_confirmation_or_write_job() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("new.tar".into());
+    app.recovery_read = true;
+    app.dispatch(Input::Recover);
+    finish(&mut app, Err("unsupported receiver".into()));
+    assert!(app.pending.is_none());
+    assert!(app.recovery_planning.is_none());
+    assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
+    assert!(app
+        .view()
+        .results
+        .unwrap()
+        .failure
+        .unwrap()
+        .text
+        .contains("unsupported receiver"));
+}
+
+#[test]
+fn failed_update_without_saved_log_keeps_cause_and_recovery_advice_accessible() {
+    for task in [Task::Flash, Task::Recovery] {
+        let mut app = one_drive();
+        app.task = task;
+        app.result_task = task;
+        app.failure = Some("Transfer failed; restore the captured backup".into());
+        app.logging_warning = Some("Diagnostic log could not be saved".into());
+        let failure = app.view().results.unwrap().failure.unwrap();
+        assert!(failure.text.contains("restore the captured backup"));
+        assert!(failure.save_log.enabled);
+        assert!(app.view().results.unwrap().view_log.enabled);
+        app.dispatch(Input::ViewLog);
+        assert!(app.diagnostics_open);
+        assert!(app
+            .diagnostic_lines
+            .iter()
+            .any(|line| line.contains("restore the captured backup")));
+        assert!(app
+            .diagnostic_text()
+            .unwrap()
+            .contains("restore the captured backup"));
+    }
+}
+
+#[test]
+fn report_cancellation_is_available_and_completion_restores_submit() {
+    let mut app = one_drive();
+    let control = crate::support::Submission::new();
+    app.report_control = Some(control.clone());
+    let (tx, rx) = mpsc::channel();
+    app.report_rx = Some(rx);
+    let button = app.results_view().submit_report;
+    assert_eq!(button.text, "Cancel report");
+    assert!(button.enabled);
+    app.dispatch(Input::CancelReport);
+    assert!(control.cancelled());
+    tx.send(Err("Report submission cancelled".into())).unwrap();
+    app.poll();
+    assert!(app.report_rx.is_none());
+    assert!(app.report_control.is_none());
+    assert_eq!(app.results_view().submit_report.text, "Submit Report");
 }
