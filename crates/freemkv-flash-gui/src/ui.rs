@@ -1804,6 +1804,22 @@ impl App {
                             .collect(),
                     });
                 }
+                items.extend([
+                    Item::Heading(
+                        if self.recovery_without_current() {
+                            "Firmware to flash"
+                        } else {
+                            "Firmware to flash (Kernel + Normal)"
+                        }
+                        .into(),
+                    ),
+                    path(
+                        "Choose firmware…",
+                        Pick::RecoveryInput,
+                        true,
+                        &self.recovery_input,
+                    ),
+                ]);
                 if self.recovery_members.len() > 1 {
                     items.push(Item::Note(
                         "Select exactly one image to recover. No second stage will run.".into(),
@@ -1831,22 +1847,6 @@ impl App {
                             .collect(),
                     });
                 }
-                items.extend([
-                    Item::Heading(
-                        if self.recovery_without_current() {
-                            "Firmware to flash"
-                        } else {
-                            "Firmware to flash (Kernel + Normal)"
-                        }
-                        .into(),
-                    ),
-                    path(
-                        "Choose firmware…",
-                        Pick::RecoveryInput,
-                        true,
-                        &self.recovery_input,
-                    ),
-                ]);
                 if self.recovery_input.is_some() {
                     items.extend(self.origin_items(true));
                 }
