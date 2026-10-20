@@ -146,11 +146,21 @@ impl FwApp {
             .add_filter("Firmware image", &["bin", "tar"])
             .pick_file()
         {
-            self.input = Some(path);
-            self.fields.clear();
-            self.failure = None;
-            self.status = "Ready".into();
+            self.select_image(path);
         }
+    }
+
+    fn select_image(&mut self, path: PathBuf) {
+        self.input = Some(path);
+        self.boot_input = None;
+        self.boot_rx = None;
+        self.boot_support = None;
+        self.boot_error = None;
+        self.boot_settings = BootSettings::standard();
+        self.boot_dirty = false;
+        self.fields.clear();
+        self.failure = None;
+        self.status = "Ready".into();
     }
 
     fn start_job(&mut self, ctx: &egui::Context, label: &str, job: Job) {
@@ -252,6 +262,8 @@ impl FwApp {
     fn boot_preview(&mut self, ctx: &egui::Context) {
         if self.boot_input != self.input {
             self.boot_input = self.input.clone();
+            self.boot_settings = BootSettings::standard();
+            self.boot_dirty = false;
             self.boot_support = None;
             self.boot_error = None;
             self.boot_rx = None;

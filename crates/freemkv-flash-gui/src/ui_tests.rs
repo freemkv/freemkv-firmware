@@ -84,6 +84,9 @@ fn selected_file_origin_is_visible_on_flash_recovery_and_confirmation() {
         FileOrigin::UserBackupLikely.explanation().into()
     )));
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     let confirm = app.view().confirm.expect("recovery confirmation");
     assert!(confirm
         .details
@@ -827,9 +830,18 @@ fn unknown_or_failed_profile_does_not_gate_recovery_or_flash_preparation() {
         app.recovery_input = Some("intm.tar".into());
         assert!(button(&app.view(), "Recover").enabled);
         app.dispatch(Input::Recover);
+        if app.recovery_planning.is_some() {
+            recovery_plan_passes(&mut app);
+        }
         assert!(matches!(
             app.pending.as_ref().map(|p| &p.sheet),
-            Some(Sheet::Recovery(CurrentFirmware::NotRequired))
+            Some(Sheet::Recovery {
+                options: RecoveryOptions {
+                    current: CurrentFirmware::NotRequired,
+                    ..
+                },
+                ..
+            })
         ));
         app.dispatch(Input::CancelConfirm);
         app.dispatch(Input::SelectTask(Task::Flash));
@@ -863,6 +875,9 @@ fn recovery_requires_both_inputs_and_a_drive() {
     }
     assert!(!button(&view, "Recover").enabled);
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     assert!(app.pending.is_none());
 
     app.dispatch(Input::Chosen(Pick::RecoveryInput, "new.tar".into()));
@@ -891,6 +906,9 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.recovery_input = Some("new.tar".into());
     app.recovery_read = true;
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     let confirm = app.view().confirm.unwrap();
     assert_eq!(confirm.title, "Confirm recovery");
     assert_eq!(confirm.warnings, [FORCE_WARNING]);
@@ -934,6 +952,9 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
     assert!(button(&app.view(), "Recover").enabled);
     app.dispatch(Input::Recover);
+    if app.recovery_planning.is_some() {
+        recovery_plan_passes(&mut app);
+    }
     let confirm = app.view().confirm.unwrap();
     assert!(confirm
         .details
@@ -1805,4 +1826,106 @@ fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
     app.answer_profile(Ok(Profile::default()));
     assert!(app.ready_profile().unwrap().tasks.is_empty());
     assert_eq!(app.recovery_current, Some("other.tar".into()));
+}
+
+fn recovery_plan_passes(app: &mut App) {
+    let (_, _, job) = last_job(app);
+    assert!(matches!(job, Job::Recovery(o) if !o.execute && !o.acknowledged_risk));
+    let worker = app.worker.take().unwrap();
+    worker
+        .send(Msg::Event(field_event(
+            "Recovery plan",
+            "Two passes: temporary Kernel, then verified pristine restoration",
+        )))
+        .unwrap();
+    worker
+        .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
+        .unwrap();
+    app.poll();
+}
+
+#[test]
+fn recovery_prepares_before_consent_and_shows_required_restoration() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("new.tar".into());
+    app.recovery_read = true;
+    app.dispatch(Input::Recover);
+    assert!(app.pending.is_none());
+    assert!(app.running());
+    assert!(!app.view().controls_enabled);
+    recovery_plan_passes(&mut app);
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm
+        .details
+        .iter()
+        .any(|line| line.contains("Two passes") && line.contains("pristine restoration")));
+    assert!(!confirm.ack_checked && !confirm.confirm.enabled);
+    app.dispatch(Input::CancelConfirm);
+    assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
+}
+
+#[test]
+fn failed_recovery_preparation_never_opens_a_confirmation_or_write_job() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("new.tar".into());
+    app.recovery_read = true;
+    app.dispatch(Input::Recover);
+    finish(&mut app, Err("unsupported receiver".into()));
+    assert!(app.pending.is_none());
+    assert!(app.recovery_planning.is_none());
+    assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
+    assert!(app
+        .view()
+        .results
+        .unwrap()
+        .failure
+        .unwrap()
+        .text
+        .contains("unsupported receiver"));
+}
+
+#[test]
+fn failed_update_without_saved_log_keeps_cause_and_recovery_advice_accessible() {
+    for task in [Task::Flash, Task::Recovery] {
+        let mut app = one_drive();
+        app.task = task;
+        app.result_task = task;
+        app.failure = Some("Transfer failed; restore the captured backup".into());
+        app.logging_warning = Some("Diagnostic log could not be saved".into());
+        let failure = app.view().results.unwrap().failure.unwrap();
+        assert!(failure.text.contains("restore the captured backup"));
+        assert!(failure.save_log.enabled);
+        assert!(app.view().results.unwrap().view_log.enabled);
+        app.dispatch(Input::ViewLog);
+        assert!(app.diagnostics_open);
+        assert!(app
+            .diagnostic_lines
+            .iter()
+            .any(|line| line.contains("restore the captured backup")));
+        assert!(app
+            .diagnostic_text()
+            .unwrap()
+            .contains("restore the captured backup"));
+    }
+}
+
+#[test]
+fn report_cancellation_is_available_and_completion_restores_submit() {
+    let mut app = one_drive();
+    let control = crate::support::Submission::new();
+    app.report_control = Some(control.clone());
+    let (tx, rx) = mpsc::channel();
+    app.report_rx = Some(rx);
+    let button = app.results_view().submit_report;
+    assert_eq!(button.text, "Cancel report");
+    assert!(button.enabled);
+    app.dispatch(Input::CancelReport);
+    assert!(control.cancelled());
+    tx.send(Err("Report submission cancelled".into())).unwrap();
+    app.poll();
+    assert!(app.report_rx.is_none());
+    assert!(app.report_control.is_none());
+    assert_eq!(app.results_view().submit_report.text, "Submit Report");
 }

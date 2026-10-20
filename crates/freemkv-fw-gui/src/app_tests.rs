@@ -143,3 +143,40 @@ fn boot_form_shows_loaded_values_and_reset_restores_shipping_defaults() {
     assert_eq!(app.boot_settings, BootSettings::standard());
     assert!(app.boot_dirty);
 }
+
+#[test]
+fn selecting_another_image_loads_its_settings_and_discards_pending_old_analysis() {
+    let original = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../freemkv-fw/tests/fixtures/BU40N_OEM_1.00.bin"
+    ))
+    .unwrap();
+    let mut selected = BootSettings::standard();
+    selected.set(BootFeature::Encryption, "off").unwrap();
+    let (image, _) = freemkv_fw::api::modify_with_defaults(&original, &selected).unwrap();
+    let loaded = freemkv_fw::api::boot_options(&image.image).unwrap();
+    let mut app = FwApp::new();
+    app.input = Some("first.bin".into());
+    app.boot_settings.set(BootFeature::Hrl, "off").unwrap();
+    app.boot_dirty = true;
+    let (old_tx, old_rx) = mpsc::channel();
+    app.boot_rx = Some(old_rx);
+    app.select_image("second.bin".into());
+    assert!(!app.boot_dirty);
+    assert!(app.boot_rx.is_none());
+    assert!(old_tx.send(Err("stale result".into())).is_err());
+    let (tx, rx) = mpsc::channel();
+    app.boot_rx = Some(rx);
+    app.boot_input = app.input.clone();
+    tx.send(Ok(loaded)).unwrap();
+    app.boot_preview(&egui::Context::default());
+    assert_eq!(app.boot_settings.value(BootFeature::Encryption), "off");
+    assert_eq!(app.boot_settings.value(BootFeature::Hrl), "oem");
+    app.reset_boot_settings();
+    app.select_image("second.bin".into());
+    assert!(
+        !app.boot_dirty,
+        "reselecting a replaced file must reload it too"
+    );
+    assert!(app.boot_input.is_none());
+}

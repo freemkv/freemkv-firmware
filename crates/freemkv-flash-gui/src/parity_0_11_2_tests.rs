@@ -582,7 +582,21 @@ fn recover(app: &mut App, input: &Path) {
     app.dispatch(Input::Chosen(Pick::RecoveryInput, input.into()));
     let before = jobs(app);
     press(app, "Recover");
-    assert_eq!(jobs(app), before, "nothing runs before the confirmation");
+    assert_eq!(
+        jobs(app),
+        before + 1,
+        "only read-only preparation runs before confirmation"
+    );
+    assert!(
+        matches!(&app.dry_run.as_ref().unwrap().last().unwrap().2, Job::Recovery(o) if !o.execute && !o.acknowledged_risk)
+    );
+    assert!(app.view().confirm.is_none());
+    app.worker
+        .take()
+        .unwrap()
+        .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
+        .unwrap();
+    app.poll();
     let sheet = app.view().confirm.expect("the recovery sheet");
     assert_eq!(sheet.title, "Confirm recovery");
     assert_eq!(sheet.warnings, ["Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable."]);
@@ -591,7 +605,7 @@ fn recover(app: &mut App, input: &Path) {
         (v0_11_2::RISK_ACK, false)
     );
     app.dispatch(Input::Confirm);
-    assert_eq!(jobs(app), before, "no tick, no recovery");
+    assert_eq!(jobs(app), before + 1, "no tick, no recovery write");
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
 }

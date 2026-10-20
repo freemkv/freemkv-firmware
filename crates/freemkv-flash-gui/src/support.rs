@@ -12,6 +12,9 @@ use zip::write::SimpleFileOptions;
 const JOURNAL_LIMIT: u64 = 8 * 1024 * 1024;
 const BUNDLE_LIMIT: u64 = 50 * 1024 * 1024;
 const MAX_LOGS: usize = 200;
+const EVENT_BYTES: usize = 8 * 1024 * 1024;
+const SCAN_BYTES: usize = 32 * 1024 * 1024;
+const EVENT_LINE: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
@@ -164,8 +167,20 @@ pub struct BundleSource {
 }
 
 impl BundleSource {
+    #[cfg(test)]
     pub fn bundle(&self, scope: Scope) -> Result<PathBuf> {
-        let mut events = self.unsaved.clone();
+        self.bundle_with_control(scope, None)
+    }
+
+    fn bundle_with_control(&self, scope: Scope, control: Option<&Submission>) -> Result<PathBuf> {
+        let check = || control.map_or(Ok(()), Submission::check);
+        check()?;
+        let mut events = Vec::new();
+        let mut event_bytes = 0usize;
+        for event in &self.unsaved {
+            retain_event(event.clone(), &mut events, &mut event_bytes)?;
+        }
+        let mut scanned = 0usize;
         let mut logs = Vec::<PathBuf>::new();
         for event in &events {
             if let Some(log) = event["data"]["log_file"].as_str() {
@@ -181,12 +196,24 @@ impl BundleSource {
             Err(error) => return Err(error.into()),
         };
         for entry in entries.into_iter().flatten() {
+            check()?;
             let path = entry?.path();
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name == "events.jsonl" || (name.starts_with("events-") && name.ends_with(".jsonl")) {
-                for line in BufReader::new(File::open(&path)?).lines() {
-                    let line = line?;
-                    let Ok(event) = serde_json::from_str::<Value>(&line) else {
+                let mut reader = BufReader::new(File::open(&path)?);
+                loop {
+                    check()?;
+                    let mut line = Vec::new();
+                    let count = Read::by_ref(&mut reader)
+                        .take((EVENT_LINE + 1) as u64)
+                        .read_until(b'\n', &mut line)?;
+                    if count == 0 {
+                        break;
+                    }
+                    anyhow::ensure!(count <= EVENT_LINE, "A saved history event exceeds 64 KiB; archive the affected history file and retry.");
+                    scanned += count;
+                    anyhow::ensure!(scanned <= SCAN_BYTES, "Saved event history exceeds the 32 MiB scan limit; archive old history and retry.");
+                    let Ok(event) = serde_json::from_slice::<Value>(&line) else {
                         continue;
                     };
                     if scope == Scope::Session
@@ -200,7 +227,7 @@ impl BundleSource {
                             logs.push(path);
                         }
                     }
-                    events.push(event);
+                    retain_event(event, &mut events, &mut event_bytes)?;
                 }
             } else if scope == Scope::AllHistory
                 && valid_log(&path, &self.dir)
@@ -235,15 +262,31 @@ impl BundleSource {
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         let mut included = Vec::new();
         let mut missing = Vec::new();
+        let mut copied = 0u64;
         for log in logs {
+            check()?;
             let name = log
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("diagnostic.log");
             match File::open(&log) {
-                Ok(mut source) => {
+                Ok(source) => {
                     zip.start_file(format!("logs/{name}"), opts)?;
-                    io::copy(&mut source, &mut zip)?;
+                    let mut source = source.take(BUNDLE_LIMIT + 1 - copied);
+                    let mut buffer = [0u8; 32 * 1024];
+                    loop {
+                        check()?;
+                        let n = source.read(&mut buffer)?;
+                        if n == 0 {
+                            break;
+                        }
+                        copied += n as u64;
+                        anyhow::ensure!(
+                            copied <= BUNDLE_LIMIT,
+                            "The selected logs grew beyond 50 MiB while creating the report."
+                        );
+                        zip.write_all(&buffer[..n])?;
+                    }
                     included.push(name.to_owned());
                 }
                 Err(_) => missing.push(name.to_owned()),
@@ -251,6 +294,7 @@ impl BundleSource {
         }
         zip.start_file("events.jsonl", opts)?;
         for event in events {
+            check()?;
             serde_json::to_writer(&mut zip, &event)?;
             zip.write_all(b"\n")?;
         }
@@ -273,101 +317,20 @@ impl BundleSource {
     }
 }
 
-/// Browser approval chooses the scope; the native app keeps the ZIP and uploads it.
-pub fn submit(source: BundleSource, mut progress: impl FnMut(String)) -> Result<String> {
-    let base = if cfg!(debug_assertions) {
-        std::env::var("FREEMKV_REPORT_API")
-            .unwrap_or_else(|_| "https://freemkv.org/api/flash-reports".into())
-    } else {
-        "https://freemkv.org/api/flash-reports".into()
-    };
-    progress("Opening report approval in your browser…".into());
-    let request: Value = ureq::post(&format!("{base}/requests"))
-        .send_json(json!({"application":"freemkv-flash","version":env!("CARGO_PKG_VERSION")}))
-        .context("Could not start a report request")?
-        .body_mut()
-        .read_json()?;
-    let id = request["id"]
-        .as_str()
-        .context("Missing report request ID")?;
-    let poll_token = request["poll_token"]
-        .as_str()
-        .context("Missing polling token")?;
-    let approval_url = request["approval_url"]
-        .as_str()
-        .context("Missing approval URL")?;
-    webbrowser::open(approval_url).context("Could not open report approval")?;
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(std::time::Duration::from_secs(30)))
-        .build()
-        .into();
-    let approved = (0..300)
-        .find_map(|_| {
-            std::thread::sleep(std::time::Duration::from_secs(2));
-            let response = agent
-                .get(&format!("{base}/requests/{id}/poll"))
-                .header("Authorization", &format!("Bearer {poll_token}"))
-                .call();
-            match response {
-                Ok(mut reply) if reply.status() == 200 => {
-                    Some(reply.body_mut().read_json::<Value>().map_err(Into::into))
-                }
-                Ok(_) => None,
-                Err(error) => Some(Err(anyhow::anyhow!("Report approval failed: {error}"))),
-            }
-        })
-        .context("Report approval timed out")??;
-    let scope = match approved["scope"].as_str() {
-        Some("all") => Scope::AllHistory,
-        Some("session") => Scope::Session,
-        _ => bail!("Invalid report scope"),
-    };
-    let upload_token = approved["upload_token"]
-        .as_str()
-        .context("Missing upload token")?;
-    progress(format!("Creating {} report ZIP…", scope.label()));
-    let path = source.bundle(scope)?;
-    let mut file = File::open(&path)?;
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)?;
-    if data.len() as u64 > BUNDLE_LIMIT {
-        bail!("The report ZIP exceeds 50 MiB. Choose this session or remove old logs.");
-    }
-    use sha2::Digest;
-    let sha = sha2::Sha256::digest(&data);
-    let checksum: String = sha.iter().map(|b| format!("{b:02x}")).collect();
-    progress("Uploading report…".into());
-    let mut receipt = None;
-    for attempt in 1..=3 {
-        let response = agent
-            .put(&format!("{base}/requests/{id}/bundle"))
-            .header("Authorization", &format!("Bearer {upload_token}"))
-            .header("Content-Type", "application/zip")
-            .header("X-Content-SHA256", &checksum)
-            .send(data.as_slice());
-        match response {
-            Ok(mut response) => {
-                receipt = Some(response.body_mut().read_json::<Value>()?);
-                break;
-            }
-            Err(ureq::Error::StatusCode(503)) if attempt < 3 => {
-                progress("Report saved; retrying notification…".into());
-                std::thread::sleep(std::time::Duration::from_secs(2));
-            }
-            Err(error) => {
-                return Err(error).context("Could not submit report; the ZIP remains on disk")
-            }
-        }
-    }
-    let receipt = receipt.context("Could not confirm report receipt; the ZIP remains on disk")?;
-    let report_id = receipt["report_id"]
-        .as_str()
-        .context("Missing report receipt")?;
-    Ok(format!(
-        "Report {report_id} received. Local copy: {}",
-        path.display()
-    ))
+fn retain_event(event: Value, events: &mut Vec<Value>, bytes: &mut usize) -> Result<()> {
+    let size = serde_json::to_vec(&event)?.len() + 1;
+    anyhow::ensure!(size <= EVENT_LINE, "A report history event exceeds 64 KiB.");
+    *bytes += size;
+    anyhow::ensure!(
+        *bytes <= EVENT_BYTES,
+        "Selected event history exceeds 8 MiB. Choose this session or archive old history."
+    );
+    events.push(event);
+    Ok(())
 }
+
+mod submission;
+pub use submission::{submit, Submission};
 
 fn valid_linked_log(path: &Path, dir: &Path) -> bool {
     valid_log(path, dir) || valid_log(path, &std::env::temp_dir().join("freemkv-logs"))
@@ -495,5 +458,54 @@ mod tests {
         drop(journal);
         fs::remove_dir_all(dir).unwrap();
         fs::remove_file(outside).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+    fn journal() -> (Journal, PathBuf) {
+        let dir =
+            std::env::temp_dir().join(format!("freemkv-history-budget-{}", random_id().unwrap()));
+        (Journal::open_at(dir.clone()).unwrap(), dir)
+    }
+    #[test]
+    fn oversized_history_line_is_refused_before_unbounded_allocation() {
+        let (journal, dir) = journal();
+        fs::write(dir.join("events-huge.jsonl"), vec![b'x'; EVENT_LINE + 1]).unwrap();
+        let error = journal.source().bundle(Scope::AllHistory).unwrap_err();
+        assert!(error.to_string().contains("64 KiB"));
+        assert!(!dir.join("reports").exists());
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn selected_events_are_bounded_across_files_and_unsaved_history() {
+        let (journal, dir) = journal();
+        let mut source = journal.source();
+        let event = json!({"session_id":source.session_id,"data":"x".repeat(32 * 1024)});
+        source.unsaved = vec![event; EVENT_BYTES / (32 * 1024) + 1];
+        let error = source.bundle(Scope::Session).unwrap_err();
+        assert!(error.to_string().contains("8 MiB"));
+        assert!(!dir.join("reports").exists());
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn unrelated_history_still_has_a_scan_budget() {
+        let (journal, dir) = journal();
+        let line = format!(
+            "{}\n",
+            json!({"session_id":"another-session","data":"x".repeat(32 * 1024)})
+        );
+        let mut file = File::create(dir.join("events-archive.jsonl")).unwrap();
+        for _ in 0..=SCAN_BYTES / line.len() {
+            file.write_all(line.as_bytes()).unwrap();
+        }
+        drop(file);
+        let error = journal.source().bundle(Scope::Session).unwrap_err();
+        assert!(error.to_string().contains("32 MiB scan limit"));
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
     }
 }

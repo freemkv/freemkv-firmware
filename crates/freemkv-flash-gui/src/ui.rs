@@ -209,6 +209,7 @@ pub enum Input {
     OpenDiagnostics,
     ViewLog,
     SubmitReport,
+    CancelReport,
     CloseDiagnostics,
     CopyDiagnostics,
     OpenResults,
@@ -559,8 +560,11 @@ pub(crate) struct Target {
 /// What a confirmation sheet asks.
 #[derive(Clone, Debug)]
 pub(crate) enum Sheet {
-    /// Recovery, asked before its job starts.
-    Recovery(CurrentFirmware),
+    /// Recovery, asked after its read-only preparation has passed.
+    Recovery {
+        options: RecoveryOptions,
+        plan: Vec<String>,
+    },
     /// An authorized flash; its worker waits on `reply`.
     Flash {
         sheet: FlashSheet,
@@ -588,6 +592,8 @@ pub struct App {
     operation_id: Option<String>,
     failure_evidence: Option<workflow::UpdateFailure>,
     report_rx: Option<Receiver<Result<String, String>>>,
+    report_control: Option<crate::support::Submission>,
+    recovery_planning: Option<(Target, RecoveryOptions)>,
     origin_rx: Vec<Receiver<OriginReply>>,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -682,6 +688,8 @@ impl App {
             operation_id: None,
             failure_evidence: None,
             report_rx: None,
+            report_control: None,
+            recovery_planning: None,
             origin_rx: Vec::new(),
             flash_origin: None,
             recovery_origin: None,
@@ -984,7 +992,24 @@ impl App {
                     execute: true,
                     ..Default::default()
                 });
-                self.ask(target, Sheet::Recovery(current));
+                let options = RecoveryOptions {
+                    device: None,
+                    input: target.options.input.clone(),
+                    member: self.recovery_member.clone(),
+                    current,
+                    current_member: self.recovery_current_member.clone(),
+                    execute: false,
+                    acknowledged_risk: false,
+                };
+                let effects = self.start_job(
+                    "Recovery plan",
+                    target.device.clone(),
+                    Job::Recovery(options.clone()),
+                );
+                if !effects.is_empty() {
+                    self.recovery_planning = Some((target, options));
+                }
+                return effects;
             }
             Input::Confirm => return self.confirm(),
             Input::CancelConfirm => {
@@ -1009,9 +1034,11 @@ impl App {
                 self.refresh_diagnostic_view();
             }
             Input::ViewLog => {
-                if let Some(path) = &self.diagnostic_log {
+                if let Some(path) = self.diagnostic_log.as_ref().filter(|p| p.is_file()) {
                     return vec![Effect::OpenPath(path.clone())];
                 }
+                self.diagnostics_open = true;
+                self.refresh_diagnostic_view();
             }
             Input::SubmitReport if self.report_rx.is_none() => {
                 self.record_event("report_requested", serde_json::json!({}));
@@ -1021,11 +1048,13 @@ impl App {
                 };
                 let source = journal.source();
                 let (tx, rx) = mpsc::channel();
+                let control = crate::support::Submission::new();
+                self.report_control = Some(control.clone());
                 self.report_rx = Some(rx);
                 self.diagnostic_notice = Some("Opening report approval in your browser…".into());
                 let waker = self.waker.clone();
                 std::thread::spawn(move || {
-                    let result = crate::support::submit(source, |message| {
+                    let result = crate::support::submit(source, control, |message| {
                         let _ = tx.send(Ok(message));
                         if let Some(wake) = &waker {
                             wake();
@@ -1037,6 +1066,12 @@ impl App {
                     }
                 });
                 return vec![Effect::StartTicking];
+            }
+            Input::CancelReport => {
+                if let Some(control) = &self.report_control {
+                    control.cancel();
+                    self.diagnostic_notice = Some("Cancelling report submission…".into());
+                }
             }
             Input::CloseDiagnostics => self.diagnostics_open = false,
             Input::CopyDiagnostics => match self.diagnostic_text() {
@@ -1317,17 +1352,11 @@ impl App {
             }
             Some(Pending {
                 target,
-                sheet: Sheet::Recovery(current),
+                sheet: Sheet::Recovery { mut options, .. },
             }) if !self.running() => {
-                let job = Job::Recovery(RecoveryOptions {
-                    device: None,
-                    input: target.options.input,
-                    member: self.recovery_member.clone(),
-                    current_member: self.recovery_current_member.clone(),
-                    current,
-                    execute: true,
-                    acknowledged_risk: true,
-                });
+                options.execute = true;
+                options.acknowledged_risk = true;
+                let job = Job::Recovery(options);
                 self.start_job("Recovery", target.device, job)
             }
             other => {
@@ -1444,12 +1473,15 @@ impl App {
             }
             if !report_done {
                 self.report_rx = Some(rx);
+            } else {
+                self.report_control = None;
             }
         }
         let origin_done = self.poll_origin();
         let profiled = self.poll_profile();
         let mut finished = false;
         let mut planned = None;
+        let mut recovery_planned = None;
         if let Some(rx) = self.rx.take() {
             loop {
                 match rx.try_recv() {
@@ -1469,6 +1501,9 @@ impl App {
                         }
                     },
                     Ok(Msg::Done(result)) => {
+                        recovery_planned = self.recovery_planning.take().filter(|_| {
+                            matches!(result, Ok(Some(workflow::UpdateOutcome::Planned)))
+                        });
                         planned = self.planning.take().filter(|_| result.is_ok());
                         self.end_flash();
                         let cancelled = std::mem::take(&mut self.cancelled);
@@ -1538,6 +1573,7 @@ impl App {
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.planning = None;
+                        self.recovery_planning = None;
                         self.end_flash();
                         self.status = "Operation interrupted".into();
                         self.failure = Some(WORKER_GONE.into());
@@ -1562,6 +1598,15 @@ impl App {
         }
         if let Some(target) = planned {
             self.back_up_and_authorize(target);
+        }
+        if let Some((target, options)) = recovery_planned {
+            let plan = self
+                .rows
+                .iter()
+                .filter_map(gui_pair)
+                .map(|(label, value)| format!("{label}: {value}"))
+                .collect();
+            self.ask(target, Sheet::Recovery { options, plan });
         }
         let due = self.diagnostic_checked.is_none_or(|checked| {
             finished || (self.running() && checked.elapsed() >= DIAGNOSTIC_REFRESH)
@@ -1714,8 +1759,19 @@ impl App {
     }
 
     pub(crate) fn diagnostic_text(&self) -> std::io::Result<String> {
-        match &self.diagnostic_log {
-            Some(path) => std::fs::read_to_string(path),
+        let saved = self.diagnostic_log.as_ref().map(std::fs::read_to_string);
+        if let Some(Ok(text)) = saved.as_ref() {
+            return Ok(text.clone());
+        }
+        if self.failure.is_some() {
+            return Ok(format!(
+                "In-memory diagnostics; no diagnostic file was saved.\n{}\n{}",
+                self.log.join("\n"),
+                self.failure.as_deref().unwrap_or_default()
+            ));
+        }
+        match saved {
+            Some(result) => result,
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "No diagnostic log is available for this operation.",
@@ -2101,29 +2157,33 @@ impl App {
             } else {
                 self.rows.iter().filter_map(gui_pair).collect()
             },
-            failure: self
-                .failure
-                .as_ref()
-                .filter(|_| !concise)
-                .map(|text| Failure {
-                    text: text.clone(),
-                    save_log: Button::new(
-                        "Save diagnostic log…",
-                        Input::Choose(Pick::DiagnosticLog),
-                        true,
-                    ),
-                }),
+            failure: self.failure.as_ref().map(|text| Failure {
+                text: text.clone(),
+                save_log: Button::new(
+                    "Save diagnostic log…",
+                    Input::Choose(Pick::DiagnosticLog),
+                    true,
+                ),
+            }),
             notice: match (&self.logging_warning, &self.diagnostic_notice) {
                 (Some(warning), Some(notice)) => Some(format!("{warning}\n{notice}")),
                 (Some(warning), None) => Some(warning.clone()),
                 (None, notice) => notice.clone(),
             },
-            view_log: Button::new("View Log", Input::ViewLog, self.diagnostic_log.is_some()),
-            submit_report: Button::new(
-                "Submit Report",
-                Input::SubmitReport,
-                self.journal.is_some() && self.report_rx.is_none(),
+            view_log: Button::new(
+                "View Log",
+                Input::ViewLog,
+                self.diagnostic_log.is_some() || self.failure.is_some(),
             ),
+            submit_report: if self.report_rx.is_some() {
+                Button::new(
+                    "Cancel report",
+                    Input::CancelReport,
+                    self.report_control.as_ref().is_some_and(|c| !c.cancelled()),
+                )
+            } else {
+                Button::new("Submit Report", Input::SubmitReport, self.journal.is_some())
+            },
         }
     }
 
@@ -2133,18 +2193,19 @@ impl App {
             format!("Image: {}", pending.target.options.input.display()),
         ];
         let (recovery, warnings, prompt) = match &pending.sheet {
-            Sheet::Recovery(current) => {
-                details.push(match current {
+            Sheet::Recovery { options, plan } => {
+                details.extend(plan.iter().cloned());
+                details.push(match &options.current {
                     CurrentFirmware::NotRequired => {
                         "Receiver detected directly; no Current firmware required".into()
                     }
                     CurrentFirmware::File(path) => format!("Current: {}", path.display()),
                     CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
                 });
-                if let Some(member) = &self.recovery_current_member {
+                if let Some(member) = &options.current_member {
                     details.push(format!("Current member (receiver reference): {member}"));
                 }
-                if let Some(member) = &self.recovery_member {
+                if let Some(member) = &options.member {
                     details.push(format!("Target member (will be flashed): {member}"));
                 }
                 (true, vec![FORCE_WARNING.to_string()], None)

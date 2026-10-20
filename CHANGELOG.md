@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.13.4] - Unreleased
 
 ### freemkv Modify
+- Reload each selected image's boot settings, including when a file is
+  reselected; discard settings and pending analysis from the previous image.
 - Add shared boot settings to the desktop Create form and repeatable CLI
   `--default FEATURE=VALUE` options. Apply these choices on every boot without
   overlaying saved drive settings. Runtime changes remain available.
@@ -23,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instruction-level coverage; physical drive validation remains outstanding.
 
 ### freemkv-flash
+- Prepare Recovery before confirmation and show its receiver, transfer layout,
+  and any temporary Kernel/restoration passes. Preparation cannot write firmware.
+- Keep detailed Flash/Recovery errors and exportable in-memory diagnostics
+  available when file logging fails.
+- Bound every report HTTP request and the overall submission, add Cancel report,
+  and bound history event size, selected history, scanned history, and log copying.
 - Update the report HTTP client to ureq 3 and current TLS roots, resolving
   the dependency audit failure without suppressing the advisory.
 - Save session events and linked operation logs automatically, and prepare a

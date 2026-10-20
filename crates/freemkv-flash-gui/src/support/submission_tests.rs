@@ -1,0 +1,275 @@
+use super::*;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpListener;
+
+struct Reply {
+    status: u16,
+    body: String,
+    delay: Duration,
+}
+fn reply(status: u16, body: Value) -> Reply {
+    Reply {
+        status,
+        body: body.to_string(),
+        delay: Duration::ZERO,
+    }
+}
+fn server(script: Vec<Reply>) -> (String, std::thread::JoinHandle<Vec<String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let task = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        for reply in script {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::WouldBlock
+                            && Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(1))
+                    }
+                    Err(error) => panic!("expected HTTP request: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut headers = String::new();
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap() == 0 {
+                    return seen;
+                }
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
+                }
+                headers.push_str(&line);
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            if headers.starts_with("PUT ") {
+                use sha2::Digest;
+                let expected: String = sha2::Sha256::digest(&body)
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect();
+                assert!(headers
+                    .to_ascii_lowercase()
+                    .contains(&format!("x-content-sha256: {expected}")));
+                let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&body)).unwrap();
+                assert!(zip.by_name("events.jsonl").is_ok());
+                assert!(zip.by_name("manifest.json").is_ok());
+            }
+            seen.push(headers);
+            std::thread::sleep(reply.delay);
+            let _ = write!(stream, "HTTP/1.1 {} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", reply.status, reply.body.len(), reply.body);
+        }
+        seen
+    });
+    (base, task)
+}
+fn control() -> Submission {
+    Submission {
+        interval: Duration::from_millis(1),
+        request_limit: Duration::from_secs(2),
+        approval_limit: Duration::from_secs(3),
+        ..Submission::new()
+    }
+}
+fn source() -> (BundleSource, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-http-test-{}",
+        crate::support::random_id().unwrap()
+    ));
+    let journal = crate::support::Journal::open_at(dir.clone()).unwrap();
+    (journal.source(), dir)
+}
+fn created() -> Value {
+    json!({"id":"test-id","poll_token":"poll-secret","approval_url":"http://localhost/approve"})
+}
+fn approved() -> Value {
+    json!({"scope":"session","upload_token":"upload-secret"})
+}
+
+#[test]
+fn approval_pending_then_upload_notification_retry_returns_a_receipt() {
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(202, json!({})),
+        reply(200, approved()),
+        reply(503, json!({})),
+        reply(200, json!({"report_id":"synthetic-report"})),
+    ]);
+    let (source, dir) = source();
+    let mut opened = false;
+    let result = submit_at(
+        source,
+        &control(),
+        &base,
+        |url| {
+            assert_eq!(url, "http://localhost/approve");
+            opened = true;
+            Ok(())
+        },
+        |_| {},
+    )
+    .unwrap();
+    assert!(opened);
+    assert!(result.contains("synthetic-report"));
+    let requests = server.join().unwrap();
+    assert!(requests[0].starts_with("POST /requests "));
+    assert!(requests[1]
+        .to_ascii_lowercase()
+        .contains("authorization: bearer poll-secret"));
+    assert!(requests[3].starts_with("PUT /requests/test-id/bundle "));
+    assert!(requests[3]
+        .to_ascii_lowercase()
+        .contains("authorization: bearer upload-secret"));
+    assert!(requests[3]
+        .to_ascii_lowercase()
+        .contains("x-content-sha256:"));
+    assert_eq!(
+        requests[3], requests[4],
+        "notification retry preserves the exact request"
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn expired_approval_never_uploads() {
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(403, json!({"error":"expired"})),
+    ]);
+    let (source, dir) = source();
+    let error = submit_at(source, &control(), &base, |_| Ok(()), |_| {}).unwrap_err();
+    assert!(format!("{error:#}").contains("403"));
+    assert_eq!(server.join().unwrap().len(), 2);
+    assert!(!dir.join("reports").exists());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn initial_request_has_a_timeout_before_opening_the_browser() {
+    let mut response = reply(200, created());
+    response.delay = Duration::from_millis(200);
+    let (base, server) = server(vec![response]);
+    let (source, dir) = source();
+    let control = Submission {
+        request_limit: Duration::from_millis(50),
+        ..control()
+    };
+    let error = submit_at(
+        source,
+        &control,
+        &base,
+        |_| panic!("timed out request cannot open a browser"),
+        |_| {},
+    )
+    .unwrap_err();
+    assert!(format!("{error:#}")
+        .to_ascii_lowercase()
+        .contains("timeout"));
+    server.join().unwrap();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn cancellation_after_approval_prevents_bundle_creation_and_upload() {
+    let (base, server) = server(vec![reply(200, created())]);
+    let (source, dir) = source();
+    let control = control();
+    let error = submit_at(
+        source,
+        &control,
+        &base,
+        |_| {
+            control.cancel();
+            Ok(())
+        },
+        |_| {},
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("cancelled"));
+    assert_eq!(server.join().unwrap().len(), 1);
+    assert!(!dir.join("reports").exists());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn overall_deadline_bounds_the_initial_request_too() {
+    let mut response = reply(200, created());
+    response.delay = Duration::from_millis(200);
+    let (base, server) = server(vec![response]);
+    let (source, dir) = source();
+    let control = Submission {
+        deadline: Instant::now() + Duration::from_millis(50),
+        ..control()
+    };
+    assert!(submit_at(
+        source,
+        &control,
+        &base,
+        |_| panic!("expired request"),
+        |_| {}
+    )
+    .is_err());
+    server.join().unwrap();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// Explicit release smoke test: the approver reads one URL from stdin and must
+/// approve its session-only form. No drive or existing diagnostic history is read.
+#[test]
+#[ignore = "sends one synthetic report to the production maintainer; requires FREEMKV_REPORT_APPROVER"]
+fn production_submission_with_synthetic_history() {
+    use std::process::{Command, Stdio};
+    let approver =
+        std::env::var_os("FREEMKV_REPORT_APPROVER").expect("explicit browser approver required");
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-production-smoke-{}",
+        crate::support::random_id().unwrap()
+    ));
+    let mut journal = crate::support::Journal::open_at(dir.clone()).unwrap();
+    journal.record("synthetic_release_smoke", json!({"application":"freemkv-flash 0.13.4", "note":"Synthetic release verification only. No drive accessed; no user logs included."})).unwrap();
+    let receipt = submit_at(
+        journal.source(),
+        &Submission::new(),
+        "https://freemkv.org/api/flash-reports",
+        |url| {
+            let mut child = Command::new("node")
+                .arg(&approver)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()?;
+            child
+                .stdin
+                .take()
+                .context("approver stdin")?
+                .write_all(url.as_bytes())?;
+            let output = child.wait_with_output()?;
+            anyhow::ensure!(
+                output.status.success(),
+                "Browser approval failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            Ok(())
+        },
+        |message| eprintln!("{message}"),
+    )
+    .unwrap();
+    assert!(receipt.starts_with("Report ") && receipt.contains(" received. Local copy:"));
+    eprintln!("Synthetic production submission: {receipt}");
+    drop(journal);
+    std::fs::remove_dir_all(dir).unwrap();
+}
