@@ -948,6 +948,25 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
 }
 
 #[test]
+fn changing_recovery_image_clears_the_previous_result() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.result_task = Task::Recovery;
+    app.recovery_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.recovery_member = Some("intermediate.bin".into());
+    app.status = "Recovery complete".into();
+    app.dispatch(Input::RecoveryMember("firmware.bin".into()));
+    assert_eq!(app.view().status.unwrap().text, "Ready");
+
+    app.status = "Recovery could not finish".into();
+    app.failure = Some("previous image failed".into());
+    app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
+    assert_eq!(app.view().status.unwrap().text, "Ready");
+    assert!(app.failure.is_none());
+}
+
+#[test]
 fn job_lifecycle_reports_progress_then_completion() {
     let mut app = one_drive();
     app.dispatch(Input::ReadInfo);

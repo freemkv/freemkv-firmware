@@ -882,6 +882,9 @@ impl App {
             Input::Choose(pick) => return self.choose(pick),
             Input::Chosen(pick, path) => return self.chosen(pick, path),
             Input::SetCheck(CheckId::RecoveryReadFromDrive, on) if !self.busy() => {
+                if self.recovery_read != on {
+                    self.clear_flash_result();
+                }
                 self.recovery_read = on;
             }
             Input::SetCheck(CheckId::RiskAck, on) if self.pending.is_some() => self.risk_ack = on,
@@ -917,11 +920,17 @@ impl App {
             }
             Input::RecoveryMember(member) if !self.busy() => {
                 if self.recovery_members.contains(&member) {
+                    if self.recovery_member.as_ref() != Some(&member) {
+                        self.clear_flash_result();
+                    }
                     self.recovery_member = Some(member);
                 }
             }
             Input::RecoveryCurrentMember(member) if !self.busy() => {
                 if self.recovery_current_members.contains(&member) {
+                    if self.recovery_current_member.as_ref() != Some(&member) {
+                        self.clear_flash_result();
+                    }
                     self.recovery_current_member = Some(member);
                 }
             }
@@ -1067,6 +1076,16 @@ impl App {
         }
     }
 
+    /// A previous flash result describes its original selection, not the new one.
+    fn clear_flash_result(&mut self) {
+        if self.result_task == self.task && matches!(self.task, Task::Flash | Task::Recovery) {
+            self.status = "Ready".into();
+            self.failure = None;
+            self.rows.clear();
+            self.progress = None;
+        }
+    }
+
     fn chosen(&mut self, pick: Pick, path: PathBuf) -> Vec<Effect> {
         match pick {
             Pick::DiagnosticLog => {
@@ -1098,10 +1117,12 @@ impl App {
                 return self.start_job("Check file", String::new(), Job::InfoFile { input: path })
             }
             Pick::FlashFirmware => {
+                self.clear_flash_result();
                 self.flash_input = Some(path.clone());
                 return self.read_origin(pick, path);
             }
             Pick::RecoveryCurrent => {
+                self.clear_flash_result();
                 self.recovery_read = false;
                 self.recovery_current_members =
                     workflow::recovery_members(&path).unwrap_or_default();
@@ -1109,6 +1130,7 @@ impl App {
                 self.recovery_current = Some(path);
             }
             Pick::RecoveryInput => {
+                self.clear_flash_result();
                 self.recovery_member = None;
                 self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
                 self.recovery_input = Some(path.clone());
