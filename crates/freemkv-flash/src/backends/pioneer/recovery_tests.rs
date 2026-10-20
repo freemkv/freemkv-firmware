@@ -1700,27 +1700,35 @@ pub(crate) fn oem_recovery_package(vendor: &str) -> Vec<u8> {
 
 #[test]
 fn oem_recovery_uses_current_receiver_code_in_normal_and_loader_modes() {
-    let pioneer = crate::backends::pioneer::Pioneer::new();
-    for vendor in ["SONY", "PLEXTOR", "TEAC", "ASUS"] {
-        let package = oem_recovery_package(vendor);
-        let mut inquiry_vendor = [b' '; 8];
-        inquiry_vendor[..vendor.len()].copy_from_slice(vendor.as_bytes());
-        for updating in [false, true] {
-            let mut drive = Drive {
-                updating,
-                inquiry_vendor,
-                ..Default::default()
-            };
-            let outcome =
-                crate::engine::recover(&mut drive, &pioneer, Some(&package), &package, true, true)
-                    .unwrap_or_else(|e| panic!("{vendor}, loader={updating}: {e:#}"));
-            assert!(matches!(outcome, UpdateOutcome::Completed(_)));
-            assert_eq!(drive.finished_passes, 1);
-            let (expected, _) = load_target(&package).unwrap();
-            assert_eq!(drive.kernel_wire, expected.kernel_transfer());
-            assert_eq!(drive.normal_wire, expected.normal_transfer());
+    crate::runtime_clock::simulated(|| {
+        let pioneer = crate::backends::pioneer::Pioneer::new();
+        for vendor in ["SONY", "PLEXTOR", "TEAC", "ASUS"] {
+            let package = oem_recovery_package(vendor);
+            let mut inquiry_vendor = [b' '; 8];
+            inquiry_vendor[..vendor.len()].copy_from_slice(vendor.as_bytes());
+            for updating in [false, true] {
+                let mut drive = Drive {
+                    updating,
+                    inquiry_vendor,
+                    ..Default::default()
+                };
+                let outcome = crate::engine::recover(
+                    &mut drive,
+                    &pioneer,
+                    Some(&package),
+                    &package,
+                    true,
+                    true,
+                )
+                .unwrap_or_else(|e| panic!("{vendor}, loader={updating}: {e:#}"));
+                assert!(matches!(outcome, UpdateOutcome::Completed(_)));
+                assert_eq!(drive.finished_passes, 1);
+                let (expected, _) = load_target(&package).unwrap();
+                assert_eq!(drive.kernel_wire, expected.kernel_transfer());
+                assert_eq!(drive.normal_wire, expected.normal_transfer());
+            }
         }
-    }
+    });
 }
 
 #[test]

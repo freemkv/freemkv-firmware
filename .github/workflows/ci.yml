@@ -24,6 +24,9 @@ jobs:
   # that builds AT the MSRV consumes needs.resolve-msrv.outputs.v so the floor
   # cannot drift. clippy deliberately runs on `stable`.
   resolve-msrv:
+    # Promotion PRs already have the exact head validated by its branch push.
+    # Feature branches and forks still run their full PR checks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(fromJSON('["dev","qa","main"]'), github.head_ref)
     runs-on: ubuntu-latest
     outputs:
       v: ${{ steps.msrv.outputs.v }}
@@ -145,11 +148,12 @@ jobs:
   # The crate ships on macOS and Windows through libfreemkv's SCSI transport, so
   # it has to compile there. Build the tests (not just `cargo check`) to force
   # codegen on the cfg-gated platform halves. These run only on the
-  # release-candidate branches — dev is the fast lane. `if` SKIPS the job (it
+  # main branch; QA covers debug codegen in its native GUI gate and release
+  # codegen in its all-targets test matrix. Dev is the fast lane. `if` SKIPS the job (it
   # does not queue), so a release gate is never blocked by a never-scheduled job.
   check-macos:
     needs: resolve-msrv
-    if: github.ref_name == 'qa' || github.ref_name == 'main'
+    if: github.ref_name == 'main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -166,7 +170,7 @@ jobs:
 
   check-windows:
     needs: resolve-msrv
-    if: github.ref_name == 'qa' || github.ref_name == 'main'
+    if: github.ref_name == 'main'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -188,6 +192,9 @@ jobs:
   # `test` job's layout and MSRV toolchain. cargo-llvm-cov comes as a prebuilt binary from
   # taiki-e/install-action, so it is toolchain-independent.
   coverage:
+    # Keep coverage on release candidates; avoid a second instrumented test
+    # suite on every dev push and on promotion PRs.
+    if: github.event_name == 'push' && (github.ref_name == 'qa' || github.ref_name == 'main')
     needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:

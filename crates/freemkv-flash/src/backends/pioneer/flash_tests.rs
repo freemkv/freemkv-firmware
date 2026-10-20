@@ -82,7 +82,7 @@ fn execute_flash(
     let mut runtime = Runtime {
         device: &shared,
         sleep: &mut |_| {},
-        start: Instant::now(),
+        start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
         completed_passes: 0,
         kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),

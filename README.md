@@ -198,8 +198,24 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 ```
 
-CI (GitHub Actions, `.github/workflows/ci.yml`) runs fmt, clippy (`-D
-warnings`), build, and test on the **stable** Rust toolchain.
+CI (`.github/workflows/ci.yml`) runs formatting and tests at the workspace's
+`rust-version`, Clippy on stable (`-D warnings`), locked dependency resolution,
+and dependency audits. Promotion PRs reuse their branch's CI; feature PRs and
+forks run their own checks. Coverage runs on QA and main.
+
+QA (`.github/workflows/qa.yml`) runs release tests with all targets and features
+on Linux, macOS, and Windows, plus native GUI gates and every release package's
+build/install smoke tests. Release packaging runs on QA, packaging feature PRs,
+and release tags, rather than repeating on dev pushes. Linux GUI compilation starts alongside the archive
+matrix, then packaging joins the compiled GUI and static CLI artifacts. No
+firmware Release is published by a branch build.
+
+The test profile optimizes the optical-image and AES-CMAC dependencies to keep
+exhaustive catalog authentication fast. Workspace test code retains debug
+assertions and overflow checks; release tests use the shipped release profile.
+In-memory golden fixtures explicitly scope a virtual clock: settle waits advance
+the runtime clock without sleeping. Production and hardware tests retain real
+waits; simulation is available only inside library unit tests.
 
 ## License
 

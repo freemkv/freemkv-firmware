@@ -174,7 +174,7 @@ fn run<T>(op: impl FnOnce() -> Result<T>) -> Outcome {
             }
             Event::DeviceSettings(_) => ev.borrow_mut().push("SETTINGS (present)".to_string()),
         },
-        || result = Some(op()),
+        || result = Some(crate::runtime_clock::simulated(op)),
     );
     let result = match result.expect("operation ran") {
         Ok(_) => "OK".to_string(),

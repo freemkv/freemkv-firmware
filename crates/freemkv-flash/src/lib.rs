@@ -20,6 +20,7 @@ pub mod output;
 
 pub mod diagnostics;
 pub mod recovery_diagnostics;
+mod runtime_clock;
 
 pub mod backend;
 pub mod backends;

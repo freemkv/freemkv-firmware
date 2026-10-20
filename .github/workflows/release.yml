@@ -38,9 +38,9 @@ name: release
 # `linux-packages`: glibc GUIs on native amd64/arm64 runners, .deb + AppImage
 # (packaging/linux/). `windows-installer`: Inno Setup (packaging/windows/).
 #
-# Every QA candidate calls this workflow as a required gate. Dev pushes / PRs
-# touching packaging also run everything as a dry run
-# (see `on:`); only tag runs publish or update the Homebrew tap.
+# Every QA candidate calls this workflow as a required gate. Feature PRs
+# touching packaging also run everything as a dry run. Dev pushes stay on the
+# fast CI path; only tag runs publish or update the Homebrew tap.
 #
 # Build jobs check themselves out into `freemkv-firmware/` and run under
 # `working-directory: freemkv-firmware`, as ci.yml does. All dependencies
@@ -55,19 +55,6 @@ on:
       # GitHub Release.
       - 'v*'
       - '!v*-rc*'
-    # Dry runs: build, package and smoke-test every asset WITHOUT publishing
-    # (every publish step and the tap update are tag-only), like freemkv's
-    # deb.yml/appimage.yml. Branch pushes are path-filtered so CI proves the
-    # packaging whenever it (or the version/lock) changes, without running the
-    # full three-OS release build on every dev commit. GitHub does not apply
-    # `paths` to tag pushes, so releases are unaffected.
-    branches: [dev]
-    paths:
-      - '.github/workflows/release.yml'
-      - 'packaging/**'
-      - 'macos/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
   pull_request:
     paths:
       - '.github/workflows/release.yml'
@@ -112,6 +99,9 @@ jobs:
   # shipped binary is built with the same compiler CI gates on and the pin
   # cannot drift from the manifest.
   resolve-msrv:
+    # QA owns packaging for promotions. Avoid building the same candidate on
+    # its promotion PR as well; feature PRs and forks still need a dry run.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(fromJSON('["dev","qa","main"]'), github.head_ref)
     runs-on: ubuntu-latest
     outputs:
       v: ${{ steps.msrv.outputs.v }}
@@ -374,6 +364,52 @@ jobs:
             freemkv-firmware/*-cli-*-macos
             freemkv-firmware/*-cli-*-windows.exe
 
+  # Compile Linux GUIs alongside the archive matrix. Waiting for all macOS/
+  # Windows archives before starting this took ten minutes on rc1. Packaging
+  # below joins the GUI and static-CLI artifacts after both are available.
+  linux-gui-build:
+    needs: resolve-msrv
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            deb: amd64
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            deb: arm64
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+          shared-key: freemkv-firmware-release-v2-${{ matrix.target }}-gui
+      - name: Install GTK4 + libadwaita development headers
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
+      - name: Build the GUIs (glibc, release)
+        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui --features freemkv-flash-gui/native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-gui-${{ matrix.deb }}
+          path: |
+            freemkv-firmware/target/${{ matrix.target }}/release/freemkv-flash-gui
+            freemkv-firmware/target/${{ matrix.target }}/release/freemkv-fw-gui
+          if-no-files-found: error
+
   # ── Linux packages (.deb + AppImage) ────────────────────────────────────────
   # Mirrors freemkv's deb.yml / appimage.yml: Ubuntu 24.04 baseline, stable
   # unversioned names with a `.sha256` sidecar, dpkg-deb --root-owner-group,
@@ -389,7 +425,7 @@ jobs:
   # The packaging lives in packaging/linux/ (build-debs.sh, build-appimage.sh).
   # Unsigned, like every other asset here.
   linux-packages:
-    needs: [resolve-msrv, build]
+    needs: [build, linux-gui-build]
     strategy:
       fail-fast: false
       matrix:
@@ -414,14 +450,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ needs.resolve-msrv.outputs.v }}
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: freemkv-firmware
-          shared-key: freemkv-firmware-release-v2-${{ matrix.target }}-gui
       # The flash GUI's native shell links GTK4/libadwaita, as freemkv's app does (headers
       # to build, the linuxdeploy gtk plugin to bundle the runtime into its AppImage). The
       # fw GUI is eframe/egui: winit, GL and the portal backend load at run time.
@@ -443,8 +471,13 @@ jobs:
             | sha256sum -c -
           chmod +x "$ld" linuxdeploy-plugin-gtk.sh
           echo "LINUXDEPLOY=$PWD/$ld" >> "$GITHUB_ENV"
-      - name: Build the GUIs (glibc, release)
-        run: cargo build --release --locked --target ${{ matrix.target }} -p freemkv-flash-gui -p freemkv-fw-gui --features freemkv-flash-gui/native
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-gui-${{ matrix.deb }}
+          path: freemkv-firmware/target/${{ matrix.target }}/release
+      # Artifact downloads do not preserve executable permissions.
+      - name: Restore GUI executable permissions
+        run: chmod +x target/${{ matrix.target }}/release/freemkv-*-gui
       - uses: actions/download-artifact@v4
         with:
           name: freemkv-linux-${{ matrix.arch }}
