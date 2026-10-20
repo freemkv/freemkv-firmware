@@ -1657,7 +1657,7 @@ fn pioneer_optical_stays_pinned() {
     // Keep the released receiver handoff checks and receive-placement fix;
     // an older dependency must not silently remove either safety gate.
     assert!(
-        line.contains("version = \"=0.16.0\"") && !line.contains("git ="),
+        line.contains("version = \"=0.16.1\"") && !line.contains("git ="),
         "pioneer-optical must use the released OEM-verified receive-placement fix: {line}"
     );
 }
