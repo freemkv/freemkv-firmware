@@ -1680,7 +1680,7 @@ fn vendor_scan_skips_comments_and_tests() {
 }
 
 // ---------------------------------------------------------------------------
-// R11: Pioneer receive-placement correction stays pinned through the release
+// R11: Pioneer receive-placement and decoded-dialect API stay pinned
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1690,11 +1690,16 @@ fn pioneer_optical_stays_pinned() {
         .lines()
         .find(|l| l.trim_start().starts_with("pioneer-optical"))
         .expect("pioneer-optical dependency");
-    // Keep the released receiver handoff checks and receive-placement fix;
-    // an older dependency must not silently remove either safety gate.
+    // Until 0.16.3 is published, the exact reviewed commit carries the new
+    // decoded-dialect API on top of the released receiver safety fixes.
+    // Neither a floating Git branch nor an older crate is acceptable.
+    let reviewed_commit = line.contains("rev = \"8be691c\"")
+        && line.contains("version = \"=0.16.2\"")
+        && line.contains("git = \"https://github.com/MattJackson/pioneer-optical.git\"");
+    let released = line.contains("version = \"=0.16.3\"") && !line.contains("git =");
     assert!(
-        line.contains("version = \"=0.16.2\"") && !line.contains("git ="),
-        "pioneer-optical must use the released OEM-verified receive-placement fix: {line}"
+        reviewed_commit || released,
+        "pioneer-optical must use the reviewed dialect API and OEM-verified receive-placement fix: {line}"
     );
 }
 
