@@ -99,8 +99,7 @@ impl Plan {
         target: Update,
         target_normal_bytes: Option<&[u8]>,
     ) -> Result<Self> {
-        let dialect =
-            super::dialect::from_decoded(installed_kernel.info().layout, &installed_kernel.image)?;
+        let dialect = super::dialect::from_decoded(installed_kernel)?;
         let control = control_from_image(installed_normal_image)?;
         let startup_setting = pioneer_optical::startup::setting(&target.normal().image)
             .map_err(|_| anyhow!("target startup checks are ambiguous; no firmware was written"))?;

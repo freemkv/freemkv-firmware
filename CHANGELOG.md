@@ -6,6 +6,22 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.4] - Unreleased
+
+### freemkv-flash
+- Save session events and linked operation logs automatically, and prepare a
+  report bundle for the user-approved website submission flow.
+- Simplify Flash and Recovery results to a current progress line, a concise
+  result, and View Log / Submit Report actions. Place Recovery's warning at the
+  top and its archive image selector beside the firmware file it belongs to.
+- Derive Pioneer BD or DVR update entry from decoded installed Kernel evidence,
+  including the PR1AME 1.05 case, instead of the product name. Keep live
+  identity and receiver compatibility checks before any write.
+- Clear a previous Flash or Recovery result when its selected inputs change.
+
+The MediaTek INTM to 1.V9 final-write rejection remains under investigation;
+0.13.4 does not yet claim that drive transition is fixed.
+
 ## [0.13.3] - 2026-10-19
 
 ### freemkv-flash

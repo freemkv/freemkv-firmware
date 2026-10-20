@@ -510,9 +510,11 @@ pub(crate) fn authorize_installed(
         validate_installed_kernel(normal, installed)?;
     }
     let receiver = installed_receiver(installed)?;
+    let mut target_dialect = None;
     let prepared = match p.selection {
         FlashSelection::KernelAndNormal => {
             let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
+            target_dialect = Some(dialect::from_decoded(target.kernel())?);
             receiver
                 .prepare(target)
                 .map(|complete| (Some(complete), None))
@@ -560,7 +562,10 @@ pub(crate) fn authorize_installed(
     let (complete, prepared_normal) = prepared.map_err(preparation_error)?;
     let installed_kernel_bytes = installed_kernel
         .context("captured installed Kernel is required to establish the update-entry dialect")?;
-    let dialect = dialect::from_kernel(&installed_kernel_bytes)?;
+    let dialect =
+        dialect::from_decoded(receiver.installed_kernel().context(
+            "captured installed Kernel is required to establish the update-entry dialect",
+        )?)?;
     let identity_fields = |bytes: &[u8]| -> Result<(String, String)> {
         let header = pioneer_optical::envelope::header_info(bytes)
             .context("Kernel has no usable identity header")?;
@@ -568,9 +573,9 @@ pub(crate) fn authorize_installed(
     };
     let initial_identity = identity_fields(&installed_kernel_bytes)?;
     let target_identity = kernel.map(identity_fields).transpose()?;
-    if let Some(target_kernel) = kernel {
+    if let Some(target_dialect) = target_dialect {
         ensure!(
-            dialect == dialect::from_kernel(target_kernel)?,
+            dialect == target_dialect,
             "installed and target Kernels use different update-entry dialects; refusing before any write"
         );
     }

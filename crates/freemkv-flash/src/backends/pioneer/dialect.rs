@@ -2,27 +2,19 @@
 //! Product strings are display data, never an entry-protocol authority.
 
 use anyhow::{bail, Context, Result};
-use pioneer_optical::{
-    envelope::{decode_envelope, Layout},
-    image::kernel_marker_policy,
-    DriveClass, Identity,
-};
+use pioneer_optical::{envelope::Envelope, DriveClass, Identity};
 
+#[cfg(test)]
 pub(super) fn from_kernel(kernel: &[u8]) -> Result<DriveClass> {
-    let decoded = decode_envelope(kernel)
+    let decoded = Envelope::load(kernel)
         .context("installed Kernel could not be decoded to establish the update-entry dialect")?;
-    from_decoded(decoded.info().layout, &decoded.image)
+    from_decoded(&decoded)
 }
 
-pub(super) fn from_decoded(layout: Layout, image: &[u8]) -> Result<DriveClass> {
-    let class = match layout {
-        Layout::KernelFront | Layout::KernelDerived if kernel_marker_policy(image).is_some() => {
-            DriveClass::Bd
-        }
-        Layout::KernelLegacyLe | Layout::KernelRom | Layout::SparseChecksum => DriveClass::Dvr,
-        _ => bail!("installed Kernel has no unique recognized update-entry dialect signature"),
-    };
-    Ok(class)
+pub(super) fn from_decoded(kernel: &Envelope) -> Result<DriveClass> {
+    kernel
+        .update_dialect()
+        .context("installed Kernel has no unique recognized update-entry dialect signature")
 }
 
 pub(super) fn check_live_identity(
