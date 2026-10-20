@@ -438,6 +438,7 @@ pub struct MediaRow {
 pub const MEDIA_HEADER: &str = "R/W";
 pub const MEDIA_HINT: &str = "Read / Write";
 /// Title of the activity log pane.
+#[cfg(all(feature = "native", target_os = "macos"))]
 pub const LOG_TITLE: &str = "Activity log";
 /// Why the window will not close while a job runs.
 pub const CLOSE_BLOCKED: &str =
