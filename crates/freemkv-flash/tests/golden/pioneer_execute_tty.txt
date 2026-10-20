@@ -14,7 +14,7 @@ EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 flash complete; drive returned ready.
 post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- scsi transcript (47) ---
+--- scsi transcript (48) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -54,6 +54,7 @@ OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9
 OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
 OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
 OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
+IN   cdb=030000001200 alloc=18 -> ok 18
 IN   cdb=4a000000100000000800 alloc=8 -> ok 8
 IN   cdb=000000000000 alloc=0 -> ok 0
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok

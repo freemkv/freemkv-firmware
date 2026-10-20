@@ -261,11 +261,31 @@ impl Plan {
         sleep(Duration::from_secs(2));
         // No readback: prove normal operation through identity and readiness.
         // NO MEDIUM is normal for an empty recovered optical drive.
+        let mut last_status = String::from("no readiness response");
         for attempt in 0..=READINESS_POLLS {
+            // The loader permits REQUEST SENSE while programming. Other
+            // commands can take its busy early return and never reach the
+            // restart check, even once programming has completed. Neither
+            // sense nor event success establishes Normal-mode readiness.
+            match dev.command_in(&cdb::request_sense(18), 18) {
+                Ok(sense) => crate::diagnostics::record(format!(
+                    "Recovery status poll {attempt}: REQUEST SENSE bytes={sense:02x?}"
+                )),
+                Err(error) => crate::diagnostics::record(format!(
+                    "Recovery status poll {attempt}: REQUEST SENSE failed: {error:#}"
+                )),
+            }
             let _ = dev.command_in(&cdb::get_event_status(), 8);
             let ready = dev.command_in(&cdb::test_unit_ready(), 0);
             if let Err(error) = &ready {
                 crate::diagnostics::record(format!("Recovery readiness poll {attempt}: {error:#}"));
+                last_status = match crate::platform::sense_triplet(error) {
+                    Some((2, 4, 2)) => "drive requires initialization (sense 02/04/02)".into(),
+                    Some((key, asc, ascq)) => {
+                        format!("drive not ready (sense {key:02x}/{asc:02x}/{ascq:02x})")
+                    }
+                    None => "readiness command failed; see diagnostic log".into(),
+                };
             }
             let usable = ready.is_ok()
                 || ready
@@ -274,14 +294,27 @@ impl Plan {
                     .and_then(crate::platform::sense_triplet)
                     .is_some_and(|(key, asc, _)| key == 2 && asc == 0x3a);
             if usable {
-                if let Ok(id) = transport::identify(dev) {
-                    crate::diagnostics::record(format!("Recovery post-write identity: revision={} kernel_tag={} normal_tag={} code={}", id.revision(), id.kernel_tag(), id.normal_tag(), id.code()));
-                    if !id.revision().is_empty()
-                        && !id.revision().starts_with("000")
-                        && !id.normal_tag().is_empty()
-                    {
-                        crate::output::field("Recovery", crate::report::Value::text(&format!("Firmware transferred; normal mode reported (revision {}). No firmware readback performed.", id.revision())));
-                        return Ok(());
+                match transport::identify(dev) {
+                    Ok(id) => {
+                        crate::diagnostics::record(format!("Recovery post-write identity: revision={} kernel_tag={} normal_tag={} code={}", id.revision(), id.kernel_tag(), id.normal_tag(), id.code()));
+                        if !id.revision().is_empty()
+                            && !id.revision().starts_with("000")
+                            && !id.normal_tag().is_empty()
+                        {
+                            crate::output::field("Recovery", crate::report::Value::text(&format!("Firmware transferred; normal mode reported (revision {}). No firmware readback performed.", id.revision())));
+                            return Ok(());
+                        }
+                        last_status = format!(
+                            "drive identity is still not Normal (revision {:?}, Normal tag {:?})",
+                            id.revision(),
+                            id.normal_tag()
+                        );
+                    }
+                    Err(error) => {
+                        crate::diagnostics::record(format!(
+                            "Recovery post-write identity failed: {error:#}"
+                        ));
+                        last_status = "drive identity could not be read; see diagnostic log".into();
                     }
                 }
             }
@@ -289,7 +322,7 @@ impl Plan {
                 sleep(Duration::from_millis(500));
             }
         }
-        bail!("firmware transferred, but return to normal mode could not be verified within {} seconds; save the diagnostic log", READINESS_POLLS / 2)
+        bail!("firmware transferred, but return to normal mode could not be verified within {} seconds; last status: {last_status}. Do not repeat the flash automatically; save the diagnostic log", READINESS_POLLS / 2)
     }
 }
 

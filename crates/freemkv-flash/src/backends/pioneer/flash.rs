@@ -59,10 +59,44 @@ pub(crate) fn execute_prepared(dev: &mut WriteDevice<'_>, plan: PreparedFlash<'_
         device: &shared,
     };
     match plan {
-        PreparedFlash::Complete(plan) => plan.flash(io, &mut runtime),
-        PreparedFlash::Normal(plan) => plan.flash(io, &mut runtime),
+        PreparedFlash::Complete(plan) => match plan.startup_setting() {
+            Some(setting) => {
+                report_startup_setting(setting);
+                plan.flash_with_parameter(io, &mut runtime, setting.parameter, setting.value)
+                    .map_err(startup_error)
+            }
+            None => plan.flash(io, &mut runtime).map_err(prepared_error),
+        },
+        PreparedFlash::Normal(plan) => match plan.startup_setting() {
+            Some(setting) => {
+                report_startup_setting(setting);
+                plan.flash_with_parameter(io, &mut runtime, setting.parameter, setting.value)
+                    .map_err(startup_error)
+            }
+            None => plan.flash(io, &mut runtime).map_err(prepared_error),
+        },
     }
-    .map_err(prepared_error)
+}
+
+fn report_startup_setting(setting: pioneer_optical::startup::Setting) {
+    let source = if setting.explicit {
+        "required by target firmware"
+    } else {
+        "neutral default for target firmware"
+    };
+    let text = format!(
+        "word {:#04x} -> {:04X} ({source}); read/change/verify before firmware transfer",
+        setting.parameter, setting.value
+    );
+    crate::diagnostics::record(format!("Pioneer startup setting: {text}"));
+    crate::output::field("Startup setting", crate::report::Value::text(&text));
+}
+
+fn startup_error(
+    error: pioneer_optical::startup::migration::Error<anyhow::Error, FlashError<anyhow::Error>>,
+) -> anyhow::Error {
+    let code = error.code();
+    anyhow::Error::new(error).context(format!("Pioneer startup-setting update [{code}]"))
 }
 
 pub(crate) fn preparation_error<E>(error: E) -> anyhow::Error

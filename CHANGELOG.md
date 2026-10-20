@@ -6,6 +6,26 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] - 2026-10-19
+
+### freemkv-flash
+- Before a Pioneer Flash using a recognized native parameter surface, read the
+  startup word, set it to the target firmware's recognized requirement or neutral
+  FFFF, and verify it before entering update mode. This also handles the reverse
+  transition without storing historical values or resetting other settings.
+- Stop before firmware transfer if the setting cannot be read, changed or
+  verified. Restore the attempt-local original only before update commands have
+  been attempted; never blindly restore or retry after an uncertain transfer.
+- Poll REQUEST SENSE after Pioneer Flash/Recovery finish, and report the last
+  readiness/identity state when return to Normal cannot be verified.
+- Keep Recovery from an already-0000 loader on its firmware-write path; do not
+  send unsupported A0 settings writes or attempt raw persistent-memory erases.
+- Use pioneer-optical 0.16.1 for shared startup selection and transaction logic.
+
+The supplied S12JX/WX1DM packages are covered by offline preparation and mock
+Flash tests in both directions. Physical SJ recovery followed by WX flashing
+remains a user-drive validation step, not a claimed test result.
+
 ## [0.13.1] - 2026-10-19
 
 ### freemkv-flash

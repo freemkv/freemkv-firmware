@@ -6,10 +6,11 @@ P6 (0.13.1): clearer pre-write errors and provenance-only backup messages; no de
 harness against the v0.11.2 tag. `golden_parity_with_0_11_2` requires that
 every difference is listed below, under its golden file and scenario, line
 for line (`-` = only in v0.11.2, `+` = only now). A Pioneer scenario may
-differ only for P1 to P4; a MediaTek scenario only for R1 to R8, M-RS and M-FAM:
+differ only for the Pioneer reasons below; a MediaTek scenario only for its listed reasons:
 
 | id | reason |
 |----|--------|
+| P7 | Pioneer 0.13.2: post-finish readiness polling sends REQUEST SENSE (`03 00 00 00 12 00`, allocation 18) before GET EVENT STATUS / TEST UNIT READY. The traced programming-busy guard admits REQUEST SENSE to the command-completion restart path while other commands can return early. Each successful mock pass adds exactly one read and increments the transcript count; two-pass restoration adds two. Firmware write commands and payloads are unchanged. This does not establish the separate persistent-startup-setting fix. |
 | P1 | Pioneer: a package that cannot be read is refused at the plan, before the backup, so no backup file is saved and no `backup:` line is shown |
 | P2 | Pioneer: the last tray check runs after the confirmation, right before the first write. A successful flash issues the same device commands. When authorize refuses (or the user declines), there is one fewer tray check. With a disc inserted after the backup, the `backup:` line, the confirmation text and the prompt appear before the refusal |
 | P3 | Pioneer: a drive that does not identify as a BD or DVR generation is refused without the dead `--recover` hint. v0.11.2: `the drive does not identify as a BD or DVR generation (a guess is only made under --recover, for a recognised BD family); refusing before any write`; now: `the drive does not identify as a BD or DVR generation; refusing before any write` (954f51d). The hint named a flash mode no user could reach since 0.11.0: the CLI always passed `force: false` (v0.11.2 main.rs:198), the GUI forced it off (app.rs:292), and a forced Pioneer flash was refused anyway (workflow.rs:284). A P3 scenario may differ only by lines that drop the hint, so its device commands are identical |
@@ -10265,8 +10266,11 @@ reason: P2
 ## pioneer_execute.txt
 
 ### Pioneer CLI execute: stdin is not a TTY
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (47) ---
++--- scsi transcript (48) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
@@ -10278,8 +10282,11 @@ reason: P4
 ```
 
 ### Pioneer execute: Kernel+Normal update
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (47) ---
++--- scsi transcript (48) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
@@ -10291,8 +10298,12 @@ reason: P4
 ```
 
 ### Pioneer execute: Kernel+Normal update with kernel restoration pass
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (69) ---
++--- scsi transcript (71) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=c0a16b5e48c7b204741c44fa37f58d6402a2828c64c1aa21a96f3c2e884a1897 -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
@@ -10320,8 +10331,11 @@ reason: P2
 ```
 
 ### Pioneer execute: Normal-only update
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (40) ---
++--- scsi transcript (41) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
@@ -10354,8 +10368,11 @@ reason: P2
 ```
 
 ### Pioneer CLI execute: TTY answers y
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (47) ---
++--- scsi transcript (48) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
@@ -10447,8 +10464,11 @@ reason: P1
 ```
 
 ### Pioneer execute: target is the installed firmware (no change)
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (47) ---
++--- scsi transcript (48) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3322ba5603d28bfebd97ba3633c0c60f5c9c09ab41c54c12f0c13e0bc6ecf39f -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=23ec2bedd92e6f32f54fcf35b1d633d87df58bc1aeb0d37dc542d65d513b6c60 -> ok
@@ -10504,8 +10524,11 @@ reason: P6
 ## pioneer_recover.txt
 
 ### Pioneer recover execute: receiver in kernel mode
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (15) ---
++--- scsi transcript (16) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
@@ -10515,8 +10538,11 @@ reason: P4
 ```
 
 ### Pioneer recover execute: receiver in normal mode
-reason: P4
+reason: P4, P7
 ```diff
+---- scsi transcript (16) ---
++--- scsi transcript (17) ---
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok

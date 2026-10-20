@@ -210,6 +210,10 @@ struct Drive {
     fail_write: Option<usize>,
     attempts: usize,
     writes: Vec<(Vec<u8>, Vec<u8>)>,
+    require_sense_restart: bool,
+    restart_pending: bool,
+    sense_polls: usize,
+    reject_sense: bool,
 }
 impl ScsiDevice for Drive {
     fn describe(&self) -> String {
@@ -217,6 +221,23 @@ impl ScsiDevice for Drive {
     }
     fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
         let mut bytes = vec![0; len];
+        if command == cdb::request_sense(18) {
+            self.sense_polls += 1;
+            if self.reject_sense {
+                bail!("REQUEST SENSE unavailable");
+            }
+            self.restart_pending = false;
+            return Ok(bytes);
+        }
+        if self.restart_pending {
+            return Err(crate::platform::ScsiSenseError::new(
+                2,
+                4,
+                2,
+                "initializing command required",
+            )
+            .into());
+        }
         let kernel = (self.updating && !self.finished) || self.stuck;
         if command == cdb::inquiry(len as u8) {
             bytes[0] = 5;
@@ -247,12 +268,53 @@ impl ScsiDevice for Drive {
         self.writes.push((command.to_vec(), bytes.to_vec()));
         if command == cdb::finish() && self.writes.iter().any(|(c, _)| c[2] == 0xf0) {
             self.finished = true;
+            self.restart_pending = self.require_sense_restart;
         }
         Ok(())
     }
 }
 fn recovery_plan() -> Plan {
     Plan::from_updates(fixture_pair(false, 1), fixture_pair(false, 0)).unwrap()
+}
+
+#[test]
+fn completed_programming_needs_sense_poll_before_normal_can_start() {
+    let plan = recovery_plan();
+    let mut drive = Drive {
+        updating: true,
+        require_sense_restart: true,
+        ..Default::default()
+    };
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+    assert!(drive.finished);
+    assert!(!drive.restart_pending);
+    assert_eq!(drive.sense_polls, 1);
+}
+
+#[test]
+fn failed_sense_poll_cannot_turn_a_stuck_loader_into_success() {
+    let plan = recovery_plan();
+    let mut drive = Drive {
+        updating: true,
+        require_sense_restart: true,
+        reject_sense: true,
+        ..Default::default()
+    };
+    let error = plan
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap_err();
+    assert!(error.to_string().contains("return to normal mode"));
+    assert!(drive.finished && drive.restart_pending);
+    assert_eq!(drive.sense_polls, READINESS_POLLS + 1);
+    assert_eq!(
+        drive
+            .writes
+            .iter()
+            .filter(|(c, _)| *c == cdb::finish())
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -423,6 +485,36 @@ fn normal_recovery_enters_first_and_uses_supplied_receiver_control() {
         (cdb::enter_update().to_vec(), plan.control.to_vec())
     );
     assert_eq!(drive.writes.last().unwrap().1, plan.control);
+}
+
+#[test]
+#[ignore = "requires supplied S12JX and WX1DM packages; mock loader only"]
+fn real_wx_kernel_mode_recovery_back_to_original_sj_uses_no_a0_write() {
+    let wx = std::fs::read(std::env::var("PIONEER_STARTUP_WX_PACKAGE").unwrap()).unwrap();
+    let sj = std::fs::read(std::env::var("PIONEER_STARTUP_ORIGINAL_PACKAGE").unwrap()).unwrap();
+    let plan = Plan::prepare(&wx, &sj).unwrap();
+    let mut drive = Drive {
+        updating: true,
+        require_sense_restart: true,
+        ..Default::default()
+    };
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+    assert!(drive.finished);
+    assert!(drive.sense_polls > 0);
+    assert!(!drive
+        .writes
+        .iter()
+        .any(|(c, _)| c == &cdb::enter_update() || c.get(2) == Some(&0xa0)));
+    for (selector, expected) in [(0xfe, &plan.kernel_transfer), (0xf0, &plan.normal_transfer)] {
+        let actual: Vec<_> = drive
+            .writes
+            .iter()
+            .filter(|(c, _)| c[2] == selector)
+            .flat_map(|(_, b)| b.iter().copied())
+            .collect();
+        assert_eq!(&actual, expected);
+    }
 }
 #[test]
 fn failed_write_stops_without_retry_or_finish() {

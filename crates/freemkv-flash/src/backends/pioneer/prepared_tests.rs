@@ -121,6 +121,9 @@ fn plan(restore: bool) -> PreparedUpdate {
 }
 
 struct Drive {
+    parameter: Option<u16>,
+    parameter_reads: usize,
+    bad_parameter_verification: bool,
     memory: Vec<u8>,
     descriptor: Vec<u8>,
     kernel: Vec<u8>,
@@ -134,6 +137,9 @@ struct Drive {
 impl Drive {
     fn new(plan: &PreparedUpdate) -> Self {
         Self {
+            parameter: None,
+            parameter_reads: 0,
+            bad_parameter_verification: false,
             memory: plan.first_kernel_image().to_vec(),
             descriptor: b"PIONEER TEST-NEW".to_vec(),
             kernel: Vec::new(),
@@ -157,6 +163,15 @@ impl ScsiDevice for Drive {
     }
 
     fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        if cdb == pioneer_optical::cdb::read_parameter_word(0x9f).unwrap() {
+            self.parameter_reads += 1;
+            let value = if self.bad_parameter_verification && self.parameter_reads == 2 {
+                0xaaaa
+            } else {
+                self.parameter.expect("unexpected parameter read")
+            };
+            return Ok(value.to_be_bytes().to_vec());
+        }
         if cdb == pioneer_optical::cdb::read_memory(CONTROL_DESCRIPTOR_ADDRESS, 16) {
             return Ok(self.descriptor.clone());
         }
@@ -184,6 +199,11 @@ impl ScsiDevice for Drive {
             bail!("injected firmware write failure");
         }
         self.writes.push((cdb.to_vec(), data.to_vec()));
+        if cdb == pioneer_optical::cdb::write_parameter_word(0x9f).unwrap() {
+            assert!(self.parameter.is_some());
+            self.parameter = Some(u16::from_be_bytes(data.try_into().unwrap()));
+            return Ok(());
+        }
         if cdb == pioneer_optical::cdb::enter_update() {
             self.kernel.clear();
         }
@@ -311,4 +331,72 @@ fn missing_descriptor_is_reported_before_update_entry() {
     let error = execute(&mut drive, &plan).unwrap_err();
     assert!(format!("{error:#}").contains("receiver descriptor read failed"));
     assert!(drive.writes.is_empty());
+}
+
+#[test]
+#[ignore = "requires supplied S12JX and WX1DM packages; mock device only"]
+fn real_package_flash_migrates_startup_word_in_both_directions() {
+    let load = |key: &str| {
+        let bytes = std::fs::read(std::env::var(key).unwrap()).unwrap();
+        let (kernel, normal) = classify_flash_input(&bytes).unwrap();
+        super::normal_prepare::load_pair(&kernel.unwrap(), &normal.unwrap()).unwrap()
+    };
+    let sj = load("PIONEER_STARTUP_ORIGINAL_PACKAGE");
+    let wx = load("PIONEER_STARTUP_WX_PACKAGE");
+    for (source, target, original, required) in
+        [(&sj, &wx, 0xffff, 0xfe24), (&wx, &sj, 0xfe24, 0xffff)]
+    {
+        let plan = Receiver::from_installed(source)
+            .unwrap()
+            .prepare(target.clone())
+            .unwrap();
+        assert_eq!(plan.startup_setting().unwrap().value, required);
+        for scenario in 0..4 {
+            let mut drive = Drive::new(&plan);
+            drive.descriptor = source.normal().image[..16].to_vec();
+            drive.parameter = Some(original);
+            drive.bad_parameter_verification = scenario == 1;
+            drive.fail_at = (scenario == 2).then_some(1);
+            if scenario == 3 {
+                drive.descriptor[0] ^= 1;
+            }
+            let result = execute(&mut drive, &plan);
+            let firmware_writes = drive.writes.iter().filter(|(c, _)| c[2] != 0xa0).count();
+            match scenario {
+                0 => {
+                    result.unwrap();
+                    assert_eq!(drive.parameter, Some(required));
+                    assert_eq!(
+                        drive.writes[0],
+                        (
+                            pioneer_optical::cdb::write_parameter_word(0x9f)
+                                .unwrap()
+                                .to_vec(),
+                            required.to_be_bytes().to_vec()
+                        )
+                    );
+                    assert_eq!(drive.finishes, 1);
+                    assert_eq!(drive.memory, plan.final_kernel_image());
+                }
+                1 => {
+                    assert!(result.is_err());
+                    assert_eq!(drive.parameter, Some(original));
+                    assert_eq!(drive.writes.len(), 2);
+                    assert_eq!(firmware_writes, 0);
+                }
+                2 => {
+                    assert!(result.is_err());
+                    assert_eq!(drive.parameter, Some(required));
+                    assert_eq!(drive.writes.len(), 1);
+                    assert_eq!(firmware_writes, 0);
+                }
+                3 => {
+                    assert!(result.is_err());
+                    assert_eq!(drive.parameter, Some(original));
+                    assert!(drive.writes.is_empty());
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
 }
