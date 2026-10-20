@@ -79,7 +79,8 @@ pub fn record(text: impl AsRef<str>) {
     }
 }
 
-fn log_directory() -> PathBuf {
+/// Directory containing automatically saved operation logs and support history.
+pub fn log_directory() -> PathBuf {
     #[cfg(target_os = "windows")]
     if let Some(base) = std::env::var_os("LOCALAPPDATA") {
         return PathBuf::from(base).join("freemkv").join("logs");

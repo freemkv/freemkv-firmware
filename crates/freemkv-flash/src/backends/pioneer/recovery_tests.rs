@@ -813,7 +813,7 @@ fn wrong_drive_and_short_identity_fail_before_vendor_commands_or_writes() {
 }
 
 #[test]
-fn unsupported_pioneer_dialect_fails_before_update_entry() {
+fn mismatched_live_receiver_fails_before_update_entry() {
     let mut inquiry = vec![0; pioneer_optical::INQUIRY_LEN];
     inquiry[0] = 5;
     inquiry[8..16].copy_from_slice(b"PIONEER ");
@@ -826,7 +826,9 @@ fn unsupported_pioneer_dialect_fails_before_update_entry() {
     let error = recovery_plan()
         .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
         .unwrap_err();
-    assert!(error.to_string().contains("update dialect"));
+    assert!(error
+        .to_string()
+        .contains("differs from the captured installed firmware"));
     assert_eq!(drive.vendor_reads, 1);
     assert_eq!(drive.writes, 0);
 }

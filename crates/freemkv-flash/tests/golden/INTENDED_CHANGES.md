@@ -10,6 +10,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| P9 | Pioneer 0.13.4: the UD04 golden mock now returns its real `GENERAL` Kernel tag from vendor identity so the firmware-derived entry preflight can match the captured installed Kernel. Only post-flash identity text in these mock transcripts changes; firmware write commands and payloads do not. |
 | P8 | Pioneer 0.13.3: read the live A0 startup word 0x9F before firmware transfer, write and verify only when it differs from the target value, then continue. The added read and preflight commands in these mock transcripts reflect this migration; neutral FFFF already matches and sends no A0 write. |
 | P7 | Pioneer 0.13.2: post-finish readiness polling sends REQUEST SENSE (`03 00 00 00 12 00`, allocation 18) before GET EVENT STATUS / TEST UNIT READY. The traced programming-busy guard admits REQUEST SENSE to the command-completion restart path while other commands can return early. Each successful mock pass adds exactly one read and increments the transcript count; two-pass restoration adds two. Firmware write commands and payloads are unchanged. This does not establish the separate persistent-startup-setting fix. |
 | P1 | Pioneer: a package that cannot be read is refused at the plan, before the backup, so no backup file is saved and no `backup:` line is shown |
@@ -10267,9 +10268,11 @@ reason: P2
 ## pioneer_execute.txt
 
 ### Pioneer CLI execute: stdin is not a TTY
-reason: P4, P7, P8
+reason: P4, P7, P8, P9
 ```diff
+-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
++post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- scsi transcript (56) ---
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 +MEDIUM -> ClosedEmpty
@@ -10289,13 +10292,18 @@ reason: P4, P7, P8
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
+
 ### Pioneer execute: Kernel+Normal update
-reason: P4, P7, P8
+reason: P4, P7, P8, P9
 ```diff
+-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- events (12) ---
++post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- events (13) ---
 +FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
+-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
++MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- scsi transcript (56) ---
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 +MEDIUM -> ClosedEmpty
@@ -10315,13 +10323,18 @@ reason: P4, P7, P8
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
+
 ### Pioneer execute: Kernel+Normal update with kernel restoration pass
-reason: P4, P7, P8
+reason: P4, P7, P8, P9
 ```diff
+-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- events (17) ---
++post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- events (18) ---
 +FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
+-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (69) ---
++MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- scsi transcript (79) ---
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 +MEDIUM -> ClosedEmpty
@@ -10348,6 +10361,7 @@ reason: P4, P7, P8
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
 +saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 ```
+
 ### Pioneer execute: Normal for another Kernel tag, refused after the backup
 reason: P2
 ```diff
@@ -10359,12 +10373,16 @@ reason: P2
 ```
 
 ### Pioneer execute: Normal-only update
-reason: P4, P7, P8
+reason: P4, P7, P8, P9
 ```diff
+-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- events (12) ---
++post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- events (13) ---
 +FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
+-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (40) ---
++MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- scsi transcript (49) ---
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 +MEDIUM -> ClosedEmpty
@@ -10378,6 +10396,7 @@ reason: P4, P7, P8
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
+
 ### Pioneer execute: disc inserted after the backup
 reason: P2
 ```diff
@@ -10406,9 +10425,11 @@ reason: P2
 ```
 
 ### Pioneer CLI execute: TTY answers y
-reason: P4, P7, P8
+reason: P4, P7, P8, P9
 ```diff
+-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
++post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- scsi transcript (56) ---
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 +MEDIUM -> ClosedEmpty
@@ -10428,6 +10449,7 @@ reason: P4, P7, P8
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
+
 ### Pioneer CLI execute: disc inserted after the backup, TTY answers y
 reason: P2
 ```diff
@@ -10509,12 +10531,16 @@ reason: P1
 ```
 
 ### Pioneer execute: target is the installed firmware (no change)
-reason: P4, P7, P8
+reason: P4, P7, P8, P9
 ```diff
+-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- events (12) ---
++post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- events (13) ---
 +FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
+-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
++MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 +--- scsi transcript (56) ---
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 +MEDIUM -> ClosedEmpty
@@ -10534,6 +10560,7 @@ reason: P4, P7, P8
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
 +saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 ```
+
 ### Pioneer flash: dry-run request
 reason: P4
 ```diff
@@ -10609,6 +10636,7 @@ reason: P4, P7, P8
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 ```
+
 ### Pioneer recover execute: write fails on the 2nd command
 reason: P4
 ```diff

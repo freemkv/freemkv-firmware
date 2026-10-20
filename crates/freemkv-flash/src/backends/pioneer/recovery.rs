@@ -13,6 +13,9 @@ use pioneer_optical::{cdb, image::ReceiverControl, Identity, Role};
 use std::time::Duration;
 
 pub(crate) struct Plan {
+    dialect: pioneer_optical::DriveClass,
+    installed_hardware: String,
+    installed_kernel_tag: String,
     control: [u8; 256],
     kernel_transfer: Vec<u8>,
     normal_transfer: Vec<u8>,
@@ -96,6 +99,8 @@ impl Plan {
         target: Update,
         target_normal_bytes: Option<&[u8]>,
     ) -> Result<Self> {
+        let dialect =
+            super::dialect::from_decoded(installed_kernel.info().layout, &installed_kernel.image)?;
         let control = control_from_image(installed_normal_image)?;
         let startup_setting = pioneer_optical::startup::setting(&target.normal().image)
             .map_err(|_| anyhow!("target startup checks are ambiguous; no firmware was written"))?;
@@ -142,6 +147,9 @@ impl Plan {
         .map_err(pioneer_optical::receiver::PreparationError::KernelHandoff)
         .map_err(super::flash::preparation_error)?;
         Ok(Self {
+            dialect,
+            installed_hardware: installed_kernel.info().hardware_version.clone(),
+            installed_kernel_tag: installed_kernel.info().kernel_version.clone(),
             control,
             kernel_transfer: target.kernel_transfer().to_vec(),
             normal_transfer,
@@ -159,10 +167,14 @@ impl Plan {
 
     fn run(&self, dev: &mut WriteDevice<'_>, sleep: &mut impl FnMut(Duration)) -> Result<()> {
         let identity = identify_receiver(dev)?;
-        let class = identity.class().context("unsupported recovery dialect")?;
         crate::diagnostics::record(format!("Recovery receiver: product={} revision={} platform={} kernel_tag={} normal_tag={} code={}", identity.product(), identity.revision(), identity.platform(), identity.kernel_tag(), identity.normal_tag(), identity.code()));
         let updating = in_update_mode(&identity);
         if !updating {
+            super::dialect::check_live_identity(
+                &identity,
+                &self.installed_hardware,
+                &self.installed_kernel_tag,
+            )?;
             let setting = self.startup_setting;
             super::flash::report_startup_setting(setting);
             let shared = SharedDevice::new(dev);
@@ -173,13 +185,13 @@ impl Plan {
                 setting.value,
                 |guard| {
                     let mut device = MigrationDevice { transport: guard };
-                    self.run_after_identity(&mut device, class, false, sleep)
+                    self.run_after_identity(&mut device, self.dialect, false, sleep)
                 },
             )
             .map_err(|error| anyhow!("Pioneer recovery startup-setting update: {error}"));
         }
         crate::diagnostics::record("Recovery startup setting: skipped because the drive is already in update mode; Normal's parameter command is unavailable");
-        self.run_after_identity(dev, class, updating, sleep)
+        self.run_after_identity(dev, self.dialect, updating, sleep)
     }
 
     fn run_after_identity(
@@ -441,10 +453,6 @@ pub(crate) fn find_receiver(dev: &mut dyn ScsiDevice) -> Result<Option<Identity>
         .context("Recovery could not read the Pioneer receiver identity; no firmware written")?;
     let identity = Identity::parse(&inquiry, &vendor)
         .context("Recovery received a truncated Pioneer receiver identity; no firmware written")?;
-    ensure!(
-        identity.class().is_some(),
-        "Recovery does not support this receiver's update dialect; no firmware written"
-    );
     Ok(Some(identity))
 }
 

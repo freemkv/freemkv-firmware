@@ -109,6 +109,9 @@ impl Shell {
                     }
                 }
                 Effect::CopyText(text) => ctx.copy_text(text),
+                Effect::OpenPath(path) => {
+                    let _ = crate::external::open_path(&path);
+                }
                 // egui repaints on the worker's waker and on the running-job timer below.
                 Effect::StartTicking | Effect::StopTicking => {}
             }
@@ -214,13 +217,6 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 results_ui(ui, results, out);
-                egui::CollapsingHeader::new(crate::ui::LOG_TITLE)
-                    .default_open(false)
-                    .show(ui, |ui| {
-                        for line in &view.log {
-                            ui.add(egui::Label::new(egui::RichText::new(line).small()).wrap());
-                        }
-                    });
             });
     });
 }
@@ -399,6 +395,7 @@ fn results_ui(ui: &mut egui::Ui, results: &Results, out: &mut Vec<Input>) {
     }
     ui.add_space(6.0);
     button(ui, &results.view_log, out);
+    button(ui, &results.submit_report, out);
 }
 
 // ── drive information cards ───────────────────────────────────────────────

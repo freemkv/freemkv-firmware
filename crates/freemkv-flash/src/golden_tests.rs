@@ -2316,6 +2316,7 @@ impl ScsiDevice for Ud04Drive {
         if cdb.first() == Some(&0x12) {
             let mut data = vec![0; len];
             if len >= 36 {
+                data[0] = 0x05;
                 data[8..16].copy_from_slice(b"PIONEER ");
                 data[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
                 data[32..36].copy_from_slice(if self.updating { b"000 " } else { b"1.14" });
@@ -2325,6 +2326,7 @@ impl ScsiDevice for Ud04Drive {
         if cdb == [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0] {
             let mut data = vec![0; 48];
             data[16..24].copy_from_slice(b"SAT 8A10");
+            data[24..32].copy_from_slice(&self.memory[0x1008..0x1010]);
             return Ok(data);
         }
         if cdb == pioneer_optical::cdb::read_parameter_word(0x9f).unwrap() {
@@ -2711,7 +2713,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// [`RECOVER_HINT`]; P4, the synthetic Kernel fixtures gained a 0.15.0 receiver
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
-const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"];
+const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
 /// v0.11.2 could not reach that flash mode either: its CLI and GUI always

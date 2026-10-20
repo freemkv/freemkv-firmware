@@ -579,6 +579,7 @@ struct Shell {
     save_log: Bound,
     notice: gui::Label,
     view_log: Bound,
+    submit_report: Bound,
 
     log_title: gui::Label,
     log: gui::Edit,
@@ -757,6 +758,7 @@ impl Shell {
         let save_log = Bound::new(&wnd, s);
         let notice = label(&wnd, wrap, none);
         let view_log = Bound::new(&wnd, s);
+        let submit_report = Bound::new(&wnd, s);
         let log_title = label(&wnd, one_line, none);
         let log = gui::Edit::new(
             &wnd,
@@ -797,6 +799,7 @@ impl Shell {
             save_log,
             notice,
             view_log,
+            submit_report,
             log_title,
             log,
             diag,
@@ -835,6 +838,9 @@ impl Shell {
                     }
                 }
                 Effect::CopyText(text) => self.copy(&text),
+                Effect::OpenPath(path) => {
+                    let _ = crate::external::open_path(&path);
+                }
                 Effect::StartTicking => {
                     if let Err(e) = self.wnd.hwnd().SetTimer(TIMER_TICK, TICK_MS, None) {
                         let _ = self.wnd.hwnd().MessageBox(
@@ -1080,6 +1086,7 @@ impl Shell {
         }
         set_text(&self.notice, r.notice.as_deref().unwrap_or(""));
         self.view_log.bind(&r.view_log);
+        self.submit_report.bind(&r.submit_report);
     }
 
     fn add_group(&self, id: i32, title: &str, subtitle: Option<&str>) {
@@ -1160,17 +1167,8 @@ impl Shell {
         self.layout_panel(s, &v.panel, &mut col);
         put(&self.rule, col.take(2));
 
-        // The activity log is pinned to the bottom.
-        let log_r = Rect::new(pad, ch - pad - s.px(lay::LOG_H), col.w, s.px(lay::LOG_H));
-        let title_r = Rect::new(
-            pad,
-            log_r.y - s.px(lay::GAP) - s.px(lay::LINE_H),
-            col.w,
-            s.px(lay::LINE_H),
-        );
-        set_text(&self.log_title, ui::LOG_TITLE);
-        put(&self.log_title, title_r);
-        put(&self.log, log_r);
+        show(&self.log_title, false);
+        show(&self.log, false);
 
         let (Some(st), Some(r)) = (&v.status, &v.results) else {
             for c in [
@@ -1189,6 +1187,7 @@ impl Shell {
                 &self.open_results,
                 &self.save_log,
                 &self.view_log,
+                &self.submit_report,
             ] {
                 b.unbind();
             }
@@ -1222,7 +1221,7 @@ impl Shell {
         }
 
         // Results: the list takes what the rows above and below it leave.
-        let bottom = title_r.y - s.px(lay::GAP);
+        let bottom = ch - pad;
         if let Some(b) = &r.open_results {
             let mut l = col.line(s.px(lay::ROW_H));
             put(&self.open_results.btn, l.take(self.button_w(s, b)));
@@ -1268,6 +1267,10 @@ impl Shell {
         }
         let mut l = col.line(s.px(lay::ROW_H));
         put(&self.view_log.btn, l.take(self.button_w(s, &r.view_log)));
+        put(
+            &self.submit_report.btn,
+            l.take(self.button_w(s, &r.submit_report)),
+        );
     }
 
     fn button_w(&self, s: Scale, b: &Button) -> i32 {
@@ -1646,6 +1649,7 @@ impl Shell {
             &self.open_results,
             &self.save_log,
             &self.view_log,
+            &self.submit_report,
         ]
         .into_iter()
         .chain(self.buttons.iter())

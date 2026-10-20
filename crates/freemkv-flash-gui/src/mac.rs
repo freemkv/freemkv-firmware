@@ -708,6 +708,9 @@ impl Controller {
                     pb.clearContents();
                     pb.setString_forType(&ns(&text), unsafe { NSPasteboardTypeString });
                 }
+                Effect::OpenPath(path) => {
+                    let _ = crate::external::open_path(&path);
+                }
                 Effect::StartTicking => self.start_tick(),
                 Effect::StopTicking => {
                     if let Some(t) = self.ivars().timer.borrow_mut().take() {
@@ -917,13 +920,13 @@ impl Controller {
 
         // Activity log.
         let log_title = small(mtm, ui::LOG_TITLE, 400.0);
-        root.addArrangedSubview(&log_title);
+        log_title.setHidden(true);
         let (log_scroll, log) = text_pane(mtm);
         log_scroll
             .heightAnchor()
             .constraintEqualToConstant(110.0)
             .setActive(true);
-        root.addArrangedSubview(&log_scroll);
+        log_scroll.setHidden(true);
         fill(&root, &log_scroll, 2.0 * PAD);
 
         let iv = self.ivars();
@@ -1080,6 +1083,7 @@ impl Controller {
             results.addArrangedSubview(&small(mtm, n, 820.0));
         }
         results.addArrangedSubview(&self.button(&r.view_log));
+        results.addArrangedSubview(&self.button(&r.submit_report));
     }
 
     // ── rendering ─────────────────────────────────────────────────────────

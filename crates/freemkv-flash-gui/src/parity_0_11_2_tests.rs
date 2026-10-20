@@ -266,14 +266,10 @@ mod v0_11_2 {
     pub const REPORT_TEXT: &str = "firmware-report.txt";
     pub const REPORT_JSON: &str = "firmware-report.json";
     pub const DIAGNOSTIC_LOG: &str = "freemkv-flash-diagnostic.log";
-    /// Wording of the confirmation dialog (`app.rs:9`, `:325`, `:336`).
-    pub const FORCE_WARNING: &str = "Recovery mode: no backups, compatibility checks overridden. Attempts to write the selected firmware to the drive. An incompatible image can leave the drive unusable. Required file and drive-protocol checks still apply.";
     pub const DANGER: &str = "Flashing can permanently disable the drive. Keep it connected and powered until completion.";
     pub const RISK_ACK: &str = "I understand and want to update this drive";
-    /// Analysis window actions (`analysis_ui.rs:168-176`), diagnostic window (`app.rs:773-787`).
+    /// Analysis window actions (`analysis_ui.rs:168-176`).
     pub const REPORT_ACTIONS: [&str; 3] = ["Copy report", "Save text…", "Save JSON…"];
-    pub const DIAGNOSTIC_ACTIONS: [&str; 3] =
-        ["Copy diagnostic log", "Save diagnostic log…", "Close"];
 }
 
 // ── the Pioneer model ─────────────────────────────────────────────────────
@@ -585,7 +581,7 @@ fn recover(app: &mut App, input: &Path) {
     assert_eq!(jobs(app), before, "nothing runs before the confirmation");
     let sheet = app.view().confirm.expect("the recovery sheet");
     assert_eq!(sheet.title, "Confirm recovery");
-    assert_eq!(sheet.warnings, [v0_11_2::FORCE_WARNING]);
+    assert_eq!(sheet.warnings, ["Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable."]);
     assert_eq!(
         (sheet.ack_text, sheet.ack_checked),
         (v0_11_2::RISK_ACK, false)
@@ -791,14 +787,10 @@ fn diagnostic_log_exports_match_0_11_2() {
     let results = app.view().results.unwrap();
     let failure = results.failure.expect("a failure offers the log");
     assert_eq!(failure.save_log.text, "Save diagnostic log…");
-    app.dispatch(results.view_log.input);
-    let diagnostics = app.view().diagnostics.expect("the log window");
-    let actions: Vec<_> = diagnostics
-        .buttons
-        .iter()
-        .map(|b| b.text.as_str())
-        .collect();
-    assert_eq!(actions, v0_11_2::DIAGNOSTIC_ACTIONS);
+    assert_eq!(
+        app.dispatch(results.view_log.input),
+        [Effect::OpenPath(log.clone())]
+    );
 
     let text = std::fs::read_to_string(&log).unwrap();
     assert_eq!(

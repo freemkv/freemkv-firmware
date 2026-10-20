@@ -13,7 +13,7 @@ Proceed? [y/N]
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- scsi transcript (56) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36

@@ -13,7 +13,7 @@ This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- events (13) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -27,7 +27,7 @@ MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
 MSG      flash complete; drive returned ready.
-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- scsi transcript (56) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
@@ -106,7 +106,7 @@ restoring the unmodified target Kernel
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- events (18) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -125,7 +125,7 @@ MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
 MSG      flash complete; drive returned ready.
-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- scsi transcript (79) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
@@ -222,7 +222,7 @@ This will flash: NORMAL only — no Kernel in the package
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- events (13) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -236,7 +236,7 @@ MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
 MSG      flash complete; drive returned ready.
-MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- scsi transcript (49) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
@@ -389,7 +389,7 @@ stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 flash complete; drive returned ready.
-post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag='GENERAL'
 --- scsi transcript (56) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36

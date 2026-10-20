@@ -24,9 +24,10 @@ use freemkv_flash::workflow::{
 };
 
 use crate::ops::{self, Job, Request, ResultView};
+use crate::support::Journal;
 
 /// Shown wherever Recovery is offered or confirmed. Wording is part of the safety contract.
-pub const FORCE_WARNING: &str = "Recovery mode: no backups, compatibility checks overridden. Attempts to write the selected firmware to the drive. An incompatible image can leave the drive unusable. Required file and drive-protocol checks still apply.";
+pub const FORCE_WARNING: &str = "Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable.";
 /// The confirmation sheet's danger line.
 pub const FLASH_DANGER: &str =
     "Flashing can permanently disable the drive. Keep it connected and powered until completion.";
@@ -43,6 +44,16 @@ const WORKER_PANIC: &str = "Operation worker failed unexpectedly. If flashing wa
 const WORKER_GONE: &str = "The worker stopped before reporting a result. If a flash was underway, inspect the drive before retrying.";
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
 const DIAGNOSTIC_REFRESH: Duration = Duration::from_millis(500);
+
+fn short_failure(error: &str) -> String {
+    let summary = error.split(';').take(2).collect::<Vec<_>>().join(";");
+    let summary = summary.trim().trim_end_matches(':');
+    if summary.chars().count() <= 170 {
+        summary.to_owned()
+    } else {
+        format!("{}…", summary.chars().take(169).collect::<String>())
+    }
+}
 
 /// The application's tasks, in tab order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -150,6 +161,8 @@ pub enum Effect {
         file_name: String,
     },
     CopyText(String),
+    /// Open an automatically saved diagnostic in the system text viewer.
+    OpenPath(PathBuf),
     /// Call `App::poll` periodically until `StopTicking`.
     StartTicking,
     StopTicking,
@@ -190,7 +203,10 @@ pub enum Input {
     CancelAnalysis,
     Confirm,
     CancelConfirm,
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     OpenDiagnostics,
+    ViewLog,
+    SubmitReport,
     CloseDiagnostics,
     CopyDiagnostics,
     OpenResults,
@@ -362,6 +378,7 @@ pub struct Results {
     pub failure: Option<Failure>,
     pub notice: Option<String>,
     pub view_log: Button,
+    pub submit_report: Button,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -518,6 +535,7 @@ impl Node {
 /// Messages from the worker thread.
 pub(crate) enum Msg {
     Event(Event),
+    DriveAfter(String),
     Analysis(ResultView),
     /// A flash passed every gate after its backup; the worker waits for the
     /// sheet's answer on the sender before writing.
@@ -561,6 +579,8 @@ type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
 
 /// The whole application state. The shells hold none of their own.
 pub struct App {
+    journal: Option<Journal>,
+    report_rx: Option<Receiver<Result<String, String>>>,
     origin_rx: Vec<Receiver<OriginReply>>,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -639,6 +659,12 @@ impl App {
     pub(crate) fn with_drives(drives: Vec<DriveChoice>) -> Self {
         let device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
         Self {
+            journal: if cfg!(test) {
+                None
+            } else {
+                Journal::open().ok()
+            },
+            report_rx: None,
             origin_rx: Vec::new(),
             flash_origin: None,
             recovery_origin: None,
@@ -804,6 +830,18 @@ impl App {
             self.pending = None;
         }
         self.drives = drives;
+        self.record_event(
+            "drives_observed",
+            serde_json::json!({
+                "drives": self.drives.iter().map(DriveChoice::display).collect::<Vec<_>>()
+            }),
+        );
+    }
+
+    fn record_event(&mut self, kind: &str, data: serde_json::Value) {
+        if let Some(journal) = &mut self.journal {
+            let _ = journal.record(kind, data);
+        }
     }
 
     pub(crate) fn device_label(&self) -> String {
@@ -922,6 +960,41 @@ impl App {
                 self.diagnostics_open = true;
                 self.diagnostic_notice = None;
                 self.refresh_diagnostic_view();
+            }
+            Input::ViewLog => {
+                if let Some(path) = &self.diagnostic_log {
+                    return vec![Effect::OpenPath(path.clone())];
+                }
+            }
+            Input::SubmitReport if self.report_rx.is_none() => {
+                let Some(journal) = &mut self.journal else {
+                    self.diagnostic_notice =
+                        Some("Automatic report logging is unavailable.".into());
+                    return Vec::new();
+                };
+                if let Err(error) = journal.record("report_requested", serde_json::json!({})) {
+                    self.diagnostic_notice =
+                        Some(format!("Could not save report request: {error}"));
+                    return Vec::new();
+                }
+                let source = journal.source();
+                let (tx, rx) = mpsc::channel();
+                self.report_rx = Some(rx);
+                self.diagnostic_notice = Some("Opening report approval in your browser…".into());
+                let waker = self.waker.clone();
+                std::thread::spawn(move || {
+                    let result = crate::support::submit(source, |message| {
+                        let _ = tx.send(Ok(message));
+                        if let Some(wake) = &waker {
+                            wake();
+                        }
+                    });
+                    let _ = tx.send(result.map_err(|error| format!("{error:#}")));
+                    if let Some(wake) = &waker {
+                        wake();
+                    }
+                });
+                return vec![Effect::StartTicking];
             }
             Input::CloseDiagnostics => self.diagnostics_open = false,
             Input::CopyDiagnostics => match self.diagnostic_text() {
@@ -1251,6 +1324,20 @@ impl App {
         self.rows.clear();
         self.info_result = matches!(job, Job::Info);
         self.log.push(format!("{label}: {device}"));
+        self.record_event(
+            "operation_started",
+            serde_json::json!({
+                "operation": label,
+                "drive_before": self.device_label(),
+                "device": device,
+                "input": match &job {
+                    Job::Flash(o) | Job::PlanFlash(o) => Some(o.input.display().to_string()),
+                    Job::Recovery(o) => Some(o.input.display().to_string()),
+                    Job::InfoFile { input } => Some(input.display().to_string()),
+                    _ => None,
+                }
+            }),
+        );
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
         #[cfg(test)]
@@ -1266,6 +1353,27 @@ impl App {
 
     /// Drain the worker's events; call on every tick or repaint.
     pub fn poll(&mut self) -> Vec<Effect> {
+        let mut report_done = false;
+        if let Some(rx) = self.report_rx.take() {
+            loop {
+                match rx.try_recv() {
+                    Ok(Ok(message)) => self.diagnostic_notice = Some(message),
+                    Ok(Err(error)) => {
+                        self.diagnostic_notice = Some(format!("Could not submit report: {error}"));
+                        report_done = true;
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        report_done = true;
+                        break;
+                    }
+                }
+            }
+            if !report_done {
+                self.report_rx = Some(rx);
+            }
+        }
         let origin_done = self.poll_origin();
         let profiled = self.poll_profile();
         let mut finished = false;
@@ -1274,6 +1382,9 @@ impl App {
             loop {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => self.event(event),
+                    Ok(Msg::DriveAfter(label)) => {
+                        self.record_event("drive_after", serde_json::json!({"drive": label}))
+                    }
                     Ok(Msg::Analysis(result)) => {
                         self.set_analysis(Some(result));
                         self.analysis_open = true;
@@ -1294,7 +1405,8 @@ impl App {
                                 self.status = format!("{} cancelled", self.action)
                             }
                             Err(error) => {
-                                self.status = format!("{} could not finish", self.action);
+                                self.status =
+                                    format!("{} failed — {}", self.action, short_failure(error));
                                 self.failure = Some(error.clone());
                             }
                         }
@@ -1303,6 +1415,12 @@ impl App {
                             Err(_) if cancelled => CANCELLED.into(),
                             Err(e) => format!("✗ error: {e}"),
                         });
+                        self.record_event("operation_finished", serde_json::json!({
+                            "operation": self.action,
+                            "result": if self.failure.is_some() { "error" } else if cancelled { "cancelled" } else { "success" },
+                            "summary": self.status,
+                            "error": self.failure,
+                        }));
                         finished = true;
                         break;
                     }
@@ -1331,10 +1449,11 @@ impl App {
         if self.diagnostics_open && due {
             self.refresh_diagnostic_view();
         }
-        if (finished || profiled || origin_done)
+        if (finished || profiled || origin_done || report_done)
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
+            && self.report_rx.is_none()
         {
             vec![Effect::StopTicking]
         } else {
@@ -1396,7 +1515,12 @@ impl App {
         match origin {
             Some(Ok(origin)) => vec![
                 Item::Origin(*origin),
-                Item::Note(origin.explanation().into()),
+                Item::Note(match origin {
+                    workflow::FileOrigin::OemLikely => {
+                        "Matches known OEM firmware; drive compatibility is unverified.".into()
+                    }
+                    _ => origin.explanation().into(),
+                }),
             ],
             Some(Err(error)) => vec![
                 Item::Origin(workflow::FileOrigin::Unknown),
@@ -1444,6 +1568,7 @@ impl App {
                 // activity log names it ("  reading normal...") like the small ones.
                 if self.progress.as_ref().is_none_or(|(l, _, _)| *l != label) {
                     self.log.push(format!("  {label}..."));
+                    self.record_event("stage", serde_json::json!({"name": label, "total": total}));
                 }
                 self.progress = Some((label, done, total));
             }
@@ -1451,7 +1576,9 @@ impl App {
                 for row in report.rows {
                     match row.gui_label.as_deref() {
                         Some(DIAGNOSTIC_FIELD) => {
-                            self.diagnostic_log = Some(row.value.plain().into())
+                            let path = row.value.plain();
+                            self.record_event("diagnostic", serde_json::json!({"log_file": path}));
+                            self.diagnostic_log = Some(path.into())
                         }
                         Some(_) => self.rows.push(row),
                         None => {}
@@ -1625,6 +1752,7 @@ impl App {
             },
             Task::Recovery => {
                 let mut items = vec![
+                    Item::Warning(FORCE_WARNING.into()),
                     Item::Heading("Current firmware".into()),
                     Item::Check {
                         id: CheckId::RecoveryReadFromDrive,
@@ -1641,6 +1769,7 @@ impl App {
                 ];
                 if self.recovery_without_current() {
                     items = vec![
+                        Item::Warning(FORCE_WARNING.into()),
                         Item::Heading("Current firmware (optional receiver reference)".into()),
                         path("Choose Current file or TAR…", Pick::RecoveryCurrent, true, &self.recovery_current),
                         Item::Note("If live receiver code cannot be read, select the firmware currently running—not the firmware to install. For BH16NS40 INTM, select the TAR's intermediate.bin.".into()),
@@ -1721,17 +1850,14 @@ impl App {
                 if self.recovery_input.is_some() {
                     items.extend(self.origin_items(true));
                 }
-                items.extend([
-                    Item::Warning(FORCE_WARNING.into()),
-                    Item::Buttons {
-                        label: None,
-                        buttons: vec![Button::primary(
-                            "Recover",
-                            Input::Recover,
-                            enabled && self.recovery_ready(),
-                        )],
-                    },
-                ]);
+                items.extend([Item::Buttons {
+                    label: None,
+                    buttons: vec![Button::primary(
+                        "Recover",
+                        Input::Recover,
+                        enabled && self.recovery_ready(),
+                    )],
+                }]);
                 items
             }
         }
@@ -1797,16 +1923,35 @@ impl App {
     fn status_view(&self) -> Status {
         let running = self.running();
         let analysis = matches!(self.task, Task::Inspect | Task::Compare);
+        let text = if running {
+            match &self.progress {
+                Some((label, done, total)) if *total > 0 => {
+                    format!(
+                        "{} — {label} ({}%)",
+                        self.action,
+                        done.saturating_mul(100) / total
+                    )
+                }
+                Some((label, _, _)) => format!("{} — {label}", self.action),
+                None => self.status.clone(),
+            }
+        } else {
+            self.status.clone()
+        };
         Status {
-            text: self.status.clone(),
+            text,
             running,
             progress: running.then(|| match &self.progress {
                 Some((label, done, total)) => Progress {
-                    label: label.clone(),
+                    label: if label.is_empty() {
+                        "Working…".into()
+                    } else {
+                        String::new()
+                    },
                     fraction: Some(*done as f32 / (*total).max(1) as f32),
                 },
                 None => Progress {
-                    label: "Preparing…".into(),
+                    label: String::new(),
                     fraction: None,
                 },
             }),
@@ -1819,6 +1964,7 @@ impl App {
     fn results_view(&self) -> Results {
         let analysis = matches!(self.task, Task::Inspect | Task::Compare);
         let info = self.result_task == Task::Info && self.info_result && !self.rows.is_empty();
+        let concise = matches!(self.task, Task::Flash | Task::Recovery);
         Results {
             open_results: (analysis && self.analysis.is_some())
                 .then(|| Button::new("Open results…", Input::OpenResults, true)),
@@ -1827,21 +1973,30 @@ impl App {
             } else {
                 Vec::new()
             },
-            fields: if info {
+            fields: if info || concise {
                 Vec::new()
             } else {
                 self.rows.iter().filter_map(gui_pair).collect()
             },
-            failure: self.failure.as_ref().map(|text| Failure {
-                text: text.clone(),
-                save_log: Button::new(
-                    "Save diagnostic log…",
-                    Input::Choose(Pick::DiagnosticLog),
-                    true,
-                ),
-            }),
+            failure: self
+                .failure
+                .as_ref()
+                .filter(|_| !concise)
+                .map(|text| Failure {
+                    text: text.clone(),
+                    save_log: Button::new(
+                        "Save diagnostic log…",
+                        Input::Choose(Pick::DiagnosticLog),
+                        true,
+                    ),
+                }),
             notice: self.diagnostic_notice.clone(),
-            view_log: Button::new("View diagnostic log…", Input::OpenDiagnostics, true),
+            view_log: Button::new("View Log", Input::ViewLog, self.diagnostic_log.is_some()),
+            submit_report: Button::new(
+                "Submit Report",
+                Input::SubmitReport,
+                self.journal.is_some() && self.report_rx.is_none(),
+            ),
         }
     }
 
@@ -1940,6 +2095,7 @@ impl Default for App {
 
 /// The worker: one job, every event forwarded, a panic reported as a failure.
 fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
+    let check_after = matches!(job, Job::Flash(_) | Job::Recovery(_));
     let wake = {
         let waker = waker.clone();
         move || {
@@ -1972,6 +2128,16 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>) {
         Ok(result) => result.map_err(|e| format!("{e:#}")),
         Err(_) => Err(WORKER_PANIC.into()),
     };
+    if check_after {
+        let after = ops::enumerate()
+            .into_iter()
+            .find(|drive| drive.path == device)
+            .map_or_else(
+                || "Drive not detected after operation".to_owned(),
+                |drive| drive.display(),
+            );
+        let _ = tx.send(Msg::DriveAfter(after));
+    }
     let _ = tx.send(Msg::Done(result));
     wake();
 }

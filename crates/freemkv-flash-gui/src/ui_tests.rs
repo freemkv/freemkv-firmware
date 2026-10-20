@@ -970,7 +970,7 @@ fn job_lifecycle_reports_progress_then_completion() {
     .unwrap();
     assert!(app.poll().is_empty());
     let progress = app.view().status.unwrap().progress.unwrap();
-    assert_eq!(progress.label, "Reading firmware");
+    assert_eq!(progress.label, "");
     assert_eq!(progress.fraction, Some(0.5));
     assert_eq!(finish(&mut app, Ok(())), [Effect::StopTicking]);
     let view = app.view();
@@ -990,8 +990,8 @@ fn failed_job_offers_log_export_next_to_the_error() {
     let failure = results.failure.unwrap();
     assert_eq!(failure.text, "Backup failed");
     assert_eq!(failure.save_log.text, "Save diagnostic log…");
-    assert_eq!(results.view_log.text, "View diagnostic log…");
-    assert_eq!(app.status, "Drive information could not finish");
+    assert_eq!(results.view_log.text, "View Log");
+    assert!(app.status.starts_with("Drive information failed —"));
     assert_eq!(app.log.last().unwrap(), "✗ error: Backup failed");
 }
 
@@ -1106,7 +1106,7 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
         app.poll();
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
-    assert_eq!(app.status, "Drive information could not finish");
+    assert!(app.status.starts_with("Drive information failed —"));
     assert!(app.view().controls_enabled);
 }
 

@@ -4,7 +4,7 @@
 //! validates component integrity and compatibility, reads the receiver control
 //! descriptor/key, then streams validated components with strict transport errors.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use pioneer_optical::receiver::Receiver;
 use pioneer_optical::Role;
 use std::borrow::Cow;
@@ -23,6 +23,7 @@ pub mod backup;
 pub mod bundle;
 /// Pioneer's `info` rows and read-only settings.
 mod details;
+mod dialect;
 /// Address-oriented Pioneer diagnostic captures.
 pub mod dump;
 /// `info <file>` for Pioneer bundles and the offline transfer plan.
@@ -490,6 +491,9 @@ pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
 struct Prepared {
     complete: Option<pioneer_optical::receiver::PreparedUpdate>,
     normal: Option<pioneer_optical::receiver::PreparedNormal>,
+    dialect: pioneer_optical::DriveClass,
+    initial_identity: (String, String),
+    target_identity: Option<(String, String)>,
 }
 
 /// The installed-firmware gates: the Kernel a Normal-only flash pairs with,
@@ -509,10 +513,9 @@ pub(crate) fn authorize_installed(
     let prepared = match p.selection {
         FlashSelection::KernelAndNormal => {
             let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
-            receiver.prepare(target).map(|complete| Prepared {
-                complete: Some(complete),
-                normal: None,
-            })
+            receiver
+                .prepare(target)
+                .map(|complete| (Some(complete), None))
         }
         FlashSelection::NormalOnly => {
             let (installed_kernel, _) =
@@ -524,10 +527,9 @@ pub(crate) fn authorize_installed(
             )?;
             let source = pioneer_optical::envelope::Envelope::load_with_kernel(normal, &k)?;
             let bytes = normal_prepare::prepare(&k, &source, normal)?;
-            receiver.prepare_normal(&bytes).map(|normal| Prepared {
-                complete: None,
-                normal: Some(normal),
-            })
+            receiver
+                .prepare_normal(&bytes)
+                .map(|normal| (None, Some(normal)))
         }
     };
     // A known handoff mismatch is a candidate for future adaptation, but all
@@ -555,7 +557,30 @@ pub(crate) fn authorize_installed(
     .map_err(|reason| anyhow!("refusing to flash: {reason}"))?;
     let route = resolve_flash_plan(installed, kernel, Some(normal))?;
     let mut warnings = routing_warnings(&route)?;
-    let prepared = prepared.map_err(preparation_error)?;
+    let (complete, prepared_normal) = prepared.map_err(preparation_error)?;
+    let installed_kernel_bytes = installed_kernel
+        .context("captured installed Kernel is required to establish the update-entry dialect")?;
+    let dialect = dialect::from_kernel(&installed_kernel_bytes)?;
+    let identity_fields = |bytes: &[u8]| -> Result<(String, String)> {
+        let header = pioneer_optical::envelope::header_info(bytes)
+            .context("Kernel has no usable identity header")?;
+        Ok((header.hardware_version, header.kernel_version))
+    };
+    let initial_identity = identity_fields(&installed_kernel_bytes)?;
+    let target_identity = kernel.map(identity_fields).transpose()?;
+    if let Some(target_kernel) = kernel {
+        ensure!(
+            dialect == dialect::from_kernel(target_kernel)?,
+            "installed and target Kernels use different update-entry dialects; refusing before any write"
+        );
+    }
+    let prepared = Prepared {
+        complete,
+        normal: prepared_normal,
+        dialect,
+        initial_identity,
+        target_identity,
+    };
     debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
         &route
     ));
@@ -927,7 +952,13 @@ impl FlashFacet for Pioneer {
             (None, Some(plan)) => PreparedFlash::Normal(plan),
             _ => unreachable!("one prepared plan selected"),
         };
-        execute_prepared(dev, selected)?;
+        execute_prepared(
+            dev,
+            selected,
+            prepared.dialect,
+            &prepared.initial_identity,
+            prepared.target_identity.as_ref(),
+        )?;
         println!(
             "{}",
             crate::style::green("flash complete; drive returned ready.")

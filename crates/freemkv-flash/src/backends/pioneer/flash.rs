@@ -9,34 +9,15 @@ use crate::backends::pioneer::FLASH_CHUNK;
 use crate::backend::WriteDevice;
 use crate::style;
 use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use pioneer_optical::drive::{UpdateError, UpdateOptions, UpdateRuntime};
 use pioneer_optical::receiver::{
     FlashError, FlashPass, FlashRuntime, FlashTransport, PreparedNormal, PreparedUpdate,
 };
-use pioneer_optical::{CodedError, DriveClass, Identity, Role};
+use pioneer_optical::{CodedError, DriveClass, Role};
 use std::time::{Duration, Instant};
 
 const PARTIAL_HINT: &str = " — the drive may now hold a partial firmware; re-flash the captured pre-flash backup to restore it";
-
-/// The drive dialect an update session must speak, taken from the drive's own
-/// identity (`drive::identify` -> `Identity::class`): a `BD-*` product, or a
-/// `DVD-R*` product on a `DVR*` platform. An unreadable or ambiguous identity
-/// is refused before any write; the dialect is never guessed.
-fn resolve_class(identity: Result<Identity>) -> Result<DriveClass> {
-    if let Some(class) = identity.as_ref().ok().and_then(Identity::class) {
-        return Ok(class);
-    }
-    match identity {
-        Err(error) => Err(error).context(
-            "could not read the drive identity to choose the update dialect; refusing before \
-             any write",
-        ),
-        Ok(_) => bail!(
-            "the drive does not identify as a BD or DVR generation; refusing before any write"
-        ),
-    }
-}
 
 /// A validated library plan selected by the app's input routing.
 pub(crate) enum PreparedFlash<'a> {
@@ -44,7 +25,13 @@ pub(crate) enum PreparedFlash<'a> {
     Normal(&'a PreparedNormal),
 }
 
-pub(crate) fn execute_prepared(dev: &mut WriteDevice<'_>, plan: PreparedFlash<'_>) -> Result<()> {
+pub(crate) fn execute_prepared(
+    dev: &mut WriteDevice<'_>,
+    plan: PreparedFlash<'_>,
+    class: DriveClass,
+    initial_identity: &(String, String),
+    target_identity: Option<&(String, String)>,
+) -> Result<()> {
     let shared = SharedDevice::new(dev);
     let mut reads = ScsiTransport::reads(&shared);
     let mut writes = ScsiTransport::flash(&shared);
@@ -57,6 +44,9 @@ pub(crate) fn execute_prepared(dev: &mut WriteDevice<'_>, plan: PreparedFlash<'_
         kernel: style::Progress::new("flashing kernel", 0),
         normal: style::Progress::new("flashing normal", 0),
         device: &shared,
+        class,
+        initial_identity: initial_identity.clone(),
+        target_identity: target_identity.cloned(),
     };
     match plan {
         PreparedFlash::Complete(plan) => match plan.startup_setting() {
@@ -169,6 +159,9 @@ fn prepared_error(error: FlashError<anyhow::Error>) -> anyhow::Error {
 
 struct Runtime<'a, 'd> {
     device: &'a SharedDevice<'d>,
+    class: DriveClass,
+    initial_identity: (String, String),
+    target_identity: Option<(String, String)>,
     start: Instant,
     kernel: style::Progress,
     normal: style::Progress,
@@ -209,13 +202,22 @@ impl FlashRuntime<anyhow::Error> for Runtime<'_, '_> {
     fn prepare_pass(&mut self, pass: FlashPass) -> Result<UpdateOptions> {
         self.device
             .with(|dev| crate::engine::guard_no_medium(dev, true))?;
-        let class = resolve_class(transport::identify_on(self.device))?;
+        let identity = transport::identify_on(self.device)
+            .context("could not re-read the live Pioneer receiver before update entry")?;
+        let expected = if pass == FlashPass::Restoration {
+            self.target_identity
+                .as_ref()
+                .unwrap_or(&self.initial_identity)
+        } else {
+            &self.initial_identity
+        };
+        super::dialect::check_live_identity(&identity, &expected.0, &expected.1)?;
         if pass == FlashPass::Restoration {
             println!("{}", style::dim("restoring the unmodified target Kernel"));
         }
         // The library's degraded-receiver mode is never requested.
         Ok(UpdateOptions {
-            class,
+            class: self.class,
             recover: false,
         })
     }

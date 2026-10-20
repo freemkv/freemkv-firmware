@@ -7,6 +7,9 @@ fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
     crate::backends::pioneer::flash::execute_prepared(
         &mut crate::engine::gates::ungated_for_tests(dev),
         crate::backends::pioneer::flash::PreparedFlash::Complete(plan),
+        pioneer_optical::DriveClass::Bd,
+        &(String::new(), String::new()),
+        None,
     )
 }
 use pioneer_optical::envelope::{
@@ -189,6 +192,7 @@ impl ScsiDevice for Drive {
         }
         let mut out = vec![0; len];
         if cdb[0] == 0x12 {
+            out[0] = 0x05;
             out[8..16].copy_from_slice(b"PIONEER ");
             out[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
             out[32..36].copy_from_slice(b"000 ");

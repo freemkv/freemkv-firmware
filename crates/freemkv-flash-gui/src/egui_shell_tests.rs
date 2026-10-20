@@ -140,7 +140,7 @@ fn failed_operation_offers_log_export_next_to_the_error() {
         text.iter().any(|(t, _)| t == "Save diagnostic log…"),
         "{text:?}"
     );
-    assert!(text.iter().any(|(t, _)| t == "View diagnostic log…"));
+    assert!(text.iter().any(|(t, _)| t == "View Log"));
     assert!(text.iter().any(|(t, _)| t == "Backup failed"));
 }
 

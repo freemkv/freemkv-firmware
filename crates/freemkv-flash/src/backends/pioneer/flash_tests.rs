@@ -49,10 +49,13 @@ fn execute_flash(
     };
     crate::engine::guard_no_medium(dev, true)?;
     let shared = SharedDevice::new(dev);
-    let class = resolve_class(transport::identify_on(&shared))?;
+    let class = DriveClass::Bd;
     let mut port = ScsiTransport::flash(&shared);
     let mut runtime = Runtime {
         device: &shared,
+        class,
+        initial_identity: (String::new(), String::new()),
+        target_identity: None,
         start: Instant::now(),
         kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
         normal: style::Progress::new("flashing normal", normal.len()),
@@ -68,6 +71,126 @@ fn execute_flash(
         },
     )
     .map_err(update_error)
+}
+
+#[test]
+fn pr1ame_1_05_real_kernel_passes_flash_entry_preflight() {
+    struct Pr1ame {
+        device_type: u8,
+        hardware: &'static [u8; 8],
+        vendor: &'static [u8; 8],
+        product: &'static [u8; 16],
+        tag: &'static [u8; 8],
+        writes: usize,
+    }
+    impl ScsiDevice for Pr1ame {
+        fn medium_status(&mut self) -> Result<crate::platform::MediumStatus> {
+            Ok(crate::platform::MediumStatus::ClosedEmpty)
+        }
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            let mut out = vec![0; len];
+            if cdb[0] == 0x12 {
+                out[0] = self.device_type;
+                out[8..16].copy_from_slice(self.vendor);
+                out[16..32].copy_from_slice(self.product);
+                out[32..36].copy_from_slice(b"1.05");
+            } else if cdb == pioneer_optical::cdb::vendor_identity() {
+                out[16..24].copy_from_slice(self.hardware);
+                out[24..32].copy_from_slice(self.tag);
+            } else {
+                anyhow::bail!("unexpected read {cdb:02x?}");
+            }
+            Ok(out)
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            self.writes += 1;
+            anyhow::bail!("preflight must not write")
+        }
+        fn describe(&self) -> String {
+            "PR1AME 1.05".into()
+        }
+    }
+    const KERNEL: &[u8] = include_bytes!("../../../tests/fixtures/pioneer/pr1ame_1_05_kernel.enc");
+    let class = super::super::dialect::from_kernel(KERNEL).unwrap();
+    let header = pioneer_optical::envelope::header_info(KERNEL).unwrap();
+    for (device_type, vendor, product, hardware, tag, should_pass) in [
+        (
+            5,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID90    ",
+            true,
+        ),
+        (
+            5,
+            b"PIONEER ",
+            b"UNUSUAL PRODUCT ",
+            b"SAT 8000",
+            b"ID90    ",
+            true,
+        ),
+        (
+            5,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8800",
+            b"ID90    ",
+            false,
+        ),
+        (
+            5,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID88    ",
+            false,
+        ),
+        (
+            5,
+            b"NOTOEM  ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID90    ",
+            false,
+        ),
+        (
+            0,
+            b"PIONEER ",
+            b"BDR-PR1AME      ",
+            b"SAT 8000",
+            b"ID90    ",
+            false,
+        ),
+    ] {
+        let mut drive = Pr1ame {
+            device_type,
+            hardware,
+            vendor,
+            product,
+            tag,
+            writes: 0,
+        };
+        let shared = SharedDevice::new(&mut drive);
+        let mut runtime = Runtime {
+            device: &shared,
+            class,
+            initial_identity: (
+                header.hardware_version.clone(),
+                header.kernel_version.clone(),
+            ),
+            target_identity: None,
+            start: Instant::now(),
+            kernel: style::Progress::new("kernel", 0),
+            normal: style::Progress::new("normal", 0),
+        };
+        let result = runtime.prepare_pass(FlashPass::Initial);
+        assert_eq!(result.is_ok(), should_pass, "{result:?}");
+        if let Ok(options) = result {
+            assert_eq!(options.class, DriveClass::Bd);
+        }
+        assert_eq!(drive.writes, 0);
+    }
 }
 
 /// A BD-generation INQUIRY response (36+ bytes): `PIONEER` / `BD-RW   BDR-UD04`
@@ -447,43 +570,6 @@ fn ud04_self_flash_control_and_wire_bytes_are_byte_exact() {
         .flat_map(|(_, d)| d.iter().copied())
         .collect();
     assert_eq!(sent, normal);
-}
-
-/// A mock that answers INQUIRY / the vendor identity with a chosen product.
-struct Ident(&'static [u8; 16]);
-impl ScsiDevice for Ident {
-    fn command_in(&mut self, cdb: &[u8], alloc: usize) -> Result<Vec<u8>> {
-        let mut r = vec![0u8; alloc.max(36)];
-        if cdb.first() == Some(&0x12) {
-            r[8..16].copy_from_slice(b"PIONEER ");
-            r[16..32].copy_from_slice(self.0);
-        }
-        Ok(r)
-    }
-    fn command_out(&mut self, _cdb: &[u8], _d: &[u8]) -> Result<()> {
-        Ok(())
-    }
-    fn describe(&self) -> String {
-        "ident".into()
-    }
-}
-
-#[test]
-fn class_follows_an_unambiguous_identity() {
-    let id = transport::identify(&mut Ident(b"BD-RW   BDR-UD04")).unwrap();
-    // The target need not profile: the drive's own identity decides.
-    assert_eq!(resolve_class(Ok(id)).unwrap(), DriveClass::Bd);
-}
-
-#[test]
-fn ambiguous_identity_is_refused_before_any_write() {
-    // Neither BD nor DVD-R/DVR.
-    let id = transport::identify(&mut Ident(b"CD-RW   UNKNOWN1")).unwrap();
-    let err = resolve_class(Ok(id)).unwrap_err();
-    assert!(format!("{err:#}").contains("refusing before any write"));
-    // An unreadable identity is equally ambiguous.
-    let err = resolve_class(Err(anyhow::anyhow!("no identity"))).unwrap_err();
-    assert!(format!("{err:#}").contains("refusing before any write"));
 }
 
 #[test]

@@ -11,6 +11,7 @@
 #[cfg(test)]
 mod architecture_tests;
 mod egui_shell;
+mod external;
 // qa's GUI gate (`FREEMKV_FLASH_GATE`): debug builds only, so a shipped binary has no hook.
 #[cfg(debug_assertions)]
 #[cfg_attr(not(feature = "native"), allow(dead_code))]
@@ -22,6 +23,7 @@ mod mac;
 mod ops;
 #[cfg(test)]
 mod parity_0_11_2_tests;
+mod support;
 mod ui;
 // Toolkit-free and built everywhere so its tests run on every host; only Windows uses it.
 #[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
