@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.13.4] - Unreleased
 
 ### Development
+- Stamp macOS application versions from the workspace package version before
+  signing, and reject stale bundle metadata during release packaging.
 - Start Linux GUI release builds in parallel with the archive matrix, consolidate
   native codegen checks, and avoid duplicate promotion-PR test runs. Keep coverage
   on QA/main and optimize image/crypto dependencies in the debug test profile.
