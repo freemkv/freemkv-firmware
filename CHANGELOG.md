@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.13.4] - Unreleased
 
+### Development
+- Start Linux GUI release builds in parallel with the archive matrix, consolidate
+  native codegen checks, and avoid duplicate promotion-PR test runs. Keep coverage
+  on QA/main and optimize image/crypto dependencies in the debug test profile.
+- Advance a scoped virtual clock for in-memory flash golden fixtures instead of
+  spending real time on hardware settle waits. Preserve real hardware timing.
+
 ### freemkv Modify
 - Reload each selected image's boot settings, including when a file is
   reselected; discard settings and pending analysis from the previous image.

@@ -103,7 +103,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
-      - run: cargo test --release --tests
+      # This also owns all-targets/all-features codegen on Windows. Do not
+      # compile the same optimized test executables again in a separate job.
+      - run: cargo test --release --locked --all-targets --all-features
 
   # clippy's output is target-dependent: cfg-gated code only gets linted on the
   # target it compiles for. Linting solely on the dev host is how a lint that CI
@@ -130,27 +132,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
       - run: cargo clippy --all-targets --all-features -- -D warnings
-
-  # Windows compiles the tests but does not run them. The value is codegen: the
-  # #[cfg(windows)] half of the SCSI transport compiles on no other runner, so
-  # without this it is first built at release time.
-  windows-build:
-    needs: resolve-msrv
-    runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: freemkv-firmware
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          path: freemkv-firmware
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ needs.resolve-msrv.outputs.v }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: freemkv-firmware
-      - run: cargo build --release --all-targets --all-features
 
   # freemkv-fw claims it can modify (create + re-verify) 100% of the FORGEABLE
   # firmware images we hold — "forgeable" meaning a plaintext MediaTek MT1959
@@ -237,8 +218,10 @@ jobs:
         with:
           workspaces: freemkv-firmware
           key: gui-gate
-      - name: Build the debug GUI with its gate hook
-        run: cargo build --locked -p freemkv-flash-gui --features native
+      # Own debug codegen for every native platform here, sharing the build
+      # that starts the GUI instead of separate macOS/Windows CI build jobs.
+      - name: Build all debug targets and the GUI gate hook
+        run: cargo build --locked --workspace --all-targets --all-features
       - name: GUI gate
         timeout-minutes: 5
         run: |

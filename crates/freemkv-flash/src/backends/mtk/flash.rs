@@ -543,14 +543,14 @@ fn text(error: &DriveError<anyhow::Error>) -> String {
 
 /// Progress and diagnostics for the crate's flash, in the flasher's words.
 pub(super) struct Runtime {
-    start: std::time::Instant,
+    start: crate::runtime_clock::Clock,
     progress: style::Progress,
 }
 
 impl Runtime {
     pub(super) fn new() -> Self {
         Self {
-            start: std::time::Instant::now(),
+            start: crate::runtime_clock::Clock::new(),
             progress: style::Progress::new("flashing firmware", 0),
         }
     }
@@ -561,7 +561,7 @@ impl FlashRuntime<anyhow::Error> for Runtime {
         self.start.elapsed()
     }
     fn sleep(&mut self, duration: std::time::Duration) {
-        std::thread::sleep(duration);
+        crate::runtime_clock::sleep(duration);
     }
     fn starting(&mut self, bytes: usize) {
         println!(

@@ -21,7 +21,7 @@ use pioneer_optical::receiver::{
 #[cfg(test)]
 use pioneer_optical::{receiver::FlashError, DriveClass};
 use pioneer_optical::{CodedError, Role};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// A validated library plan selected by the app's input routing.
 pub(crate) enum PreparedFlash<'a> {
@@ -34,7 +34,7 @@ pub(crate) fn execute_prepared(
     plan: PreparedFlash<'_>,
     mode: ExecutionMode,
 ) -> Result<crate::backend::UpdateOutcome> {
-    execute_with_sleep(dev, plan, mode, &mut std::thread::sleep)
+    execute_with_sleep(dev, plan, mode, &mut crate::runtime_clock::sleep)
 }
 
 pub(super) fn execute_with_sleep(
@@ -51,7 +51,7 @@ pub(super) fn execute_with_sleep(
         writes: &mut writes,
     };
     let mut runtime = Runtime {
-        start: Instant::now(),
+        start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
         completed_passes: 0,
         kernel: style::Progress::new("flashing kernel", 0),
@@ -160,7 +160,7 @@ fn execution_error(
 struct Runtime<'a, 'd> {
     device: &'a SharedDevice<'d>,
     sleep: &'a mut dyn FnMut(Duration),
-    start: Instant,
+    start: crate::runtime_clock::Clock,
     waited: Duration,
     completed_passes: usize,
     kernel: style::Progress,
