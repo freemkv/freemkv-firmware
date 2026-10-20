@@ -15,6 +15,7 @@ use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use super::CreateReport;
 use crate::abi;
+use crate::boot::BootSettings;
 use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
@@ -89,6 +90,14 @@ impl Mt1959Engine {
     /// lookup via `emit_hrl_classic`). Net classic set: Region + Raw-read/Encryption
     /// + HRL = 17/17.
     pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
+        self.build_report_classic_with_defaults(image, &BootSettings::standard())
+    }
+
+    pub(crate) fn build_report_classic_with_defaults(
+        &self,
+        image: &[u8],
+        defaults: &BootSettings,
+    ) -> Result<CreateReport> {
         // Idempotency: a re-fed freemkv image reports the existing base unchanged.
         if is_freemkv_patched(image) {
             bail!("image already carries a freemkv base (classic); nothing to create");
@@ -145,7 +154,13 @@ impl Mt1959Engine {
         // function entry can flip this back on.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base, boot_function_entry)
+            .build_handler_with_defaults(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                defaults,
+            )
             .context("classic base: assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -184,7 +199,7 @@ impl Mt1959Engine {
         // emit inside the boot-success arm is otherwise best-effort.
         if let Ok((site, va)) = self
             .resolve_boot_init_pair(image)
-            .and_then(|pair| self.emit_boot_init(image, &mut out, flag_base, pair))
+            .and_then(|pair| self.emit_boot_init(image, &mut out, flag_base, pair, defaults))
         {
             boot_init_site = site;
             boot_stub_va = va;
@@ -364,6 +379,16 @@ impl Mt1959Engine {
         chip: &ChipInfo,
         cap: &Capability,
     ) -> Result<ModifyReport> {
+        self.build_modify_classic_with_defaults(image, chip, cap, &BootSettings::standard())
+    }
+
+    pub(crate) fn build_modify_classic_with_defaults(
+        &self,
+        image: &[u8],
+        chip: &ChipInfo,
+        cap: &Capability,
+        defaults: &BootSettings,
+    ) -> Result<ModifyReport> {
         // Idempotency: a re-fed freemkv-modified classic image reports every lever
         // AlreadyPresent and returns byte-identical (see `build_modify`).
         if is_freemkv_patched(image) {
@@ -418,7 +443,13 @@ impl Mt1959Engine {
         // function entry can flip this back on.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base, boot_function_entry)
+            .build_handler_with_defaults(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                defaults,
+            )
             .context("classic base: assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -435,7 +466,7 @@ impl Mt1959Engine {
         // classic site is blessed on silicon (see TODO(hw-confirm) there).
         let boot_init_pair = self.resolve_boot_init_pair(image)?;
         let (_boot_init_site, _boot_stub_va) =
-            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair)?;
+            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair, defaults)?;
 
         let mut levers: Vec<LeverReport> = Vec::new();
 

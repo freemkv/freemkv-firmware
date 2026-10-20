@@ -285,6 +285,38 @@ Recovery accepts the same TAR but writes exactly one selected member:
 Add `--execute --i-understand-risk` only after reviewing the preview. Recovery
 never continues to the other member and does not create a backup.
 
+Modify's **Boot settings** are applied every time the drive starts. Select
+Unrestricted access, HRL checking, Encryption, Read speed, and Region in the
+Create form. **Reset to defaults** restores unrestricted access to On and the
+other settings to OEM behavior. The button changes the form; Create writes them
+to the generated firmware. Saved drive settings do not override these boot
+choices; applications can still change settings during a session.
+
+The CLI uses repeatable `--default FEATURE=VALUE` options:
+
+```sh
+freemkv-fw create original.bin custom.bin --default hrl=off --default encryption=off
+freemkv-fw create original.bin custom.bin --default region=free --dry-run
+```
+
+Supported values are `unrestricted`, `hrl`, and `encryption` = `on|off|oem`,
+`speed=oem|uncapped`, and `region=oem|free`. HRL Off skips checking; Encryption
+Off selects bypass. `enc` aliases `encryption`, and `passthrough` aliases `oem`.
+Omitted settings use shipping defaults. Duplicate assignments, invalid values,
+and explicit settings unavailable on the selected firmware are errors.
+`--dry-run` validates and reports the build without writing the output;
+`--json` includes resolved boot settings and availability.
+
+Newly generated images carry a versioned settings record and can be reopened
+in Modify to adjust their boot settings. Older modified images without this
+record require the original OEM image. Region selection is limited to OEM
+behavior or region-free; specific regions are not exposed.
+
+`--base` requires the complete freemkv base to build successfully; it does not
+select a smaller set of modifications. On supported firmware such as BU40N
+1.00, normal creation and `--base` produce identical output for identical boot
+settings. Ordinary creation can return partial modifications on other images.
+
 Modify accepts BIN or TAR and returns the same format. With a TAR it modifies
 only final firmware, preserves INTM bytes and pairing provenance, and updates the
 final member hash. Standalone BIN images and backups can be flashed directly, or optionally wrapped offline with

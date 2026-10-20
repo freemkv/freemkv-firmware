@@ -14,6 +14,7 @@ use super::core::*;
 use super::lever::{LeverId, LeverReport, Validation};
 use super::{CreateReport, Engine, ModifyReport};
 use crate::abi;
+use crate::boot::BootSettings;
 use crate::family::{self, Capability, ChipInfo, MediaClass};
 use thumb_asm::{self as thumb, CommandTable};
 
@@ -29,10 +30,18 @@ impl Engine for Mt1959Engine {
         self.build_report(image)
     }
 
+    fn create_with_defaults(&self, image: &[u8], defaults: &BootSettings) -> Result<CreateReport> {
+        self.build_report_with_defaults(image, defaults)
+    }
+
     fn modify(&self, image: &[u8]) -> Result<ModifyReport> {
+        self.modify_with_defaults(image, &BootSettings::standard())
+    }
+
+    fn modify_with_defaults(&self, image: &[u8], defaults: &BootSettings) -> Result<ModifyReport> {
         let chip = family::detect_chip(image)?;
         let cap = family::capability_for(&chip.model, chip.family);
-        self.build_modify(image, &chip, &cap)
+        self.build_modify_with_defaults(image, &chip, &cap, defaults)
     }
 }
 
@@ -90,14 +99,32 @@ impl Mt1959Engine {
     ///
     /// [`Engine`]: super::Engine
     pub fn build_report(&self, image: &[u8]) -> Result<CreateReport> {
-        self.build_report_with_identity(image, identity_blob())
+        self.build_report_with_defaults(image, &BootSettings::standard())
+    }
+
+    pub(crate) fn build_report_with_defaults(
+        &self,
+        image: &[u8],
+        defaults: &BootSettings,
+    ) -> Result<CreateReport> {
+        self.build_configured_report(image, identity_blob(), defaults)
     }
 
     /// Uses the production build path with a fixed identity for known-answer tests.
+    #[cfg(test)]
     pub(super) fn build_report_with_identity(
         &self,
         image: &[u8],
         identity: Vec<u8>,
+    ) -> Result<CreateReport> {
+        self.build_configured_report(image, identity, &BootSettings::standard())
+    }
+
+    fn build_configured_report(
+        &self,
+        image: &[u8],
+        identity: Vec<u8>,
+        defaults: &BootSettings,
     ) -> Result<CreateReport> {
         // ---- BASE (mandatory) — the verb handler + boot hook + save/reset need these;
         // a miss means this image cannot carry a freemkv base, so refuse.
@@ -154,6 +181,7 @@ impl Mt1959Engine {
                 flag_base,
                 boot_function_entry,
                 identity,
+                defaults,
             )
             .context("assembling the 3C-0E handler")?;
 
@@ -186,7 +214,7 @@ impl Mt1959Engine {
         // `0x00 == OFF` safe. The pre-resolved pair is threaded through so we don't
         // re-scan for the site.
         let (boot_init_site, boot_stub_va) =
-            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair)?;
+            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair, defaults)?;
         debug_assert_eq!(
             boot_init_site, resolved_boot_init_site,
             "boot_init_site drifted between resolve and emit"
@@ -300,6 +328,16 @@ impl Mt1959Engine {
         chip: &ChipInfo,
         cap: &Capability,
     ) -> Result<ModifyReport> {
+        self.build_modify_with_defaults(image, chip, cap, &BootSettings::standard())
+    }
+
+    pub(crate) fn build_modify_with_defaults(
+        &self,
+        image: &[u8],
+        chip: &ChipInfo,
+        cap: &Capability,
+        defaults: &BootSettings,
+    ) -> Result<ModifyReport> {
         // Idempotency: re-feeding a freemkv-modified image must not re-patch or
         // error out (the repointed 0x3C record now targets our injected handler,
         // which has no stock push-lr prologue). Instead, report every lever
@@ -333,7 +371,13 @@ impl Mt1959Engine {
         let resolved_boot_init_site = boot_init_pair.0 as u32;
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
         let handler_bytes = self
-            .build_handler(image, record.handler, flag_base, boot_function_entry)
+            .build_handler_with_defaults(
+                image,
+                record.handler,
+                flag_base,
+                boot_function_entry,
+                defaults,
+            )
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
@@ -354,7 +398,7 @@ impl Mt1959Engine {
         // Fail-closed if the boot-init site is absent — a base prerequisite now, since
         // tri-state OFF is unsafe without it.
         let (boot_init_site, boot_stub_va) =
-            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair)?;
+            self.emit_boot_init(image, &mut out, flag_base, boot_init_pair, defaults)?;
         debug_assert_eq!(
             boot_init_site, resolved_boot_init_site,
             "boot_init_site drifted between resolve and emit"

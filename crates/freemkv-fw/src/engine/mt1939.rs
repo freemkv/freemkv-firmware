@@ -22,6 +22,7 @@
 //! Integrity: `freemkv_flash::cmac` re-signs **both** generations unchanged
 //! (proven zero-change, table `0x10400`), so `MtkCmac` auto-accepts MT1939.
 
+use crate::boot::BootSettings;
 use anyhow::{anyhow, bail, Result};
 
 use freemkv_flash::cmac;
@@ -179,24 +180,34 @@ impl Engine for Mt1939Engine {
     }
 
     fn create(&self, image: &[u8]) -> Result<CreateReport> {
+        self.create_with_defaults(image, &BootSettings::standard())
+    }
+
+    fn create_with_defaults(&self, image: &[u8], defaults: &BootSettings) -> Result<CreateReport> {
         // Classic-generation MT1939 ("MT1939 Boot Code") has its own base shape
         // (dispatch-table window, SRAM flag base, inline sense). It builds through
         // build_report_classic; the modern monolith below covers JB8/JBP6/JBC6.
         if is_classic(image) {
             return Mt1959Engine
-                .build_report_classic(image)
+                .build_report_classic_with_defaults(image, defaults)
                 .map_err(|e| anyhow!("MT1939 classic create: {e:#}"));
         }
         // JB8/MT1959-lineage images build via the shared modern machinery.
-        Mt1959Engine.build_report(image).map_err(|e| {
-            anyhow!(
-                "MT1939 create: {e:#} (base build failed; use `modify` for the \
+        Mt1959Engine
+            .build_report_with_defaults(image, defaults)
+            .map_err(|e| {
+                anyhow!(
+                    "MT1939 create: {e:#} (base build failed; use `modify` for the \
                  downgrade-enable lever)"
-            )
-        })
+                )
+            })
     }
 
     fn modify(&self, image: &[u8]) -> Result<ModifyReport> {
+        self.modify_with_defaults(image, &BootSettings::standard())
+    }
+
+    fn modify_with_defaults(&self, image: &[u8], defaults: &BootSettings) -> Result<ModifyReport> {
         let chip = family::detect_chip(image)?;
         let cap = family::capability_for(&chip.model, chip.family);
 
@@ -207,7 +218,9 @@ impl Engine for Mt1939Engine {
         // scheduling) is reported SignatureNotFound by the never-abort driver, so
         // the image still partial-applies.
         if !is_classic(image) {
-            if let Ok(mut report) = Mt1959Engine.build_modify(image, &chip, &cap) {
+            if let Ok(mut report) =
+                Mt1959Engine.build_modify_with_defaults(image, &chip, &cap, defaults)
+            {
                 report.engine = "MT1939";
                 return Ok(report);
             }
@@ -221,7 +234,9 @@ impl Engine for Mt1939Engine {
         // classic base can't be located on this specific image, degrade to the
         // DE-only fallback below (never refuse).
         if is_classic(image) {
-            if let Ok(report) = Mt1959Engine.build_modify_classic(image, &chip, &cap) {
+            if let Ok(report) =
+                Mt1959Engine.build_modify_classic_with_defaults(image, &chip, &cap, defaults)
+            {
                 return Ok(report);
             }
         }

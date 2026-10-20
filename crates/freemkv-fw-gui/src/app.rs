@@ -3,6 +3,7 @@
 use crate::ops::{self, Job};
 use eframe::egui;
 use freemkv_flash::workflow::DriveChoice;
+use freemkv_fw::boot::{BootFeature, BootSettings, BootSupport};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
@@ -18,7 +19,15 @@ enum Task {
     Probe,
 }
 
+type BootPreview = Result<(BootSettings, BootSupport), String>;
+
 pub struct FwApp {
+    boot_settings: BootSettings,
+    boot_support: Option<BootSupport>,
+    boot_input: Option<PathBuf>,
+    boot_rx: Option<Receiver<BootPreview>>,
+    boot_error: Option<String>,
+    boot_dirty: bool,
     task: Task,
     result_task: Task,
     input: Option<PathBuf>,
@@ -75,6 +84,12 @@ impl FwApp {
 
     pub fn new() -> Self {
         Self {
+            boot_settings: BootSettings::standard(),
+            boot_support: None,
+            boot_input: None,
+            boot_rx: None,
+            boot_error: None,
+            boot_dirty: false,
             task: Task::Verify,
             result_task: Task::Verify,
             input: None,
@@ -234,6 +249,127 @@ impl FwApp {
         }
     }
 
+    fn boot_preview(&mut self, ctx: &egui::Context) {
+        if self.boot_input != self.input {
+            self.boot_input = self.input.clone();
+            self.boot_support = None;
+            self.boot_error = None;
+            self.boot_rx = None;
+            if let Some(path) = self.input.clone() {
+                let (tx, rx) = mpsc::channel();
+                self.boot_rx = Some(rx);
+                let ctx = ctx.clone();
+                std::thread::spawn(move || {
+                    let result = std::panic::catch_unwind(|| -> anyhow::Result<_> {
+                        let artifact = freemkv_fw::artifact::Artifact::parse(std::fs::read(path)?)?;
+                        freemkv_fw::api::boot_options(artifact.image())
+                    })
+                    .map_err(|_| "Firmware analysis failed".to_string())
+                    .and_then(|result| result.map_err(|e| format!("{e:#}")));
+                    let _ = tx.send(result);
+                    ctx.request_repaint();
+                });
+            }
+        }
+        if let Some(rx) = &self.boot_rx {
+            match rx.try_recv() {
+                Ok(result) => {
+                    self.boot_rx = None;
+                    match result {
+                        Ok((settings, support)) => {
+                            if !self.boot_dirty {
+                                self.boot_settings = settings;
+                            }
+                            self.boot_support = Some(support);
+                        }
+                        Err(error) => self.boot_error = Some(error),
+                    }
+                }
+                Err(TryRecvError::Disconnected) => {
+                    self.boot_rx = None;
+                    self.boot_error = Some("Firmware analysis stopped unexpectedly".into());
+                }
+                Err(TryRecvError::Empty) => {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(100));
+                }
+            }
+        }
+    }
+
+    fn reset_boot_settings(&mut self) {
+        self.boot_settings = BootSettings::standard();
+        self.boot_dirty = true;
+    }
+
+    fn boot_form(&mut self, ui: &mut egui::Ui) {
+        ui.label(egui::RichText::new("Boot settings").strong());
+        ui.small("Applied each time the drive starts.");
+        egui::Grid::new("boot_settings")
+            .num_columns(2)
+            .spacing([16.0, 5.0])
+            .show(ui, |ui| {
+                for feature in BootFeature::ALL {
+                    ui.label(feature.label());
+                    let supported = self
+                        .boot_support
+                        .as_ref()
+                        .is_some_and(|s| s.supports(feature));
+                    let value = self.boot_settings.value(feature);
+                    let mut selected = value;
+                    ui.add_enabled_ui(supported, |ui| {
+                        egui::ComboBox::from_id_salt(("boot", feature.key()))
+                            .width(220.0)
+                            .selected_text(if self.boot_support.is_some() && !supported {
+                                "Not supported"
+                            } else {
+                                self.boot_settings.label(feature)
+                            })
+                            .show_ui(ui, |ui| {
+                                for &(key, label, _) in feature.choices() {
+                                    ui.selectable_value(&mut selected, key, label);
+                                }
+                            })
+                            .response
+                            .on_hover_text(if supported {
+                                "Firmware startup setting"
+                            } else {
+                                "Not supported by the selected firmware, or analysis is pending"
+                            });
+                    });
+                    if selected != value {
+                        self.boot_settings
+                            .set(feature, selected)
+                            .expect("validated form choice");
+                        self.boot_dirty = true;
+                    }
+                    ui.end_row();
+                }
+            });
+        if ui.button("Reset to defaults").clicked() {
+            self.reset_boot_settings();
+        }
+        if self.boot_rx.is_some() {
+            ui.small("Checking firmware support…");
+        }
+        if let Some(error) = &self.boot_error {
+            ui.colored_label(egui::Color32::DARK_RED, error);
+        }
+        if let Some(support) = &self.boot_support {
+            if !support.has_boot() {
+                ui.colored_label(
+                    egui::Color32::DARK_RED,
+                    "This firmware cannot apply boot settings.",
+                );
+            }
+            if let Err(error) = self.boot_settings.validate(support) {
+                ui.colored_label(
+                    egui::Color32::DARK_RED,
+                    format!("{error}. Reset to defaults or choose compatible firmware."),
+                );
+            }
+        }
+    }
+
     fn task_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         match self.task {
             Task::Probe => {
@@ -259,6 +395,10 @@ impl FwApp {
                 } else {
                     "Recompute the firmware image’s integrity signatures."
                 });
+                if create {
+                    self.boot_preview(ctx);
+                    self.boot_form(ui);
+                }
                 ui.add_space(8.0);
                 if primary(
                     ui,
@@ -267,7 +407,11 @@ impl FwApp {
                     } else {
                         "Save signed firmware…"
                     },
-                    self.input.is_some(),
+                    self.input.is_some()
+                        && (!create
+                            || self.boot_support.as_ref().is_some_and(|s| {
+                                s.has_boot() && self.boot_settings.validate(s).is_ok()
+                            })),
                 )
                 .clicked()
                 {
@@ -283,7 +427,11 @@ impl FwApp {
                         .save_file()
                     {
                         let job = if create {
-                            Job::Create { input, output }
+                            Job::Create {
+                                input,
+                                output,
+                                defaults: self.boot_settings.clone(),
+                            }
                         } else {
                             Job::Sign { input, output }
                         };
@@ -417,8 +565,8 @@ impl FwApp {
                 ui.add_space(18.0);
                 egui::ScrollArea::vertical()
                     .id_salt(("task_content", self.task as u8))
-                    .max_height(110.0)
-                    .min_scrolled_height(110.0)
+                    .max_height(if self.task == Task::Create { 370.0 } else { 110.0 })
+                    .min_scrolled_height(if self.task == Task::Create { 370.0 } else { 110.0 })
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());

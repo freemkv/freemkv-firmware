@@ -12,6 +12,7 @@
 //! error rather than a wrong guess. This mirrors the flash-side `DriveFamily`
 //! split: one engine per chip, all sharing the dumb toolkit.
 
+use crate::boot::BootSettings;
 use anyhow::Result;
 
 use crate::family::{self, ChipFamily};
@@ -52,12 +53,8 @@ pub struct CreateReport {
     /// (the `bmi` target of the `BOOT_INIT_SIG` anchor, the first call AFTER the
     /// cold-boot SRAM clear; `0x13d428` on BU40N) replaced by a `bl` to the boot-init
     /// stub, which tail-calls `orig_init`. The stub fills the flag table with the
-    /// baked per-create `DEFAULT_FLAGS` (UHD/BD ship `STATE_ON`, the rest `0xFF`
-    /// passthrough) and then overlays the persisted config only when the NV slot-0
-    /// saved-marker says one exists. No default is `0x00`, so a freshly powered drive
-    /// still never boots a feature to OFF (the invariant that keeps tri-state
-    /// `0x00 == OFF` safe). Detouring here, not the pre-clear reload, keeps the SRAM
-    /// clear from wiping the flag table.
+    /// per-image boot settings without loading the saved configuration. Installing
+    /// here keeps SRAM initialization from wiping the selected values.
     pub boot_init_site: u32,
     /// Injection address of the always-on boot-init trampoline.
     pub boot_stub_va: u32,
@@ -168,12 +165,18 @@ pub trait Engine {
     /// KAT and by callers that want the full grounded [`CreateReport`].
     fn create(&self, image: &[u8]) -> Result<CreateReport>;
 
+    /// Build with the selected boot settings.
+    fn create_with_defaults(&self, image: &[u8], defaults: &BootSettings) -> Result<CreateReport>;
+
     /// Never-abort MODIFY: apply every lever this engine + the image's capability
     /// support, and report each one's outcome. Aborts the whole run only when the
     /// image is undetectable or nothing at all can be built. This is the
     /// user-facing path (`freemkv-fw create`): it "modifies what it can and
     /// reports what it did" rather than refusing on the first missing signature.
     fn modify(&self, image: &[u8]) -> Result<ModifyReport>;
+
+    /// Modify with the selected boot settings.
+    fn modify_with_defaults(&self, image: &[u8], defaults: &BootSettings) -> Result<ModifyReport>;
 }
 
 /// Select the engine for `image`'s detected chip family, or fail cleanly if the

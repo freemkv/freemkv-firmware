@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.13.4] - Unreleased
 
+### freemkv Modify
+- Add shared boot settings to the desktop Create form and repeatable CLI
+  `--default FEATURE=VALUE` options. Apply these choices on every boot without
+  overlaying saved drive settings. Runtime changes remain available.
+- Add Reset to defaults: unrestricted access On; HRL, encryption, speed, and
+  region use OEM behavior. Region choices are OEM behavior or region-free.
+- Check feature availability before creation, reject unsupported explicit
+  choices, and report resolved settings in human and JSON output. Add
+  `--dry-run` for previews without writing firmware.
+- Reopen newly generated BIN/TAR firmware to edit its boot settings. Preserve
+  intermediate firmware and package provenance; older modified images require
+  their original OEM source. Firmware behavior has automated structural and
+  instruction-level coverage; physical drive validation remains outstanding.
+
 ### freemkv-flash
 - Save session events and linked operation logs automatically, and prepare a
   report bundle for the user-approved website submission flow.
