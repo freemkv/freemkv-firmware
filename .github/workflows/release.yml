@@ -267,8 +267,13 @@ jobs:
           set -euo pipefail
           target='${{ matrix.target }}'
           arch='${{ matrix.arch }}'
+          version=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
           for bin in freemkv-flash-gui freemkv-fw-gui; do
             bash macos/bundle.sh "$bin" release "$target"
+            for key in CFBundleVersion CFBundleShortVersionString; do
+              actual=$(/usr/libexec/PlistBuddy -c "Print :$key" "target/$bin.app/Contents/Info.plist")
+              [ "$actual" = "$version" ] || { echo "::error::$bin $key is $actual, expected $version"; exit 1; }
+            done
             zip="$bin-macos-$arch.zip"
             ditto -c -k --keepParent "target/$bin.app" "$zip"
             shasum -a 256 "$zip" > "$zip.sha256"
