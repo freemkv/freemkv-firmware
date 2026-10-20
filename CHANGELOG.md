@@ -6,6 +6,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.3] - 2026-10-19
+
+### freemkv-flash
+- In Pioneer Recovery, read startup word `0x9F` through A0 while Normal firmware
+  is running, set it to the target firmware's selected value, and verify the
+  result before update entry and firmware transfer. Use the same target-value
+  selection and guarded transaction as Flash.
+- Stop before firmware transfer if the A0 read, change, or verification fails.
+  Recovery from an already-running Kernel loader still transfers firmware
+  without A0, since that command belongs to Normal firmware.
+- Add Rust tests for write ordering, failed parameter writes, loader-mode
+  behavior, and the BDR-207M 1.60 to BDR-PR1ML 1.30 target value (`FF01`).
+
 ## [0.13.2] - 2026-10-19
 
 ### freemkv-flash

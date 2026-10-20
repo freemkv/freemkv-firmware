@@ -78,7 +78,7 @@ pub(crate) fn execute_prepared(dev: &mut WriteDevice<'_>, plan: PreparedFlash<'_
     }
 }
 
-fn report_startup_setting(setting: pioneer_optical::startup::Setting) {
+pub(super) fn report_startup_setting(setting: pioneer_optical::startup::Setting) {
     let source = if setting.explicit {
         "required by target firmware"
     } else {

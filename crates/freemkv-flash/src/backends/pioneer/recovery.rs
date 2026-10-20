@@ -6,7 +6,7 @@ use crate::backends::pioneer::classify_flash_input;
 use crate::platform::ScsiDevice;
 use crate::transport::{self as transport, flash_err, ScsiTransport, SharedDevice};
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use pioneer_optical::drive::Segment;
+use pioneer_optical::drive::{Data, Segment, Transport};
 use pioneer_optical::envelope::{Envelope, Update};
 use pioneer_optical::receiver::transport as kernel_transport;
 use pioneer_optical::{cdb, image::ReceiverControl, Identity, Role};
@@ -23,6 +23,7 @@ pub(crate) struct Plan {
     /// True when Normal's transport encoding or authentication was prepared
     /// locally rather than written as the target package shipped it.
     reencoded: bool,
+    startup_setting: pioneer_optical::startup::Setting,
 }
 
 /// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
@@ -96,6 +97,8 @@ impl Plan {
         target_normal_bytes: Option<&[u8]>,
     ) -> Result<Self> {
         let control = control_from_image(installed_normal_image)?;
+        let startup_setting = pioneer_optical::startup::setting(&target.normal().image)
+            .map_err(|_| anyhow!("target startup checks are ambiguous; no firmware was written"))?;
         // Same hardware family remains mandatory across the Kernel handoff.
         match (
             pioneer_optical::image::family(installed_normal_image),
@@ -146,6 +149,7 @@ impl Plan {
             // the transformed wire bytes, or the fingerprint would be scrambled.
             receive: kernel_transport::detect(&target.kernel().image),
             reencoded,
+            startup_setting,
         })
     }
 
@@ -158,6 +162,33 @@ impl Plan {
         let class = identity.class().context("unsupported recovery dialect")?;
         crate::diagnostics::record(format!("Recovery receiver: product={} revision={} platform={} kernel_tag={} normal_tag={} code={}", identity.product(), identity.revision(), identity.platform(), identity.kernel_tag(), identity.normal_tag(), identity.code()));
         let updating = in_update_mode(&identity);
+        if !updating {
+            let setting = self.startup_setting;
+            super::flash::report_startup_setting(setting);
+            let shared = SharedDevice::new(dev);
+            let mut transport = ScsiTransport::flash(&shared);
+            return pioneer_optical::startup::migration::execute(
+                &mut transport,
+                setting.parameter,
+                setting.value,
+                |guard| {
+                    let mut device = MigrationDevice { transport: guard };
+                    self.run_after_identity(&mut device, class, false, sleep)
+                },
+            )
+            .map_err(|error| anyhow!("Pioneer recovery startup-setting update: {error}"));
+        }
+        crate::diagnostics::record("Recovery startup setting: skipped because the drive is already in update mode; Normal's parameter command is unavailable");
+        self.run_after_identity(dev, class, updating, sleep)
+    }
+
+    fn run_after_identity(
+        &self,
+        dev: &mut dyn ScsiDevice,
+        class: pioneer_optical::DriveClass,
+        updating: bool,
+        sleep: &mut impl FnMut(Duration),
+    ) -> Result<()> {
         crate::output::field(
             "Recovery mode",
             if updating {
@@ -323,6 +354,40 @@ impl Plan {
             }
         }
         bail!("firmware transferred, but return to normal mode could not be verified within {} seconds; last status: {last_status}. Do not repeat the flash automatically; save the diagnostic log", READINESS_POLLS / 2)
+    }
+}
+
+/// Send every recovery command through the migration guard so a failed update
+/// never restores the old parameter after any firmware command was attempted.
+struct MigrationDevice<'a, 't, T: Transport> {
+    transport: &'a mut pioneer_optical::startup::migration::FlashTransport<'t, T>,
+}
+
+impl<T: Transport<Error = anyhow::Error>> ScsiDevice for MigrationDevice<'_, '_, T> {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        let mut bytes = vec![0; len];
+        let count = self.transport.exec(cdb, Data::In(&mut bytes))?;
+        ensure!(count <= len, "recovery transport returned too many bytes");
+        bytes.truncate(count);
+        Ok(bytes)
+    }
+
+    fn command_out(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+        self.command_out_strict(cdb, bytes)
+    }
+
+    fn command_out_strict(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+        let count = self.transport.exec(cdb, Data::Out(bytes))?;
+        ensure!(
+            count == bytes.len(),
+            "short recovery write: {count}/{} bytes",
+            bytes.len()
+        );
+        Ok(())
+    }
+
+    fn describe(&self) -> String {
+        "Pioneer recovery startup transaction".into()
     }
 }
 

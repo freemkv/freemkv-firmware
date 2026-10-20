@@ -97,11 +97,19 @@ freemkv-flash recover E: --read-from-drive -i target.tar --execute --i-understan
 
 Choose exactly one Current source. Unsupported drives are rejected before firmware reads or update commands. Both packages must contain Pioneer Kernel and
 Normal. A supplied Current file avoids firmware memory reads; identity/status
-queries still run. Recovery makes no backups or readback verification and bypasses
+queries still run. Recovery makes no backups or firmware readback verification and bypasses
 installed-versus-target compatibility policy. It derives receiver credentials from
 Current, skips update entry if already in kernel mode, and sends both target
 components. Required integrity, target authentication and write-error checks remain.
 An unsigned backup can be a Current reference, but not an authenticated target.
+
+When the drive still runs Normal firmware, Recovery reads startup word `0x9F`
+through the native A0 command, selects the value required by the target Normal
+(or the same neutral `FFFF` policy as Flash), and writes and verifies any change
+before update entry. A read or write failure stops before firmware transfer.
+If the drive already reports update mode, Recovery skips A0 because the Normal
+command handler is unavailable; restoring a bootable Normal firmware may be
+needed before retrying a forward update.
 
 Success means normal identity and readiness returned. It does not prove matching
 installed bytes. Recovery is experimental and not yet verified on the reported

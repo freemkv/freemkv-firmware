@@ -143,6 +143,11 @@ reporting update mode. No firmware memory reads or readback occur with a supplie
 Current file; identity/status queries remain necessary. The user is responsible
 for supplying the correct receiver reference.
 
+While the drive runs Normal firmware, Recovery uses the same target-selected
+startup word `0x9F` migration as Flash through A0 before entering update mode.
+When the drive is already in update mode, that Normal command is unavailable and
+Recovery transfers firmware without changing the startup word.
+
 Pioneer Kernel + Normal updates hand off to the incoming Kernel before sending
 Normal. Flash and Recovery therefore preserve the paired Normal's OEM encoding
 and signature. Normal-only preparation uses the installed Kernel. The shared

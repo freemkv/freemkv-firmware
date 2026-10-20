@@ -202,7 +202,6 @@ fn unsigned_targets_are_signed_only_for_transfer_and_invalid_signatures_still_fa
     }
 }
 
-#[derive(Default)]
 struct Drive {
     updating: bool,
     finished: bool,
@@ -214,6 +213,28 @@ struct Drive {
     restart_pending: bool,
     sense_polls: usize,
     reject_sense: bool,
+    parameter: Option<u16>,
+    parameter_reads: usize,
+    reject_parameter_write: bool,
+}
+impl Default for Drive {
+    fn default() -> Self {
+        Self {
+            updating: false,
+            finished: false,
+            stuck: false,
+            fail_write: None,
+            attempts: 0,
+            writes: Vec::new(),
+            require_sense_restart: false,
+            restart_pending: false,
+            sense_polls: 0,
+            reject_sense: false,
+            parameter: Some(0xffff),
+            parameter_reads: 0,
+            reject_parameter_write: false,
+        }
+    }
 }
 impl ScsiDevice for Drive {
     fn describe(&self) -> String {
@@ -221,6 +242,15 @@ impl ScsiDevice for Drive {
     }
     fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
         let mut bytes = vec![0; len];
+        if command == cdb::read_parameter_word(0x9f).unwrap() {
+            assert!(!self.updating, "Normal parameter command in update mode");
+            self.parameter_reads += 1;
+            return Ok(self
+                .parameter
+                .expect("parameter not configured")
+                .to_be_bytes()
+                .to_vec());
+        }
         if command == cdb::request_sense(18) {
             self.sense_polls += 1;
             if self.reject_sense {
@@ -262,6 +292,15 @@ impl ScsiDevice for Drive {
     }
     fn command_out_strict(&mut self, command: &[u8], bytes: &[u8]) -> Result<()> {
         self.attempts += 1;
+        if command == cdb::write_parameter_word(0x9f).unwrap() {
+            assert!(!self.updating, "Normal parameter command in update mode");
+            if self.reject_parameter_write {
+                bail!("injected parameter write failure");
+            }
+            self.parameter = Some(u16::from_be_bytes(bytes.try_into().unwrap()));
+            self.writes.push((command.to_vec(), bytes.to_vec()));
+            return Ok(());
+        }
         if self.fail_write == Some(self.attempts) {
             bail!("injected write failure");
         }
@@ -275,6 +314,77 @@ impl ScsiDevice for Drive {
 }
 fn recovery_plan() -> Plan {
     Plan::from_updates(fixture_pair(false, 1), fixture_pair(false, 0)).unwrap()
+}
+
+#[test]
+fn normal_recovery_changes_startup_word_before_update_entry() {
+    let mut plan = recovery_plan();
+    plan.startup_setting = pioneer_optical::startup::Setting {
+        parameter: 0x9f,
+        value: 0xff01,
+        explicit: true,
+    };
+    let mut drive = Drive {
+        parameter: Some(0xffff),
+        ..Default::default()
+    };
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+    assert_eq!(drive.parameter, Some(0xff01));
+    assert_eq!(drive.parameter_reads, 2);
+    assert_eq!(drive.writes[0].0, cdb::write_parameter_word(0x9f).unwrap());
+    assert_eq!(drive.writes[1].0, cdb::enter_update());
+}
+
+#[test]
+fn recovery_parameter_write_failure_stops_before_update_entry() {
+    let mut plan = recovery_plan();
+    plan.startup_setting = pioneer_optical::startup::Setting {
+        parameter: 0x9f,
+        value: 0xff01,
+        explicit: true,
+    };
+    let mut drive = Drive {
+        parameter: Some(0xffff),
+        reject_parameter_write: true,
+        ..Default::default()
+    };
+    assert!(plan
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .is_err());
+    assert!(drive.writes.is_empty());
+    assert!(!drive.updating);
+}
+
+#[test]
+fn recovery_in_update_mode_does_not_issue_normal_parameter_command() {
+    let mut plan = recovery_plan();
+    plan.startup_setting = pioneer_optical::startup::Setting {
+        parameter: 0x9f,
+        value: 0xff01,
+        explicit: true,
+    };
+    let mut drive = Drive {
+        updating: true,
+        parameter: Some(0xffff),
+        ..Default::default()
+    };
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+    assert_eq!(drive.parameter, Some(0xffff));
+    assert_eq!(drive.parameter_reads, 0);
+    assert!(!drive.writes.iter().any(|(c, _)| c.get(2) == Some(&0xa0)));
+}
+
+#[test]
+#[ignore = "requires the supplied BDR-207M 1.60 backup and BDR-PR1ML 1.30 package"]
+fn real_207m_to_pr1ml_recovery_selects_ff01() {
+    let current = std::fs::read(std::env::var("PIONEER_RECOVERY_CURRENT").unwrap()).unwrap();
+    let target = std::fs::read(std::env::var("PIONEER_RECOVERY_TARGET").unwrap()).unwrap();
+    let plan = Plan::prepare(&current, &target).unwrap();
+    assert_eq!(plan.startup_setting.parameter, 0x9f);
+    assert_eq!(plan.startup_setting.value, 0xff01);
+    assert!(plan.startup_setting.explicit);
 }
 
 #[test]
