@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.13.3] - 2026-10-19
 
 ### freemkv-flash
+- Flash now attempts the live A0 startup-word transaction even when the
+  installed Normal code does not match the static writer fingerprint. An A0
+  command or verification failure stops before firmware transfer with an
+  explicit error. This fixes the BDR-207M 1.60 to BDR-PR1ML 1.30 preflight
+  refusal reported with 0.13.2.
 - In Pioneer Recovery, read startup word `0x9F` through A0 while Normal firmware
   is running, set it to the target firmware's selected value, and verify the
   result before update entry and firmware transfer. Use the same target-value
@@ -17,7 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Recovery from an already-running Kernel loader still transfers firmware
   without A0, since that command belongs to Normal firmware.
 - Add Rust tests for write ordering, failed parameter writes, loader-mode
-  behavior, and the BDR-207M 1.60 to BDR-PR1ML 1.30 target value (`FF01`).
+  behavior, A0 rejection in Flash, and the BDR-207M 1.60 to BDR-PR1ML 1.30
+  target value (`FF01`).
+- Use pioneer-optical 0.16.2 for the shared Flash and Recovery migration.
 
 ## [0.13.2] - 2026-10-19
 

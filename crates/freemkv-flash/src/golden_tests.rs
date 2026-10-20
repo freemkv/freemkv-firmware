@@ -2274,6 +2274,7 @@ const UD04_NORMAL_BASE: usize = 0x410000;
 /// scripted tray state; the last one repeats.
 struct Ud04Drive {
     memory: Vec<u8>,
+    startup_word: u16,
     knocks: usize,
     updating: bool,
     kernel: Vec<u8>,
@@ -2291,6 +2292,7 @@ impl Ud04Drive {
     fn installed((kernel, normal): (Vec<u8>, Vec<u8>)) -> Self {
         Self {
             memory: [kernel, normal].concat(),
+            startup_word: 0xffff,
             knocks: 0,
             updating: false,
             kernel: Vec::new(),
@@ -2324,6 +2326,10 @@ impl ScsiDevice for Ud04Drive {
             let mut data = vec![0; 48];
             data[16..24].copy_from_slice(b"SAT 8A10");
             return Ok(data);
+        }
+        if cdb == pioneer_optical::cdb::read_parameter_word(0x9f).unwrap() {
+            assert!(!self.updating, "Normal A0 read in update mode");
+            return Ok(self.startup_word.to_be_bytes().to_vec());
         }
         if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
             bail!("Pioneer does not implement the MTK identity buffer");
@@ -2360,7 +2366,10 @@ impl ScsiDevice for Ud04Drive {
     }
 
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
-        if cdb == pioneer_optical::cdb::enter_update() {
+        if cdb == pioneer_optical::cdb::write_parameter_word(0x9f).unwrap() {
+            assert!(!self.updating, "Normal A0 write in update mode");
+            self.startup_word = u16::from_be_bytes(data.try_into().unwrap());
+        } else if cdb == pioneer_optical::cdb::enter_update() {
             self.updating = true;
             self.kernel.clear();
         } else if cdb[..3] == [0x3b, 0x07, 0xfe] {
@@ -2702,7 +2711,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// [`RECOVER_HINT`]; P4, the synthetic Kernel fixtures gained a 0.15.0 receiver
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
-const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5", "P6", "P7"];
+const PIONEER_REASONS: &[&str] = &["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
 /// v0.11.2 could not reach that flash mode either: its CLI and GUI always

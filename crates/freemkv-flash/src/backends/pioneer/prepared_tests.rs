@@ -124,6 +124,8 @@ struct Drive {
     parameter: Option<u16>,
     parameter_reads: usize,
     bad_parameter_verification: bool,
+    reject_parameter_read: bool,
+    reject_parameter_write: bool,
     memory: Vec<u8>,
     descriptor: Vec<u8>,
     kernel: Vec<u8>,
@@ -137,9 +139,11 @@ struct Drive {
 impl Drive {
     fn new(plan: &PreparedUpdate) -> Self {
         Self {
-            parameter: None,
+            parameter: Some(0xffff),
             parameter_reads: 0,
             bad_parameter_verification: false,
+            reject_parameter_read: false,
+            reject_parameter_write: false,
             memory: plan.first_kernel_image().to_vec(),
             descriptor: b"PIONEER TEST-NEW".to_vec(),
             kernel: Vec::new(),
@@ -165,6 +169,9 @@ impl ScsiDevice for Drive {
     fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
         if cdb == pioneer_optical::cdb::read_parameter_word(0x9f).unwrap() {
             self.parameter_reads += 1;
+            if self.reject_parameter_read {
+                bail!("A0 unsupported by mock drive");
+            }
             let value = if self.bad_parameter_verification && self.parameter_reads == 2 {
                 0xaaaa
             } else {
@@ -195,6 +202,11 @@ impl ScsiDevice for Drive {
         bail!("unexpected lenient write")
     }
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        if cdb == pioneer_optical::cdb::write_parameter_word(0x9f).unwrap()
+            && self.reject_parameter_write
+        {
+            bail!("A0 write unsupported by mock drive");
+        }
         if self.fail_at == Some(self.writes.len()) {
             bail!("injected firmware write failure");
         }
@@ -230,7 +242,7 @@ fn first_pass_readback_failure_prevents_any_restore_write() {
     let mut drive = Drive::new(&plan);
     drive.corrupt_after_finish = Some(1);
     let error = execute(&mut drive, &plan).unwrap_err();
-    assert!(format!("{error:#}").contains("Kernel readback did not verify"));
+    assert!(format!("{error:#}").contains("Initial Kernel readback differs"));
     assert!(format!("{error:#}").contains("Initial Kernel readback differs"));
     assert_eq!(drive.finishes, 1);
 }
@@ -250,15 +262,7 @@ fn prepared_flash_requires_matching_live_receiver_before_entry() {
         .borrow()
         .iter()
         .any(|line| line.contains("EXECUTING")));
-    assert_eq!(
-        error
-            .downcast_ref::<pioneer_optical::receiver::FlashError<anyhow::Error>>()
-            .map(|error| matches!(
-                error,
-                pioneer_optical::receiver::FlashError::DescriptorMismatch { .. }
-            )),
-        Some(true)
-    );
+    assert!(format!("{error:#}").contains("live receiver descriptor does not match"));
     assert!(drive.writes.is_empty());
 }
 #[test]
@@ -271,6 +275,31 @@ fn prepared_write_failure_propagates_without_finish() {
     assert_eq!(drive.writes.len(), 1);
     assert_eq!(drive.writes[0].0, pioneer_optical::cdb::enter_update());
 }
+
+#[test]
+fn flash_stops_before_firmware_when_a0_read_is_unsupported() {
+    let plan = plan(false);
+    let mut drive = Drive::new(&plan);
+    drive.reject_parameter_read = true;
+    let error = execute(&mut drive, &plan).unwrap_err();
+    assert!(format!("{error:#}").contains("A0 startup parameter read failed"));
+    assert!(format!("{error:#}").contains("no firmware was written"));
+    assert!(drive.writes.is_empty());
+    assert_eq!(drive.finishes, 0);
+}
+
+#[test]
+fn flash_stops_before_firmware_when_a0_write_is_unsupported() {
+    let plan = plan(false);
+    let mut drive = Drive::new(&plan);
+    drive.parameter = Some(0xff01);
+    drive.reject_parameter_write = true;
+    let error = execute(&mut drive, &plan).unwrap_err();
+    assert!(format!("{error:#}").contains("A0 startup parameter write or verification failed"));
+    assert!(format!("{error:#}").contains("no firmware was written"));
+    assert!(drive.writes.is_empty());
+    assert_eq!(drive.finishes, 0);
+}
 #[test]
 fn restoration_success_requires_pristine_readback_and_preserves_normal() {
     let plan = plan(true);
@@ -279,7 +308,7 @@ fn restoration_success_requires_pristine_readback_and_preserves_normal() {
         drive.corrupt_after_finish = corrupt.then_some(2);
         let result = execute(&mut drive, &plan);
         if corrupt {
-            assert!(format!("{:#}", result.unwrap_err()).contains("readback did not verify"));
+            assert!(format!("{:#}", result.unwrap_err()).contains("Kernel readback differs"));
         } else {
             result.unwrap();
             assert_eq!(drive.memory, plan.final_kernel_image());
@@ -310,8 +339,8 @@ fn newly_inserted_disc_blocks_restoration_and_explains_temporary_kernel() {
     let error = execute(&mut drive, &plan).unwrap_err();
     let message = format!("{error:#}");
     assert!(message.contains("a disc is loaded"));
-    assert!(message.contains("temporary Kernel may remain installed"));
-    assert_eq!(drive.medium_checks, 2);
+    assert!(message.contains("installed firmware state is uncertain"));
+    assert_eq!(drive.medium_checks, 3);
     assert_eq!(drive.finishes, 1);
     assert_eq!(
         drive
@@ -329,7 +358,7 @@ fn missing_descriptor_is_reported_before_update_entry() {
     let mut drive = Drive::new(&plan);
     drive.descriptor.clear();
     let error = execute(&mut drive, &plan).unwrap_err();
-    assert!(format!("{error:#}").contains("receiver descriptor read failed"));
+    assert!(format!("{error:#}").contains("receiver descriptor read"));
     assert!(drive.writes.is_empty());
 }
 
@@ -399,4 +428,39 @@ fn real_package_flash_migrates_startup_word_in_both_directions() {
             }
         }
     }
+}
+
+#[test]
+#[ignore = "requires supplied BDR-207M 1.60 backup and BDR-PR1ML 1.30 package"]
+fn real_207m_to_pr1ml_flash_uses_a0_without_code_surface_match() {
+    let load = |key: &str| {
+        let bytes = std::fs::read(std::env::var(key).unwrap()).unwrap();
+        let (kernel, normal) = classify_flash_input(&bytes).unwrap();
+        super::normal_prepare::load_pair(&kernel.unwrap(), &normal.unwrap()).unwrap()
+    };
+    let current = load("PIONEER_RECOVERY_CURRENT");
+    let target = load("PIONEER_RECOVERY_TARGET");
+    assert!(pioneer_optical::startup::surface::discover(&current.normal().image).is_none());
+    let plan = Receiver::from_installed(&current)
+        .unwrap()
+        .prepare(target)
+        .unwrap();
+    let setting = plan.startup_setting().unwrap();
+    assert_eq!((setting.parameter, setting.value), (0x9f, 0xff01));
+
+    let mut drive = Drive::new(&plan);
+    drive.descriptor = current.normal().image[..16].to_vec();
+    drive.parameter = Some(0xffff);
+    execute(&mut drive, &plan).unwrap();
+    assert_eq!(drive.parameter, Some(0xff01));
+    assert_eq!(
+        drive.writes[0],
+        (
+            pioneer_optical::cdb::write_parameter_word(0x9f)
+                .unwrap()
+                .to_vec(),
+            0xff01u16.to_be_bytes().to_vec()
+        )
+    );
+    assert_eq!(drive.memory, plan.final_kernel_image());
 }

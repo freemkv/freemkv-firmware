@@ -10,6 +10,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| P8 | Pioneer 0.13.3: read the live A0 startup word 0x9F before firmware transfer, write and verify only when it differs from the target value, then continue. The added read and preflight commands in these mock transcripts reflect this migration; neutral FFFF already matches and sends no A0 write. |
 | P7 | Pioneer 0.13.2: post-finish readiness polling sends REQUEST SENSE (`03 00 00 00 12 00`, allocation 18) before GET EVENT STATUS / TEST UNIT READY. The traced programming-busy guard admits REQUEST SENSE to the command-completion restart path while other commands can return early. Each successful mock pass adds exactly one read and increments the transcript count; two-pass restoration adds two. Firmware write commands and payloads are unchanged. This does not establish the separate persistent-startup-setting fix. |
 | P1 | Pioneer: a package that cannot be read is refused at the plan, before the backup, so no backup file is saved and no `backup:` line is shown |
 | P2 | Pioneer: the last tray check runs after the confirmation, right before the first write. A successful flash issues the same device commands. When authorize refuses (or the user declines), there is one fewer tray check. With a disc inserted after the backup, the `backup:` line, the confirmation text and the prompt appear before the refusal |
@@ -10266,60 +10267,87 @@ reason: P2
 ## pioneer_execute.txt
 
 ### Pioneer CLI execute: stdin is not a TTY
-reason: P4, P7
+reason: P4, P7, P8
 ```diff
 ---- scsi transcript (47) ---
-+--- scsi transcript (48) ---
-+IN   cdb=030000001200 alloc=18 -> ok 18
++--- scsi transcript (56) ---
++IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++MEDIUM -> ClosedEmpty
++IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
-
 ### Pioneer execute: Kernel+Normal update
-reason: P4, P7
+reason: P4, P7, P8
 ```diff
+---- events (12) ---
++--- events (13) ---
++FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
 ---- scsi transcript (47) ---
-+--- scsi transcript (48) ---
-+IN   cdb=030000001200 alloc=18 -> ok 18
++--- scsi transcript (56) ---
++IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++MEDIUM -> ClosedEmpty
++IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
-
 ### Pioneer execute: Kernel+Normal update with kernel restoration pass
-reason: P4, P7
+reason: P4, P7, P8
 ```diff
+---- events (17) ---
++--- events (18) ---
++FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
 ---- scsi transcript (69) ---
-+--- scsi transcript (71) ---
-+IN   cdb=030000001200 alloc=18 -> ok 18
-+IN   cdb=030000001200 alloc=18 -> ok 18
++--- scsi transcript (79) ---
++IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++MEDIUM -> ClosedEmpty
++IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=c0a16b5e48c7b204741c44fa37f58d6402a2828c64c1aa21a96f3c2e884a1897 -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=e1887edb7ac462db6d799efbb3841854de8cb55146151090ec99089d0fb4056d -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
 +saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 ```
-
 ### Pioneer execute: Normal for another Kernel tag, refused after the backup
 reason: P2
 ```diff
@@ -10331,15 +10359,25 @@ reason: P2
 ```
 
 ### Pioneer execute: Normal-only update
-reason: P4, P7
+reason: P4, P7, P8
 ```diff
+---- events (12) ---
++--- events (13) ---
++FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
 ---- scsi transcript (40) ---
-+--- scsi transcript (41) ---
++--- scsi transcript (49) ---
++IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++MEDIUM -> ClosedEmpty
++IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
-
 ### Pioneer execute: disc inserted after the backup
 reason: P2
 ```diff
@@ -10368,21 +10406,28 @@ reason: P2
 ```
 
 ### Pioneer CLI execute: TTY answers y
-reason: P4, P7
+reason: P4, P7, P8
 ```diff
 ---- scsi transcript (47) ---
-+--- scsi transcript (48) ---
-+IN   cdb=030000001200 alloc=18 -> ok 18
++--- scsi transcript (56) ---
++IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++MEDIUM -> ClosedEmpty
++IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
-
 ### Pioneer CLI execute: disc inserted after the backup, TTY answers y
 reason: P2
 ```diff
@@ -10464,21 +10509,31 @@ reason: P1
 ```
 
 ### Pioneer execute: target is the installed firmware (no change)
-reason: P4, P7
+reason: P4, P7, P8
 ```diff
+---- events (12) ---
++--- events (13) ---
++FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
 ---- scsi transcript (47) ---
-+--- scsi transcript (48) ---
-+IN   cdb=030000001200 alloc=18 -> ok 18
++--- scsi transcript (56) ---
++IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++MEDIUM -> ClosedEmpty
++IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
++OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3322ba5603d28bfebd97ba3633c0c60f5c9c09ab41c54c12f0c13e0bc6ecf39f -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=23ec2bedd92e6f32f54fcf35b1d633d87df58bc1aeb0d37dc542d65d513b6c60 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=487ae0970cb0db11d54874c2c5c4a99c0c04939e70bbece3a8528aba7fad8394 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=a2d4fc2b731e9335c971975897e4bdf41d8311cf9589c7df88c8ac3a4b609261 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
 +saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 ```
-
 ### Pioneer flash: dry-run request
 reason: P4
 ```diff
@@ -10528,29 +10583,32 @@ reason: P4, P7
 ```diff
 ---- scsi transcript (15) ---
 +--- scsi transcript (16) ---
-+IN   cdb=030000001200 alloc=18 -> ok 18
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 ```
 
 ### Pioneer recover execute: receiver in normal mode
-reason: P4, P7
+reason: P4, P7, P8
 ```diff
+---- events (3) ---
++--- events (4) ---
++FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
 ---- scsi transcript (16) ---
-+--- scsi transcript (17) ---
-+IN   cdb=030000001200 alloc=18 -> ok 18
++--- scsi transcript (18) ---
++IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
++IN   cdb=030000001200 alloc=18 -> ok 18
 ```
-
 ### Pioneer recover execute: write fails on the 2nd command
 reason: P4
 ```diff

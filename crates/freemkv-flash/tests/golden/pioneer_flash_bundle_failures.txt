@@ -98,7 +98,7 @@ EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 flash complete; drive returned ready.
 post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- events (12) ---
+--- events (13) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
@@ -106,12 +106,13 @@ MSG        reading kernel...
 MSG        verifying kernel...
 MSG      backup: saved <TMP>/pioneer-failures/backup_3.tar (146432 bytes)
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
+FIELD    Startup setting = word 0x9f -> FFFF (neutral default for target firmware); read/change/verify before firmware transfer
 MSG      
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
 MSG      flash complete; drive returned ready.
 MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
---- scsi transcript (48) ---
+--- scsi transcript (56) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -135,6 +136,14 @@ OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae4
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 IN   cdb=120000006000 alloc=96 -> ok 96
 MEDIUM -> ClosedEmpty
+MEDIUM -> ClosedEmpty
+IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
+IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
