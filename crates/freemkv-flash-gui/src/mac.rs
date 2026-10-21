@@ -685,7 +685,10 @@ impl Controller {
             return true;
         }
         let alert = NSAlert::new(self.mtm());
-        alert.setMessageText(&ns(ui::CLOSE_BLOCKED));
+        alert.setMessageText(&ns(&crate::localization::render(
+            self.view().language,
+            ui::CLOSE_BLOCKED,
+        )));
         alert.runModal();
         false
     }
@@ -937,7 +940,11 @@ impl Controller {
         fill(&root, &results_scroll, 2.0 * PAD);
 
         // Activity log.
-        let log_title = small(mtm, ui::LOG_TITLE, 400.0);
+        let log_title = small(
+            mtm,
+            &crate::localization::render(self.view().language, ui::LOG_TITLE),
+            400.0,
+        );
         log_title.setHidden(true);
         let (log_scroll, log) = text_pane(mtm);
         log_scroll
@@ -968,7 +975,11 @@ impl Controller {
         let width = 820.0;
         let view: Retained<NSView> = match item {
             Item::Origin(origin) => {
-                let l = bold(mtm, origin.label());
+                let text = crate::localization::render(
+                    self.ivars().app.borrow().as_ref().unwrap().language,
+                    origin.label(),
+                );
+                let l = bold(mtm, &text);
                 let color = match origin {
                     crate::ui::FileOrigin::OemLikely => NSColor::systemGreenColor(),
                     crate::ui::FileOrigin::UserBackupLikely => NSColor::systemOrangeColor(),
@@ -1045,7 +1056,7 @@ impl Controller {
                 cols.setAlignment(NSLayoutAttribute::Top);
                 for side in [left, right] {
                     if !side.is_empty() {
-                        cols.addArrangedSubview(&media_grid(mtm, side));
+                        cols.addArrangedSubview(&media_grid(mtm, side, self.view().language));
                     }
                 }
                 inner.addArrangedSubview(&cols);
@@ -1095,13 +1106,17 @@ impl Controller {
             l.setTextColor(Some(&NSColor::systemRedColor()));
             l.setSelectable(true);
             results.addArrangedSubview(&l);
-            results.addArrangedSubview(&self.button(&f.save_log));
         }
         if let Some(n) = &r.notice {
             results.addArrangedSubview(&small(mtm, n, 820.0));
         }
-        results.addArrangedSubview(&self.button(&r.view_log));
-        results.addArrangedSubview(&self.button(&r.submit_report));
+        let actions = stack(mtm, false, 8.0);
+        actions.addArrangedSubview(&self.button(&r.view_log));
+        if let Some(f) = &r.failure {
+            actions.addArrangedSubview(&self.button(&f.save_log));
+        }
+        actions.addArrangedSubview(&self.button(&r.submit_report));
+        results.addArrangedSubview(&actions);
     }
 
     // ── rendering ─────────────────────────────────────────────────────────
@@ -1300,7 +1315,8 @@ impl Controller {
         // Never on Return: the dangerous button needs a deliberate click.
         confirm.setKeyEquivalent(&ns(""));
         confirm.setEnabled(c.confirm.enabled);
-        alert.addButtonWithTitle(&ns(&c.cancel.text));
+        let cancel = alert.addButtonWithTitle(&ns(&c.cancel.text));
+        cancel.setKeyEquivalent(&ns("\r"));
 
         let width = 380.0;
         let acc = stack(mtm, true, 10.0);
@@ -1323,6 +1339,7 @@ impl Controller {
             acc.addArrangedSubview(&wrapping(mtm, n, width));
         }
         let ack = self.checkbox(CheckId::RiskAck, &c.ack_text, c.ack_checked, true);
+        ack.setHidden(c.ack_text.is_empty());
         acc.addArrangedSubview(&ack);
         acc.widthAnchor()
             .constraintEqualToConstant(width)
@@ -1351,6 +1368,12 @@ impl Controller {
             });
         });
         alert.beginSheetModalForWindow_completionHandler(&window, Some(&handler));
+        // AppKit assigns a default while presenting. Clear that assignment after
+        // presentation so Return always selects the safe response.
+        alert.window().setDefaultButtonCell(None);
+        let buttons = alert.buttons();
+        buttons.objectAtIndex(0).setKeyEquivalent(&ns(""));
+        buttons.objectAtIndex(1).setKeyEquivalent(&ns("\r"));
     }
 
     fn render_diagnostics(&self, d: Option<&Diagnostics>) {
@@ -1466,6 +1489,14 @@ impl Controller {
             n.setStringValue(&ns(a.notice.as_deref().unwrap_or("")));
             n.setHidden(a.notice.is_none());
         }
+        if let Some(outline) = iv.an_outline.borrow().as_ref() {
+            for (index, id) in ["field.item", "field.value"].iter().enumerate() {
+                outline
+                    .tableColumns()
+                    .objectAtIndex(index)
+                    .setTitle(&ns(crate::localization::get(v.language, id)));
+            }
+        }
         let fresh = iv
             .an_shown
             .borrow()
@@ -1522,7 +1553,18 @@ impl Controller {
 
         let src = TreeSource::new(mtm);
         let ov = NSOutlineView::new(mtm);
-        for (id, title, width) in [("item", "Item", 560.0), ("value", "Value", 380.0)] {
+        for (id, title, width) in [
+            (
+                "item",
+                crate::localization::get(self.view().language, "field.item"),
+                560.0,
+            ),
+            (
+                "value",
+                crate::localization::get(self.view().language, "field.value"),
+                380.0,
+            ),
+        ] {
             let col = NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), &ns(id));
             col.setTitle(&ns(title));
             col.setWidth(width);
@@ -1555,14 +1597,18 @@ impl Controller {
     }
 }
 
-fn media_grid(mtm: MainThreadMarker, rows: &[MediaRow]) -> Retained<NSGridView> {
+fn media_grid(
+    mtm: MainThreadMarker,
+    rows: &[MediaRow],
+    language: crate::localization::Language,
+) -> Retained<NSGridView> {
     let g = grid(mtm);
     g.setRowSpacing(2.0);
-    let header = label(mtm, ui::MEDIA_HEADER);
+    let header = label(mtm, crate::localization::get(language, "media.header"));
     header.setFont(Some(&NSFont::boldSystemFontOfSize(
         NSFont::smallSystemFontSize(),
     )));
-    header.setToolTip(Some(&ns(ui::MEDIA_HINT)));
+    header.setToolTip(Some(&ns(crate::localization::get(language, "media.hint"))));
     grid_row(&g, &[NSGridCell::emptyContentView(mtm), view_of(&header)]);
     for r in rows {
         let ticks = stack(mtm, false, 2.0);

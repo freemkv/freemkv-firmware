@@ -758,7 +758,8 @@ fn execute_runs_readonly_preflight_before_backup_or_write() {
     let req = confirming_request();
     let error = crate::engine::flash(&mut dev, &Unready, &req, &mut crate::workflow::Preconfirmed)
         .unwrap_err();
-    assert_eq!(crate::workflow::error_message(&error), "receiver not ready");
+    assert!(crate::workflow::error_message(&error).contains("No firmware was written"));
+    assert!(format!("{error:#}").contains("receiver not ready"));
     let evidence = error
         .downcast_ref::<crate::backend::UpdateFailure>()
         .unwrap();

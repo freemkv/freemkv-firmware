@@ -142,7 +142,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 --- events (62) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer =
@@ -204,8 +204,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 --- scsi transcript (18) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -258,7 +258,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 --- events (62) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer =
@@ -320,8 +320,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 --- scsi transcript (18) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -374,7 +374,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 --- events (62) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = PIONEER
@@ -436,8 +436,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 --- scsi transcript (18) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -490,7 +490,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 --- events (62) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = RENESAS
@@ -552,8 +552,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 --- scsi transcript (18) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -606,7 +606,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 --- events (62) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = PIONEER
@@ -668,8 +668,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 --- scsi transcript (18) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -722,7 +722,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 --- events (62) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = HL-DT-ST
@@ -784,8 +784,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 --- scsi transcript (19) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96

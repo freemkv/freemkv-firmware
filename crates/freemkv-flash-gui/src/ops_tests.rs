@@ -55,12 +55,12 @@ fn profile_of(mut dev: MockScsiDevice) -> Profile {
 fn recovery_is_offered_for_an_unsupported_identified_drive() {
     let profile = profile_of(receiver(b"BDR 8A10"));
     assert_eq!(profile.tasks, [Task::Recovery]);
-    assert_eq!(profile.chips, ["Unsupported", "Recovery (Pioneer)"]);
+    assert_eq!(profile.chips, ["Pioneer"]);
     assert_eq!((profile.backup_name, profile.dump_name), (None, None));
 
     let profile = profile_of(MockScsiDevice::new());
     assert!(profile.tasks.is_empty() && !profile.inspect);
-    assert_eq!(profile.chips, ["Unsupported"]);
+    assert_eq!(profile.chips, ["modify.not_supported"]);
 }
 
 #[test]
@@ -70,10 +70,7 @@ fn a_supported_drive_offers_its_facets_with_names_from_the_backup_format() {
         profile.tasks,
         [Task::Backup, Task::Dump, Task::Flash, Task::Recovery]
     );
-    assert_eq!(
-        profile.chips,
-        ["Pioneer", "Backup", "Dump", "Flash", "Recovery"]
-    );
+    assert_eq!(profile.chips, ["Pioneer"]);
     assert_eq!(
         profile.backup_name.as_deref(),
         Some("BD-RW___BDR-UD04_1.14.candidate.tar")

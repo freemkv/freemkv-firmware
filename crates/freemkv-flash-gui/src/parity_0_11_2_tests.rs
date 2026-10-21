@@ -807,7 +807,7 @@ fn diagnostic_log_exports_match_0_11_2() {
 
     let results = app.view().results.unwrap();
     let failure = results.failure.expect("a failure offers the log");
-    assert_eq!(failure.save_log.text, "Save diagnostic log…");
+    assert_eq!(failure.save_log.text, "Save Log…");
     assert_eq!(
         app.dispatch(results.view_log.input),
         [Effect::OpenPath(log.clone())]

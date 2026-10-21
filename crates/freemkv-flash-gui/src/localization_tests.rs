@@ -156,3 +156,181 @@ fn failed_preference_replacement_preserves_existing_contents_and_cleans_temporar
 fn a_missing_translation_cannot_silently_show_english() {
     text(Language::Fr, "missing.message");
 }
+
+fn placeholders(value: &str) -> BTreeSet<&str> {
+    value
+        .split('{')
+        .skip(1)
+        .filter_map(|part| part.split_once('}').map(|(key, _)| key))
+        .collect()
+}
+
+#[test]
+fn every_translation_preserves_named_arguments() {
+    let english = Language::En.catalog()["messages"].as_object().unwrap();
+    for language in Language::ALL {
+        for (id, source) in english {
+            assert_eq!(
+                placeholders(get(language, id)),
+                placeholders(source.as_str().unwrap()),
+                "{}: {id}",
+                language.code()
+            );
+        }
+    }
+}
+
+#[test]
+fn translated_ui_and_english_diagnostics_resolve_the_same_message_independently() {
+    let operation = message(
+        "status.operation_failed",
+        &[("operation", "task.flash".into())],
+    );
+    let path = r"C:\Users\reader\{operation}\firmware.bin";
+    let saved = message("notice.log_saved", &[("path", path.into())]);
+    for language in Language::ALL {
+        assert_eq!(english(&operation), "Flash failed");
+        let visible = render(language, &operation);
+        assert!(
+            visible.contains(get(language, "task.flash")),
+            "{}: {visible}",
+            language.code()
+        );
+        assert!(render(language, &saved).contains(path));
+        assert!(!visible.contains('\u{1e}') && !visible.contains("status.operation"));
+        assert_eq!(
+            english_json(serde_json::json!({"summary": operation, "nested": [saved]}))["summary"],
+            "Flash failed"
+        );
+    }
+}
+
+#[test]
+fn legacy_report_templates_translate_complete_sentences_and_preserve_data() {
+    let source = "Source B: this component is not included.";
+    let translated = render(Language::Fr, source);
+    assert_ne!(translated, source);
+    assert!(translated.contains('B'));
+    for data in [
+        r"C:\firmware\Source B: this component is not included..bin",
+        "WH16NS58 1.V9",
+        "97b287072e20c952",
+    ] {
+        assert_eq!(render(Language::Fr, data), data);
+    }
+    assert_eq!(english(source), source);
+}
+
+#[test]
+fn product_names_and_protocol_names_remain_identifiers_in_every_language() {
+    let english = Language::En.catalog()["messages"].as_object().unwrap();
+    for language in Language::ALL {
+        for (id, source) in english {
+            for name in ["freemkv", "MediaTek", "Pioneer", "OEM", "SCSI"] {
+                if source.as_str().unwrap().contains(name) {
+                    assert!(
+                        get(language, id)
+                            .to_lowercase()
+                            .contains(&name.to_lowercase()),
+                        "{}: {id} must preserve {name}",
+                        language.code()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn plan_labels_and_backup_summaries_translate_without_changing_the_saved_path() {
+    let path = r"C:\firmware (original)\{bytes}\backup.bin";
+    let summary = format!("backup: saved {path} (2097152 bytes)");
+    let french = render(Language::Fr, &summary);
+    assert_ne!(french, summary);
+    assert!(french.contains(path), "{french}");
+    assert!(french.contains("2097152"));
+    assert_eq!(english(&summary), summary);
+    assert_eq!(
+        render(Language::Fr, "drive: WH16NS58"),
+        format!("{}: WH16NS58", render(Language::Fr, "Drive"))
+    );
+}
+
+#[test]
+fn memory_diagnostic_export_resolves_failure_guidance_in_english() {
+    let mut app = crate::ui::App::with_drives(Vec::new());
+    app.language = Language::Fr;
+    app.failure = Some(message("errors.current_required", &[]));
+    let diagnostic = app.diagnostic_text().unwrap();
+    assert!(diagnostic.contains(get(Language::En, "errors.current_required")));
+    assert!(!diagnostic.contains('\u{1e}'));
+    assert!(!diagnostic.contains("\"arguments\""));
+}
+
+#[test]
+fn unsupported_profile_copy_follows_the_selected_language() {
+    let mut app = crate::ui::App::with_drives(Vec::new());
+    app.set_profile(Ok(crate::ui::Profile {
+        chips: vec!["modify.not_supported".into()],
+        ..Default::default()
+    }));
+    for language in Language::ALL {
+        app.dispatch(crate::ui::Input::SetLanguage(language));
+        assert_eq!(
+            app.view().drives.chips,
+            [get(language, "modify.not_supported")]
+        );
+    }
+}
+
+#[test]
+fn firmware_switches_use_enabled_states_and_keep_english_diagnostics() {
+    // These are switch states, not translations of the prepositions "on"/"off".
+    for (code, enabled, disabled) in [
+        ("ca", "Activat", "Desactivat"),
+        ("cs", "Zapnuto", "Vypnuto"),
+        ("da", "Til", "Fra"),
+        ("de", "Ein", "Aus"),
+        ("el", "Ενεργό", "Ανενεργό"),
+        ("en", "On", "Off"),
+        ("es", "Activado", "Desactivado"),
+        ("es-419", "Activado", "Desactivado"),
+        ("fi", "Käytössä", "Pois käytöstä"),
+        ("fr", "Activé", "Désactivé"),
+        ("hu", "Bekapcsolva", "Kikapcsolva"),
+        ("id", "Aktif", "Nonaktif"),
+        ("it", "Attivo", "Disattivo"),
+        ("ja", "オン", "オフ"),
+        ("ko", "켜짐", "꺼짐"),
+        ("nl", "Aan", "Uit"),
+        ("no", "På", "Av"),
+        ("pl", "Włączone", "Wyłączone"),
+        ("pt", "Ativado", "Desativado"),
+        ("pt-br", "Ativado", "Desativado"),
+        ("ro", "Activat", "Dezactivat"),
+        ("ru", "Включено", "Выключено"),
+        ("sk", "Zapnuté", "Vypnuté"),
+        ("sv", "På", "Av"),
+        ("tr", "Açık", "Kapalı"),
+        ("uk", "Увімкнено", "Вимкнено"),
+        ("vi", "Bật", "Tắt"),
+        ("zh-hans", "开启", "关闭"),
+        ("zh-hant", "開啟", "關閉"),
+    ] {
+        let language = Language::from_code(code).unwrap();
+        assert_eq!(render(language, "On"), enabled, "{code}");
+        assert_eq!(render(language, "Off"), disabled, "{code}");
+        for (source, state) in [
+            ("On — enforce", enabled),
+            ("On — require", enabled),
+            ("Off — skip", disabled),
+            ("Off — bypass", disabled),
+        ] {
+            assert!(
+                render(language, source).starts_with(&format!("{state} — ")),
+                "{code}: {source}"
+            );
+            assert_eq!(english(source), source);
+        }
+    }
+}

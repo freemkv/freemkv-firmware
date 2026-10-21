@@ -1669,21 +1669,31 @@ fn vendor_scan_skips_comments_and_tests() {
 #[test]
 fn pioneer_optical_stays_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
-    let line = manifest
-        .lines()
-        .find(|l| l.trim_start().starts_with("pioneer-optical"))
-        .expect("pioneer-optical dependency");
-    // Until 0.17.0 is published, the exact reviewed commit carries the
-    // unified verified executor, receiver layout and two-pass restoration fixes.
-    // Neither a floating Git branch nor an older crate is acceptable.
-    let reviewed_commit = line.contains("rev = \"f67a7bd5e73fce83f418af9dc6732c4f99922c7c\"")
-        && line.contains("version = \"=0.17.0\"")
-        && line.contains("git = \"https://github.com/MattJackson/pioneer-optical.git\"");
-    let released = line.contains("version = \"=0.17.0\"") && !line.contains("git =");
-    assert!(
-        reviewed_commit || released,
-        "pioneer-optical must use the reviewed dialect API and OEM-verified receive-placement fix: {line}"
-    );
+    let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
+    for name in ["pioneer-optical", "mediatek-optical"] {
+        let line = manifest
+            .lines()
+            .find(|line| line.trim_start().starts_with(name))
+            .expect("optical dependency");
+        assert!(
+            line.contains("version = \"=1.0.0\"") && !line.contains("git ="),
+            "published optical 1.0.0 must be pinned: {line}"
+        );
+        let package = lock
+            .split("[[package]]")
+            .find(|package| package.contains(&format!("name = \"{name}\"")))
+            .expect("locked optical crate");
+        assert!(
+            package.contains("version = \"1.0.0\"")
+                && package.contains("registry+https://github.com/rust-lang/crates.io-index")
+        );
+        let checksum = package
+            .lines()
+            .find_map(|line| line.strip_prefix("checksum = \""))
+            .unwrap()
+            .trim_end_matches('"');
+        assert!(checksum.len() == 64 && checksum.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
 }
 
 /// Device-layer items that hold or lend a device type, as `(file, item,

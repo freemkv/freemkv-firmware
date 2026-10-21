@@ -1224,34 +1224,58 @@ impl Mt1959Engine {
     /// Largest run of erased flash (`0xFF`) of at least `need` bytes, 4-aligned,
     /// lying inside an active CMAC range (so it's integrity-covered like a real
     /// handler), searched from the code region up. Deterministic (largest wins,
-    /// lowest offset breaks ties) so `create` is reproducible.
+    /// lowest offset breaks ties) so `create` is reproducible. Existing full-run
+    /// placements take priority; clipped boundary runs are a fallback.
     pub fn free_space(&self, image: &[u8], need: usize) -> Result<u32> {
         let ranges: Vec<(u32, u32)> = cmac::parse_table(image)
             .map_err(|e| anyhow!("{e}"))?
             .into_iter()
-            .filter(|e| e.is_active() && e.start <= e.end)
+            .filter(|e| e.is_active() && e.start <= e.end && (e.end as usize) < image.len())
             .map(|e| (e.start, e.end))
             .collect();
         let covered = |p: u32| ranges.iter().any(|&(s, e)| s <= p && p <= e);
         let mut best: Option<(u32, usize)> = None;
+        let mut clipped: Option<(u32, usize)> = None;
         let mut i = CODE_REGION_START;
         while i < image.len() {
-            if image[i] == 0xFF {
-                let s = i;
-                while i < image.len() && image[i] == 0xFF {
-                    i += 1;
-                }
-                let a = (s + 3) & !3;
-                if i > a && i - a >= need && covered(a as u32) && covered((i - 1) as u32) {
-                    let len = i - a;
-                    if best.map(|(_, bl)| len > bl).unwrap_or(true) {
-                        best = Some((a as u32, len));
-                    }
-                }
-            } else {
+            if image[i] != 0xFF {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < image.len() && image[i] == 0xFF {
                 i += 1;
             }
+            let aligned = (start + 3) & !3;
+            if i > aligned
+                && i - aligned >= need
+                && covered(aligned as u32)
+                && covered((i - 1) as u32)
+                && ranges
+                    .iter()
+                    .any(|&(s, e)| s as usize <= aligned && i - 1 <= e as usize)
+            {
+                let len = i - aligned;
+                if best.is_none_or(|(_, previous)| len > previous) {
+                    best = Some((aligned as u32, len));
+                }
+            }
+            // Preserve existing placements first. If those holes are exhausted,
+            // a run crossing an integrity boundary can still contain usable bytes.
+            for &(lo, hi) in &ranges {
+                let a = (start.max(lo as usize) + 3) & !3;
+                let end = i.min((hi as usize).saturating_add(1));
+                if end > a
+                    && end - a >= need
+                    && clipped.is_none_or(|(old, len)| {
+                        end - a > len || (end - a == len && a < old as usize)
+                    })
+                {
+                    clipped = Some((a as u32, end - a));
+                }
+            }
         }
+        let best = best.or(clipped);
         best.map(|(a, _)| a)
             .ok_or_else(|| anyhow!("no CMAC-covered free space of {need} bytes in the code region"))
     }

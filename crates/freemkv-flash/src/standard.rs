@@ -160,7 +160,10 @@ pub fn region_rows(dev: &mut ReadDevice<'_>) -> Vec<Row> {
                 },
             ),
         ],
-        Err(e) => vec![row("region", "DVD region", &e.to_string())],
+        Err(e) => {
+            crate::diagnostics::record(format!("DVD region read failed: {e:#}"));
+            vec![row("region", "DVD region", "Unavailable")]
+        }
     };
     rows.into_iter()
         .map(|r| r.in_group(Group::Region))

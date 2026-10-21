@@ -382,7 +382,7 @@ fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
     let error =
         crate::engine::recover(&mut dev, &Mtk, Some(&original), &target, true, true).unwrap_err();
     assert!(
-        crate::workflow::error_message(&error).contains("Current firmware does not match"),
+        crate::workflow::error_message(&error).contains("Current firmware file does not match"),
         "{error:#}"
     );
     let evidence = error
@@ -680,7 +680,7 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
         .unwrap();
     assert!(error.is::<crate::backend::CurrentFirmwareRequired>());
     assert!(
-        crate::workflow::error_message(&error).contains("Specify the firmware currently installed")
+        crate::workflow::error_message(&error).contains("Choose the firmware currently installed")
     );
     assert!(!crate::workflow::error_message(&error).contains("0x98000"));
     assert!(format!("{error:#}").contains("restricted live code read 0x98000"));

@@ -42,6 +42,7 @@ pub(super) fn run(c: &Controller, dir: &Path) {
     );
 
     language_checks(c, dir, &content, &mut g);
+    analysis_header_languages(c, &mut g);
 
     for task in gui_gate::TABS {
         c.send(Input::SelectTask(task));
@@ -80,6 +81,7 @@ pub(super) fn run(c: &Controller, dir: &Path) {
     let first = sheet(c, dir, true, &mut g);
     let reopened = sheet(c, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
+    backup_question(c, dir, &mut g);
     c.with_app(|a| g.no_drive_io("end", a));
     std::process::exit(g.finish(dir));
 }
@@ -458,4 +460,82 @@ fn region(part: &NSView, root: &NSView, shot: &Capture) -> Region {
         b.size.height,
         scale,
     )
+}
+
+fn backup_question(c: &Controller, dir: &Path, g: &mut Gate) {
+    c.with_app(gui_gate::open_backup_question);
+    c.render();
+    settle(c, SETTLE);
+    let iv = c.ivars();
+    let alert = iv.alert.borrow().clone().expect("backup question");
+    let buttons = alert.buttons();
+    g.check(
+        "backup-question-yes-no",
+        buttons.len() == 2
+            && buttons.objectAtIndex(0).title().to_string() == "Yes"
+            && buttons.objectAtIndex(1).title().to_string() == "No",
+        "native Yes and No buttons",
+    );
+    g.check(
+        "backup-question-explicit-yes",
+        buttons.objectAtIndex(0).isEnabled()
+            && buttons
+                .objectAtIndex(0)
+                .keyEquivalent()
+                .to_string()
+                .is_empty()
+            && buttons.objectAtIndex(1).keyEquivalent().to_string() == "\r",
+        format!(
+            "confirm enabled={} key={:?}; cancel key={:?}",
+            buttons.objectAtIndex(0).isEnabled(),
+            buttons.objectAtIndex(0).keyEquivalent().to_string(),
+            buttons.objectAtIndex(1).keyEquivalent().to_string()
+        ),
+    );
+    g.check(
+        "backup-question-no-extra-checkbox",
+        iv.alert_ack
+            .borrow()
+            .as_ref()
+            .is_some_and(|ack| ack.isHidden()),
+        "risk acknowledgement is reserved for final Flash confirmation",
+    );
+    if let Some(content) = alert.window().contentView() {
+        let shot = capture(&content);
+        g.save(dir, "backup-question", shot.as_ref());
+    }
+    c.send(Input::CancelConfirm);
+    settle(c, SETTLE);
+    g.check(
+        "backup-question-closes-on-no",
+        c.view().confirm.is_none(),
+        "no update was authorized",
+    );
+}
+
+fn analysis_header_languages(c: &Controller, g: &mut Gate) {
+    use crate::localization::{get, Language};
+    let mut view = c.view();
+    view.analysis = Some(crate::ui::AnalysisWindow {
+        tree: std::sync::Arc::new(crate::ui::AnalysisView {
+            title: "Synthetic analysis".into(),
+            actions: Vec::new(),
+            heading: "Synthetic".into(),
+            nodes: Vec::new(),
+        }),
+        notice: None,
+    });
+    for language in [Language::En, Language::Fr, Language::Ja, Language::En] {
+        view.language = language;
+        c.render_analysis(&view);
+        let outline = c.ivars().an_outline.borrow().clone().unwrap();
+        let columns = outline.tableColumns();
+        g.check(
+            &format!("analysis-headers-{}", language.code()),
+            columns.objectAtIndex(0).title().to_string() == get(language, "field.item")
+                && columns.objectAtIndex(1).title().to_string() == get(language, "field.value"),
+            "existing table updates without replacing its data",
+        );
+    }
+    c.render_analysis(&c.view());
 }

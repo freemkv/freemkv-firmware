@@ -211,6 +211,7 @@ fn incomplete_read(readable: usize, gaps: &[(usize, usize)]) -> anyhow::Error {
              possible on this drive. `freemkv-flash dump` saves what the drive returns",
             super::IMAGE_SIZE
         )
+        .context(crate::backend::BackupReadRestricted)
     } else {
         anyhow::anyhow!(
             "backup needs every firmware byte, but read {readable} of {}; unreadable ranges \

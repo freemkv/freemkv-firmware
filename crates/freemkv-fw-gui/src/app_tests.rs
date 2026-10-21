@@ -31,7 +31,7 @@ fn rendered_text(app: &mut FwApp) -> Vec<(String, bool)> {
 
 #[test]
 fn sibling_actions_and_diagnostic_controls_fit_the_same_window() {
-    let mut app = FwApp::new();
+    let mut app = FwApp::with_preferences(Preferences::Memory);
     app.input = Some("firmware.bin".into());
     app.device = "test-drive".into();
     app.devices.push(DriveChoice {
@@ -65,7 +65,7 @@ fn sibling_actions_and_diagnostic_controls_fit_the_same_window() {
 
 #[test]
 fn failed_worker_releases_controls_and_offers_log_export() {
-    let mut app = FwApp::new();
+    let mut app = FwApp::with_preferences(Preferences::Memory);
     let (tx, rx) = mpsc::channel();
     app.running = true;
     app.rx = Some(rx);
@@ -88,7 +88,7 @@ fn diagnostic_viewer_reads_the_file_not_the_activity_summary() {
     let directory = std::env::temp_dir();
     let path = directory.join(format!("fw-viewer-test-{}.log", std::process::id()));
     std::fs::write(&path, "full metadata header and transfer evidence").unwrap();
-    let mut app = FwApp::new();
+    let mut app = FwApp::with_preferences(Preferences::Memory);
     app.log.push("short summary only".into());
     app.diagnostic_log = Some(path.clone());
     app.details_open = true;
@@ -106,7 +106,7 @@ fn diagnostic_viewer_reads_the_file_not_the_activity_summary() {
 #[test]
 fn boot_form_shows_loaded_values_and_reset_restores_shipping_defaults() {
     let input = PathBuf::from("selected.bin");
-    let mut app = FwApp::new();
+    let mut app = FwApp::with_preferences(Preferences::Memory);
     app.input = Some(input.clone());
     app.boot_input = Some(input);
     app.task = Task::Create;
@@ -155,7 +155,7 @@ fn selecting_another_image_loads_its_settings_and_discards_pending_old_analysis(
     selected.set(BootFeature::Encryption, "off").unwrap();
     let (image, _) = freemkv_fw::api::modify_with_defaults(&original, &selected).unwrap();
     let loaded = freemkv_fw::api::boot_options(&image.image).unwrap();
-    let mut app = FwApp::new();
+    let mut app = FwApp::with_preferences(Preferences::Memory);
     app.input = Some("first.bin".into());
     app.boot_settings.set(BootFeature::Hrl, "off").unwrap();
     app.boot_dirty = true;
@@ -164,7 +164,9 @@ fn selecting_another_image_loads_its_settings_and_discards_pending_old_analysis(
     app.select_image("second.bin".into());
     assert!(!app.boot_dirty);
     assert!(app.boot_rx.is_none());
-    assert!(old_tx.send(Err("stale result".into())).is_err());
+    assert!(old_tx
+        .send(Err(("stale result".into(), "stale diagnostic".into())))
+        .is_err());
     let (tx, rx) = mpsc::channel();
     app.boot_rx = Some(rx);
     app.boot_input = app.input.clone();
@@ -179,4 +181,73 @@ fn selecting_another_image_loads_its_settings_and_discards_pending_old_analysis(
         "reselecting a replaced file must reload it too"
     );
     assert!(app.boot_input.is_none());
+}
+
+#[test]
+fn operation_errors_translate_with_the_ui_but_activity_and_saved_logs_stay_english() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.language = Language::Fr;
+    app.action = "modify.firmware_verification".into();
+    let (tx, rx) = mpsc::channel();
+    app.running = true;
+    app.rx = Some(rx);
+    let guidance = freemkv_flash::workflow::user_error(&anyhow::anyhow!(
+        "firmware image invalid at private 0x1234"
+    ))
+    .encoded();
+    tx.send(Msg::Done(Err(guidance))).unwrap();
+    app.pump();
+    let text = rendered_text(&mut app);
+    assert!(text
+        .iter()
+        .any(|(line, _)| line == localization::get(Language::Fr, "errors.firmware_invalid")));
+    assert!(!text.iter().any(|(line, _)| line.contains("private 0x1234")));
+    assert!(app
+        .log
+        .last()
+        .unwrap()
+        .contains("This firmware file could not be read or validated"));
+    assert!(!app.log.last().unwrap().contains('\u{1e}'));
+}
+
+#[test]
+fn background_firmware_analysis_keeps_clean_guidance_and_exportable_english_details() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.language = Language::Fr;
+    app.input = Some("input.bin".into());
+    app.boot_input = app.input.clone();
+    app.diagnostic_log = Some("previous-operation.log".into());
+    let (tx, rx) = mpsc::channel();
+    app.boot_rx = Some(rx);
+    tx.send(Err((
+        "errors.firmware_invalid".into(),
+        "parse failed at 0x1234: unsupported image format".into(),
+    )))
+    .unwrap();
+    app.boot_preview(&egui::Context::default());
+    assert_eq!(app.boot_error.as_deref(), Some("errors.firmware_invalid"));
+    assert!(
+        app.diagnostic_log.is_none(),
+        "an earlier operation's log must not hide this failure"
+    );
+    let log = app.diagnostic_text().unwrap();
+    assert!(
+        log.contains("Firmware analysis failed: parse failed at 0x1234: unsupported image format")
+    );
+    assert!(!log.contains('\u{1e}'));
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn unicode_ui_languages_have_renderable_cjk_glyphs() {
+    let ctx = egui::Context::default();
+    crate::configure_style(&ctx);
+    let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ui.fonts_mut(|fonts| {
+            assert!(fonts.has_glyphs(
+                &egui::FontId::proportional(14.0),
+                "日本語한국어简体中文繁體中文"
+            ));
+        })
+    });
 }

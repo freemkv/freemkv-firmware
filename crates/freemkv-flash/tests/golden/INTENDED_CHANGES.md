@@ -10,6 +10,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| HUMAN_ERRORS | 0.14.1: optional DVD region, Pioneer identity and settings read failures show Unavailable. Full causes remain in English diagnostics. No device commands or values from successful reads change. |
 | PRECHECK | 0.14.0: proven pre-write failures retain phase and no-write evidence; hardware mismatches have actionable model guidance with original family identifiers in diagnostics. Pioneer preview explicitly leaves installed compatibility pending. No SCSI commands, payloads, programming order or compatibility gates change. |
 | FMT | Snapshot normalization removes trailing display padding, including empty structured `MSG` rows and terminal prompts. Commands, payload bytes, message content and assertions are unchanged; the historical v0.11.2 snapshots remain untouched. |
 | P10 | Pioneer 0.13.4: the shared optical executor derives the dialect from decoded firmware, binds the live receiver before entry and again after startup migration, and checks target identity plus Kernel and available Normal readback after each pass. OEM vendor identity binds to the loaded firmware ID, and revisions compare the defined four-byte INQUIRY field (including the projected `0.05e` release). Recovery with a supplied Current envelope uses its decoded Kernel signatures, dialect and exact identity to establish an OEM receiver; unsupported probing without Current remains refused. Golden devices now install the transferred Normal, report its tag and revision, and expose programmed bytes for verification. Typed failures retain the underlying transport cause. The corpus also refreshes the earlier optical 0.15.1 receiver-derived `FrontKeyTwoRegion` framing (`6c8c2be`, `9100f74`, `5847fe4`): a 0x1200 Kernel header/key transfer followed by two 0x8000 body transfers at offsets 0x1200 and 0x9200. Flash already used this before the current audit; Recovery now shares that plan. Contiguous Kernel bytes, Normal transfers and control payloads are preserved. |
@@ -422,56 +423,92 @@ reason: P4
 ## classify_and_unknown_info.txt
 
 ### info with the Unknown handler on MediaTek firmware-image mock
-reason: M-ENC
+reason: M-ENC, HUMAN_ERRORS
 ```diff
+-DVD region: Invalid or incomplete response
++DVD region: Unavailable
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
 ---- scsi transcript (18) ---
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 +--- scsi transcript (19) ---
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 ```
 
 ### info with the Unknown handler on MockScsiDevice::mtk
-reason: FMT
+reason: FMT, HUMAN_ERRORS
 ```diff
+-DVD region: Invalid or incomplete response
++DVD region: Unavailable
 -FIELD    Manufacturer = 
 -FIELD    Model = 
 -FIELD    Firmware version = 
 +FIELD    Manufacturer =
 +FIELD    Model =
 +FIELD    Firmware version =
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 ```
 
 ### info with the Unknown handler on MockScsiDevice::pioneer
-reason: FMT
+reason: FMT, HUMAN_ERRORS
 ```diff
+-DVD region: Invalid or incomplete response
++DVD region: Unavailable
 -FIELD    Firmware version = 
 +FIELD    Firmware version =
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 ```
 
 ### info with the Unknown handler on MockScsiDevice::renesas
-reason: FMT
+reason: FMT, HUMAN_ERRORS
 ```diff
+-DVD region: Invalid or incomplete response
++DVD region: Unavailable
 -FIELD    Model = 
 -FIELD    Firmware version = 
 +FIELD    Model =
 +FIELD    Firmware version =
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 ```
 
 ### info with the Unknown handler on ambiguous: MediaTek and Pioneer both match
-reason: FMT
+reason: FMT, HUMAN_ERRORS
 ```diff
+-DVD region: Invalid or incomplete response
++DVD region: Unavailable
 -FIELD    Firmware version = 
 +FIELD    Firmware version =
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 ```
 
 ### info with the Unknown handler on blank mock (matches no backend)
-reason: FMT
+reason: FMT, HUMAN_ERRORS
 ```diff
+-DVD region: Invalid or incomplete response
++DVD region: Unavailable
 -FIELD    Manufacturer = 
 -FIELD    Model = 
 -FIELD    Firmware version = 
 +FIELD    Manufacturer =
 +FIELD    Model =
 +FIELD    Firmware version =
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 ```
 
 ## flash_dry_run.txt
@@ -8732,12 +8769,14 @@ reason: P4
 ## info_mtk.txt
 
 ### MTK info: classify-only mock (MockScsiDevice::mtk)
-reason: R5, R7, M-CHIP, FMT
+reason: R5, R7, M-CHIP, FMT, HUMAN_ERRORS
 ```diff
 ---- text (33) ---
 +--- text (34) ---
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-DVD region: Invalid or incomplete response
++DVD region: Unavailable
 +chipset: MT1959
 ---- events (65) ---
 +--- events (67) ---
@@ -8749,6 +8788,10 @@ reason: R5, R7, M-CHIP, FMT
 +FIELD    Firmware version =
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 +FIELD    Chipset = MT1959
 +MSG      chipset: MT1959
 ---- scsi transcript (21) ---
@@ -8758,7 +8801,7 @@ reason: R5, R7, M-CHIP, FMT
 ```
 
 ### MTK info: mock exposing a drive-read firmware image
-reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
+reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, HUMAN_ERRORS
 ```diff
 ---- text (33) ---
 +--- text (34) ---
@@ -8766,9 +8809,11 @@ reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
 +banner: MT1959 Boot BU5
 -flash: MediaTek MT1959 — executable (hardware-proven)
 +flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-DVD region: Invalid or incomplete response
 -firmware: unknown (unrecognized — not in the built-in catalog)
 -          fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
 ---- events (65) ---
++DVD region: Unavailable
 +chipset: MT1959
 +firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
 +          fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
@@ -8777,9 +8822,13 @@ reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
 +MSG      banner: MT1959 Boot BU5
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
 +MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
 -MSG      firmware: unknown (unrecognized — not in the built-in catalog)
 -MSG                fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
 ---- scsi transcript (21) ---
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
 +FIELD    Chipset = MT1959
 +MSG      chipset: MT1959
 +MSG      firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
@@ -8793,19 +8842,67 @@ reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
 ## info_pioneer.txt
 
 ### Pioneer info: MockScsiDevice::pioneer
-reason: FMT
+reason: FMT, HUMAN_ERRORS
 ```diff
+-Pioneer identity: Not reported
++Pioneer identity: Unavailable
+-DVD region: Invalid or incomplete response
+-Quiet Drive: Invalid or incomplete response
+-PureRead: Invalid or incomplete response
++DVD region: Unavailable
++Quiet Drive: Unavailable
++PureRead: Unavailable
 -FIELD    Firmware version = 
 +FIELD    Firmware version =
+-FIELD    Pioneer identity = Not reported
+-MSG      Pioneer identity: Not reported
++FIELD    Pioneer identity = Unavailable
++MSG      Pioneer identity: Unavailable
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
+-FIELD    Quiet Drive = Invalid or incomplete response
+-MSG      Quiet Drive: Invalid or incomplete response
+-FIELD    PureRead = Invalid or incomplete response
+-MSG      PureRead: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
++FIELD    Quiet Drive = Unavailable
++MSG      Quiet Drive: Unavailable
++FIELD    PureRead = Unavailable
++MSG      PureRead: Unavailable
 ```
 
 ### Renesas info: MockScsiDevice::renesas (Pioneer backend)
-reason: FMT
+reason: FMT, HUMAN_ERRORS
 ```diff
+-Pioneer identity: Not reported
++Pioneer identity: Unavailable
+-DVD region: Invalid or incomplete response
+-Quiet Drive: Invalid or incomplete response
+-PureRead: Invalid or incomplete response
++DVD region: Unavailable
++Quiet Drive: Unavailable
++PureRead: Unavailable
 -FIELD    Model = 
 -FIELD    Firmware version = 
 +FIELD    Model =
 +FIELD    Firmware version =
+-FIELD    Pioneer identity = Not reported
+-MSG      Pioneer identity: Not reported
++FIELD    Pioneer identity = Unavailable
++MSG      Pioneer identity: Unavailable
+-FIELD    DVD region = Invalid or incomplete response
+-MSG      DVD region: Invalid or incomplete response
+-FIELD    Quiet Drive = Invalid or incomplete response
+-MSG      Quiet Drive: Invalid or incomplete response
+-FIELD    PureRead = Invalid or incomplete response
+-MSG      PureRead: Invalid or incomplete response
++FIELD    DVD region = Unavailable
++MSG      DVD region: Unavailable
++FIELD    Quiet Drive = Unavailable
++MSG      Quiet Drive: Unavailable
++FIELD    PureRead = Unavailable
++MSG      PureRead: Unavailable
 ```
 
 ## mtk_backup_variants.txt

@@ -35,7 +35,9 @@ pub fn profile_with_current(
 pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
     let caps = &p.capabilities;
     let family = p.backend.as_ref().map(|(d, _)| d);
-    let mut chips = vec![family.map_or("Unsupported", |d| d.display_name).to_string()];
+    let mut chips = vec![family
+        .map_or("modify.not_supported", |d| d.display_name)
+        .to_string()];
     let mut tasks = Vec::new();
     for (offered, task) in [
         (caps.backup, Task::Backup),
@@ -43,15 +45,13 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
         (caps.flash, Task::Flash),
     ] {
         if offered {
-            chips.push(task.title().into());
             tasks.push(task);
         }
     }
     if let Some(recovery) = p.recovery {
-        chips.push(match family {
-            Some(d) if d.id == recovery.id => Task::Recovery.title().into(),
-            _ => format!("{} ({})", Task::Recovery.title(), recovery.display_name),
-        });
+        if family.is_none() {
+            chips = vec![recovery.display_name.into()];
+        }
         tasks.push(Task::Recovery);
     }
     let name = |dump: bool| {
@@ -60,6 +60,7 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
             .map(|path| path.display().to_string())
     };
     Profile {
+        can_read: p.can_read(),
         flash_current: caps.flash_current,
         recovery_without_live_protocol: p.backend.is_none() && p.recovery.is_some(),
         chips,

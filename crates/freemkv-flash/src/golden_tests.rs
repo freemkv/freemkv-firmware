@@ -2800,6 +2800,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
+    "HUMAN_ERRORS",
     "PRECHECK",
     "R1",
     "R2",
@@ -2825,7 +2826,20 @@ const ALLOWED_REASONS: &[&str] = &[
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
-    "PRECHECK", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10", "P11", "FMT",
+    "HUMAN_ERRORS",
+    "PRECHECK",
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "P5",
+    "P6",
+    "P7",
+    "P8",
+    "P9",
+    "P10",
+    "P11",
+    "FMT",
 ];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.

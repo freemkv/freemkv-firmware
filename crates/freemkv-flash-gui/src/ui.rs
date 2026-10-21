@@ -27,21 +27,18 @@ use crate::ops::{self, Job, Request, ResultView};
 use crate::support::Journal;
 
 /// Shown wherever Recovery is offered or confirmed. Wording is part of the safety contract.
-pub const FORCE_WARNING: &str = "Recovery skips automatic backups and some compatibility checks. Incompatible firmware can make the drive unusable.";
+pub const FORCE_WARNING: &str = "ui.recovery_skips_automatic_backups_and_some_compatib";
 /// The confirmation sheet's danger line.
-pub const FLASH_DANGER: &str =
-    "Flashing can permanently disable the drive. Keep it connected and powered until completion.";
+pub const FLASH_DANGER: &str = "ui.flashing_can_permanently_disable_the_drive_keep_it";
 /// The acknowledgement that must be ticked, fresh, before Flash or Recover is enabled.
-pub const RISK_ACK: &str = "I understand and want to update this drive";
+pub const RISK_ACK: &str = "ui.i_understand_and_want_to_update_this_drive";
 /// Under the progress bar while a job runs.
-pub const KEEP_CONNECTED: &str = "Keep the drive connected and powered until this finishes.";
+pub const KEEP_CONNECTED: &str = "ui.keep_the_drive_connected_and_powered_until_this_fi";
 /// On the flash sheet: the backup is already saved, and cancelling is safe.
-pub const BACKUP_KEPT: &str =
-    "The pre-flash backup is saved. Cancel keeps it and writes nothing to the drive.";
-const CANCELLED: &str =
-    "Cancelled at the confirmation: nothing was written; the pre-flash backup is kept.";
-const WORKER_PANIC: &str = "Operation worker failed unexpectedly. If flashing was underway, the drive state is uncertain; keep the backup and inspect the drive before retrying.";
-const WORKER_GONE: &str = "The worker stopped before reporting a result. If a flash was underway, inspect the drive before retrying.";
+pub const BACKUP_KEPT: &str = "ui.the_pre_flash_backup_is_saved_cancel_keeps_it_and_";
+const CANCELLED: &str = "ui.cancelled_no_firmware_was_written";
+const WORKER_PANIC: &str = "ui.operation_worker_failed_unexpectedly_if_flashing_w";
+const WORKER_GONE: &str = "ui.the_worker_stopped_before_reporting_a_result_if_a_";
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
 const DIAGNOSTIC_REFRESH: Duration = Duration::from_millis(500);
 
@@ -88,6 +85,7 @@ impl Task {
 /// What the selected drive offers, from `workflow::profile`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Profile {
+    pub(crate) can_read: Option<bool>,
     pub(crate) flash_current: bool,
     /// Shown beside the drive: the family (or "Unsupported"), then what it offers.
     pub(crate) chips: Vec<String>,
@@ -116,8 +114,8 @@ pub(crate) enum ProfileState {
 }
 
 /// Shown beside the drive while its profile is read.
-pub const PROBING: &str = "probing…";
-const PROFILE_FAILED: &str = "Profile unavailable";
+pub const PROBING: &str = "status.probing";
+const PROFILE_FAILED: &str = "ui.profile_unavailable";
 
 /// What a file chooser is for; returned with the chosen path in `Input::Chosen`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -436,15 +434,11 @@ pub struct MediaRow {
     pub write: Option<Tri>,
 }
 
-/// Header over the media read/write ticks, and its expansion.
-pub const MEDIA_HEADER: &str = "R/W";
-pub const MEDIA_HINT: &str = "Read / Write";
 /// Title of the activity log pane.
 #[cfg(all(feature = "native", target_os = "macos"))]
-pub const LOG_TITLE: &str = "Activity log";
+pub const LOG_TITLE: &str = "ui.activity_log";
 /// Why the window will not close while a job runs.
-pub const CLOSE_BLOCKED: &str =
-    "An operation is still running. Keep the drive connected and powered until it finishes.";
+pub const CLOSE_BLOCKED: &str = "ui.an_operation_is_still_running_keep_the_drive_conne";
 
 /// The Flash/Recovery confirmation sheet.
 #[derive(Clone, Debug, PartialEq)]
@@ -534,9 +528,7 @@ impl Node {
 }
 
 fn translate(language: crate::localization::Language, value: &mut String) {
-    if crate::localization::is_message(value) {
-        *value = crate::localization::text(language, value);
-    }
+    *value = crate::localization::render(language, value);
 }
 
 fn translate_button(language: crate::localization::Language, button: &mut Button) {
@@ -567,13 +559,19 @@ fn translate_node(language: crate::localization::Language, node: &mut Node) {
         NodeKind::Section(text) | NodeKind::Text(text) | NodeKind::Note(text) => {
             translate(language, text)
         }
-        NodeKind::Field { label, .. } => translate(language, label),
+        NodeKind::Field { label, value } => {
+            translate(language, label);
+            translate(language, value);
+        }
         NodeKind::Mono(_) => {}
         NodeKind::Buttons(buttons) => buttons
             .iter_mut()
             .for_each(|button| translate_button(language, button)),
-        NodeKind::Table { header, .. } => {
+        NodeKind::Table { header, rows } => {
             header.iter_mut().for_each(|text| translate(language, text));
+            rows.iter_mut()
+                .flatten()
+                .for_each(|text| translate(language, text));
         }
     }
     node.children
@@ -600,7 +598,7 @@ fn translate_view(view: &mut View) {
         .for_each(|item| translate_item(language, item));
     view.log
         .iter_mut()
-        .for_each(|line| translate(language, line));
+        .for_each(|line| *line = crate::localization::english(line));
     if let Some(status) = &mut view.status {
         translate(language, &mut status.text);
         if let Some(note) = &mut status.note {
@@ -623,19 +621,20 @@ fn translate_view(view: &mut View) {
                 translate(language, subtitle);
             }
             match &mut card.body {
-                CardBody::Rows(rows) => rows
-                    .iter_mut()
-                    .for_each(|(label, _)| translate(language, label)),
+                CardBody::Rows(rows) => rows.iter_mut().for_each(|(label, value)| {
+                    translate(language, label);
+                    translate(language, value);
+                }),
                 CardBody::Media { left, right } => left
                     .iter_mut()
                     .chain(right)
                     .for_each(|row| translate(language, &mut row.label)),
             }
         });
-        results
-            .fields
-            .iter_mut()
-            .for_each(|(label, _)| translate(language, label));
+        results.fields.iter_mut().for_each(|(label, value)| {
+            translate(language, label);
+            translate(language, value);
+        });
         if let Some(failure) = &mut results.failure {
             translate(language, &mut failure.text);
             translate_button(language, &mut failure.save_log);
@@ -708,6 +707,8 @@ pub(crate) enum Msg {
     /// A flash passed every gate after its backup; the worker waits for the
     /// sheet's answer on the sender before writing.
     Authorized(FlashSheet, Sender<bool>),
+    /// Backup capture failed; wait for an explicit human Yes or No.
+    BackupUnavailable(String, Sender<bool>),
     Done(Result<Option<workflow::UpdateOutcome>, String>),
 }
 
@@ -723,6 +724,10 @@ pub(crate) struct Target {
 /// What a confirmation sheet asks.
 #[derive(Clone, Debug)]
 pub(crate) enum Sheet {
+    WithoutBackup {
+        reason: String,
+        reply: Sender<bool>,
+    },
     /// Recovery, asked after its read-only preparation has passed.
     Recovery {
         options: RecoveryOptions,
@@ -798,6 +803,7 @@ pub struct App {
     /// A flash whose backup and authorization are running; its sheet opens
     /// when the worker reports the authorized plan.
     pub(crate) flashing: Option<Target>,
+    backup_waived: bool,
     /// The user cancelled the flash sheet; the job's refusal is not a failure.
     pub(crate) cancelled: bool,
     pub(crate) log: Vec<String>,
@@ -852,15 +858,18 @@ impl App {
         preferences: crate::localization::Preferences,
     ) -> Self {
         let device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
+        let mut startup_log = vec![crate::localization::english(
+            "ui.ready_select_an_optical_drive_and_choose_an_action",
+        )];
         let (journal, logging_warning) = if cfg!(test) {
             (None, None)
         } else {
             match Journal::open() {
                 Ok(journal) => (Some(journal), None),
-                Err(error) => (
-                    Some(Journal::memory()),
-                    Some(format!("Session history is not being saved: {error}")),
-                ),
+                Err(error) => {
+                    startup_log.push(format!("Session history could not be opened: {error:#}"));
+                    (Some(Journal::memory()), Some("errors.history".into()))
+                }
             }
         };
         Self {
@@ -909,8 +918,9 @@ impl App {
             pending: None,
             planning: None,
             flashing: None,
+            backup_waived: false,
             cancelled: false,
-            log: vec!["Ready. Select an optical drive and choose an action.".into()],
+            log: startup_log,
             diagnostic_log: None,
             diagnostics_open: false,
             diagnostic_lines: Arc::default(),
@@ -991,6 +1001,10 @@ impl App {
     pub(crate) fn set_profile(&mut self, profile: Result<Profile, String>) {
         self.profile = match profile {
             Ok(profile) => {
+                if profile.can_read == Some(false) {
+                    self.flash_read = false;
+                    self.recovery_read = false;
+                }
                 self.log.extend(profile.notes.iter().cloned());
                 ProfileState::Ready(profile)
             }
@@ -1069,9 +1083,11 @@ impl App {
             data["operation_id"] = id.clone().into();
         }
         if let Some(journal) = &mut self.journal {
-            if let Err(error) = journal.record(kind, data) {
+            if let Err(error) = journal.record(kind, crate::localization::english_json(data)) {
+                self.log
+                    .push(format!("Could not save session history: {error:#}"));
                 self.logging_warning
-                    .get_or_insert_with(|| format!("Session history could not be saved: {error}"));
+                    .get_or_insert_with(|| "errors.history".into());
             }
         }
     }
@@ -1105,6 +1121,8 @@ impl App {
                 if let Some(path) = self.drives.get(i).map(|d| d.path.clone()) {
                     if !self.busy() && path != self.device {
                         self.device = path;
+                        self.flash_read = true;
+                        self.recovery_read = true;
                         self.risk_ack = false;
                         self.rows.clear();
                         self.status = "status.ready".into();
@@ -1122,13 +1140,15 @@ impl App {
             }
             Input::Choose(pick) => return self.choose(pick),
             Input::Chosen(pick, path) => return self.chosen(pick, path),
-            Input::SetCheck(CheckId::FlashReadFromDrive, on) if !self.busy() => {
+            Input::SetCheck(CheckId::FlashReadFromDrive, on) if !self.busy() && self.can_read() => {
                 if self.flash_read != on {
                     self.clear_flash_result();
                     self.flash_read = on;
                 }
             }
-            Input::SetCheck(CheckId::RecoveryReadFromDrive, on) if !self.busy() => {
+            Input::SetCheck(CheckId::RecoveryReadFromDrive, on)
+                if !self.busy() && self.can_read() =>
+            {
                 if self.recovery_read != on {
                     self.clear_flash_result();
                 }
@@ -1150,7 +1170,7 @@ impl App {
                 }
             }
             Input::ReadInfo if !self.busy() => {
-                return self.start_job("Drive information", self.device.clone(), Job::Info);
+                return self.start_job("modify.drive_information", self.device.clone(), Job::Info);
             }
             action @ (Input::CheckFlashFile | Input::CheckRecoveryFile) if !self.busy() => {
                 let input = if matches!(action, Input::CheckRecoveryFile) {
@@ -1159,7 +1179,7 @@ impl App {
                     self.flash_input.clone()
                 };
                 if let Some(input) = input {
-                    return self.start_job("Check file", String::new(), Job::InfoFile { input });
+                    return self.start_job("ui.check_file", String::new(), Job::InfoFile { input });
                 }
             }
             Input::FlashNow if !self.busy() && self.flash_ready() => {
@@ -1226,7 +1246,7 @@ impl App {
                     acknowledged_risk: false,
                 };
                 let effects = self.start_job(
-                    "Recovery plan",
+                    "ui.recovery_plan",
                     target.device.clone(),
                     Job::Recovery(options.clone()),
                 );
@@ -1238,7 +1258,7 @@ impl App {
             Input::Confirm => return self.confirm(),
             Input::CancelConfirm => {
                 if let Some(Pending {
-                    sheet: Sheet::Flash { reply, .. },
+                    sheet: Sheet::Flash { reply, .. } | Sheet::WithoutBackup { reply, .. },
                     ..
                 }) = self.pending.take()
                 {
@@ -1250,7 +1270,7 @@ impl App {
             Input::RunAnalysis if !self.busy() => return self.run_analysis(),
             Input::CancelAnalysis if self.running() => {
                 self.control.cancel();
-                self.status = "Cancelling after the current operation returns…".into();
+                self.status = "ui.cancelling_after_the_current_operation_returns".into();
             }
             Input::OpenDiagnostics => {
                 self.diagnostics_open = true;
@@ -1267,7 +1287,7 @@ impl App {
             Input::SubmitReport if self.report_rx.is_none() => {
                 self.record_event("report_requested", serde_json::json!({}));
                 let Some(journal) = &self.journal else {
-                    self.diagnostic_notice = Some("Report history is unavailable.".into());
+                    self.diagnostic_notice = Some("ui.report_history_is_unavailable".into());
                     return Vec::new();
                 };
                 let source = journal.source();
@@ -1275,7 +1295,7 @@ impl App {
                 let control = crate::support::Submission::new();
                 self.report_control = Some(control.clone());
                 self.report_rx = Some(rx);
-                self.diagnostic_notice = Some("Opening report approval in your browser…".into());
+                self.diagnostic_notice = Some("ui.opening_report_approval_in_your_browser".into());
                 let waker = self.waker.clone();
                 std::thread::spawn(move || {
                     let result = crate::support::submit(source, control, |message| {
@@ -1294,16 +1314,17 @@ impl App {
             Input::CancelReport => {
                 if let Some(control) = &self.report_control {
                     control.cancel();
-                    self.diagnostic_notice = Some(
-                        "Stopping report submission after the current request finishes…".into(),
-                    );
+                    self.diagnostic_notice =
+                        Some("ui.stopping_report_submission_after_the_current_reque".into());
                 }
             }
             Input::CloseDiagnostics => self.diagnostics_open = false,
             Input::CopyDiagnostics => match self.diagnostic_text() {
                 Ok(text) => return vec![Effect::CopyText(text)],
                 Err(e) => {
-                    self.diagnostic_notice = Some(format!("Could not read diagnostic log: {e}"))
+                    self.log
+                        .push(format!("Could not read diagnostic log: {e:#}"));
+                    self.diagnostic_notice = Some("errors.read_log".into())
                 }
             },
             Input::OpenResults if self.analysis.is_some() => self.analysis_open = true,
@@ -1339,7 +1360,7 @@ impl App {
             Pick::FlashFirmware => {
                 let extensions = vec!["tar", "bin"];
                 open(Some(FileFilter {
-                    name: "Firmware or backup",
+                    name: crate::localization::get(self.language, "filter.firmware_backup"),
                     extensions,
                 }))
             }
@@ -1347,7 +1368,7 @@ impl App {
             | Pick::RecoveryCurrent
             | Pick::RecoveryInput
             | Pick::AnalysisFile(_) => open(Some(FileFilter {
-                name: "Firmware",
+                name: crate::localization::get(self.language, "filter.firmware"),
                 extensions: workflow::file_extensions(),
             })),
             Pick::Backup | Pick::Dump if self.selected() => {
@@ -1387,8 +1408,15 @@ impl App {
                     .diagnostic_text()
                     .and_then(|text| std::fs::write(&path, text));
                 self.diagnostic_notice = Some(match result {
-                    Ok(()) => format!("Diagnostic log exported: {}", path.display()),
-                    Err(error) => format!("Could not export diagnostic log: {error}"),
+                    Ok(()) => crate::localization::message(
+                        "notice.log_saved",
+                        &[("path", path.display().to_string())],
+                    ),
+                    Err(error) => {
+                        self.log
+                            .push(format!("Could not export diagnostic log: {error:#}"));
+                        "errors.save_report".into()
+                    }
                 });
             }
             Pick::ReportText | Pick::ReportJson => {
@@ -1402,13 +1430,23 @@ impl App {
                 };
                 let written = data.and_then(|d| std::fs::write(&path, d).map_err(Into::into));
                 self.analysis_notice = Some(match written {
-                    Ok(()) => format!("Saved {}", path.display()),
-                    Err(e) => format!("Could not save report: {e}"),
+                    Ok(()) => crate::localization::message(
+                        "notice.report_saved",
+                        &[("path", path.display().to_string())],
+                    ),
+                    Err(e) => {
+                        self.log.push(format!("Could not save report: {e:#}"));
+                        "errors.save_report".into()
+                    }
                 });
             }
             _ if self.busy() => {}
             Pick::CheckFile => {
-                return self.start_job("Check file", String::new(), Job::InfoFile { input: path })
+                return self.start_job(
+                    "ui.check_file",
+                    String::new(),
+                    Job::InfoFile { input: path },
+                )
             }
             Pick::FlashFirmware => {
                 self.clear_flash_result();
@@ -1442,9 +1480,9 @@ impl App {
                 // The native save panel has already confirmed replacing an existing file.
                 let replace = path.symlink_metadata().is_ok();
                 let (label, job) = if pick == Pick::Dump {
-                    ("Raw dump", Job::Dump { out: path, replace })
+                    ("ui.raw_dump", Job::Dump { out: path, replace })
                 } else {
-                    ("Backup", Job::Backup { out: path, replace })
+                    ("task.backup", Job::Backup { out: path, replace })
                 };
                 return self.start_job(label, self.device.clone(), job);
             }
@@ -1515,7 +1553,22 @@ impl App {
     }
 
     fn flash_current_supported(&self) -> bool {
-        self.ready_profile().is_some_and(|p| p.flash_current)
+        self.ready_profile()
+            .is_some_and(|p| p.flash_current || p.can_read == Some(false))
+    }
+
+    fn can_read(&self) -> bool {
+        self.ready_profile()
+            .and_then(|profile| profile.can_read)
+            .unwrap_or(true)
+    }
+
+    fn has_origin_error(&self) -> bool {
+        match self.task {
+            Task::Flash => self.flash_origin.as_ref().is_some_and(Result::is_err),
+            Task::Recovery => self.recovery_origin.as_ref().is_some_and(Result::is_err),
+            _ => false,
+        }
     }
 
     fn flash_ready(&self) -> bool {
@@ -1549,7 +1602,7 @@ impl App {
     fn plan_flash(&mut self, options: FlashOptions) -> Vec<Effect> {
         let target = self.target(options);
         let job = Job::PlanFlash(target.options.clone());
-        let effects = self.start_job("Flash plan", target.device.clone(), job);
+        let effects = self.start_job("ui.flash_plan", target.device.clone(), job);
         if !effects.is_empty() {
             self.planning = Some(target);
         }
@@ -1564,7 +1617,7 @@ impl App {
         options.acknowledged_risk = true;
         let log = std::mem::take(&mut self.log);
         let effects = self.start_job(
-            "Firmware update",
+            "ui.firmware_update",
             target.device.clone(),
             Job::Flash(options),
         );
@@ -1576,10 +1629,23 @@ impl App {
     }
 
     fn confirm(&mut self) -> Vec<Effect> {
-        if !self.risk_ack {
+        let backup_question = self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| matches!(pending.sheet, Sheet::WithoutBackup { .. }));
+        if !self.risk_ack && !backup_question {
             return Vec::new();
         }
         match self.pending.take() {
+            Some(Pending {
+                sheet: Sheet::WithoutBackup { reply, .. },
+                ..
+            }) => {
+                self.backup_waived = true;
+                self.risk_ack = false;
+                let _ = reply.send(true);
+                Vec::new()
+            }
             Some(Pending {
                 sheet: Sheet::Flash { reply, .. },
                 ..
@@ -1595,7 +1661,7 @@ impl App {
                 options.execute = true;
                 options.acknowledged_risk = true;
                 let job = Job::Recovery(options);
-                self.start_job("Recovery", target.device, job)
+                self.start_job("task.recovery", target.device, job)
             }
             other => {
                 self.pending = other;
@@ -1635,21 +1701,28 @@ impl App {
     pub(crate) fn start_job(&mut self, label: &str, device: String, job: Job) -> Vec<Effect> {
         #[cfg(debug_assertions)]
         if self.inert {
-            self.log.push(format!("{label}: not run by the GUI gate."));
+            self.log.push(format!(
+                "{}: not run by the GUI gate.",
+                crate::localization::english(label)
+            ));
             return Vec::new();
         }
         if self.running() {
             return Vec::new();
         }
         if device.is_empty() && !matches!(job, Job::InfoFile { .. } | Job::Analysis { .. }) {
-            self.log.push("No optical drive selected.".into());
+            self.log.push("ui.no_optical_drive_selected".into());
             return Vec::new();
         }
         self.result_task = self.task;
         self.action = label.to_string();
-        self.status = format!("{label}…");
+        self.status = crate::localization::message(
+            "status.operation_running",
+            &[("operation", label.into())],
+        );
         self.failure = None;
         self.failure_evidence = None;
+        self.backup_waived = false;
         self.preview_compatibility_pending = None;
         self.log.clear();
         self.diagnostic_log = None;
@@ -1658,7 +1731,8 @@ impl App {
         self.progress = None;
         self.rows.clear();
         self.info_result = matches!(job, Job::Info);
-        self.log.push(format!("{label}: {device}"));
+        self.log
+            .push(format!("{}: {device}", crate::localization::english(label)));
         self.operation_id = Some(workflow::new_operation_id());
         self.record_event(
             "operation_started",
@@ -1678,7 +1752,7 @@ impl App {
         self.rx = Some(rx);
         #[cfg(test)]
         if let Some(jobs) = &mut self.dry_run {
-            jobs.push((label.into(), device, job));
+            jobs.push((crate::localization::english(label), device, job));
             self.worker = Some(tx);
             return vec![Effect::StartTicking];
         }
@@ -1699,7 +1773,19 @@ impl App {
                 match rx.try_recv() {
                     Ok(Ok(message)) => self.diagnostic_notice = Some(message),
                     Ok(Err(error)) => {
-                        self.diagnostic_notice = Some(format!("Could not submit report: {error}"));
+                        self.log.push(format!("Could not submit report: {error}"));
+                        self.diagnostic_notice = Some(
+                            if self
+                                .report_control
+                                .as_ref()
+                                .is_some_and(|control| control.cancelled())
+                            {
+                                "report.cancelled"
+                            } else {
+                                "errors.submit_report"
+                            }
+                            .into(),
+                        );
                         report_done = true;
                         break;
                     }
@@ -1743,6 +1829,12 @@ impl App {
                             let _ = reply.send(false);
                         }
                     },
+                    Ok(Msg::BackupUnavailable(reason, reply)) => match self.flashing.clone() {
+                        Some(target) => self.ask(target, Sheet::WithoutBackup { reason, reply }),
+                        None => {
+                            let _ = reply.send(false);
+                        }
+                    },
                     Ok(Msg::Done(result)) => {
                         recovery_planned = self.recovery_planning.take().filter(|_| {
                             matches!(result, Ok(Some(workflow::UpdateOutcome::Planned)))
@@ -1752,17 +1844,29 @@ impl App {
                         let cancelled = std::mem::take(&mut self.cancelled);
                         match &result {
                             Ok(Some(outcome)) => {
-                                self.status = format!("{} {}", self.action, outcome.summary())
+                                self.status = crate::localization::message(
+                                    "status.operation_result",
+                                    &[
+                                        ("operation", self.action.clone()),
+                                        ("result", outcome.summary().into()),
+                                    ],
+                                )
                             }
                             Ok(None) if self.preview_compatibility_pending == Some(true) => {
-                                self.status = crate::localization::text(
-                                    self.language,
-                                    "status.package_checked",
-                                );
+                                self.status = "status.package_checked".into();
                             }
-                            Ok(None) => self.status = format!("{} complete", self.action),
+                            Ok(None) => {
+                                self.status = crate::localization::message(
+                                    "status.operation_complete",
+                                    &[("operation", self.action.clone())],
+                                )
+                            }
                             Err(_) if cancelled => {
-                                self.status = format!("{} cancelled", self.action)
+                                self.status = crate::localization::message(
+                                    "status.operation_cancelled",
+                                    &[("operation", self.action.clone())],
+                                );
+                                self.failure = None
                             }
                             Err(_) => {
                                 let consequence = self.failure_evidence.as_ref().map(|evidence| {
@@ -1778,36 +1882,23 @@ impl App {
                                     .failure_evidence
                                     .as_ref()
                                     .is_some_and(|e| !e.write_started && !e.temporary_firmware);
-                                let message = crate::localization::text(
-                                    self.language,
-                                    if blocked {
-                                        "errors.update_blocked"
-                                    } else {
-                                        "errors.operation_failed"
-                                    },
-                                );
+                                let message = if blocked {
+                                    "errors.update_blocked"
+                                } else {
+                                    "errors.operation_failed"
+                                }
+                                .to_string();
                                 let consequence = if blocked { None } else { consequence };
                                 let message = consequence.map_or(message.clone(), |key| {
-                                    format!(
-                                        "{message} {}",
-                                        crate::localization::text(self.language, key)
+                                    crate::localization::message(
+                                        "ui.join",
+                                        &[("first", message.clone()), ("second", key.into())],
                                     )
                                 });
                                 self.status = message.clone();
                                 // Keep the summary localized; precheck guidance names the
                                 // stopped stage and actionable reason without technical hashes.
-                                self.failure = Some(match self.failure.take() {
-                                    Some(guidance) => {
-                                        match self.failure_evidence.as_ref().filter(|_| blocked) {
-                                            Some(evidence) => format!(
-                                                "{message} Stopped during {}. {guidance}",
-                                                evidence.phase
-                                            ),
-                                            None => format!("{message} {guidance}"),
-                                        }
-                                    }
-                                    None => message,
-                                });
+                                self.failure = Some(self.failure.take().unwrap_or(message));
                             }
                         }
                         let update_evidence = result
@@ -1837,13 +1928,21 @@ impl App {
                             Ok(_) => "success",
                         };
                         self.log.push(match result {
-                            Ok(Some(outcome)) => format!("{} {}", self.action, outcome.summary()),
+                            Ok(Some(outcome)) => format!(
+                                "{} {}",
+                                crate::localization::english(&self.action),
+                                outcome.summary()
+                            ),
                             Ok(None) if self.preview_compatibility_pending == Some(true) => {
                                 self.status.clone()
                             }
                             Ok(None) => "✓ done.".into(),
                             Err(_) if cancelled => CANCELLED.into(),
-                            Err(e) => format!("✗ {}: {e}", self.status),
+                            Err(e) => format!(
+                                "✗ {}: {}",
+                                crate::localization::english(&self.status),
+                                crate::localization::english(&e)
+                            ),
                         });
                         self.record_event("operation_finished", serde_json::json!({
                             "operation": self.action,
@@ -1863,9 +1962,10 @@ impl App {
                         self.planning = None;
                         self.recovery_planning = None;
                         self.end_flash();
-                        self.status = "Operation interrupted".into();
+                        self.status = "ui.operation_interrupted".into();
                         self.failure = Some(WORKER_GONE.into());
-                        self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
+                        self.log
+                            .push("ui.worker_disconnected_before_reporting_completion_op".into());
                         self.record_event(
                             "operation_finished",
                             serde_json::json!({
@@ -1925,7 +2025,7 @@ impl App {
         let waker = self.waker.clone();
         std::thread::spawn(move || {
             let result = std::panic::catch_unwind(|| workflow::selected_file_origin(&path))
-                .map_err(|_| "File origin inspection stopped unexpectedly.".to_string())
+                .map_err(|_| "ui.file_origin_inspection_stopped_unexpectedly".to_string())
                 .and_then(|r| r.map_err(|e| format!("{e:#}")));
             let _ = tx.send((pick, path, result));
             if let Some(wake) = waker {
@@ -1939,15 +2039,31 @@ impl App {
         let mut done = false;
         for rx in std::mem::take(&mut self.origin_rx) {
             match rx.try_recv() {
-                Ok((pick, path, result)) => match pick {
-                    Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
-                        self.flash_origin = Some(result)
+                Ok((pick, path, result)) => {
+                    let selected = (pick == Pick::FlashFirmware
+                        && self.flash_input.as_ref() == Some(&path))
+                        || (pick == Pick::RecoveryInput
+                            && self.recovery_input.as_ref() == Some(&path));
+                    if selected {
+                        if let Err(error) = &result {
+                            let detail = crate::localization::english(error);
+                            self.log
+                                .push(format!("File origin inspection failed: {detail}"));
+                            self.record_event("file_origin_failed", serde_json::json!({"file": path.display().to_string(), "error": detail}));
+                            self.diagnostic_log = None;
+                            self.diagnostic_checked = None;
+                        }
                     }
-                    Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
-                        self.recovery_origin = Some(result)
+                    match pick {
+                        Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
+                            self.flash_origin = Some(result)
+                        }
+                        Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
+                            self.recovery_origin = Some(result)
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
                 Err(TryRecvError::Empty) => {
                     self.origin_rx.push(rx);
                     continue;
@@ -1970,16 +2086,16 @@ impl App {
                 Item::Origin(*origin),
                 Item::Note(match origin {
                     workflow::FileOrigin::OemLikely => {
-                        "Matches known OEM firmware; drive compatibility is unverified.".into()
+                        "ui.matches_known_oem_firmware_drive_compatibility_is_".into()
                     }
                     _ => origin.explanation().into(),
                 }),
             ],
-            Some(Err(error)) => vec![
+            Some(Err(_error)) => vec![
                 Item::Origin(workflow::FileOrigin::Unknown),
-                Item::Note(format!("Could not inspect file origin: {error}")),
+                Item::Note("origin.inspect_failed".into()),
             ],
-            None => vec![Item::Note("Checking file origin…".into())],
+            None => vec![Item::Note("ui.checking_file_origin".into())],
         }
     }
 
@@ -1989,7 +2105,7 @@ impl App {
         if matches!(
             self.pending,
             Some(Pending {
-                sheet: Sheet::Flash { .. },
+                sheet: Sheet::Flash { .. } | Sheet::WithoutBackup { .. },
                 ..
             })
         ) {
@@ -2051,11 +2167,18 @@ impl App {
         if let Some(Ok(text)) = saved.as_ref() {
             return Ok(text.clone());
         }
-        if self.failure.is_some() {
+        if self.failure.is_some() || self.has_origin_error() {
             return Ok(format!(
                 "In-memory diagnostics; no diagnostic file was saved.\n{}\n{}",
-                self.log.join("\n"),
-                self.failure.as_deref().unwrap_or_default()
+                self.log
+                    .iter()
+                    .map(|line| crate::localization::english(line))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                self.failure
+                    .as_ref()
+                    .map(|failure| crate::localization::english(failure))
+                    .unwrap_or_default()
             ));
         }
         match saved {
@@ -2070,7 +2193,7 @@ impl App {
     pub(crate) fn refresh_diagnostic_view(&mut self) {
         self.diagnostic_lines = Arc::new(match self.diagnostic_text() {
             Ok(text) => text.lines().map(str::to_owned).collect(),
-            Err(error) => vec![format!("Could not read diagnostic log: {error}")],
+            Err(error) => vec![format!("Could not read diagnostic log: {error:#}")],
         });
         self.diagnostic_checked = Some(Instant::now());
     }
@@ -2120,9 +2243,22 @@ impl App {
             panel: self.panel(enabled),
             controls_enabled: enabled,
             status: shown.then(|| self.status_view()),
-            results: shown.then(|| self.results_view()),
+            results: (shown || self.has_origin_error()).then(|| {
+                let mut results = self.results_view();
+                if !shown {
+                    results.cards.clear();
+                    results.fields.clear();
+                    results.failure = None;
+                    results.open_results = None;
+                }
+                results
+            }),
             confirm: self.pending.as_ref().map(|p| self.confirm_view(p)),
-            log: self.log.clone(),
+            log: self
+                .log
+                .iter()
+                .map(|line| crate::localization::english(line))
+                .collect(),
             diagnostics: self.diagnostics_open.then(|| self.diagnostics_view()),
             analysis: self
                 .analysis_tree
@@ -2162,21 +2298,21 @@ impl App {
                 let dump = self.task == Task::Dump;
                 vec![
                     Item::Text(if dump {
-                        "Capture all accessible drive memory into a raw file.".into()
+                        "ui.capture_all_accessible_drive_memory_into_a_raw_fil".into()
                     } else {
-                        "Save firmware backup files for restoration.".into()
+                        "ui.save_firmware_backup_files_for_restoration".into()
                     }),
                     Item::Buttons {
                         label: None,
                         buttons: vec![if dump {
                             Button::primary(
-                                "Save raw dump…",
+                                "ui.save_raw_dump",
                                 Input::Choose(Pick::Dump),
                                 enabled && selected,
                             )
                         } else {
                             Button::primary(
-                                "Save backup…",
+                                "ui.save_backup",
                                 Input::Choose(Pick::Backup),
                                 enabled && selected,
                             )
@@ -2223,21 +2359,25 @@ impl App {
             items.push(Item::Warning(FORCE_WARNING.into()));
         }
         if recovery || self.flash_current_supported() {
-            items.extend([
-                Item::Heading("Current firmware".into()),
-                Item::Check {
+            items.push(Item::Heading("ui.current_firmware".into()));
+            if self.can_read() {
+                items.push(Item::Check {
                     id: check,
-                    text: "Read from drive".into(),
+                    text: "ui.read_from_drive".into(),
                     checked: read,
                     enabled,
-                },
-                path("Choose Current…", current_pick, !read, current),
-            ]);
+                });
+            } else {
+                items.push(Item::Note("current.choose_installed".into()));
+            }
+            items.push(path("ui.choose_current", current_pick, !read, current));
             if read {
-                items.push(Item::Note("Use the drive to identify the installed firmware. If detection fails, choose its firmware file.".into()));
+                items.push(Item::Note(
+                    "ui.use_the_drive_to_identify_the_installed_firmware_i".into(),
+                ));
             } else if members.len() > 1 {
                 items.push(Item::Buttons {
-                    label: Some("Current firmware member".into()),
+                    label: Some("ui.current_firmware_member".into()),
                     buttons: members
                         .iter()
                         .map(|name| {
@@ -2264,7 +2404,7 @@ impl App {
             }
         }
         items.extend([
-            Item::Heading("Firmware to flash".into()),
+            Item::Heading("ui.firmware_to_flash".into()),
             path(
                 if input.is_some() {
                     "action.change_file"
@@ -2278,24 +2418,23 @@ impl App {
         ]);
         if recovery && self.recovery_members.len() > 1 {
             items.push(Item::Note(
-                "Select exactly one image to recover. No second stage will run.".into(),
+                "ui.select_exactly_one_image_to_recover_no_second_stag".into(),
             ));
             items.push(Item::Buttons {
-                label: Some("Recovery image".into()),
+                label: Some("ui.recovery_image".into()),
                 buttons: self
                     .recovery_members
                     .iter()
                     .map(|name| {
                         Button::primary(
-                            &format!(
-                                "{}{}",
-                                if self.recovery_member.as_ref() == Some(name) {
-                                    "Selected: "
-                                } else {
-                                    ""
-                                },
-                                name
-                            ),
+                            &if self.recovery_member.as_ref() == Some(name) {
+                                crate::localization::message(
+                                    "notice.selected_member",
+                                    &[("member", name.clone())],
+                                )
+                            } else {
+                                name.clone()
+                            },
                             Input::RecoveryMember(name.clone()),
                             enabled,
                         )
@@ -2310,7 +2449,11 @@ impl App {
             label: None,
             buttons: vec![
                 Button::primary(
-                    if recovery { "Recover" } else { "Flash now" },
+                    if recovery {
+                        "ui.recover"
+                    } else {
+                        "ui.flash_now"
+                    },
                     if recovery {
                         Input::Recover
                     } else {
@@ -2326,7 +2469,7 @@ impl App {
                 Button {
                     enabled: enabled && input.is_some(),
                     ..Button::link(
-                        "Check file",
+                        "ui.check_file",
                         if recovery {
                             Input::CheckRecoveryFile
                         } else {
@@ -2344,20 +2487,20 @@ impl App {
         let mut items = Vec::new();
         for i in 0..if compare { 2 } else { 1 } {
             let label = match (compare, i) {
-                (false, _) => "Source",
-                (true, 0) => "Source A",
-                _ => "Source B",
+                (false, _) => "ui.source",
+                (true, 0) => "ui.source_a",
+                _ => "ui.source_b",
             };
             items.push(Item::Buttons {
                 label: Some(label.into()),
                 buttons: vec![
                     Button::new(
-                        "Firmware file…",
+                        "ui.firmware_file",
                         Input::Choose(Pick::AnalysisFile(i)),
                         enabled,
                     ),
                     Button::new(
-                        "Selected drive…",
+                        "ui.selected_drive",
                         Input::Choose(Pick::AnalysisDrive(i)),
                         enabled && self.drive_source_allowed(i),
                     ),
@@ -2369,18 +2512,32 @@ impl App {
                     device,
                     capture,
                     as_backup,
-                }) => format!(
-                    "{device} → capture {}{}",
-                    capture.display(),
-                    if *as_backup { " (as a backup)" } else { "" }
+                }) => crate::localization::message(
+                    "ui.device_capture_arg0_arg1",
+                    &[
+                        ("device", device.to_string()),
+                        ("arg0", format!("{}", capture.display())),
+                        (
+                            "arg1",
+                            (if *as_backup {
+                                "source.backup_suffix"
+                            } else {
+                                ""
+                            })
+                            .to_string(),
+                        ),
+                    ],
                 ),
-                Some(Source::Analyzed(a)) => format!("Retained analysis: {}", a.source),
-                None => "Choose a firmware file or drive.".into(),
+                Some(Source::Analyzed(a)) => crate::localization::message(
+                    "ui.retained_analysis_arg0",
+                    &[("arg0", a.source.to_string())],
+                ),
+                None => "ui.choose_a_firmware_file_or_drive".into(),
             }));
         }
         items.push(Item::Check {
             id: CheckId::CaptureAsBackup,
-            text: "Save a drive capture as a backup".into(),
+            text: "ui.save_a_drive_capture_as_a_backup".into(),
             checked: self.capture_as_backup,
             enabled,
         });
@@ -2405,14 +2562,18 @@ impl App {
         let analysis = matches!(self.task, Task::Inspect | Task::Compare);
         let text = if running {
             match &self.progress {
-                Some((label, done, total)) if *total > 0 => {
-                    format!(
-                        "{} — {label} ({}%)",
-                        self.action,
-                        done.saturating_mul(100) / total
-                    )
-                }
-                Some((label, _, _)) => format!("{} — {label}", self.action),
+                Some((label, done, total)) if *total > 0 => crate::localization::message(
+                    "status.progress",
+                    &[
+                        ("operation", self.action.clone()),
+                        ("stage", label.clone()),
+                        ("percent", (done.saturating_mul(100) / total).to_string()),
+                    ],
+                ),
+                Some((label, _, _)) => crate::localization::message(
+                    "status.stage",
+                    &[("operation", self.action.clone()), ("stage", label.clone())],
+                ),
                 None => self.status.clone(),
             }
         } else {
@@ -2424,7 +2585,7 @@ impl App {
             progress: running.then(|| match &self.progress {
                 Some((label, done, total)) => Progress {
                     label: if label.is_empty() {
-                        "Working…".into()
+                        "ui.working".into()
                     } else {
                         String::new()
                     },
@@ -2437,7 +2598,7 @@ impl App {
             }),
             note: running.then(|| KEEP_CONNECTED.to_owned()),
             cancel: (running && analysis)
-                .then(|| Button::new("Cancel analysis", Input::CancelAnalysis, true)),
+                .then(|| Button::new("ui.cancel_analysis", Input::CancelAnalysis, true)),
         }
     }
 
@@ -2447,7 +2608,7 @@ impl App {
         let concise = matches!(self.task, Task::Flash | Task::Recovery);
         Results {
             open_results: (analysis && self.analysis.is_some())
-                .then(|| Button::new("Open results…", Input::OpenResults, true)),
+                .then(|| Button::new("ui.open_results", Input::OpenResults, true)),
             cards: if info {
                 info_cards(&self.rows)
             } else {
@@ -2460,25 +2621,24 @@ impl App {
             },
             failure: self.failure.as_ref().map(|text| Failure {
                 text: text.clone(),
-                save_log: Button::new(
-                    "Save diagnostic log…",
-                    Input::Choose(Pick::DiagnosticLog),
-                    true,
-                ),
+                save_log: Button::new("action.save_log", Input::Choose(Pick::DiagnosticLog), true),
             }),
             notice: match (&self.logging_warning, &self.diagnostic_notice) {
-                (Some(warning), Some(notice)) => Some(format!("{warning}\n{notice}")),
+                (Some(warning), Some(notice)) => Some(crate::localization::message(
+                    "notice.join",
+                    &[("first", warning.clone()), ("second", notice.clone())],
+                )),
                 (Some(warning), None) => Some(warning.clone()),
                 (None, notice) => notice.clone(),
             },
             view_log: Button::new(
                 "action.view_log",
                 Input::ViewLog,
-                self.diagnostic_log.is_some() || self.failure.is_some(),
+                self.diagnostic_log.is_some() || self.failure.is_some() || self.has_origin_error(),
             ),
             submit_report: if self.report_rx.is_some() {
                 Button::new(
-                    "Cancel report",
+                    "ui.cancel_report",
                     Input::CancelReport,
                     self.report_control.as_ref().is_some_and(|c| !c.cancelled()),
                 )
@@ -2494,35 +2654,70 @@ impl App {
 
     fn confirm_view(&self, pending: &Pending) -> Confirm {
         let mut details = vec![
-            format!("Drive: {}", pending.target.label),
-            format!("Image: {}", pending.target.options.input.display()),
+            crate::localization::message(
+                "confirm.drive",
+                &[("drive", pending.target.label.clone())],
+            ),
+            crate::localization::message(
+                "confirm.image",
+                &[("path", pending.target.options.input.display().to_string())],
+            ),
         ];
         let (recovery, warnings, prompt) = match &pending.sheet {
+            Sheet::WithoutBackup { reason, .. } => {
+                return Confirm {
+                    title: "backup.unavailable".into(),
+                    details,
+                    danger: String::new(),
+                    warnings: vec![reason.clone()],
+                    prompt: Some("backup.proceed".into()),
+                    note: None,
+                    ack_text: String::new(),
+                    ack_checked: false,
+                    confirm: Button::primary("action.yes", Input::Confirm, true),
+                    cancel: Button::new("action.no", Input::CancelConfirm, true),
+                };
+            }
             Sheet::Recovery { options, plan } => {
                 details.extend(plan.iter().cloned());
                 details.push(match &options.current {
                     CurrentFirmware::NotRequired => {
-                        "Receiver detected directly; no Current firmware required".into()
+                        "ui.receiver_detected_directly_no_current_firmware_req".into()
                     }
-                    CurrentFirmware::File(path) => format!("Current: {}", path.display()),
-                    CurrentFirmware::ReadFromDrive => "Current: read from drive".into(),
+                    CurrentFirmware::File(path) => crate::localization::message(
+                        "ui.current_arg0",
+                        &[("arg0", format!("{}", path.display()))],
+                    ),
+                    CurrentFirmware::ReadFromDrive => "ui.current_read_from_drive".into(),
                 });
                 if let Some(member) = &options.current_member {
-                    details.push(format!("Current member (receiver reference): {member}"));
+                    details.push(crate::localization::message(
+                        "ui.current_member_receiver_reference_member",
+                        &[("member", member.to_string())],
+                    ));
                 }
                 if let Some(member) = &options.member {
-                    details.push(format!("Target member (will be flashed): {member}"));
+                    details.push(crate::localization::message(
+                        "ui.target_member_will_be_flashed_member",
+                        &[("member", member.to_string())],
+                    ));
                 }
                 (true, vec![FORCE_WARNING.to_string()], None)
             }
             Sheet::Flash { sheet, .. } => {
                 details.extend(sheet.plan.iter().cloned());
                 details.push(match &pending.target.options.current {
-                    Some(path) => format!("Current: {}", path.display()),
-                    None => "Current: read from drive".into(),
+                    Some(path) => crate::localization::message(
+                        "ui.current_arg0",
+                        &[("arg0", format!("{}", path.display()))],
+                    ),
+                    None => "ui.current_read_from_drive".into(),
                 });
                 if let Some(member) = &pending.target.options.current_member {
-                    details.push(format!("Current member (receiver reference): {member}"));
+                    details.push(crate::localization::message(
+                        "ui.current_member_receiver_reference_member",
+                        &[("member", member.to_string())],
+                    ));
                 }
                 (false, sheet.warnings.clone(), sheet.confirmation.clone())
             }
@@ -2537,53 +2732,58 @@ impl App {
             .and_then(|r| r.as_ref().ok())
             .copied()
             .unwrap_or(workflow::FileOrigin::Unknown);
-        details.push(format!(
-            "File origin: {}. {}",
-            origin.label(),
-            origin.explanation()
+        details.push(crate::localization::message(
+            "ui.file_origin_arg0_arg1",
+            &[
+                ("arg0", origin.label().to_string()),
+                ("arg1", origin.explanation().to_string()),
+            ],
         ));
         Confirm {
             title: if recovery {
-                "Confirm recovery"
+                "ui.confirm_recovery"
             } else {
-                "Confirm flash"
+                "ui.confirm_flash"
             }
             .into(),
             details,
             danger: FLASH_DANGER.into(),
             warnings,
             prompt,
-            note: (!recovery).then(|| BACKUP_KEPT.to_owned()),
+            note: (!recovery && !self.backup_waived).then(|| BACKUP_KEPT.to_owned()),
             ack_text: RISK_ACK.into(),
             ack_checked: self.risk_ack,
             confirm: Button::primary(
-                if recovery { "Recover" } else { "Flash now" },
+                if recovery {
+                    "ui.recover"
+                } else {
+                    "ui.flash_now"
+                },
                 Input::Confirm,
                 self.risk_ack,
             ),
-            cancel: Button::new("Cancel", Input::CancelConfirm, true),
+            cancel: Button::new("ui.cancel", Input::CancelConfirm, true),
         }
     }
 
     fn diagnostics_view(&self) -> Diagnostics {
         Diagnostics {
-            title: "Diagnostic log".into(),
+            title: "ui.diagnostic_log".into(),
             buttons: vec![
-                Button::new("Copy diagnostic log", Input::CopyDiagnostics, true),
-                Button::new(
-                    "Save diagnostic log…",
-                    Input::Choose(Pick::DiagnosticLog),
-                    true,
-                ),
-                Button::new("Close", Input::CloseDiagnostics, true),
+                Button::new("modify.copy_diagnostic_log", Input::CopyDiagnostics, true),
+                Button::new("action.save_log", Input::Choose(Pick::DiagnosticLog), true),
+                Button::new("menu.close", Input::CloseDiagnostics, true),
             ],
-            hint: "Attach this log to your bug report.".into(),
+            hint: "ui.attach_this_log_to_your_bug_report".into(),
             path: self
                 .diagnostic_log
                 .as_ref()
                 .map(|p| p.display().to_string()),
             notice: match (&self.logging_warning, &self.diagnostic_notice) {
-                (Some(warning), Some(notice)) => Some(format!("{warning}\n{notice}")),
+                (Some(warning), Some(notice)) => Some(crate::localization::message(
+                    "notice.join",
+                    &[("first", warning.clone()), ("second", notice.clone())],
+                )),
                 (Some(warning), None) => Some(warning.clone()),
                 (None, notice) => notice.clone(),
             },
@@ -2682,26 +2882,15 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
     }));
     let result = match result {
         Ok(result) => result.map_err(|e: anyhow::Error| {
+            let _ = tx.send(Msg::Event(Event::Message(format!(
+                "Operation failed: {e:#}"
+            ))));
             if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
             }
-            let message = workflow::error_message(&e);
-            if e.is::<workflow::HardwareMismatch>()
-                || e.downcast_ref::<workflow::UpdateFailure>()
-                    .is_some_and(|evidence| !evidence.write_started && !evidence.temporary_firmware)
-            {
-                let _ = tx.send(Msg::UserGuidance(message.clone()));
-            }
-            if e.is::<workflow::CurrentFirmwareRequired>() {
-                let _ = tx.send(Msg::Event(Event::Message(format!(
-                    "Receiver detection diagnostic: {e:#}"
-                ))));
-                let guidance = format!("{message} Uncheck Read from drive to select a file.");
-                let _ = tx.send(Msg::UserGuidance(guidance.clone()));
-                guidance
-            } else {
-                message
-            }
+            let message = workflow::user_error(&e).encoded();
+            let _ = tx.send(Msg::UserGuidance(message.clone()));
+            message
         }),
         Err(_) => Err(WORKER_PANIC.into()),
     };
@@ -2730,6 +2919,21 @@ pub(crate) struct SheetConfirm {
 }
 
 impl workflow::Confirm for SheetConfirm {
+    fn proceed_without_backup(&mut self, reason: &str) -> anyhow::Result<bool> {
+        let (reply, answer) = mpsc::channel();
+        if self
+            .tx
+            .send(Msg::BackupUnavailable(reason.to_owned(), reply))
+            .is_err()
+        {
+            return Ok(false);
+        }
+        if let Some(wake) = &self.waker {
+            wake();
+        }
+        Ok(answer.recv().unwrap_or(false))
+    }
+
     fn confirm(&mut self, plan: &AuthorizedPlan) -> anyhow::Result<bool> {
         let (reply, answer) = mpsc::channel();
         if self
@@ -2769,12 +2973,12 @@ fn report_json(result: &ResultView) -> anyhow::Result<String> {
 /// The cards in single-column order: the report group, its title, and its
 /// column in the two-column layout.
 const CARDS: [(Group, &str, usize); 6] = [
-    (Group::General, "General information", 0),
-    (Group::Additional, "Additional information", 1),
-    (Group::Region, "DVD region", 1),
-    (Group::Settings, "Device settings", 1),
-    (Group::Media, "Media capabilities", 0),
-    (Group::Operations, "Firmware operations", 1),
+    (Group::General, "ui.general_information", 0),
+    (Group::Additional, "ui.additional_information", 1),
+    (Group::Region, "ui.dvd_region", 1),
+    (Group::Settings, "ui.device_settings", 1),
+    (Group::Media, "ui.media_capabilities", 0),
+    (Group::Operations, "ui.firmware_operations", 1),
 ];
 
 /// A row's GUI label and value, when the GUI shows it.
@@ -2840,7 +3044,8 @@ pub(crate) fn info_cards(rows: &[report::Row]) -> Vec<Card> {
         };
         cards.push(Card {
             title: title.into(),
-            subtitle: (group == Group::Settings).then(|| "Current settings · read only".to_owned()),
+            subtitle: (group == Group::Settings)
+                .then(|| "ui.current_settings_read_only".to_owned()),
             column,
             body,
         });
@@ -2856,7 +3061,7 @@ fn field_nodes(fields: &[workflow::Field]) -> Vec<Node> {
         .filter(|f| !matches!(f.label.as_str(), "Codec" | "Logical bytes"))
         .map(|f| {
             Node::leaf(NodeKind::Field {
-                label: format!("{}:", f.label),
+                label: crate::localization::message("field.label", &[("label", f.label.clone())]),
                 value: f.value.clone(),
             })
         })
@@ -2865,16 +3070,19 @@ fn field_nodes(fields: &[workflow::Field]) -> Vec<Node> {
 
 fn byte_count(bytes: usize) -> String {
     if bytes == 0 {
-        "Unchanged".into()
+        "ui.unchanged".into()
     } else if bytes < 1024 {
-        format!("{bytes} bytes")
+        crate::localization::message("unit.bytes", &[("count", bytes.to_string())])
     } else {
-        format!("{:.1} KiB", bytes as f64 / 1024.0)
+        crate::localization::message(
+            "unit.kib",
+            &[("count", format!("{:.1}", bytes as f64 / 1024.0))],
+        )
     }
 }
 
 fn family_id(family: &Option<workflow::HardwareFamily>) -> &str {
-    family.as_ref().map_or("Unknown", |f| f.id.as_str())
+    family.as_ref().map_or("ui.unknown", |f| f.id.as_str())
 }
 
 /// One inspected component: its fields, findings and region tree.
@@ -2883,7 +3091,7 @@ pub(crate) fn component_node(c: &workflow::ComponentView) -> Node {
     children.extend(c.findings().map(Node::text));
     for r in &c.regions {
         let mut region = vec![Node::leaf(NodeKind::Field {
-            label: "Role:".into(),
+            label: crate::localization::message("field.label", &[("label", "ui.role".into())]),
             value: r.role.label().into(),
         })];
         region.extend(field_nodes(&r.fields));
@@ -2905,7 +3113,13 @@ pub(crate) fn component_node(c: &workflow::ComponentView) -> Node {
                     )))
                 })
                 .collect();
-            let name = format!("{} — {} records", t.format, t.records.len());
+            let name = crate::localization::message(
+                "analysis.records",
+                &[
+                    ("format", t.format.clone()),
+                    ("count", t.records.len().to_string()),
+                ],
+            );
             region.push(Node::section(name, false, records));
         }
         children.push(Node::section(&r.name, false, region));
@@ -2924,27 +3138,29 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                 nodes.push(Node::text(&report.source));
             }
             if let Some(live) = &report.live {
-                nodes.push(Node::text(format!(
-                    "Drive state captured at {} (Unix seconds)",
-                    live.captured_at
+                nodes.push(Node::text(crate::localization::message(
+                    "ui.drive_state_captured_at_arg0_unix_seconds",
+                    &[("arg0", format!("{}", live.captured_at))],
                 )));
                 nodes.extend(field_nodes(&live.fields));
                 nodes.extend(live.diagnostics.iter().map(Node::text));
             } else {
                 nodes.push(Node::leaf(NodeKind::Note(
-                    "DVD region and change counters are available only from a live drive capture."
-                        .into(),
+                    "ui.dvd_region_and_change_counters_are_available_only_".into(),
                 )));
             }
             for name in &report.missing_components {
                 nodes.push(Node::leaf(NodeKind::Field {
-                    label: format!("{name}:"),
-                    value: "Not included in this source.".into(),
+                    label: crate::localization::message("field.label", &[("label", name.clone())]),
+                    value: "ui.not_included_in_this_source".into(),
                 }));
             }
             nodes.extend(report.components.iter().map(component_node));
             if family {
-                format!("Hardware family: {}", family_id(&report.family))
+                crate::localization::message(
+                    "ui.hardware_family_arg0",
+                    &[("arg0", family_id(&report.family).to_string())],
+                )
             } else {
                 report.source.clone()
             }
@@ -2961,13 +3177,16 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                 family_id(&report.right_family)
             )));
             nodes.push(Node::text(match report.unexpected_regions() {
-                0 => "No unexpected differences.".to_string(),
-                1 => "Unexpected differences in 1 region.".to_string(),
-                n => format!("Unexpected differences in {n} regions."),
+                0 => "ui.no_unexpected_differences".to_string(),
+                1 => "ui.unexpected_differences_in_1_region".to_string(),
+                n => crate::localization::message(
+                    "ui.unexpected_differences_in_n_regions",
+                    &[("n", format!("{}", n))],
+                ),
             }));
             nodes.push(Node::leaf(NodeKind::Buttons(vec![
-                Button::new("Inspect A", Input::InspectSide(Side::A), true),
-                Button::new("Inspect B", Input::InspectSide(Side::B), true),
+                Button::new("ui.inspect_a", Input::InspectSide(Side::A), true),
+                Button::new("ui.inspect_b", Input::InspectSide(Side::B), true),
             ])));
             for s in &report.sections {
                 let mut children: Vec<Node> = s.summary.iter().map(Node::text).collect();
@@ -2981,16 +3200,16 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                             byte_count(region.left_changed),
                             byte_count(region.right_changed),
                             if region.unresolved {
-                                "Partially compared".into()
+                                "ui.partially_compared".into()
                             } else {
                                 region
                                     .difference_percent
-                                    .map_or("Not available".into(), |p| format!("{p:.2}%"))
+                                    .map_or("ui.not_available".into(), |p| format!("{p:.2}%"))
                             },
                             match (region.differs(), region.expected) {
-                                (false, _) => "None",
-                                (true, true) => "Expected",
-                                (true, false) => "Unexpected",
+                                (false, _) => "ui.none",
+                                (true, true) => "ui.expected",
+                                (true, false) => "ui.unexpected",
                             }
                             .into(),
                         ]
@@ -2998,42 +3217,47 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                     .collect();
                 let table = Node::leaf(NodeKind::Table {
                     header: [
-                        "Region",
-                        "Role",
-                        "Changed in A",
-                        "Changed in B",
-                        "Different",
-                        "Verdict",
+                        "ui.region",
+                        "ui.role",
+                        "ui.changed_in_a",
+                        "ui.changed_in_b",
+                        "ui.different",
+                        "ui.verdict",
                     ]
                     .map(String::from)
                     .to_vec(),
                     rows,
                 });
-                children.push(Node::section("Changes by region", true, vec![table]));
-                let mut technical = vec![Node::text("Percentages use decoded and expanded bytes across both sources. Metadata and verified address relocations do not count as differences.")];
+                children.push(Node::section("ui.changes_by_region", true, vec![table]));
+                let mut technical = vec![Node::text(
+                    "ui.percentages_use_decoded_and_expanded_bytes_across_",
+                )];
                 technical.extend(field_nodes(&s.fields));
-                technical.push(Node::text(format!(
-                    "{} address-relocation or metadata changes excluded.",
-                    s.relocations.len()
+                technical.push(Node::text(crate::localization::message(
+                    "ui.arg0_address_relocation_or_metadata_changes_excluded",
+                    &[("arg0", format!("{}", s.relocations.len()))],
                 )));
                 technical.push(Node::section(
-                    "Excluded changes",
+                    "ui.excluded_changes",
                     false,
                     s.relocations.iter().map(Node::text).collect(),
                 ));
                 technical.extend(s.details.iter().map(Node::text));
-                children.push(Node::section("Technical details", false, technical));
+                children.push(Node::section("ui.technical_details", false, technical));
                 nodes.push(Node::section(&s.name, true, children));
             }
-            format!("Hardware family: {:?}", report.family)
+            crate::localization::message(
+                "ui.hardware_family_arg0",
+                &[("arg0", format!("{:?}", report.family))],
+            )
         }
     };
     AnalysisView {
-        title: "Firmware analysis".into(),
+        title: "ui.firmware_analysis".into(),
         actions: vec![
-            Button::new("Copy report", Input::CopyReport, true),
-            Button::new("Save text…", Input::Choose(Pick::ReportText), true),
-            Button::new("Save JSON…", Input::Choose(Pick::ReportJson), true),
+            Button::new("ui.copy_report", Input::CopyReport, true),
+            Button::new("ui.save_text", Input::Choose(Pick::ReportText), true),
+            Button::new("ui.save_json", Input::Choose(Pick::ReportJson), true),
         ],
         heading,
         nodes,
