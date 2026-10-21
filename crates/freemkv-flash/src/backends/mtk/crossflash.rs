@@ -209,7 +209,12 @@ pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> 
         // The drive's full family is known (a backup, or a fixture): the exact
         // family gate runs now.
         Some(drive_family) if drive_family != image_family => {
-            bail!("{}", different_family(drive_family, image_family))
+            return Err(crate::backend::HardwareMismatch {
+                installed_model: product.into(),
+                target_model: target.product.clone(),
+                source: anyhow::anyhow!(different_family(drive_family, image_family)),
+            }
+            .into());
         }
         Some(_) => {}
         // Only the descriptor is known: refuse a differing platform or boot
@@ -217,7 +222,12 @@ pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> 
         // image of a different family is admitted now and caught by the exact
         // family gate once the backup is read.
         None if live.platform != target.platform || live.banner != target.banner => {
-            bail!("{}", different_hardware(live, target))
+            return Err(crate::backend::HardwareMismatch {
+                installed_model: product.into(),
+                target_model: target.product.clone(),
+                source: anyhow::anyhow!(different_hardware(live, target)),
+            }
+            .into());
         }
         None => {}
     }

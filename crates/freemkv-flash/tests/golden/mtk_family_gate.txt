@@ -4724,7 +4724,7 @@ IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 saved pre-flash backup: 2097152 bytes sha256=20885c10ca871477b2e868f469ea7b967bd5f22723ee3097021ae3b19f1377a7
 
 === MTK execute: JB8 image onto a JB7 drive of the same model ===
-result: ERR image is MT1959 firmware but this drive is MT1939 silicon — refusing to flash across chip generations. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): image is MT1959 firmware but this drive is MT1939 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (3) ---
@@ -4734,7 +4734,7 @@ IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 saved pre-flash backup: <not created>
 
 === MTK execute: JB7 image onto a JB8 drive of the same model ===
-result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (3) ---
@@ -4744,7 +4744,7 @@ IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 saved pre-flash backup: <not created>
 
 === MTK execute: image without a hardware record ===
-result: ERR could not determine the target firmware family (the image has no hardware configuration record to profile); flashing requires a known family
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): could not determine the target firmware family (the image has no hardware configuration record to profile); flashing requires a known family
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (3) ---
@@ -4754,7 +4754,7 @@ IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 saved pre-flash backup: <not created>
 
 === MTK execute: drive without a hardware record ===
-result: ERR could not determine the installed firmware family (the pre-flash backup has no hardware configuration record to profile); flashing requires a known family
+result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): could not determine the installed firmware family (the pre-flash backup has no hardware configuration record to profile); flashing requires a known family
 --- text (108) ---
 reading drive memory: 0%
 reading drive memory: 1%

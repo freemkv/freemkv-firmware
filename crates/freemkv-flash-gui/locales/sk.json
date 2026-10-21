@@ -36,6 +36,8 @@
     "menu.minimize": "Minimalizovať",
     "menu.close": "Zavrieť",
     "action.ok": "OK",
-    "app.name": "Nástroj firmvéru freemkv"
+    "app.name": "Nástroj firmvéru freemkv",
+    "errors.update_blocked": "Aktualizácia zablokovaná. Nebol zapísaný žiadny firmvér.",
+    "status.package_checked": "Balík prešiel kontrolami; kompatibilitu s mechanikou treba ešte overiť."
   }
 }

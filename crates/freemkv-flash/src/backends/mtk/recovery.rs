@@ -84,8 +84,13 @@ impl RecoveryFacet for Mtk {
         _current: Option<&[u8]>,
         target: &[u8],
     ) -> Result<UpdateOutcome> {
-        let bound = receiver.state::<RecoveryReceiver>()?;
-        let plan = bound.receiver.prepare(target).map_err(|e| anyhow!("{e}"))?;
+        let bound = receiver
+            .state::<RecoveryReceiver>()
+            .map_err(|error| UpdateFailure::before_write("recovery preparation", error))?;
+        let plan = bound
+            .receiver
+            .prepare(target)
+            .map_err(|e| UpdateFailure::before_write("recovery preparation", anyhow!("{e}")))?;
         crate::output::field(
             "Receiver code source",
             if plan.plan().receiver().provenance()

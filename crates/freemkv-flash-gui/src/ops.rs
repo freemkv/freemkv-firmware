@@ -126,6 +126,7 @@ pub enum Job {
 /// A job result preserves update evidence separately from analysis views.
 pub enum JobResult {
     Complete,
+    Preview(workflow::FlashPreview),
     Analysis(ResultView),
     Update(workflow::UpdateOutcome),
 }
@@ -153,7 +154,7 @@ pub fn execute(device: &str, job: &Job, confirm: &mut dyn Confirm) -> anyhow::Re
         Job::PlanFlash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
-            workflow::plan_flash(&options).map(drop)
+            return workflow::preview_flash(&options).map(JobResult::Preview);
         }
         Job::Flash(options) => {
             let mut options = options.clone();

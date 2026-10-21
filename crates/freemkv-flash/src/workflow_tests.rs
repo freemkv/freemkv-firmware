@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn hardware_mismatch_guidance_keeps_models_but_not_family_hashes() {
+    let source =
+        anyhow::anyhow!("family mismatch: installed cf3183a51bc41e42, target 31ce81c2dbb0fdb");
+    let error = UpdateFailure::before_write(
+        "compatibility checks",
+        crate::backend::HardwareMismatch {
+            installed_model: "BDE-PR1EP PP100".into(),
+            target_model: "BDX-PR1MLA".into(),
+            source,
+        }
+        .into(),
+    );
+    let message = error_message(&error);
+    assert!(message.contains("The underlying hardware for these firmwares is not compatible."));
+    assert!(message.contains("Installed firmware: BDE-PR1EP PP100."));
+    assert!(message.contains("Target firmware: BDX-PR1MLA."));
+    assert!(message.contains("No firmware was written."));
+    assert!(!message.contains("cf3183a51bc41e42"));
+    assert!(!message.contains("31ce81c2dbb0fdb"));
+    let diagnostic = format!("{error:#}");
+    assert!(diagnostic.contains("cf3183a51bc41e42"));
+    assert!(diagnostic.contains("31ce81c2dbb0fdb"));
+    let evidence = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert_eq!(evidence.phase, "compatibility checks");
+    assert!(!evidence.write_started);
+}
+
+#[test]
+fn precheck_evidence_never_overwrites_an_execution_failure() {
+    let evidence = UpdateFailure {
+        phase: "target upload".into(),
+        write_started: true,
+        temporary_firmware: true,
+        completed_stages: vec!["intermediate".into()],
+    };
+    let error = anyhow::anyhow!("write rejected").context(evidence.clone());
+    let error = UpdateFailure::before_write("precheck", error);
+    assert_eq!(error.downcast_ref::<UpdateFailure>(), Some(&evidence));
+    assert_eq!(error_message(&error), "write rejected");
+}
+
+#[test]
 fn current_detection_error_keeps_transport_diagnostics_out_of_user_guidance() {
     let error = anyhow::Error::new(crate::backend::CurrentFirmwareRequired {
         source: anyhow::anyhow!("SCSI invalid field in CDB at 0x98000 [E4000]"),

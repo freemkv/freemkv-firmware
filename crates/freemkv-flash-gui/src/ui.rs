@@ -702,6 +702,8 @@ pub(crate) enum Msg {
     Event(Event),
     DriveAfter(String),
     FailureEvidence(workflow::UpdateFailure),
+    UserGuidance(String),
+    PreviewCompatibilityPending(bool),
     Analysis(ResultView),
     /// A flash passed every gate after its backup; the worker waits for the
     /// sheet's answer on the sender before writing.
@@ -754,6 +756,7 @@ pub struct App {
     logging_warning: Option<String>,
     operation_id: Option<String>,
     failure_evidence: Option<workflow::UpdateFailure>,
+    preview_compatibility_pending: Option<bool>,
     report_rx: Option<Receiver<Result<String, String>>>,
     report_control: Option<crate::support::Submission>,
     recovery_planning: Option<(Target, RecoveryOptions)>,
@@ -867,6 +870,7 @@ impl App {
             logging_warning,
             operation_id: None,
             failure_evidence: None,
+            preview_compatibility_pending: None,
             report_rx: None,
             report_control: None,
             recovery_planning: None,
@@ -1646,6 +1650,7 @@ impl App {
         self.status = format!("{label}…");
         self.failure = None;
         self.failure_evidence = None;
+        self.preview_compatibility_pending = None;
         self.log.clear();
         self.diagnostic_log = None;
         self.diagnostic_checked = None;
@@ -1721,6 +1726,10 @@ impl App {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => self.event(event),
                     Ok(Msg::FailureEvidence(evidence)) => self.failure_evidence = Some(evidence),
+                    Ok(Msg::UserGuidance(message)) => self.failure = Some(message),
+                    Ok(Msg::PreviewCompatibilityPending(pending)) => {
+                        self.preview_compatibility_pending = Some(pending);
+                    }
                     Ok(Msg::DriveAfter(label)) => {
                         self.record_event("drive_after", serde_json::json!({"drive": label}))
                     }
@@ -1745,6 +1754,12 @@ impl App {
                             Ok(Some(outcome)) => {
                                 self.status = format!("{} {}", self.action, outcome.summary())
                             }
+                            Ok(None) if self.preview_compatibility_pending == Some(true) => {
+                                self.status = crate::localization::text(
+                                    self.language,
+                                    "status.package_checked",
+                                );
+                            }
                             Ok(None) => self.status = format!("{} complete", self.action),
                             Err(_) if cancelled => {
                                 self.status = format!("{} cancelled", self.action)
@@ -1759,10 +1774,19 @@ impl App {
                                         "errors.update_not_started"
                                     }
                                 });
+                                let blocked = self
+                                    .failure_evidence
+                                    .as_ref()
+                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware);
                                 let message = crate::localization::text(
                                     self.language,
-                                    "errors.operation_failed",
+                                    if blocked {
+                                        "errors.update_blocked"
+                                    } else {
+                                        "errors.operation_failed"
+                                    },
                                 );
+                                let consequence = if blocked { None } else { consequence };
                                 let message = consequence.map_or(message.clone(), |key| {
                                     format!(
                                         "{message} {}",
@@ -1770,9 +1794,20 @@ impl App {
                                     )
                                 });
                                 self.status = message.clone();
-                                // Detailed backend errors remain in the diagnostic log. The
-                                // status and failure panel use localized, stable error codes.
-                                self.failure = Some(message);
+                                // Keep the summary localized; precheck guidance names the
+                                // stopped stage and actionable reason without technical hashes.
+                                self.failure = Some(match self.failure.take() {
+                                    Some(guidance) => {
+                                        match self.failure_evidence.as_ref().filter(|_| blocked) {
+                                            Some(evidence) => format!(
+                                                "{message} Stopped during {}. {guidance}",
+                                                evidence.phase
+                                            ),
+                                            None => format!("{message} {guidance}"),
+                                        }
+                                    }
+                                    None => message,
+                                });
                             }
                         }
                         let update_evidence = result
@@ -1782,7 +1817,18 @@ impl App {
                             .map(outcome_json);
                         let result_kind = match &result {
                             Err(_) if cancelled => "cancelled",
+                            Err(_)
+                                if self
+                                    .failure_evidence
+                                    .as_ref()
+                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware) =>
+                            {
+                                "blocked"
+                            }
                             Err(_) => "error",
+                            Ok(None) if self.preview_compatibility_pending == Some(true) => {
+                                "prechecked"
+                            }
                             Ok(Some(workflow::UpdateOutcome::Planned)) => "planned",
                             Ok(Some(outcome)) if !outcome.safe_to_probe() => "uncertain",
                             Ok(Some(outcome)) if !outcome.fully_verified() => {
@@ -1792,6 +1838,9 @@ impl App {
                         };
                         self.log.push(match result {
                             Ok(Some(outcome)) => format!("{} {}", self.action, outcome.summary()),
+                            Ok(None) if self.preview_compatibility_pending == Some(true) => {
+                                self.status.clone()
+                            }
                             Ok(None) => "✓ done.".into(),
                             Err(_) if cancelled => CANCELLED.into(),
                             Err(e) => format!("✗ {}: {e}", self.status),
@@ -1803,6 +1852,7 @@ impl App {
                             "error": self.failure,
                             "failure": self.failure.as_ref().map(|_| failure_json(self.failure_evidence.as_ref())),
                             "update": update_evidence,
+                            "compatibility_pending": self.preview_compatibility_pending,
                         }));
                         self.operation_id = None;
                         finished = true;
@@ -2618,6 +2668,12 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                             Ok(None)
                         }
                         ops::JobResult::Update(outcome) => Ok(Some(outcome)),
+                        ops::JobResult::Preview(preview) => {
+                            let _ = tx.send(Msg::PreviewCompatibilityPending(
+                                preview.compatibility_pending,
+                            ));
+                            Ok(None)
+                        }
                         ops::JobResult::Complete => Ok(None),
                     }
                 })
@@ -2630,11 +2686,19 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
             }
             let message = workflow::error_message(&e);
+            if e.is::<workflow::HardwareMismatch>()
+                || e.downcast_ref::<workflow::UpdateFailure>()
+                    .is_some_and(|evidence| !evidence.write_started && !evidence.temporary_firmware)
+            {
+                let _ = tx.send(Msg::UserGuidance(message.clone()));
+            }
             if e.is::<workflow::CurrentFirmwareRequired>() {
                 let _ = tx.send(Msg::Event(Event::Message(format!(
                     "Receiver detection diagnostic: {e:#}"
                 ))));
-                format!("{message} Uncheck Read from drive to select a file.")
+                let guidance = format!("{message} Uncheck Read from drive to select a file.");
+                let _ = tx.send(Msg::UserGuidance(guidance.clone()));
+                guidance
             } else {
                 message
             }

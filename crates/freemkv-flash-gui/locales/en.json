@@ -36,6 +36,8 @@
     "menu.minimize": "Minimize",
     "menu.close": "Close",
     "action.ok": "OK",
-    "app.name": "freemkv Firmware Utility"
+    "app.name": "freemkv Firmware Utility",
+    "errors.update_blocked": "Update blocked. No firmware was written.",
+    "status.package_checked": "Package checks passed; drive compatibility is still pending."
   }
 }

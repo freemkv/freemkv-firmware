@@ -36,6 +36,8 @@
     "menu.minimize": "Minimieren",
     "menu.close": "Schließen",
     "action.ok": "OK",
-    "app.name": "freemkv-Firmwarewerkzeug"
+    "app.name": "freemkv-Firmwarewerkzeug",
+    "errors.update_blocked": "Update blockiert. Es wurde keine Firmware geschrieben.",
+    "status.package_checked": "Die Paketprüfung war erfolgreich; die Laufwerkskompatibilität muss noch geprüft werden."
   }
 }

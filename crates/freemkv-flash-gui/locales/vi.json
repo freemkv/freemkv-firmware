@@ -36,6 +36,8 @@
     "menu.minimize": "Thu nhỏ",
     "menu.close": "Đóng",
     "action.ok": "OK",
-    "app.name": "Tiện ích phần sụn freemkv"
+    "app.name": "Tiện ích phần sụn freemkv",
+    "errors.update_blocked": "Đã chặn cập nhật. Chưa ghi phần sụn.",
+    "status.package_checked": "Gói đã vượt qua kiểm tra; vẫn cần xác minh khả năng tương thích với ổ đĩa."
   }
 }

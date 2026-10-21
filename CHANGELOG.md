@@ -12,6 +12,9 @@ Versions are independent of the freemkv ripping applications.
 - Let MediaTek Flash use a selected Current firmware file when the drive blocks automatic detection. Read from drive remains the default; failed detection now explains how to select the installed firmware.
 - Give Flash and Recovery matching firmware-selection layouts, with Read from drive selected by default in both desktop forms.
 - Make MediaTek Recovery consistently use the Current firmware file you select and report when it does not match the drive.
+- Clearly distinguish a blocked precheck from a failed update, and show when no firmware was written.
+- Explain incompatible hardware using the installed and target firmware models, with technical identifiers kept in diagnostics.
+- Make Pioneer previews clear that passing package checks still requires a drive compatibility check before writing.
 
 ### freemkv Modify
 

@@ -36,6 +36,8 @@
     "menu.minimize": "Réduire",
     "menu.close": "Fermer",
     "action.ok": "OK",
-    "app.name": "Utilitaire de micrologiciel freemkv"
+    "app.name": "Utilitaire de micrologiciel freemkv",
+    "errors.update_blocked": "Mise à jour bloquée. Aucun micrologiciel n’a été écrit.",
+    "status.package_checked": "Le fichier a passé les contrôles ; la compatibilité avec le lecteur reste à vérifier."
   }
 }

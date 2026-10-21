@@ -548,7 +548,29 @@ pub(crate) fn authorize_installed(
         if crate::crossflash::refusal_status(error)
             != crate::crossflash::CompatibilityStatus::SoftNo
         {
-            return Err(preparation_error(error.clone()));
+            let source = preparation_error(error.clone());
+            if matches!(
+                error,
+                pioneer_optical::receiver::PreparationError::Compatibility(
+                    pioneer_optical::receiver::Error::FamilyMismatch { .. }
+                )
+            ) {
+                let installed_model = installed_normal
+                    .as_deref()
+                    .and_then(pioneer_optical::envelope::header_info)
+                    .map(|header| header.model)
+                    .unwrap_or_default();
+                let target_model = pioneer_optical::envelope::header_info(normal)
+                    .map(|header| header.model)
+                    .unwrap_or_default();
+                return Err(crate::backend::HardwareMismatch {
+                    installed_model,
+                    target_model,
+                    source,
+                }
+                .into());
+            }
+            return Err(source);
         }
     }
     // The paired Normal is received by its incoming Kernel. Reuse the loaded
@@ -984,22 +1006,33 @@ impl RecoveryFacet for Pioneer {
         current: Option<&[u8]>,
         target: &[u8],
     ) -> Result<UpdateOutcome> {
-        let evidence = receiver.state::<Option<recovery::Current>>()?;
+        let evidence = receiver
+            .state::<Option<recovery::Current>>()
+            .map_err(|error| {
+                crate::backend::UpdateFailure::before_write("recovery preparation", error)
+            })?;
         let captured;
         let current: &[u8] = match current {
             Some(bytes) => bytes,
             None => {
                 captured = crate::backends::pioneer::backup::capture_signed_candidate(dev.scsi())
-                    .context(
-                    "cannot read Current firmware; supply a Current firmware file instead",
-                )?;
+                    .context("cannot read Current firmware; supply a Current firmware file instead")
+                    .map_err(|error| {
+                        crate::backend::UpdateFailure::before_write(
+                            "current firmware capture",
+                            error,
+                        )
+                    })?;
                 &captured
             }
         };
         let plan = match evidence {
-            Some(evidence) => recovery::Plan::with_current(evidence, target)?,
-            None => recovery::Plan::prepare(current, target)?,
-        };
+            Some(evidence) => recovery::Plan::with_current(evidence, target),
+            None => recovery::Plan::prepare(current, target),
+        }
+        .map_err(|error| {
+            crate::backend::UpdateFailure::before_write("recovery preparation", error)
+        })?;
         crate::output::field(
             "Recovery",
             "No automatic backup; compatibility policy bypassed",

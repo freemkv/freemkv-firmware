@@ -36,6 +36,8 @@
     "menu.minimize": "Minimaliseren",
     "menu.close": "Sluiten",
     "action.ok": "OK",
-    "app.name": "freemkv-firmwarehulpprogramma"
+    "app.name": "freemkv-firmwarehulpprogramma",
+    "errors.update_blocked": "Update geblokkeerd. Er is geen firmware geschreven.",
+    "status.package_checked": "De pakketcontroles zijn geslaagd; de compatibiliteit met het station moet nog worden gecontroleerd."
   }
 }

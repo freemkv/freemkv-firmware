@@ -440,7 +440,20 @@ pub(super) fn authorize_bytes(
         Some(installed) => PreparedUpdate::prepare(image, installed),
         None => PreparedUpdate::prepare_without_installed(image, live),
     }
-    .map_err(refusal)?;
+    .map_err(|error| {
+        if matches!(error, PrepareError::FamilyMismatch { .. }) {
+            crate::backend::HardwareMismatch {
+                installed_model: drive_product.into(),
+                target_model: Build::of_image(image)
+                    .map(|build| build.product)
+                    .unwrap_or_default(),
+                source: refusal(error),
+            }
+            .into()
+        } else {
+            refusal(error)
+        }
+    })?;
     let _expect = match (verdict, backup) {
         (Verdict::Crossflash, Some(backup)) => {
             Some(authorize_crossflash(drive_product, verdict, backup, image)?)

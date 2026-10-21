@@ -72,11 +72,27 @@ content-integrity and rollback gates. A different family or an
 unknown-identity image is refused, an unknown family fails closed, and nothing
 switches the gate off. Its workflow is:
 
-1. **Back up** — a live execution reads and saves a fresh, complete, validated
-   backup artifact. A failed backup stops the flash before any firmware write.
-2. **Write** — `.bin` streams the full MTK firmware image; `.tar` selects the
+1. **Check the input and receiver** — validate the selected package and the
+   drive's available receiver evidence. Passing a package check does not approve
+   drive compatibility; Pioneer's preview explicitly reports that it is pending.
+2. **Back up** — live Flash captures and validates the installed firmware before
+   checking compatibility against it. A capture failure requires an explicit
+   decision to proceed without a rollback backup; compatibility gates still apply.
+3. **Check compatibility and confirm** — installed-firmware and target checks
+   must pass before the desktop confirmation sheet appears. A precheck block
+   reports that no firmware was written, with the reason and stopped stage.
+4. **Write** — recheck the tray and live receiver, then perform the prepared
+   update. `.bin` streams the full MTK firmware image; `.tar` selects the
    same image from the backup archive and reflashes it.
-3. **Verify** — the backend performs its supported completion/read-back checks.
+5. **Verify** — report startup and supported readback checks separately from
+   transfer completion. An execution failure or incomplete verification is not a
+   precheck rejection.
+
+Recovery prepares the current receiver and selected target before its write,
+without Flash's automatic backup or installed-versus-target policy checks. It
+still validates the required image, receiver and transfer contracts. Its dry-run
+preview precedes desktop confirmation. A precheck rejection writes no firmware;
+execution failures retain their actual write and temporary-firmware evidence.
 
 ### Transport format
 

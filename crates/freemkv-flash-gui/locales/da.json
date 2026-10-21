@@ -36,6 +36,8 @@
     "menu.minimize": "Minimer",
     "menu.close": "Luk",
     "action.ok": "OK",
-    "app.name": "freemkv-firmwareværktøj"
+    "app.name": "freemkv-firmwareværktøj",
+    "errors.update_blocked": "Opdatering blokeret. Ingen firmware blev skrevet.",
+    "status.package_checked": "Pakken bestod kontrollen; kompatibiliteten med drevet mangler at blive kontrolleret."
   }
 }

@@ -1969,6 +1969,7 @@ fn logging_failure_retains_operation_and_terminal_interrupted_event() {
     assert_eq!(terminal["data"]["operation_id"], "correlated-operation");
     assert_eq!(terminal["data"]["result"], "interrupted");
     assert_eq!(terminal["data"]["failure"]["safe_to_probe"], false);
+    assert!(terminal["data"]["failure"]["write_started"].is_null());
     drop(zip);
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -2161,4 +2162,104 @@ fn report_cancellation_is_available_and_completion_restores_submit() {
         app.view().results.unwrap().submit_report.text,
         "Submit Report"
     );
+}
+
+#[test]
+fn package_preview_reports_compatibility_pending_in_every_language() {
+    for language in crate::localization::Language::ALL {
+        let mut app = App::with_drives(Vec::new());
+        app.language = language;
+        app.action = "Flash plan".into();
+        let (tx, rx) = mpsc::channel();
+        app.rx = Some(rx);
+        tx.send(Msg::PreviewCompatibilityPending(true)).unwrap();
+        tx.send(Msg::Done(Ok(None))).unwrap();
+        app.poll();
+        assert_eq!(
+            app.status,
+            crate::localization::text(language, "status.package_checked")
+        );
+        assert!(app.failure.is_none());
+        assert!(app.log.iter().any(|line| line == &app.status));
+    }
+}
+
+#[test]
+fn blocked_update_shows_actionable_reason_and_records_no_write() {
+    let dir =
+        std::env::temp_dir().join(format!("freemkv-blocked-{}", workflow::new_operation_id()));
+    let mut app = App::with_drives(Vec::new());
+    app.journal = Some(Journal::memory_at(dir.clone()));
+    app.operation_id = Some("incompatible-hardware".into());
+    app.action = "Firmware update".into();
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    tx.send(Msg::FailureEvidence(workflow::UpdateFailure {
+        phase: "compatibility checks".into(),
+        write_started: false,
+        temporary_firmware: false,
+        completed_stages: Vec::new(),
+    }))
+    .unwrap();
+    let reason = "The underlying hardware for these firmwares is not compatible. Installed firmware: PP100. Target firmware: BDX-PR1MLA.";
+    tx.send(Msg::UserGuidance(reason.into())).unwrap();
+    tx.send(Msg::Done(Err(reason.into()))).unwrap();
+    app.poll();
+    assert_eq!(app.status, "Update blocked. No firmware was written.");
+    let failure = app.failure.as_ref().unwrap();
+    assert!(failure.contains(reason));
+    assert!(failure.contains("Stopped during compatibility checks."));
+    assert!(!failure.contains("cf3183a51bc41e42"));
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let event: serde_json::Value = contents
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .find(|event| event["event"] == "operation_finished")
+        .unwrap();
+    assert_eq!(event["data"]["result"], "blocked");
+    assert_eq!(event["data"]["failure"]["phase"], "compatibility checks");
+    assert_eq!(event["data"]["failure"]["write_started"], false);
+    assert_eq!(event["data"]["failure"]["safe_to_probe"], false);
+    drop(zip);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn worker_input_failure_has_precheck_evidence_without_opening_a_drive() {
+    let (tx, rx) = mpsc::channel();
+    let options = FlashOptions {
+        input: std::env::temp_dir()
+            .join(workflow::new_operation_id())
+            .join("absent.tar"),
+        ..FlashOptions::default()
+    };
+    run_job(
+        "not-a-real-device",
+        Job::PlanFlash(options),
+        tx,
+        None,
+        "input-check".into(),
+    );
+    let messages: Vec<_> = rx.try_iter().collect();
+    assert!(messages
+        .iter()
+        .any(|msg| matches!(msg, Msg::FailureEvidence(e)
+        if e.phase == "input and drive checks" && !e.write_started && !e.temporary_firmware)));
+    assert!(messages
+        .iter()
+        .any(|msg| matches!(msg, Msg::UserGuidance(_))));
+    assert!(messages.iter().any(|msg| matches!(msg, Msg::Done(Err(_)))));
+    assert!(!messages
+        .iter()
+        .any(|msg| matches!(msg, Msg::DriveAfter(_) | Msg::Authorized(_, _))));
 }
