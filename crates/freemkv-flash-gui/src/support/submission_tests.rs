@@ -176,7 +176,7 @@ fn receipt_is_not_misreported_as_cancelled_when_upload_was_already_accepted() {
     let (source, dir) = source();
     let receipt = submit_at(source, &control, &base, |_| Ok(()), |_| {}).unwrap();
     assert!(control.cancelled());
-    assert!(receipt.contains("accepted-before-cancel received"));
+    assert!(crate::localization::english(&receipt).contains("accepted-before-cancel received"));
     assert_eq!(server.join().unwrap().len(), 3);
     std::fs::remove_dir_all(dir).unwrap();
 }

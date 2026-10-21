@@ -2,6 +2,7 @@
 
 use crate::ops::{self, Job};
 use eframe::egui;
+use freemkv_flash::localization::{self, Language, Preferences};
 use freemkv_flash::workflow::DriveChoice;
 use freemkv_fw::boot::{BootFeature, BootSettings, BootSupport};
 use std::path::PathBuf;
@@ -22,6 +23,8 @@ enum Task {
 type BootPreview = Result<(BootSettings, BootSupport), String>;
 
 pub struct FwApp {
+    language: Language,
+    preferences: Preferences,
     boot_settings: BootSettings,
     boot_support: Option<BootSupport>,
     boot_input: Option<PathBuf>,
@@ -76,14 +79,27 @@ impl FwApp {
                 .diagnostic_text()
                 .and_then(|text| std::fs::write(&path, text));
             self.diagnostic_notice = Some(match result {
-                Ok(()) => format!("Diagnostic log exported: {}", path.display()),
-                Err(error) => format!("Could not export diagnostic log: {error}"),
+                Ok(()) => localization::message(
+                    "notice.log_saved",
+                    &[("path", path.display().to_string())],
+                ),
+                Err(error) => {
+                    self.log
+                        .push(format!("Could not export diagnostic log: {error:#}"));
+                    "errors.save_report".into()
+                }
             });
         }
     }
 
     pub fn new() -> Self {
+        Self::with_preferences(Preferences::user())
+    }
+
+    fn with_preferences(preferences: Preferences) -> Self {
         Self {
+            language: preferences.load(),
+            preferences,
             boot_settings: BootSettings::standard(),
             boot_support: None,
             boot_input: None,
@@ -93,7 +109,7 @@ impl FwApp {
             task: Task::Verify,
             result_task: Task::Verify,
             input: None,
-            status: "Ready".into(),
+            status: "status.ready".into(),
             failure: None,
             action: String::new(),
             devices: Vec::new(),
@@ -143,7 +159,10 @@ impl FwApp {
 
     fn choose_image(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Firmware image", &["bin", "tar"])
+            .add_filter(
+                localization::get(self.language, "modify.firmware_image"),
+                &["bin", "tar"],
+            )
             .pick_file()
         {
             self.select_image(path);
@@ -160,7 +179,7 @@ impl FwApp {
         self.boot_dirty = false;
         self.fields.clear();
         self.failure = None;
-        self.status = "Ready".into();
+        self.status = "status.ready".into();
     }
 
     fn start_job(&mut self, ctx: &egui::Context, label: &str, job: Job) {
@@ -170,7 +189,8 @@ impl FwApp {
         self.result_task = self.task;
         self.running = true;
         self.action = label.to_string();
-        self.status = format!("{label}…");
+        self.status =
+            localization::message("status.operation_running", &[("operation", label.into())]);
         self.failure = None;
         self.log.clear();
         self.diagnostic_log = None;
@@ -178,7 +198,7 @@ impl FwApp {
         self.diagnostic_notice = None;
         self.progress = None;
         self.fields.clear();
-        self.log.push(label.to_owned());
+        self.log.push(localization::english(label));
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
         let ctx = ctx.clone();
@@ -195,11 +215,8 @@ impl FwApp {
                 )
             }));
             let result = match result {
-                Ok(result) => result.map_err(|e| format!("{e:#}")),
-                Err(_) => Err(
-                    "Operation worker failed unexpectedly. Inspect the output before using it."
-                        .into(),
-                ),
+                Ok(result) => result.map_err(|e| freemkv_flash::workflow::user_error(&e).encoded()),
+                Err(_) => Err("errors.worker".into()),
             };
             let _ = tx.send(Msg::Done(result));
             ctx.request_repaint();
@@ -228,23 +245,31 @@ impl FwApp {
                     },
                     Ok(Msg::Done(result)) => {
                         match &result {
-                            Ok(()) => self.status = format!("{} complete", self.action),
+                            Ok(()) => {
+                                self.status = localization::message(
+                                    "status.operation_complete",
+                                    &[("operation", self.action.clone())],
+                                )
+                            }
                             Err(error) => {
-                                self.status = format!("{} could not finish", self.action);
+                                self.status = localization::message(
+                                    "status.operation_failed",
+                                    &[("operation", self.action.clone())],
+                                );
                                 self.failure = Some(error.clone());
                             }
                         }
                         self.log.push(match result {
                             Ok(()) => "✓ done.".into(),
-                            Err(e) => format!("✗ error: {e}"),
+                            Err(e) => format!("✗ error: {}", localization::english(&e)),
                         });
                         finished = true;
                         break;
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
-                        self.status = "Operation interrupted".into();
-                        self.failure = Some("The worker stopped before reporting a result. Inspect the output before using it.".into());
+                        self.status = "status.interrupted".into();
+                        self.failure = Some("errors.worker".into());
                         self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
                         finished = true;
                         break;
@@ -276,8 +301,10 @@ impl FwApp {
                         let artifact = freemkv_fw::artifact::Artifact::parse(std::fs::read(path)?)?;
                         freemkv_fw::api::boot_options(artifact.image())
                     })
-                    .map_err(|_| "Firmware analysis failed".to_string())
-                    .and_then(|result| result.map_err(|e| format!("{e:#}")));
+                    .map_err(|_| "errors.analysis".to_string())
+                    .and_then(|result| {
+                        result.map_err(|e| freemkv_flash::workflow::user_error(&e).encoded())
+                    });
                     let _ = tx.send(result);
                     ctx.request_repaint();
                 });
@@ -299,7 +326,7 @@ impl FwApp {
                 }
                 Err(TryRecvError::Disconnected) => {
                     self.boot_rx = None;
-                    self.boot_error = Some("Firmware analysis stopped unexpectedly".into());
+                    self.boot_error = Some("errors.analysis".into());
                 }
                 Err(TryRecvError::Empty) => {
                     ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -314,14 +341,19 @@ impl FwApp {
     }
 
     fn boot_form(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Boot settings").strong());
-        ui.small("Applied each time the drive starts.");
+        ui.label(
+            egui::RichText::new(localization::get(self.language, "modify.boot_settings")).strong(),
+        );
+        ui.small(localization::get(
+            self.language,
+            "modify.applied_each_time_the_drive_starts",
+        ));
         egui::Grid::new("boot_settings")
             .num_columns(2)
             .spacing([16.0, 5.0])
             .show(ui, |ui| {
                 for feature in BootFeature::ALL {
-                    ui.label(feature.label());
+                    ui.label(localization::render(self.language, feature.label()));
                     let supported = self
                         .boot_support
                         .as_ref()
@@ -331,21 +363,21 @@ impl FwApp {
                     ui.add_enabled_ui(supported, |ui| {
                         egui::ComboBox::from_id_salt(("boot", feature.key()))
                             .width(220.0)
-                            .selected_text(if self.boot_support.is_some() && !supported {
-                                "Not supported"
+                            .selected_text(localization::render(self.language, if self.boot_support.is_some() && !supported {
+                                "modify.not_supported"
                             } else {
                                 self.boot_settings.label(feature)
-                            })
+                            }))
                             .show_ui(ui, |ui| {
                                 for &(key, label, _) in feature.choices() {
-                                    ui.selectable_value(&mut selected, key, label);
+                                    ui.selectable_value(&mut selected, key, localization::render(self.language, label));
                                 }
                             })
                             .response
                             .on_hover_text(if supported {
-                                "Firmware startup setting"
+                                localization::get(self.language, "modify.firmware_startup_setting")
                             } else {
-                                "Not supported by the selected firmware, or analysis is pending"
+                                localization::get(self.language, "modify.not_supported_by_the_selected_firmware_or_analysis_is_p")
                             });
                     });
                     if selected != value {
@@ -357,26 +389,38 @@ impl FwApp {
                     ui.end_row();
                 }
             });
-        if ui.button("Reset to defaults").clicked() {
+        if ui
+            .button(localization::get(self.language, "modify.reset_to_defaults"))
+            .clicked()
+        {
             self.reset_boot_settings();
         }
         if self.boot_rx.is_some() {
-            ui.small("Checking firmware support…");
+            ui.small(localization::get(
+                self.language,
+                "modify.checking_firmware_support",
+            ));
         }
         if let Some(error) = &self.boot_error {
-            ui.colored_label(egui::Color32::DARK_RED, error);
+            ui.colored_label(
+                egui::Color32::DARK_RED,
+                localization::render(self.language, error),
+            );
         }
         if let Some(support) = &self.boot_support {
             if !support.has_boot() {
                 ui.colored_label(
                     egui::Color32::DARK_RED,
-                    "This firmware cannot apply boot settings.",
+                    localization::get(
+                        self.language,
+                        "modify.this_firmware_cannot_apply_boot_settings",
+                    ),
                 );
             }
-            if let Err(error) = self.boot_settings.validate(support) {
+            if let Err(_error) = self.boot_settings.validate(support) {
                 ui.colored_label(
                     egui::Color32::DARK_RED,
-                    format!("{error}. Reset to defaults or choose compatible firmware."),
+                    localization::get(self.language, "errors.boot_settings"),
                 );
             }
         }
@@ -385,17 +429,39 @@ impl FwApp {
     fn task_content(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         match self.task {
             Task::Probe => {
-                ui.label("Check whether the selected drive runs freemkv firmware.");
-                if primary(ui, "Read drive information", !self.device.is_empty()).clicked() {
-                    self.start_job(ctx, "Drive information", Job::Probe(self.device.clone()));
+                ui.label(localization::get(
+                    self.language,
+                    "modify.check_whether_the_selected_drive_runs_freemkv_firmware",
+                ));
+                if primary(
+                    ui,
+                    localization::get(self.language, "action.read_info"),
+                    !self.device.is_empty(),
+                )
+                .clicked()
+                {
+                    self.start_job(
+                        ctx,
+                        "modify.drive_information",
+                        Job::Probe(self.device.clone()),
+                    );
                 }
             }
             Task::Verify => {
-                ui.label("Check the firmware image’s integrity before using it.");
-                if primary(ui, "Verify firmware", self.input.is_some()).clicked() {
+                ui.label(localization::get(
+                    self.language,
+                    "modify.check_the_firmware_image_s_integrity_before_using_it",
+                ));
+                if primary(
+                    ui,
+                    localization::get(self.language, "modify.verify_firmware"),
+                    self.input.is_some(),
+                )
+                .clicked()
+                {
                     self.start_job(
                         ctx,
-                        "Firmware verification",
+                        "modify.firmware_verification",
                         Job::Verify(self.input.clone().unwrap()),
                     );
                 }
@@ -403,9 +469,15 @@ impl FwApp {
             Task::Create | Task::Sign => {
                 let create = self.task == Task::Create;
                 ui.label(if create {
-                    "Build freemkv firmware from an OEM image, then sign and verify it."
+                    localization::get(
+                        self.language,
+                        "modify.build_freemkv_firmware_from_an_oem_image_then_sign_and_",
+                    )
                 } else {
-                    "Recompute the firmware image’s integrity signatures."
+                    localization::get(
+                        self.language,
+                        "modify.recompute_the_firmware_image_s_integrity_signatures",
+                    )
                 });
                 if create {
                     self.boot_preview(ctx);
@@ -415,9 +487,9 @@ impl FwApp {
                 if primary(
                     ui,
                     if create {
-                        "Create firmware…"
+                        localization::get(self.language, "modify.create_firmware")
                     } else {
-                        "Save signed firmware…"
+                        localization::get(self.language, "modify.save_signed_firmware")
                     },
                     self.input.is_some()
                         && (!create
@@ -435,7 +507,10 @@ impl FwApp {
                             "{stem}.{suffix}.{}",
                             input.extension().and_then(|e| e.to_str()).unwrap_or("bin")
                         ))
-                        .add_filter("Firmware image", &["bin", "tar"])
+                        .add_filter(
+                            localization::get(self.language, "modify.firmware_image"),
+                            &["bin", "tar"],
+                        )
                         .save_file()
                     {
                         let job = if create {
@@ -450,9 +525,9 @@ impl FwApp {
                         self.start_job(
                             ctx,
                             if create {
-                                "Firmware creation"
+                                "modify.firmware_creation"
                             } else {
-                                "Firmware signing"
+                                "modify.firmware_signing"
                             },
                             job,
                         );
@@ -485,6 +560,10 @@ impl FwApp {
     fn render(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.pump();
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(localization::text(
+            self.language,
+            "modify.window_title",
+        )));
         if self.running {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
             if ctx.input(|i| i.viewport().close_requested()) {
@@ -495,9 +574,23 @@ impl FwApp {
             ui.set_max_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.heading("freemkv");
-                ui.label("Firmware Modifier");
+                ui.label(localization::get(self.language, "modify.firmware_modifier"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.weak(env!("CARGO_PKG_VERSION"));
+                    let previous = self.language;
+                    egui::ComboBox::from_id_salt("firmware_language")
+                        .selected_text(self.language.native_name())
+                        .show_ui(ui, |ui| {
+                            for language in Language::ALL {
+                                ui.selectable_value(&mut self.language, language, language.native_name());
+                            }
+                        });
+                    if self.language != previous {
+                        if let Err(error) = self.preferences.save(self.language) {
+                            self.log.push(format!("Could not save language preference: {error}"));
+                            self.diagnostic_notice = Some("errors.language_save".into());
+                        }
+                    }
                 });
             });
             ui.add_space(18.0);
@@ -507,7 +600,7 @@ impl FwApp {
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         if self.task == Task::Probe {
-                            ui.label(egui::RichText::new("Optical drive").strong());
+                            ui.label(egui::RichText::new(localization::get(self.language, "drive.label")).strong());
                             ui.horizontal(|ui| {
                                 let label = self
                                     .devices
@@ -515,7 +608,7 @@ impl FwApp {
                                     .find(|d| d.path == self.device)
                                     .map(|d| d.display())
                                     .unwrap_or_else(|| {
-                                        "Select Refresh to find optical drives".into()
+                                        localization::get(self.language, "modify.select_refresh_to_find_optical_drives").into()
                                     });
                                 egui::ComboBox::from_id_salt("device_combo")
                                     .selected_text(label)
@@ -530,18 +623,18 @@ impl FwApp {
                                             .on_hover_text(&drive.path);
                                         }
                                     });
-                                if ui.button("Refresh").clicked() {
+                                if ui.button(localization::get(self.language, "action.refresh")).clicked() {
                                     self.discover();
                                 }
                             });
                         } else {
-                            ui.label(egui::RichText::new("Firmware image").strong());
+                            ui.label(egui::RichText::new(localization::get(self.language, "modify.firmware_image")).strong());
                             ui.horizontal(|ui| {
                                 if ui
                                     .button(if self.input.is_some() {
-                                        "Change file…"
+                                        localization::get(self.language, "action.change_file")
                                     } else {
-                                        "Choose firmware…"
+                                        localization::get(self.language, "action.choose_firmware")
                                     })
                                     .clicked()
                                 {
@@ -556,18 +649,18 @@ impl FwApp {
                                     )
                                     .on_hover_text(input.display().to_string());
                                 } else {
-                                    ui.weak("No firmware image selected");
+                                    ui.weak(localization::get(self.language, "modify.no_firmware_image_selected"));
                                 }
                             });
                         }
                     });
                 ui.add_space(18.0);
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.task, Task::Verify, "Verify firmware");
-                    ui.selectable_value(&mut self.task, Task::Create, "Create firmware");
-                    ui.selectable_value(&mut self.task, Task::Probe, "Drive info");
-                    ui.menu_button(if self.task == Task::Sign { "Advanced: Sign" } else { "Advanced" }, |ui| {
-                        if ui.selectable_label(self.task == Task::Sign, "Sign firmware").on_hover_text("Re-sign a manually edited image. Create already signs and verifies automatically.").clicked() {
+                    ui.selectable_value(&mut self.task, Task::Verify, localization::get(self.language, "modify.verify_firmware"));
+                    ui.selectable_value(&mut self.task, Task::Create, localization::get(self.language, "modify.create_firmware_e1bf99"));
+                    ui.selectable_value(&mut self.task, Task::Probe, localization::get(self.language, "task.info"));
+                    ui.menu_button(if self.task == Task::Sign { localization::get(self.language, "modify.advanced_sign") } else { localization::get(self.language, "modify.advanced") }, |ui| {
+                        if ui.selectable_label(self.task == Task::Sign, localization::get(self.language, "modify.sign_firmware")).on_hover_text(localization::get(self.language, "modify.re_sign_a_manually_edited_image_create_already_signs_an")).clicked() {
                             self.task = Task::Sign;
                             ui.close();
                         }
@@ -594,19 +687,19 @@ impl FwApp {
                 if self.running {
                     ui.spinner();
                 }
-                ui.label(egui::RichText::new(&self.status).strong());
+                ui.label(egui::RichText::new(localization::render(self.language, &self.status)).strong());
             });
             if self.running {
                 if let Some((label, done, total)) = &self.progress {
-                    ui.label(label);
+                    ui.label(localization::render(self.language, label));
                     ui.add(
                         egui::ProgressBar::new(*done as f32 / (*total).max(1) as f32)
                             .show_percentage(),
                     );
                 } else {
-                    ui.add(egui::ProgressBar::new(0.0).animate(true).text("Preparing…"));
+                    ui.add(egui::ProgressBar::new(0.0).animate(true).text(localization::get(self.language, "modify.preparing")));
                 }
-                ui.small("The operation is running. Keep this window open until it finishes.");
+                ui.small(localization::get(self.language, "modify.the_operation_is_running_keep_this_window_open_until_it"));
             }
             egui::ScrollArea::vertical()
                 .id_salt("result_panel")
@@ -621,23 +714,23 @@ impl FwApp {
                             .max_col_width((ui.available_width() - 24.0) / 2.0)
                             .show(ui, |ui| {
                                 for (label, value) in &self.fields {
-                                    ui.label(label);
-                                    ui.add(egui::Label::new(value).wrap());
+                                    ui.label(localization::render(self.language, label));
+                                    ui.add(egui::Label::new(localization::render(self.language, value)).wrap());
                                     ui.end_row();
                                 }
                             });
                     }
                     if let Some(error) = &self.failure {
-                        ui.colored_label(egui::Color32::from_rgb(160, 45, 35), error);
-                        if ui.button("Save diagnostic log…").clicked() {
+                        ui.colored_label(egui::Color32::from_rgb(160, 45, 35), localization::render(self.language, error));
+                        if ui.button(localization::get(self.language, "ui.save_diagnostic_log")).clicked() {
                             self.save_diagnostic_log();
                         }
                     }
                     if let Some(notice) = &self.diagnostic_notice {
-                        ui.label(notice);
+                        ui.label(localization::render(self.language, notice));
                     }
                     ui.add_space(6.0);
-                    if ui.button("View diagnostic log…").clicked() {
+                    if ui.button(localization::get(self.language, "modify.view_diagnostic_log")).clicked() {
                         self.details_open = true;
                         self.diagnostic_checked = None;
                         self.diagnostic_notice = None;
@@ -657,7 +750,7 @@ impl FwApp {
             }
             let mut open = true;
             let mut close = false;
-            egui::Window::new("Diagnostic log")
+            egui::Window::new(localization::get(self.language, "ui.diagnostic_log"))
                 .open(&mut open)
                 .collapsible(false)
                 .resizable(false)
@@ -665,25 +758,44 @@ impl FwApp {
                 .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
                 .show(&ctx, |ui| {
                     ui.horizontal(|ui| {
-                        if ui.button("Copy diagnostic log").clicked() {
+                        if ui
+                            .button(localization::get(
+                                self.language,
+                                "modify.copy_diagnostic_log",
+                            ))
+                            .clicked()
+                        {
                             match self.diagnostic_text() {
                                 Ok(text) => ctx.copy_text(text),
                                 Err(error) => {
-                                    self.diagnostic_notice =
-                                        Some(format!("Could not read diagnostic log: {error}"))
+                                    self.diagnostic_notice = Some({
+                                        self.log.push(format!(
+                                            "Could not read diagnostic log: {error:#}"
+                                        ));
+                                        "errors.read_log".into()
+                                    })
                                 }
                             }
                         }
-                        if ui.button("Save diagnostic log…").clicked() {
+                        if ui
+                            .button(localization::get(self.language, "ui.save_diagnostic_log"))
+                            .clicked()
+                        {
                             self.save_diagnostic_log();
                         }
-                        if ui.button("Close").clicked() {
+                        if ui
+                            .button(localization::get(self.language, "menu.close"))
+                            .clicked()
+                        {
                             close = true;
                         }
                     });
-                    ui.label("Attach this log to your bug report.");
+                    ui.label(localization::get(
+                        self.language,
+                        "ui.attach_this_log_to_your_bug_report",
+                    ));
                     if let Some(notice) = &self.diagnostic_notice {
-                        ui.label(notice);
+                        ui.label(localization::render(self.language, notice));
                     }
                     ui.separator();
                     egui::ScrollArea::both()

@@ -1,5 +1,6 @@
 //! Background authoring operations with structured results and automatic diagnostics.
 use anyhow::{bail, Result};
+use freemkv_flash::localization::message;
 use freemkv_flash::output::field;
 use freemkv_fw::{
     api,
@@ -39,12 +40,22 @@ pub fn execute(job: &Job) -> Result<()> {
                 field("Integrity scheme", outcome.scheme);
                 for verdict in &outcome.verdicts {
                     field(
-                        format!("Region {}", verdict.index),
-                        format!(
-                            "0x{:x}–0x{:x}: {}",
-                            verdict.start,
-                            verdict.end,
-                            if verdict.ok { "Match" } else { "Mismatch" }
+                        message("modify.region", &[("index", verdict.index.to_string())]),
+                        message(
+                            "modify.region_verdict",
+                            &[
+                                ("start", format!("0x{:x}", verdict.start)),
+                                ("end", format!("0x{:x}", verdict.end)),
+                                (
+                                    "verdict",
+                                    if verdict.ok {
+                                        "domain.match"
+                                    } else {
+                                        "domain.mismatch"
+                                    }
+                                    .into(),
+                                ),
+                            ],
                         ),
                     );
                 }
@@ -53,7 +64,10 @@ pub fn execute(job: &Job) -> Result<()> {
                 }
                 field(
                     "Verification",
-                    format!("{} regions verified", outcome.verdicts.len()),
+                    message(
+                        "modify.regions_verified",
+                        &[("count", outcome.verdicts.len().to_string())],
+                    ),
                 );
             }
             Job::Create {
@@ -91,11 +105,17 @@ pub fn execute(job: &Job) -> Result<()> {
                 diagnostics::record(defaults.report_json(&support, &report.to_json()));
                 field(
                     "Verification",
-                    format!("{} regions verified", verification.verdicts.len()),
+                    message(
+                        "modify.regions_verified",
+                        &[("count", verification.verdicts.len().to_string())],
+                    ),
                 );
                 diagnostics::write(output, &artifact.output(report.image.clone())?)?;
                 field("Saved firmware", output.display().to_string());
-                field("Image size", format!("{} bytes", report.image.len()));
+                field(
+                    "Image size",
+                    message("unit.bytes", &[("count", report.image.len().to_string())]),
+                );
             }
             Job::Sign { input, output } => {
                 let artifact = freemkv_fw::artifact::Artifact::parse(diagnostics::read(input)?)?;
@@ -110,7 +130,14 @@ pub fn execute(job: &Job) -> Result<()> {
             Job::Probe(device) => {
                 let outcome = api::probe_device(device)?;
                 field("Drive", device);
-                field("freemkv firmware", outcome.detail);
+                field(
+                    "freemkv firmware",
+                    if outcome.detected {
+                        message("modify.detected", &[("version", outcome.detail)])
+                    } else {
+                        "modify.not_detected".into()
+                    },
+                );
             }
         }
         Ok(())

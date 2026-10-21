@@ -898,7 +898,8 @@ fn execute_refuses_unsaved_or_existing_backup_before_write() {
     req.predump_out = None;
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let error = flash(&mut dev, &Mtk, &req).unwrap_err();
-    assert!(crate::workflow::error_message(&error).contains("no preflash backup path"));
+    assert!(crate::workflow::error_message(&error)
+        .contains("Choose a destination for the pre-flash backup"));
     let evidence = error
         .downcast_ref::<crate::backend::UpdateFailure>()
         .unwrap();

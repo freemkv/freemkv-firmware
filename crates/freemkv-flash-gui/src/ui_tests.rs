@@ -20,10 +20,9 @@ impl Profile {
     /// A drive that offers every task.
     pub(crate) fn every_task() -> Self {
         Self {
+            can_read: Some(true),
             flash_current: true,
-            chips: ["Test family", "Backup", "Dump", "Flash", "Recovery"]
-                .map(String::from)
-                .to_vec(),
+            chips: vec!["Test family".into()],
             tasks: vec![Task::Backup, Task::Dump, Task::Flash, Task::Recovery],
             inspect: true,
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
@@ -461,7 +460,10 @@ fn enabled_tabs(app: &App) -> Vec<Task> {
 fn tabs_navigate_even_when_the_drive_does_not_offer_the_operation() {
     let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
     assert_eq!(app.start(), [Effect::StartTicking]);
-    assert_eq!(app.view().drives.chips, [PROBING]);
+    assert_eq!(
+        app.view().drives.chips,
+        [crate::localization::english(PROBING)]
+    );
     assert!(enabled_tabs(&app).is_empty(), "controls lock while probing");
     app.dispatch(Input::SelectTask(Task::Inspect));
     assert_eq!(app.task, Task::Info, "no tab switch while probing");
@@ -558,7 +560,10 @@ fn no_drive_cannot_start_drive_jobs() {
     let mut app = dry(Vec::new());
     assert!(app.dispatch(Input::ReadInfo).is_empty());
     assert!(!app.running());
-    assert_eq!(app.log.last().unwrap(), "No optical drive selected.");
+    assert_eq!(
+        crate::localization::english(app.log.last().unwrap()),
+        "No optical drive selected."
+    );
     assert_eq!(app.view().drives.chips, Vec::<String>::new());
     app.dispatch(Input::SelectTask(Task::Backup));
     assert_eq!(
@@ -655,6 +660,7 @@ fn flash_starts_with_a_firmware_chooser() {
 /// A flash backend that authorizes with a generation-barrier warning and
 /// records whether it wrote.
 struct SheetBackend {
+    fail_backup: bool,
     confirmation: Option<&'static str>,
     executed: AtomicBool,
 }
@@ -698,6 +704,12 @@ impl BackupFacet for SheetBackend {
         }
     }
     fn capture(&self, _: &mut ReadDevice<'_>) -> anyhow::Result<Vec<u8>> {
+        if self.fail_backup {
+            return Err(
+                anyhow::anyhow!("restricted firmware bytes: cdb=[3c, 06] gap=0x1f0000")
+                    .context(freemkv_flash::backend::BackupReadRestricted),
+            );
+        }
         Ok(vec![1, 2, 3])
     }
     fn notice(&self, _: &[u8]) -> BackupNotice {
@@ -767,11 +779,20 @@ impl Flashing {
 /// Press Flash now on `app`, let the plan pass, and run the backup-and-
 /// authorize job until its sheet opens.
 fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flashing {
+    flash_until_sheet_with_backup(app, confirmation, false)
+}
+
+fn flash_until_sheet_with_backup(
+    app: &mut App,
+    confirmation: Option<&'static str>,
+    fail_backup: bool,
+) -> Flashing {
     app.flash_input = Some("firmware.tar".into());
     app.dispatch(Input::FlashNow);
     plan_passes(app);
     let worker = app.worker.take().expect("the flash job's worker");
     let backend = Arc::new(SheetBackend {
+        fail_backup,
         confirmation,
         executed: AtomicBool::new(false),
     });
@@ -828,6 +849,61 @@ fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flash
 }
 
 #[test]
+fn backup_unavailable_asks_yes_or_no_and_no_never_executes() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet_with_backup(&mut app, None, true);
+    let question = app.view().confirm.unwrap();
+    assert_eq!(question.title, "Backup unavailable");
+    assert_eq!(
+        question.prompt.as_deref(),
+        Some("Proceed without a backup?")
+    );
+    assert_eq!(question.confirm.text, "Yes");
+    assert_eq!(question.cancel.text, "No");
+    assert!(question.confirm.enabled);
+    assert!(question.ack_text.is_empty());
+    assert!(!question.warnings.join(" ").contains("cdb="));
+    assert!(flashing.waiting());
+    assert!(!flashing.executed());
+    app.dispatch(Input::CancelConfirm);
+    assert!(flashing.result().is_err());
+    assert!(!flashing.executed());
+    assert!(!flashing.backup.exists());
+}
+
+#[test]
+fn backup_yes_still_requires_a_separate_final_flash_confirmation() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet_with_backup(&mut app, Some("Write the selected image?"), true);
+    app.dispatch(Input::Confirm);
+    let start = Instant::now();
+    while !matches!(
+        app.pending.as_ref().map(|p| &p.sheet),
+        Some(Sheet::Flash { .. })
+    ) {
+        assert!(start.elapsed() < Duration::from_secs(20));
+        std::thread::sleep(Duration::from_millis(10));
+        app.poll();
+    }
+    let final_sheet = app.view().confirm.unwrap();
+    assert!(!final_sheet.ack_checked);
+    assert!(!final_sheet.confirm.enabled);
+    assert!(
+        final_sheet.note.is_none(),
+        "must not claim an unsaved backup is kept"
+    );
+    assert!(final_sheet.warnings.iter().any(|s| s == BARRIER));
+    app.dispatch(Input::Confirm);
+    assert!(flashing.waiting());
+    assert!(!flashing.executed());
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::Confirm);
+    assert!(flashing.result().is_ok());
+    assert!(flashing.executed());
+    assert!(!flashing.backup.exists());
+}
+
+#[test]
 fn execute_never_runs_without_confirm_after_authorize() {
     let mut app = one_drive();
     // No confirmation text: the CLI would not ask, the GUI's sheet still does.
@@ -849,7 +925,10 @@ fn execute_never_runs_without_confirm_after_authorize() {
         assert!(start.elapsed() < Duration::from_secs(20));
         app.poll();
     }
-    assert_eq!(app.status, "Firmware update complete — target verified");
+    assert_eq!(
+        crate::localization::english(&app.status),
+        "Firmware update complete — target verified"
+    );
     let _ = std::fs::remove_file(&flashing.backup);
 }
 
@@ -869,7 +948,10 @@ fn cancel_at_the_sheet_writes_nothing_and_keeps_the_backup() {
         assert!(start.elapsed() < Duration::from_secs(20));
         app.poll();
     }
-    assert_eq!(app.status, "Firmware update cancelled");
+    assert_eq!(
+        crate::localization::english(&app.status),
+        "Firmware update cancelled"
+    );
     assert_eq!(app.failure, None);
     assert_eq!(app.log.last().map(String::as_str), Some(CANCELLED));
     assert_eq!(app.dry_run.as_ref().unwrap().len(), 2, "plan, then flash");
@@ -900,8 +982,11 @@ fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
             ),
         ]
     );
-    assert_eq!(confirm.danger, FLASH_DANGER);
-    assert_eq!(confirm.note.as_deref(), Some(BACKUP_KEPT));
+    assert_eq!(confirm.danger, crate::localization::english(FLASH_DANGER));
+    assert_eq!(
+        confirm.note.as_deref(),
+        Some(crate::localization::english(BACKUP_KEPT).as_str())
+    );
     assert_eq!(confirm.confirm.text, "Flash now");
     assert!(!app.view().controls_enabled && !app.view().can_close);
     app.dispatch(Input::CancelConfirm);
@@ -944,7 +1029,10 @@ fn a_failed_plan_shows_no_sheet() {
     );
     assert!(app.view().confirm.is_none() && app.pending.is_none());
     assert_eq!(
-        app.failure.as_deref(),
+        app.failure
+            .as_ref()
+            .map(|value| crate::localization::english(value))
+            .as_deref(),
         Some(
             crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
                 .as_str()
@@ -1087,7 +1175,10 @@ fn recovery_requires_both_inputs_and_a_drive() {
         FORCE_WARNING,
         "Recover",
     ] {
-        assert!(has_text(&view, text), "{text}");
+        assert!(
+            has_text(&view, &crate::localization::english(text)),
+            "{text}"
+        );
     }
     assert!(!button(&view, "Recover").enabled);
     app.dispatch(Input::Recover);
@@ -1127,7 +1218,10 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     }
     let confirm = app.view().confirm.unwrap();
     assert_eq!(confirm.title, "Confirm recovery");
-    assert_eq!(confirm.warnings, [FORCE_WARNING]);
+    assert_eq!(
+        confirm.warnings,
+        [crate::localization::english(FORCE_WARNING)]
+    );
     assert_eq!((confirm.prompt, confirm.note), (None, None));
     assert_eq!(confirm.confirm.text, "Recover");
     assert!(confirm
@@ -1214,7 +1308,10 @@ fn job_lifecycle_reports_progress_then_completion() {
     let status = app.view().status.unwrap();
     assert_eq!(status.text, "Drive information…");
     assert!(status.running);
-    assert_eq!(status.note.as_deref(), Some(KEEP_CONNECTED));
+    assert_eq!(
+        status.note.as_deref(),
+        Some(crate::localization::english(KEEP_CONNECTED).as_str())
+    );
     assert_eq!(
         status.progress.unwrap().fraction,
         None,
@@ -1252,10 +1349,10 @@ fn failed_job_offers_log_export_next_to_the_error() {
         failure.text,
         crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
     );
-    assert_eq!(failure.save_log.text, "Save diagnostic log…");
+    assert_eq!(failure.save_log.text, "Save Log…");
     assert_eq!(results.view_log.text, "View Log");
     assert_eq!(
-        app.status,
+        crate::localization::english(&app.status),
         crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
     );
     assert!(app.log.iter().any(|line| line.contains("Backup failed")));
@@ -1372,10 +1469,12 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
         app.poll();
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
-    assert!(app.status.starts_with(&crate::localization::text(
-        crate::localization::Language::En,
-        "errors.operation_failed"
-    )));
+    assert!(
+        crate::localization::english(&app.status).starts_with(&crate::localization::text(
+            crate::localization::Language::En,
+            "errors.operation_failed"
+        ))
+    );
     assert!(app.view().controls_enabled);
 }
 
@@ -1403,10 +1502,7 @@ fn diagnostic_viewer_and_export_show_the_same_full_log() {
         .any(|l| l.contains("status=0x00 transferred=0")));
     assert!(!diag.lines.iter().any(|l| l == "backup failed"));
     let texts: Vec<_> = diag.buttons.iter().map(|b| b.text.as_str()).collect();
-    assert_eq!(
-        texts,
-        ["Copy diagnostic log", "Save diagnostic log…", "Close"]
-    );
+    assert_eq!(texts, ["Copy diagnostic log", "Save Log…", "Close"]);
     assert!(matches!(
         &app.dispatch(Input::CopyDiagnostics)[..],
         [Effect::CopyText(t)] if t.contains("RESULT: error")
@@ -1418,11 +1514,10 @@ fn diagnostic_viewer_and_export_show_the_same_full_log() {
         std::fs::read_to_string(&out).unwrap(),
         std::fs::read_to_string(&path).unwrap()
     );
-    assert!(app
-        .diagnostic_notice
-        .as_ref()
-        .unwrap()
-        .starts_with("Diagnostic log exported"));
+    assert!(
+        crate::localization::english(app.diagnostic_notice.as_ref().unwrap())
+            .starts_with("Diagnostic log saved")
+    );
     std::fs::remove_file(&out).unwrap();
 
     std::fs::write(&path, "RESULT: updated log\n").unwrap();
@@ -1834,9 +1929,9 @@ fn inspect_tree_leaves_out_standing_caveats() {
 
 #[test]
 fn byte_counts_read_naturally() {
-    assert_eq!(byte_count(0), "Unchanged");
-    assert_eq!(byte_count(10), "10 bytes");
-    assert_eq!(byte_count(2048), "2.0 KiB");
+    assert_eq!(crate::localization::english(&byte_count(0)), "Unchanged");
+    assert_eq!(crate::localization::english(&byte_count(10)), "10 bytes");
+    assert_eq!(crate::localization::english(&byte_count(2048)), "2.0 KiB");
 }
 
 #[test]
@@ -1922,7 +2017,7 @@ fn limited_verification_survives_worker_completion_in_clean_status() {
     tx.send(Msg::Done(Ok(Some(test_update(true))))).unwrap();
     app.poll();
     assert_eq!(
-        app.status,
+        crate::localization::english(&app.status),
         "Recovery target started — readback verification limited"
     );
     assert!(app.failure.is_none());
@@ -1946,7 +2041,10 @@ fn logging_failure_retains_operation_and_terminal_interrupted_event() {
     app.rx = Some(rx);
     drop(tx);
     app.poll();
-    assert_eq!(app.status, "Operation interrupted");
+    assert_eq!(
+        crate::localization::english(&app.status),
+        "Operation interrupted"
+    );
     let path = app
         .journal
         .as_ref()
@@ -1996,7 +2094,7 @@ fn typed_failure_keeps_phase_and_completed_stages_in_report() {
     tx.send(Msg::Done(Err("write rejected".into()))).unwrap();
     app.poll();
     assert_eq!(
-        app.status,
+        crate::localization::english(&app.status),
         format!(
             "{} {}",
             crate::localization::text(crate::localization::Language::En, "errors.operation_failed"),
@@ -2150,7 +2248,7 @@ fn report_cancellation_is_available_and_completion_restores_submit() {
     let (tx, rx) = mpsc::channel();
     app.report_rx = Some(rx);
     let button = app.results_view().submit_report;
-    assert_eq!(button.text, "Cancel report");
+    assert_eq!(crate::localization::english(&button.text), "Cancel report");
     assert!(button.enabled);
     app.dispatch(Input::CancelReport);
     assert!(control.cancelled());
@@ -2176,8 +2274,8 @@ fn package_preview_reports_compatibility_pending_in_every_language() {
         tx.send(Msg::Done(Ok(None))).unwrap();
         app.poll();
         assert_eq!(
-            app.status,
-            crate::localization::text(language, "status.package_checked")
+            crate::localization::english(&app.status),
+            crate::localization::text(crate::localization::Language::En, "status.package_checked")
         );
         assert!(app.failure.is_none());
         assert!(app.log.iter().any(|line| line == &app.status));
@@ -2205,10 +2303,13 @@ fn blocked_update_shows_actionable_reason_and_records_no_write() {
     tx.send(Msg::UserGuidance(reason.into())).unwrap();
     tx.send(Msg::Done(Err(reason.into()))).unwrap();
     app.poll();
-    assert_eq!(app.status, "Update blocked. No firmware was written.");
+    assert_eq!(
+        crate::localization::english(&app.status),
+        "Update blocked. No firmware was written."
+    );
     let failure = app.failure.as_ref().unwrap();
     assert!(failure.contains(reason));
-    assert!(failure.contains("Stopped during compatibility checks."));
+    assert!(!failure.contains("Stopped during compatibility checks."));
     assert!(!failure.contains("cf3183a51bc41e42"));
     let path = app
         .journal
@@ -2262,4 +2363,106 @@ fn worker_input_failure_has_precheck_evidence_without_opening_a_drive() {
     assert!(!messages
         .iter()
         .any(|msg| matches!(msg, Msg::DriveAfter(_) | Msg::Authorized(_, _))));
+}
+
+#[test]
+fn backend_read_restriction_hides_automatic_current_and_requires_a_file_in_both_forms() {
+    let mut app = one_drive();
+    let mut profile = Profile::every_task();
+    profile.can_read = Some(false);
+    // Policy follows the backend capability, regardless of the family label.
+    profile.chips = vec!["Any optical backend".into()];
+    app.set_profile(Ok(profile));
+    app.flash_input = Some("target.bin".into());
+    app.recovery_input = app.flash_input.clone();
+    for (task, check, pick, action) in [
+        (
+            Task::Flash,
+            CheckId::FlashReadFromDrive,
+            Pick::FlashCurrent,
+            "Flash now",
+        ),
+        (
+            Task::Recovery,
+            CheckId::RecoveryReadFromDrive,
+            Pick::RecoveryCurrent,
+            "Recover",
+        ),
+    ] {
+        app.task = task;
+        assert!(!app
+            .view()
+            .panel
+            .iter()
+            .any(|item| matches!(item, Item::Check { id, .. } if *id == check)));
+        assert!(!button(&app.view(), action).enabled);
+        assert!(button(&app.view(), "Choose Current…").enabled);
+        app.dispatch(Input::SetCheck(check, true));
+        assert!(
+            !app.flash_read && !app.recovery_read,
+            "stale checkbox events cannot bypass the backend policy"
+        );
+        app.dispatch(Input::Chosen(pick, "installed.bin".into()));
+        assert!(button(&app.view(), action).enabled);
+    }
+}
+
+#[test]
+fn backend_refresh_preserves_manual_current_choice_for_read_capable_drives() {
+    let mut app = one_drive();
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, false));
+    app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, false));
+    app.set_profile(Ok(Profile::every_task()));
+    assert!(!app.flash_read && !app.recovery_read);
+}
+
+#[test]
+fn backup_consent_is_no_when_the_gui_or_answer_channel_disappears() {
+    use freemkv_flash::backend::Confirm;
+    let (tx, rx) = mpsc::channel();
+    drop(rx);
+    assert!(!SheetConfirm { tx, waker: None }
+        .proceed_without_backup("reason")
+        .unwrap());
+    let (tx, rx) = mpsc::channel();
+    let woke = Arc::new(AtomicBool::new(false));
+    let marker = woke.clone();
+    let worker = std::thread::spawn(move || {
+        SheetConfirm {
+            tx,
+            waker: Some(Arc::new(move || {
+                marker.store(true, Ordering::SeqCst);
+            })),
+        }
+        .proceed_without_backup("reason")
+        .unwrap()
+    });
+    let Msg::BackupUnavailable(_, reply) = rx.recv().unwrap() else {
+        panic!("backup consent required")
+    };
+    drop(reply);
+    assert!(!worker.join().unwrap());
+    assert!(woke.load(Ordering::SeqCst));
+}
+
+// Exercise the rendered English presentation of deferred catalog messages.
+fn info_cards(rows: &[report::Row]) -> Vec<Card> {
+    let mut cards = super::info_cards(rows);
+    for card in &mut cards {
+        card.title = crate::localization::english(&card.title);
+        card.subtitle = card
+            .subtitle
+            .as_ref()
+            .map(|value| crate::localization::english(value));
+    }
+    cards
+}
+
+fn analysis_tree(result: &ResultView) -> AnalysisView {
+    let mut tree = super::analysis_tree(result);
+    tree.heading = crate::localization::english(&tree.heading);
+    for node in &mut tree.nodes {
+        translate_node(crate::localization::Language::En, node);
+    }
+    tree
 }

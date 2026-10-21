@@ -156,3 +156,102 @@ fn failed_preference_replacement_preserves_existing_contents_and_cleans_temporar
 fn a_missing_translation_cannot_silently_show_english() {
     text(Language::Fr, "missing.message");
 }
+
+fn placeholders(value: &str) -> BTreeSet<&str> {
+    value
+        .split('{')
+        .skip(1)
+        .filter_map(|part| part.split_once('}').map(|(key, _)| key))
+        .collect()
+}
+
+#[test]
+fn every_translation_preserves_named_arguments() {
+    let english = Language::En.catalog()["messages"].as_object().unwrap();
+    for language in Language::ALL {
+        for (id, source) in english {
+            assert_eq!(
+                placeholders(get(language, id)),
+                placeholders(source.as_str().unwrap()),
+                "{}: {id}",
+                language.code()
+            );
+        }
+    }
+}
+
+#[test]
+fn translated_ui_and_english_diagnostics_resolve_the_same_message_independently() {
+    let operation = message(
+        "status.operation_failed",
+        &[("operation", "task.flash".into())],
+    );
+    let path = r"C:\Users\reader\{operation}\firmware.bin";
+    let saved = message("notice.log_saved", &[("path", path.into())]);
+    for language in Language::ALL {
+        assert_eq!(english(&operation), "Flash failed");
+        let visible = render(language, &operation);
+        assert!(
+            visible.contains(get(language, "task.flash")),
+            "{}: {visible}",
+            language.code()
+        );
+        assert!(render(language, &saved).contains(path));
+        assert!(!visible.contains('\u{1e}') && !visible.contains("status.operation"));
+        assert_eq!(
+            english_json(serde_json::json!({"summary": operation, "nested": [saved]}))["summary"],
+            "Flash failed"
+        );
+    }
+}
+
+#[test]
+fn legacy_report_templates_translate_complete_sentences_and_preserve_data() {
+    let source = "Source B: this component is not included.";
+    let translated = render(Language::Fr, source);
+    assert_ne!(translated, source);
+    assert!(translated.contains('B'));
+    for data in [
+        r"C:\firmware\Source B: this component is not included..bin",
+        "WH16NS58 1.V9",
+        "97b287072e20c952",
+    ] {
+        assert_eq!(render(Language::Fr, data), data);
+    }
+    assert_eq!(english(source), source);
+}
+
+#[test]
+fn product_names_and_protocol_names_remain_identifiers_in_every_language() {
+    let english = Language::En.catalog()["messages"].as_object().unwrap();
+    for language in Language::ALL {
+        for (id, source) in english {
+            for name in ["freemkv", "MediaTek", "Pioneer", "OEM", "SCSI"] {
+                if source.as_str().unwrap().contains(name) {
+                    assert!(
+                        get(language, id)
+                            .to_lowercase()
+                            .contains(&name.to_lowercase()),
+                        "{}: {id} must preserve {name}",
+                        language.code()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn plan_labels_and_backup_summaries_translate_without_changing_the_saved_path() {
+    let path = r"C:\firmware (original)\{bytes}\backup.bin";
+    let summary = format!("backup: saved {path} (2097152 bytes)");
+    let french = render(Language::Fr, &summary);
+    assert_ne!(french, summary);
+    assert!(french.contains(path), "{french}");
+    assert!(french.contains("2097152"));
+    assert_eq!(english(&summary), summary);
+    assert_eq!(
+        render(Language::Fr, "drive: WH16NS58"),
+        format!("{}: WH16NS58", render(Language::Fr, "Drive"))
+    );
+}

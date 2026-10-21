@@ -202,7 +202,9 @@ fn legacy_backups_accept_the_old_tag_label_as_an_alias() {
 #[test]
 fn a_drive_that_hides_its_flash_is_told_so_not_asked_for_every_byte() {
     // The reported WH16NS58: only the calibration area (0x1F0000..) answered.
-    let err = super::incomplete_read(0x1_0000, &[(0, 0x1F_0000)]).to_string();
+    let error = super::incomplete_read(0x1_0000, &[(0, 0x1F_0000)]);
+    assert!(crate::workflow::error_message(&error).contains("normal for many MediaTek drives"));
+    let err = format!("{error:#}");
     assert!(err.contains("does not expose its flash"), "{err}");
     assert!(!err.contains("needs every firmware byte"), "{err}");
 }

@@ -30,7 +30,10 @@ fn load_icon() -> Option<egui::IconData> {
 
 fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("freemkv Firmware Modifier")
+        .with_title(freemkv_flash::localization::get(
+            freemkv_flash::localization::Preferences::user().load(),
+            "modify.window_title",
+        ))
         .with_inner_size([720.0, 800.0])
         .with_min_inner_size([720.0, 800.0])
         .with_resizable(true);

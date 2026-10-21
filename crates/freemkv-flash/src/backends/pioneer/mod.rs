@@ -676,6 +676,10 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
 };
 
 impl Backend for Pioneer {
+    fn can_read(&self) -> bool {
+        pioneer_optical::DriveClass::Bd.can_read()
+    }
+
     fn descriptor(&self) -> &'static Descriptor {
         &DESCRIPTOR
     }

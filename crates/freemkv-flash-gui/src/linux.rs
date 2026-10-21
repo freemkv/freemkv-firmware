@@ -463,8 +463,18 @@ impl Shell {
                 }
                 return glib::Propagation::Proceed;
             }
-            let dlg = adw::MessageDialog::new(Some(&me.window), Some(ui::CLOSE_BLOCKED), None);
-            dlg.add_response("ok", "OK");
+            let dlg = adw::MessageDialog::new(
+                Some(&me.window),
+                Some(&crate::localization::render(
+                    me.view().language,
+                    ui::CLOSE_BLOCKED,
+                )),
+                None,
+            );
+            dlg.add_response(
+                "ok",
+                crate::localization::get(me.view().language, "action.ok"),
+            );
             dlg.set_default_response(Some("ok"));
             dlg.set_close_response("ok");
             dlg.present();
@@ -610,7 +620,7 @@ impl Shell {
             Item::Text(t) => widgets::label(t, &[]).upcast(),
             Item::Heading(t) => widgets::label(t, &["heading"]).upcast(),
             Item::Origin(origin) => widgets::label(
-                origin.label(),
+                &crate::localization::render(self.app.borrow().language, origin.label()),
                 &[match origin {
                     crate::ui::FileOrigin::OemLikely => "success",
                     crate::ui::FileOrigin::UserBackupLikely => "warning",
@@ -667,7 +677,8 @@ impl Shell {
             self.results.append(&btn);
         }
         if !r.cards.is_empty() {
-            self.results.append(&widgets::cards(&r.cards));
+            self.results
+                .append(&widgets::cards(&r.cards, self.view().language));
         } else if !r.fields.is_empty() {
             self.results.append(&widgets::fields(&r.fields));
         }
@@ -675,19 +686,16 @@ impl Shell {
             let l = widgets::label(&f.text, &["error"]);
             l.set_selectable(true);
             self.results.append(&l);
-            let b = self.button(&f.save_log);
-            b.set_halign(gtk::Align::Start);
-            self.results.append(&b);
         }
         if let Some(n) = &r.notice {
             self.results.append(&widgets::label(n, &["caption"]));
         }
-        let b = self.button(&r.view_log);
-        b.set_halign(gtk::Align::Start);
-        self.results.append(&b);
-        let b = self.button(&r.submit_report);
-        b.set_halign(gtk::Align::Start);
-        self.results.append(&b);
+        let mut actions = vec![r.view_log.clone()];
+        if let Some(f) = &r.failure {
+            actions.push(f.save_log.clone());
+        }
+        actions.push(r.submit_report.clone());
+        self.results.append(&self.button_row(&actions));
     }
 
     // ── the confirmation ──────────────────────────────────────────────────
@@ -742,6 +750,7 @@ impl Shell {
             extra.append(&widgets::label(n, &[]));
         }
         let ack = gtk::CheckButton::with_label(&c.ack_text);
+        ack.set_visible(!c.ack_text.is_empty());
         ack.set_active(c.ack_checked);
         let me = self.clone();
         ack.connect_toggled(move |b| {

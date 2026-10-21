@@ -887,6 +887,10 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
 pub struct Mtk;
 
 impl Backend for Mtk {
+    fn can_read(&self) -> bool {
+        mediatek_optical::DriveClass::Mt19.can_read()
+    }
+
     fn descriptor(&self) -> &'static Descriptor {
         &DESCRIPTOR
     }

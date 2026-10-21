@@ -693,7 +693,8 @@ fn offer_flash_without_backup(
     confirm: &mut dyn Confirm,
     error: anyhow::Error,
 ) -> Result<Option<SavedBackup>> {
-    let reason = format!("{error:#}");
+    crate::diagnostics::record(format!("Backup unavailable: {error:#}"));
+    let reason = crate::workflow::error_message(&error);
     if confirm.proceed_without_backup(&reason)? {
         eprintln!(
             "{}",

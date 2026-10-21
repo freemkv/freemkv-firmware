@@ -141,21 +141,24 @@ pub struct FlashOptions {
 
 /// Keep actionable guidance separate from diagnostic evidence and source chains.
 pub fn error_message(error: &anyhow::Error) -> String {
-    if let Some(error) = error.downcast_ref::<HardwareMismatch>() {
-        return error.to_string();
-    }
-    if let Some(error) = error.downcast_ref::<CurrentFirmwareRequired>() {
-        return error.to_string();
-    }
-    let evidence = error
+    let guidance =
+        crate::user_error::UserError::of(error).render(crate::localization::Language::En);
+    if error
         .downcast_ref::<UpdateFailure>()
-        .map(ToString::to_string);
-    error
-        .chain()
-        .map(ToString::to_string)
-        .filter(|cause| Some(cause) != evidence.as_ref())
-        .collect::<Vec<_>>()
-        .join(": ")
+        .is_some_and(|e| !e.write_started && !e.temporary_firmware)
+    {
+        format!(
+            "{} {guidance}",
+            crate::localization::get(crate::localization::Language::En, "errors.update_blocked")
+        )
+    } else {
+        guidance
+    }
+}
+
+/// Localizable customer guidance for desktop front-ends.
+pub fn user_error(error: &anyhow::Error) -> crate::user_error::UserError {
+    crate::user_error::UserError::of(error)
 }
 
 /// Inspect a local firmware file without drive discovery or transport access.
@@ -266,6 +269,21 @@ pub struct DriveProfile {
     /// Why a recovery backend could not identify the receiver, when one tried
     /// and failed (not offered is not an error; the reason is still shown).
     pub recovery_errors: Vec<String>,
+}
+
+impl DriveProfile {
+    /// The optical backend's installed-firmware read capability. Unknown means
+    /// no backend has identified the drive; do not guess from its model name.
+    pub fn can_read(&self) -> Option<bool> {
+        let id = self
+            .backend
+            .as_ref()
+            .map(|(descriptor, _)| descriptor.id)
+            .or_else(|| self.recovery.map(|descriptor| descriptor.id))?;
+        registry::backends()
+            .find(|backend| backend.descriptor().id == id)
+            .map(|backend| backend.can_read())
+    }
 }
 
 /// Every file-name ending a registered backend reads, for open-file pickers.

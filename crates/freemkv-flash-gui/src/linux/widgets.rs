@@ -106,7 +106,7 @@ fn property(label: &str, value: &str) -> adw::ActionRow {
 }
 
 /// The drive information cards in their two columns.
-pub fn cards(cards: &[Card]) -> gtk::Widget {
+pub fn cards(cards: &[Card], language: crate::localization::Language) -> gtk::Widget {
     let cols = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     cols.set_homogeneous(true);
     let columns = [
@@ -114,7 +114,7 @@ pub fn cards(cards: &[Card]) -> gtk::Widget {
         gtk::Box::new(gtk::Orientation::Vertical, 12),
     ];
     for card in cards {
-        columns[card.column.min(1)].append(&card_group(card));
+        columns[card.column.min(1)].append(&card_group(card, language));
     }
     for c in &columns {
         c.set_valign(gtk::Align::Start);
@@ -123,7 +123,7 @@ pub fn cards(cards: &[Card]) -> gtk::Widget {
     cols.upcast()
 }
 
-fn card_group(card: &Card) -> adw::PreferencesGroup {
+fn card_group(card: &Card, language: crate::localization::Language) -> adw::PreferencesGroup {
     let g = adw::PreferencesGroup::builder().title(&card.title).build();
     if let Some(sub) = card.subtitle.as_deref() {
         g.set_description(Some(sub));
@@ -135,9 +135,9 @@ fn card_group(card: &Card) -> adw::PreferencesGroup {
             }
         }
         CardBody::Media { left, right } => {
-            let header = gtk::Label::new(Some(ui::MEDIA_HEADER));
+            let header = gtk::Label::new(Some(crate::localization::get(language, "media.header")));
             header.add_css_class("caption-heading");
-            header.set_tooltip_text(Some(ui::MEDIA_HINT));
+            header.set_tooltip_text(Some(crate::localization::get(language, "media.hint")));
             g.set_header_suffix(Some(&header));
             for r in left.iter().chain(right) {
                 g.add(&media_row(r));
