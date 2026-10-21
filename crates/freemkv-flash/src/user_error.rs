@@ -63,7 +63,11 @@ impl UserError {
                 "errors.backup_destination"
             } else if detail.contains("does not match the target drive") {
                 "errors.backup_mismatch"
-            } else if detail.contains("already modified") || detail.contains("already patched") {
+            } else if detail.contains("already modified")
+                || detail.contains("already patched")
+                || detail.contains("already contains freemkv firmware")
+                || detail.contains("predates editable boot settings")
+            {
                 "errors.already_modified"
             } else if detail.contains("current")
                 && (detail.contains("does not match") || detail.contains("mismatch"))
@@ -166,5 +170,24 @@ mod tests {
         assert!(guidance.contains("DRIVE {selected}"));
         assert!(guidance.contains("TARGET"));
         assert!(!guidance.contains("abcdef0123456789"));
+    }
+}
+
+#[cfg(test)]
+mod legacy_guidance_tests {
+    use super::*;
+
+    #[test]
+    fn previous_modified_images_keep_the_instruction_to_choose_an_original_oem() {
+        for detail in [
+            "image already contains freemkv firmware; creating a new build requires a clean, unmodified OEM image",
+            "This firmware predates editable boot settings. Select its original OEM image to create firmware with boot settings.",
+        ] {
+            let error = anyhow::anyhow!(detail);
+            let guidance = UserError::of(&error);
+            assert_eq!(guidance.id, "errors.already_modified");
+            assert!(guidance.render(Language::En).contains("Choose an original OEM firmware file"));
+            assert_eq!(format!("{error:#}"), detail);
+        }
     }
 }
