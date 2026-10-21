@@ -53,6 +53,9 @@ impl Authorized {
 }
 
 impl FlashFacet for Mtk {
+    fn accepts_current(&self) -> bool {
+        true
+    }
     fn plan(&self, dev: &mut ReadDevice<'_>, req: &FlashRequest) -> Result<FlashPlan> {
         let format = req.input_format;
         if !DESCRIPTOR.owns(format) {
@@ -93,7 +96,11 @@ impl FlashFacet for Mtk {
             .transpose()
             .context("preparing final-stage receiver plan before any firmware write")?;
         let (live, verdict) = self.validate_image(dev, &image, &req.drive_model)?;
-        let receiver = detect_receiver(dev)?;
+        let receiver = match req.current.as_deref() {
+            Some(current) => super::receiver_reference::detect(dev, current)?,
+            None => detect_receiver(dev)
+                .map_err(|source| crate::backend::CurrentFirmwareRequired { source })?,
+        };
         let enc = receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted;
         if req.enc_override.is_some_and(|requested| requested != enc) {
             bail!("encoding override contradicts the active MediaTek receiver");
@@ -119,6 +126,9 @@ impl FlashFacet for Mtk {
                 ),
             ),
         ];
+        if req.current.is_some() {
+            block.push(PlanLine::Field("receiver code source", "Selected Current firmware; live identity and build metadata matched. Live receiver code was not compared.".into()));
+        }
         if verdict == Verdict::Crossflash {
             block.extend(crossflash_lines(&live, &image)?);
         }

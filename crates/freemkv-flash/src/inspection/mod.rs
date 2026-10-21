@@ -172,6 +172,10 @@ fn inspect_bytes(name: String, bytes: &[u8], control: &Control) -> Result<Inspec
             return inspection;
         }
     }
+    anyhow::ensure!(
+        bytes.get(257..262) != Some(b"ustar"),
+        "TAR archive is damaged or contains no supported firmware package"
+    );
     let identity = crate::imageid::identify(bytes);
     Err(if identity.family == crate::imageid::ImageFamily::Unknown {
         InspectionError::UnrecognizedFormat

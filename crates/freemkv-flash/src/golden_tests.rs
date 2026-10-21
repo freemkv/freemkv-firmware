@@ -741,6 +741,7 @@ fn backup_firmware() -> Vec<u8> {
 
 fn mtk_request(image: Vec<u8>, execute: bool, backup: Option<PathBuf>) -> FlashRequest {
     FlashRequest {
+        current: None,
         input: image,
         input_format: &MTK_IMAGE,
         mode: FlashMode::Full,
@@ -1340,6 +1341,7 @@ fn golden_check_file() {
 
 fn pioneer_request(input: Vec<u8>, kind: &'static FileFormat, execute: bool) -> FlashRequest {
     FlashRequest {
+        current: None,
         input,
         input_format: kind,
         mode: FlashMode::Full,

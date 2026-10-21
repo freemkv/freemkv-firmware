@@ -9,6 +9,7 @@ use pioneer_optical::cdb;
 
 fn request(execute: bool, acknowledged_risk: bool) -> FlashRequest {
     FlashRequest {
+        current: None,
         input: Vec::new(),
         input_format: &PIONEER.formats[0],
         mode: crate::manifest::FlashMode::Full,

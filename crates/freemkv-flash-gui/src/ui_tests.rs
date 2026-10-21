@@ -20,6 +20,7 @@ impl Profile {
     /// A drive that offers every task.
     pub(crate) fn every_task() -> Self {
         Self {
+            flash_current: true,
             chips: ["Test family", "Backup", "Dump", "Flash", "Recovery"]
                 .map(String::from)
                 .to_vec(),
@@ -61,6 +62,103 @@ fn ready(drives: Vec<DriveChoice>) -> App {
 
 fn one_drive() -> App {
     ready(vec![drive("drive-a", "drive-a", "Drive A")])
+}
+
+#[test]
+fn flash_defaults_to_drive_reads_and_requires_current_only_when_unchecked() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("modified.bin".into());
+    assert!(app.flash_read);
+    assert!(app.view().panel.iter().any(|item| matches!(
+        item,
+        Item::Check {
+            id: CheckId::FlashReadFromDrive,
+            checked: true,
+            ..
+        }
+    )));
+    assert!(!button(&app.view(), "Choose Current…").enabled);
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert!(options.current.is_none());
+    finish(&mut app, Err("Automatic detection unavailable".into()));
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, false));
+    assert!(app.failure.is_none());
+    assert!(button(&app.view(), "Choose Current…").enabled);
+    assert!(!button(&app.view(), "Flash now").enabled);
+    let jobs = app.dry_run.as_ref().unwrap().len();
+    app.dispatch(Input::FlashNow);
+    assert_eq!(app.dry_run.as_ref().unwrap().len(), jobs);
+    app.dispatch(Input::Chosen(Pick::FlashCurrent, "installed.bin".into()));
+    assert!(button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert_eq!(options.current, Some(PathBuf::from("installed.bin")));
+    assert_eq!(options.input, PathBuf::from("modified.bin"));
+    assert!(!options.acknowledged_risk);
+    finish(&mut app, Err("Current did not match".into()));
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, true));
+    assert!(app.failure.is_none());
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert!(options.current.is_none() && options.current_member.is_none());
+}
+
+#[test]
+fn flash_paired_current_selection_is_explicit_and_frozen_through_confirmation() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("modified.tar".into());
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, false));
+    app.dispatch(Input::Chosen(Pick::FlashCurrent, "original.tar".into()));
+    app.flash_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    assert!(!button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashCurrentMember("not-a-member.bin".into()));
+    assert!(!button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashCurrentMember("firmware.bin".into()));
+    assert!(button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashNow);
+    plan_passes(&mut app);
+    let (_, _, Job::Flash(options)) = last_job(&app) else {
+        panic!("flash execution")
+    };
+    assert_eq!(
+        options.current.as_deref(),
+        Some(std::path::Path::new("original.tar"))
+    );
+    assert_eq!(options.current_member.as_deref(), Some("firmware.bin"));
+    assert_eq!(options.input, PathBuf::from("modified.tar"));
+}
+
+#[test]
+fn unsupported_backend_ignores_inactive_flash_current_choices() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("pioneer.tar".into());
+    app.flash_read = false;
+    let mut profile = Profile::every_task();
+    profile.flash_current = false;
+    app.set_profile(Ok(profile));
+    assert!(button(&app.view(), "Flash now").enabled);
+    assert!(!app.view().panel.iter().any(|item| matches!(
+        item,
+        Item::Check {
+            id: CheckId::FlashReadFromDrive,
+            ..
+        }
+    )));
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert!(options.current.is_none());
 }
 
 #[test]
@@ -574,6 +672,7 @@ fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flash
     let (engine_backend, out) = (backend.clone(), backup.clone());
     std::thread::spawn(move || {
         let request = FlashRequest {
+            current: None,
             input: Vec::new(),
             input_format: &SHEET_FORMAT,
             mode: FlashMode::Full,

@@ -750,9 +750,8 @@ fn ram_logging_switch(cdb: &[u8], data: &[u8]) -> bool {
 }
 
 impl FileFacet for Pioneer {
-    /// A parsed package or envelope header is structural; any other tar
-    /// archive is a heuristic claim, so a damaged package is still reported
-    /// as one.
+    /// A parsed package or envelope header establishes the protocol. A TAR
+    /// header alone is shared with MediaTek and cannot identify Pioneer.
     fn recognize(&self, bytes: &[u8]) -> Option<Recognized> {
         let structural = |format| {
             Some(Recognized {
@@ -769,10 +768,7 @@ impl FileFacet for Pioneer {
         {
             return structural(&ENVELOPE);
         }
-        (bytes.get(257..262) == Some(b"ustar")).then_some(Recognized {
-            format: &PACKAGE,
-            confidence: Confidence::Heuristic,
-        })
+        None
     }
 
     fn describe(&self, image: &[u8], _recognized: &Recognized) -> Option<Result<()>> {

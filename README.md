@@ -84,7 +84,13 @@ The backend chooses the transport format; there is no encryption selector.
 MediaTek uses `mediatek-optical` to detect BOOT versus running firmware and
 read the active receiver's code signature. It sends plaintext or the encrypted
 transport envelope accordingly, and rechecks the identity and signature before
-writing. Unknown, unreadable or conflicting signatures refuse the flash.
+writing. If the drive blocks automatic detection, uncheck **Read from drive** on
+the Flash page and select the firmware currently installed as **Current**. The
+CLI equivalent is `--current FILE`; a paired Current TAR also needs
+`--current-member firmware.bin` (or `intermediate.bin` if INTM is running).
+The reference must match the live identity and build metadata. It supplies
+receiver code only; backup and readback still use the drive. Without readable
+code or a matching Current reference, Flash refuses before writing.
 Normal flash retains its compatibility checks. The explicit recovery command
 uses the separate recovery path described below.
 

@@ -4,7 +4,9 @@ use crate::backend::{
     registry, unsupported_family_error, Backend, BackendId, Capabilities, Descriptor, FlashRequest,
     Match, ReadDevice, UNKNOWN_FAMILY,
 };
-pub use crate::backend::{AuthorizedPlan, Confirm, UpdateEvidence, UpdateFailure, UpdateOutcome};
+pub use crate::backend::{
+    AuthorizedPlan, Confirm, CurrentFirmwareRequired, UpdateEvidence, UpdateFailure, UpdateOutcome,
+};
 /// Correlation helpers keep a front-end's session events linked to operation logs.
 pub use crate::diagnostics::{new_operation_id, with_operation_id};
 /// Inspection inputs and results, so a front-end needs only this module and
@@ -120,6 +122,10 @@ pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonRe
 /// Flash options shared by both front-ends. Defaults are a backed-up dry run.
 #[derive(Clone, Debug, Default)]
 pub struct FlashOptions {
+    /// Installed firmware reference; omission reads receiver evidence from the drive.
+    pub current: Option<PathBuf>,
+    /// Explicit installed member of a paired Current MediaTek TAR.
+    pub current_member: Option<String>,
     /// Optional device selector; omission selects the sole attached drive.
     pub device: Option<String>,
     /// Firmware or backup input.
@@ -130,6 +136,14 @@ pub struct FlashOptions {
     pub execute: bool,
     /// Explicit acknowledgement of the flash risk.
     pub acknowledged_risk: bool,
+}
+
+/// Concise receiver guidance, retaining full detail for other operation errors.
+pub fn error_message(error: &anyhow::Error) -> String {
+    match error.downcast_ref::<crate::backend::CurrentFirmwareRequired>() {
+        Some(error) => error.to_string(),
+        None => format!("{error:#}"),
+    }
 }
 
 /// Inspect a local firmware file without drive discovery or transport access.
@@ -547,9 +561,22 @@ fn open_flash(
 )> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
+    anyhow::ensure!(
+        args.current.is_some() || args.current_member.is_none(),
+        "--current-member requires --current"
+    );
+    let current = args
+        .current
+        .as_ref()
+        .map(|path| current_firmware_image(&read_capped(path)?, args.current_member.as_deref()))
+        .transpose()?;
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
+    anyhow::ensure!(
+        current.is_none() || handler.flash().is_some_and(|f| f.accepts_current()),
+        "this flash backend does not accept a Current firmware reference"
+    );
     let input_format = registry::flash_input_format(handler, &args.input, &input)?
         .context("backend reads no firmware files")?;
     let drive_model = handler
@@ -561,6 +588,7 @@ fn open_flash(
             .and_then(|b| default_backup_path(&args.input, b.format().extension))
     });
     let req = FlashRequest {
+        current,
         input,
         input_format,
         mode: FlashMode::Full,

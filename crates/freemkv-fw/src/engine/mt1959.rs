@@ -424,6 +424,7 @@ impl Mt1959Engine {
             LeverId::Identity,
             vec![
                 ("handler_va", handler_va),
+                ("handler_len", handler_bytes.len() as u32),
                 ("record_off", record.off as u32),
                 ("boot_init_site", boot_init_site),
                 ("boot_stub_va", boot_stub_va),

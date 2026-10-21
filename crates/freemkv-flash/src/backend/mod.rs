@@ -183,6 +183,8 @@ pub struct Match {
 /// A fully-resolved flash request handed to [`crate::engine`].
 #[derive(Debug, Clone)]
 pub struct FlashRequest {
+    /// Explicit installed-firmware receiver evidence; never used as a backup.
+    pub current: Option<Vec<u8>>,
     /// The raw input file bytes.
     pub input: Vec<u8>,
     /// The input's format, owned by the drive's backend unless misdirected.
@@ -205,9 +207,29 @@ pub struct FlashRequest {
     pub predump_out: Option<std::path::PathBuf>,
 }
 
+/// Live receiver detection failed; retain diagnostics while asking for Current.
+#[derive(Debug)]
+pub struct CurrentFirmwareRequired {
+    pub(crate) source: anyhow::Error,
+}
+
+impl std::fmt::Display for CurrentFirmwareRequired {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("The current firmware could not be automatically detected from the drive. Specify the firmware currently installed as Current firmware and try again.")
+    }
+}
+
+impl std::error::Error for CurrentFirmwareRequired {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
 /// What a drive offers, derived from the facets its backend provides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Capabilities {
+    /// Flash accepts an explicit installed-firmware receiver reference.
+    pub flash_current: bool,
     /// A complete or candidate firmware backup can be captured (`backup`).
     pub backup: bool,
     /// A raw memory dump can be captured (`dump`).
@@ -226,6 +248,7 @@ pub struct Capabilities {
 impl Capabilities {
     /// A drive no backend recognizes: identify only.
     pub const NONE: Self = Self {
+        flash_current: false,
         backup: false,
         dump: false,
         flash: false,
@@ -237,6 +260,7 @@ impl Capabilities {
     /// What `backend` offers.
     pub fn of(backend: &dyn Backend) -> Self {
         Self {
+            flash_current: backend.flash().is_some_and(|f| f.accepts_current()),
             backup: backend.backup().is_some(),
             dump: backend.dump().is_some(),
             flash: backend.flash().is_some(),
@@ -628,6 +652,10 @@ impl std::error::Error for UpdateFailure {}
 
 /// Firmware update in two read-only stages, then the write.
 pub trait FlashFacet {
+    /// Whether Flash accepts a separate installed-firmware receiver reference.
+    fn accepts_current(&self) -> bool {
+        false
+    }
     /// Read-only and pre-backup: validate the input against the drive and
     /// describe the plan. Must not need the backup.
     fn plan(&self, dev: &mut ReadDevice<'_>, req: &FlashRequest) -> Result<FlashPlan>;

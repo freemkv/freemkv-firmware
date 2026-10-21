@@ -88,6 +88,7 @@ impl Task {
 /// What the selected drive offers, from `workflow::profile`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Profile {
+    pub(crate) flash_current: bool,
     /// Shown beside the drive: the family (or "Unsupported"), then what it offers.
     pub(crate) chips: Vec<String>,
     /// The drive tasks offered; Info, Inspect and Compare need no profile.
@@ -125,6 +126,7 @@ const PROFILE_FAILED: &str = "Profile unavailable";
 pub enum Pick {
     CheckFile,
     FlashFirmware,
+    FlashCurrent,
     RecoveryCurrent,
     RecoveryInput,
     Backup,
@@ -167,6 +169,7 @@ pub enum Effect {
 /// Checkboxes in the model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckId {
+    FlashReadFromDrive,
     RecoveryReadFromDrive,
     RiskAck,
     /// Save a live analysis capture as a backup rather than a raw read.
@@ -193,6 +196,7 @@ pub enum Input {
     ReadInfo,
     FlashNow,
     CheckFlashFile,
+    FlashCurrentMember(String),
     Recover,
     RecoveryMember(String),
     RecoveryCurrentMember(String),
@@ -764,6 +768,10 @@ pub struct App {
     pub(crate) task: Task,
     pub(crate) result_task: Task,
     pub(crate) flash_input: Option<PathBuf>,
+    flash_current: Option<PathBuf>,
+    flash_read: bool,
+    flash_current_members: Vec<String>,
+    flash_current_member: Option<String>,
     pub(crate) recovery_input: Option<PathBuf>,
     pub(crate) recovery_current: Option<PathBuf>,
     pub(crate) recovery_read: bool,
@@ -873,6 +881,10 @@ impl App {
             task: Task::Info,
             result_task: Task::Info,
             flash_input: None,
+            flash_current: None,
+            flash_read: true,
+            flash_current_members: Vec::new(),
+            flash_current_member: None,
             recovery_input: None,
             recovery_current: None,
             recovery_read: false,
@@ -1107,6 +1119,12 @@ impl App {
             }
             Input::Choose(pick) => return self.choose(pick),
             Input::Chosen(pick, path) => return self.chosen(pick, path),
+            Input::SetCheck(CheckId::FlashReadFromDrive, on) if !self.busy() => {
+                if self.flash_read != on {
+                    self.clear_flash_result();
+                    self.flash_read = on;
+                }
+            }
             Input::SetCheck(CheckId::RecoveryReadFromDrive, on) if !self.busy() => {
                 if self.recovery_read != on {
                     self.clear_flash_result();
@@ -1136,13 +1154,26 @@ impl App {
                     return self.start_job("Check file", String::new(), Job::InfoFile { input });
                 }
             }
-            Input::FlashNow if !self.busy() && self.selected() => {
+            Input::FlashNow if !self.busy() && self.flash_ready() => {
                 if let Some(input) = self.flash_input.clone() {
+                    let use_current = self.flash_current_supported() && !self.flash_read;
                     return self.plan_flash(FlashOptions {
+                        current: use_current.then(|| self.flash_current.clone()).flatten(),
+                        current_member: use_current
+                            .then(|| self.flash_current_member.clone())
+                            .flatten(),
                         input,
                         execute: true,
                         ..Default::default()
                     });
+                }
+            }
+            Input::FlashCurrentMember(member) if !self.busy() => {
+                if self.flash_current_members.contains(&member)
+                    && self.flash_current_member.as_ref() != Some(&member)
+                {
+                    self.clear_flash_result();
+                    self.flash_current_member = Some(member);
                 }
             }
             Input::RecoveryMember(member) if !self.busy() => {
@@ -1302,12 +1333,13 @@ impl App {
                     extensions,
                 }))
             }
-            Pick::RecoveryCurrent | Pick::RecoveryInput | Pick::AnalysisFile(_) => {
-                open(Some(FileFilter {
-                    name: "Firmware",
-                    extensions: workflow::file_extensions(),
-                }))
-            }
+            Pick::FlashCurrent
+            | Pick::RecoveryCurrent
+            | Pick::RecoveryInput
+            | Pick::AnalysisFile(_) => open(Some(FileFilter {
+                name: "Firmware",
+                extensions: workflow::file_extensions(),
+            })),
             Pick::Backup | Pick::Dump if self.selected() => {
                 let profile = self.ready_profile();
                 let name = match pick {
@@ -1381,6 +1413,12 @@ impl App {
                 self.recovery_current_member = None;
                 self.recovery_current = Some(path);
                 return self.refresh_current_profile();
+            }
+            Pick::FlashCurrent => {
+                self.clear_flash_result();
+                self.flash_current_members = workflow::recovery_members(&path).unwrap_or_default();
+                self.flash_current_member = None;
+                self.flash_current = Some(path);
             }
             Pick::RecoveryInput => {
                 self.clear_flash_result();
@@ -1473,6 +1511,20 @@ impl App {
                 || !self
                     .ready_profile()
                     .is_some_and(|p| p.tasks.contains(&Task::Recovery)))
+    }
+
+    fn flash_current_supported(&self) -> bool {
+        self.ready_profile().is_some_and(|p| p.flash_current)
+    }
+
+    fn flash_ready(&self) -> bool {
+        self.selected()
+            && self.flash_input.is_some()
+            && (!self.flash_current_supported()
+                || self.flash_read
+                || (self.flash_current.is_some()
+                    && (self.flash_current_members.len() < 2
+                        || self.flash_current_member.is_some())))
     }
 
     /// The selected drive and `options`, frozen; consent always starts unticked.
@@ -2098,10 +2150,56 @@ impl App {
                         &self.flash_input,
                     )];
                     items.extend(self.origin_items(false));
+                    if self.flash_current_supported() {
+                        items.extend([
+                            Item::Heading("Current firmware".into()),
+                            Item::Check {
+                                id: CheckId::FlashReadFromDrive,
+                                text: "Read from drive".into(),
+                                checked: self.flash_read,
+                                enabled,
+                            },
+                            path(
+                                "Choose Current…",
+                                Pick::FlashCurrent,
+                                enabled && !self.flash_read,
+                                &self.flash_current,
+                            ),
+                        ]);
+                        if self.flash_current_members.len() > 1 && !self.flash_read {
+                            items.push(Item::Buttons {
+                                label: Some("Current firmware member".into()),
+                                buttons: self
+                                    .flash_current_members
+                                    .iter()
+                                    .map(|name| {
+                                        Button::primary(
+                                            &format!(
+                                                "{}{}",
+                                                if self.flash_current_member.as_ref() == Some(name)
+                                                {
+                                                    "Selected: "
+                                                } else {
+                                                    ""
+                                                },
+                                                name
+                                            ),
+                                            Input::FlashCurrentMember(name.clone()),
+                                            enabled,
+                                        )
+                                    })
+                                    .collect(),
+                            });
+                        }
+                    }
                     items.push(Item::Buttons {
                         label: None,
                         buttons: vec![
-                            Button::primary("Flash now", Input::FlashNow, enabled && selected),
+                            Button::primary(
+                                "Flash now",
+                                Input::FlashNow,
+                                enabled && self.flash_ready(),
+                            ),
                             Button {
                                 enabled,
                                 ..Button::link("Check file", Input::CheckFlashFile)
@@ -2565,7 +2663,15 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
             if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
             }
-            format!("{e:#}")
+            let message = workflow::error_message(&e);
+            if e.is::<workflow::CurrentFirmwareRequired>() {
+                let _ = tx.send(Msg::Event(Event::Message(format!(
+                    "Receiver detection diagnostic: {e:#}"
+                ))));
+                format!("{message} Uncheck Read from drive to select a file.")
+            } else {
+                message
+            }
         }),
         Err(_) => Err(WORKER_PANIC.into()),
     };

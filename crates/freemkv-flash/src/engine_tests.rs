@@ -190,6 +190,7 @@ fn fresh_backup_path() -> std::path::PathBuf {
 
 fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
     FlashRequest {
+        current: None,
         input: image,
         input_format: &IMAGE,
         mode: FlashMode::Full,

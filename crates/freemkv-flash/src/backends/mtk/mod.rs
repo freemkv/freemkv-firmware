@@ -28,7 +28,6 @@ pub(crate) mod file_info;
 pub(crate) mod fixture;
 mod flash;
 pub mod fwdump;
-#[cfg(test)]
 mod receiver_reference;
 mod recovery;
 pub(crate) use flash::decide_offline;

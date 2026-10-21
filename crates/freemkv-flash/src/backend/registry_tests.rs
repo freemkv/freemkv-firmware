@@ -1,7 +1,7 @@
 //! Unit tests for [`super`] (protocol probes, input formats, drive identity).
 
 use super::*;
-use crate::backend::{sanitize_ascii, try_read_identity};
+use crate::backend::{sanitize_ascii, try_read_identity, FlashRequest};
 use crate::platform::MockScsiDevice;
 
 /// The id of the uniquely matching backend, if any.
@@ -259,6 +259,49 @@ fn flash_input_formats_follow_the_drive_and_foreign_package_names() {
     assert_eq!(format(&MTK, "UD04.INSTALLER.TAR"), "pioneer-package");
     assert_eq!(format(&PIONEER, "x.tar"), "pioneer-package");
     assert_eq!(format(&PIONEER, "normal.enc"), "pioneer-envelope");
+}
+
+#[test]
+fn unrecognized_tar_is_not_evidence_of_pioneer_firmware() {
+    let mut tar = tar::Builder::new(Vec::new());
+    let manifest = br#"{"format":"freemkv-mediatek-package","version":1,"components":[]}"#;
+    let mut header = tar::Header::new_gnu();
+    header.set_size(manifest.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "manifest.json", &manifest[..])
+        .unwrap();
+    let bytes = tar.into_inner().unwrap();
+    assert!(recognize(&bytes).unwrap().is_none());
+    let format = flash_input_format(&MTK, Path::new("WH16NS58_1.V9-patched.tar"), &bytes)
+        .unwrap()
+        .unwrap();
+    assert_eq!(format.id, "mtk-package");
+    let mut dev = MockScsiDevice::mtk();
+    let request = FlashRequest {
+        current: None,
+        input: bytes,
+        input_format: format,
+        mode: crate::manifest::FlashMode::Full,
+        execute: false,
+        acknowledged_risk: false,
+        enc_override: None,
+        drive_model: "BD-RE WH16NS58".into(),
+        verbose: false,
+        predump_out: None,
+    };
+    let error = MTK
+        .flash()
+        .unwrap()
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &request)
+        .err()
+        .unwrap();
+    assert!(
+        error.to_string().contains("package needs one final image"),
+        "{error:#}"
+    );
+    assert!(!error.to_string().contains("Pioneer"));
+    assert!(dev.writes.is_empty());
 }
 
 #[test]

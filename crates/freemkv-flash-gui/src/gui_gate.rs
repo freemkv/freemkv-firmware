@@ -90,6 +90,7 @@ pub fn fixture() -> App {
     app.preferences = crate::localization::Preferences::Memory;
     app.language = crate::localization::Language::En;
     app.profile = ProfileState::Ready(Profile {
+        flash_current: true,
         chips: ["Synthetic", "Backup", "Dump", "Flash", "Recovery"]
             .map(String::from)
             .to_vec(),

@@ -354,6 +354,7 @@ fn production_v1_paired_flash_runs_intm_then_mixed_v9_with_restricted_reads() {
         restricted: true,
     };
     let req = FlashRequest {
+        current: None,
         input: tar,
         input_format: &super::super::PACKAGE,
         mode: crate::manifest::FlashMode::Full,
@@ -404,6 +405,7 @@ fn standalone_bin_plans_only_the_requested_image() {
         let target = image(revision, 2);
         let mut dev = MockScsiDevice::new().with_firmware_image(initial.clone());
         let request = FlashRequest {
+            current: None,
             input: target.clone(),
             input_format: &super::super::IMAGE,
             mode: crate::manifest::FlashMode::Full,
@@ -495,6 +497,7 @@ fn restricted_intm_to_final_uses_just_installed_image_and_encrypted_wire() {
 
 fn request(input: Vec<u8>, input_format: &'static crate::backend::FileFormat) -> FlashRequest {
     FlashRequest {
+        current: None,
         input,
         input_format,
         mode: crate::manifest::FlashMode::Full,
@@ -505,6 +508,157 @@ fn request(input: Vec<u8>, input_format: &'static crate::backend::FileFormat) ->
         verbose: false,
         predump_out: None,
     }
+}
+
+fn restricted_current_drive(current: &[u8]) -> Drive {
+    Drive {
+        inner: MockScsiDevice::echoing()
+            .with_firmware_image(current.to_vec())
+            .on(|c| c.first() == Some(&0x12), running_inquiry(current)),
+        written: vec![0; IMAGE_SIZE],
+        stages: vec![current.to_vec()],
+        boot_intermediate: true,
+        encrypted_after: true,
+        header_only_after: false,
+        wire_stages: vec![],
+        restricted: true,
+    }
+}
+
+#[test]
+fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_code() {
+    let mut current = image(b"1.V9", 1);
+    super::super::bulk_receiver_fixture::stamp(&mut current);
+    let current = crate::cmac::resign(&current).unwrap();
+    let target = image(b"1.V9", 3);
+    let mut dev = restricted_current_drive(&current);
+    let mut req = request(target.clone(), &super::super::IMAGE);
+    let error = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .err()
+        .unwrap();
+    assert!(error.is::<crate::backend::CurrentFirmwareRequired>());
+    assert!(
+        crate::workflow::error_message(&error).contains("Specify the firmware currently installed")
+    );
+    assert!(!crate::workflow::error_message(&error).contains("0x98000"));
+    assert!(format!("{error:#}").contains("restricted live code read 0x98000"));
+    req.current = Some(current.clone());
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    let state = plan.state::<Plan>().unwrap();
+    assert_eq!(state.image, target);
+    assert_eq!(
+        state.receiver.encoding(),
+        mediatek_optical::receiver::Encoding::Encrypted
+    );
+    assert_eq!(
+        state.receiver.provenance(),
+        mediatek_optical::receiver::reference::Provenance::CurrentReference
+    );
+    assert!(plan
+        .dry_run
+        .iter()
+        .any(|line| matches!(line, PlanLine::Field("receiver code source", _))));
+    let authorized = Mtk
+        .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
+        .unwrap();
+    let executable = authorized.state::<Executable>().unwrap();
+    assert_eq!(
+        executable.prepared.plan().encoding().body,
+        mediatek_optical::receiver::Encoding::Encrypted
+    );
+    let mut stale = current;
+    stale[0x1ec01b] ^= 1;
+    dev.inner = MockScsiDevice::echoing()
+        .with_firmware_image(stale.clone())
+        .on(|c| c.first() == Some(&0x12), running_inquiry(&stale));
+    let shared = SharedDevice::new(&mut dev);
+    let mut reads = ScsiTransport::reads(&shared);
+    assert!(executable
+        .prepared
+        .plan()
+        .receiver()
+        .revalidate(&mut reads)
+        .is_err());
+    assert!(dev.inner.writes.is_empty());
+}
+
+#[test]
+fn flash_current_never_substitutes_for_backup_or_accepts_stale_build_metadata() {
+    struct Refuse;
+    impl crate::backend::Confirm for Refuse {
+        fn confirm(&mut self, _: &AuthorizedPlan) -> Result<bool> {
+            panic!("no write confirmation before a usable backup")
+        }
+    }
+    let current = image(b"1.V9", 1);
+    let mut dev = restricted_current_drive(&current);
+    let mut req = request(image(b"1.V9", 3), &super::super::IMAGE);
+    let mut stale = current.clone();
+    stale[0x1ec040] ^= 1;
+    req.current = Some(crate::cmac::resign(&stale).unwrap());
+    assert!(Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .is_err());
+    req.current = Some(current);
+    let path = std::env::temp_dir().join(format!(
+        "freemkv-current-not-backup-{}.bin",
+        std::process::id()
+    ));
+    req.predump_out = Some(path.clone());
+    let error = crate::engine::flash(&mut dev, &Mtk, &req, &mut Refuse).unwrap_err();
+    assert!(
+        format!("{error:#}")
+            .contains("pre-flash backup failed and flashing without one was declined"),
+        "{error:#}"
+    );
+    assert!(!path.exists());
+    assert!(dev.inner.writes.is_empty());
+}
+
+#[test]
+#[ignore = "requires FREEMKV_HOARD with the production WH16NS58 1.V9 package"]
+fn exact_v9_current_reference_prepares_normal_flash_with_restricted_reads() {
+    let root = std::path::PathBuf::from(std::env::var_os("FREEMKV_HOARD").expect("FREEMKV_HOARD"));
+    let bytes = std::fs::read(root.join(
+        "packages/mediatek/ef64ae9e3f5471e0a1cd091544f577757a969cba6e2faca34d18028ecb755270.tar",
+    ))
+    .unwrap();
+    let package = crate::mediatek_package::Package::parse(&bytes).unwrap();
+    let current = package.firmware();
+    let target = std::env::var_os("FREEMKV_FLASH_TARGET")
+        .map(|path| std::fs::read(path).unwrap())
+        .unwrap_or_else(|| current.to_vec());
+    let mut dev = restricted_current_drive(current);
+    let mut req = request(target.clone(), &super::super::IMAGE);
+    req.drive_model = Build::of_image(current).unwrap().product;
+    assert!(Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .err()
+        .unwrap()
+        .is::<crate::backend::CurrentFirmwareRequired>());
+    req.current = Some(current.to_vec());
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    let authorized = Mtk
+        .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
+        .unwrap();
+    let prepared = &authorized.state::<Executable>().unwrap().prepared;
+    assert_eq!(
+        prepared.plan().prepare_command().command(),
+        cdb::enter_update()
+    );
+    assert_eq!(
+        prepared.plan().encoding().body,
+        mediatek_optical::receiver::Encoding::Encrypted
+    );
+    let mut decoded = prepared.plan().transfer().to_vec();
+    mediatek_optical::enc::decrypt(&mut decoded).unwrap();
+    assert_eq!(decoded, target);
+    assert!(dev.inner.writes.is_empty());
 }
 
 fn package(intermediate: &[u8], target: &[u8]) -> Vec<u8> {
