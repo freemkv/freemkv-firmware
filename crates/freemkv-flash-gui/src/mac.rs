@@ -489,6 +489,7 @@ struct Ivars {
     /// The single source of truth. The shell holds no state of its own.
     app: RefCell<Option<ui::App>>,
     window: RefCell<Option<Retained<NSWindow>>>,
+    drive_label: RefCell<Option<Retained<NSTextField>>>,
     drive_popup: RefCell<Option<Retained<NSPopUpButton>>>,
     drive_chips: RefCell<Option<Retained<NSTextField>>>,
     refresh: RefCell<Option<Retained<NSButton>>>,
@@ -507,6 +508,7 @@ struct Ivars {
     panel_shown: RefCell<Option<(Task, Vec<Item>)>>,
     results_shown: RefCell<Option<Option<Results>>>,
     log_shown: RefCell<Vec<String>>,
+    language_shown: Cell<Option<crate::localization::Language>>,
     /// Button tag → the input it forwards; checkbox tag → the check it reports.
     actions: RefCell<HashMap<isize, Input>>,
     checks: RefCell<HashMap<isize, CheckId>>,
@@ -516,6 +518,8 @@ struct Ivars {
     alert_confirm: RefCell<Option<Retained<NSButton>>>,
     diag_win: RefCell<Option<Retained<NSWindow>>>,
     diag_text: RefCell<Option<Retained<NSTextView>>>,
+    diag_buttons: RefCell<Option<Retained<Stack>>>,
+    diag_hint: RefCell<Option<Retained<NSTextField>>>,
     diag_path: RefCell<Option<Retained<NSTextField>>>,
     diag_notice: RefCell<Option<Retained<NSTextField>>>,
     diag_shown: RefCell<Option<Arc<Vec<String>>>>,
@@ -603,6 +607,19 @@ define_class!(
             let i = p.indexOfSelectedItem();
             if i >= 0 && !self.ivars().drives_shown.borrow().as_ref().is_none_or(Vec::is_empty) {
                 self.send(Input::SelectDrive(i as usize));
+            }
+        }
+
+        #[unsafe(method(onLanguage:))]
+        fn on_language(&self, sender: Option<&AnyObject>) {
+            let Some(item) = sender.and_then(|s| s.downcast_ref::<NSMenuItem>()) else {
+                return;
+            };
+            if let Some(language) = crate::localization::Language::ALL
+                .get(item.tag() as usize)
+                .copied()
+            {
+                self.send(Input::SetLanguage(language));
             }
         }
 
@@ -839,7 +856,8 @@ impl Controller {
         // Drive bar.
         let bar = stack(mtm, false, 8.0);
         let v = self.view();
-        bar.addArrangedSubview(&label(mtm, v.drives.label));
+        let drive_label = label(mtm, &v.drives.label);
+        bar.addArrangedSubview(&drive_label);
         let popup = NSPopUpButton::new(mtm);
         unsafe {
             popup.setTarget(Some(self));
@@ -863,7 +881,7 @@ impl Controller {
         root.addArrangedSubview(&chips);
 
         // Task switcher.
-        let titles: Vec<_> = v.tabs.iter().map(|t| ns(t.title)).collect();
+        let titles: Vec<_> = v.tabs.iter().map(|t| ns(&t.title)).collect();
         let tabs = unsafe {
             NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
                 &NSArray::from_retained_slice(&titles),
@@ -929,6 +947,7 @@ impl Controller {
         log_scroll.setHidden(true);
 
         let iv = self.ivars();
+        *iv.drive_label.borrow_mut() = Some(drive_label);
         *iv.drive_popup.borrow_mut() = Some(popup);
         *iv.drive_chips.borrow_mut() = Some(chips);
         *iv.refresh.borrow_mut() = Some(refresh);
@@ -1004,9 +1023,9 @@ impl Controller {
     fn card(&self, card: &Card) -> Retained<NSBox> {
         let mtm = self.mtm();
         let b = NSBox::new(mtm);
-        b.setTitle(&ns(card.title));
+        b.setTitle(&ns(&card.title));
         let inner = stack(mtm, true, 6.0);
-        if let Some(sub) = card.subtitle {
+        if let Some(sub) = &card.subtitle {
             inner.addArrangedSubview(&small(mtm, sub, 360.0));
         }
         match &card.body {
@@ -1091,12 +1110,20 @@ impl Controller {
     fn render(&self) {
         let v = self.view();
         let iv = self.ivars();
+        if iv.language_shown.replace(Some(v.language)) != Some(v.language) {
+            *iv.drives_shown.borrow_mut() = None;
+            *iv.results_shown.borrow_mut() = None;
+            *iv.diag_shown.borrow_mut() = None;
+            let app = NSApplication::sharedApplication(self.mtm());
+            build_menus(self.mtm(), &app, self, v.language);
+        }
         if let Some(w) = iv.window.borrow().as_ref() {
             w.setTitle(&ns(&v.title));
         }
         self.render_drives(&v);
         if let Some(tabs) = iv.tabs.borrow().as_ref() {
             for (i, tab) in v.tabs.iter().enumerate() {
+                tabs.setLabel_forSegment(&ns(&tab.title), i as isize);
                 tabs.setEnabled_forSegment(tab.enabled, i as isize);
                 if tab.task == v.task {
                     tabs.setSelectedSegment(i as isize);
@@ -1140,6 +1167,9 @@ impl Controller {
             return;
         };
         let bar = &v.drives;
+        if let Some(label) = iv.drive_label.borrow().as_ref() {
+            label.setStringValue(&ns(&bar.label));
+        }
         if let Some(chips) = iv.drive_chips.borrow().as_ref() {
             chips.setStringValue(&ns(&bar.chips.join("  ·  ")));
             chips.setHidden(bar.chips.is_empty());
@@ -1175,6 +1205,7 @@ impl Controller {
         popup.selectItemAtIndex(bar.selected.map_or(0, |i| i as isize));
         popup.setEnabled(v.controls_enabled && !bar.items.is_empty());
         if let Some(r) = iv.refresh.borrow().as_ref() {
+            r.setTitle(&ns(&bar.refresh.text));
             r.setEnabled(bar.refresh.enabled);
         }
     }
@@ -1220,7 +1251,7 @@ impl Controller {
             }
         }
         note.setHidden(s.note.is_none());
-        note.setStringValue(&ns(s.note.unwrap_or("")));
+        note.setStringValue(&ns(s.note.as_deref().unwrap_or("")));
         match &s.cancel {
             Some(b) => {
                 cancel.setHidden(false);
@@ -1263,7 +1294,7 @@ impl Controller {
         };
         let alert = NSAlert::new(mtm);
         alert.setAlertStyle(NSAlertStyle::Critical);
-        alert.setMessageText(&ns(c.title));
+        alert.setMessageText(&ns(&c.title));
         alert.setInformativeText(&ns(&c.details.join("\n")));
         let confirm = alert.addButtonWithTitle(&ns(&c.confirm.text));
         // Never on Return: the dangerous button needs a deliberate click.
@@ -1273,7 +1304,7 @@ impl Controller {
 
         let width = 380.0;
         let acc = stack(mtm, true, 10.0);
-        let danger = wrapping(mtm, c.danger, width);
+        let danger = wrapping(mtm, &c.danger, width);
         danger.setTextColor(Some(&NSColor::systemRedColor()));
         acc.addArrangedSubview(&danger);
         for w in &c.warnings {
@@ -1288,10 +1319,10 @@ impl Controller {
             ));
             acc.addArrangedSubview(&l);
         }
-        if let Some(n) = c.note {
+        if let Some(n) = &c.note {
             acc.addArrangedSubview(&wrapping(mtm, n, width));
         }
-        let ack = self.checkbox(CheckId::RiskAck, c.ack_text, c.ack_checked, true);
+        let ack = self.checkbox(CheckId::RiskAck, &c.ack_text, c.ack_checked, true);
         acc.addArrangedSubview(&ack);
         acc.widthAnchor()
             .constraintEqualToConstant(width)
@@ -1334,6 +1365,25 @@ impl Controller {
         if iv.diag_win.borrow().is_none() {
             self.build_diagnostics(d);
         }
+        if let Some(w) = iv.diag_win.borrow().as_ref() {
+            w.setTitle(&ns(&d.title));
+        }
+        if let Some(hint) = iv.diag_hint.borrow().as_ref() {
+            hint.setStringValue(&ns(&d.hint));
+        }
+        if let Some(buttons) = iv.diag_buttons.borrow().as_ref() {
+            let labels: Vec<_> = buttons
+                .arrangedSubviews()
+                .iter()
+                .filter_map(|v| v.downcast_ref::<NSButton>().map(|b| b.title().to_string()))
+                .collect();
+            if labels != d.buttons.iter().map(|b| b.text.clone()).collect::<Vec<_>>() {
+                clear(buttons);
+                for button in &d.buttons {
+                    buttons.addArrangedSubview(&self.button(button));
+                }
+            }
+        }
         if let Some(p) = iv.diag_path.borrow().as_ref() {
             p.setStringValue(&ns(d.path.as_deref().unwrap_or("")));
         }
@@ -1362,7 +1412,7 @@ impl Controller {
 
     fn build_diagnostics(&self, d: &Diagnostics) {
         let mtm = self.mtm();
-        let w = new_window(mtm, d.title, 680.0, 460.0);
+        let w = new_window(mtm, &d.title, 680.0, 460.0);
         w.setDelegate(Some(ProtocolObject::from_ref(self)));
         let content = w.contentView().expect("content view");
         let root = stack(mtm, true, 8.0);
@@ -1374,8 +1424,10 @@ impl Controller {
         });
         content.addSubview(&root);
         pin(&content, &root, 0.0);
-        root.addArrangedSubview(&self.button_row(&d.buttons));
-        root.addArrangedSubview(&label(mtm, d.hint));
+        let buttons = self.button_row(&d.buttons);
+        root.addArrangedSubview(&buttons);
+        let hint = label(mtm, &d.hint);
+        root.addArrangedSubview(&hint);
         let path = small(mtm, "", 640.0);
         path.setSelectable(true);
         root.addArrangedSubview(&path);
@@ -1389,6 +1441,8 @@ impl Controller {
         let iv = self.ivars();
         *iv.diag_win.borrow_mut() = Some(w);
         *iv.diag_text.borrow_mut() = Some(tv);
+        *iv.diag_buttons.borrow_mut() = Some(buttons);
+        *iv.diag_hint.borrow_mut() = Some(hint);
         *iv.diag_path.borrow_mut() = Some(path);
         *iv.diag_notice.borrow_mut() = Some(notice);
     }
@@ -1404,6 +1458,9 @@ impl Controller {
         };
         if iv.an_win.borrow().is_none() {
             self.build_analysis(&a.tree);
+        }
+        if let Some(w) = iv.an_win.borrow().as_ref() {
+            w.setTitle(&ns(&a.tree.title));
         }
         if let Some(n) = iv.an_notice.borrow().as_ref() {
             n.setStringValue(&ns(a.notice.as_deref().unwrap_or("")));
@@ -1442,7 +1499,7 @@ impl Controller {
 
     fn build_analysis(&self, tree: &AnalysisView) {
         let mtm = self.mtm();
-        let w = new_window(mtm, tree.title, 1000.0, 720.0);
+        let w = new_window(mtm, &tree.title, 1000.0, 720.0);
         w.setDelegate(Some(ProtocolObject::from_ref(self)));
         w.center();
         let content = w.contentView().expect("content view");
@@ -1518,12 +1575,17 @@ fn media_grid(mtm: MainThreadMarker, rows: &[MediaRow]) -> Retained<NSGridView> 
     g
 }
 
-fn menu_item(mtm: MainThreadMarker, title: &str, action: Sel, key: &str) -> Retained<NSMenuItem> {
+fn menu_item(
+    mtm: MainThreadMarker,
+    title: &str,
+    action: Option<Sel>,
+    key: &str,
+) -> Retained<NSMenuItem> {
     unsafe {
         NSMenuItem::initWithTitle_action_keyEquivalent(
             NSMenuItem::alloc(mtm),
             &ns(title),
-            Some(action),
+            action,
             &ns(key),
         )
     }
@@ -1532,34 +1594,66 @@ fn menu_item(mtm: MainThreadMarker, title: &str, action: Sel, key: &str) -> Reta
 /// A menu command: title, action, key equivalent.
 type MenuEntry = (&'static str, Sel, &'static str);
 
-/// The standard menus: Quit, the text-editing commands and the window commands.
-fn build_menus(mtm: MainThreadMarker, app: &NSApplication) {
+/// The standard menus plus a language picker owned by the shared UI model.
+fn build_menus(
+    mtm: MainThreadMarker,
+    app: &NSApplication,
+    controller: &Controller,
+    language: crate::localization::Language,
+) {
     let main = NSMenu::new(mtm);
     let groups: [(&str, Vec<MenuEntry>); 3] = [
+        ("freemkv Flash", vec![("menu.quit", sel!(terminate:), "q")]),
         (
-            "freemkv Flash",
-            vec![("Quit freemkv Flash", sel!(terminate:), "q")],
-        ),
-        (
-            "Edit",
+            "menu.edit",
             vec![
-                ("Copy", sel!(copy:), "c"),
-                ("Select All", sel!(selectAll:), "a"),
+                ("menu.copy", sel!(copy:), "c"),
+                ("menu.select_all", sel!(selectAll:), "a"),
             ],
         ),
         (
-            "Window",
+            "menu.window",
             vec![
-                ("Minimize", sel!(performMiniaturize:), "m"),
-                ("Close", sel!(performClose:), "w"),
+                ("menu.minimize", sel!(performMiniaturize:), "m"),
+                ("menu.close", sel!(performClose:), "w"),
             ],
         ),
     ];
     for (title, items) in groups {
-        let top = menu_item(mtm, title, sel!(noop:), "");
-        let sub = NSMenu::initWithTitle(NSMenu::alloc(mtm), &ns(title));
+        let localized_title = if crate::localization::is_message(title) {
+            crate::localization::get(language, title)
+        } else {
+            title
+        };
+        let top = menu_item(mtm, localized_title, None, "");
+        let sub = NSMenu::initWithTitle(NSMenu::alloc(mtm), &ns(localized_title));
         for (t, action, key) in items {
-            sub.addItem(&menu_item(mtm, t, action, key));
+            sub.addItem(&menu_item(
+                mtm,
+                crate::localization::get(language, t),
+                Some(action),
+                key,
+            ));
+        }
+        if title == "freemkv Flash" {
+            let language_item = menu_item(
+                mtm,
+                &crate::localization::text(language, "settings.language"),
+                None,
+                "",
+            );
+            let language_menu = NSMenu::new(mtm);
+            for (index, choice) in crate::localization::Language::ALL.iter().enumerate() {
+                let item = menu_item(mtm, choice.native_name(), Some(sel!(onLanguage:)), "");
+                // SAFETY: `controller` is a live Objective-C target retained for the
+                // application lifetime, and the selector is implemented on Controller.
+                unsafe { item.setTarget(Some(controller)) };
+                item.setTag(index as isize);
+                item.setState(isize::from(*choice == language));
+                language_menu.addItem(&item);
+            }
+            language_item.setSubmenu(Some(&language_menu));
+            sub.addItem(&language_item);
         }
         top.setSubmenu(Some(&sub));
         main.addItem(&top);
@@ -1591,11 +1685,10 @@ pub fn run() {
     } else {
         NSApplicationActivationPolicy::Regular
     });
-    build_menus(mtm, &app);
-
-    let window = new_window(mtm, "freemkv Firmware Utility", W, H);
+    let window = new_window(mtm, &model.view().title, W, H);
     window.setContentMinSize(NSSize::new(760.0, 640.0));
     let c = Controller::new(mtm, model);
+    build_menus(mtm, &app, &c, c.view().language);
     *c.ivars().window.borrow_mut() = Some(window.clone());
     app.setDelegate(Some(ProtocolObject::from_ref(&*c)));
     window.setDelegate(Some(ProtocolObject::from_ref(&*c)));

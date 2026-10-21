@@ -809,6 +809,7 @@ fn dump_preserves_mapped_memory_even_when_identity_is_unavailable() {
 
 fn bundle_req(input: Vec<u8>) -> crate::backend::FlashRequest {
     crate::backend::FlashRequest {
+        current: None,
         input,
         input_format: &ENVELOPE,
         mode: FlashMode::Full,

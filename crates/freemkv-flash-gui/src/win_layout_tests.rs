@@ -79,3 +79,19 @@ fn every_task_form_fits_the_control_pools() {
     assert!(forms.iter().any(|f| panel_needs(f).checks == 1));
     assert!(forms.iter().any(|f| panel_needs(f).line >= 2));
 }
+
+#[test]
+fn flash_current_form_fits_the_windows_control_pools() {
+    let mut app = App::with_drives(Vec::new());
+    app.profile = crate::ui::ProfileState::Ready(crate::ui::Profile::every_task());
+    app.dispatch(Input::SelectTask(Task::Flash));
+    app.dispatch(Input::Chosen(Pick::FlashFirmware, "modified.bin".into()));
+    let needs = panel_needs(&app.view().panel);
+    assert_eq!(needs.checks, 1);
+    assert!(needs.fits(), "{needs:?}");
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, false));
+    app.dispatch(Input::Chosen(Pick::FlashCurrent, "current.bin".into()));
+    let needs = panel_needs(&app.view().panel);
+    assert_eq!(needs.checks, 1);
+    assert!(needs.fits(), "{needs:?}");
+}

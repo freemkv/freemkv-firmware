@@ -146,6 +146,7 @@ fn create_inner(image: &[u8], defaults: &crate::boot::BootSettings) -> Result<Cr
     crate::boot::attach(
         &mut report.image,
         report.handler_va as usize,
+        report.handler_bytes.len(),
         report.boot_stub_va as usize,
         defaults,
         &support,
@@ -255,8 +256,16 @@ pub fn modify_with_defaults(
             .unwrap_or(0)
     };
     let handler = fact("handler_va");
+    let handler_len = fact("handler_len");
     let boot = fact("boot_stub_va");
-    crate::boot::attach(&mut report.image, handler, boot, defaults, &support)?;
+    crate::boot::attach(
+        &mut report.image,
+        handler,
+        handler_len,
+        boot,
+        defaults,
+        &support,
+    )?;
     if support.has_boot() {
         report.levers.push(engine::lever::LeverReport::applied(
             engine::lever::LeverId::BootSettings,

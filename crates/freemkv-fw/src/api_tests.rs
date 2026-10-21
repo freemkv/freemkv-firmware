@@ -59,6 +59,48 @@ fn bu40n_fixture() -> Vec<u8> {
 }
 
 #[test]
+fn create_diagnoses_legacy_freemkv_input_before_searching_for_oem_handlers() {
+    let mut image = bu40n_fixture();
+    let engine = engine::mt1959::Mt1959Engine;
+    let record = engine
+        .find_live_record(&image, abi::READ_BUFFER_OPCODE)
+        .unwrap();
+    let handler = engine.free_space(&image, 256).unwrap() as usize;
+    // Model the reported 0.6.0 input: an injected handler with a literal load
+    // instead of the OEM push-lr prologue, and the old embedded identity.
+    image[handler..handler + 2].copy_from_slice(&0x4b00u16.to_le_bytes());
+    let identity = b"freemkv 0.6.0";
+    image[handler + 32..handler + 32 + identity.len()].copy_from_slice(identity);
+    image[record.off + 4..record.off + 8].copy_from_slice(&((handler as u32) | 1).to_le_bytes());
+    let image = cmac::resign(&image).unwrap();
+
+    let error = match create(&image) {
+        Ok(_) => panic!("a legacy freemkv build must not be patched again"),
+        Err(error) => format!("{error:#}"),
+    };
+    assert!(
+        error.contains("already contains freemkv firmware"),
+        "{error}"
+    );
+    assert!(error.contains("unmodified OEM image"), "{error}");
+    assert!(!error.contains("coherent table"), "{error}");
+}
+
+#[test]
+fn create_with_defaults_diagnoses_a_previous_production_build() {
+    let built = create(&bu40n_fixture()).expect("clean OEM image builds");
+    let error = match create_with_defaults(built.image(), &crate::boot::BootSettings::standard()) {
+        Ok(_) => panic!("a production freemkv build must not be patched again"),
+        Err(error) => format!("{error:#}"),
+    };
+    assert!(
+        error.contains("already contains freemkv firmware"),
+        "{error}"
+    );
+    assert!(error.contains("unmodified OEM image"), "{error}");
+}
+
+#[test]
 fn verify_reports_ok_only_when_every_active_region_matches() {
     let outcome = verify(&synthetic_image(), None).expect("a well-formed MTK image verifies");
     assert_eq!(outcome.verdicts.len(), 1);

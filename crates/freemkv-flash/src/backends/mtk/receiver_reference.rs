@@ -1,8 +1,12 @@
 //! Explicit file-derived receiver evidence; transport always reads the drive.
-use anyhow::{anyhow, ensure, Context, Result};
+#[cfg(test)]
+use anyhow::ensure;
+use anyhow::{anyhow, Context, Result};
 #[cfg(test)]
 use mediatek_optical::drive::Transport;
-use mediatek_optical::{cdb, envelope::Envelope, layout, receiver};
+#[cfg(test)]
+use mediatek_optical::{cdb, layout};
+use mediatek_optical::{envelope::Envelope, receiver};
 
 pub(super) fn detect(
     dev: &mut crate::backend::ReadDevice<'_>,

@@ -380,6 +380,7 @@ fn force_and_skip_backup_paths_are_gone() {
     // even when its plan (built before any backup) passes.
     let mut dev = MockScsiDevice::new();
     let request = FlashRequest {
+        current: None,
         input: header_only_bundle(),
         input_format: &pioneer::PACKAGE,
         mode: FlashMode::Full,

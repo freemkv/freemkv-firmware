@@ -60,8 +60,8 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
             .map(|path| path.display().to_string())
     };
     Profile {
+        flash_current: caps.flash_current,
         recovery_without_live_protocol: p.backend.is_none() && p.recovery.is_some(),
-        recovery_without_current: !workflow::recovery_requires_current(p),
         chips,
         tasks,
         inspect: caps.inspect,

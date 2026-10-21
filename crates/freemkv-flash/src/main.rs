@@ -118,6 +118,15 @@ FLASH WORKFLOW:
 
 Do not power off or disconnect the drive during step 5.")]
 struct FlashArgs {
+    /// Installed MediaTek firmware, if automatic receiver detection is unavailable.
+    #[arg(long, conflicts_with = "read_from_drive")]
+    current: Option<PathBuf>,
+    /// Exact installed member of a paired Current TAR (e.g. firmware.bin).
+    #[arg(long, requires = "current")]
+    current_member: Option<String>,
+    /// Read receiver evidence from the drive (the default).
+    #[arg(long)]
+    read_from_drive: bool,
     /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`).
     /// Omit to auto-pick the only connected drive.
     device: Option<String>,
@@ -217,7 +226,14 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{} {e:#}", style::red("error:"));
+            eprintln!(
+                "{} {}",
+                style::red("error:"),
+                freemkv_flash::workflow::error_message(&e)
+            );
+            if e.is::<freemkv_flash::backend::CurrentFirmwareRequired>() {
+                eprintln!("Use --current <FILE>; add --current-member <NAME> for a paired TAR.");
+            }
             ExitCode::FAILURE
         }
     }
@@ -226,6 +242,8 @@ fn main() -> ExitCode {
 impl From<FlashArgs> for freemkv_flash::workflow::FlashOptions {
     fn from(a: FlashArgs) -> Self {
         Self {
+            current: a.current,
+            current_member: a.current_member,
             device: a.device,
             input: a.input,
             backup: a.backup,

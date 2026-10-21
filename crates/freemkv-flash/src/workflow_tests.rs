@@ -1,6 +1,18 @@
 use super::*;
 
 #[test]
+fn current_detection_error_keeps_transport_diagnostics_out_of_user_guidance() {
+    let error = anyhow::Error::new(crate::backend::CurrentFirmwareRequired {
+        source: anyhow::anyhow!("SCSI invalid field in CDB at 0x98000 [E4000]"),
+    });
+    assert!(error_message(&error).contains("Specify the firmware currently installed"));
+    assert!(!error_message(&error).contains("E4000"));
+    assert!(format!("{error:#}").contains("SCSI invalid field in CDB at 0x98000 [E4000]"));
+    let other = anyhow::anyhow!("original cause").context("operation failed");
+    assert_eq!(error_message(&other), "operation failed: original cause");
+}
+
+#[test]
 fn mediatek_boot_without_mmc_feature_still_offers_independent_recovery() {
     use crate::{backends::mtk, platform::MockScsiDevice};
     let mut image = mtk::fixture::image(&mtk::fixture::BU3, "BU40N", 1);

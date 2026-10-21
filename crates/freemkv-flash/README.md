@@ -69,6 +69,15 @@ on Linux, `disk4` on macOS while a disc is mounted), its model and its id
 by its id alone. Pass either the name or the id. The drive can be omitted when
 exactly one is connected. The desktop app lists drives the same way.
 
+MediaTek Flash defaults to **Read from drive** for automatic receiver detection.
+If the drive restricts those reads, turn that checkbox off and choose the
+firmware currently installed as **Current firmware**. A paired TAR requires
+selecting its installed member. In the CLI, use `--current FILE` and, for a
+paired TAR, `--current-member firmware.bin` or `intermediate.bin`. Current is
+checked against the drive and supplies receiver code only; it never replaces
+the live backup or verification reads, and normal Flash compatibility checks
+still apply.
+
 **Backup** produces restoration artifacts. A MediaTek backup is the 2 MiB
 update image as the vendor ships it: per-drive settings, calibration and
 revocation lists are replaced with factory contents, so it is safe to share.
