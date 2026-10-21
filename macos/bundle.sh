@@ -39,6 +39,14 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$PLIST" "$APP/Contents/Info.plist"
 cp "$ICNS" "$APP/Contents/Resources/freemkv.icns"
 
+# Crates inherit their version from the workspace. Template versions are not
+# release metadata: resolve the actual package version before signing.
+VERSION=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c \
+  'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == sys.argv[1]))' "$BIN_NAME")
+for key in CFBundleVersion CFBundleShortVersionString; do
+  /usr/libexec/PlistBuddy -c "Set :$key $VERSION" "$APP/Contents/Info.plist"
+done
+
 # Build first so the bundle can never ship a stale binary.
 BUILD=(cargo build --bin "$BIN_NAME" --bin "$CLI_NAME")
 [ "$PROFILE" = release ] && BUILD+=(--release)
@@ -62,4 +70,5 @@ done
 codesign --force --sign - "$APP/Contents/MacOS/$CLI_NAME"
 codesign --force --sign - "$APP/Contents/MacOS/$BIN_NAME"
 codesign --force --sign - "$APP"
+codesign --verify --strict "$APP"
 echo "built $APP ($(lipo -archs "$APP/Contents/MacOS/$BIN_NAME")) — ad-hoc signed"
