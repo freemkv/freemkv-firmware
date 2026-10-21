@@ -866,6 +866,18 @@ fn allocation_clips_erased_runs_to_one_active_integrity_range() {
     image[table + 32..table + 36].copy_from_slice(&0x120040u32.to_le_bytes());
     image[table + 36..table + 40].copy_from_slice(&0x120fffu32.to_le_bytes());
     assert!(Mt1959Engine.free_space(&image, 61).is_err());
+    image[table + 28..table + 32].copy_from_slice(&1u32.to_le_bytes());
+    image[table + 32..table + 36].copy_from_slice(&0x120080u32.to_le_bytes());
+    image[table + 36..table + 40].copy_from_slice(&0x1200bfu32.to_le_bytes());
+    assert!(Mt1959Engine.free_space(&image, 100).is_err());
+    image[table + 28..table + 32].copy_from_slice(&0u32.to_le_bytes());
+    image[table + 4..table + 8].copy_from_slice(&u32::MAX.to_le_bytes());
+    image[table + 8..table + 12].copy_from_slice(&u32::MAX.to_le_bytes());
+    assert!(Mt1959Engine.free_space(&image, 1).is_err());
+    image[table + 4..table + 8].copy_from_slice(&lo.to_le_bytes());
+    let outside_image = image.len() as u32;
+    image[table + 8..table + 12].copy_from_slice(&outside_image.to_le_bytes());
+    assert!(Mt1959Engine.free_space(&image, 1).is_err());
 }
 
 #[test]

@@ -1230,7 +1230,7 @@ impl Mt1959Engine {
         let ranges: Vec<(u32, u32)> = cmac::parse_table(image)
             .map_err(|e| anyhow!("{e}"))?
             .into_iter()
-            .filter(|e| e.is_active() && e.start <= e.end)
+            .filter(|e| e.is_active() && e.start <= e.end && (e.end as usize) < image.len())
             .map(|e| (e.start, e.end))
             .collect();
         let covered = |p: u32| ranges.iter().any(|&(s, e)| s <= p && p <= e);
