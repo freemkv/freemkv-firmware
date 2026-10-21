@@ -282,3 +282,55 @@ fn unsupported_profile_copy_follows_the_selected_language() {
         );
     }
 }
+
+#[test]
+fn firmware_switches_use_enabled_states_and_keep_english_diagnostics() {
+    // These are switch states, not translations of the prepositions "on"/"off".
+    for (code, enabled, disabled) in [
+        ("ca", "Activat", "Desactivat"),
+        ("cs", "Zapnuto", "Vypnuto"),
+        ("da", "Til", "Fra"),
+        ("de", "Ein", "Aus"),
+        ("el", "Ενεργό", "Ανενεργό"),
+        ("en", "On", "Off"),
+        ("es", "Activado", "Desactivado"),
+        ("es-419", "Activado", "Desactivado"),
+        ("fi", "Käytössä", "Pois käytöstä"),
+        ("fr", "Activé", "Désactivé"),
+        ("hu", "Bekapcsolva", "Kikapcsolva"),
+        ("id", "Aktif", "Nonaktif"),
+        ("it", "Attivo", "Disattivo"),
+        ("ja", "オン", "オフ"),
+        ("ko", "켜짐", "꺼짐"),
+        ("nl", "Aan", "Uit"),
+        ("no", "På", "Av"),
+        ("pl", "Włączone", "Wyłączone"),
+        ("pt", "Ativado", "Desativado"),
+        ("pt-br", "Ativado", "Desativado"),
+        ("ro", "Activat", "Dezactivat"),
+        ("ru", "Включено", "Выключено"),
+        ("sk", "Zapnuté", "Vypnuté"),
+        ("sv", "På", "Av"),
+        ("tr", "Açık", "Kapalı"),
+        ("uk", "Увімкнено", "Вимкнено"),
+        ("vi", "Bật", "Tắt"),
+        ("zh-hans", "开启", "关闭"),
+        ("zh-hant", "開啟", "關閉"),
+    ] {
+        let language = Language::from_code(code).unwrap();
+        assert_eq!(render(language, "On"), enabled, "{code}");
+        assert_eq!(render(language, "Off"), disabled, "{code}");
+        for (source, state) in [
+            ("On — enforce", enabled),
+            ("On — require", enabled),
+            ("Off — skip", disabled),
+            ("Off — bypass", disabled),
+        ] {
+            assert!(
+                render(language, source).starts_with(&format!("{state} — ")),
+                "{code}: {source}"
+            );
+            assert_eq!(english(source), source);
+        }
+    }
+}
