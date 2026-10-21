@@ -27,7 +27,7 @@ the separate `freemkv-fw` binary in this workspace.
 | `freemkv-flash dump <dev> [-o out.bin]` | RAM logging only, when supported | — | captures memory and diagnostic responses in one address-oriented file; not flashable |
 | `freemkv-flash check <file>` | no | firmware file | inspect without a drive |
 | `freemkv-flash recover <dev> --current <current.tar> -i <target.tar>` | with `--execute` | Pioneer Kernel + Normal packages | experimental recovery without backups |
-| `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.tar` or `.bin` | validate and plan; execute only after fresh backup |
+| `freemkv-flash flash <dev> -i <file> [flags]` | with `--execute` | `.tar` or `.bin` | validate and plan; back up before execution or ask for consent if unavailable |
 
 - `backup` produces one firmware file. Pioneer candidates with zero signatures
   are usable as Current references, but targets must pass transfer authentication.
@@ -100,9 +100,11 @@ The backend chooses the transport format; there is no encryption selector.
 MediaTek uses `mediatek-optical` to detect BOOT versus running firmware and
 read the active receiver's code signature. It sends plaintext or the encrypted
 transport envelope accordingly, and rechecks the identity and signature before
-writing. If the drive blocks automatic detection, uncheck **Read from drive** on
-the Flash page and select the firmware currently installed as **Current**. The
-CLI equivalent is `--current FILE`; a paired Current TAR also needs
+writing. In the desktop app, a backend that cannot acquire installed firmware
+requires a **Current** firmware file in both Flash and Recovery; **Read from drive**
+is hidden. MediaTek drives use this file-selection flow. Select the firmware
+currently installed on the drive, rather than the firmware you want to install.
+The CLI equivalent is `--current FILE`; a paired Current TAR also needs
 `--current-member firmware.bin` (or `intermediate.bin` if INTM is running).
 The reference must match the live identity and build metadata. It supplies
 receiver code only; backup and readback still use the drive. Without readable
@@ -153,7 +155,7 @@ write is underway. `flash` is **dry-run unless `--execute`**, and even then
 refuses to write unless:
 
 - `--i-understand-risk` is given (acknowledging possible bricking),
-- a fresh, complete, validated pre-flash backup has been saved,
+- a fresh, complete, validated pre-flash backup has been saved, or the operator has explicitly agreed to proceed when capture is unavailable,
 - the drive classified as a supported family (Unknown is refused).
 
 The **Recovery** tab (CLI: `recover`) takes a Current firmware package and a
@@ -324,8 +326,9 @@ Add `--execute --i-understand-risk` only after reviewing the preview. Recovery
 never continues to the other member and does not create a backup.
 
 The Flash and Recovery desktop forms use the same Current firmware and target
-layout. Both select **Read from drive** by default. Uncheck it to choose the
-firmware currently installed; select its exact member if the Current TAR is paired.
+layout. Both select **Read from drive** by default when the backend supports it.
+Otherwise, that option is hidden and the currently installed firmware file is
+required. Select its exact member if the Current TAR is paired.
 Recovery uses that selected file even when the drive's receiver code is readable.
 The CLI retains its explicit `--current` / `--read-from-drive` options.
 
