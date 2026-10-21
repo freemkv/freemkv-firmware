@@ -20,7 +20,7 @@ enum Task {
     Probe,
 }
 
-type BootPreview = Result<(BootSettings, BootSupport), String>;
+type BootPreview = Result<(BootSettings, BootSupport), (String, String)>;
 
 pub struct FwApp {
     language: Language,
@@ -55,6 +55,13 @@ impl FwApp {
     fn diagnostic_text(&self) -> std::io::Result<String> {
         match &self.diagnostic_log {
             Some(path) => std::fs::read_to_string(path),
+            None if !self.log.is_empty() => Ok(self
+                .log
+                .iter()
+                .map(|line| localization::english(line))
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"),
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "No diagnostic log is available for this operation.",
@@ -215,7 +222,12 @@ impl FwApp {
                 )
             }));
             let result = match result {
-                Ok(result) => result.map_err(|e| freemkv_flash::workflow::user_error(&e).encoded()),
+                Ok(result) => result.map_err(|e| {
+                    let _ = tx.send(Msg::Event(freemkv_flash::output::Event::Message(format!(
+                        "Operation failed: {e:#}"
+                    ))));
+                    freemkv_flash::workflow::user_error(&e).encoded()
+                }),
                 Err(_) => Err("errors.worker".into()),
             };
             let _ = tx.send(Msg::Done(result));
@@ -301,9 +313,19 @@ impl FwApp {
                         let artifact = freemkv_fw::artifact::Artifact::parse(std::fs::read(path)?)?;
                         freemkv_fw::api::boot_options(artifact.image())
                     })
-                    .map_err(|_| "errors.analysis".to_string())
+                    .map_err(|_| {
+                        (
+                            "errors.analysis".to_string(),
+                            "Firmware analysis worker stopped unexpectedly".to_string(),
+                        )
+                    })
                     .and_then(|result| {
-                        result.map_err(|e| freemkv_flash::workflow::user_error(&e).encoded())
+                        result.map_err(|e| {
+                            (
+                                freemkv_flash::workflow::user_error(&e).encoded(),
+                                format!("{e:#}"),
+                            )
+                        })
                     });
                     let _ = tx.send(result);
                     ctx.request_repaint();
@@ -321,7 +343,13 @@ impl FwApp {
                             }
                             self.boot_support = Some(support);
                         }
-                        Err(error) => self.boot_error = Some(error),
+                        Err((guidance, diagnostic)) => {
+                            self.boot_error = Some(guidance);
+                            self.log
+                                .push(format!("Firmware analysis failed: {diagnostic}"));
+                            self.diagnostic_log = None;
+                            self.diagnostic_checked = None;
+                        }
                     }
                 }
                 Err(TryRecvError::Disconnected) => {

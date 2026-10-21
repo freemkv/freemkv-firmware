@@ -255,3 +255,14 @@ fn plan_labels_and_backup_summaries_translate_without_changing_the_saved_path() 
         format!("{}: WH16NS58", render(Language::Fr, "Drive"))
     );
 }
+
+#[test]
+fn memory_diagnostic_export_resolves_failure_guidance_in_english() {
+    let mut app = crate::ui::App::with_drives(Vec::new());
+    app.language = Language::Fr;
+    app.failure = Some(message("errors.current_required", &[]));
+    let diagnostic = app.diagnostic_text().unwrap();
+    assert!(diagnostic.contains(get(Language::En, "errors.current_required")));
+    assert!(!diagnostic.contains('\u{1e}'));
+    assert!(!diagnostic.contains("\"arguments\""));
+}

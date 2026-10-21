@@ -164,7 +164,9 @@ fn selecting_another_image_loads_its_settings_and_discards_pending_old_analysis(
     app.select_image("second.bin".into());
     assert!(!app.boot_dirty);
     assert!(app.boot_rx.is_none());
-    assert!(old_tx.send(Err("stale result".into())).is_err());
+    assert!(old_tx
+        .send(Err(("stale result".into(), "stale diagnostic".into())))
+        .is_err());
     let (tx, rx) = mpsc::channel();
     app.boot_rx = Some(rx);
     app.boot_input = app.input.clone();
@@ -206,4 +208,31 @@ fn operation_errors_translate_with_the_ui_but_activity_and_saved_logs_stay_engli
         .unwrap()
         .contains("This firmware file could not be read or validated"));
     assert!(!app.log.last().unwrap().contains('\u{1e}'));
+}
+
+#[test]
+fn background_firmware_analysis_keeps_clean_guidance_and_exportable_english_details() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.language = Language::Fr;
+    app.input = Some("input.bin".into());
+    app.boot_input = app.input.clone();
+    app.diagnostic_log = Some("previous-operation.log".into());
+    let (tx, rx) = mpsc::channel();
+    app.boot_rx = Some(rx);
+    tx.send(Err((
+        "errors.firmware_invalid".into(),
+        "parse failed at 0x1234: unsupported image format".into(),
+    )))
+    .unwrap();
+    app.boot_preview(&egui::Context::default());
+    assert_eq!(app.boot_error.as_deref(), Some("errors.firmware_invalid"));
+    assert!(
+        app.diagnostic_log.is_none(),
+        "an earlier operation's log must not hide this failure"
+    );
+    let log = app.diagnostic_text().unwrap();
+    assert!(
+        log.contains("Firmware analysis failed: parse failed at 0x1234: unsupported image format")
+    );
+    assert!(!log.contains('\u{1e}'));
 }

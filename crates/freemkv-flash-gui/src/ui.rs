@@ -1563,6 +1563,14 @@ impl App {
             .unwrap_or(true)
     }
 
+    fn has_origin_error(&self) -> bool {
+        match self.task {
+            Task::Flash => self.flash_origin.as_ref().is_some_and(Result::is_err),
+            Task::Recovery => self.recovery_origin.as_ref().is_some_and(Result::is_err),
+            _ => false,
+        }
+    }
+
     fn flash_ready(&self) -> bool {
         self.selected()
             && self.flash_input.is_some()
@@ -2031,15 +2039,31 @@ impl App {
         let mut done = false;
         for rx in std::mem::take(&mut self.origin_rx) {
             match rx.try_recv() {
-                Ok((pick, path, result)) => match pick {
-                    Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
-                        self.flash_origin = Some(result)
+                Ok((pick, path, result)) => {
+                    let selected = (pick == Pick::FlashFirmware
+                        && self.flash_input.as_ref() == Some(&path))
+                        || (pick == Pick::RecoveryInput
+                            && self.recovery_input.as_ref() == Some(&path));
+                    if selected {
+                        if let Err(error) = &result {
+                            let detail = crate::localization::english(error);
+                            self.log
+                                .push(format!("File origin inspection failed: {detail}"));
+                            self.record_event("file_origin_failed", serde_json::json!({"file": path.display().to_string(), "error": detail}));
+                            self.diagnostic_log = None;
+                            self.diagnostic_checked = None;
+                        }
                     }
-                    Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
-                        self.recovery_origin = Some(result)
+                    match pick {
+                        Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
+                            self.flash_origin = Some(result)
+                        }
+                        Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
+                            self.recovery_origin = Some(result)
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
                 Err(TryRecvError::Empty) => {
                     self.origin_rx.push(rx);
                     continue;
@@ -2143,7 +2167,7 @@ impl App {
         if let Some(Ok(text)) = saved.as_ref() {
             return Ok(text.clone());
         }
-        if self.failure.is_some() {
+        if self.failure.is_some() || self.has_origin_error() {
             return Ok(format!(
                 "In-memory diagnostics; no diagnostic file was saved.\n{}\n{}",
                 self.log
@@ -2151,7 +2175,10 @@ impl App {
                     .map(|line| crate::localization::english(line))
                     .collect::<Vec<_>>()
                     .join("\n"),
-                self.failure.as_deref().unwrap_or_default()
+                self.failure
+                    .as_ref()
+                    .map(|failure| crate::localization::english(failure))
+                    .unwrap_or_default()
             ));
         }
         match saved {
@@ -2216,7 +2243,16 @@ impl App {
             panel: self.panel(enabled),
             controls_enabled: enabled,
             status: shown.then(|| self.status_view()),
-            results: shown.then(|| self.results_view()),
+            results: (shown || self.has_origin_error()).then(|| {
+                let mut results = self.results_view();
+                if !shown {
+                    results.cards.clear();
+                    results.fields.clear();
+                    results.failure = None;
+                    results.open_results = None;
+                }
+                results
+            }),
             confirm: self.pending.as_ref().map(|p| self.confirm_view(p)),
             log: self
                 .log
@@ -2598,7 +2634,7 @@ impl App {
             view_log: Button::new(
                 "action.view_log",
                 Input::ViewLog,
-                self.diagnostic_log.is_some() || self.failure.is_some(),
+                self.diagnostic_log.is_some() || self.failure.is_some() || self.has_origin_error(),
             ),
             submit_report: if self.report_rx.is_some() {
                 Button::new(
@@ -2846,6 +2882,9 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
     }));
     let result = match result {
         Ok(result) => result.map_err(|e: anyhow::Error| {
+            let _ = tx.send(Msg::Event(Event::Message(format!(
+                "Operation failed: {e:#}"
+            ))));
             if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
             }

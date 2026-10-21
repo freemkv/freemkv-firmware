@@ -2466,3 +2466,34 @@ fn analysis_tree(result: &ResultView) -> AnalysisView {
     }
     tree
 }
+
+#[test]
+fn origin_check_keeps_technical_causes_in_logs_and_clean_copy_in_the_form() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("selected.bin".into());
+    let (tx, rx) = mpsc::channel();
+    app.origin_rx.push(rx);
+    tx.send((
+        Pick::FlashFirmware,
+        PathBuf::from("selected.bin"),
+        Err("archive invalid at private offset 0x1234".into()),
+    ))
+    .unwrap();
+    app.poll_origin();
+    let results = app
+        .view()
+        .results
+        .expect("origin failures offer diagnostic actions");
+    assert!(results.view_log.enabled);
+    assert!(results.cards.is_empty() && results.fields.is_empty());
+    assert!(app
+        .diagnostic_text()
+        .unwrap()
+        .contains("archive invalid at private offset 0x1234"));
+    assert!(!app
+        .view()
+        .panel
+        .iter()
+        .any(|item| matches!(item, Item::Note(text) if text.contains("private offset"))));
+}
