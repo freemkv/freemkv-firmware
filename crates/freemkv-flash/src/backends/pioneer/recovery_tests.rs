@@ -1680,7 +1680,10 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
         message.contains("Installed firmware: BDR-TEST."),
         "{message}"
     );
-    assert!(message.contains("Target firmware: BDR-OTHER."), "{message}");
+    assert!(
+        message.contains("Selected firmware: BDR-OTHER."),
+        "{message}"
+    );
     assert!(!message.contains(&installed.family().unwrap().to_string()));
     assert!(format!("{error:#}").contains(&installed.family().unwrap().to_string()));
     assert!(format!("{error:#}").contains(&target.family().unwrap().to_string()));

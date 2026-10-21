@@ -16,7 +16,7 @@ fn hardware_mismatch_guidance_keeps_models_but_not_family_hashes() {
     let message = error_message(&error);
     assert!(message.contains("The underlying hardware for these firmwares is not compatible."));
     assert!(message.contains("Installed firmware: BDE-PR1EP PP100."));
-    assert!(message.contains("Target firmware: BDX-PR1MLA."));
+    assert!(message.contains("Selected firmware: BDX-PR1MLA."));
     assert!(message.contains("No firmware was written."));
     assert!(!message.contains("cf3183a51bc41e42"));
     assert!(!message.contains("31ce81c2dbb0fdb"));
@@ -39,7 +39,8 @@ fn precheck_evidence_never_overwrites_an_execution_failure() {
     let error = anyhow::anyhow!("write rejected").context(evidence.clone());
     let error = UpdateFailure::before_write("precheck", error);
     assert_eq!(error.downcast_ref::<UpdateFailure>(), Some(&evidence));
-    assert_eq!(error_message(&error), "write rejected");
+    assert!(error_message(&error).contains("Keep the drive"));
+    assert!(format!("{error:#}").contains("write rejected"));
 }
 
 #[test]
@@ -47,11 +48,12 @@ fn current_detection_error_keeps_transport_diagnostics_out_of_user_guidance() {
     let error = anyhow::Error::new(crate::backend::CurrentFirmwareRequired {
         source: anyhow::anyhow!("SCSI invalid field in CDB at 0x98000 [E4000]"),
     });
-    assert!(error_message(&error).contains("Specify the firmware currently installed"));
+    assert!(error_message(&error).contains("Choose the firmware currently installed"));
     assert!(!error_message(&error).contains("E4000"));
     assert!(format!("{error:#}").contains("SCSI invalid field in CDB at 0x98000 [E4000]"));
     let other = anyhow::anyhow!("original cause").context("operation failed");
-    assert_eq!(error_message(&other), "operation failed: original cause");
+    assert!(error_message(&other).contains("could not finish"));
+    assert!(format!("{other:#}").contains("original cause"));
 }
 
 #[test]
@@ -257,4 +259,27 @@ fn replaced_current_revokes_recovery_even_for_a_normally_recognized_drive() {
         );
         assert!(dev.writes.is_empty());
     }
+}
+
+#[test]
+fn firmware_read_capability_comes_from_normal_or_recovery_backend_without_io() {
+    let mut profile = DriveProfile {
+        identity: crate::backend::Identity {
+            vendor: "UNRELATED".into(),
+            product: "A model name must not decide policy".into(),
+            revision: "1.00".into(),
+            banner: None,
+        },
+        backend: None,
+        recovery: None,
+        capabilities: Capabilities::NONE,
+        backup_format: None,
+        flash_formats: &[],
+        recovery_errors: Vec::new(),
+    };
+    assert_eq!(profile.can_read(), None);
+    profile.recovery = Some(&crate::backends::mtk::DESCRIPTOR);
+    assert_eq!(profile.can_read(), Some(false));
+    profile.recovery = Some(&crate::backends::pioneer::DESCRIPTOR);
+    assert_eq!(profile.can_read(), Some(true));
 }

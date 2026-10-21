@@ -214,7 +214,7 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     for item in &view.panel {
-                        panel_item(ui, item, out);
+                        panel_item(ui, item, out, view.language);
                     }
                 });
         });
@@ -230,7 +230,7 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
             .max_height(ui.available_height().max(1.0))
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                results_ui(ui, results, out);
+                results_ui(ui, results, out, view.language);
             });
     });
 }
@@ -297,7 +297,12 @@ fn button(ui: &mut egui::Ui, b: &Button, out: &mut Vec<Input>) {
     }
 }
 
-fn panel_item(ui: &mut egui::Ui, item: &Item, out: &mut Vec<Input>) {
+fn panel_item(
+    ui: &mut egui::Ui,
+    item: &Item,
+    out: &mut Vec<Input>,
+    language: crate::localization::Language,
+) {
     match item {
         Item::Origin(origin) => {
             let color = match origin {
@@ -305,7 +310,10 @@ fn panel_item(ui: &mut egui::Ui, item: &Item, out: &mut Vec<Input>) {
                 crate::ui::FileOrigin::UserBackupLikely => CAUTION,
                 crate::ui::FileOrigin::Unknown => ui.visuals().weak_text_color(),
             };
-            ui.colored_label(color, egui::RichText::new(origin.label()).strong());
+            ui.colored_label(
+                color,
+                egui::RichText::new(crate::localization::render(language, origin.label())).strong(),
+            );
         }
         Item::Text(t) => {
             ui.label(t);
@@ -381,12 +389,17 @@ fn status_ui(ui: &mut egui::Ui, status: &Status, out: &mut Vec<Input>) {
     }
 }
 
-fn results_ui(ui: &mut egui::Ui, results: &Results, out: &mut Vec<Input>) {
+fn results_ui(
+    ui: &mut egui::Ui,
+    results: &Results,
+    out: &mut Vec<Input>,
+    language: crate::localization::Language,
+) {
     if let Some(open) = &results.open_results {
         button(ui, open, out);
     }
     if !results.cards.is_empty() {
-        info_cards(ui, &results.cards);
+        info_cards(ui, &results.cards, language);
     } else if !results.fields.is_empty() {
         egui::Grid::new("operation_results")
             .num_columns(2)
@@ -402,33 +415,41 @@ fn results_ui(ui: &mut egui::Ui, results: &Results, out: &mut Vec<Input>) {
     }
     if let Some(failure) = &results.failure {
         ui.colored_label(ERROR, &failure.text);
-        button(ui, &failure.save_log, out);
     }
     if let Some(notice) = &results.notice {
         ui.label(notice);
     }
     ui.add_space(6.0);
-    button(ui, &results.view_log, out);
-    button(ui, &results.submit_report, out);
+    ui.horizontal(|ui| {
+        button(ui, &results.view_log, out);
+        if let Some(failure) = &results.failure {
+            button(ui, &failure.save_log, out);
+        }
+        button(ui, &results.submit_report, out);
+    });
 }
 
 // ── drive information cards ───────────────────────────────────────────────
 
-pub(crate) fn info_cards(ui: &mut egui::Ui, cards: &[Card]) {
+pub(crate) fn info_cards(
+    ui: &mut egui::Ui,
+    cards: &[Card],
+    language: crate::localization::Language,
+) {
     if ui.available_width() >= 760.0 {
         ui.columns(2, |cols| {
             for card in cards {
-                card_ui(&mut cols[card.column.min(1)], card);
+                card_ui(&mut cols[card.column.min(1)], card, language);
             }
         });
     } else {
         for card in cards {
-            card_ui(ui, card);
+            card_ui(ui, card, language);
         }
     }
 }
 
-fn card_ui(ui: &mut egui::Ui, card: &Card) {
+fn card_ui(ui: &mut egui::Ui, card: &Card, language: crate::localization::Language) {
     egui::Frame::group(ui.style()).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.visuals_mut().disabled_alpha = 0.8;
@@ -455,11 +476,11 @@ fn card_ui(ui: &mut egui::Ui, card: &Card) {
                 ui.add_space(8.0);
                 if ui.available_width() >= 350.0 && !left.is_empty() && !right.is_empty() {
                     ui.columns(2, |cols| {
-                        media_column(&mut cols[0], left.iter(), 0);
-                        media_column(&mut cols[1], right.iter(), 1);
+                        media_column(&mut cols[0], left.iter(), 0, language);
+                        media_column(&mut cols[1], right.iter(), 1, language);
                     });
                 } else {
-                    media_column(ui, left.iter().chain(right), 0);
+                    media_column(ui, left.iter().chain(right), 0, language);
                 }
             }
         }
@@ -467,14 +488,19 @@ fn card_ui(ui: &mut egui::Ui, card: &Card) {
     ui.add_space(8.0);
 }
 
-fn media_column<'a>(ui: &mut egui::Ui, rows: impl Iterator<Item = &'a MediaRow>, id: usize) {
+fn media_column<'a>(
+    ui: &mut egui::Ui,
+    rows: impl Iterator<Item = &'a MediaRow>,
+    id: usize,
+    language: crate::localization::Language,
+) {
     egui::Grid::new(("media_capabilities", id))
         .num_columns(2)
         .spacing([8.0, 2.0])
         .show(ui, |ui| {
             ui.label("");
-            ui.strong(crate::ui::MEDIA_HEADER)
-                .on_hover_text(crate::ui::MEDIA_HINT);
+            ui.strong(crate::localization::get(language, "media.header"))
+                .on_hover_text(crate::localization::get(language, "media.hint"));
             ui.end_row();
             for row in rows {
                 ui.label(&row.label);
@@ -533,7 +559,7 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
             }
             ui.add_space(12.0);
             let mut ack = c.ack_checked;
-            if ui.checkbox(&mut ack, &c.ack_text).changed() {
+            if !c.ack_text.is_empty() && ui.checkbox(&mut ack, &c.ack_text).changed() {
                 out.push(Input::SetCheck(crate::ui::CheckId::RiskAck, ack));
             }
             ui.horizontal(|ui| {

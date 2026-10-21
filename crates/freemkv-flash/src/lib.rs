@@ -68,3 +68,9 @@ pub(crate) fn kernel_handoff_fixture(kernel: &mut [u8]) {
 }
 
 pub mod package;
+
+/// Shared user-interface message catalogs; never used to translate diagnostic logs.
+pub mod localization;
+
+/// Localizable customer guidance; diagnostic errors preserve their complete source chains.
+pub mod user_error;

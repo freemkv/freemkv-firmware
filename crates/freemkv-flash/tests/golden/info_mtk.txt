@@ -32,7 +32,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 chipset: MT1959
 firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
           fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
@@ -98,8 +98,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 FIELD    Chipset = MT1959
 MSG      chipset: MT1959
 MSG      firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
@@ -163,7 +163,7 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
+DVD region: Unavailable
 chipset: MT1959
 firmware: unknown (unrecognized — not in the built-in catalog)
           fingerprint fe47043787640c7d3f50b7a8e13ae22b07fc74f41826cb532effebf110816305
@@ -229,8 +229,8 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
 FIELD    Chipset = MT1959
 MSG      chipset: MT1959
 MSG      firmware: unknown (unrecognized — not in the built-in catalog)

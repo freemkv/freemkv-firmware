@@ -69,3 +69,22 @@ fn proceed_without_backup_prompt_requires_an_explicit_yes() {
         assert!(!proceed_without_backup_with(&mut bytes).unwrap());
     }
 }
+
+#[test]
+fn encoded_ui_messages_have_english_diagnostic_events_without_changing_the_event() {
+    let value = crate::localization::message(
+        "status.operation_failed",
+        &[("operation", "task.flash".into())],
+    );
+    let event = Event::Report(
+        crate::report::Row::gui("result", "status.ready", value.clone().into()).into(),
+    );
+    let diagnostic = diagnostic_event(&event);
+    assert!(diagnostic.contains("Flash failed"));
+    assert!(diagnostic.contains("Ready"));
+    assert!(!diagnostic.contains("status.operation_failed"));
+    let Event::Report(report) = event else {
+        unreachable!()
+    };
+    assert_eq!(report.gui_fields()[0].1, value);
+}

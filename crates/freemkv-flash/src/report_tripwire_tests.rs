@@ -22,8 +22,26 @@ fn baseline(file: &str, scenario: &str, part: &str) -> Vec<String> {
         .skip(1)
         .take_while(|l| !l.starts_with("--- "))
         .filter(|l| !l.is_empty())
-        .cloned()
+        .map(|line| clean_unavailable_fields(line))
         .collect()
+}
+
+// 0.14.1 intentionally replaces unavailable optional-field errors with a short
+// status. The historical transcript itself stays unchanged for comparison.
+fn clean_unavailable_fields(line: &str) -> String {
+    let optional = ["DVD region", "Quiet Drive", "PureRead", "Pioneer identity"];
+    if optional.iter().any(|label| {
+        line.trim_start().starts_with(&format!("{label}:"))
+            || line
+                .trim_start()
+                .starts_with(&format!("FIELD    {label} ="))
+            || line.trim_start().starts_with(&format!("MSG      {label}:"))
+    }) {
+        return line
+            .replace("Invalid or incomplete response", "Unavailable")
+            .replace("Not reported", "Unavailable");
+    }
+    line.to_owned()
 }
 
 /// The Pioneer and backend-less `info` scenarios, which must equal v0.11.2.

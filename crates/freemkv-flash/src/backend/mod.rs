@@ -339,6 +339,12 @@ pub fn unsupported_family_error(family: &str) -> anyhow::Error {
 /// A firmware command-protocol backend. Everything beyond identity is an
 /// optional facet; core code offers exactly what the facets provide.
 pub trait Backend: Sync + 'static {
+    /// Whether to offer automatic Current firmware acquisition. The optical
+    /// library owns this protocol capability; unknown backends require a file.
+    fn can_read(&self) -> bool {
+        false
+    }
+
     /// What this backend declares about itself: id, names and file formats.
     fn descriptor(&self) -> &'static Descriptor;
 
@@ -580,6 +586,18 @@ impl AuthorizedPlan {
             .context("authorized plan was made by another backend")
     }
 }
+
+/// The installed MediaTek firmware restricts the reads needed for a full backup.
+#[derive(Debug)]
+pub struct BackupReadRestricted;
+
+impl std::fmt::Display for BackupReadRestricted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("This firmware cannot be backed up. This is normal for many MediaTek drives.")
+    }
+}
+
+impl std::error::Error for BackupReadRestricted {}
 
 /// A front-end's answer to an authorized flash's confirmation text.
 pub trait Confirm {

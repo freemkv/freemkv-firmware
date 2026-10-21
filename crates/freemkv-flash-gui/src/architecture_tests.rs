@@ -89,6 +89,7 @@ fn gui_model_imports_only_workflow_and_report() {
                 let rest = &line[at + "freemkv_flash::".len()..];
                 if !(rest.starts_with("workflow")
                     || rest.starts_with("report")
+                    || (*file == "localization.rs" && rest.starts_with("localization"))
                     || (*file == "support.rs" && rest.starts_with("diagnostics")))
                 {
                     hits.push(format!("{file}:{n}: {line}"));

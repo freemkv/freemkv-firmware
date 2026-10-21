@@ -93,7 +93,7 @@ fn submit_at(
         .timeout_global(Some(control.timeout()?))
         .build()
         .into();
-    progress("Opening report approval in your browser…".into());
+    progress("report.opening".into());
     let request: Value = agent
         .post(&format!("{base}/requests"))
         .config()
@@ -162,7 +162,7 @@ fn submit_at(
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
-    progress("Uploading report…".into());
+    progress("report.uploading".into());
     for attempt in 1..=3 {
         let response = agent
             .put(&format!("{base}/requests/{id}/bundle"))
@@ -184,13 +184,13 @@ fn submit_at(
                 let id = receipt["report_id"]
                     .as_str()
                     .context("Missing report receipt")?;
-                return Ok(format!(
-                    "Report {id} received. Local copy: {}",
-                    path.display()
+                return Ok(crate::localization::message(
+                    "report.received",
+                    &[("receipt", id.into()), ("path", path.display().to_string())],
                 ));
             }
             Err(ureq::Error::StatusCode(503)) if attempt < 3 => {
-                progress("Report saved; retrying notification…".into());
+                progress("report.retrying".into());
                 control.pause()?;
             }
             Err(error) => {

@@ -170,7 +170,7 @@ fn rawread_reports_the_uhd_hrl_bd_and_auth_cell_facts_whenever_those_detours_are
 // ---------------------------------------------------------------------------
 
 /// The erased (`0xFF`) runs `free_space` will consider: 4-aligned, and
-/// CMAC-covered at both ends. Mirrors the allocator's own scan.
+/// wholly inside one active CMAC range, including clipped boundary runs.
 fn covered_free_runs(buf: &[u8]) -> Vec<(usize, usize)> {
     let ranges: Vec<(u32, u32)> = cmac::parse_table(buf)
         .expect("fixture carries a parseable CMAC table")
@@ -178,21 +178,23 @@ fn covered_free_runs(buf: &[u8]) -> Vec<(usize, usize)> {
         .filter(|e| e.is_active() && e.start <= e.end)
         .map(|e| (e.start, e.end))
         .collect();
-    let covered = |p: u32| ranges.iter().any(|&(s, e)| s <= p && p <= e);
     let mut runs = Vec::new();
     let mut i = CODE_REGION_START;
     while i < buf.len() {
-        if buf[i] == 0xFF {
-            let s = i;
-            while i < buf.len() && buf[i] == 0xFF {
-                i += 1;
-            }
-            let a = (s + 3) & !3;
-            if i > a && covered(a as u32) && covered((i - 1) as u32) {
-                runs.push((a, i - a));
-            }
-        } else {
+        if buf[i] != 0xff {
             i += 1;
+            continue;
+        }
+        let start = i;
+        while i < buf.len() && buf[i] == 0xff {
+            i += 1;
+        }
+        for &(lo, hi) in &ranges {
+            let a = (start.max(lo as usize) + 3) & !3;
+            let end = i.min(hi as usize + 1);
+            if end > a {
+                runs.push((a, end - a));
+            }
         }
     }
     runs
@@ -204,10 +206,14 @@ fn covered_free_runs(buf: &[u8]) -> Vec<(usize, usize)> {
 /// of a size this test controls. Returns that window's base.
 fn only_free_space(buf: &mut [u8], window: usize) -> u32 {
     let runs = covered_free_runs(buf);
-    let &(base, len) = runs
+    let base = Mt1959Engine
+        .free_space(buf, window)
+        .expect("fixture has covered space") as usize;
+    let len = runs
         .iter()
-        .max_by_key(|&&(a, l)| (l, std::cmp::Reverse(a)))
-        .expect("the fixture has CMAC-covered free space");
+        .find(|(start, _)| *start == base)
+        .expect("chosen covered run")
+        .1;
     assert!(
         window <= len,
         "asked for a {window}-byte window but the base's largest covered run is only {len}"
@@ -840,4 +846,82 @@ fn gatea_deny_target_sign_extends_a_backward_bne() {
          the deny block, not {:#x} bytes away",
         (facts.deny_site as i64 - want_site as i64).abs()
     );
+}
+
+#[test]
+fn allocation_clips_erased_runs_to_one_active_integrity_range() {
+    let mut image = vec![0; 0x200000];
+    let table = cmac::TABLE_OFFSET;
+    image[table..table + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE].fill(0xff);
+    let lo = 0x120003u32;
+    let hi = 0x12003fu32;
+    image[table..table + 4].copy_from_slice(&1u32.to_le_bytes());
+    image[table + 4..table + 8].copy_from_slice(&lo.to_le_bytes());
+    image[table + 8..table + 12].copy_from_slice(&hi.to_le_bytes());
+    image[0x120000..0x121000].fill(0xff);
+    assert_eq!(Mt1959Engine.free_space(&image, 60).unwrap(), 0x120004);
+    assert!(Mt1959Engine.free_space(&image, 61).is_err());
+    // An inactive range cannot extend coverage or bridge an uncovered gap.
+    image[table + 28..table + 32].copy_from_slice(&0u32.to_le_bytes());
+    image[table + 32..table + 36].copy_from_slice(&0x120040u32.to_le_bytes());
+    image[table + 36..table + 40].copy_from_slice(&0x120fffu32.to_le_bytes());
+    assert!(Mt1959Engine.free_space(&image, 61).is_err());
+    image[table + 28..table + 32].copy_from_slice(&1u32.to_le_bytes());
+    image[table + 32..table + 36].copy_from_slice(&0x120080u32.to_le_bytes());
+    image[table + 36..table + 40].copy_from_slice(&0x1200bfu32.to_le_bytes());
+    assert!(Mt1959Engine.free_space(&image, 100).is_err());
+    image[table + 28..table + 32].copy_from_slice(&0u32.to_le_bytes());
+    image[table + 4..table + 8].copy_from_slice(&u32::MAX.to_le_bytes());
+    image[table + 8..table + 12].copy_from_slice(&u32::MAX.to_le_bytes());
+    assert!(Mt1959Engine.free_space(&image, 1).is_err());
+    image[table + 4..table + 8].copy_from_slice(&lo.to_le_bytes());
+    let outside_image = image.len() as u32;
+    image[table + 8..table + 12].copy_from_slice(&outside_image.to_le_bytes());
+    assert!(Mt1959Engine.free_space(&image, 1).is_err());
+}
+
+#[test]
+fn allocation_keeps_existing_whole_run_placements_before_boundary_fallback() {
+    let mut image = fixture();
+    let original = Mt1959Engine.free_space(&image, 52).unwrap();
+    // The final active range is followed by erased bytes outside its coverage.
+    let range = cmac::parse_table(&image)
+        .unwrap()
+        .into_iter()
+        .filter(|entry| entry.is_active())
+        .max_by_key(|entry| entry.end)
+        .unwrap();
+    image[range.end as usize - 4095..range.end as usize + 4097].fill(0xff);
+    assert_eq!(Mt1959Engine.free_space(&image, 52).unwrap(), original);
+}
+
+#[test]
+fn reported_wh16ns58_v9_build_installs_raw_read_inside_signed_flash() {
+    let original = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    use sha2::Digest;
+    assert_eq!(
+        format!("{:x}", sha2::Sha256::digest(original)),
+        "97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061"
+    );
+    let (report, support) =
+        crate::api::modify_with_defaults(original, &BootSettings::standard()).unwrap();
+    let raw = lever(&report, LeverId::RawRead);
+    assert_eq!(raw.outcome, LeverOutcome::Applied);
+    assert!(support.has_boot());
+    let boundary_stub = fact(raw, "bd_stub_va").unwrap();
+    assert_eq!(boundary_stub, 0x1b236c);
+    let table = cmac::parse_table(&report.image).unwrap();
+    assert!(table.iter().any(|entry| entry.is_active()
+        && entry.start <= boundary_stub
+        && boundary_stub + 36 <= entry.end));
+    assert!(cmac::verify_detailed(&report.image)
+        .unwrap()
+        .iter()
+        .all(|entry| entry.matches));
+    let audit = crate::engine::audit::audit_image(original, &report);
+    assert!(audit.ok(), "{:?}", audit.failures().collect::<Vec<_>>());
+    // Modifying settings again uses the signed record without allocating more hooks.
+    let (again, _) =
+        crate::api::modify_with_defaults(&report.image, &BootSettings::standard()).unwrap();
+    assert_eq!(again.image, report.image);
 }

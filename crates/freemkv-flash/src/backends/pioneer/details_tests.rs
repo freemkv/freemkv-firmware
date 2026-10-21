@@ -33,3 +33,44 @@ fn mode_rows_list_every_choice_with_its_marks_for_the_gui_only() {
         ]
     );
 }
+
+#[test]
+fn optional_settings_errors_are_clean_in_the_report_and_complete_in_diagnostics() {
+    use std::sync::{Arc, Mutex};
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let received = events.clone();
+    let rows = crate::output::capture_events(
+        move |event| received.lock().unwrap().push(event),
+        || {
+            crate::diagnostics::run("optional-settings-error-test", || {
+                Ok(settings_rows(&Err(anyhow!(
+                    "SCSI E4000 cdb=[3c,06,00] offset=0x98000"
+                ))))
+            })
+            .unwrap()
+        },
+    );
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|row| row.value.plain() == "Unavailable"));
+    let path = events
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|event| {
+            let crate::output::Event::Report(report) = event else {
+                return None;
+            };
+            report.rows.iter().find_map(|row| match &row.value {
+                crate::report::Value::Path(path)
+                    if row.gui_label.as_deref() == Some("Diagnostic log") =>
+                {
+                    Some(path.clone())
+                }
+                _ => None,
+            })
+        })
+        .expect("saved diagnostic log");
+    let diagnostic = std::fs::read_to_string(&path).unwrap();
+    assert!(diagnostic.contains("SCSI E4000 cdb=[3c,06,00] offset=0x98000"));
+    std::fs::remove_file(path).unwrap();
+}

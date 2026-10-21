@@ -67,7 +67,7 @@ pub fn captured() -> bool {
 
 /// Publish a structured update; returns whether a front-end received it.
 pub fn publish(event: Event) -> bool {
-    crate::diagnostics::record(format!("{event:?}"));
+    crate::diagnostics::record(diagnostic_event(&event));
     SINK.with(|s| {
         if let Some(sink) = s.borrow_mut().as_mut() {
             sink(event);
@@ -76,6 +76,28 @@ pub fn publish(event: Event) -> bool {
             false
         }
     })
+}
+
+// Resolve presentation messages for logs without changing what reaches the GUI.
+fn diagnostic_event(event: &Event) -> String {
+    let mut diagnostic = event.clone();
+    match &mut diagnostic {
+        Event::Message(text) | Event::Progress { label: text, .. } => {
+            *text = crate::localization::english(text)
+        }
+        Event::Report(report) => {
+            for row in &mut report.rows {
+                if let Some(label) = &mut row.gui_label {
+                    *label = crate::localization::english(label);
+                }
+                if let crate::report::Value::Message(message) = &mut row.value {
+                    *message = crate::localization::english(message);
+                }
+            }
+        }
+        Event::DeviceSettings(_) => {}
+    }
+    format!("{diagnostic:?}")
 }
 
 /// Publish one GUI-only result row.
@@ -161,14 +183,7 @@ impl crate::backend::Confirm for TerminalConfirm {
 
     fn proceed_without_backup(&mut self, reason: &str) -> anyhow::Result<bool> {
         use std::io::IsTerminal;
-        println!(
-            "{}",
-            crate::style::amber(&format!(
-                "This drive cannot be backed up: {reason}\n\
-                 Flashing can still proceed, with every other safety check in place, but you will \
-                 NOT be able to roll this drive back to its current firmware."
-            ))
-        );
+        println!("{}", crate::style::amber(reason));
         // No backup is a bigger decision than the normal flash confirmation, so
         // it needs an explicit human yes: never auto-proceed on a non-terminal.
         if !std::io::stdin().is_terminal() {

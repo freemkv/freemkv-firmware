@@ -779,7 +779,16 @@ impl Shell {
                     | co::LVS_EX::INFOTIP
                     | co::LVS_EX::LABELTIP,
                 window_style: co::WS::CHILD | co::WS::TABSTOP | co::WS::GROUP,
-                columns: &[("Item", s.px(lay::FIELD_COL_W)), ("Value", s.px(400))],
+                columns: &[
+                    (
+                        crate::localization::get(app.language, "field.item"),
+                        s.px(lay::FIELD_COL_W),
+                    ),
+                    (
+                        crate::localization::get(app.language, "field.value"),
+                        s.px(400),
+                    ),
+                ],
                 ..Default::default()
             },
         );
@@ -871,9 +880,9 @@ impl Shell {
                     let _ = crate::external::open_path(&path);
                 }
                 Effect::StartTicking => {
-                    if let Err(e) = self.wnd.hwnd().SetTimer(TIMER_TICK, TICK_MS, None) {
+                    if let Err(_e) = self.wnd.hwnd().SetTimer(TIMER_TICK, TICK_MS, None) {
                         let _ = self.wnd.hwnd().MessageBox(
-                            &format!("The progress timer could not start ({e}). This window will not update until the operation finishes."),
+                            crate::localization::get(self.app.borrow().language, "errors.timer"),
                             "freemkv",
                             co::MB::ICONERROR,
                         );
@@ -1280,7 +1289,7 @@ impl Shell {
             .map(|n| measure(self.notice.hwnd(), n, Some(col.w)).1);
         let gap = s.px(lay::GAP);
         let row = s.px(lay::ROW_H) + gap;
-        let tail = fail_h.map_or(0, |h| h + gap + row) + notice_h.map_or(0, |h| h + gap) + row;
+        let tail = fail_h.map_or(0, |h| h + gap) + notice_h.map_or(0, |h| h + gap) + row;
         let has_rows = !r.cards.is_empty() || !r.fields.is_empty();
         if has_rows {
             let h = (bottom - col.y - tail - gap).max(s.px(lay::RESULTS_MIN_H).min(bottom - col.y));
@@ -1298,10 +1307,6 @@ impl Shell {
         match fail_h {
             Some(h) => {
                 put(&self.failure, col.take(h));
-                if let Some(f) = &r.failure {
-                    let mut l = col.line(s.px(lay::ROW_H));
-                    put(&self.save_log.btn, l.take(self.button_w(s, &f.save_log)));
-                }
             }
             None => show(&self.failure, false),
         }
@@ -1311,6 +1316,9 @@ impl Shell {
         }
         let mut l = col.line(s.px(lay::ROW_H));
         put(&self.view_log.btn, l.take(self.button_w(s, &r.view_log)));
+        if let Some(f) = &r.failure {
+            put(&self.save_log.btn, l.take(self.button_w(s, &f.save_log)));
+        }
         put(
             &self.submit_report.btn,
             l.take(self.button_w(s, &r.submit_report)),
@@ -1339,7 +1347,9 @@ impl Shell {
                         continue;
                     };
                     t += 1;
-                    let text = origin.label();
+                    let translated =
+                        crate::localization::render(self.app.borrow().language, origin.label());
+                    let text = translated.as_str();
                     if fresh {
                         set_text(lbl, text);
                         set_font(lbl.hwnd(), s.dpi(), Face::Bold);
@@ -1586,7 +1596,7 @@ impl Shell {
                 (TD_CANCEL, c.cancel.text.as_str()),
             ],
             default_button_id: TD_CANCEL,
-            verification_text: Some(&c.ack_text),
+            verification_text: (!c.ack_text.is_empty()).then_some(&c.ack_text),
             footer_text: (!footer.is_empty()).then_some(footer.as_str()),
             callback: Some(Box::new(move |hwnd: &w::HWND, tdn: w::Tdn| {
                 me.on_confirm(hwnd, tdn)
@@ -1863,9 +1873,11 @@ impl Shell {
             if me.view().can_close {
                 me.wnd.hwnd().DestroyWindow()?;
             } else {
-                me.wnd
-                    .hwnd()
-                    .MessageBox(ui::CLOSE_BLOCKED, "freemkv", co::MB::ICONWARNING)?;
+                me.wnd.hwnd().MessageBox(
+                    &crate::localization::render(me.app.borrow().language, ui::CLOSE_BLOCKED),
+                    "freemkv",
+                    co::MB::ICONWARNING,
+                )?;
             }
             Ok(())
         });
@@ -1933,8 +1945,17 @@ fn media_ticks(r: &MediaRow) -> String {
         Tri::Unknown => ' ',
     };
     match r.write {
-        Some(wr) => format!("{}: {} {}", ui::MEDIA_HEADER, tick(r.read), tick(wr)),
-        None => format!("{}: {}", ui::MEDIA_HEADER, tick(r.read)),
+        Some(wr) => format!(
+            "{}: {} {}",
+            crate::localization::get(crate::localization::Language::En, "media.header"),
+            tick(r.read),
+            tick(wr)
+        ),
+        None => format!(
+            "{}: {}",
+            crate::localization::get(crate::localization::Language::En, "media.header"),
+            tick(r.read)
+        ),
     }
 }
 

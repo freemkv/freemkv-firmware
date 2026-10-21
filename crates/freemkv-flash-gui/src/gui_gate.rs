@@ -90,10 +90,9 @@ pub fn fixture() -> App {
     app.preferences = crate::localization::Preferences::Memory;
     app.language = crate::localization::Language::En;
     app.profile = ProfileState::Ready(Profile {
+        can_read: Some(true),
         flash_current: true,
-        chips: ["Synthetic", "Backup", "Dump", "Flash", "Recovery"]
-            .map(String::from)
-            .to_vec(),
+        chips: vec!["Synthetic".into()],
         tasks: vec![Task::Backup, Task::Dump, Task::Flash, Task::Recovery],
         inspect: true,
         backup_name: Some("GATE_1.00.backup.bin".into()),
@@ -496,3 +495,14 @@ fn seen(v: Option<bool>, yes: &str, no: &str) -> String {
 #[cfg(test)]
 #[path = "gui_gate_tests.rs"]
 mod tests;
+
+/// Synthetic backup question; its unanswered receiver never authorizes a write.
+#[cfg(all(feature = "native", target_os = "macos"))]
+pub fn open_backup_question(app: &mut App) {
+    open_flash_sheet(app);
+    let (reply, _) = mpsc::channel();
+    app.pending.as_mut().unwrap().sheet = Sheet::WithoutBackup {
+        reason: "errors.backup_restricted".into(),
+        reply,
+    };
+}

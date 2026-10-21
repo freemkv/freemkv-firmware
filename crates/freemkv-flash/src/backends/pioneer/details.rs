@@ -37,7 +37,10 @@ fn identity_rows(dev: &mut ReadDevice<'_>, read: &InfoSoFar<'_>) -> Vec<Row> {
             row("firmware_type", "Firmware type", id.normal_tag()),
             row("kernel_version", "Kernel version", id.code()),
         ],
-        Err(e) => vec![row("pioneer_identity", "Pioneer identity", &e.to_string())],
+        Err(e) => {
+            crate::diagnostics::record(format!("Pioneer identity read failed: {e:#}"));
+            vec![row("pioneer_identity", "Pioneer identity", "Unavailable")]
+        }
     };
     let mut b = [0; production::PARAMETERS_LEN];
     let made =
@@ -69,10 +72,11 @@ fn settings_rows(settings: &Result<Settings>) -> Vec<Row> {
     let s = match settings {
         Ok(s) => s,
         Err(e) => {
+            crate::diagnostics::record(format!("Pioneer settings read failed: {e:#}"));
             return vec![
-                row("quiet_drive", "Quiet Drive", &e.to_string()).in_group(Group::Settings),
-                row("pure_read", "PureRead", &e.to_string()).in_group(Group::Settings),
-            ]
+                row("quiet_drive", "Quiet Drive", "Unavailable").in_group(Group::Settings),
+                row("pure_read", "PureRead", "Unavailable").in_group(Group::Settings),
+            ];
         }
     };
     let mut rows = Vec::new();

@@ -54,7 +54,8 @@ fn rendered_text(shell: &mut Shell) -> Vec<(String, bool)> {
 }
 
 fn shows(text: &[(String, bool)], want: &str) -> bool {
-    text.iter().any(|(t, visible)| t == want && *visible)
+    text.iter()
+        .any(|(t, visible)| *t == crate::localization::english(want) && *visible)
 }
 
 #[test]
@@ -136,10 +137,7 @@ fn failed_operation_offers_log_export_next_to_the_error() {
     let mut s = shell(Vec::new());
     s.app.failure = Some("Backup failed".into());
     let text = rendered_text(&mut s);
-    assert!(
-        text.iter().any(|(t, _)| t == "Save diagnostic log…"),
-        "{text:?}"
-    );
+    assert!(text.iter().any(|(t, _)| t == "Save Log…"), "{text:?}");
     assert!(text.iter().any(|(t, _)| t == "View Log"));
     assert!(text.iter().any(|(t, _)| t == "Backup failed"));
 }
@@ -205,7 +203,11 @@ fn confirmation_window_shows_the_gate_texts() {
         crate::ui::RISK_ACK,
         "Current: old.tar",
     ] {
-        assert!(text.iter().any(|(t, _)| t == want), "{want}: {text:?}");
+        assert!(
+            text.iter()
+                .any(|(t, _)| *t == crate::localization::english(want)),
+            "{want}: {text:?}"
+        );
     }
 }
 
@@ -215,7 +217,14 @@ fn card_text(fields: &[(&str, &str, Group)], width: f32) -> Vec<String> {
         .iter()
         .map(|(k, v, g)| Row::gui("test", k, (*v).into()).in_group(*g))
         .collect();
-    let cards = crate::ui::info_cards(&rows);
+    let mut cards = crate::ui::info_cards(&rows);
+    for card in &mut cards {
+        card.title = crate::localization::english(&card.title);
+        card.subtitle = card
+            .subtitle
+            .as_ref()
+            .map(|value| crate::localization::english(value));
+    }
     let ctx = egui::Context::default();
     let mut text = Vec::new();
     for _ in 0..3 {
@@ -227,7 +236,7 @@ fn card_text(fields: &[(&str, &str, Group)], width: f32) -> Vec<String> {
                 )),
                 ..Default::default()
             },
-            |ui| info_cards(ui, &cards),
+            |ui| info_cards(ui, &cards, crate::localization::Language::En),
         );
         text = output
             .shapes
@@ -262,7 +271,8 @@ fn information_cards_render_in_narrow_and_wide_layouts() {
             "R/W",
         ] {
             assert!(
-                text.iter().any(|t| t == want),
+                text.iter()
+                    .any(|t| *t == crate::localization::english(want)),
                 "{want} at {width}: {text:?}"
             );
         }
@@ -276,4 +286,39 @@ fn light_theme_has_an_opaque_light_window_background() {
     let background = s.clear_color(&egui::Visuals::light());
     assert!(background[..3].iter().all(|channel| *channel > 0.8));
     assert_eq!(background[3], 1.0);
+}
+
+#[test]
+fn diagnostic_actions_share_one_row_in_view_save_submit_order() {
+    let mut s = shell(Vec::new());
+    s.app.failure = Some("errors.operation_failed".into());
+    let ctx = egui::Context::default();
+    configure_style(&ctx);
+    let mut found = std::collections::BTreeMap::new();
+    for _ in 0..3 {
+        let output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(900.0, 760.0),
+                )),
+                ..Default::default()
+            },
+            |ui| s.render(ui),
+        );
+        found.clear();
+        for clipped in output.shapes {
+            if let egui::epaint::Shape::Text(shape) = clipped.shape {
+                let text = shape.galley.text();
+                if ["View Log", "Save Log…", "Submit Report"].contains(&text) {
+                    found.insert(text.to_owned(), shape.pos);
+                }
+            }
+        }
+    }
+    let view = found["View Log"];
+    let save = found["Save Log…"];
+    let submit = found["Submit Report"];
+    assert!(view.x < save.x && save.x < submit.x);
+    assert!((view.y - save.y).abs() < 1.0 && (save.y - submit.y).abs() < 1.0);
 }

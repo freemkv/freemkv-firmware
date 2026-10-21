@@ -10,7 +10,7 @@ Serial number: Not reported
 Buffer size: Not reported
 Loader type: Not reported
 Interface type: Not reported
-Pioneer identity: Not reported
+Pioneer identity: Unavailable
 Product code: Not reported
 Manufactured: Not reported
 Product origin: Not reported
@@ -35,9 +35,9 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
-Quiet Drive: Invalid or incomplete response
-PureRead: Invalid or incomplete response
+DVD region: Unavailable
+Quiet Drive: Unavailable
+PureRead: Unavailable
 --- events (74) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = PIONEER
@@ -57,8 +57,8 @@ FIELD    Loader type = Not reported
 MSG      Loader type: Not reported
 FIELD    Interface type = Not reported
 MSG      Interface type: Not reported
-FIELD    Pioneer identity = Not reported
-MSG      Pioneer identity: Not reported
+FIELD    Pioneer identity = Unavailable
+MSG      Pioneer identity: Unavailable
 FIELD    Product code = Not reported
 MSG      Product code: Not reported
 FIELD    Manufactured = Not reported
@@ -107,12 +107,12 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
-FIELD    Quiet Drive = Invalid or incomplete response
-MSG      Quiet Drive: Invalid or incomplete response
-FIELD    PureRead = Invalid or incomplete response
-MSG      PureRead: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
+FIELD    Quiet Drive = Unavailable
+MSG      Quiet Drive: Unavailable
+FIELD    PureRead = Unavailable
+MSG      PureRead: Unavailable
 --- scsi transcript (20) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -146,7 +146,7 @@ Serial number: Not reported
 Buffer size: Not reported
 Loader type: Not reported
 Interface type: Not reported
-Pioneer identity: Not reported
+Pioneer identity: Unavailable
 Product code: Not reported
 Manufactured: Not reported
 Product origin: Not reported
@@ -171,9 +171,9 @@ HD DVD-ROM: Read: Unknown    Write: No
 HD DVD-R: Read: Unknown    Write: Unknown
 HD DVD-RAM: Read: Unknown    Write: Unknown
 HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Invalid or incomplete response
-Quiet Drive: Invalid or incomplete response
-PureRead: Invalid or incomplete response
+DVD region: Unavailable
+Quiet Drive: Unavailable
+PureRead: Unavailable
 --- events (74) ---
 MSG      device: mock://in-memory
 FIELD    Manufacturer = RENESAS
@@ -193,8 +193,8 @@ FIELD    Loader type = Not reported
 MSG      Loader type: Not reported
 FIELD    Interface type = Not reported
 MSG      Interface type: Not reported
-FIELD    Pioneer identity = Not reported
-MSG      Pioneer identity: Not reported
+FIELD    Pioneer identity = Unavailable
+MSG      Pioneer identity: Unavailable
 FIELD    Product code = Not reported
 MSG      Product code: Not reported
 FIELD    Manufactured = Not reported
@@ -243,12 +243,12 @@ FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
 MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
 MSG      HD DVD-RW: Read: Unknown    Write: Unknown
-FIELD    DVD region = Invalid or incomplete response
-MSG      DVD region: Invalid or incomplete response
-FIELD    Quiet Drive = Invalid or incomplete response
-MSG      Quiet Drive: Invalid or incomplete response
-FIELD    PureRead = Invalid or incomplete response
-MSG      PureRead: Invalid or incomplete response
+FIELD    DVD region = Unavailable
+MSG      DVD region: Unavailable
+FIELD    Quiet Drive = Unavailable
+MSG      Quiet Drive: Unavailable
+FIELD    PureRead = Unavailable
+MSG      PureRead: Unavailable
 --- scsi transcript (20) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96

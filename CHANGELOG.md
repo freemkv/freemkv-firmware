@@ -3,6 +3,21 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.14.1] - 2026-10-21
+
+### freemkv Flash
+
+- Ask whether to proceed when a backup cannot be made, including the normal read restrictions on many MediaTek drives. Choosing Yes still requires final confirmation before flashing.
+- Require a Current firmware file when the drive cannot provide its installed firmware automatically. Flash and Recovery show the same controls for the selected drive.
+- Translate operation forms, confirmations, results and error guidance in all 29 UI languages. Diagnostic logs remain in English.
+- Show concise errors with a next step, while keeping command details and full failure causes in diagnostic logs.
+- Put View Log, Save Log and Submit Report together in one row, and remove repeated operation labels above the tabs.
+
+### freemkv Modify
+
+- Add a saved language preference and translated controls, startup settings, results and error guidance in 29 languages. Diagnostic logs remain in English.
+- Fix Raw Read patching on WH16NS58 1.V9 and other images with usable space at the edge of a signed firmware region.
+
 ## [0.14.0] - 2026-10-21
 
 ### freemkv Flash
