@@ -3,11 +3,12 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
-## [0.14.0] - Unreleased
+## [0.14.0] - 2026-10-21
 
 ### freemkv Flash
 
 - Add a saved language preference and initial translations for common controls and menus in 29 languages. Translation of operation details and error messages is still in progress.
+- Show the correct application version in macOS app information.
 - Fix misleading Pioneer errors for unrecognized MediaTek TAR files. Invalid packages now report a package error before any write.
 - Let MediaTek Flash use a selected Current firmware file when the drive blocks automatic detection. Read from drive remains the default; failed detection now explains how to select the installed firmware.
 - Give Flash and Recovery matching firmware-selection layouts, with Read from drive selected by default in both desktop forms.
@@ -18,7 +19,7 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
-- Fix firmware creation and editable startup settings for WH16NS58 1.V9 and other supported images with fragmented free space.
+- Fix firmware creation and editing startup settings for WH16NS58 1.V9 and other affected firmware.
 - Explain when an input is already modified and a clean OEM firmware file is required.
 
 ## [0.13.4] - 2026-10-20
