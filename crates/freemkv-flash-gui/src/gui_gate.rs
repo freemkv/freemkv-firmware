@@ -497,6 +497,7 @@ fn seen(v: Option<bool>, yes: &str, no: &str) -> String {
 mod tests;
 
 /// Synthetic backup question; its unanswered receiver never authorizes a write.
+#[cfg(all(feature = "native", target_os = "macos"))]
 pub fn open_backup_question(app: &mut App) {
     open_flash_sheet(app);
     let (reply, _) = mpsc::channel();

@@ -394,7 +394,7 @@
     "domain.signature": "Signatura",
     "domain.valid_encoding_key_and_firmware": "Valido (codifica chiave e firmware)",
     "domain.valid_firmware": "Il firmware (Firmware)",
-    "domain.invalid": "Invalidità",
+    "domain.integrity_invalid": "Invalidità",
     "domain.present_verification_unavailable": "Presente; verifica non disponibile",
     "domain.verification_unavailable_for_this_format": "Verificazione non disponibile per questo formato",
     "domain.main_firmware": "Il principale firmware",

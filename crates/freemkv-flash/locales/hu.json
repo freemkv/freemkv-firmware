@@ -394,7 +394,7 @@
     "domain.signature": "aláírás",
     "domain.valid_encoding_key_and_firmware": "Valid (a kulcs és a firmware kódolásával)",
     "domain.valid_firmware": "Hiteles ( firmware )",
-    "domain.invalid": "fogyatékosság",
+    "domain.integrity_invalid": "fogyatékosság",
     "domain.present_verification_unavailable": "Jelenléte; ellenőrzés nem elérhető",
     "domain.verification_unavailable_for_this_format": "Ellenőrzés nem elérhető ebben a formátumban",
     "domain.main_firmware": "Fő firmware",

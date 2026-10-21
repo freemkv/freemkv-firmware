@@ -394,7 +394,7 @@
     "domain.signature": "Signatør",
     "domain.valid_encoding_key_and_firmware": "Valid (koding av nøkkel og firmware)",
     "domain.valid_firmware": "Gjeldende (Firmware)",
-    "domain.invalid": "Invalid",
+    "domain.integrity_invalid": "Invalid",
     "domain.present_verification_unavailable": "Tilgjengelig; verifisering ikke tilgjengelig",
     "domain.verification_unavailable_for_this_format": "Verifikasjon ikke tilgjengelig for dette formatet",
     "domain.main_firmware": "Hovedfirmaet",

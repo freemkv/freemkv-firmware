@@ -394,7 +394,7 @@
     "domain.signature": "Unterschrift",
     "domain.valid_encoding_key_and_firmware": "gültig (Schlüssel und Firmware verschlüsseln)",
     "domain.valid_firmware": "Wirksamkeit ( Firmware )",
-    "domain.invalid": "Invalid",
+    "domain.integrity_invalid": "Invalid",
     "domain.present_verification_unavailable": "Gegenwart; Überprüfung nicht verfügbar",
     "domain.verification_unavailable_for_this_format": "Überprüfung nicht für dieses Format verfügbar",
     "domain.main_firmware": "Haupt Firmware",

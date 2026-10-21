@@ -394,7 +394,7 @@
     "domain.signature": "Tandatangan",
     "domain.valid_encoding_key_and_firmware": "valid (coding key dan firmware)",
     "domain.valid_firmware": "Perangkat lunak ( firmware )",
-    "domain.invalid": "Invalid",
+    "domain.integrity_invalid": "Invalid",
     "domain.present_verification_unavailable": "Keterangan; verifikasi tidak tersedia",
     "domain.verification_unavailable_for_this_format": "Verifikasi tidak tersedia untuk format ini",
     "domain.main_firmware": "Firmware utama",

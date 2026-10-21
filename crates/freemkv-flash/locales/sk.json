@@ -394,7 +394,7 @@
     "domain.signature": "podpisovanie",
     "domain.valid_encoding_key_and_firmware": "Valid (kódovanie kľúča a firmvéru)",
     "domain.valid_firmware": "Platnosť ( firmware )",
-    "domain.invalid": "Invalidný",
+    "domain.integrity_invalid": "Invalidný",
     "domain.present_verification_unavailable": "prítomnosť; overovanie nedostupné",
     "domain.verification_unavailable_for_this_format": "Verifikácia nie je k dispozícii pre tento formát",
     "domain.main_firmware": "Hlavný firmware",

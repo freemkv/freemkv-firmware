@@ -394,7 +394,7 @@
     "domain.signature": "chữ ký",
     "domain.valid_encoding_key_and_firmware": "Valid (coding key và firmware)",
     "domain.valid_firmware": "Công cụ (Firmware)",
-    "domain.invalid": "khuyết tật",
+    "domain.integrity_invalid": "khuyết tật",
     "domain.present_verification_unavailable": "Hiện tại; xác minh không sẵn dùng",
     "domain.verification_unavailable_for_this_format": "Kiểm tra không sẵn dùng cho định dạng này",
     "domain.main_firmware": "Firmware chính",

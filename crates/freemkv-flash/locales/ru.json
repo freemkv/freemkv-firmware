@@ -394,7 +394,7 @@
     "domain.signature": "Подписание",
     "domain.valid_encoding_key_and_firmware": "Валидный (кодирование ключа и фирменного программного обеспечения)",
     "domain.valid_firmware": "Использование (Firmware)",
-    "domain.invalid": "инвалид",
+    "domain.integrity_invalid": "инвалид",
     "domain.present_verification_unavailable": "Настоящий; проверка недоступна",
     "domain.verification_unavailable_for_this_format": "Проверка недоступна для этого формата",
     "domain.main_firmware": "Основная фирма",

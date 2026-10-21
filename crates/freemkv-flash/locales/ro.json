@@ -394,7 +394,7 @@
     "domain.signature": "semnătura",
     "domain.valid_encoding_key_and_firmware": "Valid (codificarea cheii și firmware)",
     "domain.valid_firmware": "Cuvânt cheie ( firmware )",
-    "domain.invalid": "invalidă",
+    "domain.integrity_invalid": "invalidă",
     "domain.present_verification_unavailable": "prezent; verificarea nu este disponibilă",
     "domain.verification_unavailable_for_this_format": "Verificarea nu este disponibilă pentru acest format",
     "domain.main_firmware": "Firmware principală",

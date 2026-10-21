@@ -394,7 +394,7 @@
     "domain.signature": "υπογραφή",
     "domain.valid_encoding_key_and_firmware": "Κανόνες κρυπτογράφησης (κλειδί κρυπτογράφησης και firmware)",
     "domain.valid_firmware": "Συσκευή (Firmware)",
-    "domain.invalid": "Αναπηρία",
+    "domain.integrity_invalid": "Αναπηρία",
     "domain.present_verification_unavailable": "Παρουσιάζοντας; Ελέγχου μη διαθέσιμη",
     "domain.verification_unavailable_for_this_format": "Η επαλήθευση δεν είναι διαθέσιμη για αυτή τη μορφή",
     "domain.main_firmware": "Κύρια firmware",

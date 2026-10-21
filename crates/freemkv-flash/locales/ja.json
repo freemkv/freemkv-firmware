@@ -394,7 +394,7 @@
     "domain.signature": "サイン",
     "domain.valid_encoding_key_and_firmware": "有効(キーとファームウェアの暗号化)",
     "domain.valid_firmware": "ファームウェア(Firmware)",
-    "domain.invalid": "障害者",
+    "domain.integrity_invalid": "障害者",
     "domain.present_verification_unavailable": "現状:未確認",
     "domain.verification_unavailable_for_this_format": "このフォーマットで利用できない検証",
     "domain.main_firmware": "主なファームウェア",

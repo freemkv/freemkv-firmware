@@ -394,7 +394,7 @@
     "domain.signature": "İmza",
     "domain.valid_encoding_key_and_firmware": "GÜVENLİ (Key ve Firmware Kodlama)",
     "domain.valid_firmware": "Firmware ( firmware için geçerli )",
-    "domain.invalid": "Engelli",
+    "domain.integrity_invalid": "Engelli",
     "domain.present_verification_unavailable": "Mevcut; doğrulama mevcut değil",
     "domain.verification_unavailable_for_this_format": "Bu format için mevcut olmayan doğrulama",
     "domain.main_firmware": "Ana firmware",

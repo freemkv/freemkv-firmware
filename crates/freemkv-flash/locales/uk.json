@@ -394,7 +394,7 @@
     "domain.signature": "підписання",
     "domain.valid_encoding_key_and_firmware": "Важливий (кодируючи ключ і фірмауре)",
     "domain.valid_firmware": "Використання фірмування (Firmware)",
-    "domain.invalid": "інвалідність",
+    "domain.integrity_invalid": "інвалідність",
     "domain.present_verification_unavailable": "Теперішній; перевірка недоступна",
     "domain.verification_unavailable_for_this_format": "Перевірка недоступна для цього формату",
     "domain.main_firmware": "Основна фірма",

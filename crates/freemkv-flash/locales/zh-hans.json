@@ -394,7 +394,7 @@
     "domain.signature": "签名",
     "domain.valid_encoding_key_and_firmware": "有效(编码密钥和硬件)",
     "domain.valid_firmware": "可用(Firmware)",
-    "domain.invalid": "残疾人",
+    "domain.integrity_invalid": "残疾人",
     "domain.present_verification_unavailable": "现有; 未可用的验证",
     "domain.verification_unavailable_for_this_format": "此格式未提供的验证",
     "domain.main_firmware": "主要 firmware",

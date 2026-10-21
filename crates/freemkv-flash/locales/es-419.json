@@ -394,7 +394,7 @@
     "domain.signature": "Síntomas",
     "domain.valid_encoding_key_and_firmware": "Valido (encodando la clave y el firmware)",
     "domain.valid_firmware": "El firmware (Firmware)",
-    "domain.invalid": "Invalido",
+    "domain.integrity_invalid": "Invalido",
     "domain.present_verification_unavailable": "Presente; verificación no disponible",
     "domain.verification_unavailable_for_this_format": "Verificación no disponible para este formato",
     "domain.main_firmware": "El firmware principal",

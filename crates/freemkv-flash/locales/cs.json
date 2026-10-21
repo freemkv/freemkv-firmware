@@ -394,7 +394,7 @@
     "domain.signature": "Podpis",
     "domain.valid_encoding_key_and_firmware": "Valid (kódování klíče a firmwaru)",
     "domain.valid_firmware": "Vlastní firmware (Firmware)",
-    "domain.invalid": "invalidní",
+    "domain.integrity_invalid": "invalidní",
     "domain.present_verification_unavailable": "Přítomnost; ověřování nedostupné",
     "domain.verification_unavailable_for_this_format": "ověření nedostupné pro tento formát",
     "domain.main_firmware": "Hlavní firmware",

@@ -394,7 +394,7 @@
     "domain.signature": "Signatura",
     "domain.valid_encoding_key_and_firmware": "Valid (encodant clau i firmware)",
     "domain.valid_firmware": "El programari (Firmware)",
-    "domain.invalid": "Invalid",
+    "domain.integrity_invalid": "Invalid",
     "domain.present_verification_unavailable": "Presència; verificació no disponible",
     "domain.verification_unavailable_for_this_format": "Verificació no disponible per a aquest format",
     "domain.main_firmware": "El principal firmware",

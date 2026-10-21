@@ -394,7 +394,7 @@
     "domain.signature": "ondertekening",
     "domain.valid_encoding_key_and_firmware": "Geldig (codering van sleutel en firmware)",
     "domain.valid_firmware": "Geldig (de firmware)",
-    "domain.invalid": "Invalid",
+    "domain.integrity_invalid": "Invalid",
     "domain.present_verification_unavailable": "Present; verificatie ontoegankelijk",
     "domain.verification_unavailable_for_this_format": "Verificatie niet beschikbaar voor dit formaat",
     "domain.main_firmware": "De belangrijkste firmware",

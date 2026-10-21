@@ -394,7 +394,7 @@
     "domain.signature": "서명",
     "domain.valid_encoding_key_and_firmware": "유효한 (코딩 키 및 firmware)",
     "domain.valid_firmware": "유효한 소프트웨어 (Firmware)",
-    "domain.invalid": "장애인",
+    "domain.integrity_invalid": "장애인",
     "domain.present_verification_unavailable": "현재; 확인이 불가능",
     "domain.verification_unavailable_for_this_format": "이 형식에 사용할 수 없는 검사",
     "domain.main_firmware": "주요 firmware",

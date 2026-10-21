@@ -394,7 +394,7 @@
     "domain.signature": "allekirjoittaminen",
     "domain.valid_encoding_key_and_firmware": "Käytettävissä (koodi avain ja firmware)",
     "domain.valid_firmware": "Käytettävissä ( Firmware )",
-    "domain.invalid": "vammainen",
+    "domain.integrity_invalid": "vammainen",
     "domain.present_verification_unavailable": "Tilanne; tarkastus ei ole saatavilla",
     "domain.verification_unavailable_for_this_format": "Tarkistus, joka ei ole saatavilla tässä muodossa",
     "domain.main_firmware": "Tärkein firmware",
