@@ -48,6 +48,7 @@ use crate::backends::pioneer::{Pioneer, PACKAGE};
 /// COMPAT: a flash request for an OEM package, as the CLI builds it.
 fn request(input: Vec<u8>, execute: bool, model: &str, backup: Option<PathBuf>) -> FlashRequest {
     FlashRequest {
+        current: None,
         input,
         input_format: &PACKAGE,
         mode: FlashMode::Full,

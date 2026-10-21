@@ -4,7 +4,10 @@ use crate::backend::{
     registry, unsupported_family_error, Backend, BackendId, Capabilities, Descriptor, FlashRequest,
     Match, ReadDevice, UNKNOWN_FAMILY,
 };
-pub use crate::backend::{AuthorizedPlan, Confirm, UpdateEvidence, UpdateFailure, UpdateOutcome};
+pub use crate::backend::{
+    AuthorizedPlan, Confirm, CurrentFirmwareRequired, FlashPreview, HardwareMismatch,
+    UpdateEvidence, UpdateFailure, UpdateOutcome,
+};
 /// Correlation helpers keep a front-end's session events linked to operation logs.
 pub use crate::diagnostics::{new_operation_id, with_operation_id};
 /// Inspection inputs and results, so a front-end needs only this module and
@@ -120,6 +123,10 @@ pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonRe
 /// Flash options shared by both front-ends. Defaults are a backed-up dry run.
 #[derive(Clone, Debug, Default)]
 pub struct FlashOptions {
+    /// Installed firmware reference; omission reads receiver evidence from the drive.
+    pub current: Option<PathBuf>,
+    /// Explicit installed member of a paired Current MediaTek TAR.
+    pub current_member: Option<String>,
     /// Optional device selector; omission selects the sole attached drive.
     pub device: Option<String>,
     /// Firmware or backup input.
@@ -130,6 +137,25 @@ pub struct FlashOptions {
     pub execute: bool,
     /// Explicit acknowledgement of the flash risk.
     pub acknowledged_risk: bool,
+}
+
+/// Keep actionable guidance separate from diagnostic evidence and source chains.
+pub fn error_message(error: &anyhow::Error) -> String {
+    if let Some(error) = error.downcast_ref::<HardwareMismatch>() {
+        return error.to_string();
+    }
+    if let Some(error) = error.downcast_ref::<CurrentFirmwareRequired>() {
+        return error.to_string();
+    }
+    let evidence = error
+        .downcast_ref::<UpdateFailure>()
+        .map(ToString::to_string);
+    error
+        .chain()
+        .map(ToString::to_string)
+        .filter(|cause| Some(cause) != evidence.as_ref())
+        .collect::<Vec<_>>()
+        .join(": ")
 }
 
 /// Inspect a local firmware file without drive discovery or transport access.
@@ -516,9 +542,13 @@ fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<UpdateOu
         args.input, args.backup, args.execute, args.acknowledged_risk
     ));
     if args.execute && !args.acknowledged_risk {
-        bail!("refusing to flash without acknowledging the risk");
+        return Err(UpdateFailure::before_write(
+            "risk acknowledgement",
+            anyhow::anyhow!("refusing to flash without acknowledging the risk"),
+        ));
     }
-    let (mut dev, handler, req) = open_flash(&args)?;
+    let (mut dev, handler, req) = open_flash(&args)
+        .map_err(|error| UpdateFailure::before_write("input and drive checks", error))?;
     engine::flash(dev.as_mut(), handler, &req, confirm).inspect(|outcome| {
         crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
     })
@@ -527,13 +557,19 @@ fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<UpdateOu
 /// The read-only first stage for a front-end to show before asking for
 /// consent: the dry run's checks and plan as text. Needs no backup.
 pub fn plan_flash(args: &FlashOptions) -> Result<Vec<String>> {
+    preview_flash(args).map(|preview| preview.lines)
+}
+
+/// A preview reports separately whether installed compatibility is still pending.
+pub fn preview_flash(args: &FlashOptions) -> Result<FlashPreview> {
     crate::diagnostics::run("flash plan", || {
         let args = FlashOptions {
             execute: false,
             ..args.clone()
         };
-        let (mut dev, handler, req) = open_flash(&args)?;
-        engine::preview_flash(dev.as_mut(), handler, &req)
+        let (mut dev, handler, req) = open_flash(&args)
+            .map_err(|error| UpdateFailure::before_write("input and drive checks", error))?;
+        engine::preview_flash_details(dev.as_mut(), handler, &req)
     })
 }
 
@@ -547,9 +583,22 @@ fn open_flash(
 )> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
+    anyhow::ensure!(
+        args.current.is_some() || args.current_member.is_none(),
+        "--current-member requires --current"
+    );
+    let current = args
+        .current
+        .as_ref()
+        .map(|path| current_firmware_image(&read_capped(path)?, args.current_member.as_deref()))
+        .transpose()?;
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
+    anyhow::ensure!(
+        current.is_none() || handler.flash().is_some_and(|f| f.accepts_current()),
+        "this flash backend does not accept a Current firmware reference"
+    );
     let input_format = registry::flash_input_format(handler, &args.input, &input)?
         .context("backend reads no firmware files")?;
     let drive_model = handler
@@ -561,6 +610,7 @@ fn open_flash(
             .and_then(|b| default_backup_path(&args.input, b.format().extension))
     });
     let req = FlashRequest {
+        current,
         input,
         input_format,
         mode: FlashMode::Full,
@@ -702,64 +752,83 @@ pub struct RecoveryOptions {
 /// Recover without automatic backups or installed-versus-target policy gates.
 pub fn recover(args: RecoveryOptions) -> Result<UpdateOutcome> {
     crate::diagnostics::run("recovery", || {
-        if args.execute && !args.acknowledged_risk {
-            bail!("refusing recovery without acknowledging the risk");
-        }
-        crate::diagnostics::record(format!("recovery options: {args:?}"));
-        let input = read_capped(&args.input)?;
-        if input.get(257..262) != Some(b"ustar") {
-            bail!("Recovery accepts TAR packages only");
-        }
-        let target = recovery_target(&input, args.member.as_deref())?;
-        let supplied = match &args.current {
-            CurrentFirmware::File(path) => {
-                let bytes = read_capped(path)?;
-                Some(current_firmware_image(
-                    &bytes,
-                    args.current_member.as_deref(),
-                )?)
-            }
-            CurrentFirmware::ReadFromDrive | CurrentFirmware::NotRequired => None,
-        };
-        let candidates: Vec<_> = match supplied.as_deref() {
-            Some(current) => vec![current_recovery_backend(current)?],
-            None => registry::backends().collect(),
-        };
-        let selector = resolve_device(args.device.as_deref())?;
-        let mut dev = platform::open(&selector, args.execute)?;
-        // Recovery serves drives too damaged to classify: no protocol probe,
-        // the file-selected backend, or each backend without a Current file,
-        // identifies the receiver itself. File selection never grants writes.
-        let mut refusal = None;
-        for backend in candidates {
-            let Some(facet) = backend.recovery() else {
-                continue;
-            };
-            if let Some(receiver) = facet.identify_with_current(
-                &mut ReadDevice::for_backend(dev.as_mut(), backend),
-                supplied.as_deref(),
-            )? {
-                if facet.requires_current() && matches!(args.current, CurrentFirmware::NotRequired)
-                {
-                    bail!("this recovery backend requires --current or --read-from-drive");
-                }
-                return engine::recover_identified(
-                    dev.as_mut(),
-                    backend,
-                    Some(receiver),
-                    supplied.as_deref(),
-                    &target,
-                    args.execute,
-                    args.acknowledged_risk,
-                )
-                .inspect(|outcome| {
-                    crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
-                });
-            }
-            refusal.get_or_insert(facet.unidentified());
-        }
-        bail!(refusal.unwrap_or("no protocol backend offers recovery for this drive"))
+        let mut input = open_recovery(&args)
+            .map_err(|error| UpdateFailure::before_write("recovery precheck", error))?;
+        engine::recover_identified(
+            input.dev.as_mut(),
+            input.backend,
+            Some(input.receiver),
+            input.current.as_deref(),
+            &input.target,
+            args.execute,
+            args.acknowledged_risk,
+        )
+        .inspect(|outcome| {
+            crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
+        })
     })
+}
+
+struct RecoveryInput {
+    dev: Box<dyn platform::ScsiDevice>,
+    backend: &'static dyn Backend,
+    receiver: crate::backend::RecoveryTarget,
+    current: Option<Vec<u8>>,
+    target: Vec<u8>,
+}
+
+fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
+    if args.execute && !args.acknowledged_risk {
+        bail!("refusing recovery without acknowledging the risk");
+    }
+    crate::diagnostics::record(format!("recovery options: {args:?}"));
+    let input = read_capped(&args.input)?;
+    if input.get(257..262) != Some(b"ustar") {
+        bail!("Recovery accepts TAR packages only");
+    }
+    let target = recovery_target(&input, args.member.as_deref())?;
+    let supplied = match &args.current {
+        CurrentFirmware::File(path) => {
+            let bytes = read_capped(path)?;
+            Some(current_firmware_image(
+                &bytes,
+                args.current_member.as_deref(),
+            )?)
+        }
+        CurrentFirmware::ReadFromDrive | CurrentFirmware::NotRequired => None,
+    };
+    let candidates: Vec<_> = match supplied.as_deref() {
+        Some(current) => vec![current_recovery_backend(current)?],
+        None => registry::backends().collect(),
+    };
+    let selector = resolve_device(args.device.as_deref())?;
+    let mut dev = platform::open(&selector, args.execute)?;
+    // Recovery serves drives too damaged to classify: no protocol probe,
+    // the file-selected backend, or each backend without a Current file,
+    // identifies the receiver itself. File selection never grants writes.
+    let mut refusal = None;
+    for backend in candidates {
+        let Some(facet) = backend.recovery() else {
+            continue;
+        };
+        if let Some(receiver) = facet.identify_with_current(
+            &mut ReadDevice::for_backend(dev.as_mut(), backend),
+            supplied.as_deref(),
+        )? {
+            if facet.requires_current() && matches!(args.current, CurrentFirmware::NotRequired) {
+                bail!("this recovery backend requires --current or --read-from-drive");
+            }
+            return Ok(RecoveryInput {
+                dev,
+                backend,
+                receiver,
+                current: supplied,
+                target,
+            });
+        }
+        refusal.get_or_insert(facet.unidentified());
+    }
+    bail!(refusal.unwrap_or("no protocol backend offers recovery for this drive"))
 }
 
 /// Select exactly one member from a package with independent recovery images.

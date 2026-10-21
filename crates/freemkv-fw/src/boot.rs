@@ -391,6 +391,7 @@ pub(crate) fn update(
 pub(crate) fn attach(
     image: &mut Vec<u8>,
     handler: usize,
+    handler_len: usize,
     boot: usize,
     defaults: &BootSettings,
     support: &BootSupport,
@@ -419,8 +420,8 @@ pub(crate) fn attach(
     };
     let sites = [
         find(boot, boot + 64, 0)?,
-        find(handler, boot, 0)?,
-        find(handler, boot, 6)?,
+        find(handler, handler.saturating_add(handler_len), 0)?,
+        find(handler, handler.saturating_add(handler_len), 6)?,
     ];
     let offset = crate::engine::mt1959::Mt1959Engine.free_space(image, RECORD_LEN + 16)? as usize;
     let mut record = RECORD_MAGIC.to_vec();

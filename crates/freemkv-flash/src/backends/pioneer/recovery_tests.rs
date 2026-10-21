@@ -410,6 +410,27 @@ fn recovery_plan() -> Plan {
 }
 
 #[test]
+fn application_flash_and_recovery_share_the_pioneer_executor_and_wire_bytes() {
+    let plan = recovery_plan();
+    let mut flash = Drive::default();
+    let mut recovery = Drive::default();
+    let flashed = super::super::flash::execute_with_sleep(
+        &mut ungated_for_tests(&mut flash),
+        super::super::flash::PreparedFlash::Complete(&plan.prepared),
+        pioneer_optical::receiver::ExecutionMode::Flash,
+        &mut |_| {},
+    )
+    .unwrap();
+    let recovered = plan
+        .run(&mut ungated_for_tests(&mut recovery), &mut |_| {})
+        .unwrap();
+    assert_eq!(flash.writes, recovery.writes);
+    assert_eq!(flash.parameter_reads, recovery.parameter_reads);
+    assert_eq!(flashed, recovered);
+    assert!(!flash.writes.is_empty());
+}
+
+#[test]
 fn normal_recovery_changes_startup_word_before_update_entry() {
     let plan = recovery_plan();
     let mut drive = Drive {
@@ -1617,6 +1638,52 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
     if let Err(e) = authorize_installed(plan, Some(&archive(&installed, false))) {
         panic!("a different-SAT, same-class installed Kernel must be admitted: {e:#}");
     }
+}
+
+#[test]
+fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() {
+    let installed = fixture_pair(false, 1);
+    let mut normal = installed.normal().image.clone();
+    normal[0x401] = 0x13;
+    balance(&mut normal);
+    let mut scalar = [0; 20];
+    scalar[19] = 5;
+    let signer = SigningKey::from_bytes(scalar).unwrap();
+    let encoded = encode_encrypted_pair(
+        &BuildInputs {
+            kernel_image: &installed.kernel().image,
+            normal_image: &normal,
+            envelope_id: "PIONEER BDR-OTHER",
+            normal_revision: "1.01",
+            normal_date: "26/10/21",
+            kernel: KernelBuild::from_seed(7),
+            normal_key_seed: 11,
+        },
+        NormalSignature::Sign(&signer),
+    )
+    .unwrap();
+    let target = Update::load(&encoded.kernel, &encoded.normal).unwrap();
+    assert_ne!(installed.family(), target.family());
+    let plan = crate::backend::FlashPlan::new(
+        super::super::execute_plan(&archive(&target, false)).unwrap(),
+    );
+    let error = match super::super::authorize_installed(plan, Some(&archive(&installed, false))) {
+        Ok(_) => panic!("cross-family target must be refused"),
+        Err(error) => error,
+    };
+    let message = crate::workflow::error_message(&error);
+    assert!(
+        message.contains("underlying hardware for these firmwares is not compatible"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Installed firmware: BDR-TEST."),
+        "{message}"
+    );
+    assert!(message.contains("Target firmware: BDR-OTHER."), "{message}");
+    assert!(!message.contains(&installed.family().unwrap().to_string()));
+    assert!(format!("{error:#}").contains(&installed.family().unwrap().to_string()));
+    assert!(format!("{error:#}").contains(&target.family().unwrap().to_string()));
 }
 
 #[test]

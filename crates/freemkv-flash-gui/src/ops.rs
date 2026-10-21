@@ -60,8 +60,8 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
             .map(|path| path.display().to_string())
     };
     Profile {
+        flash_current: caps.flash_current,
         recovery_without_live_protocol: p.backend.is_none() && p.recovery.is_some(),
-        recovery_without_current: !workflow::recovery_requires_current(p),
         chips,
         tasks,
         inspect: caps.inspect,
@@ -126,6 +126,7 @@ pub enum Job {
 /// A job result preserves update evidence separately from analysis views.
 pub enum JobResult {
     Complete,
+    Preview(workflow::FlashPreview),
     Analysis(ResultView),
     Update(workflow::UpdateOutcome),
 }
@@ -153,7 +154,7 @@ pub fn execute(device: &str, job: &Job, confirm: &mut dyn Confirm) -> anyhow::Re
         Job::PlanFlash(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
-            workflow::plan_flash(&options).map(drop)
+            return workflow::preview_flash(&options).map(JobResult::Preview);
         }
         Job::Flash(options) => {
             let mut options = options.clone();

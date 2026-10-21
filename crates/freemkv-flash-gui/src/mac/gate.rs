@@ -41,6 +41,8 @@ pub(super) fn run(c: &Controller, dir: &Path) {
         }),
     );
 
+    language_checks(c, dir, &content, &mut g);
+
     for task in gui_gate::TABS {
         c.send(Input::SelectTask(task));
         settle(c, SETTLE);
@@ -80,6 +82,96 @@ pub(super) fn run(c: &Controller, dir: &Path) {
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     c.with_app(|a| g.no_drive_io("end", a));
     std::process::exit(g.finish(dir));
+}
+
+/// Select languages through AppKit's real menu and read the controls that previously stayed English.
+fn language_checks(c: &Controller, dir: &Path, content: &NSView, g: &mut Gate) {
+    use crate::localization::{Language, Preferences};
+    let original = c.with_app(|app| {
+        let original = (app.drives.clone(), app.device.clone(), app.profile.clone());
+        app.drives.clear();
+        app.device.clear();
+        app.profile = crate::ui::ProfileState::NoDrive;
+        app.preferences = Preferences::User(Some(dir.join("language-preference")));
+        original
+    });
+    c.render();
+    let appkit = NSApplication::sharedApplication(c.mtm());
+    for language in Language::ALL {
+        let application_menu = appkit.mainMenu().and_then(|menu| {
+            menu.itemArray()
+                .iter()
+                .next()
+                .and_then(|item| item.submenu())
+        });
+        let parent = application_menu.and_then(|menu| {
+            menu.itemArray()
+                .iter()
+                .find(|item| item.submenu().is_some())
+        });
+        let Some(parent) = parent else {
+            g.check("language-menu-exists", false, language.code());
+            break;
+        };
+        let menu = parent.submenu().expect("language submenu");
+        menu.update();
+        let index = Language::ALL
+            .iter()
+            .position(|choice| *choice == language)
+            .unwrap();
+        let item = menu.itemAtIndex(index as isize).expect("language item");
+        g.check(
+            &format!("language-{}-enabled", language.code()),
+            parent.isEnabled() && item.isEnabled(),
+            language.code(),
+        );
+        menu.performActionForItemAtIndex(index as isize);
+        settle(c, Duration::from_millis(60));
+        let view = c.view();
+        let iv = c.ivars();
+        let drive = iv
+            .drive_label
+            .borrow()
+            .as_ref()
+            .map(|label| label.stringValue().to_string());
+        let placeholder = iv
+            .drive_popup
+            .borrow()
+            .as_ref()
+            .and_then(|popup| popup.titleOfSelectedItem())
+            .map(|title| title.to_string());
+        let refresh = iv
+            .refresh
+            .borrow()
+            .as_ref()
+            .map(|button| button.title().to_string());
+        let tabs_match = iv.tabs.borrow().as_ref().is_some_and(|tabs| {
+            view.tabs.iter().enumerate().all(|(index, tab)| {
+                tabs.labelForSegment(index as isize)
+                    .is_some_and(|title| title.to_string() == tab.title)
+            })
+        });
+        let stored = c.with_app(|model| model.preferences.load());
+        g.check(&format!("language-{}-widgets-and-startup", language.code()),
+            view.language == language && stored == language
+                && drive.as_deref() == Some(view.drives.label.as_str())
+                && placeholder.as_deref() == Some(view.drives.placeholder.as_str())
+                && refresh.as_deref() == Some(view.drives.refresh.text.as_str()) && tabs_match,
+            format!("drive={drive:?}; placeholder={placeholder:?}; refresh={refresh:?}; tabs={tabs_match}"));
+        if matches!(language, Language::Fr | Language::Ja | Language::ZhHant) {
+            settle(c, SETTLE);
+            let shot = capture(content);
+            g.save(dir, &format!("language-{}", language.code()), shot.as_ref());
+        }
+    }
+    c.with_app(|app| {
+        app.drives = original.0;
+        app.device = original.1;
+        app.profile = original.2;
+        app.language = Language::En;
+        app.preferences = Preferences::Memory;
+    });
+    c.render();
 }
 
 /// Open the confirmation over the synthetic plan, read it, tick its box when `tick`, and

@@ -153,7 +153,7 @@ pub fn plan_offline(
             transcript.len()
         )),
         PlanLine::Text("Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.".into()),
-        PlanLine::Text("Installed-family compatibility is checked against the live backup.".into()),
+        PlanLine::Text("Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.".into()),
     ];
     if verbose {
         for step in &transcript {
@@ -165,6 +165,6 @@ pub fn plan_offline(
             )));
         }
     }
-    lines.push(PlanLine::Text("DRY RUN: no device I/O or writes.".into()));
+    lines.push(PlanLine::Text("DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.".into()));
     Ok(lines)
 }

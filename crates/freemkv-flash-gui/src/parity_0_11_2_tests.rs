@@ -408,7 +408,8 @@ fn selecting_and_refreshing_drives_retarget_jobs_as_in_0_11_2() {
     app.failure = Some("old".into());
     app.status = "Backup could not finish".into();
     app.dispatch(Input::SelectDrive(1));
-    assert_eq!((app.status.as_str(), app.failure.as_ref()), ("Ready", None));
+    assert_eq!(app.view().status.unwrap().text, "Ready");
+    assert!(app.failure.is_none());
     app.profile_worker
         .take()
         .unwrap()
@@ -537,11 +538,11 @@ fn flash_now_sends_the_0_11_2_options_after_an_unticked_confirmation() {
     app.poll();
     let sheet = app.view().confirm.expect("the flash sheet");
     assert_eq!(
-        (sheet.title, sheet.danger),
+        (sheet.title.as_str(), sheet.danger.as_str()),
         ("Confirm flash", v0_11_2::DANGER)
     );
     assert_eq!(
-        (sheet.ack_text, sheet.ack_checked),
+        (sheet.ack_text.as_str(), sheet.ack_checked),
         (v0_11_2::RISK_ACK, false)
     );
     assert!(!sheet.confirm.enabled);
@@ -599,9 +600,10 @@ fn recover(app: &mut App, input: &Path) {
     app.poll();
     let sheet = app.view().confirm.expect("the recovery sheet");
     assert_eq!(sheet.title, "Confirm recovery");
-    assert_eq!(sheet.warnings, ["Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable."]);
+    // 0.14.0 clarifies that receiver/integrity checks remain mandatory.
+    assert_eq!(sheet.warnings, ["Recovery skips automatic backups and some compatibility checks. Incompatible firmware can make the drive unusable."]);
     assert_eq!(
-        (sheet.ack_text, sheet.ack_checked),
+        (sheet.ack_text.as_str(), sheet.ack_checked),
         (v0_11_2::RISK_ACK, false)
     );
     app.dispatch(Input::Confirm);
@@ -624,6 +626,7 @@ fn recovery_reading_current_from_the_drive_matches_0_11_2() {
 fn recovery_from_a_current_file_matches_0_11_2() {
     let mut app = pioneer_app();
     app.dispatch(Input::SelectTask(Task::Recovery));
+    app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, false));
     covers(
         open_filter(&press(&mut app, "Choose Current…")),
         v0_11_2::FIRMWARE_FILTER,
@@ -847,7 +850,10 @@ fn settings_are_read_only_as_in_0_11_2() {
         .iter()
         .find(|c| c.title == "Device settings")
         .expect("a settings card");
-    assert_eq!(settings.subtitle, Some("Current settings · read only"));
+    assert_eq!(
+        settings.subtitle.as_deref(),
+        Some("Current settings · read only")
+    );
     let rows = |pairs: &[(&str, &str)]| {
         pairs
             .iter()
@@ -932,7 +938,7 @@ fn every_0_11_2_tab_is_offered_for_a_pioneer_drive() {
         .tabs
         .iter()
         .filter(|t| t.enabled)
-        .map(|t| t.title)
+        .map(|t| t.title.clone())
         .collect();
     assert_eq!(
         tabs,

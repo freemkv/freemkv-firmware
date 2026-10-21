@@ -29,34 +29,37 @@ impl RecoveryFacet for Mtk {
     ) -> Result<Option<RecoveryTarget>> {
         let shared = SharedDevice::new(dev);
         let mut reads = ScsiTransport::reads(&shared);
-        let result = recovery::Receiver::identify(&mut reads);
+        let result = match current {
+            Some(current) => {
+                let envelope = mediatek_optical::envelope::Envelope::load(current)?;
+                recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
+            }
+            None => recovery::Receiver::identify(&mut reads),
+        };
         crate::diagnostics::record(format!(
             "MediaTek recovery identification: {}",
             reads.read_summary()
         ));
         let summary = reads.read_summary();
-        let result = match result {
+        match result {
             Err(error)
-                if matches!(
-                    &error,
-                    recovery::Error::Receiver(
-                        mediatek_optical::receiver::Error::Unknown
-                            | mediatek_optical::receiver::Error::UnknownEntry
-                            | mediatek_optical::receiver::Error::Read(_)
-                    )
-                ) && current.is_some() =>
+                if current.is_none()
+                    && matches!(
+                        &error,
+                        recovery::Error::Receiver(
+                            mediatek_optical::receiver::Error::Unknown
+                                | mediatek_optical::receiver::Error::UnknownEntry
+                                | mediatek_optical::receiver::Error::Read(_)
+                        )
+                    ) =>
             {
-                crate::diagnostics::record(format!("MediaTek live receiver analysis failed: {error}; checking explicit Current reference"));
-                let envelope =
-                    mediatek_optical::envelope::Envelope::load(current.expect("guarded Current"))?;
-                recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
+                Err(crate::backend::CurrentFirmwareRequired {
+                    source: anyhow::Error::new(error).context(summary),
+                }
+                .into())
             }
-            other => other,
-        };
-        result
-            .map_err(|e| anyhow!("Unable to read or identify the running firmware's receiver code from the drive. Select the firmware currently installed as Current instead of Read from drive. For BH16NS40 INTM, choose intermediate.bin from the TAR, not the original 1.V1 or target 1.V9. No target firmware was sent. Diagnostic detail: {e}. {summary}. Encoding was not guessed."))
-            .map(|r| {
-                r.map(|receiver| {
+            result => result.map_err(anyhow::Error::new).map(|receiver| {
+                receiver.map(|receiver| {
                     RecoveryTarget::new(
                         format!(
                             "{} {:?} ({:?})",
@@ -67,8 +70,10 @@ impl RecoveryFacet for Mtk {
                         RecoveryReceiver { receiver },
                     )
                 })
-            })
+            }),
+        }
     }
+
     fn unidentified(&self) -> &'static str {
         "no recognized MediaTek recovery receiver; readable chip banner and receiver signature required"
     }
@@ -79,8 +84,13 @@ impl RecoveryFacet for Mtk {
         _current: Option<&[u8]>,
         target: &[u8],
     ) -> Result<UpdateOutcome> {
-        let bound = receiver.state::<RecoveryReceiver>()?;
-        let plan = bound.receiver.prepare(target).map_err(|e| anyhow!("{e}"))?;
+        let bound = receiver
+            .state::<RecoveryReceiver>()
+            .map_err(|error| UpdateFailure::before_write("recovery preparation", error))?;
+        let plan = bound
+            .receiver
+            .prepare(target)
+            .map_err(|e| UpdateFailure::before_write("recovery preparation", anyhow!("{e}")))?;
         crate::output::field(
             "Receiver code source",
             if plan.plan().receiver().provenance()

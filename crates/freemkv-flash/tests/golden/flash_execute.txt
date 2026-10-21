@@ -7086,7 +7086,7 @@ IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
 
 === MTK execute: no risk acknowledgement ===
-result: ERR SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
+result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (568) ---
@@ -7660,14 +7660,14 @@ IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c060009a30000000e00 alloc=14 -> ok 14
 
 === MTK execute: disc loaded ===
-result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
+result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> DiscPresent
 
 === MTK execute: tray open ===
-result: ERR the tray is OPEN — refusing to flash. Close the empty tray and retry. This update pass has not started.
+result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): the tray is OPEN — refusing to flash. Close the empty tray and retry. This update pass has not started.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -7676,14 +7676,14 @@ refused runs left a file at disc.tar: <not created>
 refused runs left a file at never.tar: <not created>
 
 === Pioneer execute: no risk acknowledgement ===
-result: ERR SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
+result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> ClosedEmpty
 
 === Pioneer execute: pre-flash backup cannot be read ===
-result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (2) ---
@@ -7691,14 +7691,14 @@ MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 96
 
 === Pioneer execute: disc loaded ===
-result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
+result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> DiscPresent
 
 === MTK execute: Pioneer bundle sent to an MTK drive ===
-result: ERR a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -7706,7 +7706,7 @@ MEDIUM -> ClosedEmpty
 failed Pioneer backup left a file: <not created>
 
 === MTK execute: MT1939 image on an MT1959 drive ===
-result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (3) ---
@@ -7716,7 +7716,7 @@ IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 saved pre-flash backup: <not created>
 
 === MTK execute: raw drive read as input ===
-result: ERR this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---

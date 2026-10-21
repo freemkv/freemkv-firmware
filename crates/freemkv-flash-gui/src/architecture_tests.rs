@@ -4,6 +4,7 @@
 
 const MODEL: &[(&str, &str)] = &[
     ("ui.rs", include_str!("ui.rs")),
+    ("localization.rs", include_str!("localization.rs")),
     ("ops.rs", include_str!("ops.rs")),
     ("gui_gate.rs", include_str!("gui_gate.rs")),
     ("support.rs", include_str!("support.rs")),

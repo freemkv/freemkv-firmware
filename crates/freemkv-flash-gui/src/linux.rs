@@ -59,6 +59,7 @@ pub fn run() -> i32 {
 /// What the shell last drew, so `render` rebuilds only what changed. Not model state.
 #[derive(Default)]
 struct Memo {
+    language: Option<crate::localization::Language>,
     drives: Option<Vec<DriveItem>>,
     panel: Option<(Task, Vec<Item>)>,
     results: Option<Option<Results>>,
@@ -98,6 +99,7 @@ pub(crate) struct Shell {
     app: RefCell<ui::App>,
     window: adw::ApplicationWindow,
     title: adw::WindowTitle,
+    language_menu_button: gtk::MenuButton,
     refresh_action: gio::SimpleAction,
 
     drive_label: gtk::Label,
@@ -134,9 +136,13 @@ fn build_ui(gapp: &adw::Application) {
         w.present();
         return;
     }
+    #[cfg(debug_assertions)]
+    let (model, gate) = crate::gui_gate::model_or(ui::App::new);
+    #[cfg(not(debug_assertions))]
+    let model = ui::App::new();
     let window = adw::ApplicationWindow::builder()
         .application(gapp)
-        .title("freemkv Firmware Utility")
+        .title(&model.view().title)
         .default_width(900)
         .default_height(760)
         .build();
@@ -144,13 +150,14 @@ fn build_ui(gapp: &adw::Application) {
 
     let toolbar = adw::ToolbarView::new();
     let header = adw::HeaderBar::new();
-    let title = adw::WindowTitle::new("freemkv Firmware Utility", "");
+    let title = adw::WindowTitle::new(&model.view().title, "");
     header.set_title_widget(Some(&title));
     let menu_btn = gtk::MenuButton::builder()
         .icon_name("open-menu-symbolic")
         .primary(true)
-        .menu_model(&main_menu())
+        .menu_model(&main_menu(model.language))
         .build();
+    let language_menu_button = menu_btn.clone();
     header.pack_end(&menu_btn);
     toolbar.add_top_bar(&header);
 
@@ -238,14 +245,11 @@ fn build_ui(gapp: &adw::Application) {
     window.set_content(Some(&toolbar));
 
     let refresh_action = gio::SimpleAction::new("refresh", None);
-    #[cfg(debug_assertions)]
-    let (model, gate) = crate::gui_gate::model_or(ui::App::new);
-    #[cfg(not(debug_assertions))]
-    let model = ui::App::new();
     let shell = Rc::new(Shell {
         app: RefCell::new(model),
         window: window.clone(),
         title,
+        language_menu_button,
         refresh_action: refresh_action.clone(),
         drive_label,
         drives,
@@ -282,14 +286,32 @@ fn build_ui(gapp: &adw::Application) {
 }
 
 /// The hamburger menu: the window's commands, Quit last (GNOME convention).
-fn main_menu() -> gio::Menu {
+fn main_menu(language: crate::localization::Language) -> gio::Menu {
     let menu = gio::Menu::new();
     let commands = gio::Menu::new();
-    commands.append(Some("Refresh drives"), Some("app.refresh"));
-    commands.append(Some("Diagnostic log\u{2026}"), Some("app.diagnostics"));
+    commands.append(
+        Some(&crate::localization::text(language, "menu.refresh_drives")),
+        Some("app.refresh"),
+    );
+    commands.append(
+        Some(&crate::localization::text(language, "menu.diagnostic_log")),
+        Some("app.diagnostics"),
+    );
     menu.append_section(None, &commands);
+    let language_menu = gio::Menu::new();
+    for language in crate::localization::Language::ALL {
+        let action = format!("app.language-{}", language.code());
+        language_menu.append(Some(language.native_name()), Some(&action));
+    }
+    menu.append_submenu(
+        Some(&crate::localization::text(language, "settings.language")),
+        &language_menu,
+    );
     let app = gio::Menu::new();
-    app.append(Some("Quit"), Some("app.quit"));
+    app.append(
+        Some(&crate::localization::text(language, "menu.quit")),
+        Some("app.quit"),
+    );
     menu.append_section(None, &app);
     menu
 }
@@ -380,6 +402,13 @@ impl Shell {
         let me = self.clone();
         refresh.connect_activate(move |_, _| me.send(Input::Refresh));
         gapp.add_action(&refresh);
+        for language in crate::localization::Language::ALL {
+            let action_name = format!("language-{}", language.code());
+            let action = gio::SimpleAction::new(&action_name, None);
+            let me = self.clone();
+            action.connect_activate(move |_, _| me.send(Input::SetLanguage(language)));
+            gapp.add_action(&action);
+        }
         let diagnostics = gio::SimpleAction::new("diagnostics", None);
         let me = self.clone();
         diagnostics.connect_activate(move |_, _| me.send(Input::OpenDiagnostics));
@@ -449,11 +478,20 @@ impl Shell {
     fn render(self: &Rc<Self>) {
         let v = self.view();
         self.painting.set(true);
+        {
+            let mut memo = self.memo.borrow_mut();
+            if memo.language.replace(v.language) != Some(v.language) {
+                memo.drives = None;
+                memo.results = None;
+            }
+        }
         self.window.set_title(Some(&v.title));
         self.title.set_title(&v.title);
+        self.language_menu_button
+            .set_menu_model(Some(&main_menu(v.language)));
         self.render_drives(&v);
         for (tab, b) in v.tabs.iter().zip(&self.tabs) {
-            b.set_label(tab.title);
+            b.set_label(&tab.title);
             b.set_sensitive(tab.enabled);
             if tab.task == v.task && !b.is_active() {
                 b.set_active(true);
@@ -488,12 +526,12 @@ impl Shell {
 
     fn render_drives(self: &Rc<Self>, v: &View) {
         let bar = &v.drives;
-        self.drive_label.set_label(bar.label);
+        self.drive_label.set_label(&bar.label);
         self.drive_chips.set_label(&bar.chips.join("  \u{b7}  "));
         self.drive_chips.set_visible(!bar.chips.is_empty());
         if self.memo.borrow().drives.as_ref() != Some(&bar.items) {
             let texts: Vec<&str> = if bar.items.is_empty() {
-                vec![bar.placeholder]
+                vec![bar.placeholder.as_str()]
             } else {
                 bar.items.iter().map(|d| d.text.as_str()).collect()
             };
@@ -535,7 +573,7 @@ impl Shell {
             }
         }
         self.note.set_visible(s.note.is_some());
-        self.note.set_label(s.note.unwrap_or(""));
+        self.note.set_label(s.note.as_deref().unwrap_or(""));
         match &s.cancel {
             Some(b) => {
                 self.cancel.set_visible(true);
@@ -682,7 +720,7 @@ impl Shell {
     fn present_confirm(self: &Rc<Self>, c: &Confirm) {
         let dialog = adw::MessageDialog::new(
             Some(&self.window),
-            Some(c.title),
+            Some(&c.title),
             Some(&c.details.join("\n")),
         );
         dialog.add_response("cancel", &c.cancel.text);
@@ -693,17 +731,17 @@ impl Shell {
         dialog.set_close_response("cancel");
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 10);
-        extra.append(&widgets::label(c.danger, &["error"]));
+        extra.append(&widgets::label(&c.danger, &["error"]));
         for w in &c.warnings {
             extra.append(&widgets::label(w, &["warning"]));
         }
         if let Some(p) = &c.prompt {
             extra.append(&widgets::label(p, &["heading"]));
         }
-        if let Some(n) = c.note {
+        if let Some(n) = &c.note {
             extra.append(&widgets::label(n, &[]));
         }
-        let ack = gtk::CheckButton::with_label(c.ack_text);
+        let ack = gtk::CheckButton::with_label(&c.ack_text);
         ack.set_active(c.ack_checked);
         let me = self.clone();
         ack.connect_toggled(move |b| {
@@ -751,8 +789,8 @@ impl Shell {
         }
         let diag = self.diag.borrow();
         let Some(w) = diag.as_ref() else { return };
-        w.title.set_title(d.title);
-        w.window.set_title(Some(d.title));
+        w.title.set_title(&d.title);
+        w.window.set_title(Some(&d.title));
         if self.memo.borrow().diag_buttons.as_ref() != Some(&d.buttons) {
             widgets::clear(&w.buttons);
             for b in &d.buttons {
@@ -760,7 +798,7 @@ impl Shell {
             }
             self.memo.borrow_mut().diag_buttons = Some(d.buttons.clone());
         }
-        w.hint.set_label(d.hint);
+        w.hint.set_label(&d.hint);
         w.path.set_label(d.path.as_deref().unwrap_or(""));
         w.notice.set_visible(d.notice.is_some());
         w.notice.set_label(d.notice.as_deref().unwrap_or(""));
@@ -839,8 +877,8 @@ impl Shell {
             return;
         }
         let tree = &a.tree;
-        w.title.set_title(tree.title);
-        w.window.set_title(Some(tree.title));
+        w.title.set_title(&tree.title);
+        w.window.set_title(Some(&tree.title));
         w.heading.set_label(&tree.heading);
         widgets::clear(&w.actions);
         widgets::clear(&w.body);

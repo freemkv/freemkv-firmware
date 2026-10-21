@@ -18,6 +18,7 @@ mod external;
 mod gui_gate;
 #[cfg(all(feature = "native", target_os = "linux", target_env = "gnu"))]
 mod linux;
+mod localization;
 #[cfg(all(feature = "native", target_os = "macos"))]
 mod mac;
 mod ops;

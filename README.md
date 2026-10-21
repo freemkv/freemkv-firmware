@@ -72,11 +72,27 @@ content-integrity and rollback gates. A different family or an
 unknown-identity image is refused, an unknown family fails closed, and nothing
 switches the gate off. Its workflow is:
 
-1. **Back up** — a live execution reads and saves a fresh, complete, validated
-   backup artifact. A failed backup stops the flash before any firmware write.
-2. **Write** — `.bin` streams the full MTK firmware image; `.tar` selects the
+1. **Check the input and receiver** — validate the selected package and the
+   drive's available receiver evidence. Passing a package check does not approve
+   drive compatibility; Pioneer's preview explicitly reports that it is pending.
+2. **Back up** — live Flash captures and validates the installed firmware before
+   checking compatibility against it. A capture failure requires an explicit
+   decision to proceed without a rollback backup; compatibility gates still apply.
+3. **Check compatibility and confirm** — installed-firmware and target checks
+   must pass before the desktop confirmation sheet appears. A precheck block
+   reports that no firmware was written, with the reason and stopped stage.
+4. **Write** — recheck the tray and live receiver, then perform the prepared
+   update. `.bin` streams the full MTK firmware image; `.tar` selects the
    same image from the backup archive and reflashes it.
-3. **Verify** — the backend performs its supported completion/read-back checks.
+5. **Verify** — report startup and supported readback checks separately from
+   transfer completion. An execution failure or incomplete verification is not a
+   precheck rejection.
+
+Recovery prepares the current receiver and selected target before its write,
+without Flash's automatic backup or installed-versus-target policy checks. It
+still validates the required image, receiver and transfer contracts. Its dry-run
+preview precedes desktop confirmation. A precheck rejection writes no firmware;
+execution failures retain their actual write and temporary-firmware evidence.
 
 ### Transport format
 
@@ -84,7 +100,13 @@ The backend chooses the transport format; there is no encryption selector.
 MediaTek uses `mediatek-optical` to detect BOOT versus running firmware and
 read the active receiver's code signature. It sends plaintext or the encrypted
 transport envelope accordingly, and rechecks the identity and signature before
-writing. Unknown, unreadable or conflicting signatures refuse the flash.
+writing. If the drive blocks automatic detection, uncheck **Read from drive** on
+the Flash page and select the firmware currently installed as **Current**. The
+CLI equivalent is `--current FILE`; a paired Current TAR also needs
+`--current-member firmware.bin` (or `intermediate.bin` if INTM is running).
+The reference must match the live identity and build metadata. It supplies
+receiver code only; backup and readback still use the drive. Without readable
+code or a matching Current reference, Flash refuses before writing.
 Normal flash retains its compatibility checks. The explicit recovery command
 uses the separate recovery path described below.
 
@@ -300,6 +322,12 @@ Recovery accepts the same TAR but writes exactly one selected member:
 `freemkv-flash recover DEVICE -i release.tar --member intermediate.bin`.
 Add `--execute --i-understand-risk` only after reviewing the preview. Recovery
 never continues to the other member and does not create a backup.
+
+The Flash and Recovery desktop forms use the same Current firmware and target
+layout. Both select **Read from drive** by default. Uncheck it to choose the
+firmware currently installed; select its exact member if the Current TAR is paired.
+Recovery uses that selected file even when the drive's receiver code is readable.
+The CLI retains its explicit `--current` / `--read-from-drive` options.
 
 Modify's **Boot settings** are applied every time the drive starts. Select
 Unrestricted access, HRL checking, Encryption, Read speed, and Region in the

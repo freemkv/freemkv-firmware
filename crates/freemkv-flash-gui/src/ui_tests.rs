@@ -20,6 +20,7 @@ impl Profile {
     /// A drive that offers every task.
     pub(crate) fn every_task() -> Self {
         Self {
+            flash_current: true,
             chips: ["Test family", "Backup", "Dump", "Flash", "Recovery"]
                 .map(String::from)
                 .to_vec(),
@@ -28,7 +29,6 @@ impl Profile {
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
             flash_extensions: vec!["bin"],
-            recovery_without_current: false,
             recovery_without_live_protocol: false,
             notes: Vec::new(),
         }
@@ -61,6 +61,215 @@ fn ready(drives: Vec<DriveChoice>) -> App {
 
 fn one_drive() -> App {
     ready(vec![drive("drive-a", "drive-a", "Drive A")])
+}
+
+#[test]
+fn update_forms_share_layout_and_default_to_reading_current_from_drive() {
+    fn presentation(mut panel: Vec<Item>) -> Vec<Item> {
+        panel.retain(|item| !matches!(item, Item::Warning(_)));
+        for item in &mut panel {
+            match item {
+                Item::Check { id, .. } => *id = CheckId::FlashReadFromDrive,
+                Item::Path { button, .. } => button.input = Input::Refresh,
+                Item::Buttons { buttons, .. } => {
+                    for button in buttons {
+                        button.input = Input::Refresh;
+                        if button.text == "Recover" {
+                            button.text = "Flash now".into();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        panel
+    }
+    let mut app = one_drive();
+    assert!(app.flash_read && app.recovery_read);
+    for selected in [false, true] {
+        if selected {
+            app.flash_input = Some("target.tar".into());
+            app.recovery_input = app.flash_input.clone();
+        }
+        app.task = Task::Flash;
+        let flash = app.view().panel;
+        assert!(matches!(&flash[0], Item::Heading(text) if text == "Current firmware"));
+        app.task = Task::Recovery;
+        assert_eq!(presentation(flash), presentation(app.view().panel));
+    }
+    for (task, check, action) in [
+        (Task::Flash, CheckId::FlashReadFromDrive, "Flash now"),
+        (Task::Recovery, CheckId::RecoveryReadFromDrive, "Recover"),
+    ] {
+        app.task = task;
+        assert!(button(&app.view(), action).enabled);
+        app.dispatch(Input::SetCheck(check, false));
+        assert!(!button(&app.view(), action).enabled);
+        assert!(button(&app.view(), "Choose Current…").enabled);
+    }
+    app.flash_current = Some("current.tar".into());
+    app.recovery_current = app.flash_current.clone();
+    app.flash_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.recovery_current_members = app.flash_current_members.clone();
+    app.flash_current_member = Some("intermediate.bin".into());
+    app.recovery_current_member = app.flash_current_member.clone();
+    app.task = Task::Flash;
+    let flash = presentation(app.view().panel);
+    app.task = Task::Recovery;
+    assert_eq!(flash, presentation(app.view().panel));
+}
+
+#[test]
+fn both_update_forms_check_their_own_selected_target_file() {
+    let mut app = one_drive();
+    app.flash_input = Some("flash-target.tar".into());
+    app.recovery_input = Some("recovery-target.tar".into());
+    for (task, expected) in [
+        (Task::Flash, "flash-target.tar"),
+        (Task::Recovery, "recovery-target.tar"),
+    ] {
+        app.task = task;
+        app.dispatch(button(&app.view(), "Check file").input);
+        let (_, device, Job::InfoFile { input }) = last_job(&app) else {
+            panic!("file-only analysis required")
+        };
+        assert!(device.is_empty());
+        assert_eq!(input, &PathBuf::from(expected));
+        finish(&mut app, Ok(()));
+    }
+}
+
+#[test]
+fn mediatek_recovery_drive_reads_ignore_stale_current_file_and_member() {
+    let mut app = one_drive();
+    app.set_profile(Ok(Profile::every_task()));
+    app.task = Task::Recovery;
+    app.recovery_input = Some("target.bin".into());
+    app.recovery_current = Some("stale.tar".into());
+    app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.recovery_current_member = Some("intermediate.bin".into());
+    app.dispatch(Input::Recover);
+    let (_, _, Job::Recovery(options)) = last_job(&app) else {
+        panic!("recovery plan")
+    };
+    assert!(matches!(options.current, CurrentFirmware::ReadFromDrive));
+    assert!(options.current_member.is_none());
+    assert!(!options.execute && !options.acknowledged_risk);
+}
+
+#[test]
+fn flash_defaults_to_drive_reads_and_requires_current_only_when_unchecked() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("modified.bin".into());
+    assert!(app.flash_read);
+    assert!(app.view().panel.iter().any(|item| matches!(
+        item,
+        Item::Check {
+            id: CheckId::FlashReadFromDrive,
+            checked: true,
+            ..
+        }
+    )));
+    assert!(!button(&app.view(), "Choose Current…").enabled);
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert!(options.current.is_none());
+    finish(&mut app, Err("Automatic detection unavailable".into()));
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, false));
+    assert!(app.failure.is_none());
+    assert!(button(&app.view(), "Choose Current…").enabled);
+    assert!(!button(&app.view(), "Flash now").enabled);
+    let jobs = app.dry_run.as_ref().unwrap().len();
+    app.dispatch(Input::FlashNow);
+    assert_eq!(app.dry_run.as_ref().unwrap().len(), jobs);
+    app.dispatch(Input::Chosen(Pick::FlashCurrent, "installed.bin".into()));
+    assert!(button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert_eq!(options.current, Some(PathBuf::from("installed.bin")));
+    assert_eq!(options.input, PathBuf::from("modified.bin"));
+    assert!(!options.acknowledged_risk);
+    finish(&mut app, Err("Current did not match".into()));
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, true));
+    assert!(app.failure.is_none());
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert!(options.current.is_none() && options.current_member.is_none());
+}
+
+#[test]
+fn flash_paired_current_selection_is_explicit_and_frozen_through_confirmation() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("modified.tar".into());
+    app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, false));
+    app.dispatch(Input::Chosen(Pick::FlashCurrent, "original.tar".into()));
+    app.flash_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    assert!(!button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashCurrentMember("not-a-member.bin".into()));
+    assert!(!button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashCurrentMember("firmware.bin".into()));
+    assert!(button(&app.view(), "Flash now").enabled);
+    app.dispatch(Input::FlashNow);
+    plan_passes(&mut app);
+    let (_, _, Job::Flash(options)) = last_job(&app) else {
+        panic!("flash execution")
+    };
+    assert_eq!(
+        options.current.as_deref(),
+        Some(std::path::Path::new("original.tar"))
+    );
+    assert_eq!(options.current_member.as_deref(), Some("firmware.bin"));
+    assert_eq!(options.input, PathBuf::from("modified.tar"));
+    let (reply, _answer) = mpsc::channel();
+    app.worker
+        .as_ref()
+        .unwrap()
+        .send(Msg::Authorized(FlashSheet::default(), reply))
+        .unwrap();
+    app.poll();
+    app.flash_current = Some("another.tar".into());
+    app.flash_current_member = Some("intermediate.bin".into());
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm.details.contains(&"Current: original.tar".into()));
+    assert!(confirm
+        .details
+        .contains(&"Current member (receiver reference): firmware.bin".into()));
+    assert!(!confirm
+        .details
+        .iter()
+        .any(|line| line.contains("another.tar")));
+}
+
+#[test]
+fn unsupported_backend_ignores_inactive_flash_current_choices() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("pioneer.tar".into());
+    app.flash_read = false;
+    let mut profile = Profile::every_task();
+    profile.flash_current = false;
+    app.set_profile(Ok(profile));
+    assert!(button(&app.view(), "Flash now").enabled);
+    assert!(!app.view().panel.iter().any(|item| matches!(
+        item,
+        Item::Check {
+            id: CheckId::FlashReadFromDrive,
+            ..
+        }
+    )));
+    app.dispatch(Input::FlashNow);
+    let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
+        panic!("flash plan")
+    };
+    assert!(options.current.is_none());
 }
 
 #[test]
@@ -208,7 +417,7 @@ fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
 #[test]
 fn every_task_is_a_tab_and_enabled_when_idle() {
     let view = one_drive().view();
-    let titles: Vec<_> = view.tabs.iter().map(|t| t.title).collect();
+    let titles: Vec<_> = view.tabs.iter().map(|t| t.title.as_str()).collect();
     assert_eq!(
         titles,
         [
@@ -414,7 +623,9 @@ fn flash_starts_with_a_firmware_chooser() {
     let mut app = one_drive();
     app.dispatch(Input::SelectTask(Task::Flash));
     let view = app.view();
-    assert_eq!(buttons(&view).len(), 1);
+    assert!(has_text(&view, "Firmware to flash"));
+    assert!(!button(&view, "Flash now").enabled);
+    assert!(!button(&view, "Check file").enabled);
     assert!(button(&view, "Choose firmware…").enabled);
     assert_eq!(
         app.dispatch(Input::Choose(Pick::FlashFirmware)),
@@ -574,6 +785,7 @@ fn flash_until_sheet(app: &mut App, confirmation: Option<&'static str>) -> Flash
     let (engine_backend, out) = (backend.clone(), backup.clone());
     std::thread::spawn(move || {
         let request = FlashRequest {
+            current: None,
             input: Vec::new(),
             input_format: &SHEET_FORMAT,
             mode: FlashMode::Full,
@@ -680,6 +892,7 @@ fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
             "Image: firmware.tar".into(),
             "== flash plan ==".into(),
             saved,
+            "Current: read from drive".into(),
             format!(
                 "File origin: {}. {}",
                 workflow::FileOrigin::Unknown.label(),
@@ -688,7 +901,7 @@ fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
         ]
     );
     assert_eq!(confirm.danger, FLASH_DANGER);
-    assert_eq!(confirm.note, Some(BACKUP_KEPT));
+    assert_eq!(confirm.note.as_deref(), Some(BACKUP_KEPT));
     assert_eq!(confirm.confirm.text, "Flash now");
     assert!(!app.view().controls_enabled && !app.view().can_close);
     app.dispatch(Input::CancelConfirm);
@@ -732,7 +945,10 @@ fn a_failed_plan_shows_no_sheet() {
     assert!(app.view().confirm.is_none() && app.pending.is_none());
     assert_eq!(
         app.failure.as_deref(),
-        Some("image fails its AES-CMAC integrity check")
+        Some(
+            crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+                .as_str()
+        )
     );
     assert!(!app.running());
     assert!(app.dispatch(Input::Confirm).is_empty());
@@ -837,7 +1053,7 @@ fn unknown_or_failed_profile_does_not_gate_recovery_or_flash_preparation() {
             app.pending.as_ref().map(|p| &p.sheet),
             Some(Sheet::Recovery {
                 options: RecoveryOptions {
-                    current: CurrentFirmware::NotRequired,
+                    current: CurrentFirmware::ReadFromDrive,
                     ..
                 },
                 ..
@@ -866,7 +1082,7 @@ fn recovery_requires_both_inputs_and_a_drive() {
         "Current firmware",
         "Read from drive",
         "Choose Current…",
-        "Firmware to flash (Kernel + Normal)",
+        "Firmware to flash",
         "Choose firmware…",
         FORCE_WARNING,
         "Recover",
@@ -882,15 +1098,15 @@ fn recovery_requires_both_inputs_and_a_drive() {
 
     app.dispatch(Input::Chosen(Pick::RecoveryInput, "new.tar".into()));
     assert!(
-        !button(&app.view(), "Recover").enabled,
-        "current firmware missing"
+        button(&app.view(), "Recover").enabled,
+        "drive reads are the default"
     );
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, true));
     let view = app.view();
     assert!(!button(&view, "Choose Current…").enabled);
     assert!(has_text(
         &view,
-        "Reads installed firmware for protocol analysis. No backup file is saved."
+        "Use the drive to identify the installed firmware. If detection fails, choose its firmware file."
     ));
     assert!(button(&view, "Recover").enabled);
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, false));
@@ -935,17 +1151,12 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
 #[test]
 fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     let mut app = one_drive();
-    let mut profile = Profile::every_task();
-    profile.recovery_without_current = true;
-    app.set_profile(Ok(profile));
+    app.set_profile(Ok(Profile::every_task()));
     app.task = Task::Recovery;
     app.recovery_input = Some("1.V9.tar".into());
     app.recovery_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
     app.dispatch(Input::RecoveryMember("firmware.bin".into()));
-    assert!(has_text(
-        &app.view(),
-        "Current firmware (optional receiver reference)"
-    ));
+    assert!(has_text(&app.view(), "Current firmware"));
     app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "1.V9.tar".into()));
     app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
     assert!(!button(&app.view(), "Recover").enabled);
@@ -1003,7 +1214,7 @@ fn job_lifecycle_reports_progress_then_completion() {
     let status = app.view().status.unwrap();
     assert_eq!(status.text, "Drive information…");
     assert!(status.running);
-    assert_eq!(status.note, Some(KEEP_CONNECTED));
+    assert_eq!(status.note.as_deref(), Some(KEEP_CONNECTED));
     assert_eq!(
         status.progress.unwrap().fraction,
         None,
@@ -1037,11 +1248,17 @@ fn failed_job_offers_log_export_next_to_the_error() {
     finish(&mut app, Err("Backup failed".into()));
     let results = app.view().results.unwrap();
     let failure = results.failure.unwrap();
-    assert_eq!(failure.text, "Backup failed");
+    assert_eq!(
+        failure.text,
+        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    );
     assert_eq!(failure.save_log.text, "Save diagnostic log…");
     assert_eq!(results.view_log.text, "View Log");
-    assert!(app.status.starts_with("Drive information failed —"));
-    assert_eq!(app.log.last().unwrap(), "✗ error: Backup failed");
+    assert_eq!(
+        app.status,
+        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    );
+    assert!(app.log.iter().any(|line| line.contains("Backup failed")));
 }
 
 #[test]
@@ -1155,7 +1372,10 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
         app.poll();
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
-    assert!(app.status.starts_with("Drive information failed —"));
+    assert!(app.status.starts_with(&crate::localization::text(
+        crate::localization::Language::En,
+        "errors.operation_failed"
+    )));
     assert!(app.view().controls_enabled);
 }
 
@@ -1480,7 +1700,7 @@ fn information_cards_follow_report_groups_in_report_order() {
         row("Firmware update", "Supported", Group::Operations),
     ];
     let cards = info_cards(&rows);
-    let titles: Vec<_> = cards.iter().map(|c| (c.title, c.column)).collect();
+    let titles: Vec<_> = cards.iter().map(|c| (c.title.as_str(), c.column)).collect();
     assert_eq!(
         titles,
         [
@@ -1492,7 +1712,10 @@ fn information_cards_follow_report_groups_in_report_order() {
             ("Firmware operations", 1),
         ]
     );
-    assert_eq!(cards[3].subtitle, Some("Current settings · read only"));
+    assert_eq!(
+        cards[3].subtitle.as_deref(),
+        Some("Current settings · read only")
+    );
     let pairs = |list: &[(&str, &str)]| {
         list.iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
@@ -1746,6 +1969,7 @@ fn logging_failure_retains_operation_and_terminal_interrupted_event() {
     assert_eq!(terminal["data"]["operation_id"], "correlated-operation");
     assert_eq!(terminal["data"]["result"], "interrupted");
     assert_eq!(terminal["data"]["failure"]["safe_to_probe"], false);
+    assert!(terminal["data"]["failure"]["write_started"].is_null());
     drop(zip);
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -1773,7 +1997,14 @@ fn typed_failure_keeps_phase_and_completed_stages_in_report() {
     app.poll();
     assert_eq!(
         app.status,
-        "Recovery failed during final target upload — temporary firmware may remain"
+        format!(
+            "{} {}",
+            crate::localization::text(crate::localization::Language::En, "errors.operation_failed"),
+            crate::localization::text(
+                crate::localization::Language::En,
+                "errors.temporary_firmware"
+            )
+        )
     );
     assert!(!app.status.contains("write_started"));
     let path = app
@@ -1876,14 +2107,14 @@ fn failed_recovery_preparation_never_opens_a_confirmation_or_write_job() {
     assert!(app.pending.is_none());
     assert!(app.recovery_planning.is_none());
     assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
+    assert_eq!(
+        app.view().results.unwrap().failure.unwrap().text,
+        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    );
     assert!(app
-        .view()
-        .results
-        .unwrap()
-        .failure
-        .unwrap()
-        .text
-        .contains("unsupported receiver"));
+        .log
+        .iter()
+        .any(|line| line.contains("unsupported receiver")));
 }
 
 #[test]
@@ -1927,5 +2158,108 @@ fn report_cancellation_is_available_and_completion_restores_submit() {
     app.poll();
     assert!(app.report_rx.is_none());
     assert!(app.report_control.is_none());
-    assert_eq!(app.results_view().submit_report.text, "Submit Report");
+    assert_eq!(
+        app.view().results.unwrap().submit_report.text,
+        "Submit Report"
+    );
+}
+
+#[test]
+fn package_preview_reports_compatibility_pending_in_every_language() {
+    for language in crate::localization::Language::ALL {
+        let mut app = App::with_drives(Vec::new());
+        app.language = language;
+        app.action = "Flash plan".into();
+        let (tx, rx) = mpsc::channel();
+        app.rx = Some(rx);
+        tx.send(Msg::PreviewCompatibilityPending(true)).unwrap();
+        tx.send(Msg::Done(Ok(None))).unwrap();
+        app.poll();
+        assert_eq!(
+            app.status,
+            crate::localization::text(language, "status.package_checked")
+        );
+        assert!(app.failure.is_none());
+        assert!(app.log.iter().any(|line| line == &app.status));
+    }
+}
+
+#[test]
+fn blocked_update_shows_actionable_reason_and_records_no_write() {
+    let dir =
+        std::env::temp_dir().join(format!("freemkv-blocked-{}", workflow::new_operation_id()));
+    let mut app = App::with_drives(Vec::new());
+    app.journal = Some(Journal::memory_at(dir.clone()));
+    app.operation_id = Some("incompatible-hardware".into());
+    app.action = "Firmware update".into();
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    tx.send(Msg::FailureEvidence(workflow::UpdateFailure {
+        phase: "compatibility checks".into(),
+        write_started: false,
+        temporary_firmware: false,
+        completed_stages: Vec::new(),
+    }))
+    .unwrap();
+    let reason = "The underlying hardware for these firmwares is not compatible. Installed firmware: PP100. Target firmware: BDX-PR1MLA.";
+    tx.send(Msg::UserGuidance(reason.into())).unwrap();
+    tx.send(Msg::Done(Err(reason.into()))).unwrap();
+    app.poll();
+    assert_eq!(app.status, "Update blocked. No firmware was written.");
+    let failure = app.failure.as_ref().unwrap();
+    assert!(failure.contains(reason));
+    assert!(failure.contains("Stopped during compatibility checks."));
+    assert!(!failure.contains("cf3183a51bc41e42"));
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let event: serde_json::Value = contents
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .find(|event| event["event"] == "operation_finished")
+        .unwrap();
+    assert_eq!(event["data"]["result"], "blocked");
+    assert_eq!(event["data"]["failure"]["phase"], "compatibility checks");
+    assert_eq!(event["data"]["failure"]["write_started"], false);
+    assert_eq!(event["data"]["failure"]["safe_to_probe"], false);
+    drop(zip);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn worker_input_failure_has_precheck_evidence_without_opening_a_drive() {
+    let (tx, rx) = mpsc::channel();
+    let options = FlashOptions {
+        input: std::env::temp_dir()
+            .join(workflow::new_operation_id())
+            .join("absent.tar"),
+        ..FlashOptions::default()
+    };
+    run_job(
+        "not-a-real-device",
+        Job::PlanFlash(options),
+        tx,
+        None,
+        "input-check".into(),
+    );
+    let messages: Vec<_> = rx.try_iter().collect();
+    assert!(messages
+        .iter()
+        .any(|msg| matches!(msg, Msg::FailureEvidence(e)
+        if e.phase == "input and drive checks" && !e.write_started && !e.temporary_firmware)));
+    assert!(messages
+        .iter()
+        .any(|msg| matches!(msg, Msg::UserGuidance(_))));
+    assert!(messages.iter().any(|msg| matches!(msg, Msg::Done(Err(_)))));
+    assert!(!messages
+        .iter()
+        .any(|msg| matches!(msg, Msg::DriveAfter(_) | Msg::Authorized(_, _))));
 }

@@ -1,5 +1,43 @@
 use super::*;
 #[test]
+fn flash_current_is_optional_and_paired_member_requires_an_explicit_file() {
+    let base = ["freemkv-flash", "flash", "-i", "modified.bin"];
+    for suffix in [vec![], vec!["--read-from-drive"]] {
+        let Some(Command::Flash(args)) = Cli::try_parse_from(base.into_iter().chain(suffix))
+            .unwrap()
+            .command
+        else {
+            panic!("flash command")
+        };
+        let options: freemkv_flash::workflow::FlashOptions = args.into();
+        assert!(options.current.is_none());
+        assert!(!options.execute);
+    }
+    let Some(Command::Flash(args)) = Cli::try_parse_from(base.into_iter().chain([
+        "--current",
+        "oem.tar",
+        "--current-member",
+        "firmware.bin",
+    ]))
+    .unwrap()
+    .command
+    else {
+        panic!("flash command")
+    };
+    let options: freemkv_flash::workflow::FlashOptions = args.into();
+    assert_eq!(options.current.unwrap(), PathBuf::from("oem.tar"));
+    assert_eq!(options.current_member.as_deref(), Some("firmware.bin"));
+    assert!(
+        Cli::try_parse_from(base.into_iter().chain(["--current-member", "firmware.bin"])).is_err()
+    );
+    assert!(Cli::try_parse_from(base.into_iter().chain([
+        "--current",
+        "oem.bin",
+        "--read-from-drive"
+    ]))
+    .is_err());
+}
+#[test]
 fn obsolete_flash_switches_are_rejected() {
     for flag in [
         "--force",

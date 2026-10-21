@@ -27,7 +27,7 @@ use crate::ops::{self, Job, Request, ResultView};
 use crate::support::Journal;
 
 /// Shown wherever Recovery is offered or confirmed. Wording is part of the safety contract.
-pub const FORCE_WARNING: &str = "Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable.";
+pub const FORCE_WARNING: &str = "Recovery skips automatic backups and some compatibility checks. Incompatible firmware can make the drive unusable.";
 /// The confirmation sheet's danger line.
 pub const FLASH_DANGER: &str =
     "Flashing can permanently disable the drive. Keep it connected and powered until completion.";
@@ -44,16 +44,6 @@ const WORKER_PANIC: &str = "Operation worker failed unexpectedly. If flashing wa
 const WORKER_GONE: &str = "The worker stopped before reporting a result. If a flash was underway, inspect the drive before retrying.";
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
 const DIAGNOSTIC_REFRESH: Duration = Duration::from_millis(500);
-
-fn short_failure(error: &str) -> String {
-    let summary = error.split(';').take(2).collect::<Vec<_>>().join(";");
-    let summary = summary.trim().trim_end_matches(':');
-    if summary.chars().count() <= 170 {
-        summary.to_owned()
-    } else {
-        format!("{}…", summary.chars().take(169).collect::<String>())
-    }
-}
 
 /// The application's tasks, in tab order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -78,28 +68,31 @@ impl Task {
         Task::Recovery,
     ];
 
-    pub fn title(self) -> &'static str {
+    pub const fn message_id(self) -> &'static str {
         match self {
-            Task::Info => "Drive info",
-            Task::Inspect => "Inspect",
-            Task::Compare => "Compare",
-            Task::Backup => "Backup",
-            Task::Dump => "Dump",
-            Task::Flash => "Flash",
-            Task::Recovery => "Recovery",
+            Task::Info => "task.info",
+            Task::Inspect => "task.inspect",
+            Task::Compare => "task.compare",
+            Task::Backup => "task.backup",
+            Task::Dump => "task.dump",
+            Task::Flash => "task.flash",
+            Task::Recovery => "task.recovery",
         }
+    }
+
+    pub fn title(self) -> &'static str {
+        crate::localization::get(crate::localization::Language::En, self.message_id())
     }
 }
 
 /// What the selected drive offers, from `workflow::profile`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Profile {
+    pub(crate) flash_current: bool,
     /// Shown beside the drive: the family (or "Unsupported"), then what it offers.
     pub(crate) chips: Vec<String>,
     /// The drive tasks offered; Info, Inspect and Compare need no profile.
     pub(crate) tasks: Vec<Task>,
-    /// Recovery identifies its receiver without an installed firmware reference.
-    pub(crate) recovery_without_current: bool,
     /// Recheck Current choices when Recovery lacks a normal live protocol match.
     pub(crate) recovery_without_live_protocol: bool,
     /// A live capture can feed Inspect and Compare.
@@ -131,6 +124,7 @@ const PROFILE_FAILED: &str = "Profile unavailable";
 pub enum Pick {
     CheckFile,
     FlashFirmware,
+    FlashCurrent,
     RecoveryCurrent,
     RecoveryInput,
     Backup,
@@ -173,6 +167,7 @@ pub enum Effect {
 /// Checkboxes in the model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckId {
+    FlashReadFromDrive,
     RecoveryReadFromDrive,
     RiskAck,
     /// Save a live analysis capture as a backup rather than a raw read.
@@ -189,6 +184,7 @@ pub enum Side {
 /// Every user action a shell can forward.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Input {
+    SetLanguage(crate::localization::Language),
     SelectDrive(usize),
     Refresh,
     SelectTask(Task),
@@ -198,6 +194,8 @@ pub enum Input {
     ReadInfo,
     FlashNow,
     CheckFlashFile,
+    CheckRecoveryFile,
+    FlashCurrentMember(String),
     Recover,
     RecoveryMember(String),
     RecoveryCurrentMember(String),
@@ -224,6 +222,7 @@ pub enum Input {
 #[derive(Clone, Debug, PartialEq)]
 pub struct View {
     pub title: String,
+    pub language: crate::localization::Language,
     pub drives: DriveBar,
     pub tabs: Vec<Tab>,
     pub task: Task,
@@ -244,11 +243,11 @@ pub struct View {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DriveBar {
-    pub label: &'static str,
+    pub label: String,
     pub items: Vec<DriveItem>,
     pub selected: Option<usize>,
     /// Shown, disabled, when there is no drive.
-    pub placeholder: &'static str,
+    pub placeholder: String,
     pub refresh: Button,
     /// The selected drive's profile chips, or `PROBING` while it is read.
     pub chips: Vec<String>,
@@ -263,7 +262,7 @@ pub struct DriveItem {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tab {
     pub task: Task,
-    pub title: &'static str,
+    pub title: String,
     pub enabled: bool,
 }
 
@@ -359,7 +358,7 @@ pub struct Status {
     pub text: String,
     pub running: bool,
     pub progress: Option<Progress>,
-    pub note: Option<&'static str>,
+    pub note: Option<String>,
     pub cancel: Option<Button>,
 }
 
@@ -394,8 +393,8 @@ pub struct Failure {
 /// shows the cards in the order given.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Card {
-    pub title: &'static str,
-    pub subtitle: Option<&'static str>,
+    pub title: String,
+    pub subtitle: Option<String>,
     pub column: usize,
     pub body: CardBody,
 }
@@ -450,15 +449,15 @@ pub const CLOSE_BLOCKED: &str =
 /// The Flash/Recovery confirmation sheet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Confirm {
-    pub title: &'static str,
+    pub title: String,
     pub details: Vec<String>,
-    pub danger: &'static str,
+    pub danger: String,
     /// Cautions: a flash's authorization warnings, or the Recovery warning.
     pub warnings: Vec<String>,
     /// The backend's own confirmation text, when it words one.
     pub prompt: Option<String>,
-    pub note: Option<&'static str>,
-    pub ack_text: &'static str,
+    pub note: Option<String>,
+    pub ack_text: String,
     pub ack_checked: bool,
     pub confirm: Button,
     pub cancel: Button,
@@ -466,9 +465,9 @@ pub struct Confirm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Diagnostics {
-    pub title: &'static str,
+    pub title: String,
     pub buttons: Vec<Button>,
-    pub hint: &'static str,
+    pub hint: String,
     pub path: Option<String>,
     pub notice: Option<String>,
     pub lines: Arc<Vec<String>>,
@@ -483,7 +482,7 @@ pub struct AnalysisWindow {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnalysisView {
-    pub title: &'static str,
+    pub title: String,
     pub actions: Vec<Button>,
     pub heading: String,
     pub nodes: Vec<Node>,
@@ -534,6 +533,168 @@ impl Node {
     }
 }
 
+fn translate(language: crate::localization::Language, value: &mut String) {
+    if crate::localization::is_message(value) {
+        *value = crate::localization::text(language, value);
+    }
+}
+
+fn translate_button(language: crate::localization::Language, button: &mut Button) {
+    translate(language, &mut button.text);
+}
+
+fn translate_item(language: crate::localization::Language, item: &mut Item) {
+    match item {
+        Item::Origin(_) => {}
+        Item::Text(text) | Item::Heading(text) | Item::Note(text) | Item::Warning(text) => {
+            translate(language, text)
+        }
+        Item::Check { text, .. } => translate(language, text),
+        Item::Path { button, .. } => translate_button(language, button),
+        Item::Buttons { label, buttons } => {
+            if let Some(label) = label {
+                translate(language, label);
+            }
+            buttons
+                .iter_mut()
+                .for_each(|button| translate_button(language, button));
+        }
+    }
+}
+
+fn translate_node(language: crate::localization::Language, node: &mut Node) {
+    match &mut node.kind {
+        NodeKind::Section(text) | NodeKind::Text(text) | NodeKind::Note(text) => {
+            translate(language, text)
+        }
+        NodeKind::Field { label, .. } => translate(language, label),
+        NodeKind::Mono(_) => {}
+        NodeKind::Buttons(buttons) => buttons
+            .iter_mut()
+            .for_each(|button| translate_button(language, button)),
+        NodeKind::Table { header, .. } => {
+            header.iter_mut().for_each(|text| translate(language, text));
+        }
+    }
+    node.children
+        .iter_mut()
+        .for_each(|child| translate_node(language, child));
+}
+
+/// Resolve catalog messages at the model boundary so every shell receives the same language.
+fn translate_view(view: &mut View) {
+    let language = view.language;
+    translate(language, &mut view.title);
+    translate(language, &mut view.drives.label);
+    translate(language, &mut view.drives.placeholder);
+    translate_button(language, &mut view.drives.refresh);
+    view.drives
+        .chips
+        .iter_mut()
+        .for_each(|text| translate(language, text));
+    view.tabs
+        .iter_mut()
+        .for_each(|tab| translate(language, &mut tab.title));
+    view.panel
+        .iter_mut()
+        .for_each(|item| translate_item(language, item));
+    view.log
+        .iter_mut()
+        .for_each(|line| translate(language, line));
+    if let Some(status) = &mut view.status {
+        translate(language, &mut status.text);
+        if let Some(note) = &mut status.note {
+            translate(language, note);
+        }
+        if let Some(progress) = &mut status.progress {
+            translate(language, &mut progress.label);
+        }
+        if let Some(cancel) = &mut status.cancel {
+            translate_button(language, cancel);
+        }
+    }
+    if let Some(results) = &mut view.results {
+        if let Some(button) = &mut results.open_results {
+            translate_button(language, button);
+        }
+        results.cards.iter_mut().for_each(|card| {
+            translate(language, &mut card.title);
+            if let Some(subtitle) = &mut card.subtitle {
+                translate(language, subtitle);
+            }
+            match &mut card.body {
+                CardBody::Rows(rows) => rows
+                    .iter_mut()
+                    .for_each(|(label, _)| translate(language, label)),
+                CardBody::Media { left, right } => left
+                    .iter_mut()
+                    .chain(right)
+                    .for_each(|row| translate(language, &mut row.label)),
+            }
+        });
+        results
+            .fields
+            .iter_mut()
+            .for_each(|(label, _)| translate(language, label));
+        if let Some(failure) = &mut results.failure {
+            translate(language, &mut failure.text);
+            translate_button(language, &mut failure.save_log);
+        }
+        if let Some(notice) = &mut results.notice {
+            translate(language, notice);
+        }
+        translate_button(language, &mut results.view_log);
+        translate_button(language, &mut results.submit_report);
+    }
+    if let Some(confirm) = &mut view.confirm {
+        translate(language, &mut confirm.title);
+        confirm
+            .details
+            .iter_mut()
+            .for_each(|text| translate(language, text));
+        translate(language, &mut confirm.danger);
+        confirm
+            .warnings
+            .iter_mut()
+            .for_each(|text| translate(language, text));
+        if let Some(prompt) = &mut confirm.prompt {
+            translate(language, prompt);
+        }
+        if let Some(note) = &mut confirm.note {
+            translate(language, note);
+        }
+        translate(language, &mut confirm.ack_text);
+        translate_button(language, &mut confirm.confirm);
+        translate_button(language, &mut confirm.cancel);
+    }
+    if let Some(diagnostics) = &mut view.diagnostics {
+        translate(language, &mut diagnostics.title);
+        diagnostics
+            .buttons
+            .iter_mut()
+            .for_each(|button| translate_button(language, button));
+        translate(language, &mut diagnostics.hint);
+        if let Some(notice) = &mut diagnostics.notice {
+            translate(language, notice);
+        }
+    }
+    if let Some(analysis) = &mut view.analysis {
+        let mut tree = (*analysis.tree).clone();
+        translate(language, &mut tree.title);
+        translate(language, &mut tree.heading);
+        tree.actions
+            .iter_mut()
+            .for_each(|button| translate_button(language, button));
+        tree.nodes
+            .iter_mut()
+            .for_each(|node| translate_node(language, node));
+        analysis.tree = Arc::new(tree);
+        if let Some(notice) = &mut analysis.notice {
+            translate(language, notice);
+        }
+    }
+}
+
 // ── the model ─────────────────────────────────────────────────────────────
 
 /// Messages from the worker thread.
@@ -541,6 +702,8 @@ pub(crate) enum Msg {
     Event(Event),
     DriveAfter(String),
     FailureEvidence(workflow::UpdateFailure),
+    UserGuidance(String),
+    PreviewCompatibilityPending(bool),
     Analysis(ResultView),
     /// A flash passed every gate after its backup; the worker waits for the
     /// sheet's answer on the sender before writing.
@@ -587,10 +750,13 @@ type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
 
 /// The whole application state. The shells hold none of their own.
 pub struct App {
+    pub(crate) language: crate::localization::Language,
+    pub(crate) preferences: crate::localization::Preferences,
     journal: Option<Journal>,
     logging_warning: Option<String>,
     operation_id: Option<String>,
     failure_evidence: Option<workflow::UpdateFailure>,
+    preview_compatibility_pending: Option<bool>,
     report_rx: Option<Receiver<Result<String, String>>>,
     report_control: Option<crate::support::Submission>,
     recovery_planning: Option<(Target, RecoveryOptions)>,
@@ -604,6 +770,10 @@ pub struct App {
     pub(crate) task: Task,
     pub(crate) result_task: Task,
     pub(crate) flash_input: Option<PathBuf>,
+    flash_current: Option<PathBuf>,
+    flash_read: bool,
+    flash_current_members: Vec<String>,
+    flash_current_member: Option<String>,
     pub(crate) recovery_input: Option<PathBuf>,
     pub(crate) recovery_current: Option<PathBuf>,
     pub(crate) recovery_read: bool,
@@ -670,6 +840,17 @@ impl App {
     }
 
     pub(crate) fn with_drives(drives: Vec<DriveChoice>) -> Self {
+        #[cfg(test)]
+        let preferences = crate::localization::Preferences::Memory;
+        #[cfg(not(test))]
+        let preferences = crate::localization::Preferences::user();
+        Self::with_preferences(drives, preferences)
+    }
+
+    pub(crate) fn with_preferences(
+        drives: Vec<DriveChoice>,
+        preferences: crate::localization::Preferences,
+    ) -> Self {
         let device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
         let (journal, logging_warning) = if cfg!(test) {
             (None, None)
@@ -683,10 +864,13 @@ impl App {
             }
         };
         Self {
+            language: preferences.load(),
+            preferences,
             journal,
             logging_warning,
             operation_id: None,
             failure_evidence: None,
+            preview_compatibility_pending: None,
             report_rx: None,
             report_control: None,
             recovery_planning: None,
@@ -700,9 +884,13 @@ impl App {
             task: Task::Info,
             result_task: Task::Info,
             flash_input: None,
+            flash_current: None,
+            flash_read: true,
+            flash_current_members: Vec::new(),
+            flash_current_member: None,
             recovery_input: None,
             recovery_current: None,
-            recovery_read: false,
+            recovery_read: true,
             recovery_member: None,
             recovery_members: Vec::new(),
             recovery_current_members: Vec::new(),
@@ -714,7 +902,7 @@ impl App {
             analysis_open: false,
             analysis_notice: None,
             control: Control::default(),
-            status: "Ready".into(),
+            status: "status.ready".into(),
             failure: None,
             action: String::new(),
             risk_ack: false,
@@ -893,7 +1081,7 @@ impl App {
             .iter()
             .find(|d| d.path == self.device)
             .map(DriveChoice::display)
-            .unwrap_or_else(|| "No optical drive found".into())
+            .unwrap_or_else(|| "drive.none".into())
     }
 
     fn selected(&self) -> bool {
@@ -903,13 +1091,23 @@ impl App {
     /// Apply one user action; returns the work only the shell can do.
     pub fn dispatch(&mut self, input: Input) -> Vec<Effect> {
         match input {
+            Input::SetLanguage(language) => {
+                if self.language != language {
+                    self.language = language;
+                    if let Err(error) = self.preferences.save(language) {
+                        self.log.push(format!(
+                            "Language changed for this session but could not be saved: {error}"
+                        ));
+                    }
+                }
+            }
             Input::SelectDrive(i) => {
                 if let Some(path) = self.drives.get(i).map(|d| d.path.clone()) {
                     if !self.busy() && path != self.device {
                         self.device = path;
                         self.risk_ack = false;
                         self.rows.clear();
-                        self.status = "Ready".into();
+                        self.status = "status.ready".into();
                         self.failure = None;
                         return self.start_profile();
                     }
@@ -924,6 +1122,12 @@ impl App {
             }
             Input::Choose(pick) => return self.choose(pick),
             Input::Chosen(pick, path) => return self.chosen(pick, path),
+            Input::SetCheck(CheckId::FlashReadFromDrive, on) if !self.busy() => {
+                if self.flash_read != on {
+                    self.clear_flash_result();
+                    self.flash_read = on;
+                }
+            }
             Input::SetCheck(CheckId::RecoveryReadFromDrive, on) if !self.busy() => {
                 if self.recovery_read != on {
                     self.clear_flash_result();
@@ -948,18 +1152,36 @@ impl App {
             Input::ReadInfo if !self.busy() => {
                 return self.start_job("Drive information", self.device.clone(), Job::Info);
             }
-            Input::CheckFlashFile if !self.busy() => {
-                if let Some(input) = self.flash_input.clone() {
+            action @ (Input::CheckFlashFile | Input::CheckRecoveryFile) if !self.busy() => {
+                let input = if matches!(action, Input::CheckRecoveryFile) {
+                    self.recovery_input.clone()
+                } else {
+                    self.flash_input.clone()
+                };
+                if let Some(input) = input {
                     return self.start_job("Check file", String::new(), Job::InfoFile { input });
                 }
             }
-            Input::FlashNow if !self.busy() && self.selected() => {
+            Input::FlashNow if !self.busy() && self.flash_ready() => {
                 if let Some(input) = self.flash_input.clone() {
+                    let use_current = self.flash_current_supported() && !self.flash_read;
                     return self.plan_flash(FlashOptions {
+                        current: use_current.then(|| self.flash_current.clone()).flatten(),
+                        current_member: use_current
+                            .then(|| self.flash_current_member.clone())
+                            .flatten(),
                         input,
                         execute: true,
                         ..Default::default()
                     });
+                }
+            }
+            Input::FlashCurrentMember(member) if !self.busy() => {
+                if self.flash_current_members.contains(&member)
+                    && self.flash_current_member.as_ref() != Some(&member)
+                {
+                    self.clear_flash_result();
+                    self.flash_current_member = Some(member);
                 }
             }
             Input::RecoveryMember(member) if !self.busy() => {
@@ -980,7 +1202,7 @@ impl App {
                 }
             }
             Input::Recover if !self.busy() && self.recovery_ready() => {
-                let current = if self.recovery_read && !self.recovery_without_current() {
+                let current = if self.recovery_read {
                     CurrentFirmware::ReadFromDrive
                 } else if let Some(current) = self.recovery_current.clone() {
                     CurrentFirmware::File(current)
@@ -997,7 +1219,9 @@ impl App {
                     input: target.options.input.clone(),
                     member: self.recovery_member.clone(),
                     current,
-                    current_member: self.recovery_current_member.clone(),
+                    current_member: (!self.recovery_read)
+                        .then(|| self.recovery_current_member.clone())
+                        .flatten(),
                     execute: false,
                     acknowledged_risk: false,
                 };
@@ -1119,12 +1343,13 @@ impl App {
                     extensions,
                 }))
             }
-            Pick::RecoveryCurrent | Pick::RecoveryInput | Pick::AnalysisFile(_) => {
-                open(Some(FileFilter {
-                    name: "Firmware",
-                    extensions: workflow::file_extensions(),
-                }))
-            }
+            Pick::FlashCurrent
+            | Pick::RecoveryCurrent
+            | Pick::RecoveryInput
+            | Pick::AnalysisFile(_) => open(Some(FileFilter {
+                name: "Firmware",
+                extensions: workflow::file_extensions(),
+            })),
             Pick::Backup | Pick::Dump if self.selected() => {
                 let profile = self.ready_profile();
                 let name = match pick {
@@ -1148,7 +1373,7 @@ impl App {
     /// A previous flash result describes its original selection, not the new one.
     fn clear_flash_result(&mut self) {
         if self.result_task == self.task && matches!(self.task, Task::Flash | Task::Recovery) {
-            self.status = "Ready".into();
+            self.status = "status.ready".into();
             self.failure = None;
             self.rows.clear();
             self.progress = None;
@@ -1198,6 +1423,13 @@ impl App {
                 self.recovery_current_member = None;
                 self.recovery_current = Some(path);
                 return self.refresh_current_profile();
+            }
+            Pick::FlashCurrent => {
+                self.clear_flash_result();
+                self.flash_read = false;
+                self.flash_current_members = workflow::recovery_members(&path).unwrap_or_default();
+                self.flash_current_member = None;
+                self.flash_current = Some(path);
             }
             Pick::RecoveryInput => {
                 self.clear_flash_result();
@@ -1272,24 +1504,28 @@ impl App {
         }
     }
 
-    fn recovery_without_current(&self) -> bool {
-        self.ready_profile()
-            .is_some_and(|p| p.recovery_without_current)
-    }
-
     fn recovery_ready(&self) -> bool {
         self.selected()
             && self.recovery_input.is_some()
             && (self.recovery_members.len() < 2 || self.recovery_member.is_some())
             && (self.recovery_read
-                || self.recovery_current_members.len() < 2
-                || self.recovery_current_member.is_some())
-            && (self.recovery_without_current()
-                || self.recovery_read
-                || self.recovery_current.is_some()
-                || !self
-                    .ready_profile()
-                    .is_some_and(|p| p.tasks.contains(&Task::Recovery)))
+                || (self.recovery_current.is_some()
+                    && (self.recovery_current_members.len() < 2
+                        || self.recovery_current_member.is_some())))
+    }
+
+    fn flash_current_supported(&self) -> bool {
+        self.ready_profile().is_some_and(|p| p.flash_current)
+    }
+
+    fn flash_ready(&self) -> bool {
+        self.selected()
+            && self.flash_input.is_some()
+            && (!self.flash_current_supported()
+                || self.flash_read
+                || (self.flash_current.is_some()
+                    && (self.flash_current_members.len() < 2
+                        || self.flash_current_member.is_some())))
     }
 
     /// The selected drive and `options`, frozen; consent always starts unticked.
@@ -1414,6 +1650,7 @@ impl App {
         self.status = format!("{label}…");
         self.failure = None;
         self.failure_evidence = None;
+        self.preview_compatibility_pending = None;
         self.log.clear();
         self.diagnostic_log = None;
         self.diagnostic_checked = None;
@@ -1489,6 +1726,10 @@ impl App {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => self.event(event),
                     Ok(Msg::FailureEvidence(evidence)) => self.failure_evidence = Some(evidence),
+                    Ok(Msg::UserGuidance(message)) => self.failure = Some(message),
+                    Ok(Msg::PreviewCompatibilityPending(pending)) => {
+                        self.preview_compatibility_pending = Some(pending);
+                    }
                     Ok(Msg::DriveAfter(label)) => {
                         self.record_event("drive_after", serde_json::json!({"drive": label}))
                     }
@@ -1513,30 +1754,60 @@ impl App {
                             Ok(Some(outcome)) => {
                                 self.status = format!("{} {}", self.action, outcome.summary())
                             }
+                            Ok(None) if self.preview_compatibility_pending == Some(true) => {
+                                self.status = crate::localization::text(
+                                    self.language,
+                                    "status.package_checked",
+                                );
+                            }
                             Ok(None) => self.status = format!("{} complete", self.action),
                             Err(_) if cancelled => {
                                 self.status = format!("{} cancelled", self.action)
                             }
-                            Err(error) => {
-                                self.status = match &self.failure_evidence {
-                                    Some(evidence) => {
-                                        let consequence = if evidence.temporary_firmware {
-                                            " — temporary firmware may remain"
-                                        } else if evidence.write_started {
-                                            " — firmware may be partial"
-                                        } else {
-                                            " — update not started"
-                                        };
-                                        format!(
-                                            "{} failed during {}{consequence}",
-                                            self.action, evidence.phase
-                                        )
+                            Err(_) => {
+                                let consequence = self.failure_evidence.as_ref().map(|evidence| {
+                                    if evidence.temporary_firmware {
+                                        "errors.temporary_firmware"
+                                    } else if evidence.write_started {
+                                        "errors.partial_firmware"
+                                    } else {
+                                        "errors.update_not_started"
                                     }
-                                    None => {
-                                        format!("{} failed — {}", self.action, short_failure(error))
+                                });
+                                let blocked = self
+                                    .failure_evidence
+                                    .as_ref()
+                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware);
+                                let message = crate::localization::text(
+                                    self.language,
+                                    if blocked {
+                                        "errors.update_blocked"
+                                    } else {
+                                        "errors.operation_failed"
+                                    },
+                                );
+                                let consequence = if blocked { None } else { consequence };
+                                let message = consequence.map_or(message.clone(), |key| {
+                                    format!(
+                                        "{message} {}",
+                                        crate::localization::text(self.language, key)
+                                    )
+                                });
+                                self.status = message.clone();
+                                // Keep the summary localized; precheck guidance names the
+                                // stopped stage and actionable reason without technical hashes.
+                                self.failure = Some(match self.failure.take() {
+                                    Some(guidance) => {
+                                        match self.failure_evidence.as_ref().filter(|_| blocked) {
+                                            Some(evidence) => format!(
+                                                "{message} Stopped during {}. {guidance}",
+                                                evidence.phase
+                                            ),
+                                            None => format!("{message} {guidance}"),
+                                        }
                                     }
-                                };
-                                self.failure = Some(error.clone());
+                                    None => message,
+                                });
                             }
                         }
                         let update_evidence = result
@@ -1546,7 +1817,18 @@ impl App {
                             .map(outcome_json);
                         let result_kind = match &result {
                             Err(_) if cancelled => "cancelled",
+                            Err(_)
+                                if self
+                                    .failure_evidence
+                                    .as_ref()
+                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware) =>
+                            {
+                                "blocked"
+                            }
                             Err(_) => "error",
+                            Ok(None) if self.preview_compatibility_pending == Some(true) => {
+                                "prechecked"
+                            }
                             Ok(Some(workflow::UpdateOutcome::Planned)) => "planned",
                             Ok(Some(outcome)) if !outcome.safe_to_probe() => "uncertain",
                             Ok(Some(outcome)) if !outcome.fully_verified() => {
@@ -1556,9 +1838,12 @@ impl App {
                         };
                         self.log.push(match result {
                             Ok(Some(outcome)) => format!("{} {}", self.action, outcome.summary()),
+                            Ok(None) if self.preview_compatibility_pending == Some(true) => {
+                                self.status.clone()
+                            }
                             Ok(None) => "✓ done.".into(),
                             Err(_) if cancelled => CANCELLED.into(),
-                            Err(e) => format!("✗ error: {e}"),
+                            Err(e) => format!("✗ {}: {e}", self.status),
                         });
                         self.record_event("operation_finished", serde_json::json!({
                             "operation": self.action,
@@ -1567,6 +1852,7 @@ impl App {
                             "error": self.failure,
                             "failure": self.failure.as_ref().map(|_| failure_json(self.failure_evidence.as_ref())),
                             "update": update_evidence,
+                            "compatibility_pending": self.preview_compatibility_pending,
                         }));
                         self.operation_id = None;
                         finished = true;
@@ -1795,10 +2081,15 @@ impl App {
     pub fn view(&self) -> View {
         let enabled = !self.busy();
         let shown = self.result_task == self.task;
-        View {
-            title: format!("freemkv Firmware Utility {}", env!("CARGO_PKG_VERSION")),
+        let mut view = View {
+            title: format!(
+                "{} {}",
+                crate::localization::get(self.language, "app.name"),
+                env!("CARGO_PKG_VERSION")
+            ),
+            language: self.language,
             drives: DriveBar {
-                label: "Optical drive",
+                label: "drive.label".into(),
                 items: self
                     .drives
                     .iter()
@@ -1808,8 +2099,8 @@ impl App {
                     })
                     .collect(),
                 selected: self.drives.iter().position(|d| d.path == self.device),
-                placeholder: "No optical drive found",
-                refresh: Button::new("Refresh", Input::Refresh, enabled),
+                placeholder: "drive.none".into(),
+                refresh: Button::new("action.refresh", Input::Refresh, enabled),
                 chips: match &self.profile {
                     ProfileState::NoDrive => Vec::new(),
                     ProfileState::Probing => vec![PROBING.into()],
@@ -1821,7 +2112,7 @@ impl App {
                 .iter()
                 .map(|&task| Tab {
                     task,
-                    title: task.title(),
+                    title: task.message_id().into(),
                     enabled,
                 })
                 .collect(),
@@ -1842,7 +2133,9 @@ impl App {
                     notice: self.analysis_notice.clone(),
                 }),
             can_close: !self.running(),
-        }
+        };
+        translate_view(&mut view);
+        view
     }
 
     fn panel(&self, enabled: bool) -> Vec<Item> {
@@ -1850,27 +2143,17 @@ impl App {
         // identification and authorization; a BOOT or failed profile must not
         // prevent reaching Recovery or preparing a Flash operation.
         let selected = self.selected();
-        let path = |text: &str, pick, on: bool, file: &Option<PathBuf>| Item::Path {
-            button: Button::new(text, Input::Choose(pick), enabled && on),
-            path: file.as_deref().map(PathView::of),
-        };
         match self.task {
             Task::Info => {
                 let mut items = vec![Item::Buttons {
                     label: None,
                     buttons: vec![
-                        Button::primary(
-                            "Read drive information",
-                            Input::ReadInfo,
-                            enabled && selected,
-                        ),
-                        Button::new("Check file…", Input::Choose(Pick::CheckFile), enabled),
+                        Button::primary("action.read_info", Input::ReadInfo, enabled && selected),
+                        Button::new("action.check_file", Input::Choose(Pick::CheckFile), enabled),
                     ],
                 }];
                 if !selected {
-                    items.push(Item::Note(
-                        "Connect an optical drive, then select Refresh.".into(),
-                    ));
+                    items.push(Item::Note("info.connect_drive".into()));
                 }
                 items
             }
@@ -1901,147 +2184,159 @@ impl App {
                     },
                 ]
             }
-            Task::Flash => match &self.flash_input {
-                Some(_) => {
-                    let mut items = vec![path(
-                        "Change file…",
-                        Pick::FlashFirmware,
-                        true,
-                        &self.flash_input,
-                    )];
-                    items.extend(self.origin_items(false));
-                    items.push(Item::Buttons {
-                        label: None,
-                        buttons: vec![
-                            Button::primary("Flash now", Input::FlashNow, enabled && selected),
-                            Button {
-                                enabled,
-                                ..Button::link("Check file", Input::CheckFlashFile)
-                            },
-                        ],
-                    });
-                    items
-                }
-                None => vec![Item::Buttons {
-                    label: None,
-                    buttons: vec![Button::primary(
-                        "Choose firmware…",
-                        Input::Choose(Pick::FlashFirmware),
-                        enabled,
-                    )],
-                }],
-            },
-            Task::Recovery => {
-                let mut items = vec![
-                    Item::Warning(FORCE_WARNING.into()),
-                    Item::Heading("Current firmware".into()),
-                    Item::Check {
-                        id: CheckId::RecoveryReadFromDrive,
-                        text: "Read from drive".into(),
-                        checked: self.recovery_read,
-                        enabled,
-                    },
-                    path(
-                        "Choose Current…",
-                        Pick::RecoveryCurrent,
-                        !self.recovery_read,
-                        &self.recovery_current,
-                    ),
-                ];
-                if self.recovery_without_current() {
-                    items = vec![
-                        Item::Warning(FORCE_WARNING.into()),
-                        Item::Heading("Current firmware (optional receiver reference)".into()),
-                        path("Choose Current file or TAR…", Pick::RecoveryCurrent, true, &self.recovery_current),
-                        Item::Note("If live receiver code cannot be read, select the firmware currently running—not the firmware to install. For BH16NS40 INTM, select the TAR's intermediate.bin.".into()),
-                    ];
-                } else if self.recovery_read {
-                    items.push(Item::Note(
-                        "Reads installed firmware for protocol analysis. No backup file is saved."
-                            .into(),
-                    ));
-                }
-                if self.recovery_current_members.len() > 1 && !self.recovery_read {
-                    items.push(Item::Buttons {
-                        label: Some("Current firmware member".into()),
-                        buttons: self
-                            .recovery_current_members
-                            .iter()
-                            .map(|name| {
-                                Button::primary(
-                                    &format!(
-                                        "{}{}",
-                                        if self.recovery_current_member.as_ref() == Some(name) {
-                                            "Selected: "
-                                        } else {
-                                            ""
-                                        },
-                                        name
-                                    ),
-                                    Input::RecoveryCurrentMember(name.clone()),
-                                    enabled,
-                                )
-                            })
-                            .collect(),
-                    });
-                }
-                items.extend([
-                    Item::Heading(
-                        if self.recovery_without_current() {
-                            "Firmware to flash"
-                        } else {
-                            "Firmware to flash (Kernel + Normal)"
-                        }
-                        .into(),
-                    ),
-                    path(
-                        "Choose firmware…",
-                        Pick::RecoveryInput,
-                        true,
-                        &self.recovery_input,
-                    ),
-                ]);
-                if self.recovery_members.len() > 1 {
-                    items.push(Item::Note(
-                        "Select exactly one image to recover. No second stage will run.".into(),
-                    ));
-                    items.push(Item::Buttons {
-                        label: Some("Recovery image".into()),
-                        buttons: self
-                            .recovery_members
-                            .iter()
-                            .map(|name| {
-                                Button::primary(
-                                    &format!(
-                                        "{}{}",
-                                        if self.recovery_member.as_ref() == Some(name) {
-                                            "Selected: "
-                                        } else {
-                                            ""
-                                        },
-                                        name
-                                    ),
-                                    Input::RecoveryMember(name.clone()),
-                                    enabled,
-                                )
-                            })
-                            .collect(),
-                    });
-                }
-                if self.recovery_input.is_some() {
-                    items.extend(self.origin_items(true));
-                }
-                items.extend([Item::Buttons {
-                    label: None,
-                    buttons: vec![Button::primary(
-                        "Recover",
-                        Input::Recover,
-                        enabled && self.recovery_ready(),
-                    )],
-                }]);
-                items
+            Task::Flash | Task::Recovery => {
+                self.firmware_panel(enabled, self.task == Task::Recovery)
             }
         }
+    }
+
+    fn firmware_panel(&self, enabled: bool, recovery: bool) -> Vec<Item> {
+        let (input, current, read, members, member, current_pick, input_pick, check) = if recovery {
+            (
+                &self.recovery_input,
+                &self.recovery_current,
+                self.recovery_read,
+                &self.recovery_current_members,
+                &self.recovery_current_member,
+                Pick::RecoveryCurrent,
+                Pick::RecoveryInput,
+                CheckId::RecoveryReadFromDrive,
+            )
+        } else {
+            (
+                &self.flash_input,
+                &self.flash_current,
+                self.flash_read,
+                &self.flash_current_members,
+                &self.flash_current_member,
+                Pick::FlashCurrent,
+                Pick::FlashFirmware,
+                CheckId::FlashReadFromDrive,
+            )
+        };
+        let path = |text: &str, pick, on: bool, file: &Option<PathBuf>| Item::Path {
+            button: Button::new(text, Input::Choose(pick), enabled && on),
+            path: file.as_deref().map(PathView::of),
+        };
+        let mut items = Vec::new();
+        if recovery {
+            items.push(Item::Warning(FORCE_WARNING.into()));
+        }
+        if recovery || self.flash_current_supported() {
+            items.extend([
+                Item::Heading("Current firmware".into()),
+                Item::Check {
+                    id: check,
+                    text: "Read from drive".into(),
+                    checked: read,
+                    enabled,
+                },
+                path("Choose Current…", current_pick, !read, current),
+            ]);
+            if read {
+                items.push(Item::Note("Use the drive to identify the installed firmware. If detection fails, choose its firmware file.".into()));
+            } else if members.len() > 1 {
+                items.push(Item::Buttons {
+                    label: Some("Current firmware member".into()),
+                    buttons: members
+                        .iter()
+                        .map(|name| {
+                            Button::primary(
+                                &format!(
+                                    "{}{}",
+                                    if member.as_ref() == Some(name) {
+                                        "Selected: "
+                                    } else {
+                                        ""
+                                    },
+                                    name
+                                ),
+                                if recovery {
+                                    Input::RecoveryCurrentMember(name.clone())
+                                } else {
+                                    Input::FlashCurrentMember(name.clone())
+                                },
+                                enabled,
+                            )
+                        })
+                        .collect(),
+                });
+            }
+        }
+        items.extend([
+            Item::Heading("Firmware to flash".into()),
+            path(
+                if input.is_some() {
+                    "action.change_file"
+                } else {
+                    "action.choose_firmware"
+                },
+                input_pick,
+                true,
+                input,
+            ),
+        ]);
+        if recovery && self.recovery_members.len() > 1 {
+            items.push(Item::Note(
+                "Select exactly one image to recover. No second stage will run.".into(),
+            ));
+            items.push(Item::Buttons {
+                label: Some("Recovery image".into()),
+                buttons: self
+                    .recovery_members
+                    .iter()
+                    .map(|name| {
+                        Button::primary(
+                            &format!(
+                                "{}{}",
+                                if self.recovery_member.as_ref() == Some(name) {
+                                    "Selected: "
+                                } else {
+                                    ""
+                                },
+                                name
+                            ),
+                            Input::RecoveryMember(name.clone()),
+                            enabled,
+                        )
+                    })
+                    .collect(),
+            });
+        }
+        if input.is_some() {
+            items.extend(self.origin_items(recovery));
+        }
+        items.push(Item::Buttons {
+            label: None,
+            buttons: vec![
+                Button::primary(
+                    if recovery { "Recover" } else { "Flash now" },
+                    if recovery {
+                        Input::Recover
+                    } else {
+                        Input::FlashNow
+                    },
+                    enabled
+                        && if recovery {
+                            self.recovery_ready()
+                        } else {
+                            self.flash_ready()
+                        },
+                ),
+                Button {
+                    enabled: enabled && input.is_some(),
+                    ..Button::link(
+                        "Check file",
+                        if recovery {
+                            Input::CheckRecoveryFile
+                        } else {
+                            Input::CheckFlashFile
+                        },
+                    )
+                },
+            ],
+        });
+        items
     }
 
     fn analysis_panel(&self, enabled: bool) -> Vec<Item> {
@@ -2093,7 +2388,11 @@ impl App {
         items.push(Item::Buttons {
             label: None,
             buttons: vec![Button::new(
-                if compare { "Compare" } else { "Inspect" },
+                if compare {
+                    "task.compare"
+                } else {
+                    "task.inspect"
+                },
                 Input::RunAnalysis,
                 enabled && ready,
             )],
@@ -2136,7 +2435,7 @@ impl App {
                     fraction: None,
                 },
             }),
-            note: running.then_some(KEEP_CONNECTED),
+            note: running.then(|| KEEP_CONNECTED.to_owned()),
             cancel: (running && analysis)
                 .then(|| Button::new("Cancel analysis", Input::CancelAnalysis, true)),
         }
@@ -2173,7 +2472,7 @@ impl App {
                 (None, notice) => notice.clone(),
             },
             view_log: Button::new(
-                "View Log",
+                "action.view_log",
                 Input::ViewLog,
                 self.diagnostic_log.is_some() || self.failure.is_some(),
             ),
@@ -2184,7 +2483,11 @@ impl App {
                     self.report_control.as_ref().is_some_and(|c| !c.cancelled()),
                 )
             } else {
-                Button::new("Submit Report", Input::SubmitReport, self.journal.is_some())
+                Button::new(
+                    "action.submit_report",
+                    Input::SubmitReport,
+                    self.journal.is_some(),
+                )
             },
         }
     }
@@ -2214,6 +2517,13 @@ impl App {
             }
             Sheet::Flash { sheet, .. } => {
                 details.extend(sheet.plan.iter().cloned());
+                details.push(match &pending.target.options.current {
+                    Some(path) => format!("Current: {}", path.display()),
+                    None => "Current: read from drive".into(),
+                });
+                if let Some(member) = &pending.target.options.current_member {
+                    details.push(format!("Current member (receiver reference): {member}"));
+                }
                 (false, sheet.warnings.clone(), sheet.confirmation.clone())
             }
         };
@@ -2237,13 +2547,14 @@ impl App {
                 "Confirm recovery"
             } else {
                 "Confirm flash"
-            },
+            }
+            .into(),
             details,
-            danger: FLASH_DANGER,
+            danger: FLASH_DANGER.into(),
             warnings,
             prompt,
-            note: (!recovery).then_some(BACKUP_KEPT),
-            ack_text: RISK_ACK,
+            note: (!recovery).then(|| BACKUP_KEPT.to_owned()),
+            ack_text: RISK_ACK.into(),
             ack_checked: self.risk_ack,
             confirm: Button::primary(
                 if recovery { "Recover" } else { "Flash now" },
@@ -2256,7 +2567,7 @@ impl App {
 
     fn diagnostics_view(&self) -> Diagnostics {
         Diagnostics {
-            title: "Diagnostic log",
+            title: "Diagnostic log".into(),
             buttons: vec![
                 Button::new("Copy diagnostic log", Input::CopyDiagnostics, true),
                 Button::new(
@@ -2266,7 +2577,7 @@ impl App {
                 ),
                 Button::new("Close", Input::CloseDiagnostics, true),
             ],
-            hint: "Attach this log to your bug report.",
+            hint: "Attach this log to your bug report.".into(),
             path: self
                 .diagnostic_log
                 .as_ref()
@@ -2357,6 +2668,12 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                             Ok(None)
                         }
                         ops::JobResult::Update(outcome) => Ok(Some(outcome)),
+                        ops::JobResult::Preview(preview) => {
+                            let _ = tx.send(Msg::PreviewCompatibilityPending(
+                                preview.compatibility_pending,
+                            ));
+                            Ok(None)
+                        }
                         ops::JobResult::Complete => Ok(None),
                     }
                 })
@@ -2368,7 +2685,23 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
             if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
             }
-            format!("{e:#}")
+            let message = workflow::error_message(&e);
+            if e.is::<workflow::HardwareMismatch>()
+                || e.downcast_ref::<workflow::UpdateFailure>()
+                    .is_some_and(|evidence| !evidence.write_started && !evidence.temporary_firmware)
+            {
+                let _ = tx.send(Msg::UserGuidance(message.clone()));
+            }
+            if e.is::<workflow::CurrentFirmwareRequired>() {
+                let _ = tx.send(Msg::Event(Event::Message(format!(
+                    "Receiver detection diagnostic: {e:#}"
+                ))));
+                let guidance = format!("{message} Uncheck Read from drive to select a file.");
+                let _ = tx.send(Msg::UserGuidance(guidance.clone()));
+                guidance
+            } else {
+                message
+            }
         }),
         Err(_) => Err(WORKER_PANIC.into()),
     };
@@ -2506,8 +2839,8 @@ pub(crate) fn info_cards(rows: &[report::Row]) -> Vec<Card> {
             CardBody::Rows(pairs)
         };
         cards.push(Card {
-            title,
-            subtitle: (group == Group::Settings).then_some("Current settings · read only"),
+            title: title.into(),
+            subtitle: (group == Group::Settings).then(|| "Current settings · read only".to_owned()),
             column,
             body,
         });
@@ -2696,7 +3029,7 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
         }
     };
     AnalysisView {
-        title: "Firmware analysis",
+        title: "Firmware analysis".into(),
         actions: vec![
             Button::new("Copy report", Input::CopyReport, true),
             Button::new("Save text…", Input::Choose(Pick::ReportText), true),

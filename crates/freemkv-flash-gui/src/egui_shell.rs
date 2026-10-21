@@ -20,7 +20,8 @@ const ERROR: egui::Color32 = egui::Color32::from_rgb(160, 45, 35);
 pub fn run() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(format!(
-            "freemkv Firmware Utility {}",
+            "{} {}",
+            crate::localization::get(crate::localization::load_preference(), "app.name"),
             env!("CARGO_PKG_VERSION")
         ))
         .with_inner_size([900.0, 760.0])
@@ -123,6 +124,7 @@ impl Shell {
         let effects = self.app.poll();
         self.perform(&ctx, effects);
         let view = self.app.view();
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(view.title.clone()));
         if !view.can_close && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
@@ -160,8 +162,21 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
     egui::Frame::new().inner_margin(16.0).show(ui, |ui| {
         ui.set_max_width(ui.available_width());
         ui.horizontal(|ui| {
-            ui.heading("freemkv");
-            ui.label("Firmware Utility");
+            ui.heading(crate::localization::get(view.language, "app.name"));
+            ui.menu_button(
+                crate::localization::text(view.language, "settings.language"),
+                |ui| {
+                    for language in crate::localization::Language::ALL {
+                        if ui
+                            .selectable_label(view.language == language, language.native_name())
+                            .clicked()
+                        {
+                            out.push(Input::SetLanguage(language));
+                            ui.close();
+                        }
+                    }
+                },
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.weak(env!("CARGO_PKG_VERSION"));
             });
@@ -176,7 +191,7 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
                 for tab in &view.tabs {
                     let r = ui.add_enabled(
                         tab.enabled,
-                        egui::Button::selectable(view.task == tab.task, tab.title),
+                        egui::Button::selectable(view.task == tab.task, &tab.title),
                     );
                     if r.clicked() && view.task != tab.task {
                         out.push(Input::SelectTask(tab.task));
@@ -189,8 +204,7 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
                 Task::Info => (60.0, 60.0),
                 Task::Inspect | Task::Compare => (180.0, 0.0),
                 Task::Backup | Task::Dump => (110.0, 110.0),
-                Task::Flash => (200.0, 200.0),
-                Task::Recovery => (280.0, 280.0),
+                Task::Flash | Task::Recovery => (280.0, 280.0),
             };
             egui::ScrollArea::vertical()
                 .id_salt(("task_content", view.task as u8))
@@ -226,12 +240,12 @@ fn drive_bar(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
     egui::Frame::group(ui.style())
         .inner_margin(14.0)
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(bar.label).strong());
+            ui.label(egui::RichText::new(&bar.label).strong());
             ui.horizontal(|ui| {
                 let shown = bar
                     .selected
                     .and_then(|i| bar.items.get(i))
-                    .map_or(bar.placeholder, |d| d.text.as_str());
+                    .map_or(bar.placeholder.as_str(), |d| d.text.as_str());
                 egui::ComboBox::from_id_salt("device_combo")
                     .selected_text(shown)
                     .width((ui.available_width() - 88.0).max(180.0))
@@ -362,7 +376,7 @@ fn status_ui(ui: &mut egui::Ui, status: &Status, out: &mut Vec<Input>) {
             }
         }
     }
-    if let Some(note) = status.note {
+    if let Some(note) = &status.note {
         ui.small(note);
     }
 }
@@ -418,14 +432,14 @@ fn card_ui(ui: &mut egui::Ui, card: &Card) {
     egui::Frame::group(ui.style()).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.visuals_mut().disabled_alpha = 0.8;
-        ui.strong(card.title);
-        if let Some(sub) = card.subtitle {
+        ui.strong(&card.title);
+        if let Some(sub) = &card.subtitle {
             ui.small(sub);
         }
         match &card.body {
             CardBody::Rows(rows) => {
                 ui.add_space(8.0);
-                egui::Grid::new(("drive_information", card.title))
+                egui::Grid::new(("drive_information", &card.title))
                     .num_columns(2)
                     .spacing([12.0, 4.0])
                     .max_col_width((ui.available_width() - 16.0) / 2.0)
@@ -493,7 +507,7 @@ fn tick(ui: &mut egui::Ui, state: Tri) {
 
 fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
     let mut open = true;
-    egui::Window::new(c.title)
+    egui::Window::new(&c.title)
         .default_width(480.0)
         .collapsible(false)
         .resizable(false)
@@ -504,7 +518,7 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
             for line in drive_image {
                 ui.label(line);
             }
-            ui.colored_label(DANGER, c.danger);
+            ui.colored_label(DANGER, &c.danger);
             for line in current {
                 ui.label(line);
             }
@@ -514,12 +528,12 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
             if let Some(p) = &c.prompt {
                 ui.strong(p);
             }
-            if let Some(n) = c.note {
+            if let Some(n) = &c.note {
                 ui.label(n);
             }
             ui.add_space(12.0);
             let mut ack = c.ack_checked;
-            if ui.checkbox(&mut ack, c.ack_text).changed() {
+            if ui.checkbox(&mut ack, &c.ack_text).changed() {
                 out.push(Input::SetCheck(crate::ui::CheckId::RiskAck, ack));
             }
             ui.horizontal(|ui| {
@@ -538,7 +552,7 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
 
 fn diagnostics_window(ctx: &egui::Context, d: &Diagnostics, out: &mut Vec<Input>) {
     let mut open = true;
-    egui::Window::new(d.title)
+    egui::Window::new(&d.title)
         .open(&mut open)
         .collapsible(false)
         .resizable(false)
@@ -550,7 +564,7 @@ fn diagnostics_window(ctx: &egui::Context, d: &Diagnostics, out: &mut Vec<Input>
                     button(ui, b, out);
                 }
             });
-            ui.label(d.hint);
+            ui.label(&d.hint);
             if let Some(path) = &d.path {
                 ui.add(
                     egui::Label::new(egui::RichText::new(path).small())
@@ -590,7 +604,7 @@ fn analysis_window(
     ctx.show_viewport_immediate(
         egui::ViewportId::from_hash_of("firmware_analysis_results"),
         egui::ViewportBuilder::default()
-            .with_title(tree.title)
+            .with_title(&tree.title)
             .with_inner_size([1100.0, 800.0])
             .with_min_inner_size([720.0, 500.0]),
         |ctx, _| {

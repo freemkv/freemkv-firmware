@@ -741,6 +741,7 @@ fn backup_firmware() -> Vec<u8> {
 
 fn mtk_request(image: Vec<u8>, execute: bool, backup: Option<PathBuf>) -> FlashRequest {
     FlashRequest {
+        current: None,
         input: image,
         input_format: &MTK_IMAGE,
         mode: FlashMode::Full,
@@ -1340,6 +1341,7 @@ fn golden_check_file() {
 
 fn pioneer_request(input: Vec<u8>, kind: &'static FileFormat, execute: bool) -> FlashRequest {
     FlashRequest {
+        current: None,
         input,
         input_format: kind,
         mode: FlashMode::Full,
@@ -2798,6 +2800,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
+    "PRECHECK",
     "R1",
     "R2",
     "R3",
@@ -2822,7 +2825,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
-    "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10", "P11", "FMT",
+    "PRECHECK", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10", "P11", "FMT",
 ];
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.

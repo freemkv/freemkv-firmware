@@ -190,6 +190,7 @@ fn fresh_backup_path() -> std::path::PathBuf {
 
 fn bin_req(image: Vec<u8>, execute: bool) -> FlashRequest {
     FlashRequest {
+        current: None,
         input: image,
         input_format: &IMAGE,
         mode: FlashMode::Full,
@@ -896,10 +897,13 @@ fn execute_refuses_unsaved_or_existing_backup_before_write() {
     let mut req = bin_req(backup_firmware(), true);
     req.predump_out = None;
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    assert!(flash(&mut dev, &Mtk, &req)
-        .unwrap_err()
-        .to_string()
-        .contains("no preflash backup path"));
+    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(crate::workflow::error_message(&error).contains("no preflash backup path"));
+    let evidence = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert_eq!(evidence.phase, "backup destination");
+    assert!(!evidence.write_started);
     assert!(dev.writes.is_empty());
 
     let out = fresh_backup_path();
@@ -943,10 +947,10 @@ fn restore_refuses_other_drive_backup_without_write() {
     req.input_format = &LEGACY_TAR;
     req.drive_model = "WH16NS60".into();
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    assert!(flash(&mut dev, &Mtk, &req)
-        .unwrap_err()
-        .to_string()
-        .contains("does not match the target drive"));
+    assert!(
+        crate::workflow::error_message(&flash(&mut dev, &Mtk, &req).unwrap_err())
+            .contains("does not match the target drive")
+    );
     assert!(dev.writes.is_empty());
 }
 
@@ -1506,12 +1510,28 @@ fn unknown_receiver_refuses_before_backup_or_write() {
     let mut dev = MockScsiDevice::new().with_firmware_image(installed);
     let req = bin_req(backup_firmware(), true);
     let error = flash(&mut dev, &Mtk, &req).unwrap_err();
+    let evidence = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert_eq!(evidence.phase, "package and receiver checks");
+    assert!(!evidence.write_started);
+    assert!(!evidence.temporary_firmware);
     assert!(
         format!("{error:#}").contains("receiver signature"),
         "{error:#}"
     );
     assert!(dev.writes.is_empty());
     assert!(!req.predump_out.unwrap().exists());
+}
+
+#[test]
+fn mediatek_preview_keeps_installed_backup_checks_pending_without_writes() {
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let req = bin_req(backup_firmware(), false);
+    let preview = super::preview_flash_details(&mut dev, &Mtk, &req).unwrap();
+    assert!(preview.compatibility_pending);
+    assert!(dev.writes.is_empty());
+    assert!(req.predump_out.is_none());
 }
 
 #[test]

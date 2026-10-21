@@ -87,7 +87,10 @@ pub fn fixture() -> App {
         label: "Synthetic drive 1.00 (no hardware)".into(),
     }]);
     app.inert = true;
+    app.preferences = crate::localization::Preferences::Memory;
+    app.language = crate::localization::Language::En;
     app.profile = ProfileState::Ready(Profile {
+        flash_current: true,
         chips: ["Synthetic", "Backup", "Dump", "Flash", "Recovery"]
             .map(String::from)
             .to_vec(),
@@ -96,7 +99,6 @@ pub fn fixture() -> App {
         backup_name: Some("GATE_1.00.backup.bin".into()),
         dump_name: Some("GATE_1.00.dump.bin".into()),
         flash_extensions: vec!["bin"],
-        recovery_without_current: false,
         recovery_without_live_protocol: false,
         notes: Vec::new(),
     });
@@ -109,6 +111,10 @@ pub fn fixture() -> App {
     ] {
         app.dispatch(Input::Chosen(pick, PathBuf::from(file)));
     }
+    app.dispatch(Input::SetCheck(
+        crate::ui::CheckId::RecoveryReadFromDrive,
+        true,
+    ));
     app
 }
 

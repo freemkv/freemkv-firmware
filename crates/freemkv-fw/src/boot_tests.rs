@@ -11,6 +11,39 @@ fn fixture() -> Vec<u8> {
     ))
     .unwrap()
 }
+
+#[test]
+fn editable_settings_do_not_require_boot_to_follow_the_handler() {
+    let mut image = fixture();
+    let defaults = BootSettings::standard();
+    let boot = 0x1000;
+    let handler = 0x2000;
+    let reset = stores(&defaults.flags(), 0);
+    let fallback = stores(&defaults.flags(), 6);
+    image[boot..boot + 64].fill(0);
+    image[boot..boot + reset.len()].copy_from_slice(&reset);
+    image[handler..handler + reset.len()].copy_from_slice(&reset);
+    image[handler + reset.len()..handler + reset.len() + fallback.len()].copy_from_slice(&fallback);
+    attach(
+        &mut image,
+        handler,
+        reset.len() + fallback.len(),
+        boot,
+        &defaults,
+        &BootSupport {
+            boot: true,
+            mask: 31,
+        },
+    )
+    .unwrap();
+    assert_eq!(inspect(&image).unwrap().unwrap().0, defaults);
+    let changed = settings(&["unrestricted=off"]);
+    let (updated, _) = update(&image, &changed).unwrap().unwrap();
+    assert_eq!(
+        inspect(&updated).unwrap().unwrap().0.flags(),
+        changed.flags()
+    );
+}
 fn settings(args: &[&str]) -> BootSettings {
     BootSettings::parse(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap()
 }
