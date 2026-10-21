@@ -14,6 +14,7 @@ Versions are independent of the freemkv ripping applications.
 ### freemkv Modify
 
 - Fix firmware creation and editable startup settings for WH16NS58 1.V9 and other supported images with fragmented free space.
+- Explain when an input is already modified and a clean OEM firmware file is required.
 
 ## [0.13.4] - 2026-10-20
 

@@ -13,6 +13,10 @@ cargo build
 cargo test
 ```
 
+Add tests for every new feature or function. Bug fixes need regression tests
+that fail with the broken behavior and pass with the fix. Exercise the relevant
+GUI, CLI and shared core paths when a change crosses those boundaries.
+
 ## Release notes
 
 Write the customer-visible result: what works now, what changed, and any action

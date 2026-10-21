@@ -90,8 +90,11 @@ fn selected_language_is_restored_by_the_next_app_instance() {
 #[test]
 fn changing_language_re_resolves_existing_main_screen_copy() {
     let mut app = crate::ui::App::with_drives(Vec::new());
-    for language in [Language::En, Language::Fr, Language::De, Language::Fr] {
-        app.language = language;
+    for language in Language::ALL
+        .into_iter()
+        .chain([Language::En, Language::Fr])
+    {
+        app.dispatch(crate::ui::Input::SetLanguage(language));
         let view = app.view();
         assert_eq!(view.drives.label, get(language, "drive.label"));
         assert_eq!(view.drives.placeholder, get(language, "drive.none"));
@@ -107,6 +110,45 @@ fn changing_language_re_resolves_existing_main_screen_copy() {
             assert_eq!(tab.title, get(language, tab.task.message_id()));
         }
     }
+}
+
+#[test]
+fn unavailable_preferences_keep_the_selected_language_usable_for_the_session() {
+    let mut app = crate::ui::App::with_preferences(Vec::new(), Preferences::User(None));
+    let selected = if app.language == Language::Fr {
+        Language::De
+    } else {
+        Language::Fr
+    };
+    app.dispatch(crate::ui::Input::SetLanguage(selected));
+    assert_eq!(app.language, selected);
+    assert_eq!(app.view().drives.label, get(selected, "drive.label"));
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("could not be saved")));
+}
+
+#[test]
+fn failed_preference_replacement_preserves_existing_contents_and_cleans_temporary_file() {
+    let dir = std::env::temp_dir().join(format!(
+        "flash-language-failure-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let destination = dir.join("language");
+    fs::create_dir_all(&destination).unwrap();
+    let existing = destination.join("existing");
+    fs::write(&existing, "preserve me").unwrap();
+    assert!(Preferences::User(Some(destination))
+        .save(Language::Fr)
+        .is_err());
+    assert_eq!(fs::read_to_string(existing).unwrap(), "preserve me");
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+    fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
