@@ -16,7 +16,7 @@ Versions are independent of the freemkv ripping applications.
 ### freemkv Modify
 
 - Add a saved language preference and translated controls, startup settings, results and error guidance in 29 languages. Diagnostic logs remain in English.
-- Fix Raw Read patching on WH16NS58 1.V9 and other images with usable space at the edge of a signed firmware region.
+- Restore missing Raw Read patching and HRL/encryption startup options when modifying WH16NS58 1.V9 firmware.
 
 ## [0.14.0] - 2026-10-21
 
