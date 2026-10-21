@@ -982,6 +982,13 @@ impl Shell {
             if memo.language.replace(v.language) != Some(v.language) {
                 memo.drives = None;
                 memo.results = None;
+                for (index, id) in [(0, "field.item"), (1, "field.value")] {
+                    let _ = self
+                        .list
+                        .cols()
+                        .get(index)
+                        .set_title(crate::localization::get(v.language, id));
+                }
                 if let Ok(menu) = build_menu(v.language) {
                     let old = self.wnd.hwnd().GetMenu();
                     if self.wnd.hwnd().SetMenu(&menu).is_ok() {

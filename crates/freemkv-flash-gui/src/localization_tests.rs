@@ -266,3 +266,19 @@ fn memory_diagnostic_export_resolves_failure_guidance_in_english() {
     assert!(!diagnostic.contains('\u{1e}'));
     assert!(!diagnostic.contains("\"arguments\""));
 }
+
+#[test]
+fn unsupported_profile_copy_follows_the_selected_language() {
+    let mut app = crate::ui::App::with_drives(Vec::new());
+    app.set_profile(Ok(crate::ui::Profile {
+        chips: vec!["modify.not_supported".into()],
+        ..Default::default()
+    }));
+    for language in Language::ALL {
+        app.dispatch(crate::ui::Input::SetLanguage(language));
+        assert_eq!(
+            app.view().drives.chips,
+            [get(language, "modify.not_supported")]
+        );
+    }
+}

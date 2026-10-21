@@ -42,6 +42,7 @@ pub(super) fn run(c: &Controller, dir: &Path) {
     );
 
     language_checks(c, dir, &content, &mut g);
+    analysis_header_languages(c, &mut g);
 
     for task in gui_gate::TABS {
         c.send(Input::SelectTask(task));
@@ -510,4 +511,31 @@ fn backup_question(c: &Controller, dir: &Path, g: &mut Gate) {
         c.view().confirm.is_none(),
         "no update was authorized",
     );
+}
+
+fn analysis_header_languages(c: &Controller, g: &mut Gate) {
+    use crate::localization::{get, Language};
+    let mut view = c.view();
+    view.analysis = Some(crate::ui::AnalysisWindow {
+        tree: std::sync::Arc::new(crate::ui::AnalysisView {
+            title: "Synthetic analysis".into(),
+            actions: Vec::new(),
+            heading: "Synthetic".into(),
+            nodes: Vec::new(),
+        }),
+        notice: None,
+    });
+    for language in [Language::En, Language::Fr, Language::Ja, Language::En] {
+        view.language = language;
+        c.render_analysis(&view);
+        let outline = c.ivars().an_outline.borrow().clone().unwrap();
+        let columns = outline.tableColumns();
+        g.check(
+            &format!("analysis-headers-{}", language.code()),
+            columns.objectAtIndex(0).title().to_string() == get(language, "field.item")
+                && columns.objectAtIndex(1).title().to_string() == get(language, "field.value"),
+            "existing table updates without replacing its data",
+        );
+    }
+    c.render_analysis(&c.view());
 }

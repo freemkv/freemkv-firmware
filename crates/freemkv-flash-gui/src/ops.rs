@@ -35,7 +35,9 @@ pub fn profile_with_current(
 pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
     let caps = &p.capabilities;
     let family = p.backend.as_ref().map(|(d, _)| d);
-    let mut chips = vec![family.map_or("Unsupported", |d| d.display_name).to_string()];
+    let mut chips = vec![family
+        .map_or("modify.not_supported", |d| d.display_name)
+        .to_string()];
     let mut tasks = Vec::new();
     for (offered, task) in [
         (caps.backup, Task::Backup),
