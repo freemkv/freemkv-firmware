@@ -87,6 +87,8 @@ pub fn fixture() -> App {
         label: "Synthetic drive 1.00 (no hardware)".into(),
     }]);
     app.inert = true;
+    app.preferences = crate::localization::Preferences::Memory;
+    app.language = crate::localization::Language::En;
     app.profile = ProfileState::Ready(Profile {
         chips: ["Synthetic", "Backup", "Dump", "Flash", "Recovery"]
             .map(String::from)

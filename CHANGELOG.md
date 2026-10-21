@@ -6,6 +6,15 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - Unreleased
+
+### freemkv-flash
+- Begin self-contained flash GUI localization with a language selector, saved
+  preference, and initial common-control/menu catalogs for 29 languages.
+- Refresh native drive labels, tabs, placeholders, and menus when the language
+  changes. Add catalog/persistence checks and a macOS rendered language gate.
+  Full task, diagnostic, error, and analysis copy migration remains in progress.
+
 ## [0.13.4] - Unreleased
 
 ### Development

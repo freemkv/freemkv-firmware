@@ -208,7 +208,7 @@ fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
 #[test]
 fn every_task_is_a_tab_and_enabled_when_idle() {
     let view = one_drive().view();
-    let titles: Vec<_> = view.tabs.iter().map(|t| t.title).collect();
+    let titles: Vec<_> = view.tabs.iter().map(|t| t.title.as_str()).collect();
     assert_eq!(
         titles,
         [
@@ -688,7 +688,7 @@ fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
         ]
     );
     assert_eq!(confirm.danger, FLASH_DANGER);
-    assert_eq!(confirm.note, Some(BACKUP_KEPT));
+    assert_eq!(confirm.note.as_deref(), Some(BACKUP_KEPT));
     assert_eq!(confirm.confirm.text, "Flash now");
     assert!(!app.view().controls_enabled && !app.view().can_close);
     app.dispatch(Input::CancelConfirm);
@@ -732,7 +732,10 @@ fn a_failed_plan_shows_no_sheet() {
     assert!(app.view().confirm.is_none() && app.pending.is_none());
     assert_eq!(
         app.failure.as_deref(),
-        Some("image fails its AES-CMAC integrity check")
+        Some(
+            crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+                .as_str()
+        )
     );
     assert!(!app.running());
     assert!(app.dispatch(Input::Confirm).is_empty());
@@ -1003,7 +1006,7 @@ fn job_lifecycle_reports_progress_then_completion() {
     let status = app.view().status.unwrap();
     assert_eq!(status.text, "Drive information…");
     assert!(status.running);
-    assert_eq!(status.note, Some(KEEP_CONNECTED));
+    assert_eq!(status.note.as_deref(), Some(KEEP_CONNECTED));
     assert_eq!(
         status.progress.unwrap().fraction,
         None,
@@ -1037,11 +1040,17 @@ fn failed_job_offers_log_export_next_to_the_error() {
     finish(&mut app, Err("Backup failed".into()));
     let results = app.view().results.unwrap();
     let failure = results.failure.unwrap();
-    assert_eq!(failure.text, "Backup failed");
+    assert_eq!(
+        failure.text,
+        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    );
     assert_eq!(failure.save_log.text, "Save diagnostic log…");
     assert_eq!(results.view_log.text, "View Log");
-    assert!(app.status.starts_with("Drive information failed —"));
-    assert_eq!(app.log.last().unwrap(), "✗ error: Backup failed");
+    assert_eq!(
+        app.status,
+        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    );
+    assert!(app.log.iter().any(|line| line.contains("Backup failed")));
 }
 
 #[test]
@@ -1155,7 +1164,10 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
         app.poll();
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
-    assert!(app.status.starts_with("Drive information failed —"));
+    assert!(app.status.starts_with(&crate::localization::text(
+        crate::localization::Language::En,
+        "errors.operation_failed"
+    )));
     assert!(app.view().controls_enabled);
 }
 
@@ -1480,7 +1492,7 @@ fn information_cards_follow_report_groups_in_report_order() {
         row("Firmware update", "Supported", Group::Operations),
     ];
     let cards = info_cards(&rows);
-    let titles: Vec<_> = cards.iter().map(|c| (c.title, c.column)).collect();
+    let titles: Vec<_> = cards.iter().map(|c| (c.title.as_str(), c.column)).collect();
     assert_eq!(
         titles,
         [
@@ -1492,7 +1504,10 @@ fn information_cards_follow_report_groups_in_report_order() {
             ("Firmware operations", 1),
         ]
     );
-    assert_eq!(cards[3].subtitle, Some("Current settings · read only"));
+    assert_eq!(
+        cards[3].subtitle.as_deref(),
+        Some("Current settings · read only")
+    );
     let pairs = |list: &[(&str, &str)]| {
         list.iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
@@ -1773,7 +1788,14 @@ fn typed_failure_keeps_phase_and_completed_stages_in_report() {
     app.poll();
     assert_eq!(
         app.status,
-        "Recovery failed during final target upload — temporary firmware may remain"
+        format!(
+            "{} {}",
+            crate::localization::text(crate::localization::Language::En, "errors.operation_failed"),
+            crate::localization::text(
+                crate::localization::Language::En,
+                "errors.temporary_firmware"
+            )
+        )
     );
     assert!(!app.status.contains("write_started"));
     let path = app
@@ -1876,14 +1898,14 @@ fn failed_recovery_preparation_never_opens_a_confirmation_or_write_job() {
     assert!(app.pending.is_none());
     assert!(app.recovery_planning.is_none());
     assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
+    assert_eq!(
+        app.view().results.unwrap().failure.unwrap().text,
+        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    );
     assert!(app
-        .view()
-        .results
-        .unwrap()
-        .failure
-        .unwrap()
-        .text
-        .contains("unsupported receiver"));
+        .log
+        .iter()
+        .any(|line| line.contains("unsupported receiver")));
 }
 
 #[test]
@@ -1927,5 +1949,8 @@ fn report_cancellation_is_available_and_completion_restores_submit() {
     app.poll();
     assert!(app.report_rx.is_none());
     assert!(app.report_control.is_none());
-    assert_eq!(app.results_view().submit_report.text, "Submit Report");
+    assert_eq!(
+        app.view().results.unwrap().submit_report.text,
+        "Submit Report"
+    );
 }

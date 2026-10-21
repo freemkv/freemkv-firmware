@@ -45,16 +45,6 @@ const WORKER_GONE: &str = "The worker stopped before reporting a result. If a fl
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
 const DIAGNOSTIC_REFRESH: Duration = Duration::from_millis(500);
 
-fn short_failure(error: &str) -> String {
-    let summary = error.split(';').take(2).collect::<Vec<_>>().join(";");
-    let summary = summary.trim().trim_end_matches(':');
-    if summary.chars().count() <= 170 {
-        summary.to_owned()
-    } else {
-        format!("{}…", summary.chars().take(169).collect::<String>())
-    }
-}
-
 /// The application's tasks, in tab order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
@@ -78,16 +68,20 @@ impl Task {
         Task::Recovery,
     ];
 
-    pub fn title(self) -> &'static str {
+    pub const fn message_id(self) -> &'static str {
         match self {
-            Task::Info => "Drive info",
-            Task::Inspect => "Inspect",
-            Task::Compare => "Compare",
-            Task::Backup => "Backup",
-            Task::Dump => "Dump",
-            Task::Flash => "Flash",
-            Task::Recovery => "Recovery",
+            Task::Info => "task.info",
+            Task::Inspect => "task.inspect",
+            Task::Compare => "task.compare",
+            Task::Backup => "task.backup",
+            Task::Dump => "task.dump",
+            Task::Flash => "task.flash",
+            Task::Recovery => "task.recovery",
         }
+    }
+
+    pub fn title(self) -> &'static str {
+        crate::localization::get(crate::localization::Language::En, self.message_id())
     }
 }
 
@@ -189,6 +183,7 @@ pub enum Side {
 /// Every user action a shell can forward.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Input {
+    SetLanguage(crate::localization::Language),
     SelectDrive(usize),
     Refresh,
     SelectTask(Task),
@@ -224,6 +219,7 @@ pub enum Input {
 #[derive(Clone, Debug, PartialEq)]
 pub struct View {
     pub title: String,
+    pub language: crate::localization::Language,
     pub drives: DriveBar,
     pub tabs: Vec<Tab>,
     pub task: Task,
@@ -244,11 +240,11 @@ pub struct View {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DriveBar {
-    pub label: &'static str,
+    pub label: String,
     pub items: Vec<DriveItem>,
     pub selected: Option<usize>,
     /// Shown, disabled, when there is no drive.
-    pub placeholder: &'static str,
+    pub placeholder: String,
     pub refresh: Button,
     /// The selected drive's profile chips, or `PROBING` while it is read.
     pub chips: Vec<String>,
@@ -263,7 +259,7 @@ pub struct DriveItem {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tab {
     pub task: Task,
-    pub title: &'static str,
+    pub title: String,
     pub enabled: bool,
 }
 
@@ -359,7 +355,7 @@ pub struct Status {
     pub text: String,
     pub running: bool,
     pub progress: Option<Progress>,
-    pub note: Option<&'static str>,
+    pub note: Option<String>,
     pub cancel: Option<Button>,
 }
 
@@ -394,8 +390,8 @@ pub struct Failure {
 /// shows the cards in the order given.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Card {
-    pub title: &'static str,
-    pub subtitle: Option<&'static str>,
+    pub title: String,
+    pub subtitle: Option<String>,
     pub column: usize,
     pub body: CardBody,
 }
@@ -450,15 +446,15 @@ pub const CLOSE_BLOCKED: &str =
 /// The Flash/Recovery confirmation sheet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Confirm {
-    pub title: &'static str,
+    pub title: String,
     pub details: Vec<String>,
-    pub danger: &'static str,
+    pub danger: String,
     /// Cautions: a flash's authorization warnings, or the Recovery warning.
     pub warnings: Vec<String>,
     /// The backend's own confirmation text, when it words one.
     pub prompt: Option<String>,
-    pub note: Option<&'static str>,
-    pub ack_text: &'static str,
+    pub note: Option<String>,
+    pub ack_text: String,
     pub ack_checked: bool,
     pub confirm: Button,
     pub cancel: Button,
@@ -466,9 +462,9 @@ pub struct Confirm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Diagnostics {
-    pub title: &'static str,
+    pub title: String,
     pub buttons: Vec<Button>,
-    pub hint: &'static str,
+    pub hint: String,
     pub path: Option<String>,
     pub notice: Option<String>,
     pub lines: Arc<Vec<String>>,
@@ -483,7 +479,7 @@ pub struct AnalysisWindow {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnalysisView {
-    pub title: &'static str,
+    pub title: String,
     pub actions: Vec<Button>,
     pub heading: String,
     pub nodes: Vec<Node>,
@@ -530,6 +526,168 @@ impl Node {
             kind: NodeKind::Section(name.into()),
             open,
             children,
+        }
+    }
+}
+
+fn translate(language: crate::localization::Language, value: &mut String) {
+    if crate::localization::is_message(value) {
+        *value = crate::localization::text(language, value);
+    }
+}
+
+fn translate_button(language: crate::localization::Language, button: &mut Button) {
+    translate(language, &mut button.text);
+}
+
+fn translate_item(language: crate::localization::Language, item: &mut Item) {
+    match item {
+        Item::Origin(_) => {}
+        Item::Text(text) | Item::Heading(text) | Item::Note(text) | Item::Warning(text) => {
+            translate(language, text)
+        }
+        Item::Check { text, .. } => translate(language, text),
+        Item::Path { button, .. } => translate_button(language, button),
+        Item::Buttons { label, buttons } => {
+            if let Some(label) = label {
+                translate(language, label);
+            }
+            buttons
+                .iter_mut()
+                .for_each(|button| translate_button(language, button));
+        }
+    }
+}
+
+fn translate_node(language: crate::localization::Language, node: &mut Node) {
+    match &mut node.kind {
+        NodeKind::Section(text) | NodeKind::Text(text) | NodeKind::Note(text) => {
+            translate(language, text)
+        }
+        NodeKind::Field { label, .. } => translate(language, label),
+        NodeKind::Mono(_) => {}
+        NodeKind::Buttons(buttons) => buttons
+            .iter_mut()
+            .for_each(|button| translate_button(language, button)),
+        NodeKind::Table { header, .. } => {
+            header.iter_mut().for_each(|text| translate(language, text));
+        }
+    }
+    node.children
+        .iter_mut()
+        .for_each(|child| translate_node(language, child));
+}
+
+/// Resolve catalog messages at the model boundary so every shell receives the same language.
+fn translate_view(view: &mut View) {
+    let language = view.language;
+    translate(language, &mut view.title);
+    translate(language, &mut view.drives.label);
+    translate(language, &mut view.drives.placeholder);
+    translate_button(language, &mut view.drives.refresh);
+    view.drives
+        .chips
+        .iter_mut()
+        .for_each(|text| translate(language, text));
+    view.tabs
+        .iter_mut()
+        .for_each(|tab| translate(language, &mut tab.title));
+    view.panel
+        .iter_mut()
+        .for_each(|item| translate_item(language, item));
+    view.log
+        .iter_mut()
+        .for_each(|line| translate(language, line));
+    if let Some(status) = &mut view.status {
+        translate(language, &mut status.text);
+        if let Some(note) = &mut status.note {
+            translate(language, note);
+        }
+        if let Some(progress) = &mut status.progress {
+            translate(language, &mut progress.label);
+        }
+        if let Some(cancel) = &mut status.cancel {
+            translate_button(language, cancel);
+        }
+    }
+    if let Some(results) = &mut view.results {
+        if let Some(button) = &mut results.open_results {
+            translate_button(language, button);
+        }
+        results.cards.iter_mut().for_each(|card| {
+            translate(language, &mut card.title);
+            if let Some(subtitle) = &mut card.subtitle {
+                translate(language, subtitle);
+            }
+            match &mut card.body {
+                CardBody::Rows(rows) => rows
+                    .iter_mut()
+                    .for_each(|(label, _)| translate(language, label)),
+                CardBody::Media { left, right } => left
+                    .iter_mut()
+                    .chain(right)
+                    .for_each(|row| translate(language, &mut row.label)),
+            }
+        });
+        results
+            .fields
+            .iter_mut()
+            .for_each(|(label, _)| translate(language, label));
+        if let Some(failure) = &mut results.failure {
+            translate(language, &mut failure.text);
+            translate_button(language, &mut failure.save_log);
+        }
+        if let Some(notice) = &mut results.notice {
+            translate(language, notice);
+        }
+        translate_button(language, &mut results.view_log);
+        translate_button(language, &mut results.submit_report);
+    }
+    if let Some(confirm) = &mut view.confirm {
+        translate(language, &mut confirm.title);
+        confirm
+            .details
+            .iter_mut()
+            .for_each(|text| translate(language, text));
+        translate(language, &mut confirm.danger);
+        confirm
+            .warnings
+            .iter_mut()
+            .for_each(|text| translate(language, text));
+        if let Some(prompt) = &mut confirm.prompt {
+            translate(language, prompt);
+        }
+        if let Some(note) = &mut confirm.note {
+            translate(language, note);
+        }
+        translate(language, &mut confirm.ack_text);
+        translate_button(language, &mut confirm.confirm);
+        translate_button(language, &mut confirm.cancel);
+    }
+    if let Some(diagnostics) = &mut view.diagnostics {
+        translate(language, &mut diagnostics.title);
+        diagnostics
+            .buttons
+            .iter_mut()
+            .for_each(|button| translate_button(language, button));
+        translate(language, &mut diagnostics.hint);
+        if let Some(notice) = &mut diagnostics.notice {
+            translate(language, notice);
+        }
+    }
+    if let Some(analysis) = &mut view.analysis {
+        let mut tree = (*analysis.tree).clone();
+        translate(language, &mut tree.title);
+        translate(language, &mut tree.heading);
+        tree.actions
+            .iter_mut()
+            .for_each(|button| translate_button(language, button));
+        tree.nodes
+            .iter_mut()
+            .for_each(|node| translate_node(language, node));
+        analysis.tree = Arc::new(tree);
+        if let Some(notice) = &mut analysis.notice {
+            translate(language, notice);
         }
     }
 }
@@ -587,6 +745,8 @@ type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
 
 /// The whole application state. The shells hold none of their own.
 pub struct App {
+    pub(crate) language: crate::localization::Language,
+    pub(crate) preferences: crate::localization::Preferences,
     journal: Option<Journal>,
     logging_warning: Option<String>,
     operation_id: Option<String>,
@@ -670,6 +830,17 @@ impl App {
     }
 
     pub(crate) fn with_drives(drives: Vec<DriveChoice>) -> Self {
+        #[cfg(test)]
+        let preferences = crate::localization::Preferences::Memory;
+        #[cfg(not(test))]
+        let preferences = crate::localization::Preferences::user();
+        Self::with_preferences(drives, preferences)
+    }
+
+    pub(crate) fn with_preferences(
+        drives: Vec<DriveChoice>,
+        preferences: crate::localization::Preferences,
+    ) -> Self {
         let device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
         let (journal, logging_warning) = if cfg!(test) {
             (None, None)
@@ -683,6 +854,8 @@ impl App {
             }
         };
         Self {
+            language: preferences.load(),
+            preferences,
             journal,
             logging_warning,
             operation_id: None,
@@ -714,7 +887,7 @@ impl App {
             analysis_open: false,
             analysis_notice: None,
             control: Control::default(),
-            status: "Ready".into(),
+            status: "status.ready".into(),
             failure: None,
             action: String::new(),
             risk_ack: false,
@@ -893,7 +1066,7 @@ impl App {
             .iter()
             .find(|d| d.path == self.device)
             .map(DriveChoice::display)
-            .unwrap_or_else(|| "No optical drive found".into())
+            .unwrap_or_else(|| "drive.none".into())
     }
 
     fn selected(&self) -> bool {
@@ -903,13 +1076,23 @@ impl App {
     /// Apply one user action; returns the work only the shell can do.
     pub fn dispatch(&mut self, input: Input) -> Vec<Effect> {
         match input {
+            Input::SetLanguage(language) => {
+                if self.language != language {
+                    self.language = language;
+                    if let Err(error) = self.preferences.save(language) {
+                        self.log.push(format!(
+                            "Language changed for this session but could not be saved: {error}"
+                        ));
+                    }
+                }
+            }
             Input::SelectDrive(i) => {
                 if let Some(path) = self.drives.get(i).map(|d| d.path.clone()) {
                     if !self.busy() && path != self.device {
                         self.device = path;
                         self.risk_ack = false;
                         self.rows.clear();
-                        self.status = "Ready".into();
+                        self.status = "status.ready".into();
                         self.failure = None;
                         return self.start_profile();
                     }
@@ -1148,7 +1331,7 @@ impl App {
     /// A previous flash result describes its original selection, not the new one.
     fn clear_flash_result(&mut self) {
         if self.result_task == self.task && matches!(self.task, Task::Flash | Task::Recovery) {
-            self.status = "Ready".into();
+            self.status = "status.ready".into();
             self.failure = None;
             self.rows.clear();
             self.progress = None;
@@ -1517,26 +1700,30 @@ impl App {
                             Err(_) if cancelled => {
                                 self.status = format!("{} cancelled", self.action)
                             }
-                            Err(error) => {
-                                self.status = match &self.failure_evidence {
-                                    Some(evidence) => {
-                                        let consequence = if evidence.temporary_firmware {
-                                            " — temporary firmware may remain"
-                                        } else if evidence.write_started {
-                                            " — firmware may be partial"
-                                        } else {
-                                            " — update not started"
-                                        };
-                                        format!(
-                                            "{} failed during {}{consequence}",
-                                            self.action, evidence.phase
-                                        )
+                            Err(_) => {
+                                let consequence = self.failure_evidence.as_ref().map(|evidence| {
+                                    if evidence.temporary_firmware {
+                                        "errors.temporary_firmware"
+                                    } else if evidence.write_started {
+                                        "errors.partial_firmware"
+                                    } else {
+                                        "errors.update_not_started"
                                     }
-                                    None => {
-                                        format!("{} failed — {}", self.action, short_failure(error))
-                                    }
-                                };
-                                self.failure = Some(error.clone());
+                                });
+                                let message = crate::localization::text(
+                                    self.language,
+                                    "errors.operation_failed",
+                                );
+                                let message = consequence.map_or(message.clone(), |key| {
+                                    format!(
+                                        "{message} {}",
+                                        crate::localization::text(self.language, key)
+                                    )
+                                });
+                                self.status = message.clone();
+                                // Detailed backend errors remain in the diagnostic log. The
+                                // status and failure panel use localized, stable error codes.
+                                self.failure = Some(message);
                             }
                         }
                         let update_evidence = result
@@ -1558,7 +1745,7 @@ impl App {
                             Ok(Some(outcome)) => format!("{} {}", self.action, outcome.summary()),
                             Ok(None) => "✓ done.".into(),
                             Err(_) if cancelled => CANCELLED.into(),
-                            Err(e) => format!("✗ error: {e}"),
+                            Err(e) => format!("✗ {}: {e}", self.status),
                         });
                         self.record_event("operation_finished", serde_json::json!({
                             "operation": self.action,
@@ -1795,10 +1982,15 @@ impl App {
     pub fn view(&self) -> View {
         let enabled = !self.busy();
         let shown = self.result_task == self.task;
-        View {
-            title: format!("freemkv Firmware Utility {}", env!("CARGO_PKG_VERSION")),
+        let mut view = View {
+            title: format!(
+                "{} {}",
+                crate::localization::get(self.language, "app.name"),
+                env!("CARGO_PKG_VERSION")
+            ),
+            language: self.language,
             drives: DriveBar {
-                label: "Optical drive",
+                label: "drive.label".into(),
                 items: self
                     .drives
                     .iter()
@@ -1808,8 +2000,8 @@ impl App {
                     })
                     .collect(),
                 selected: self.drives.iter().position(|d| d.path == self.device),
-                placeholder: "No optical drive found",
-                refresh: Button::new("Refresh", Input::Refresh, enabled),
+                placeholder: "drive.none".into(),
+                refresh: Button::new("action.refresh", Input::Refresh, enabled),
                 chips: match &self.profile {
                     ProfileState::NoDrive => Vec::new(),
                     ProfileState::Probing => vec![PROBING.into()],
@@ -1821,7 +2013,7 @@ impl App {
                 .iter()
                 .map(|&task| Tab {
                     task,
-                    title: task.title(),
+                    title: task.message_id().into(),
                     enabled,
                 })
                 .collect(),
@@ -1842,7 +2034,9 @@ impl App {
                     notice: self.analysis_notice.clone(),
                 }),
             can_close: !self.running(),
-        }
+        };
+        translate_view(&mut view);
+        view
     }
 
     fn panel(&self, enabled: bool) -> Vec<Item> {
@@ -1859,18 +2053,12 @@ impl App {
                 let mut items = vec![Item::Buttons {
                     label: None,
                     buttons: vec![
-                        Button::primary(
-                            "Read drive information",
-                            Input::ReadInfo,
-                            enabled && selected,
-                        ),
-                        Button::new("Check file…", Input::Choose(Pick::CheckFile), enabled),
+                        Button::primary("action.read_info", Input::ReadInfo, enabled && selected),
+                        Button::new("action.check_file", Input::Choose(Pick::CheckFile), enabled),
                     ],
                 }];
                 if !selected {
-                    items.push(Item::Note(
-                        "Connect an optical drive, then select Refresh.".into(),
-                    ));
+                    items.push(Item::Note("info.connect_drive".into()));
                 }
                 items
             }
@@ -1904,7 +2092,7 @@ impl App {
             Task::Flash => match &self.flash_input {
                 Some(_) => {
                     let mut items = vec![path(
-                        "Change file…",
+                        "action.change_file",
                         Pick::FlashFirmware,
                         true,
                         &self.flash_input,
@@ -1925,7 +2113,7 @@ impl App {
                 None => vec![Item::Buttons {
                     label: None,
                     buttons: vec![Button::primary(
-                        "Choose firmware…",
+                        "action.choose_firmware",
                         Input::Choose(Pick::FlashFirmware),
                         enabled,
                     )],
@@ -1995,7 +2183,7 @@ impl App {
                         .into(),
                     ),
                     path(
-                        "Choose firmware…",
+                        "action.choose_firmware",
                         Pick::RecoveryInput,
                         true,
                         &self.recovery_input,
@@ -2093,7 +2281,11 @@ impl App {
         items.push(Item::Buttons {
             label: None,
             buttons: vec![Button::new(
-                if compare { "Compare" } else { "Inspect" },
+                if compare {
+                    "task.compare"
+                } else {
+                    "task.inspect"
+                },
                 Input::RunAnalysis,
                 enabled && ready,
             )],
@@ -2136,7 +2328,7 @@ impl App {
                     fraction: None,
                 },
             }),
-            note: running.then_some(KEEP_CONNECTED),
+            note: running.then(|| KEEP_CONNECTED.to_owned()),
             cancel: (running && analysis)
                 .then(|| Button::new("Cancel analysis", Input::CancelAnalysis, true)),
         }
@@ -2173,7 +2365,7 @@ impl App {
                 (None, notice) => notice.clone(),
             },
             view_log: Button::new(
-                "View Log",
+                "action.view_log",
                 Input::ViewLog,
                 self.diagnostic_log.is_some() || self.failure.is_some(),
             ),
@@ -2184,7 +2376,11 @@ impl App {
                     self.report_control.as_ref().is_some_and(|c| !c.cancelled()),
                 )
             } else {
-                Button::new("Submit Report", Input::SubmitReport, self.journal.is_some())
+                Button::new(
+                    "action.submit_report",
+                    Input::SubmitReport,
+                    self.journal.is_some(),
+                )
             },
         }
     }
@@ -2237,13 +2433,14 @@ impl App {
                 "Confirm recovery"
             } else {
                 "Confirm flash"
-            },
+            }
+            .into(),
             details,
-            danger: FLASH_DANGER,
+            danger: FLASH_DANGER.into(),
             warnings,
             prompt,
-            note: (!recovery).then_some(BACKUP_KEPT),
-            ack_text: RISK_ACK,
+            note: (!recovery).then(|| BACKUP_KEPT.to_owned()),
+            ack_text: RISK_ACK.into(),
             ack_checked: self.risk_ack,
             confirm: Button::primary(
                 if recovery { "Recover" } else { "Flash now" },
@@ -2256,7 +2453,7 @@ impl App {
 
     fn diagnostics_view(&self) -> Diagnostics {
         Diagnostics {
-            title: "Diagnostic log",
+            title: "Diagnostic log".into(),
             buttons: vec![
                 Button::new("Copy diagnostic log", Input::CopyDiagnostics, true),
                 Button::new(
@@ -2266,7 +2463,7 @@ impl App {
                 ),
                 Button::new("Close", Input::CloseDiagnostics, true),
             ],
-            hint: "Attach this log to your bug report.",
+            hint: "Attach this log to your bug report.".into(),
             path: self
                 .diagnostic_log
                 .as_ref()
@@ -2506,8 +2703,8 @@ pub(crate) fn info_cards(rows: &[report::Row]) -> Vec<Card> {
             CardBody::Rows(pairs)
         };
         cards.push(Card {
-            title,
-            subtitle: (group == Group::Settings).then_some("Current settings · read only"),
+            title: title.into(),
+            subtitle: (group == Group::Settings).then(|| "Current settings · read only".to_owned()),
             column,
             body,
         });
@@ -2696,7 +2893,7 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
         }
     };
     AnalysisView {
-        title: "Firmware analysis",
+        title: "Firmware analysis".into(),
         actions: vec![
             Button::new("Copy report", Input::CopyReport, true),
             Button::new("Save text…", Input::Choose(Pick::ReportText), true),

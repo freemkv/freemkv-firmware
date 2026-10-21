@@ -42,6 +42,7 @@ const IDM_DIAGNOSTICS: u16 = 2002;
 const IDM_EXIT: u16 = 2003;
 const IDM_COPY: u16 = 2004;
 const IDM_SELECT_ALL: u16 = 2005;
+const IDM_LANGUAGE_FIRST: u16 = 2100;
 
 // The confirmation's buttons, clear of the common dialog ids.
 const TD_CONFIRM: u16 = 1001;
@@ -536,6 +537,7 @@ impl AnalysisWindow {
 /// What the shell last drew, so `render` rebuilds only what changed. Not model state.
 #[derive(Default)]
 struct Memo {
+    language: Option<crate::localization::Language>,
     drives: Option<Vec<DriveItem>>,
     panel: Option<Vec<Item>>,
     results: Option<Option<Results>>,
@@ -601,48 +603,74 @@ struct Shell {
     risk_box: Rc<Cell<bool>>,
 }
 
-fn build_menu() -> w::SysResult<w::HMENU> {
+fn build_menu(language: crate::localization::Language) -> w::SysResult<w::HMENU> {
+    let t = |id| crate::localization::get(language, id);
+    let refresh = format!("{}\tF5", t("menu.refresh_drives"));
+    let quit = format!("{}\tAlt+F4", t("menu.quit"));
+    let copy = format!("{}\tCtrl+C", t("menu.copy"));
+    let select_all = format!("{}\tCtrl+A", t("menu.select_all"));
     let bar = w::HMENU::CreateMenu()?;
     let file = w::HMENU::CreatePopupMenu()?;
     file.append_item(&[
         w::MenuItem::Entry {
             cmd_id: IDM_REFRESH,
-            text: "&Refresh drives\tF5",
+            text: &refresh,
         },
         w::MenuItem::Separator,
         w::MenuItem::Entry {
             cmd_id: IDM_EXIT,
-            text: "E&xit\tAlt+F4",
+            text: &quit,
         },
     ])?;
     let edit = w::HMENU::CreatePopupMenu()?;
     edit.append_item(&[
         w::MenuItem::Entry {
             cmd_id: IDM_COPY,
-            text: "&Copy\tCtrl+C",
+            text: &copy,
         },
         w::MenuItem::Entry {
             cmd_id: IDM_SELECT_ALL,
-            text: "Select &All\tCtrl+A",
+            text: &select_all,
         },
     ])?;
     let view = w::HMENU::CreatePopupMenu()?;
     view.append_item(&[w::MenuItem::Entry {
         cmd_id: IDM_DIAGNOSTICS,
-        text: "&Diagnostic log\u{2026}",
+        text: t("menu.diagnostic_log"),
     }])?;
+    let languages = w::HMENU::CreatePopupMenu()?;
+    let choices: Vec<_> = crate::localization::Language::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, choice)| w::MenuItem::Entry {
+            cmd_id: IDM_LANGUAGE_FIRST + i as u16,
+            text: choice.native_name(),
+        })
+        .collect();
+    languages.append_item(&choices)?;
+    for (index, choice) in crate::localization::Language::ALL.iter().enumerate() {
+        languages.CheckMenuItem(
+            w::IdPos::Id(IDM_LANGUAGE_FIRST + index as u16),
+            *choice == language,
+        )?;
+    }
+    let language_label = crate::localization::text(language, "settings.language");
     bar.append_item(&[
         w::MenuItem::Submenu {
             submenu: &file,
-            text: "&File",
+            text: t("menu.file"),
         },
         w::MenuItem::Submenu {
             submenu: &edit,
-            text: "&Edit",
+            text: t("menu.edit"),
         },
         w::MenuItem::Submenu {
             submenu: &view,
-            text: "&View",
+            text: t("menu.view"),
+        },
+        w::MenuItem::Submenu {
+            submenu: &languages,
+            text: &language_label,
         },
     ])?;
     Ok(bar)
@@ -661,8 +689,9 @@ impl Shell {
     fn new(app: ui::App) -> Self {
         // Only the system DPI exists before the window; `wm_create` re-lays out at the real one.
         let s = Scale::new(system_dpi());
+        let language = app.language;
         let wnd = gui::WindowMain::new(gui::WindowMainOpts {
-            title: "freemkv Firmware Utility",
+            title: crate::localization::get(language, "app.name"),
             class_name: "FmkFlashMain",
             class_icon: gui::Icon::Id(IDI_APP),
             size: lay::default_size(s.dpi()),
@@ -674,7 +703,7 @@ impl Shell {
                 | co::WS::MINIMIZEBOX
                 | co::WS::MAXIMIZEBOX
                 | co::WS::SIZEBOX,
-            menu: build_menu().unwrap_or(w::HMENU::NULL),
+            menu: build_menu(language).unwrap_or(w::HMENU::NULL),
             accel_table: build_accels().ok(),
             ..Default::default()
         });
@@ -941,12 +970,27 @@ impl Shell {
         self.painting.set(true);
         {
             let mut memo = self.memo.borrow_mut();
+            if memo.language.replace(v.language) != Some(v.language) {
+                memo.drives = None;
+                memo.results = None;
+                if let Ok(menu) = build_menu(v.language) {
+                    let old = self.wnd.hwnd().GetMenu();
+                    if self.wnd.hwnd().SetMenu(&menu).is_ok() {
+                        if let Some(mut old) = old {
+                            let _ = old.DestroyMenu();
+                        }
+                    }
+                }
+            }
             if memo.title != v.title {
                 let _ = self.wnd.hwnd().SetWindowText(&v.title);
                 memo.title.clone_from(&v.title);
             }
         }
         self.render_drives(&v);
+        for (index, tab) in v.tabs.iter().enumerate() {
+            let _ = self.tabs.items().get(index as u32).set_text(&tab.title);
+        }
         if let Some(i) = Task::ALL.iter().position(|t| *t == v.task) {
             unsafe {
                 self.tabs
@@ -986,13 +1030,13 @@ impl Shell {
 
     fn render_drives(&self, v: &View) {
         let bar = &v.drives;
-        set_text(&self.drive_label, bar.label);
+        set_text(&self.drive_label, &bar.label);
         set_text(&self.drive_chips, &bar.chips.join("  \u{b7}  "));
         let changed = self.memo.borrow().drives.as_ref() != Some(&bar.items);
         if changed {
             self.drives.items().delete_all();
             if bar.items.is_empty() {
-                let _ = self.drives.items().add(&[bar.placeholder]);
+                let _ = self.drives.items().add(&[bar.placeholder.as_str()]);
             } else {
                 let texts: Vec<&str> = bar.items.iter().map(|d| d.text.as_str()).collect();
                 let _ = self.drives.items().add(&texts);
@@ -1032,7 +1076,7 @@ impl Shell {
             }
             None => self.progress.set_marquee(false),
         }
-        set_text(&self.note, s.note.unwrap_or(""));
+        set_text(&self.note, s.note.as_deref().unwrap_or(""));
         match &s.cancel {
             Some(b) => self.cancel.bind(b),
             None => self.cancel.unbind(),
@@ -1064,7 +1108,7 @@ impl Shell {
         }
         if grouped {
             for (id, card) in r.cards.iter().enumerate() {
-                self.add_group(id as i32, card.title, card.subtitle);
+                self.add_group(id as i32, &card.title, card.subtitle.as_deref());
                 for (label, value) in card_rows(&card.body) {
                     self.add_row(&label, &value, Some(id as i32));
                 }
@@ -1413,7 +1457,7 @@ impl Shell {
             self.memo.borrow_mut().diag_lines = None;
             return;
         };
-        set_text(&win.wnd, d.title);
+        set_text(&win.wnd, &d.title);
         let s = Scale::new(window_dpi(win.wnd.hwnd()));
         let mut line = Column::new(s.px(lay::PAD), s.px(lay::PAD), 0, 0).line(s.px(lay::ROW_H));
         line.right = i32::MAX / 2;
@@ -1426,7 +1470,7 @@ impl Shell {
                 None => bound.unbind(),
             }
         }
-        set_text(&win.hint, d.hint);
+        set_text(&win.hint, &d.hint);
         set_text(&win.path, d.path.as_deref().unwrap_or(""));
         set_text(&win.notice, d.notice.as_deref().unwrap_or(""));
         let fresh = self
@@ -1462,7 +1506,7 @@ impl Shell {
             return;
         }
         let tree = &a.tree;
-        set_text(&win.wnd, tree.title);
+        set_text(&win.wnd, &tree.title);
         set_text(&win.heading, &tree.heading);
         // Top-level button rows join the actions, as in the macOS shell.
         let extra: Vec<Button> = tree
@@ -1526,23 +1570,23 @@ impl Shell {
             .warnings
             .iter()
             .map(String::as_str)
-            .chain(c.note)
+            .chain(c.note.as_deref())
             .collect::<Vec<_>>()
             .join("\n\n");
         let me = self.clone();
         let cfg = w::TASKDIALOGCONFIG {
             hwnd_parent: Some(self.wnd.hwnd()),
             flags: confirm_flags(),
-            window_title: Some(c.title),
+            window_title: Some(&c.title),
             main_icon: w::IconIdTd::Td(co::TD_ICON::WARNING),
-            main_instruction: Some(c.title),
+            main_instruction: Some(&c.title),
             content: Some(&content),
             buttons: &[
                 (TD_CONFIRM, c.confirm.text.as_str()),
                 (TD_CANCEL, c.cancel.text.as_str()),
             ],
             default_button_id: TD_CANCEL,
-            verification_text: Some(c.ack_text),
+            verification_text: Some(&c.ack_text),
             footer_text: (!footer.is_empty()).then_some(footer.as_str()),
             callback: Some(Box::new(move |hwnd: &w::HWND, tdn: w::Tdn| {
                 me.on_confirm(hwnd, tdn)
@@ -1705,6 +1749,15 @@ impl Shell {
                 Ok(())
             });
         }
+        for (index, language) in crate::localization::Language::ALL.into_iter().enumerate() {
+            let me = self.clone();
+            self.wnd
+                .on()
+                .wm_command_acc_menu(IDM_LANGUAGE_FIRST + index as u16, move || {
+                    me.send(Input::SetLanguage(language));
+                    Ok(())
+                });
+        }
         // File > Exit is the window's X: one guarded way out.
         let me = self.clone();
         self.wnd.on().wm_command_acc_menu(IDM_EXIT, move || {
@@ -1743,7 +1796,7 @@ impl Shell {
             set_icons(me.wnd.hwnd());
             for tab in me.view().tabs {
                 unsafe {
-                    me.tabs.items().add(tab.title);
+                    me.tabs.items().add(&tab.title);
                 }
             }
             let fx = me.app.borrow_mut().start();

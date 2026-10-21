@@ -124,8 +124,8 @@ pub fn cards(cards: &[Card]) -> gtk::Widget {
 }
 
 fn card_group(card: &Card) -> adw::PreferencesGroup {
-    let g = adw::PreferencesGroup::builder().title(card.title).build();
-    if let Some(sub) = card.subtitle {
+    let g = adw::PreferencesGroup::builder().title(&card.title).build();
+    if let Some(sub) = card.subtitle.as_deref() {
         g.set_description(Some(sub));
     }
     match &card.body {
