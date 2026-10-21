@@ -1489,6 +1489,14 @@ impl Controller {
             n.setStringValue(&ns(a.notice.as_deref().unwrap_or("")));
             n.setHidden(a.notice.is_none());
         }
+        if let Some(outline) = iv.an_outline.borrow().as_ref() {
+            for (index, id) in ["field.item", "field.value"].iter().enumerate() {
+                outline
+                    .tableColumns()
+                    .objectAtIndex(index)
+                    .setTitle(&ns(crate::localization::get(v.language, id)));
+            }
+        }
         let fresh = iv
             .an_shown
             .borrow()

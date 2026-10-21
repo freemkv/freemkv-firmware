@@ -60,7 +60,7 @@ fn recovery_is_offered_for_an_unsupported_identified_drive() {
 
     let profile = profile_of(MockScsiDevice::new());
     assert!(profile.tasks.is_empty() && !profile.inspect);
-    assert_eq!(profile.chips, ["Unsupported"]);
+    assert_eq!(profile.chips, ["modify.not_supported"]);
 }
 
 #[test]

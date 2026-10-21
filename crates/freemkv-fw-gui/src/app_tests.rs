@@ -236,3 +236,18 @@ fn background_firmware_analysis_keeps_clean_guidance_and_exportable_english_deta
     );
     assert!(!log.contains('\u{1e}'));
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn unicode_ui_languages_have_renderable_cjk_glyphs() {
+    let ctx = egui::Context::default();
+    crate::configure_style(&ctx);
+    let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ui.fonts_mut(|fonts| {
+            assert!(fonts.has_glyphs(
+                &egui::FontId::proportional(14.0),
+                "日本語한국어简体中文繁體中文"
+            ));
+        })
+    });
+}

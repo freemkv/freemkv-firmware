@@ -322,3 +322,32 @@ fn diagnostic_actions_share_one_row_in_view_save_submit_order() {
     assert!(view.x < save.x && save.x < submit.x);
     assert!((view.y - save.y).abs() < 1.0 && (save.y - submit.y).abs() < 1.0);
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn all_catalog_characters_have_real_glyphs_with_the_unicode_fallback() {
+    let ctx = egui::Context::default();
+    configure_style(&ctx);
+    let characters: std::collections::BTreeSet<char> = crate::localization::Language::ALL
+        .into_iter()
+        .flat_map(|language| {
+            language.catalog()["messages"]
+                .as_object()
+                .unwrap()
+                .values()
+                .flat_map(|value| value.as_str().unwrap().chars())
+                .collect::<Vec<_>>()
+        })
+        .filter(|character| !character.is_control() && !character.is_whitespace())
+        .collect();
+    let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ui.fonts_mut(|fonts| {
+            for character in &characters {
+                assert!(
+                    fonts.has_glyph(&egui::FontId::proportional(14.0), *character),
+                    "missing glyph: {character}"
+                );
+            }
+        })
+    });
+}
