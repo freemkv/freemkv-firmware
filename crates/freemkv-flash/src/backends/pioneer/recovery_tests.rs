@@ -1641,6 +1641,52 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
 }
 
 #[test]
+fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() {
+    let installed = fixture_pair(false, 1);
+    let mut normal = installed.normal().image.clone();
+    normal[0x401] = 0x13;
+    balance(&mut normal);
+    let mut scalar = [0; 20];
+    scalar[19] = 5;
+    let signer = SigningKey::from_bytes(scalar).unwrap();
+    let encoded = encode_encrypted_pair(
+        &BuildInputs {
+            kernel_image: &installed.kernel().image,
+            normal_image: &normal,
+            envelope_id: "PIONEER BDR-OTHER",
+            normal_revision: "1.01",
+            normal_date: "26/10/21",
+            kernel: KernelBuild::from_seed(7),
+            normal_key_seed: 11,
+        },
+        NormalSignature::Sign(&signer),
+    )
+    .unwrap();
+    let target = Update::load(&encoded.kernel, &encoded.normal).unwrap();
+    assert_ne!(installed.family(), target.family());
+    let plan = crate::backend::FlashPlan::new(
+        super::super::execute_plan(&archive(&target, false)).unwrap(),
+    );
+    let error = match super::super::authorize_installed(plan, Some(&archive(&installed, false))) {
+        Ok(_) => panic!("cross-family target must be refused"),
+        Err(error) => error,
+    };
+    let message = crate::workflow::error_message(&error);
+    assert!(
+        message.contains("underlying hardware for these firmwares is not compatible"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Installed firmware: BDR-TEST."),
+        "{message}"
+    );
+    assert!(message.contains("Target firmware: BDR-OTHER."), "{message}");
+    assert!(!message.contains(&installed.family().unwrap().to_string()));
+    assert!(format!("{error:#}").contains(&installed.family().unwrap().to_string()));
+    assert!(format!("{error:#}").contains(&target.family().unwrap().to_string()));
+}
+
+#[test]
 fn recover_admits_a_different_sat_target_in_the_same_family() {
     // `image::family` does not hash the SAT, and a hardware family spans several
     // SATs. recover gates on family + re-encode, never SAT, so a same-family,

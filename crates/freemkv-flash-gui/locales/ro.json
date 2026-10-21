@@ -36,6 +36,8 @@
     "menu.minimize": "Minimizează",
     "menu.close": "Închide",
     "action.ok": "OK",
-    "app.name": "Utilitar de firmware freemkv"
+    "app.name": "Utilitar de firmware freemkv",
+    "errors.update_blocked": "Actualizare blocată. Nu a fost scris niciun firmware.",
+    "status.package_checked": "Pachetul a trecut verificările; compatibilitatea cu unitatea trebuie încă verificată."
   }
 }

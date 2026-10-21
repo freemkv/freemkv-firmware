@@ -36,6 +36,8 @@
     "menu.minimize": "최소화",
     "menu.close": "닫기",
     "action.ok": "확인",
-    "app.name": "freemkv 펌웨어 유틸리티"
+    "app.name": "freemkv 펌웨어 유틸리티",
+    "errors.update_blocked": "업데이트가 차단되었습니다. 펌웨어는 기록되지 않았습니다.",
+    "status.package_checked": "패키지 검사를 통과했습니다. 드라이브 호환성은 아직 확인되지 않았습니다."
   }
 }

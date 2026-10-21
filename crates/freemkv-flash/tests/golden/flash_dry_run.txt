@@ -1192,14 +1192,14 @@ IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 
 === MTK dry run: bad CMAC refused ===
-result: ERR firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> ClosedEmpty
 
 === MTK dry run: different family refused ===
-result: ERR this image is for a different hardware family than this drive (image platform "BU9" banner "MT1959 Boot BU5." vs drive platform "BU3" banner "MT1959 Boot BU5."); refusing to flash
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): The underlying hardware for these firmwares is not compatible. Installed firmware: BU40N. Target firmware: WH16NS60. No firmware was written.: this image is for a different hardware family than this drive (image platform "BU9" banner "MT1959 Boot BU5." vs drive platform "BU3" banner "MT1959 Boot BU5."); refusing to flash
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (3) ---
@@ -1208,7 +1208,7 @@ IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === MTK dry run: wrong size refused ===
-result: ERR firmware .bin must be exactly 2097152 bytes, got 1024
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware .bin must be exactly 2097152 bytes, got 1024
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -1222,16 +1222,16 @@ stated model: BD-RW   BDR-TEST
 SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-Installed-family compatibility is checked against the live backup.
-DRY RUN: no device I/O or writes.
+Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
 MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-MSG      Installed-family compatibility is checked against the live backup.
-MSG      DRY RUN: no device I/O or writes.
+MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- scsi transcript (0) ---
 
 === Pioneer dry run: bundle verbose ===
@@ -1242,7 +1242,7 @@ stated model: BD-RW   BDR-TEST
 SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-Installed-family compatibility is checked against the live backup.
+Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
   Entry [3B, 04, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
   KernelFe [3B, 07, FE, 00, 00, 00, 00, 80, 00, 00] 32768 B
   KernelFe [3B, 07, FE, 00, 80, 00, 00, 80, 00, 00] 32768 B
@@ -1251,14 +1251,14 @@ Installed-family compatibility is checked against the live backup.
   Normal [3B, 07, F0, 00, 80, 00, 00, 80, 00, 00] 32768 B
   Normal [3B, 07, F0, 01, 00, 00, 00, 22, 00, 00] 8704 B
   Finish [3B, 05, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
-DRY RUN: no device I/O or writes.
+DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- events (15) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
 MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-MSG      Installed-family compatibility is checked against the live backup.
+MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 MSG        Entry [3B, 04, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
 MSG        KernelFe [3B, 07, FE, 00, 00, 00, 00, 80, 00, 00] 32768 B
 MSG        KernelFe [3B, 07, FE, 00, 80, 00, 00, 80, 00, 00] 32768 B
@@ -1267,11 +1267,11 @@ MSG        Normal [3B, 07, F0, 00, 00, 00, 00, 80, 00, 00] 32768 B
 MSG        Normal [3B, 07, F0, 00, 80, 00, 00, 80, 00, 00] 32768 B
 MSG        Normal [3B, 07, F0, 01, 00, 00, 00, 22, 00, 00] 8704 B
 MSG        Finish [3B, 05, FF, 00, 00, 00, 00, 01, 00, 00] 256 B
-MSG      DRY RUN: no device I/O or writes.
+MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- scsi transcript (0) ---
 
 === Pioneer dry run: header-only bundle ===
-result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
@@ -1284,38 +1284,38 @@ stated model: BD-RW   BDR-TEST
 SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
 Validated envelope integrity and transfer framing; 5 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-Installed-family compatibility is checked against the live backup.
-DRY RUN: no device I/O or writes.
+Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
 MSG      SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
 MSG      Validated envelope integrity and transfer framing; 5 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-MSG      Installed-family compatibility is checked against the live backup.
-MSG      DRY RUN: no device I/O or writes.
+MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- scsi transcript (0) ---
 
 === Pioneer dry run: UD04 Normal .bin ===
-result: ERR malformed bundle: Normal slot carries a component whose header declares File Type "unknown", not "Normal"
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): malformed bundle: Normal slot carries a component whose header declares File Type "unknown", not "Normal"
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
 
 === Pioneer dry run: garbage .bin ===
-result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
 
 === Pioneer dry run: Tar kind refused ===
-result: ERR Pioneer planning requires an envelope or Pioneer bundle
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): Pioneer planning requires an envelope or Pioneer bundle
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
 
 === MTK drive given a Pioneer bundle ===
-result: ERR a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---

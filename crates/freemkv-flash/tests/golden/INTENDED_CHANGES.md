@@ -10,6 +10,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| PRECHECK | 0.14.0: proven pre-write failures retain phase and no-write evidence; hardware mismatches have actionable model guidance with original family identifiers in diagnostics. Pioneer preview explicitly leaves installed compatibility pending. No SCSI commands, payloads, programming order or compatibility gates change. |
 | FMT | Snapshot normalization removes trailing display padding, including empty structured `MSG` rows and terminal prompts. Commands, payload bytes, message content and assertions are unchanged; the historical v0.11.2 snapshots remain untouched. |
 | P10 | Pioneer 0.13.4: the shared optical executor derives the dialect from decoded firmware, binds the live receiver before entry and again after startup migration, and checks target identity plus Kernel and available Normal readback after each pass. OEM vendor identity binds to the loaded firmware ID, and revisions compare the defined four-byte INQUIRY field (including the projected `0.05e` release). Recovery with a supplied Current envelope uses its decoded Kernel signatures, dialect and exact identity to establish an OEM receiver; unsupported probing without Current remains refused. Golden devices now install the transferred Normal, report its tag and revision, and expose programmed bytes for verification. Typed failures retain the underlying transport cause. The corpus also refreshes the earlier optical 0.15.1 receiver-derived `FrontKeyTwoRegion` framing (`6c8c2be`, `9100f74`, `5847fe4`): a 0x1200 Kernel header/key transfer followed by two 0x8000 body transfers at offsets 0x1200 and 0x9200. Flash already used this before the current audit; Recovery now shares that plan. Contiguous Kernel bytes, Normal transfers and control payloads are preserved. |
 | P11 | Pioneer corpus refresh of the prior 0.13.1 Normal preparation fixes (`a20047a`, `3b2a421`, October 19): preserve a valid OEM representation or prepare Normal for its actual receiving Kernel, proving decoded-body equality and receiver-required authentication. The corpus snapshots were last refreshed on October 11 (`9ee1a1d`); valid Normal-only scenarios now reach execution. Authentication gates remain in force, and incompatible Kernel-version or corrupt-body cases still refuse. The 34 newly exercised locally signed Normal transfers use recorded valid authentication blocks in tests, keyed by receiver authentication policy and every byte outside the 0x170..0x1c0 signature/public-key block. Fresh and recorded signatures are both verified; full emitted wire digests remain asserted. Production signing remains random. |
@@ -476,10 +477,10 @@ reason: FMT
 ## flash_dry_run.txt
 
 ### MTK drive given a Pioneer bundle
-reason: R7
+reason: R7, PRECHECK
 ```diff
 -result: ERR Pioneer firmware bundles cannot use the MTK flash path
-+result: ERR a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
 ```
 
 ### MTK dry run: .bin
@@ -1700,10 +1701,17 @@ reason: R2, M-RS, M-CHIP, M-ENC, FMT, M-LIFECYCLE
 +IN   cdb=3c060009a30000000e00 alloc=14 -> ok 14
 ```
 
-### MTK dry run: different family refused
-reason: M-FAM, M-CHIP
+### MTK dry run: bad CMAC refused
+reason: PRECHECK
 ```diff
-+result: ERR this image is for a different hardware family than this drive (image platform "BU9" banner "MT1959 Boot BU5." vs drive platform "BU3" banner "MT1959 Boot BU5."); refusing to flash
+-result: ERR firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
+```
+
+### MTK dry run: different family refused
+reason: M-FAM, M-CHIP, PRECHECK
+```diff
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): The underlying hardware for these firmwares is not compatible. Installed firmware: BU40N. Target firmware: WH16NS60. No firmware was written.: this image is for a different hardware family than this drive (image platform "BU9" banner "MT1959 Boot BU5." vs drive platform "BU3" banner "MT1959 Boot BU5."); refusing to flash
 +--- text (0) ---
 +--- events (0) ---
 +--- scsi transcript (3) ---
@@ -1724,29 +1732,86 @@ reason: M-FAM
 -
 ```
 
+### MTK dry run: wrong size refused
+reason: PRECHECK
+```diff
+-result: ERR firmware .bin must be exactly 2097152 bytes, got 1024
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware .bin must be exactly 2097152 bytes, got 1024
+```
+
+### Pioneer dry run: Tar kind refused
+reason: PRECHECK
+```diff
+-result: ERR Pioneer planning requires an envelope or Pioneer bundle
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): Pioneer planning requires an envelope or Pioneer bundle
+```
+
+### Pioneer dry run: UD04 Normal .bin
+reason: PRECHECK
+```diff
+-result: ERR malformed bundle: Normal slot carries a component whose header declares File Type "unknown", not "Normal"
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): malformed bundle: Normal slot carries a component whose header declares File Type "unknown", not "Normal"
+```
+
+### Pioneer dry run: bare signed Normal .enc
+reason: PRECHECK
+```diff
+-Installed-family compatibility is checked against the live backup.
+-DRY RUN: no device I/O or writes.
++Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
+-MSG      Installed-family compatibility is checked against the live backup.
+-MSG      DRY RUN: no device I/O or writes.
++MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
+```
+
 ### Pioneer dry run: bundle verbose
-reason: P4
+reason: P4, PRECHECK
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-Installed-family compatibility is checked against the live backup.
++Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+-DRY RUN: no device I/O or writes.
++DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-MSG      Installed-family compatibility is checked against the live backup.
++MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+-MSG      DRY RUN: no device I/O or writes.
++MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
+```
+
+### Pioneer dry run: garbage .bin
+reason: PRECHECK
+```diff
+-result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
 ```
 
 ### Pioneer dry run: header-only bundle
-reason: P6
+reason: P6, PRECHECK
 ```diff
 -result: ERR Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
-+result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 ```
 
 ### Pioneer dry run: signed Kernel+Normal bundle
-reason: P4
+reason: P4, PRECHECK
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-Installed-family compatibility is checked against the live backup.
+-DRY RUN: no device I/O or writes.
++Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-MSG      Installed-family compatibility is checked against the live backup.
+-MSG      DRY RUN: no device I/O or writes.
++MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 ```
 
 ## flash_execute.txt
@@ -2950,7 +3015,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
 ```
 
 ### MTK execute: MT1939 image on an MT1959 drive
-reason: R2, M-CHIP
+reason: R2, M-CHIP, PRECHECK
 ```diff
 -result: OK
 ---- text (221) ---
@@ -3915,7 +3980,7 @@ reason: R2, M-CHIP
 -IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -IN   cdb=120000006000 alloc=96 -> ok 96
 -IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-+result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 +--- text (0) ---
 +--- events (0) ---
 +--- scsi transcript (3) ---
@@ -4190,15 +4255,24 @@ reason: R2, M-CHIP
 ```
 
 ### MTK execute: Pioneer bundle sent to an MTK drive
-reason: R7
+reason: R7, PRECHECK
 ```diff
 -result: ERR Pioneer firmware bundles cannot use the MTK flash path
-+result: ERR a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
+```
+
+### MTK execute: disc loaded
+reason: PRECHECK
+```diff
+-result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
++result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 ```
 
 ### MTK execute: no risk acknowledgement
-reason: R2, M-CHIP, M-ENC, M-LIFECYCLE
+reason: R2, M-CHIP, M-ENC, M-LIFECYCLE, PRECHECK
 ```diff
+-result: ERR SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
++result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
 ---- scsi transcript (1) ---
 +--- scsi transcript (568) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
@@ -4771,7 +4845,7 @@ reason: R2, M-CHIP, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK execute: raw drive read as input
-reason: R3, M-CHIP
+reason: R3, M-CHIP, PRECHECK
 ```diff
 -result: OK
 ---- text (221) ---
@@ -5736,7 +5810,7 @@ reason: R3, M-CHIP
 -IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -IN   cdb=120000006000 alloc=96 -> ok 96
 -IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-+result: ERR this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
 +--- text (0) ---
 +--- events (0) ---
 +--- scsi transcript (1) ---
@@ -6011,7 +6085,7 @@ reason: R3, M-CHIP
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 ---- text (218) ---
@@ -8399,11 +8473,32 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
 +saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
 ```
 
+### MTK execute: tray open
+reason: PRECHECK
+```diff
+-result: ERR the tray is OPEN — refusing to flash. Close the empty tray and retry. This update pass has not started.
++result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): the tray is OPEN — refusing to flash. Close the empty tray and retry. This update pass has not started.
+```
+
+### Pioneer execute: disc loaded
+reason: PRECHECK
+```diff
+-result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
++result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
+```
+
+### Pioneer execute: no risk acknowledgement
+reason: PRECHECK
+```diff
+-result: ERR SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
++result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
+```
+
 ### Pioneer execute: pre-flash backup cannot be read
-reason: P5
+reason: P5, PRECHECK
 ```diff
 -result: ERR pre-flash backup failed; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
-+result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
++result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 ```
 
 ## info_file.txt
@@ -8832,7 +8927,7 @@ reason: R8, M-ENC, M-LIFECYCLE
 ## mtk_flash_input_refusals.txt
 
 ### MTK dry run: MT1939 image on an MT1959 drive
-reason: R2, M-CHIP
+reason: R2, M-CHIP, PRECHECK
 ```diff
 -result: OK
 ---- text (13) ---
@@ -8863,13 +8958,20 @@ reason: R2, M-CHIP
 -MSG        preflight ................ transport ready; backup capture is checked only on execute
 -MSG      
 -MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
-+result: ERR image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
 +--- text (0) ---
 +--- events (0) ---
 -IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 -IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+```
+
+### MTK dry run: all zeros
+reason: PRECHECK
+```diff
+-result: ERR firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
 ```
 
 ### MTK dry run: disc loaded
@@ -9471,7 +9573,7 @@ reason: R2, M-CHIP, M-ENC, FMT, M-LIFECYCLE
 ```
 
 ### MTK dry run: raw drive read as input
-reason: R3
+reason: R3, PRECHECK
 ```diff
 -result: OK
 ---- text (13) ---
@@ -9503,7 +9605,7 @@ reason: R3
 -MSG      
 -MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
 ---- scsi transcript (3) ---
-+result: ERR this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
 +--- text (0) ---
 +--- events (0) ---
 +--- scsi transcript (1) ---
@@ -10110,7 +10212,7 @@ reason: R2, M-CHIP, M-ENC, FMT, M-LIFECYCLE
 ```
 
 ### MTK dry run: unknown boot page, validly signed
-reason: R4, R2
+reason: R4, R2, PRECHECK
 ```diff
 -result: OK
 ---- text (13) ---
@@ -10142,7 +10244,7 @@ reason: R4, R2
 -MSG      
 -MSG      DRY RUN: no firmware writes or backup capture. Execute may still fail if a complete rollback image cannot be read.
 ---- scsi transcript (3) ---
-+result: ERR the image's boot page is not one any known OEM build stores — refusing to flash an image whose boot page may not start the drive
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): the image's boot page is not one any known OEM build stores — refusing to flash an image whose boot page may not start the drive
 +--- text (0) ---
 +--- events (0) ---
 +--- scsi transcript (1) ---
@@ -10150,29 +10252,54 @@ reason: R4, R2
 -IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 ```
 
+### MTK dry run: unsigned image
+reason: PRECHECK
+```diff
+-result: ERR firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
+```
+
 ### Pioneer dry run: disc loaded
-reason: P4
+reason: P4, PRECHECK
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-Installed-family compatibility is checked against the live backup.
+-DRY RUN: no device I/O or writes.
++Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-MSG      Installed-family compatibility is checked against the live backup.
+-MSG      DRY RUN: no device I/O or writes.
++MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 ```
 
 ### Pioneer dry run: tray open
-reason: P4
+reason: P4, PRECHECK
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-Installed-family compatibility is checked against the live backup.
+-DRY RUN: no device I/O or writes.
++Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
 +MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+-MSG      Installed-family compatibility is checked against the live backup.
+-MSG      DRY RUN: no device I/O or writes.
++MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 ```
 
 ## pioneer_confirm_prompt.txt
 
 ### Pioneer prompt: TTY answers n
-reason: FMT
+reason: FMT, PRECHECK
 ```diff
+-result: ERR flash aborted at confirmation prompt
++result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): flash aborted at confirmation prompt
 -Proceed? [y/N] 
 +Proceed? [y/N]
 -MSG      Proceed? [y/N] 
@@ -10198,8 +10325,10 @@ reason: FMT
 ```
 
 ### Pioneer prompt: TTY input ends
-reason: FMT
+reason: FMT, PRECHECK
 ```diff
+-result: ERR flash aborted at confirmation prompt
++result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): flash aborted at confirmation prompt
 -Proceed? [y/N] 
 +Proceed? [y/N]
 -MSG      Proceed? [y/N] 
@@ -30408,8 +30537,10 @@ reason: P4, P7, P8, P9, FMT, P10
 ```
 
 ### Pioneer execute: Normal for another Kernel tag, refused after the backup
-reason: P2
+reason: P2, PRECHECK
 ```diff
+-result: ERR malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
++result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
 ---- scsi transcript (23) ---
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
@@ -30449,9 +30580,11 @@ reason: P4, P7, P8, P9, FMT, P10
 ```
 
 ### Pioneer execute: disc inserted after the backup
-reason: P2
+reason: P2, PRECHECK
 ```diff
+-result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 ---- text (5) ---
++result: ERR update failed during final tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 +--- text (7) ---
 ---- events (5) ---
 +backup: saved <TMP>/pioneer-execute/backup_4.tar (146432 bytes)
@@ -30466,8 +30599,10 @@ reason: P2
 ## pioneer_execute_tty.txt
 
 ### Pioneer CLI execute: TTY answers n
-reason: P2, FMT
+reason: P2, FMT, PRECHECK
 ```diff
+-result: ERR flash aborted at confirmation prompt
++result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): flash aborted at confirmation prompt
 -Proceed? [y/N] 
 ---- scsi transcript (23) ---
 +Proceed? [y/N]
@@ -30511,9 +30646,11 @@ reason: P4, P7, P8, P9, FMT, P10
 ```
 
 ### Pioneer CLI execute: disc inserted after the backup, TTY answers y
-reason: P2, FMT
+reason: P2, FMT, PRECHECK
 ```diff
+-result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 ---- terminal (5) ---
++result: ERR update failed during final tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 +--- terminal (8) ---
 +backup: saved <TMP>/tty-disc/backup.tar (146432 bytes)
 +This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
@@ -30525,17 +30662,19 @@ reason: P2, FMT
 ## pioneer_flash_bundle_failures.txt
 
 ### Pioneer execute: installed backup is Kernel-only
-reason: P4, P5
+reason: P4, P5, PRECHECK
 ```diff
 -result: ERR backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update; aborting flash: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
-+result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
++result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 -saved pre-flash backup: 71680 bytes sha256=1ca0f8fd812313de0e9f42418df7eb1d378763bb0629b9b7dc25bc61799c43f2
 +saved pre-flash backup: 71680 bytes sha256=262d81dcf0bbe4661d5a92cbd3018fcdf8a833a03c02ee4311016ea47d661aeb
 ```
 
 ### Pioneer execute: target is a header-only bundle
-reason: P2
+reason: P2, PRECHECK
 ```diff
+-result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
++result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 ---- scsi transcript (23) ---
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
@@ -30544,8 +30683,9 @@ reason: P2
 ```
 
 ### Pioneer execute: target is garbage
-reason: P1
+reason: P1, PRECHECK
 ```diff
+-result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
 ---- text (6) ---
 -Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 -Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -30583,6 +30723,7 @@ reason: P1
 -OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 -IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 -IN   cdb=120000006000 alloc=96 -> ok 96
++result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
 +--- text (0) ---
 +--- events (0) ---
 +--- scsi transcript (1) ---
@@ -30628,12 +30769,20 @@ reason: P4, P7, P8, P9, FMT, P10
 ```
 
 ### Pioneer flash: dry-run request
-reason: P4
+reason: P4, PRECHECK
 ```diff
 -SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
 +SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
+-Installed-family compatibility is checked against the live backup.
+-DRY RUN: no device I/O or writes.
++Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
 +MSG      SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
+-MSG      Installed-family compatibility is checked against the live backup.
+-MSG      DRY RUN: no device I/O or writes.
++MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
++MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 ```
 
 ## pioneer_plan_and_gates.txt
@@ -30672,10 +30821,10 @@ reason: P6
 ## pioneer_recover.txt
 
 ### Pioneer recover dry run: garbage Current
-reason: P10
+reason: P10, PRECHECK
 ```diff
 -result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
-+result: ERR cannot establish Current receiver evidence; no firmware written: flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
++result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): cannot establish Current receiver evidence; no firmware written: flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
 ---- scsi transcript (2) ---
 -IN   cdb=120000002400 alloc=36 -> ok 36
 -IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -30683,10 +30832,10 @@ reason: P10
 ```
 
 ### Pioneer recover dry run: no Current, unrecognized drive
-reason: P10
+reason: P10, PRECHECK
 ```diff
 -result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
-+result: ERR Recovery requires a supported Pioneer-protocol optical drive; supply its Current firmware to identify an OEM receiver, or use Flash for supported MediaTek firmware. No firmware written
++result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): Recovery requires a supported Pioneer-protocol optical drive; supply its Current firmware to identify an OEM receiver, or use Flash for supported MediaTek firmware. No firmware written
 ```
 
 ### Pioneer recover execute: receiver in kernel mode
@@ -30774,14 +30923,14 @@ reason: P4, P7, P8, P10
 ```
 
 ### Pioneer recover execute: unrecognized drive
-reason: P10
+reason: P10, PRECHECK
 ```diff
 -result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
-+result: ERR Recovery requires a supported Pioneer-protocol optical drive; supply its Current firmware to identify an OEM receiver, or use Flash for supported MediaTek firmware. No firmware written
++result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): Recovery requires a supported Pioneer-protocol optical drive; supply its Current firmware to identify an OEM receiver, or use Flash for supported MediaTek firmware. No firmware written
 ```
 
 ### Pioneer recover execute: write fails on the 2nd command
-reason: P4, P10
+reason: P4, P10, PRECHECK
 ```diff
 -result: ERR Kernel write failed at 0x8000; firmware may be partial; write was not retried: injected write failure
 ---- text (0) ---

@@ -163,7 +163,7 @@ fn pioneer_confirmation_text_is_returned_not_prompted() {
     let (outcome, transcript) = drive_run(MockScsiDevice::echoing(), |d| {
         crate::engine::flash(d, &Confirming, &confirming_request(), &mut front_end)
     });
-    assert_eq!(outcome.result, "ERR flash aborted at confirmation prompt");
+    assert_eq!(outcome.result, "ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): flash aborted at confirmation prompt");
     assert_eq!(front_end.0, [Some(CONFIRM_TEXT.to_string())]);
     assert!(outcome.text.iter().any(|l| l == CONFIRM_TEXT));
     assert!(
@@ -424,8 +424,27 @@ fn dry_run_keeps_tray_warning_and_mtk_preflight() {
     assert!(transcript.is_empty(), "{transcript:#?}");
     assert_eq!(
         outcome.text.last().unwrap(),
-        "DRY RUN: no device I/O or writes."
+        "DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata."
     );
+}
+
+#[test]
+fn pioneer_preview_passes_only_package_checks_without_approving_drive_compatibility() {
+    let (_, target) = pioneer_update(false);
+    let req = pioneer_request(target, &PIONEER_PACKAGE, false);
+    let mut dev = MockScsiDevice::pioneer();
+    let preview = crate::engine::preview_flash_details(&mut dev, &Pioneer::new(), &req).unwrap();
+    assert!(preview.compatibility_pending);
+    assert!(preview
+        .lines
+        .iter()
+        .any(|line| line.contains("Drive compatibility is still pending")));
+    assert!(preview
+        .lines
+        .iter()
+        .any(|line| line.contains("before confirmation or writing")));
+    assert!(dev.reads.is_empty());
+    assert!(dev.writes.is_empty());
 }
 
 #[test]
@@ -739,7 +758,12 @@ fn execute_runs_readonly_preflight_before_backup_or_write() {
     let req = confirming_request();
     let error = crate::engine::flash(&mut dev, &Unready, &req, &mut crate::workflow::Preconfirmed)
         .unwrap_err();
-    assert_eq!(error.to_string(), "receiver not ready");
+    assert_eq!(crate::workflow::error_message(&error), "receiver not ready");
+    let evidence = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert_eq!(evidence.phase, "preflight");
+    assert!(!evidence.write_started);
     assert!(dev.writes.is_empty());
     assert!(!req.predump_out.as_ref().unwrap().exists());
 }

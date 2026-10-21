@@ -404,7 +404,10 @@ pub fn recover_identified(
 ) -> Result<crate::backend::UpdateOutcome> {
     let facet = drive
         .recovery()
-        .with_context(|| format!("{} offers no recovery", drive.descriptor().id))?;
+        .with_context(|| format!("{} offers no recovery", drive.descriptor().id))
+        .map_err(|error| {
+            crate::backend::UpdateFailure::before_write("recovery capability checks", error)
+        })?;
     let identify = |dev: &mut dyn ScsiDevice| -> Result<RecoveryTarget> {
         match receiver {
             Some(receiver) => Ok(receiver),
@@ -414,13 +417,23 @@ pub fn recover_identified(
         }
     };
     if execute {
-        let mut writer = gates::recovery(dev, execute, acknowledged_risk)?;
-        let receiver = identify(&mut writer)?;
+        let mut writer = gates::recovery(dev, execute, acknowledged_risk).map_err(|error| {
+            crate::backend::UpdateFailure::before_write("risk acknowledgement", error)
+        })?;
+        let receiver = identify(&mut writer).map_err(|error| {
+            crate::backend::UpdateFailure::before_write("recovery receiver checks", error)
+        })?;
         facet.recover(DeviceAccess::Write(&mut writer), &receiver, current, target)
     } else {
-        let receiver = identify(dev)?;
+        let receiver = identify(dev).map_err(|error| {
+            crate::backend::UpdateFailure::before_write("recovery receiver checks", error)
+        })?;
         let mut reader = ReadDevice::for_backend(dev, drive);
-        facet.recover(DeviceAccess::Read(&mut reader), &receiver, current, target)
+        facet
+            .recover(DeviceAccess::Read(&mut reader), &receiver, current, target)
+            .map_err(|error| {
+                crate::backend::UpdateFailure::before_write("recovery preparation", error)
+            })
     }
 }
 
@@ -437,19 +450,28 @@ pub fn flash(
     req: &FlashRequest,
     confirm: &mut dyn Confirm,
 ) -> Result<crate::backend::UpdateOutcome> {
-    let facet = flash_facet(drive)?;
+    let facet = flash_facet(drive)
+        .map_err(|error| crate::backend::UpdateFailure::before_write("capability checks", error))?;
     if req.execute {
-        required_backup_path(req)?;
+        required_backup_path(req).map_err(|error| {
+            crate::backend::UpdateFailure::before_write("backup destination", error)
+        })?;
     }
     let plan = plan_flash(dev, drive, req)?;
     if !req.execute {
         return dry_run(dev, drive, facet, &plan).map(|_| crate::backend::UpdateOutcome::Planned);
     }
     if let Err(block) = check_safety(req.acknowledged_risk) {
-        bail!("SAFETY GATE: {}", block.0);
+        return Err(crate::backend::UpdateFailure::before_write(
+            "risk acknowledgement",
+            anyhow::anyhow!("SAFETY GATE: {}", block.0),
+        ));
     }
-    facet.preflight(&mut ReadDevice::for_backend(dev, drive), &plan)?;
-    let saved = capture_required_backup(dev, drive, facet, &plan, req, confirm)?;
+    facet
+        .preflight(&mut ReadDevice::for_backend(dev, drive), &plan)
+        .map_err(|error| crate::backend::UpdateFailure::before_write("preflight", error))?;
+    let saved = capture_required_backup(dev, drive, facet, &plan, req, confirm)
+        .map_err(|error| crate::backend::UpdateFailure::before_write("backup", error))?;
     let backup_line = match &saved {
         Some(s) => s.summary().to_string(),
         None => {
@@ -458,7 +480,11 @@ pub fn flash(
     };
     emit_plan(&plan.after_backup, &backup_line);
     let reader = &mut ReadDevice::for_backend(dev, drive);
-    let mut authorized = facet.authorize(reader, plan, saved.as_ref())?;
+    let mut authorized = facet
+        .authorize(reader, plan, saved.as_ref())
+        .map_err(|error| {
+            crate::backend::UpdateFailure::before_write("compatibility checks", error)
+        })?;
     authorized.set_backup(&backup_line);
     for warning in &authorized.warnings {
         eprintln!("{}", style::amber(warning));
@@ -467,13 +493,23 @@ pub fn flash(
         println!("{}", style::bold(text));
     }
     let ask = authorized.confirmation.is_some() || confirm.asks_every_flash();
-    if ask && !confirm.confirm(&authorized)? {
-        bail!("flash aborted at confirmation prompt");
+    if ask
+        && !confirm
+            .confirm(&authorized)
+            .map_err(|error| crate::backend::UpdateFailure::before_write("confirmation", error))?
+    {
+        return Err(crate::backend::UpdateFailure::before_write(
+            "confirmation",
+            anyhow::anyhow!("flash aborted at confirmation prompt"),
+        ));
     }
     // The last tray check sits right before the first write: the backup and
     // the confirmation left a window for a disc to be loaded.
-    guard_no_medium(dev, true)?;
-    let mut writer = gates::flash(dev, req, saved.as_ref())?;
+    guard_no_medium(dev, true)
+        .map_err(|error| crate::backend::UpdateFailure::before_write("final tray check", error))?;
+    let mut writer = gates::flash(dev, req, saved.as_ref()).map_err(|error| {
+        crate::backend::UpdateFailure::before_write("write authorization", error)
+    })?;
     facet.execute(&mut writer, &authorized)
 }
 
@@ -484,11 +520,17 @@ pub fn plan_flash(
     drive: &dyn Backend,
     req: &FlashRequest,
 ) -> Result<FlashPlan> {
-    let facet = flash_facet(drive)?;
+    let facet = flash_facet(drive)
+        .map_err(|error| crate::backend::UpdateFailure::before_write("capability checks", error))?;
     if req.execute || facet.dry_run_uses_device() {
-        guard_no_medium(dev, req.execute)?;
+        guard_no_medium(dev, req.execute)
+            .map_err(|error| crate::backend::UpdateFailure::before_write("tray check", error))?;
     }
-    let plan = facet.plan(&mut ReadDevice::for_backend(dev, drive), req)?;
+    let plan = facet
+        .plan(&mut ReadDevice::for_backend(dev, drive), req)
+        .map_err(|error| {
+            crate::backend::UpdateFailure::before_write("package and receiver checks", error)
+        })?;
     emit_plan(&plan.notes, "");
     Ok(plan)
 }
@@ -500,16 +542,28 @@ pub fn preview_flash(
     drive: &dyn Backend,
     req: &FlashRequest,
 ) -> Result<Vec<String>> {
+    preview_flash_details(dev, drive, req).map(|preview| preview.lines)
+}
+
+/// Preserve the distinction between package checks and installed compatibility.
+pub fn preview_flash_details(
+    dev: &mut dyn ScsiDevice,
+    drive: &dyn Backend,
+    req: &FlashRequest,
+) -> Result<crate::backend::FlashPreview> {
     if req.execute {
         bail!("a flash preview is a dry run");
     }
     let facet = flash_facet(drive)?;
     let plan = plan_flash(dev, drive, req)?;
     let lines = dry_run(dev, drive, facet, &plan)?;
-    Ok(lines
-        .iter()
-        .map(|line| render_plan_line(line, DRY_RUN_BACKUP))
-        .collect())
+    Ok(crate::backend::FlashPreview {
+        compatibility_pending: plan.compatibility_pending,
+        lines: lines
+            .iter()
+            .map(|line| render_plan_line(line, DRY_RUN_BACKUP))
+            .collect(),
+    })
 }
 
 const DRY_RUN_BACKUP: &str = "not captured (dry run)";
@@ -522,7 +576,9 @@ fn dry_run(
     plan: &FlashPlan,
 ) -> Result<Vec<PlanLine>> {
     emit_plan(&plan.dry_run, DRY_RUN_BACKUP);
-    let tail = facet.preflight(&mut ReadDevice::for_backend(dev, drive), plan)?;
+    let tail = facet
+        .preflight(&mut ReadDevice::for_backend(dev, drive), plan)
+        .map_err(|error| crate::backend::UpdateFailure::before_write("preflight", error))?;
     emit_plan(&tail, "");
     Ok(plan
         .notes

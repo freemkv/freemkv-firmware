@@ -36,6 +36,8 @@
     "menu.minimize": "Kis méret",
     "menu.close": "Bezárás",
     "action.ok": "OK",
-    "app.name": "freemkv firmware-eszköz"
+    "app.name": "freemkv firmware-eszköz",
+    "errors.update_blocked": "A frissítés blokkolva. Nem történt firmware-írás.",
+    "status.package_checked": "A csomag ellenőrzése sikeres; a meghajtóval való kompatibilitást még ellenőrizni kell."
   }
 }

@@ -36,6 +36,8 @@
     "menu.minimize": "最小化",
     "menu.close": "关闭",
     "action.ok": "确定",
-    "app.name": "freemkv 固件工具"
+    "app.name": "freemkv 固件工具",
+    "errors.update_blocked": "更新已被阻止。未写入任何固件。",
+    "status.package_checked": "固件包检查已通过；仍需验证与光驱的兼容性。"
   }
 }

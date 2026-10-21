@@ -36,6 +36,8 @@
     "menu.minimize": "Minimizar",
     "menu.close": "Fechar",
     "action.ok": "OK",
-    "app.name": "Utilitário de firmware freemkv"
+    "app.name": "Utilitário de firmware freemkv",
+    "errors.update_blocked": "Atualização bloqueada. Nenhum firmware foi gravado.",
+    "status.package_checked": "O pacote passou nas verificações; a compatibilidade com a unidade ainda precisa ser verificada."
   }
 }

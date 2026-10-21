@@ -36,6 +36,8 @@
     "menu.minimize": "Pienennä",
     "menu.close": "Sulje",
     "action.ok": "OK",
-    "app.name": "freemkv-laiteohjelmistotyökalu"
+    "app.name": "freemkv-laiteohjelmistotyökalu",
+    "errors.update_blocked": "Päivitys estettiin. Laiteohjelmistoa ei kirjoitettu.",
+    "status.package_checked": "Paketti läpäisi tarkistukset; yhteensopivuus aseman kanssa on vielä tarkistamatta."
   }
 }

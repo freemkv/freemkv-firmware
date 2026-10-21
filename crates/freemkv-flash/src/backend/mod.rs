@@ -225,6 +225,28 @@ impl std::error::Error for CurrentFirmwareRequired {
     }
 }
 
+/// A proven hardware-family mismatch, with technical evidence kept as its source.
+#[derive(Debug)]
+pub struct HardwareMismatch {
+    pub(crate) installed_model: String,
+    pub(crate) target_model: String,
+    pub(crate) source: anyhow::Error,
+}
+
+impl std::fmt::Display for HardwareMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "The underlying hardware for these firmwares is not compatible. Installed firmware: {}. Target firmware: {}. No firmware was written.",
+            crate::style::printable(crate::style::ident_or_unknown(&self.installed_model)),
+            crate::style::printable(crate::style::ident_or_unknown(&self.target_model)))
+    }
+}
+
+impl std::error::Error for HardwareMismatch {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
 /// What a drive offers, derived from the facets its backend provides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Capabilities {
@@ -485,6 +507,8 @@ pub enum PlanLine {
 /// A pre-backup flash plan: what to show, plus backend-private state that only
 /// the same backend's `authorize` reads.
 pub struct FlashPlan {
+    /// Installed-versus-target compatibility remains unchecked until backup.
+    pub compatibility_pending: bool,
     /// Shown as soon as the plan is made, on a dry run and on execute.
     pub notes: Vec<PlanLine>,
     /// The plan a dry run shows.
@@ -498,6 +522,7 @@ impl FlashPlan {
     /// A plan carrying `state` for the backend's own `authorize`.
     pub fn new(state: impl Any + Send) -> Self {
         Self {
+            compatibility_pending: true,
             notes: Vec::new(),
             dry_run: Vec::new(),
             after_backup: Vec::new(),
@@ -633,7 +658,7 @@ impl UpdateOutcome {
 pub struct UpdateFailure {
     /// Stage or protocol phase where the failure occurred.
     pub phase: String,
-    /// Whether a mutating command may have reached the drive.
+    /// Whether a firmware-update command may have reached the drive.
     pub write_started: bool,
     /// Whether an intermediate or temporary image may remain installed.
     pub temporary_firmware: bool,
@@ -649,6 +674,29 @@ impl std::fmt::Display for UpdateFailure {
 }
 
 impl std::error::Error for UpdateFailure {}
+
+impl UpdateFailure {
+    /// Attach evidence only at a boundary that cannot issue firmware writes.
+    pub(crate) fn before_write(phase: &str, error: anyhow::Error) -> anyhow::Error {
+        if error.is::<Self>() {
+            return error;
+        }
+        error.context(Self {
+            phase: phase.into(),
+            write_started: false,
+            temporary_firmware: false,
+            completed_stages: Vec::new(),
+        })
+    }
+}
+
+/// A preview can validate a package while installed compatibility is still pending.
+pub struct FlashPreview {
+    /// Rendered checks and limitations for the front-end.
+    pub lines: Vec<String>,
+    /// Requires installed evidence before confirmation and any firmware write.
+    pub compatibility_pending: bool,
+}
 
 /// Firmware update in two read-only stages, then the write.
 pub trait FlashFacet {

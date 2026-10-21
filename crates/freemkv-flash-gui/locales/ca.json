@@ -36,6 +36,8 @@
     "menu.minimize": "Minimitza",
     "menu.close": "Tanca",
     "action.ok": "D’acord",
-    "app.name": "Utilitat de microprogramari freemkv"
+    "app.name": "Utilitat de microprogramari freemkv",
+    "errors.update_blocked": "Actualització bloquejada. No s’ha escrit cap microprogramari.",
+    "status.package_checked": "El paquet ha superat les comprovacions; falta verificar la compatibilitat amb la unitat."
   }
 }

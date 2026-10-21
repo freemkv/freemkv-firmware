@@ -36,6 +36,8 @@
     "menu.minimize": "Minimalizuj",
     "menu.close": "Zamknij",
     "action.ok": "OK",
-    "app.name": "Narzędzie oprogramowania układowego freemkv"
+    "app.name": "Narzędzie oprogramowania układowego freemkv",
+    "errors.update_blocked": "Aktualizacja zablokowana. Nie zapisano oprogramowania układowego.",
+    "status.package_checked": "Pakiet przeszedł kontrole; zgodność z napędem wymaga jeszcze sprawdzenia."
   }
 }

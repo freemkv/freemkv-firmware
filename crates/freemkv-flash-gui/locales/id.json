@@ -36,6 +36,8 @@
     "menu.minimize": "Minimalkan",
     "menu.close": "Tutup",
     "action.ok": "OK",
-    "app.name": "Utilitas firmware freemkv"
+    "app.name": "Utilitas firmware freemkv",
+    "errors.update_blocked": "Pembaruan diblokir. Tidak ada firmware yang ditulis.",
+    "status.package_checked": "Paket lolos pemeriksaan; kompatibilitas dengan drive masih perlu diperiksa."
   }
 }

@@ -36,6 +36,8 @@
     "menu.minimize": "Minimalizovat",
     "menu.close": "Zavřít",
     "action.ok": "OK",
-    "app.name": "Nástroj firmwaru freemkv"
+    "app.name": "Nástroj firmwaru freemkv",
+    "errors.update_blocked": "Aktualizace zablokována. Nebyl zapsán žádný firmware.",
+    "status.package_checked": "Balíček prošel kontrolami; kompatibilitu s mechanikou je ještě nutné ověřit."
   }
 }

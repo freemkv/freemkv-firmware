@@ -36,6 +36,8 @@
     "menu.minimize": "最小化",
     "menu.close": "閉じる",
     "action.ok": "OK",
-    "app.name": "freemkv ファームウェアユーティリティ"
+    "app.name": "freemkv ファームウェアユーティリティ",
+    "errors.update_blocked": "更新はブロックされました。ファームウェアは書き込まれていません。",
+    "status.package_checked": "パッケージの検査に合格しました。ドライブとの互換性はまだ確認されていません。"
   }
 }

@@ -36,6 +36,8 @@
     "menu.minimize": "Minimera",
     "menu.close": "Stäng",
     "action.ok": "OK",
-    "app.name": "freemkv-verktyg för fast programvara"
+    "app.name": "freemkv-verktyg för fast programvara",
+    "errors.update_blocked": "Uppdateringen blockerades. Ingen firmware skrevs.",
+    "status.package_checked": "Paketkontrollerna godkändes; kompatibiliteten med enheten återstår att kontrollera."
   }
 }

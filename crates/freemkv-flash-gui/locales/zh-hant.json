@@ -36,6 +36,8 @@
     "menu.minimize": "最小化",
     "menu.close": "關閉",
     "action.ok": "確定",
-    "app.name": "freemkv 韌體工具"
+    "app.name": "freemkv 韌體工具",
+    "errors.update_blocked": "更新已遭阻止。未寫入任何韌體。",
+    "status.package_checked": "韌體套件檢查已通過；仍需驗證與光碟機的相容性。"
   }
 }

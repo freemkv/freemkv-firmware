@@ -382,11 +382,14 @@ fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
     let error =
         crate::engine::recover(&mut dev, &Mtk, Some(&original), &target, true, true).unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("Current firmware does not match"),
+        crate::workflow::error_message(&error).contains("Current firmware does not match"),
         "{error:#}"
     );
+    let evidence = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert_eq!(evidence.phase, "recovery receiver checks");
+    assert!(!evidence.write_started);
     assert!(dev.wire_stages.is_empty());
     assert!(dev.inner.writes.is_empty());
 }
@@ -543,6 +546,44 @@ fn no_backup_crossflash_cannot_waive_installed_family_or_rollback() {
     .err()
     .expect("missing crossflash evidence must refuse");
     assert!(error.to_string().contains("does not waive compatibility"));
+}
+
+#[test]
+fn mediatek_family_mismatch_keeps_hashes_in_diagnostics_only() {
+    let current = image(b"1.00", 1);
+    let mut target = image(b"1.05", 2);
+    let board = fixture::Board {
+        platform: "BU9",
+        ..fixture::BU3
+    };
+    fixture::stamp(&mut target, &board);
+    let target = crate::cmac::resign(&target).unwrap();
+    let error = authorize_bytes(
+        &fixture::identity(&current),
+        "BD-RE BU40N",
+        Verdict::SameModel,
+        &target,
+        Some(&current),
+    )
+    .err()
+    .expect("different families must refuse");
+    let message = crate::workflow::error_message(&error);
+    assert!(
+        message.contains("underlying hardware for these firmwares is not compatible"),
+        "{message}"
+    );
+    assert!(message.contains("BU40N"));
+    let current_family = mediatek_optical::image::family(&current)
+        .unwrap()
+        .to_string();
+    let target_family = mediatek_optical::image::family(&target)
+        .unwrap()
+        .to_string();
+    assert_ne!(current_family, target_family);
+    assert!(!message.contains(&current_family));
+    assert!(!message.contains(&target_family));
+    assert!(format!("{error:#}").contains(&current_family));
+    assert!(format!("{error:#}").contains(&target_family));
 }
 
 #[test]

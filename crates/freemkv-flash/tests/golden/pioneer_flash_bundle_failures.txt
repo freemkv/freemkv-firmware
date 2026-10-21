@@ -1,6 +1,6 @@
 
 === Pioneer execute: installed backup is Kernel-only ===
-result: ERR pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 --- text (6) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -35,7 +35,7 @@ IN   cdb=120000006000 alloc=96 -> ok 96
 saved pre-flash backup: 71680 bytes sha256=262d81dcf0bbe4661d5a92cbd3018fcdf8a833a03c02ee4311016ea47d661aeb
 
 === Pioneer execute: target is a header-only bundle ===
-result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
+result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 --- text (6) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -76,7 +76,7 @@ IN   cdb=120000006000 alloc=96 -> ok 96
 saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
 
 === Pioneer execute: target is garbage ===
-result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -179,14 +179,14 @@ stated model: BD-RW   BDR-UD04
 SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-Installed-family compatibility is checked against the live backup.
-DRY RUN: no device I/O or writes.
+Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-UD04
 MSG      SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
-MSG      Installed-family compatibility is checked against the live backup.
-MSG      DRY RUN: no device I/O or writes.
+MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
+MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 --- scsi transcript (0) ---

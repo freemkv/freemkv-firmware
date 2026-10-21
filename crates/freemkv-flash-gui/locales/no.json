@@ -36,6 +36,8 @@
     "menu.minimize": "Minimer",
     "menu.close": "Lukk",
     "action.ok": "OK",
-    "app.name": "freemkv-fastvareverktøy"
+    "app.name": "freemkv-fastvareverktøy",
+    "errors.update_blocked": "Oppdatering blokkert. Ingen fastvare ble skrevet.",
+    "status.package_checked": "Pakken bestod kontrollene; kompatibiliteten med stasjonen må fortsatt kontrolleres."
   }
 }
