@@ -29,7 +29,6 @@ impl Profile {
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
             flash_extensions: vec!["bin"],
-            recovery_without_current: false,
             recovery_without_live_protocol: false,
             notes: Vec::new(),
         }
@@ -62,6 +61,100 @@ fn ready(drives: Vec<DriveChoice>) -> App {
 
 fn one_drive() -> App {
     ready(vec![drive("drive-a", "drive-a", "Drive A")])
+}
+
+#[test]
+fn update_forms_share_layout_and_default_to_reading_current_from_drive() {
+    fn presentation(mut panel: Vec<Item>) -> Vec<Item> {
+        panel.retain(|item| !matches!(item, Item::Warning(_)));
+        for item in &mut panel {
+            match item {
+                Item::Check { id, .. } => *id = CheckId::FlashReadFromDrive,
+                Item::Path { button, .. } => button.input = Input::Refresh,
+                Item::Buttons { buttons, .. } => {
+                    for button in buttons {
+                        button.input = Input::Refresh;
+                        if button.text == "Recover" {
+                            button.text = "Flash now".into();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        panel
+    }
+    let mut app = one_drive();
+    assert!(app.flash_read && app.recovery_read);
+    for selected in [false, true] {
+        if selected {
+            app.flash_input = Some("target.tar".into());
+            app.recovery_input = app.flash_input.clone();
+        }
+        app.task = Task::Flash;
+        let flash = app.view().panel;
+        assert!(matches!(&flash[0], Item::Heading(text) if text == "Current firmware"));
+        app.task = Task::Recovery;
+        assert_eq!(presentation(flash), presentation(app.view().panel));
+    }
+    for (task, check, action) in [
+        (Task::Flash, CheckId::FlashReadFromDrive, "Flash now"),
+        (Task::Recovery, CheckId::RecoveryReadFromDrive, "Recover"),
+    ] {
+        app.task = task;
+        assert!(button(&app.view(), action).enabled);
+        app.dispatch(Input::SetCheck(check, false));
+        assert!(!button(&app.view(), action).enabled);
+        assert!(button(&app.view(), "Choose Current…").enabled);
+    }
+    app.flash_current = Some("current.tar".into());
+    app.recovery_current = app.flash_current.clone();
+    app.flash_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.recovery_current_members = app.flash_current_members.clone();
+    app.flash_current_member = Some("intermediate.bin".into());
+    app.recovery_current_member = app.flash_current_member.clone();
+    app.task = Task::Flash;
+    let flash = presentation(app.view().panel);
+    app.task = Task::Recovery;
+    assert_eq!(flash, presentation(app.view().panel));
+}
+
+#[test]
+fn both_update_forms_check_their_own_selected_target_file() {
+    let mut app = one_drive();
+    app.flash_input = Some("flash-target.tar".into());
+    app.recovery_input = Some("recovery-target.tar".into());
+    for (task, expected) in [
+        (Task::Flash, "flash-target.tar"),
+        (Task::Recovery, "recovery-target.tar"),
+    ] {
+        app.task = task;
+        app.dispatch(button(&app.view(), "Check file").input);
+        let (_, device, Job::InfoFile { input }) = last_job(&app) else {
+            panic!("file-only analysis required")
+        };
+        assert!(device.is_empty());
+        assert_eq!(input, &PathBuf::from(expected));
+        finish(&mut app, Ok(()));
+    }
+}
+
+#[test]
+fn mediatek_recovery_drive_reads_ignore_stale_current_file_and_member() {
+    let mut app = one_drive();
+    app.set_profile(Ok(Profile::every_task()));
+    app.task = Task::Recovery;
+    app.recovery_input = Some("target.bin".into());
+    app.recovery_current = Some("stale.tar".into());
+    app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.recovery_current_member = Some("intermediate.bin".into());
+    app.dispatch(Input::Recover);
+    let (_, _, Job::Recovery(options)) = last_job(&app) else {
+        panic!("recovery plan")
+    };
+    assert!(matches!(options.current, CurrentFirmware::ReadFromDrive));
+    assert!(options.current_member.is_none());
+    assert!(!options.execute && !options.acknowledged_risk);
 }
 
 #[test]
@@ -135,6 +228,24 @@ fn flash_paired_current_selection_is_explicit_and_frozen_through_confirmation() 
     );
     assert_eq!(options.current_member.as_deref(), Some("firmware.bin"));
     assert_eq!(options.input, PathBuf::from("modified.tar"));
+    let (reply, _answer) = mpsc::channel();
+    app.worker
+        .as_ref()
+        .unwrap()
+        .send(Msg::Authorized(FlashSheet::default(), reply))
+        .unwrap();
+    app.poll();
+    app.flash_current = Some("another.tar".into());
+    app.flash_current_member = Some("intermediate.bin".into());
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm.details.contains(&"Current: original.tar".into()));
+    assert!(confirm
+        .details
+        .contains(&"Current member (receiver reference): firmware.bin".into()));
+    assert!(!confirm
+        .details
+        .iter()
+        .any(|line| line.contains("another.tar")));
 }
 
 #[test]
@@ -512,7 +623,9 @@ fn flash_starts_with_a_firmware_chooser() {
     let mut app = one_drive();
     app.dispatch(Input::SelectTask(Task::Flash));
     let view = app.view();
-    assert_eq!(buttons(&view).len(), 1);
+    assert!(has_text(&view, "Firmware to flash"));
+    assert!(!button(&view, "Flash now").enabled);
+    assert!(!button(&view, "Check file").enabled);
     assert!(button(&view, "Choose firmware…").enabled);
     assert_eq!(
         app.dispatch(Input::Choose(Pick::FlashFirmware)),
@@ -779,6 +892,7 @@ fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
             "Image: firmware.tar".into(),
             "== flash plan ==".into(),
             saved,
+            "Current: read from drive".into(),
             format!(
                 "File origin: {}. {}",
                 workflow::FileOrigin::Unknown.label(),
@@ -939,7 +1053,7 @@ fn unknown_or_failed_profile_does_not_gate_recovery_or_flash_preparation() {
             app.pending.as_ref().map(|p| &p.sheet),
             Some(Sheet::Recovery {
                 options: RecoveryOptions {
-                    current: CurrentFirmware::NotRequired,
+                    current: CurrentFirmware::ReadFromDrive,
                     ..
                 },
                 ..
@@ -968,7 +1082,7 @@ fn recovery_requires_both_inputs_and_a_drive() {
         "Current firmware",
         "Read from drive",
         "Choose Current…",
-        "Firmware to flash (Kernel + Normal)",
+        "Firmware to flash",
         "Choose firmware…",
         FORCE_WARNING,
         "Recover",
@@ -984,15 +1098,15 @@ fn recovery_requires_both_inputs_and_a_drive() {
 
     app.dispatch(Input::Chosen(Pick::RecoveryInput, "new.tar".into()));
     assert!(
-        !button(&app.view(), "Recover").enabled,
-        "current firmware missing"
+        button(&app.view(), "Recover").enabled,
+        "drive reads are the default"
     );
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, true));
     let view = app.view();
     assert!(!button(&view, "Choose Current…").enabled);
     assert!(has_text(
         &view,
-        "Reads installed firmware for protocol analysis. No backup file is saved."
+        "Use the drive to identify the installed firmware. If detection fails, choose its firmware file."
     ));
     assert!(button(&view, "Recover").enabled);
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, false));
@@ -1037,17 +1151,12 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
 #[test]
 fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     let mut app = one_drive();
-    let mut profile = Profile::every_task();
-    profile.recovery_without_current = true;
-    app.set_profile(Ok(profile));
+    app.set_profile(Ok(Profile::every_task()));
     app.task = Task::Recovery;
     app.recovery_input = Some("1.V9.tar".into());
     app.recovery_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
     app.dispatch(Input::RecoveryMember("firmware.bin".into()));
-    assert!(has_text(
-        &app.view(),
-        "Current firmware (optional receiver reference)"
-    ));
+    assert!(has_text(&app.view(), "Current firmware"));
     app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "1.V9.tar".into()));
     app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
     assert!(!button(&app.view(), "Recover").enabled);

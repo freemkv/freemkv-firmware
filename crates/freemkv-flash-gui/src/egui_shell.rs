@@ -204,8 +204,7 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
                 Task::Info => (60.0, 60.0),
                 Task::Inspect | Task::Compare => (180.0, 0.0),
                 Task::Backup | Task::Dump => (110.0, 110.0),
-                Task::Flash => (200.0, 200.0),
-                Task::Recovery => (280.0, 280.0),
+                Task::Flash | Task::Recovery => (280.0, 280.0),
             };
             egui::ScrollArea::vertical()
                 .id_salt(("task_content", view.task as u8))

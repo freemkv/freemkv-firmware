@@ -27,7 +27,7 @@ use crate::ops::{self, Job, Request, ResultView};
 use crate::support::Journal;
 
 /// Shown wherever Recovery is offered or confirmed. Wording is part of the safety contract.
-pub const FORCE_WARNING: &str = "Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable.";
+pub const FORCE_WARNING: &str = "Recovery skips automatic backups and some compatibility checks. Incompatible firmware can make the drive unusable.";
 /// The confirmation sheet's danger line.
 pub const FLASH_DANGER: &str =
     "Flashing can permanently disable the drive. Keep it connected and powered until completion.";
@@ -93,8 +93,6 @@ pub(crate) struct Profile {
     pub(crate) chips: Vec<String>,
     /// The drive tasks offered; Info, Inspect and Compare need no profile.
     pub(crate) tasks: Vec<Task>,
-    /// Recovery identifies its receiver without an installed firmware reference.
-    pub(crate) recovery_without_current: bool,
     /// Recheck Current choices when Recovery lacks a normal live protocol match.
     pub(crate) recovery_without_live_protocol: bool,
     /// A live capture can feed Inspect and Compare.
@@ -196,6 +194,7 @@ pub enum Input {
     ReadInfo,
     FlashNow,
     CheckFlashFile,
+    CheckRecoveryFile,
     FlashCurrentMember(String),
     Recover,
     RecoveryMember(String),
@@ -887,7 +886,7 @@ impl App {
             flash_current_member: None,
             recovery_input: None,
             recovery_current: None,
-            recovery_read: false,
+            recovery_read: true,
             recovery_member: None,
             recovery_members: Vec::new(),
             recovery_current_members: Vec::new(),
@@ -1149,8 +1148,13 @@ impl App {
             Input::ReadInfo if !self.busy() => {
                 return self.start_job("Drive information", self.device.clone(), Job::Info);
             }
-            Input::CheckFlashFile if !self.busy() => {
-                if let Some(input) = self.flash_input.clone() {
+            action @ (Input::CheckFlashFile | Input::CheckRecoveryFile) if !self.busy() => {
+                let input = if matches!(action, Input::CheckRecoveryFile) {
+                    self.recovery_input.clone()
+                } else {
+                    self.flash_input.clone()
+                };
+                if let Some(input) = input {
                     return self.start_job("Check file", String::new(), Job::InfoFile { input });
                 }
             }
@@ -1194,7 +1198,7 @@ impl App {
                 }
             }
             Input::Recover if !self.busy() && self.recovery_ready() => {
-                let current = if self.recovery_read && !self.recovery_without_current() {
+                let current = if self.recovery_read {
                     CurrentFirmware::ReadFromDrive
                 } else if let Some(current) = self.recovery_current.clone() {
                     CurrentFirmware::File(current)
@@ -1211,7 +1215,9 @@ impl App {
                     input: target.options.input.clone(),
                     member: self.recovery_member.clone(),
                     current,
-                    current_member: self.recovery_current_member.clone(),
+                    current_member: (!self.recovery_read)
+                        .then(|| self.recovery_current_member.clone())
+                        .flatten(),
                     execute: false,
                     acknowledged_risk: false,
                 };
@@ -1416,6 +1422,7 @@ impl App {
             }
             Pick::FlashCurrent => {
                 self.clear_flash_result();
+                self.flash_read = false;
                 self.flash_current_members = workflow::recovery_members(&path).unwrap_or_default();
                 self.flash_current_member = None;
                 self.flash_current = Some(path);
@@ -1493,24 +1500,14 @@ impl App {
         }
     }
 
-    fn recovery_without_current(&self) -> bool {
-        self.ready_profile()
-            .is_some_and(|p| p.recovery_without_current)
-    }
-
     fn recovery_ready(&self) -> bool {
         self.selected()
             && self.recovery_input.is_some()
             && (self.recovery_members.len() < 2 || self.recovery_member.is_some())
             && (self.recovery_read
-                || self.recovery_current_members.len() < 2
-                || self.recovery_current_member.is_some())
-            && (self.recovery_without_current()
-                || self.recovery_read
-                || self.recovery_current.is_some()
-                || !self
-                    .ready_profile()
-                    .is_some_and(|p| p.tasks.contains(&Task::Recovery)))
+                || (self.recovery_current.is_some()
+                    && (self.recovery_current_members.len() < 2
+                        || self.recovery_current_member.is_some())))
     }
 
     fn flash_current_supported(&self) -> bool {
@@ -2096,10 +2093,6 @@ impl App {
         // identification and authorization; a BOOT or failed profile must not
         // prevent reaching Recovery or preparing a Flash operation.
         let selected = self.selected();
-        let path = |text: &str, pick, on: bool, file: &Option<PathBuf>| Item::Path {
-            button: Button::new(text, Input::Choose(pick), enabled && on),
-            path: file.as_deref().map(PathView::of),
-        };
         match self.task {
             Task::Info => {
                 let mut items = vec![Item::Buttons {
@@ -2141,193 +2134,159 @@ impl App {
                     },
                 ]
             }
-            Task::Flash => match &self.flash_input {
-                Some(_) => {
-                    let mut items = vec![path(
-                        "action.change_file",
-                        Pick::FlashFirmware,
-                        true,
-                        &self.flash_input,
-                    )];
-                    items.extend(self.origin_items(false));
-                    if self.flash_current_supported() {
-                        items.extend([
-                            Item::Heading("Current firmware".into()),
-                            Item::Check {
-                                id: CheckId::FlashReadFromDrive,
-                                text: "Read from drive".into(),
-                                checked: self.flash_read,
-                                enabled,
-                            },
-                            path(
-                                "Choose Current…",
-                                Pick::FlashCurrent,
-                                enabled && !self.flash_read,
-                                &self.flash_current,
-                            ),
-                        ]);
-                        if self.flash_current_members.len() > 1 && !self.flash_read {
-                            items.push(Item::Buttons {
-                                label: Some("Current firmware member".into()),
-                                buttons: self
-                                    .flash_current_members
-                                    .iter()
-                                    .map(|name| {
-                                        Button::primary(
-                                            &format!(
-                                                "{}{}",
-                                                if self.flash_current_member.as_ref() == Some(name)
-                                                {
-                                                    "Selected: "
-                                                } else {
-                                                    ""
-                                                },
-                                                name
-                                            ),
-                                            Input::FlashCurrentMember(name.clone()),
-                                            enabled,
-                                        )
-                                    })
-                                    .collect(),
-                            });
-                        }
-                    }
-                    items.push(Item::Buttons {
-                        label: None,
-                        buttons: vec![
-                            Button::primary(
-                                "Flash now",
-                                Input::FlashNow,
-                                enabled && self.flash_ready(),
-                            ),
-                            Button {
-                                enabled,
-                                ..Button::link("Check file", Input::CheckFlashFile)
-                            },
-                        ],
-                    });
-                    items
-                }
-                None => vec![Item::Buttons {
-                    label: None,
-                    buttons: vec![Button::primary(
-                        "action.choose_firmware",
-                        Input::Choose(Pick::FlashFirmware),
-                        enabled,
-                    )],
-                }],
-            },
-            Task::Recovery => {
-                let mut items = vec![
-                    Item::Warning(FORCE_WARNING.into()),
-                    Item::Heading("Current firmware".into()),
-                    Item::Check {
-                        id: CheckId::RecoveryReadFromDrive,
-                        text: "Read from drive".into(),
-                        checked: self.recovery_read,
-                        enabled,
-                    },
-                    path(
-                        "Choose Current…",
-                        Pick::RecoveryCurrent,
-                        !self.recovery_read,
-                        &self.recovery_current,
-                    ),
-                ];
-                if self.recovery_without_current() {
-                    items = vec![
-                        Item::Warning(FORCE_WARNING.into()),
-                        Item::Heading("Current firmware (optional receiver reference)".into()),
-                        path("Choose Current file or TAR…", Pick::RecoveryCurrent, true, &self.recovery_current),
-                        Item::Note("If live receiver code cannot be read, select the firmware currently running—not the firmware to install. For BH16NS40 INTM, select the TAR's intermediate.bin.".into()),
-                    ];
-                } else if self.recovery_read {
-                    items.push(Item::Note(
-                        "Reads installed firmware for protocol analysis. No backup file is saved."
-                            .into(),
-                    ));
-                }
-                if self.recovery_current_members.len() > 1 && !self.recovery_read {
-                    items.push(Item::Buttons {
-                        label: Some("Current firmware member".into()),
-                        buttons: self
-                            .recovery_current_members
-                            .iter()
-                            .map(|name| {
-                                Button::primary(
-                                    &format!(
-                                        "{}{}",
-                                        if self.recovery_current_member.as_ref() == Some(name) {
-                                            "Selected: "
-                                        } else {
-                                            ""
-                                        },
-                                        name
-                                    ),
-                                    Input::RecoveryCurrentMember(name.clone()),
-                                    enabled,
-                                )
-                            })
-                            .collect(),
-                    });
-                }
-                items.extend([
-                    Item::Heading(
-                        if self.recovery_without_current() {
-                            "Firmware to flash"
-                        } else {
-                            "Firmware to flash (Kernel + Normal)"
-                        }
-                        .into(),
-                    ),
-                    path(
-                        "action.choose_firmware",
-                        Pick::RecoveryInput,
-                        true,
-                        &self.recovery_input,
-                    ),
-                ]);
-                if self.recovery_members.len() > 1 {
-                    items.push(Item::Note(
-                        "Select exactly one image to recover. No second stage will run.".into(),
-                    ));
-                    items.push(Item::Buttons {
-                        label: Some("Recovery image".into()),
-                        buttons: self
-                            .recovery_members
-                            .iter()
-                            .map(|name| {
-                                Button::primary(
-                                    &format!(
-                                        "{}{}",
-                                        if self.recovery_member.as_ref() == Some(name) {
-                                            "Selected: "
-                                        } else {
-                                            ""
-                                        },
-                                        name
-                                    ),
-                                    Input::RecoveryMember(name.clone()),
-                                    enabled,
-                                )
-                            })
-                            .collect(),
-                    });
-                }
-                if self.recovery_input.is_some() {
-                    items.extend(self.origin_items(true));
-                }
-                items.extend([Item::Buttons {
-                    label: None,
-                    buttons: vec![Button::primary(
-                        "Recover",
-                        Input::Recover,
-                        enabled && self.recovery_ready(),
-                    )],
-                }]);
-                items
+            Task::Flash | Task::Recovery => {
+                self.firmware_panel(enabled, self.task == Task::Recovery)
             }
         }
+    }
+
+    fn firmware_panel(&self, enabled: bool, recovery: bool) -> Vec<Item> {
+        let (input, current, read, members, member, current_pick, input_pick, check) = if recovery {
+            (
+                &self.recovery_input,
+                &self.recovery_current,
+                self.recovery_read,
+                &self.recovery_current_members,
+                &self.recovery_current_member,
+                Pick::RecoveryCurrent,
+                Pick::RecoveryInput,
+                CheckId::RecoveryReadFromDrive,
+            )
+        } else {
+            (
+                &self.flash_input,
+                &self.flash_current,
+                self.flash_read,
+                &self.flash_current_members,
+                &self.flash_current_member,
+                Pick::FlashCurrent,
+                Pick::FlashFirmware,
+                CheckId::FlashReadFromDrive,
+            )
+        };
+        let path = |text: &str, pick, on: bool, file: &Option<PathBuf>| Item::Path {
+            button: Button::new(text, Input::Choose(pick), enabled && on),
+            path: file.as_deref().map(PathView::of),
+        };
+        let mut items = Vec::new();
+        if recovery {
+            items.push(Item::Warning(FORCE_WARNING.into()));
+        }
+        if recovery || self.flash_current_supported() {
+            items.extend([
+                Item::Heading("Current firmware".into()),
+                Item::Check {
+                    id: check,
+                    text: "Read from drive".into(),
+                    checked: read,
+                    enabled,
+                },
+                path("Choose Current…", current_pick, !read, current),
+            ]);
+            if read {
+                items.push(Item::Note("Use the drive to identify the installed firmware. If detection fails, choose its firmware file.".into()));
+            } else if members.len() > 1 {
+                items.push(Item::Buttons {
+                    label: Some("Current firmware member".into()),
+                    buttons: members
+                        .iter()
+                        .map(|name| {
+                            Button::primary(
+                                &format!(
+                                    "{}{}",
+                                    if member.as_ref() == Some(name) {
+                                        "Selected: "
+                                    } else {
+                                        ""
+                                    },
+                                    name
+                                ),
+                                if recovery {
+                                    Input::RecoveryCurrentMember(name.clone())
+                                } else {
+                                    Input::FlashCurrentMember(name.clone())
+                                },
+                                enabled,
+                            )
+                        })
+                        .collect(),
+                });
+            }
+        }
+        items.extend([
+            Item::Heading("Firmware to flash".into()),
+            path(
+                if input.is_some() {
+                    "action.change_file"
+                } else {
+                    "action.choose_firmware"
+                },
+                input_pick,
+                true,
+                input,
+            ),
+        ]);
+        if recovery && self.recovery_members.len() > 1 {
+            items.push(Item::Note(
+                "Select exactly one image to recover. No second stage will run.".into(),
+            ));
+            items.push(Item::Buttons {
+                label: Some("Recovery image".into()),
+                buttons: self
+                    .recovery_members
+                    .iter()
+                    .map(|name| {
+                        Button::primary(
+                            &format!(
+                                "{}{}",
+                                if self.recovery_member.as_ref() == Some(name) {
+                                    "Selected: "
+                                } else {
+                                    ""
+                                },
+                                name
+                            ),
+                            Input::RecoveryMember(name.clone()),
+                            enabled,
+                        )
+                    })
+                    .collect(),
+            });
+        }
+        if input.is_some() {
+            items.extend(self.origin_items(recovery));
+        }
+        items.push(Item::Buttons {
+            label: None,
+            buttons: vec![
+                Button::primary(
+                    if recovery { "Recover" } else { "Flash now" },
+                    if recovery {
+                        Input::Recover
+                    } else {
+                        Input::FlashNow
+                    },
+                    enabled
+                        && if recovery {
+                            self.recovery_ready()
+                        } else {
+                            self.flash_ready()
+                        },
+                ),
+                Button {
+                    enabled: enabled && input.is_some(),
+                    ..Button::link(
+                        "Check file",
+                        if recovery {
+                            Input::CheckRecoveryFile
+                        } else {
+                            Input::CheckFlashFile
+                        },
+                    )
+                },
+            ],
+        });
+        items
     }
 
     fn analysis_panel(&self, enabled: bool) -> Vec<Item> {
@@ -2508,6 +2467,13 @@ impl App {
             }
             Sheet::Flash { sheet, .. } => {
                 details.extend(sheet.plan.iter().cloned());
+                details.push(match &pending.target.options.current {
+                    Some(path) => format!("Current: {}", path.display()),
+                    None => "Current: read from drive".into(),
+                });
+                if let Some(member) = &pending.target.options.current_member {
+                    details.push(format!("Current member (receiver reference): {member}"));
+                }
                 (false, sheet.warnings.clone(), sheet.confirmation.clone())
             }
         };

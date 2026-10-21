@@ -307,6 +307,12 @@ Recovery accepts the same TAR but writes exactly one selected member:
 Add `--execute --i-understand-risk` only after reviewing the preview. Recovery
 never continues to the other member and does not create a backup.
 
+The Flash and Recovery desktop forms use the same Current firmware and target
+layout. Both select **Read from drive** by default. Uncheck it to choose the
+firmware currently installed; select its exact member if the Current TAR is paired.
+Recovery uses that selected file even when the drive's receiver code is readable.
+The CLI retains its explicit `--current` / `--read-from-drive` options.
+
 Modify's **Boot settings** are applied every time the drive starts. Select
 Unrestricted access, HRL checking, Encryption, Read speed, and Region in the
 Create form. **Reset to defaults** restores unrestricted access to On and the

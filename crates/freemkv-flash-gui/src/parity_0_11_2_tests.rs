@@ -600,7 +600,8 @@ fn recover(app: &mut App, input: &Path) {
     app.poll();
     let sheet = app.view().confirm.expect("the recovery sheet");
     assert_eq!(sheet.title, "Confirm recovery");
-    assert_eq!(sheet.warnings, ["Recovery skips backups and compatibility checks. Incompatible firmware can make the drive unusable."]);
+    // 0.14.0 clarifies that receiver/integrity checks remain mandatory.
+    assert_eq!(sheet.warnings, ["Recovery skips automatic backups and some compatibility checks. Incompatible firmware can make the drive unusable."]);
     assert_eq!(
         (sheet.ack_text.as_str(), sheet.ack_checked),
         (v0_11_2::RISK_ACK, false)
@@ -625,6 +626,7 @@ fn recovery_reading_current_from_the_drive_matches_0_11_2() {
 fn recovery_from_a_current_file_matches_0_11_2() {
     let mut app = pioneer_app();
     app.dispatch(Input::SelectTask(Task::Recovery));
+    app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, false));
     covers(
         open_filter(&press(&mut app, "Choose Current…")),
         v0_11_2::FIRMWARE_FILTER,

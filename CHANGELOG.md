@@ -10,6 +10,8 @@ Versions are independent of the freemkv ripping applications.
 - Add a saved language preference and initial translations for common controls and menus in 29 languages. Translation of operation details and error messages is still in progress.
 - Fix misleading Pioneer errors for unrecognized MediaTek TAR files. Invalid packages now report a package error before any write.
 - Let MediaTek Flash use a selected Current firmware file when the drive blocks automatic detection. Read from drive remains the default; failed detection now explains how to select the installed firmware.
+- Give Flash and Recovery matching firmware-selection layouts, with Read from drive selected by default in both desktop forms.
+- Make MediaTek Recovery consistently use the Current firmware file you select and report when it does not match the drive.
 
 ### freemkv Modify
 

@@ -72,7 +72,7 @@ fn backup_and_flash_controls_are_visible_and_do_not_show_info_results() {
                 "Current firmware",
                 "Read from drive",
                 "Choose Current…",
-                "Firmware to flash (Kernel + Normal)",
+                "Firmware to flash",
                 "Recover",
             ],
         ),

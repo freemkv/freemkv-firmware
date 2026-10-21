@@ -99,7 +99,6 @@ pub fn fixture() -> App {
         backup_name: Some("GATE_1.00.backup.bin".into()),
         dump_name: Some("GATE_1.00.dump.bin".into()),
         flash_extensions: vec!["bin"],
-        recovery_without_current: false,
         recovery_without_live_protocol: false,
         notes: Vec::new(),
     });
@@ -112,6 +111,10 @@ pub fn fixture() -> App {
     ] {
         app.dispatch(Input::Chosen(pick, PathBuf::from(file)));
     }
+    app.dispatch(Input::SetCheck(
+        crate::ui::CheckId::RecoveryReadFromDrive,
+        true,
+    ));
     app
 }
 

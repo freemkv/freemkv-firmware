@@ -410,6 +410,27 @@ fn recovery_plan() -> Plan {
 }
 
 #[test]
+fn application_flash_and_recovery_share_the_pioneer_executor_and_wire_bytes() {
+    let plan = recovery_plan();
+    let mut flash = Drive::default();
+    let mut recovery = Drive::default();
+    let flashed = super::super::flash::execute_with_sleep(
+        &mut ungated_for_tests(&mut flash),
+        super::super::flash::PreparedFlash::Complete(&plan.prepared),
+        pioneer_optical::receiver::ExecutionMode::Flash,
+        &mut |_| {},
+    )
+    .unwrap();
+    let recovered = plan
+        .run(&mut ungated_for_tests(&mut recovery), &mut |_| {})
+        .unwrap();
+    assert_eq!(flash.writes, recovery.writes);
+    assert_eq!(flash.parameter_reads, recovery.parameter_reads);
+    assert_eq!(flashed, recovered);
+    assert!(!flash.writes.is_empty());
+}
+
+#[test]
 fn normal_recovery_changes_startup_word_before_update_entry() {
     let plan = recovery_plan();
     let mut drive = Drive {

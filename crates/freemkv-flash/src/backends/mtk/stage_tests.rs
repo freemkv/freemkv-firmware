@@ -75,6 +75,106 @@ fn image(revision: &[u8; 4], code: u8) -> Vec<u8> {
     bytes[0x1ec018..0x1ec01c].copy_from_slice(revision);
     mediatek_optical::image::cmac::resign(&bytes).unwrap()
 }
+
+fn flash_single_image(
+    dev: &mut MockScsiDevice,
+    current: &[u8],
+    target: &[u8],
+) -> Result<UpdateOutcome> {
+    let req = request(target.to_vec(), &super::super::IMAGE);
+    let plan = Mtk.plan(&mut ReadDevice::without_unlocks(dev), &req)?;
+    let backup = crate::engine::gates::saved_for_tests(current.to_vec());
+    let authorized = Mtk.authorize(&mut ReadDevice::without_unlocks(dev), plan, Some(&backup))?;
+    Mtk.execute(
+        &mut crate::engine::gates::ungated_for_tests(dev),
+        &authorized,
+    )
+}
+
+#[test]
+fn flash_and_recovery_share_exact_application_write_commands_and_bytes() {
+    let current = image(b"1.00", 1);
+    let target = image(b"1.01", 3);
+    let mut flash = MockScsiDevice::echoing().with_firmware_image(current.clone());
+    let mut recovery = MockScsiDevice::echoing().with_firmware_image(current.clone());
+    assert!(flash_single_image(&mut flash, &current, &target)
+        .unwrap()
+        .fully_verified());
+    assert!(
+        crate::engine::recover(&mut recovery, &Mtk, None, &target, true, true)
+            .unwrap()
+            .fully_verified()
+    );
+    assert_eq!(flash.writes, recovery.writes);
+    assert_eq!(flash.writes.first().unwrap().0, cdb::enter_update());
+    assert_eq!(flash.writes.last().unwrap().0, cdb::finish());
+    let transferred: Vec<_> = flash
+        .writes
+        .iter()
+        .flat_map(|(_, data)| data.clone())
+        .collect();
+    assert_eq!(transferred, target);
+}
+
+#[test]
+fn recovery_entry_policy_continues_once_while_flash_stops_before_streaming() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let current = image(b"1.00", 1);
+    let target = image(b"1.01", 3);
+    for recover in [false, true] {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let count = attempts.clone();
+        let mut dev = MockScsiDevice::echoing()
+            .with_firmware_image(current.clone())
+            .on_fail(
+                move |command| {
+                    let matches = command == cdb::enter_update();
+                    if matches {
+                        count.fetch_add(1, Ordering::SeqCst);
+                    }
+                    matches
+                },
+                "PREPARE rejected",
+            );
+        let result = if recover {
+            crate::engine::recover(&mut dev, &Mtk, None, &target, true, true)
+        } else {
+            flash_single_image(&mut dev, &current, &target)
+        };
+        assert_eq!(attempts.load(Ordering::SeqCst), 1, "entry must never retry");
+        if recover {
+            assert!(result.unwrap().fully_verified());
+            let transferred: Vec<_> = dev
+                .writes
+                .iter()
+                .flat_map(|(_, data)| data.clone())
+                .collect();
+            assert_eq!(transferred, target);
+            assert_eq!(dev.writes.last().unwrap().0, cdb::finish());
+        } else {
+            assert!(format!("{:#}", result.unwrap_err()).contains("PREPARE rejected"));
+            assert!(dev.writes.is_empty());
+        }
+    }
+}
+
+#[test]
+fn recovery_selected_current_is_not_ignored_when_live_receiver_is_readable() {
+    let current = image(b"1.00", 1);
+    let stale = image(b"1.01", 1);
+    let target = image(b"1.02", 3);
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(current);
+    let error = crate::engine::recover(&mut dev, &Mtk, Some(&stale), &target, false, false)
+        .expect_err("selected Current must match even when live code can be read");
+    assert!(
+        format!("{error:#}").contains("Current firmware does not match"),
+        "{error:#}"
+    );
+    assert!(dev.writes.is_empty());
+}
 fn running_inquiry(image: &[u8]) -> Vec<u8> {
     let mut inquiry = vec![0; 36];
     inquiry[0] = 5;
