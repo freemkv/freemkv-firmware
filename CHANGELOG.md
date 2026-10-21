@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changes. Add catalog/persistence checks and a macOS rendered language gate.
   Full task, diagnostic, error, and analysis copy migration remains in progress.
 
-## [0.13.4] - Unreleased
+## [0.13.4] - 2026-10-20
 
 ### Development
 - Stamp macOS application versions from the workspace package version before

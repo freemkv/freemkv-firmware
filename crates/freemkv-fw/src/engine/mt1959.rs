@@ -126,6 +126,15 @@ impl Mt1959Engine {
         identity: Vec<u8>,
         defaults: &BootSettings,
     ) -> Result<CreateReport> {
+        // A previous build repoints 0x3C to an injected handler without the OEM
+        // prologue. Diagnose that input before the OEM-only finders run.
+        if is_freemkv_patched(image) {
+            bail!(
+                "image already contains freemkv firmware; creating a new build requires a clean, \
+                 unmodified OEM image. Select the original OEM firmware, not a previous freemkv output"
+            );
+        }
+
         // ---- BASE (mandatory) — the verb handler + boot hook + save/reset need these;
         // a miss means this image cannot carry a freemkv base, so refuse.
         let scanner_entry = self.find_scanner_entry(image)?;
