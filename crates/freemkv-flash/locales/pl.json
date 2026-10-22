@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Język",
     "errors.operation_failed": "Operacja nie powiodła się.",
-    "errors.update_not_started": "Aktualizacja nie została rozpoczęta.",
+    "errors.update_not_started": "Podjęto próbę wysłania polecenia wejścia w tryb aktualizacji, ale nie wysłano żadnych danych oprogramowania układowego. Napęd może być w trybie aktualizacji; pozostaw go podłączonego i sprawdź przed ponowną próbą.",
     "errors.partial_firmware": "Oprogramowanie układowe może być niekompletne. Pozostaw napęd podłączony i sprawdź go przed ponowną próbą.",
     "errors.temporary_firmware": "W napędzie może pozostać tymczasowe oprogramowanie układowe. Pozostaw go podłączonego i sprawdź przed ponowną próbą.",
     "menu.refresh_drives": "Odśwież napędy",

@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Limbă",
     "errors.operation_failed": "Operația a eșuat.",
-    "errors.update_not_started": "Actualizarea nu a început.",
+    "errors.update_not_started": "S-a încercat trimiterea comenzii de intrare în modul de actualizare, dar nu s-au trimis date de firmware. Unitatea poate fi în modul de actualizare; păstrați-o conectată și verificați-o înainte de a încerca din nou.",
     "errors.partial_firmware": "Firmware-ul poate fi incomplet. Lăsați unitatea conectată și verificați-o înainte de a încerca din nou.",
     "errors.temporary_firmware": "Este posibil să fi rămas firmware temporar. Lăsați unitatea conectată și verificați-o înainte de a încerca din nou.",
     "menu.refresh_drives": "Reîmprospătează unitățile",

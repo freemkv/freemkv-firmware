@@ -127,7 +127,7 @@ IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
 === Pioneer recover execute: write fails on the 2nd command ===
-result: ERR update failed during firmware transfer (write started: true; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
+result: ERR update failed during firmware transfer (progress: PayloadAttempted; payload bytes accepted in stage: None; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
 --- text (3) ---
 
 EXECUTING flash — do not power off or disconnect the drive...

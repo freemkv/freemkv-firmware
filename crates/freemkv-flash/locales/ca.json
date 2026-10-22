@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Idioma",
     "errors.operation_failed": "L’operació ha fallat.",
-    "errors.update_not_started": "L’actualització no s’ha iniciat.",
+    "errors.update_not_started": "S’ha intentat enviar l’ordre d’entrada al mode d’actualització, però no s’ha enviat cap dada del microprogramari. La unitat pot estar en mode d’actualització; manteniu-la connectada i examineu-la abans de tornar-ho a provar.",
     "errors.partial_firmware": "El microprogramari pot estar incomplet. Manteniu la unitat connectada i inspeccioneu-la abans de tornar-ho a provar.",
     "errors.temporary_firmware": "Pot quedar microprogramari temporal. Manteniu la unitat connectada i inspeccioneu-la abans de tornar-ho a provar.",
     "menu.refresh_drives": "Actualitza les unitats",

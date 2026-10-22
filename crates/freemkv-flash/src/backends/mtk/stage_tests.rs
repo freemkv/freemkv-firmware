@@ -167,6 +167,9 @@ fn recovery_entry_policy_continues_once_while_flash_stops_before_streaming() {
                 failure.impact(),
                 crate::backend::UpdateImpact::EntryUncertain
             );
+            let diagnostic = format!("{error:#}");
+            assert!(diagnostic.contains("entry command attempted; no firmware payload sent"));
+            assert!(!diagnostic.contains("write started: true"));
             let guidance =
                 crate::user_error::UserError::of(&error).render(crate::localization::Language::En);
             assert!(guidance.contains("no firmware payload was sent"));

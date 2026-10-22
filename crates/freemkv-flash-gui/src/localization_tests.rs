@@ -4,6 +4,49 @@ use super::*;
 use std::collections::BTreeSet;
 
 #[test]
+fn entry_failure_translations_say_no_firmware_payload_was_sent() {
+    let no_payload = [
+        (Language::Ca, "no s’ha enviat cap dada"),
+        (Language::Cs, "nebyla odeslána žádná data"),
+        (Language::Da, "ingen firmwaredata"),
+        (Language::De, "keine Firmware-Daten"),
+        (Language::El, "δεν στάλθηκαν δεδομένα"),
+        (Language::En, "no firmware payload was sent"),
+        (Language::Es, "no se enviaron datos"),
+        (Language::Es419, "no se enviaron datos"),
+        (Language::Fi, "ei lähetetty"),
+        (Language::Fr, "aucune donnée"),
+        (Language::Hu, "nem küldtünk firmware-adatokat"),
+        (Language::Id, "tidak ada data firmware"),
+        (Language::It, "non sono stati inviati dati"),
+        (Language::Ja, "データは送信されていません"),
+        (Language::Ko, "데이터는 전송되지 않았습니다"),
+        (Language::Nl, "geen firmwaregegevens"),
+        (Language::No, "ingen fastvaredata"),
+        (Language::Pl, "nie wysłano żadnych danych"),
+        (Language::Pt, "não foram enviados dados"),
+        (Language::PtBr, "nenhum dado do firmware"),
+        (Language::Ro, "nu s-au trimis date de firmware"),
+        (Language::Ru, "данные прошивки не отправлялись"),
+        (Language::Sk, "neboli odoslané žiadne údaje"),
+        (Language::Sv, "inga firmwaredata"),
+        (Language::Tr, "hiçbir aygıt yazılımı verisi gönderilmedi"),
+        (Language::Uk, "дані мікропрограми не надсилалися"),
+        (Language::Vi, "chưa gửi dữ liệu chương trình cơ sở nào"),
+        (Language::ZhHans, "未发送任何固件数据"),
+        (Language::ZhHant, "未傳送任何韌體資料"),
+    ];
+    assert_eq!(no_payload.len(), Language::ALL.len());
+    for (language, phrase) in no_payload {
+        let message = get(language, "errors.update_not_started");
+        assert!(message.contains(phrase), "{}: {message}", language.code());
+        if language != Language::En {
+            assert_ne!(message, get(Language::En, "errors.update_not_started"));
+        }
+    }
+}
+
+#[test]
 fn every_embedded_catalog_has_the_same_nonempty_message_ids() {
     let english = Language::En.catalog()["messages"].as_object().unwrap();
     let expected: BTreeSet<_> = english.keys().collect();

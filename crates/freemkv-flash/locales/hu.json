@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Nyelv",
     "errors.operation_failed": "A művelet nem sikerült.",
-    "errors.update_not_started": "A frissítés nem indult el.",
+    "errors.update_not_started": "Megkíséreltük a frissítési módba léptető parancs elküldését, de nem küldtünk firmware-adatokat. A meghajtó frissítési módban lehet; tartsa csatlakoztatva, és vizsgálja meg, mielőtt újra próbálkozna.",
     "errors.partial_firmware": "A firmware hiányos lehet. Hagyja csatlakoztatva a meghajtót, és ellenőrizze újrapróbálkozás előtt.",
     "errors.temporary_firmware": "Ideiglenes firmware maradhatott a meghajtón. Hagyja csatlakoztatva, és ellenőrizze újrapróbálkozás előtt.",
     "menu.refresh_drives": "Meghajtók frissítése",

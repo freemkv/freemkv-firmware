@@ -721,8 +721,18 @@ pub struct UpdateFailure {
 
 impl std::fmt::Display for UpdateFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "update failed during {} (write started: {}; temporary firmware: {}; completed stages: {:?})",
-            self.phase, self.write_started, self.temporary_firmware, self.completed_stages)
+        match self.progress {
+            UpdateProgress::EntryAttempted => write!(f,
+                "update failed during {} (entry command attempted; no firmware payload sent; temporary firmware: {}; completed stages: {:?})",
+                self.phase, self.temporary_firmware, self.completed_stages),
+            _ if self.write_started => write!(f,
+                "update failed during {} (progress: {:?}; payload bytes accepted in stage: {:?}; temporary firmware: {}; completed stages: {:?})",
+                self.phase, self.progress, self.payload_bytes_accepted,
+                self.temporary_firmware, self.completed_stages),
+            _ => write!(f,
+                "update failed during {} (write started: false; temporary firmware: {}; completed stages: {:?})",
+                self.phase, self.temporary_firmware, self.completed_stages),
+        }
     }
 }
 

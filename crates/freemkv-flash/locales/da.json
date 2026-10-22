@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Sprog",
     "errors.operation_failed": "Handlingen mislykkedes.",
-    "errors.update_not_started": "Opdateringen blev ikke startet.",
+    "errors.update_not_started": "Kommandoen til at gå i opdateringstilstand blev forsøgt, men ingen firmwaredata blev sendt. Drevet kan være i opdateringstilstand; hold det tilsluttet, og undersøg det, før du prøver igen.",
     "errors.partial_firmware": "Firmwaren kan være ufuldstændig. Lad drevet være tilsluttet, og undersøg det, før du prøver igen.",
     "errors.temporary_firmware": "Midlertidig firmware kan stadig være installeret. Lad drevet være tilsluttet, og undersøg det, før du prøver igen.",
     "menu.refresh_drives": "Opdater drev",
