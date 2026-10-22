@@ -361,6 +361,34 @@ fn origin_workers_do_not_relabel_a_new_selection_and_both_tabs_finish() {
 }
 
 #[test]
+fn french_flash_confirmation_resolves_nested_origin_catalog_ids() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.language = crate::localization::Language::Fr;
+    app.flash_origin = Some(Ok(FileOrigin::Unknown));
+    let (reply, _answer) = mpsc::channel();
+    app.pending = Some(Pending {
+        target: Target {
+            device: "drive-a".into(),
+            label: "Drive A".into(),
+            options: FlashOptions {
+                input: "firmware.tar".into(),
+                ..FlashOptions::default()
+            },
+        },
+        sheet: Sheet::Flash {
+            sheet: FlashSheet::default(),
+            reply,
+        },
+    });
+    let details = app.view().confirm.expect("confirmation").details;
+    let origin = details.last().expect("origin warning");
+    assert!(origin.contains("Origine inconnue"), "{origin}");
+    assert!(origin.contains("L'origine du fichier"), "{origin}");
+    assert!(!origin.contains("domain."), "{origin}");
+}
+
+#[test]
 fn disconnected_origin_worker_stops_checking_without_exposing_english_in_ui() {
     let mut app = one_drive();
     app.task = Task::Flash;
