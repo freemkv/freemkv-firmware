@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Idioma",
     "errors.operation_failed": "La operación falló.",
-    "errors.update_not_started": "La actualización no comenzó.",
+    "errors.update_not_started": "Se intentó enviar el comando para entrar en el modo de actualización, pero no se enviaron datos del firmware. La unidad podría estar en modo de actualización; mantenla conectada y revísala antes de volver a intentarlo.",
     "errors.partial_firmware": "El firmware podría estar incompleto. Mantén la unidad conectada y revísala antes de volver a intentarlo.",
     "errors.temporary_firmware": "Podría quedar firmware temporal. Mantén la unidad conectada y revísala antes de volver a intentarlo.",
     "menu.refresh_drives": "Actualizar unidades",

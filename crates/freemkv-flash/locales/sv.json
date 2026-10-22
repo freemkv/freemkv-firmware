@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Språk",
     "errors.operation_failed": "Åtgärden misslyckades.",
-    "errors.update_not_started": "Uppdateringen startade inte.",
+    "errors.update_not_started": "Ett försök gjordes att skicka kommandot för att gå in i uppdateringsläge, men inga firmwaredata skickades. Enheten kan vara i uppdateringsläge; låt den vara ansluten och kontrollera den innan du försöker igen.",
     "errors.partial_firmware": "Den fasta programvaran kan vara ofullständig. Låt enheten vara ansluten och kontrollera den innan du försöker igen.",
     "errors.temporary_firmware": "Tillfällig fast programvara kan finnas kvar. Låt enheten vara ansluten och kontrollera den innan du försöker igen.",
     "menu.refresh_drives": "Uppdatera enheter",

@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Taal",
     "errors.operation_failed": "De bewerking is mislukt.",
-    "errors.update_not_started": "De update is niet gestart.",
+    "errors.update_not_started": "Er is geprobeerd de opdracht te verzenden om de updatemodus te openen, maar er zijn geen firmwaregegevens verzonden. Het station kan in de updatemodus staan; laat het aangesloten en controleer het voordat u het opnieuw probeert.",
     "errors.partial_firmware": "De firmware is mogelijk onvolledig. Laat de drive aangesloten en controleer deze voordat u het opnieuw probeert.",
     "errors.temporary_firmware": "Er kan tijdelijke firmware zijn achtergebleven. Laat de drive aangesloten en controleer deze voordat u het opnieuw probeert.",
     "menu.refresh_drives": "Stations vernieuwen",

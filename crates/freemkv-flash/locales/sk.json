@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Jazyk",
     "errors.operation_failed": "Operácia zlyhala.",
-    "errors.update_not_started": "Aktualizácia sa nespustila.",
+    "errors.update_not_started": "Došlo k pokusu o odoslanie príkazu na vstup do režimu aktualizácie, ale neboli odoslané žiadne údaje firmvéru. Jednotka môže byť v režime aktualizácie; nechajte ju pripojenú a pred ďalším pokusom ju skontrolujte.",
     "errors.partial_firmware": "Firmvér môže byť neúplný. Nechajte jednotku pripojenú a pred ďalším pokusom ju skontrolujte.",
     "errors.temporary_firmware": "Môže zostať dočasný firmvér. Nechajte jednotku pripojenú a pred ďalším pokusom ju skontrolujte.",
     "menu.refresh_drives": "Obnoviť jednotky",

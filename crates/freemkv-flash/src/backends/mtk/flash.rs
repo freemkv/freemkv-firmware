@@ -279,6 +279,36 @@ fn execute_stage(
                     )
             );
             let operation_already_wrote = !completed_stages.is_empty();
+            let progress = if operation_already_wrote {
+                crate::backend::UpdateProgress::UploadComplete
+            } else {
+                match &error {
+                    mediatek_optical::receiver::ExecuteError::Receiver(_) => {
+                        crate::backend::UpdateProgress::Preflight
+                    }
+                    mediatek_optical::receiver::ExecuteError::Flash(
+                        mediatek_optical::update::FlashError::Entry(_),
+                    ) if writes.empty_write_attempted() => {
+                        crate::backend::UpdateProgress::EntryAttempted
+                    }
+                    mediatek_optical::receiver::ExecuteError::Flash(
+                        mediatek_optical::update::FlashError::Entry(_),
+                    ) => crate::backend::UpdateProgress::Preflight,
+                    mediatek_optical::receiver::ExecuteError::Flash(
+                        mediatek_optical::update::FlashError::Transfer { .. },
+                    ) if runtime.payload_bytes_accepted == 0 => {
+                        crate::backend::UpdateProgress::PayloadAttempted
+                    }
+                    mediatek_optical::receiver::ExecuteError::Flash(
+                        mediatek_optical::update::FlashError::Transfer { .. },
+                    ) => crate::backend::UpdateProgress::PayloadAccepted,
+                    _ if runtime.upload_complete => crate::backend::UpdateProgress::UploadComplete,
+                    _ if runtime.payload_bytes_accepted > 0 => {
+                        crate::backend::UpdateProgress::PayloadAccepted
+                    }
+                    _ => crate::backend::UpdateProgress::PayloadAttempted,
+                }
+            };
             let source = match error {
                 mediatek_optical::receiver::ExecuteError::Flash(error) => flash_error(error),
                 error => anyhow::Error::new(error),
@@ -287,7 +317,11 @@ fn execute_stage(
                 .context("MediaTek update failed")
                 .context(UpdateFailure {
                     phase: phase.into(),
-                    write_started: write_started || operation_already_wrote,
+                    write_started: (write_started
+                        && progress != crate::backend::UpdateProgress::Preflight)
+                        || operation_already_wrote,
+                    progress,
+                    payload_bytes_accepted: Some(runtime.payload_bytes_accepted),
                     temporary_firmware: temporary_firmware
                         && (firmware_payload_started || operation_already_wrote),
                     completed_stages,
@@ -568,6 +602,8 @@ fn text(error: &DriveError<anyhow::Error>) -> String {
 pub(super) struct Runtime {
     start: crate::runtime_clock::Clock,
     progress: style::Progress,
+    payload_bytes_accepted: usize,
+    upload_complete: bool,
 }
 
 impl Runtime {
@@ -575,7 +611,15 @@ impl Runtime {
         Self {
             start: crate::runtime_clock::Clock::new(),
             progress: style::Progress::new("flashing firmware", 0),
+            payload_bytes_accepted: 0,
+            upload_complete: false,
         }
+    }
+    pub(super) fn payload_bytes_accepted(&self) -> usize {
+        self.payload_bytes_accepted
+    }
+    pub(super) fn upload_complete(&self) -> bool {
+        self.upload_complete
     }
 }
 
@@ -595,6 +639,7 @@ impl FlashRuntime<anyhow::Error> for Runtime {
     }
     fn progress(&mut self, written: usize, _total: usize) {
         self.progress.set(written);
+        self.payload_bytes_accepted = written;
     }
     fn recovery_entry_failed(&mut self, error: &DriveError<anyhow::Error>) {
         let message = format!(
@@ -637,6 +682,8 @@ impl FlashRuntime<anyhow::Error> for Runtime {
         }
     }
     fn uploaded(&mut self, bytes: usize) {
+        self.payload_bytes_accepted = bytes;
+        self.upload_complete = true;
         println!(
             "upload complete {}",
             style::dim(&format!(

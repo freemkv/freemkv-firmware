@@ -6,14 +6,15 @@ use crate::backend::{
 };
 pub use crate::backend::{
     AuthorizedPlan, Confirm, CurrentFirmwareRequired, FlashPreview, HardwareMismatch,
-    UpdateEvidence, UpdateFailure, UpdateOutcome,
+    UpdateEvidence, UpdateFailure, UpdateImpact, UpdateOutcome, UpdateProgress,
 };
 /// Correlation helpers keep a front-end's session events linked to operation logs.
 pub use crate::diagnostics::{new_operation_id, with_operation_id};
 /// Inspection inputs and results, so a front-end needs only this module and
 /// [`crate::report`] to run Inspect and Compare.
 pub use crate::inspection::{
-    ComparisonReport, ComponentView, Control, Field, HardwareFamily, Inspection, Source,
+    ComparisonReport, ComponentView, Control, Field, HardwareFamily, Inspection, InspectionError,
+    Source,
 };
 use crate::manifest::FlashMode;
 /// The event stream every workflow writes to, which a front-end subscribes to.
@@ -35,6 +36,30 @@ pub enum FileOrigin {
 }
 
 impl FileOrigin {
+    /// Catalog ID for a GUI badge, distinct from the English CLI label.
+    pub fn label_id(self) -> &'static str {
+        match self {
+            Self::OemLikely => "domain.oem_likely",
+            Self::UserBackupLikely => "domain.user_provided",
+            Self::Unknown => "domain.origin_unknown",
+        }
+    }
+
+    /// Catalog ID for the origin caveat shown before an update.
+    pub fn explanation_id(self) -> &'static str {
+        match self {
+            Self::OemLikely => {
+                "domain.firmware_bodies_and_the_original_normal_signature_match_known_oem_refe"
+            }
+            Self::UserBackupLikely => {
+                "domain.firmware_supplied_by_a_user_or_captured_from_a_drive_rather_than_ident"
+            }
+            Self::Unknown => {
+                "domain.the_file_s_origin_could_not_be_established_a_valid_transfer_signature_"
+            }
+        }
+    }
+
     /// Short user-facing badge text; this is deliberately not a certification.
     pub fn label(self) -> &'static str {
         match self {
@@ -145,7 +170,7 @@ pub fn error_message(error: &anyhow::Error) -> String {
         crate::user_error::UserError::of(error).render(crate::localization::Language::En);
     if error
         .downcast_ref::<UpdateFailure>()
-        .is_some_and(|e| !e.write_started && !e.temporary_firmware)
+        .is_some_and(|e| e.impact() == crate::backend::UpdateImpact::Blocked)
     {
         format!(
             "{} {guidance}",

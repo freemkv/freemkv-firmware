@@ -234,8 +234,9 @@ pub fn scsi_status_name(status: u8) -> &'static str {
 }
 
 /// Classify a libfreemkv SCSI error for people: a transport/link failure (no
-/// reply from the drive) is kept distinct from a real drive reply (CHECK
-/// CONDITION with or without sense). The raw `E<code>: ...` text is appended
+/// reply from the drive) is kept distinct from a SCSI status reply. A zero
+/// sense triple cannot establish whether a valid sense buffer was returned.
+/// The raw `E<code>: ...` text is appended
 /// in brackets for support.
 pub fn describe_scsi_error(error: &libfreemkv::error::Error) -> String {
     use libfreemkv::error::Error as E;
@@ -248,7 +249,7 @@ pub fn describe_scsi_error(error: &libfreemkv::error::Error) -> String {
         };
         if (s.sense_key, s.asc, s.ascq) == (0, 0, 0) {
             format!(
-                "{} (0x{status:02x}): the drive rejected the command and returned no sense data",
+                "{} (0x{status:02x}): sense details unavailable or invalid",
                 scsi_status_name(status)
             )
         } else {
@@ -260,7 +261,7 @@ pub fn describe_scsi_error(error: &libfreemkv::error::Error) -> String {
         }
     } else if let E::ScsiError { status, .. } = error {
         format!(
-            "{} (0x{status:02x}): the drive replied without sense data",
+            "{} (0x{status:02x}): sense details unavailable or invalid",
             scsi_status_name(*status)
         )
     } else {

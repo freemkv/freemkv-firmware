@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Språk",
     "errors.operation_failed": "Operasjonen mislyktes.",
-    "errors.update_not_started": "Oppdateringen startet ikke.",
+    "errors.update_not_started": "Kommandoen for å gå inn i oppdateringsmodus ble forsøkt sendt, men ingen fastvaredata ble sendt. Stasjonen kan være i oppdateringsmodus; hold den tilkoblet og undersøk den før du prøver igjen.",
     "errors.partial_firmware": "Fastvaren kan være ufullstendig. La stasjonen være tilkoblet, og undersøk den før du prøver igjen.",
     "errors.temporary_firmware": "Midlertidig fastvare kan fortsatt være installert. La stasjonen være tilkoblet, og undersøk den før du prøver igjen.",
     "menu.refresh_drives": "Oppdater stasjoner",

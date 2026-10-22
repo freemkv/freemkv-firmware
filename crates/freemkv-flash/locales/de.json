@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Sprache",
     "errors.operation_failed": "Der Vorgang ist fehlgeschlagen.",
-    "errors.update_not_started": "Das Update wurde nicht gestartet.",
+    "errors.update_not_started": "Es wurde versucht, den Befehl zum Wechsel in den Update-Modus zu senden, aber es wurden keine Firmware-Daten gesendet. Das Laufwerk könnte im Update-Modus sein; lassen Sie es angeschlossen und prüfen Sie es, bevor Sie es erneut versuchen.",
     "errors.partial_firmware": "Die Firmware ist möglicherweise unvollständig. Lassen Sie das Laufwerk angeschlossen und prüfen Sie es, bevor Sie es erneut versuchen.",
     "errors.temporary_firmware": "Temporäre Firmware ist möglicherweise noch vorhanden. Lassen Sie das Laufwerk angeschlossen und prüfen Sie es, bevor Sie es erneut versuchen.",
     "menu.refresh_drives": "Laufwerke aktualisieren",

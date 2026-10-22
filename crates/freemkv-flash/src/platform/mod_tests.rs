@@ -81,9 +81,7 @@ fn scsi_error_check_condition_with_sense_is_decoded() {
 fn scsi_error_check_condition_no_sense_is_a_rejection() {
     let s = describe_scsi_error(&scsi_err(0x02, Some((0, 0, 0))));
     assert!(
-        s.starts_with(
-            "CHECK CONDITION (0x02): the drive rejected the command and returned no sense data"
-        ),
+        s.starts_with("CHECK CONDITION (0x02): sense details unavailable or invalid"),
         "{s}"
     );
     assert!(s.contains("0x3b/0x02/0x00/0x00/0x00"), "raw code kept: {s}");

@@ -2363,7 +2363,7 @@ saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70d
 image chunks streamed: 128 x 16384 bytes
 
 === MTK execute: read-back mismatch ===
-result: ERR update failed during firmware readback (write started: true; temporary firmware: false; completed stages: []): MediaTek update failed: read-back differs at 0x01105e (read 0x00, wrote 0x11); 61346 of 61440 protected bytes differ
+result: ERR update failed during firmware readback (progress: UploadComplete; payload bytes accepted in stage: Some(2097152); temporary firmware: false; completed stages: []): MediaTek update failed: read-back differs at 0x01105e (read 0x00, wrote 0x11); 61346 of 61440 protected bytes differ
 --- text (215) ---
 reading drive memory: 0%
 reading drive memory: 1%

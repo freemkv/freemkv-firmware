@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "語言",
     "errors.operation_failed": "操作失敗。",
-    "errors.update_not_started": "更新尚未開始。",
+    "errors.update_not_started": "已嘗試傳送進入更新模式的命令，但未傳送任何韌體資料。光碟機可能處於更新模式；請保持連線並檢查其狀態，然後再重試。",
     "errors.partial_firmware": "韌體可能不完整。請保持光碟機連接，並在重試前檢查。",
     "errors.temporary_firmware": "可能仍有暫存韌體。請保持光碟機連接並檢查後再重試。",
     "menu.refresh_drives": "重新整理光碟機",

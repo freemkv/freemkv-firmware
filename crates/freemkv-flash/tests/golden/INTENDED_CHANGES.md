@@ -6126,7 +6126,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 ---- text (218) ---
-+result: ERR update failed during firmware readback (write started: true; temporary firmware: false; completed stages: []): MediaTek update failed: read-back differs at 0x01105e (read 0x00, wrote 0x11); 61346 of 61440 protected bytes differ
++result: ERR update failed during firmware readback (progress: UploadComplete; payload bytes accepted in stage: Some(2097152); temporary firmware: false; completed stages: []): MediaTek update failed: read-back differs at 0x01105e (read 0x00, wrote 0x11); 61346 of 61440 protected bytes differ
 +--- text (215) ---
 +receiver: Firmware (Plaintext, signature at 0x9a300)
 -firmware: 2 MiB (plaintext envelope)
@@ -31032,7 +31032,7 @@ reason: P4, P10, PRECHECK
 -result: ERR Kernel write failed at 0x8000; firmware may be partial; write was not retried: injected write failure
 ---- text (0) ---
 ---- events (2) ---
-+result: ERR update failed during firmware transfer (write started: true; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
++result: ERR update failed during firmware transfer (progress: PayloadAttempted; payload bytes accepted in stage: None; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
 +--- text (3) ---
 +
 +EXECUTING flash — do not power off or disconnect the drive...

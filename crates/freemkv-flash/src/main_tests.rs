@@ -1,4 +1,24 @@
 use super::*;
+
+#[test]
+fn unverified_cli_result_uses_typed_consequence_instead_of_generic_retry() {
+    let outcome = freemkv_flash::workflow::UpdateOutcome::Completed(
+        freemkv_flash::workflow::UpdateEvidence {
+            target_started: false,
+            target_identity: String::new(),
+            verified_regions: Vec::new(),
+            unverified_regions: Vec::new(),
+            completed_stages: vec!["first stage".into()],
+            temporary_firmware: true,
+        },
+    );
+    let error = report_update("Flash", outcome).unwrap_err();
+    assert!(error.is::<freemkv_flash::backend::UnverifiedUpdateOutcome>());
+    let guidance = freemkv_flash::workflow::error_message(&error);
+    assert!(guidance.contains("Temporary firmware may remain"));
+    assert!(!guidance.contains("then try again"));
+    assert!(format!("{error:#}").contains("first stage"));
+}
 #[test]
 fn flash_current_is_optional_and_paired_member_requires_an_explicit_file() {
     let base = ["freemkv-flash", "flash", "-i", "modified.bin"];

@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "言語",
     "errors.operation_failed": "操作に失敗しました。",
-    "errors.update_not_started": "アップデートは開始されていません。",
+    "errors.update_not_started": "更新モードに入るコマンドを試行しましたが、ファームウェアのデータは送信されていません。ドライブが更新モードになっている可能性があります。接続を維持し、状態を確認してから再試行してください。",
     "errors.partial_firmware": "ファームウェアが不完全な可能性があります。再試行する前に、ドライブを接続したまま状態を確認してください。",
     "errors.temporary_firmware": "一時ファームウェアが残っている可能性があります。ドライブを接続したまま状態を確認してください。",
     "menu.refresh_drives": "ドライブを更新",
