@@ -20,7 +20,7 @@ use freemkv_flash::report::{self, Group};
 pub use freemkv_flash::workflow::FileOrigin;
 use freemkv_flash::workflow::{
     self, AuthorizedPlan, Control, CurrentFirmware, DriveChoice, Event, FlashOptions, FlashSheet,
-    RecoveryOptions, Source,
+    RecoveryOptions, Source, UpdateImpact,
 };
 
 use crate::ops::{self, Job, Request, ResultView};
@@ -1870,18 +1870,20 @@ impl App {
                             }
                             Err(_) => {
                                 let consequence = self.failure_evidence.as_ref().map(|evidence| {
-                                    if evidence.temporary_firmware {
-                                        "errors.temporary_firmware"
-                                    } else if evidence.write_started {
-                                        "errors.partial_firmware"
-                                    } else {
-                                        "errors.update_not_started"
+                                    match evidence.impact() {
+                                        UpdateImpact::Blocked => "errors.update_blocked",
+                                        UpdateImpact::EntryUncertain => "errors.update_not_started",
+                                        UpdateImpact::PayloadUncertain => "errors.partial_firmware",
+                                        UpdateImpact::TemporaryFirmware => {
+                                            "errors.temporary_firmware"
+                                        }
+                                        UpdateImpact::Unknown => "errors.update_uncertain",
                                     }
                                 });
                                 let blocked = self
                                     .failure_evidence
                                     .as_ref()
-                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware);
+                                    .is_some_and(|e| e.impact() == UpdateImpact::Blocked);
                                 let message = if blocked {
                                     "errors.update_blocked"
                                 } else {
@@ -1912,7 +1914,7 @@ impl App {
                                 if self
                                     .failure_evidence
                                     .as_ref()
-                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware) =>
+                                    .is_some_and(|e| e.impact() == UpdateImpact::Blocked) =>
                             {
                                 "blocked"
                             }
@@ -2802,11 +2804,14 @@ fn failure_json(evidence: Option<&workflow::UpdateFailure>) -> serde_json::Value
     match evidence {
         Some(e) => serde_json::json!({
             "phase": e.phase, "write_started": e.write_started,
+            "progress": format!("{:?}", e.progress),
+            "payload_bytes_accepted": e.payload_bytes_accepted,
             "temporary_firmware": e.temporary_firmware, "completed_stages": e.completed_stages,
             "safe_to_probe": false,
         }),
         None => serde_json::json!({
-            "phase": "unknown", "write_started": null, "temporary_firmware": null,
+            "phase": "unknown", "write_started": null, "progress": "Unknown",
+            "payload_bytes_accepted": null, "temporary_firmware": null,
             "completed_stages": null, "safe_to_probe": false,
         }),
     }
@@ -2886,13 +2891,28 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                 "Operation failed: {e:#}"
             ))));
             if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
+                let _ = tx.send(Msg::Event(Event::Message(format!(
+                    "Update evidence: phase={:?} progress={:?} payload_bytes_accepted_in_stage={:?} impact={:?}; write_started is a legacy command-attempt flag",
+                    evidence.phase, evidence.progress, evidence.payload_bytes_accepted,
+                    evidence.impact()
+                ))));
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
             }
             let message = workflow::user_error(&e).encoded();
             let _ = tx.send(Msg::UserGuidance(message.clone()));
             message
         }),
-        Err(_) => Err(WORKER_PANIC.into()),
+        Err(payload) => {
+            let detail = payload
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("non-string panic payload");
+            let _ = tx.send(Msg::Event(Event::Message(format!(
+                "Worker panic; update state unknown: {detail}"
+            ))));
+            Err(WORKER_PANIC.into())
+        }
     };
     if check_after {
         if let Some(after) = post_update_snapshot(&result, || {

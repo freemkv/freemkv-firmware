@@ -228,7 +228,17 @@ impl FwApp {
                     ))));
                     freemkv_flash::workflow::user_error(&e).encoded()
                 }),
-                Err(_) => Err("errors.worker".into()),
+                Err(payload) => {
+                    let detail = payload
+                        .downcast_ref::<&str>()
+                        .copied()
+                        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                        .unwrap_or("non-string panic payload");
+                    let _ = tx.send(Msg::Event(freemkv_flash::output::Event::Message(format!(
+                        "Worker panic; operation outcome unknown: {detail}"
+                    ))));
+                    Err("errors.worker".into())
+                }
             };
             let _ = tx.send(Msg::Done(result));
             ctx.request_repaint();

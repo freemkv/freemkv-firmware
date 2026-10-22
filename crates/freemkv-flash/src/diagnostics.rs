@@ -303,7 +303,16 @@ fn run_at_named<T>(
     };
     match &result {
         Ok(_) => record("RESULT: success"),
-        Err(error) => record(format!("RESULT: error: {error:#}")),
+        Err(error) => {
+            record(format!("RESULT: error: {error:#}"));
+            if let Some(failure) = error.downcast_ref::<crate::backend::UpdateFailure>() {
+                record(format!(
+                    "UPDATE EVIDENCE: phase={:?} progress={:?} payload_bytes_accepted_in_stage={:?} impact={:?} temporary_firmware={} completed_stages={:?}; write_started is a legacy command-attempt flag",
+                    failure.phase, failure.progress, failure.payload_bytes_accepted,
+                    failure.impact(), failure.temporary_firmware, failure.completed_stages
+                ));
+            }
+        }
     }
     if let Some(path) = &path.filter(|_| LOG.with(|slot| slot.borrow().is_some())) {
         eprintln!("Diagnostic log saved: {}", path.display());

@@ -2087,6 +2087,8 @@ fn typed_failure_keeps_phase_and_completed_stages_in_report() {
     tx.send(Msg::FailureEvidence(workflow::UpdateFailure {
         phase: "final target upload".into(),
         write_started: true,
+        progress: freemkv_flash::backend::UpdateProgress::PayloadAttempted,
+        payload_bytes_accepted: Some(0),
         temporary_firmware: true,
         completed_stages: vec!["intermediate".into()],
     }))
@@ -2295,6 +2297,8 @@ fn blocked_update_shows_actionable_reason_and_records_no_write() {
     tx.send(Msg::FailureEvidence(workflow::UpdateFailure {
         phase: "compatibility checks".into(),
         write_started: false,
+        progress: freemkv_flash::backend::UpdateProgress::Preflight,
+        payload_bytes_accepted: Some(0),
         temporary_firmware: false,
         completed_stages: Vec::new(),
     }))
@@ -2330,9 +2334,40 @@ fn blocked_update_shows_actionable_reason_and_records_no_write() {
     assert_eq!(event["data"]["result"], "blocked");
     assert_eq!(event["data"]["failure"]["phase"], "compatibility checks");
     assert_eq!(event["data"]["failure"]["write_started"], false);
+    assert_eq!(event["data"]["failure"]["progress"], "Preflight");
+    assert_eq!(event["data"]["failure"]["payload_bytes_accepted"], 0);
     assert_eq!(event["data"]["failure"]["safe_to_probe"], false);
     drop(zip);
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn prepare_failure_does_not_claim_partial_firmware_in_gui() {
+    let mut app = App::with_drives(Vec::new());
+    app.action = "Firmware update".into();
+    let (tx, rx) = mpsc::channel();
+    app.rx = Some(rx);
+    tx.send(Msg::FailureEvidence(workflow::UpdateFailure {
+        phase: "update entry".into(),
+        write_started: true,
+        progress: freemkv_flash::backend::UpdateProgress::EntryAttempted,
+        payload_bytes_accepted: Some(0),
+        temporary_firmware: false,
+        completed_stages: Vec::new(),
+    }))
+    .unwrap();
+    tx.send(Msg::UserGuidance("errors.update_not_started".into()))
+        .unwrap();
+    tx.send(Msg::Done(Err("errors.update_not_started".into())))
+        .unwrap();
+    app.poll();
+    let status = crate::localization::english(&app.status);
+    assert!(status.contains("no firmware payload was sent"));
+    assert!(!status.contains("firmware may be incomplete"));
+    assert_eq!(
+        failure_json(app.failure_evidence.as_ref())["payload_bytes_accepted"],
+        0
+    );
 }
 
 #[test]

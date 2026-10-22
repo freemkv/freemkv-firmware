@@ -155,7 +155,22 @@ fn recovery_entry_policy_continues_once_while_flash_stops_before_streaming() {
             assert_eq!(transferred, target);
             assert_eq!(dev.writes.last().unwrap().0, cdb::finish());
         } else {
-            assert!(format!("{:#}", result.unwrap_err()).contains("PREPARE rejected"));
+            let error = result.unwrap_err();
+            assert!(format!("{error:#}").contains("PREPARE rejected"));
+            let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+            assert_eq!(
+                failure.progress,
+                crate::backend::UpdateProgress::EntryAttempted
+            );
+            assert_eq!(failure.payload_bytes_accepted, Some(0));
+            assert_eq!(
+                failure.impact(),
+                crate::backend::UpdateImpact::EntryUncertain
+            );
+            let guidance =
+                crate::user_error::UserError::of(&error).render(crate::localization::Language::En);
+            assert!(guidance.contains("no firmware payload was sent"));
+            assert!(!guidance.contains("firmware may be incomplete"));
             assert!(dev.writes.is_empty());
         }
     }

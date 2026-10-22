@@ -6,7 +6,7 @@ use crate::backend::{
 };
 pub use crate::backend::{
     AuthorizedPlan, Confirm, CurrentFirmwareRequired, FlashPreview, HardwareMismatch,
-    UpdateEvidence, UpdateFailure, UpdateOutcome,
+    UpdateEvidence, UpdateFailure, UpdateImpact, UpdateOutcome, UpdateProgress,
 };
 /// Correlation helpers keep a front-end's session events linked to operation logs.
 pub use crate::diagnostics::{new_operation_id, with_operation_id};
@@ -145,7 +145,7 @@ pub fn error_message(error: &anyhow::Error) -> String {
         crate::user_error::UserError::of(error).render(crate::localization::Language::En);
     if error
         .downcast_ref::<UpdateFailure>()
-        .is_some_and(|e| !e.write_started && !e.temporary_firmware)
+        .is_some_and(|e| e.impact() == crate::backend::UpdateImpact::Blocked)
     {
         format!(
             "{} {guidance}",

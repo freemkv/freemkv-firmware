@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Language",
     "errors.operation_failed": "The operation failed.",
-    "errors.update_not_started": "The update did not start.",
+    "errors.update_not_started": "The update entry was attempted, but no firmware payload was sent. The drive may be in update mode; keep it connected and inspect it before retrying.",
     "errors.partial_firmware": "The firmware may be incomplete. Keep the drive connected and inspect it before retrying.",
     "errors.temporary_firmware": "Temporary firmware may remain. Keep the drive connected and inspect it before retrying.",
     "menu.refresh_drives": "Refresh drives",

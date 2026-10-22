@@ -1,6 +1,6 @@
 //! Customer guidance selected from error evidence. Technical chains stay in diagnostics.
 use crate::backend::{
-    BackupReadRestricted, CurrentFirmwareRequired, HardwareMismatch, UpdateFailure,
+    BackupReadRestricted, CurrentFirmwareRequired, HardwareMismatch, UpdateFailure, UpdateImpact,
 };
 use crate::localization::{self, Language};
 
@@ -33,11 +33,17 @@ impl UserError {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
             "errors.backup_restricted"
-        } else if error
+        } else if let Some(failure) = error
             .downcast_ref::<UpdateFailure>()
-            .is_some_and(|failure| failure.write_started || failure.temporary_firmware)
+            .filter(|failure| failure.impact() != UpdateImpact::Blocked)
         {
-            "errors.update_uncertain"
+            match failure.impact() {
+                UpdateImpact::Blocked => unreachable!("filtered above"),
+                UpdateImpact::EntryUncertain => "errors.update_not_started",
+                UpdateImpact::PayloadUncertain => "errors.update_uncertain",
+                UpdateImpact::TemporaryFirmware => "errors.temporary_firmware",
+                UpdateImpact::Unknown => "errors.update_uncertain",
+            }
         } else if let Some(io) = error
             .chain()
             .find_map(|cause| cause.downcast_ref::<std::io::Error>())
@@ -150,6 +156,8 @@ mod tests {
         let error = anyhow::anyhow!("SCSI transport error").context(UpdateFailure {
             phase: "upload".into(),
             write_started: true,
+            progress: crate::backend::UpdateProgress::PayloadAttempted,
+            payload_bytes_accepted: Some(0),
             temporary_firmware: false,
             completed_stages: Vec::new(),
         });
@@ -157,6 +165,55 @@ mod tests {
         assert_eq!(guidance.id, "errors.update_uncertain");
         assert!(!guidance.render(Language::En).contains("try again"));
         assert!(format!("{error:#}").contains("SCSI transport error"));
+    }
+
+    #[test]
+    fn failure_guidance_uses_typed_progress_across_every_catalog() {
+        use crate::backend::UpdateProgress;
+        for (progress, temporary, expected) in [
+            (
+                UpdateProgress::EntryAttempted,
+                false,
+                "errors.update_not_started",
+            ),
+            (
+                UpdateProgress::PayloadAttempted,
+                false,
+                "errors.update_uncertain",
+            ),
+            (
+                UpdateProgress::PayloadAccepted,
+                false,
+                "errors.update_uncertain",
+            ),
+            (
+                UpdateProgress::UploadComplete,
+                false,
+                "errors.update_uncertain",
+            ),
+            (
+                UpdateProgress::EntryAttempted,
+                true,
+                "errors.temporary_firmware",
+            ),
+            (UpdateProgress::Unknown, false, "errors.update_uncertain"),
+        ] {
+            let error = anyhow::anyhow!("private SCSI detail").context(UpdateFailure {
+                phase: "test".into(),
+                write_started: true,
+                progress,
+                payload_bytes_accepted: Some(0),
+                temporary_firmware: temporary,
+                completed_stages: Vec::new(),
+            });
+            let guidance = UserError::of(&error);
+            assert_eq!(guidance.id, expected);
+            for language in Language::ALL {
+                let text = guidance.render(language);
+                assert!(!text.contains("private SCSI detail"));
+                assert!(!text.trim().is_empty());
+            }
+        }
     }
 
     #[test]
