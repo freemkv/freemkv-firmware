@@ -4,6 +4,23 @@ use super::*;
 use std::collections::BTreeSet;
 
 #[test]
+fn file_origin_warning_uses_explicit_catalog_ids_in_every_language() {
+    use freemkv_flash::workflow::FileOrigin;
+    for origin in [
+        FileOrigin::OemLikely,
+        FileOrigin::UserBackupLikely,
+        FileOrigin::Unknown,
+    ] {
+        for language in Language::ALL {
+            let badge = get(language, origin.label_id());
+            let guidance = get(language, origin.explanation_id());
+            assert!(!badge.is_empty() && !guidance.is_empty());
+            assert!(!badge.contains("domain.") && !guidance.contains("domain."));
+        }
+    }
+}
+
+#[test]
 fn entry_failure_translations_say_no_firmware_payload_was_sent() {
     let no_payload = [
         (Language::Ca, "no s’ha enviat cap dada"),

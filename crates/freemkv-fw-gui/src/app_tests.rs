@@ -1,4 +1,29 @@
 use super::*;
+
+#[test]
+fn integrity_verdicts_have_specific_catalog_guidance_and_english_diagnostics() {
+    for (failure, key) in [
+        (
+            ops::VerificationFailure::ExistingImage,
+            "domain.firmware_integrity_verification_failed_see_region_results",
+        ),
+        (
+            ops::VerificationFailure::GeneratedImage,
+            "domain.generated_firmware_failed_integrity_verification",
+        ),
+    ] {
+        let error = anyhow::Error::new(failure);
+        let guidance = user_guidance(&error);
+        assert_eq!(guidance, key);
+        for language in Language::ALL {
+            let text = localization::render(language, &guidance);
+            assert!(!text.is_empty());
+            assert_ne!(text, key);
+        }
+        let diagnostic = format!("{error:#}");
+        assert!(diagnostic.contains("integrity") && diagnostic.contains("verification"));
+    }
+}
 fn rendered_text(app: &mut FwApp) -> Vec<(String, bool)> {
     let ctx = egui::Context::default();
     crate::configure_style(&ctx);
@@ -81,6 +106,23 @@ fn failed_worker_releases_controls_and_offers_log_export() {
     assert!(rendered_text(&mut app)
         .iter()
         .any(|(line, visible)| line == "Save diagnostic log…" && *visible));
+}
+
+#[test]
+fn disconnected_boot_preview_has_localized_failure_and_english_diagnostic() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    let path = PathBuf::from("firmware.bin");
+    app.input = Some(path.clone());
+    app.boot_input = Some(path);
+    let (tx, rx) = mpsc::channel();
+    app.boot_rx = Some(rx);
+    drop(tx);
+    app.boot_preview(&egui::Context::default());
+    assert_eq!(app.boot_error.as_deref(), Some("errors.worker"));
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("analysis outcome unknown")));
 }
 
 #[test]

@@ -1,6 +1,7 @@
 //! Customer guidance selected from error evidence. Technical chains stay in diagnostics.
 use crate::backend::{
-    BackupReadRestricted, CurrentFirmwareRequired, HardwareMismatch, UpdateFailure, UpdateImpact,
+    BackupReadRestricted, CurrentFirmwareRequired, HardwareMismatch, UnverifiedUpdateOutcome,
+    UpdateFailure, UpdateImpact,
 };
 use crate::localization::{self, Language};
 
@@ -33,6 +34,35 @@ impl UserError {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
             "errors.backup_restricted"
+        } else if let Some(unverified) = error.downcast_ref::<UnverifiedUpdateOutcome>() {
+            match &unverified.0 {
+                crate::backend::UpdateOutcome::Completed(e) if e.temporary_firmware => {
+                    "errors.temporary_firmware"
+                }
+                _ => "errors.update_uncertain",
+            }
+        } else if let Some(inspection) = error.downcast_ref::<crate::inspection::InspectionError>()
+        {
+            use crate::inspection::InspectionError;
+            match inspection {
+                InspectionError::UnsupportedFormat(_) => "modify.not_supported",
+                InspectionError::UnrecognizedFormat => {
+                    "domain.this_firmware_format_was_not_recognized"
+                }
+                InspectionError::UnsupportedPair => {
+                    "domain.these_firmware_formats_cannot_currently_be_compared"
+                }
+                InspectionError::PackageRequired => {
+                    "domain.for_pioneer_inspection_select_the_tar_package_containing_the_firmware"
+                }
+                InspectionError::Cancelled => {
+                    arguments.push(("operation", "ui.firmware_analysis".into()));
+                    "status.operation_cancelled"
+                }
+                InspectionError::TwoDrives => {
+                    "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive"
+                }
+            }
         } else if let Some(failure) = error
             .downcast_ref::<UpdateFailure>()
             .filter(|failure| failure.impact() != UpdateImpact::Blocked)
@@ -118,6 +148,86 @@ impl UserError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancelled_inspection_is_not_a_failure_or_retry_prompt() {
+        let error = anyhow::Error::new(crate::inspection::InspectionError::Cancelled);
+        let guidance = UserError::of(&error);
+        assert_eq!(guidance.id, "status.operation_cancelled");
+        for language in Language::ALL {
+            let text = guidance.render(language);
+            assert!(!text.contains("{operation}"), "{}: {text}", language.code());
+        }
+        assert_eq!(guidance.render(Language::En), "Firmware analysis cancelled");
+    }
+
+    #[test]
+    fn inspection_error_variants_have_specific_localized_guidance() {
+        use crate::inspection::InspectionError;
+        for (error, expected) in [
+            (
+                InspectionError::UnsupportedFormat("Pioneer".into()),
+                "modify.not_supported",
+            ),
+            (
+                InspectionError::UnrecognizedFormat,
+                "domain.this_firmware_format_was_not_recognized",
+            ),
+            (
+                InspectionError::UnsupportedPair,
+                "domain.these_firmware_formats_cannot_currently_be_compared",
+            ),
+            (
+                InspectionError::PackageRequired,
+                "domain.for_pioneer_inspection_select_the_tar_package_containing_the_firmware",
+            ),
+            (
+                InspectionError::TwoDrives,
+                "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive",
+            ),
+        ] {
+            let error = anyhow::Error::new(error);
+            let guidance = UserError::of(&error);
+            assert_eq!(guidance.id, expected);
+            for language in Language::ALL {
+                let message = guidance.render(language);
+                assert!(!message.is_empty());
+                assert_ne!(message, expected);
+            }
+            assert!(!guidance.render(Language::En).contains("try again"));
+        }
+    }
+
+    #[test]
+    fn unverified_outcome_retains_temporary_firmware_evidence() {
+        let outcome = crate::backend::UpdateOutcome::Completed(crate::backend::UpdateEvidence {
+            target_started: false,
+            target_identity: String::new(),
+            verified_regions: Vec::new(),
+            unverified_regions: Vec::new(),
+            completed_stages: Vec::new(),
+            temporary_firmware: true,
+        });
+        let error = anyhow::Error::new(UnverifiedUpdateOutcome(outcome));
+        assert_eq!(UserError::of(&error).id, "errors.temporary_firmware");
+        assert!(format!("{error:#}").contains("temporary_firmware: true"));
+    }
+
+    #[test]
+    fn unverified_target_startup_does_not_suggest_generic_retry() {
+        let outcome = crate::backend::UpdateOutcome::Completed(crate::backend::UpdateEvidence {
+            target_started: false,
+            target_identity: String::new(),
+            verified_regions: Vec::new(),
+            unverified_regions: Vec::new(),
+            completed_stages: Vec::new(),
+            temporary_firmware: false,
+        });
+        let error = anyhow::Error::new(UnverifiedUpdateOutcome(outcome));
+        let guidance = UserError::of(&error);
+        assert_eq!(guidance.id, "errors.update_uncertain");
+        assert!(!guidance.render(Language::En).contains("then try again"));
+    }
 
     #[test]
     fn technical_causes_stay_in_diagnostics_and_never_enter_user_guidance() {

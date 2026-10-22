@@ -670,6 +670,19 @@ impl UpdateOutcome {
     }
 }
 
+/// A completed executor returned evidence that cannot confirm the final target.
+/// Front-ends keep this typed result instead of reducing it to a summary string.
+#[derive(Debug)]
+pub struct UnverifiedUpdateOutcome(pub UpdateOutcome);
+
+impl std::fmt::Display for UnverifiedUpdateOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "update outcome not verified: {:?}", self.0)
+    }
+}
+
+impl std::error::Error for UnverifiedUpdateOutcome {}
+
 /// The furthest update command boundary supported by backend evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateProgress {

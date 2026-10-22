@@ -248,6 +248,20 @@ fn flash_paired_current_selection_is_explicit_and_frozen_through_confirmation() 
 }
 
 #[test]
+fn selected_current_member_uses_the_catalog_in_non_english_ui() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_read = false;
+    app.flash_current = Some("original.tar".into());
+    app.flash_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
+    app.flash_current_member = Some("firmware.bin".into());
+    app.language = crate::localization::Language::Fr;
+    assert!(buttons(&app.view())
+        .iter()
+        .any(|button| button.text == "Sélectionné : firmware.bin"));
+}
+
+#[test]
 fn unsupported_backend_ignores_inactive_flash_current_choices() {
     let mut app = one_drive();
     app.task = Task::Flash;
@@ -312,7 +326,11 @@ fn origin_workers_do_not_relabel_a_new_selection_and_both_tabs_finish() {
     let (old_tx, old_rx) = mpsc::channel();
     let (flash_tx, flash_rx) = mpsc::channel();
     let (recovery_tx, recovery_rx) = mpsc::channel();
-    app.origin_rx = vec![old_rx, flash_rx, recovery_rx];
+    app.origin_rx = vec![
+        (Pick::FlashFirmware, "old.tar".into(), old_rx),
+        (Pick::FlashFirmware, "new.tar".into(), flash_rx),
+        (Pick::RecoveryInput, "capture.tar".into(), recovery_rx),
+    ];
     old_tx
         .send((
             Pick::FlashFirmware,
@@ -340,6 +358,29 @@ fn origin_workers_do_not_relabel_a_new_selection_and_both_tabs_finish() {
     assert!(app.poll_origin());
     assert_eq!(app.flash_origin, Some(Ok(FileOrigin::Unknown)));
     assert!(app.origin_rx.is_empty());
+}
+
+#[test]
+fn disconnected_origin_worker_stops_checking_without_exposing_english_in_ui() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.flash_input = Some("selected.bin".into());
+    let (tx, rx) = mpsc::channel();
+    app.origin_rx
+        .push((Pick::FlashFirmware, "selected.bin".into(), rx));
+    drop(tx);
+    assert!(app.poll_origin());
+    assert_eq!(
+        app.flash_origin,
+        Some(Err("ui.file_origin_inspection_stopped_unexpectedly".into()))
+    );
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("worker disconnected before reporting a result")));
+    app.language = crate::localization::Language::Fr;
+    let view = app.view();
+    assert!(!format!("{:?}", view.panel).contains("worker disconnected"));
 }
 
 /// One GUI report row in `group`.
@@ -1593,6 +1634,80 @@ fn inspect_and_compare_need_their_sources() {
 }
 
 #[test]
+fn cancelled_analysis_is_reported_as_cancellation_without_failure_guidance() {
+    let mut app = one_drive();
+    app.dispatch(Input::SelectTask(Task::Inspect));
+    app.sources[0] = Some(Source::File("firmware.bin".into()));
+    app.dispatch(Input::RunAnalysis);
+    let worker = app.worker.take().expect("analysis worker");
+    app.dispatch(Input::CancelAnalysis);
+    worker.send(Msg::AnalysisCancelled).unwrap();
+    worker
+        .send(Msg::Done(Err("domain.firmware_analysis_cancelled".into())))
+        .unwrap();
+    app.poll();
+    assert_eq!(
+        crate::localization::english(&app.status),
+        "Inspect cancelled"
+    );
+    assert!(app.failure.is_none());
+    assert_eq!(
+        app.log.last().map(String::as_str),
+        Some("domain.firmware_analysis_cancelled")
+    );
+}
+
+#[test]
+fn worker_identifies_typed_inspection_cancellation_before_any_file_access() {
+    let control = Control::default();
+    control.cancel();
+    let (tx, rx) = mpsc::channel();
+    run_job(
+        "",
+        Job::Analysis {
+            request: Request::Inspect(Source::File("absent.bin".into())),
+            control,
+        },
+        tx,
+        None,
+        "cancelled-inspection".into(),
+    );
+    let messages: Vec<_> = rx.try_iter().collect();
+    assert!(messages.iter().any(|message| matches!(message,
+        Msg::Event(Event::Message(line)) if line.starts_with("Analysis cancelled:"))));
+    assert!(!messages.iter().any(|message| matches!(message,
+        Msg::Event(Event::Message(line)) if line.starts_with("Operation failed:"))));
+    assert!(messages
+        .iter()
+        .any(|message| matches!(message, Msg::AnalysisCancelled)));
+    assert!(messages
+        .iter()
+        .any(|message| matches!(message, Msg::Done(Err(_)))));
+    assert!(!messages
+        .iter()
+        .any(|message| matches!(message, Msg::UserGuidance(_))));
+}
+
+#[test]
+fn panic_diagnostic_only_names_unknown_update_state_for_executing_updates() {
+    let detail = "synthetic panic";
+    assert_eq!(
+        worker_panic_detail(&Job::Info, detail),
+        "Worker panic; operation outcome unknown: synthetic panic"
+    );
+    let mut options = FlashOptions::default();
+    assert_eq!(
+        worker_panic_detail(&Job::PlanFlash(options.clone()), detail),
+        "Worker panic; operation outcome unknown: synthetic panic"
+    );
+    options.execute = true;
+    assert_eq!(
+        worker_panic_detail(&Job::Flash(options), detail),
+        "Worker panic; update state unknown: synthetic panic"
+    );
+}
+
+#[test]
 fn only_one_compare_side_may_be_a_live_drive() {
     let mut app = one_drive();
     app.dispatch(Input::SelectTask(Task::Compare));
@@ -2265,6 +2380,21 @@ fn report_cancellation_is_available_and_completion_restores_submit() {
 }
 
 #[test]
+fn disconnected_report_worker_has_localized_notice_and_english_diagnostic() {
+    let mut app = one_drive();
+    let (tx, rx) = mpsc::channel();
+    app.report_rx = Some(rx);
+    drop(tx);
+    app.poll();
+    assert_eq!(app.diagnostic_notice.as_deref(), Some("errors.worker"));
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("submission outcome unknown")));
+    assert!(app.report_rx.is_none());
+}
+
+#[test]
 fn package_preview_reports_compatibility_pending_in_every_language() {
     for language in crate::localization::Language::ALL {
         let mut app = App::with_drives(Vec::new());
@@ -2508,7 +2638,8 @@ fn origin_check_keeps_technical_causes_in_logs_and_clean_copy_in_the_form() {
     app.task = Task::Flash;
     app.flash_input = Some("selected.bin".into());
     let (tx, rx) = mpsc::channel();
-    app.origin_rx.push(rx);
+    app.origin_rx
+        .push((Pick::FlashFirmware, "selected.bin".into(), rx));
     tx.send((
         Pick::FlashFirmware,
         PathBuf::from("selected.bin"),
