@@ -1670,21 +1670,21 @@ fn vendor_scan_skips_comments_and_tests() {
 fn pioneer_optical_stays_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
     let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
-    for name in ["pioneer-optical", "mediatek-optical"] {
+    for (name, version) in [("pioneer-optical", "1.0.1"), ("mediatek-optical", "1.0.0")] {
         let line = manifest
             .lines()
             .find(|line| line.trim_start().starts_with(name))
             .expect("optical dependency");
         assert!(
-            line.contains("version = \"=1.0.0\"") && !line.contains("git ="),
-            "published optical 1.0.0 must be pinned: {line}"
+            line.contains(&format!("version = \"={version}\"")) && !line.contains("git ="),
+            "published {name} {version} must be pinned: {line}"
         );
         let package = lock
             .split("[[package]]")
             .find(|package| package.contains(&format!("name = \"{name}\"")))
             .expect("locked optical crate");
         assert!(
-            package.contains("version = \"1.0.0\"")
+            package.contains(&format!("version = \"{version}\""))
                 && package.contains("registry+https://github.com/rust-lang/crates.io-index")
         );
         let checksum = package

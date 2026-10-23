@@ -300,6 +300,27 @@ fn crossflash_family_mismatch_is_refused() {
 }
 
 #[test]
+fn ffc5_high_servo_difference_reaches_the_flash_family_gate() {
+    let body = vec![
+        0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0xf6, 0x20, 0x6a, 0x86, 0xff, 0xc5,
+    ];
+    let mut with_servo = body.clone();
+    let mut row = [0u8; 40];
+    row[..10].copy_from_slice(&[0x7f, 0x97, 0x7f, 0x51, 0x7f, 0x51, 0x7f, 0x51, 0x7f, 0x51]);
+    with_servo.extend_from_slice(&row);
+    let mut source = installed(0x8680, true, "22/01/01");
+    source.family = FamilyKey::from_body(&with_servo);
+    let mut target = pair_target(0x8000, "22/01/01", "22/01/01", 0x01);
+    target.family = FamilyKey::from_body(&body);
+    assert!(source.family.is_some() && target.family.is_some());
+    assert_ne!(source.family, target.family);
+    assert!(matches!(
+        decide_flash_plan(&source, &target),
+        FlashPlan::Refused(reason) if reason.contains("family mismatch")
+    ));
+}
+
+#[test]
 fn crossflash_without_kernel_is_refused() {
     // Different-SAT target requires a pair; Normal-only crossflash is never
     // safe (would land the new Normal on the drive's existing wrong-model

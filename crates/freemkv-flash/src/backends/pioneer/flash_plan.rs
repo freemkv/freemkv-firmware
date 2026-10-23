@@ -164,8 +164,8 @@ pub enum FlashPlan {
 }
 
 /// Opaque crossflash-family key: the lowercase-hex rendering of
-/// `pioneer_optical::image::Family`. Equal keys mean crossflash-compatible
-/// (same silicon/optical platform). Held as a string so the planner is pure and
+/// `pioneer_optical::image::Family`. Equal keys mean matching extracted
+/// hardware configuration under the library's current fingerprint scheme. Held as a string so the planner is pure and
 /// unit tests can inject families without any firmware.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FamilyKey(String);
@@ -205,12 +205,12 @@ pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
 
 // ---- Receiver class and the installed-Kernel receiver gate ------------------
 //
-// The family key ([`FamilyKey`]) proves same silicon/optical platform but it is
+// The family key ([`FamilyKey`]) compares extracted configuration, but it is
 // computed from the decoded Normal body alone, so two drives in one family can
 // still disagree on how their resident Kernel *receives* an incoming Normal: the
 // two payload offsets its decode loop leaves un-XORed, and its rotation
 // direction. A BDR-207M (un-XORed at 0x16900/0x77300, forward rotation) and a
-// BDR-PR1ML (0x32400/0xB1700, reversed) share family `cee5c9016d0174c9` yet
+// BDR-PR1ML (0x32400/0xB1700, reversed) shared v1 family `cee5c9016d0174c9` yet
 // cannot decode each other's Normal: the installed Kernel reaches a nonzero body
 // checksum and refuses to program, leaving the drive in boot mode. The family
 // gate admits the pair; only this receiver check catches it.
