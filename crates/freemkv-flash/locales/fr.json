@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Langue",
     "errors.operation_failed": "L’opération a échoué.",
-    "errors.update_not_started": "La mise à jour n’a pas démarré.",
+    "errors.update_not_started": "La commande d’entrée en mode de mise à jour a été tentée, mais aucune donnée du micrologiciel n’a été envoyée. Le lecteur peut être en mode de mise à jour ; laissez-le connecté et vérifiez son état avant de réessayer.",
     "errors.partial_firmware": "Le micrologiciel est peut-être incomplet. Laissez le lecteur connecté et inspectez-le avant de réessayer.",
     "errors.temporary_firmware": "Un micrologiciel temporaire peut subsister. Laissez le lecteur connecté et inspectez-le avant de réessayer.",
     "menu.refresh_drives": "Actualiser les lecteurs",

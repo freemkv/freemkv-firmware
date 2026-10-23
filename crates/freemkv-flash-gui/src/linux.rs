@@ -620,7 +620,7 @@ impl Shell {
             Item::Text(t) => widgets::label(t, &[]).upcast(),
             Item::Heading(t) => widgets::label(t, &["heading"]).upcast(),
             Item::Origin(origin) => widgets::label(
-                &crate::localization::render(self.app.borrow().language, origin.label()),
+                &crate::localization::render(self.app.borrow().language, origin.label_id()),
                 &[match origin {
                     crate::ui::FileOrigin::OemLikely => "success",
                     crate::ui::FileOrigin::UserBackupLikely => "warning",

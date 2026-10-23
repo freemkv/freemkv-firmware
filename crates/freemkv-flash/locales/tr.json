@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Dil",
     "errors.operation_failed": "İşlem başarısız oldu.",
-    "errors.update_not_started": "Güncelleme başlatılmadı.",
+    "errors.update_not_started": "Güncelleme moduna giriş komutu gönderilmeye çalışıldı, ancak hiçbir aygıt yazılımı verisi gönderilmedi. Sürücü güncelleme modunda olabilir; bağlı tutun ve yeniden denemeden önce durumunu inceleyin.",
     "errors.partial_firmware": "Aygıt yazılımı eksik olabilir. Yeniden denemeden önce sürücüyü bağlı tutup inceleyin.",
     "errors.temporary_firmware": "Geçici aygıt yazılımı kalmış olabilir. Sürücüyü bağlı tutup yeniden denemeden önce inceleyin.",
     "menu.refresh_drives": "Sürücüleri yenile",

@@ -9,6 +9,28 @@ use freemkv_fw::{
 };
 use std::path::PathBuf;
 
+/// An integrity verdict whose user guidance must not be reduced to an input-file guess.
+#[derive(Debug)]
+pub enum VerificationFailure {
+    /// An existing image failed verification; region verdicts are available.
+    ExistingImage,
+    /// The newly generated image failed its internal self-check before saving.
+    GeneratedImage,
+}
+
+impl std::fmt::Display for VerificationFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ExistingImage => {
+                f.write_str("Firmware integrity verification failed; see region results.")
+            }
+            Self::GeneratedImage => f.write_str("Generated firmware failed integrity verification"),
+        }
+    }
+}
+
+impl std::error::Error for VerificationFailure {}
+
 pub enum Job {
     Verify(PathBuf),
     Create {
@@ -60,7 +82,7 @@ pub fn execute(job: &Job) -> Result<()> {
                     );
                 }
                 if !outcome.ok {
-                    bail!("Firmware integrity verification failed; see region results.");
+                    return Err(VerificationFailure::ExistingImage.into());
                 }
                 field(
                     "Verification",
@@ -85,7 +107,7 @@ pub fn execute(job: &Job) -> Result<()> {
                 }
                 let verification = api::verify(&report.image, None)?;
                 if !verification.ok {
-                    bail!("Generated firmware failed integrity verification");
+                    return Err(VerificationFailure::GeneratedImage.into());
                 }
                 field("Engine", report.engine);
                 field(

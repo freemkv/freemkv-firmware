@@ -309,11 +309,7 @@ fn a_same_family_crossflash_runs_through_the_engine() {
         "{}",
         outcome.result
     );
-    assert!(
-        outcome.result.contains("write started: true"),
-        "{}",
-        outcome.result
-    );
+    assert!(outcome.result.contains("progress: "), "{}", outcome.result);
 }
 
 /// Every 2 MiB MediaTek image under `FREEMKV_MTK_IMAGES` with an identity

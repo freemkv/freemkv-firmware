@@ -2,6 +2,38 @@ use super::*;
 use std::sync::{Arc, Mutex};
 
 #[test]
+fn entry_failure_log_records_zero_payload_without_claiming_programming() {
+    use crate::backend::{UpdateFailure, UpdateProgress};
+    let directory = std::env::temp_dir().join(format!("freemkv-entry-log-{}", new_operation_id()));
+    let (path, log) = create_log(&directory, "freemkv-flash").unwrap();
+    drop(log);
+    let result: Result<()> = run_at(&directory, "entry-test", || {
+        Err(anyhow::anyhow!("PREPARE rejected").context(UpdateFailure {
+            phase: "update entry".into(),
+            write_started: true,
+            progress: UpdateProgress::EntryAttempted,
+            payload_bytes_accepted: Some(0),
+            temporary_firmware: false,
+            completed_stages: Vec::new(),
+        }))
+    });
+    assert!(result.is_err());
+    // The run creates its own log; the first file is only a directory probe.
+    let logs = std::fs::read_dir(&directory).unwrap();
+    let text = logs
+        .filter_map(|entry| entry.ok())
+        .map(|entry| std::fs::read_to_string(entry.path()).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("progress=EntryAttempted"));
+    assert!(text.contains("payload_bytes_accepted_in_stage=Some(0)"));
+    assert!(text.contains("impact=EntryUncertain"));
+    assert!(!text.contains("programmed=true"));
+    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn operation_log_includes_output_native_warning_and_full_error_chain() {
     let path = Arc::new(Mutex::new(None));
     let captured = path.clone();

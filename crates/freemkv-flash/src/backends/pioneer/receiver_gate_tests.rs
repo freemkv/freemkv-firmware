@@ -1,6 +1,6 @@
 //! Real-package proof that paired Normal is validated under its incoming Kernel.
 //! Uses the real BDR-207M 1.60 <-> BDR-PR1ML 1.30 pair in both
-//! directions (their receiver classes differ inside family `cee5c9016d0174c9`);
+//! directions (their receiver classes differ inside former v1 family `cee5c9016d0174c9`);
 //! leave every same-model reflash and every same-receiver-class crossflash
 //! admitted, including different receiver classes when the incoming pair matches.
 

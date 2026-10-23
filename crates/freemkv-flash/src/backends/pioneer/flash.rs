@@ -144,6 +144,16 @@ fn execution_error(
     let failure = crate::backend::UpdateFailure {
         phase: error.phase().to_string(),
         write_started: error.write_started(),
+        progress: if completed_passes > 0 {
+            crate::backend::UpdateProgress::UploadComplete
+        } else if error.firmware_write_started() {
+            crate::backend::UpdateProgress::PayloadAttempted
+        } else if error.write_started() {
+            crate::backend::UpdateProgress::EntryAttempted
+        } else {
+            crate::backend::UpdateProgress::Preflight
+        },
+        payload_bytes_accepted: None,
         temporary_firmware: restoration_required && error.firmware_write_started(),
         completed_stages: (1..=completed_passes)
             .map(|pass| format!("Pioneer update pass {pass}"))

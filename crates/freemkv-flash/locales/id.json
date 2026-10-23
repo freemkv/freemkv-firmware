@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Bahasa",
     "errors.operation_failed": "Operasi gagal.",
-    "errors.update_not_started": "Pembaruan tidak dimulai.",
+    "errors.update_not_started": "Perintah untuk masuk ke mode pembaruan telah dicoba, tetapi tidak ada data firmware yang dikirim. Drive mungkin berada dalam mode pembaruan; biarkan tetap terhubung dan periksa sebelum mencoba lagi.",
     "errors.partial_firmware": "Firmware mungkin belum lengkap. Biarkan drive tetap tersambung dan periksa sebelum mencoba lagi.",
     "errors.temporary_firmware": "Firmware sementara mungkin masih tersisa. Biarkan drive tetap tersambung dan periksa sebelum mencoba lagi.",
     "menu.refresh_drives": "Segarkan drive",

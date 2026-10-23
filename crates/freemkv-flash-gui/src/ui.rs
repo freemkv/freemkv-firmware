@@ -20,7 +20,7 @@ use freemkv_flash::report::{self, Group};
 pub use freemkv_flash::workflow::FileOrigin;
 use freemkv_flash::workflow::{
     self, AuthorizedPlan, Control, CurrentFirmware, DriveChoice, Event, FlashOptions, FlashSheet,
-    RecoveryOptions, Source,
+    RecoveryOptions, Source, UpdateImpact,
 };
 
 use crate::ops::{self, Job, Request, ResultView};
@@ -701,6 +701,7 @@ pub(crate) enum Msg {
     Event(Event),
     DriveAfter(String),
     FailureEvidence(workflow::UpdateFailure),
+    AnalysisCancelled,
     UserGuidance(String),
     PreviewCompatibilityPending(bool),
     Analysis(ResultView),
@@ -761,11 +762,12 @@ pub struct App {
     logging_warning: Option<String>,
     operation_id: Option<String>,
     failure_evidence: Option<workflow::UpdateFailure>,
+    analysis_cancelled: bool,
     preview_compatibility_pending: Option<bool>,
     report_rx: Option<Receiver<Result<String, String>>>,
     report_control: Option<crate::support::Submission>,
     recovery_planning: Option<(Target, RecoveryOptions)>,
-    origin_rx: Vec<Receiver<OriginReply>>,
+    origin_rx: Vec<(Pick, PathBuf, Receiver<OriginReply>)>,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
     pub(crate) profile: ProfileState,
@@ -879,6 +881,7 @@ impl App {
             logging_warning,
             operation_id: None,
             failure_evidence: None,
+            analysis_cancelled: false,
             preview_compatibility_pending: None,
             report_rx: None,
             report_control: None,
@@ -1722,6 +1725,7 @@ impl App {
         );
         self.failure = None;
         self.failure_evidence = None;
+        self.analysis_cancelled = false;
         self.backup_waived = false;
         self.preview_compatibility_pending = None;
         self.log.clear();
@@ -1791,6 +1795,11 @@ impl App {
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
+                        self.log.push(
+                            "Report worker disconnected before reporting completion; submission outcome unknown."
+                                .into(),
+                        );
+                        self.diagnostic_notice = Some("errors.worker".into());
                         report_done = true;
                         break;
                     }
@@ -1812,6 +1821,7 @@ impl App {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => self.event(event),
                     Ok(Msg::FailureEvidence(evidence)) => self.failure_evidence = Some(evidence),
+                    Ok(Msg::AnalysisCancelled) => self.analysis_cancelled = true,
                     Ok(Msg::UserGuidance(message)) => self.failure = Some(message),
                     Ok(Msg::PreviewCompatibilityPending(pending)) => {
                         self.preview_compatibility_pending = Some(pending);
@@ -1868,20 +1878,29 @@ impl App {
                                 );
                                 self.failure = None
                             }
+                            Err(_) if self.analysis_cancelled => {
+                                self.status = crate::localization::message(
+                                    "status.operation_cancelled",
+                                    &[("operation", self.action.clone())],
+                                );
+                                self.failure = None;
+                            }
                             Err(_) => {
                                 let consequence = self.failure_evidence.as_ref().map(|evidence| {
-                                    if evidence.temporary_firmware {
-                                        "errors.temporary_firmware"
-                                    } else if evidence.write_started {
-                                        "errors.partial_firmware"
-                                    } else {
-                                        "errors.update_not_started"
+                                    match evidence.impact() {
+                                        UpdateImpact::Blocked => "errors.update_blocked",
+                                        UpdateImpact::EntryUncertain => "errors.update_not_started",
+                                        UpdateImpact::PayloadUncertain => "errors.partial_firmware",
+                                        UpdateImpact::TemporaryFirmware => {
+                                            "errors.temporary_firmware"
+                                        }
+                                        UpdateImpact::Unknown => "errors.update_uncertain",
                                     }
                                 });
                                 let blocked = self
                                     .failure_evidence
                                     .as_ref()
-                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware);
+                                    .is_some_and(|e| e.impact() == UpdateImpact::Blocked);
                                 let message = if blocked {
                                     "errors.update_blocked"
                                 } else {
@@ -1908,11 +1927,12 @@ impl App {
                             .map(outcome_json);
                         let result_kind = match &result {
                             Err(_) if cancelled => "cancelled",
+                            Err(_) if self.analysis_cancelled => "cancelled",
                             Err(_)
                                 if self
                                     .failure_evidence
                                     .as_ref()
-                                    .is_some_and(|e| !e.write_started && !e.temporary_firmware) =>
+                                    .is_some_and(|e| e.impact() == UpdateImpact::Blocked) =>
                             {
                                 "blocked"
                             }
@@ -1938,6 +1958,9 @@ impl App {
                             }
                             Ok(None) => "✓ done.".into(),
                             Err(_) if cancelled => CANCELLED.into(),
+                            Err(_) if self.analysis_cancelled => {
+                                "domain.firmware_analysis_cancelled".into()
+                            }
                             Err(e) => format!(
                                 "✗ {}: {}",
                                 crate::localization::english(&self.status),
@@ -2021,7 +2044,7 @@ impl App {
             _ => return Vec::new(),
         }
         let (tx, rx) = mpsc::channel();
-        self.origin_rx.push(rx);
+        self.origin_rx.push((pick, path.clone(), rx));
         let waker = self.waker.clone();
         std::thread::spawn(move || {
             let result = std::panic::catch_unwind(|| workflow::selected_file_origin(&path))
@@ -2037,38 +2060,50 @@ impl App {
 
     fn poll_origin(&mut self) -> bool {
         let mut done = false;
-        for rx in std::mem::take(&mut self.origin_rx) {
-            match rx.try_recv() {
-                Ok((pick, path, result)) => {
-                    let selected = (pick == Pick::FlashFirmware
-                        && self.flash_input.as_ref() == Some(&path))
-                        || (pick == Pick::RecoveryInput
-                            && self.recovery_input.as_ref() == Some(&path));
-                    if selected {
-                        if let Err(error) = &result {
-                            let detail = crate::localization::english(error);
-                            self.log
-                                .push(format!("File origin inspection failed: {detail}"));
-                            self.record_event("file_origin_failed", serde_json::json!({"file": path.display().to_string(), "error": detail}));
-                            self.diagnostic_log = None;
-                            self.diagnostic_checked = None;
-                        }
-                    }
-                    match pick {
-                        Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
-                            self.flash_origin = Some(result)
-                        }
-                        Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
-                            self.recovery_origin = Some(result)
-                        }
-                        _ => {}
-                    }
-                }
+        for (requested_pick, requested_path, rx) in std::mem::take(&mut self.origin_rx) {
+            let reply = match rx.try_recv() {
+                Ok(reply) => reply,
                 Err(TryRecvError::Empty) => {
-                    self.origin_rx.push(rx);
+                    self.origin_rx.push((requested_pick, requested_path, rx));
                     continue;
                 }
-                Err(TryRecvError::Disconnected) => {}
+                Err(TryRecvError::Disconnected) => {
+                    self.log.push(format!(
+                        "File origin worker disconnected before reporting a result: {}",
+                        requested_path.display()
+                    ));
+                    (
+                        requested_pick,
+                        requested_path,
+                        Err("ui.file_origin_inspection_stopped_unexpectedly".into()),
+                    )
+                }
+            };
+            let (pick, path, result) = reply;
+            let selected = (pick == Pick::FlashFirmware
+                && self.flash_input.as_ref() == Some(&path))
+                || (pick == Pick::RecoveryInput && self.recovery_input.as_ref() == Some(&path));
+            if selected {
+                if let Err(error) = &result {
+                    let detail = crate::localization::english(error);
+                    self.log
+                        .push(format!("File origin inspection failed: {detail}"));
+                    self.record_event(
+                        "file_origin_failed",
+                        serde_json::json!({"file": path.display().to_string(), "error": detail}),
+                    );
+                    self.diagnostic_log = None;
+                    self.diagnostic_checked = None;
+                }
+            }
+            match pick {
+                Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
+                    self.flash_origin = Some(result)
+                }
+                Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
+                    self.recovery_origin = Some(result)
+                }
+                _ => {}
             }
             done = true;
         }
@@ -2088,7 +2123,7 @@ impl App {
                     workflow::FileOrigin::OemLikely => {
                         "ui.matches_known_oem_firmware_drive_compatibility_is_".into()
                     }
-                    _ => origin.explanation().into(),
+                    _ => origin.explanation_id().into(),
                 }),
             ],
             Some(Err(_error)) => vec![
@@ -2382,15 +2417,14 @@ impl App {
                         .iter()
                         .map(|name| {
                             Button::primary(
-                                &format!(
-                                    "{}{}",
-                                    if member.as_ref() == Some(name) {
-                                        "Selected: "
-                                    } else {
-                                        ""
-                                    },
-                                    name
-                                ),
+                                &if member.as_ref() == Some(name) {
+                                    crate::localization::message(
+                                        "notice.selected_member",
+                                        &[("member", name.clone())],
+                                    )
+                                } else {
+                                    name.clone()
+                                },
                                 if recovery {
                                     Input::RecoveryCurrentMember(name.clone())
                                 } else {
@@ -2735,8 +2769,8 @@ impl App {
         details.push(crate::localization::message(
             "ui.file_origin_arg0_arg1",
             &[
-                ("arg0", origin.label().to_string()),
-                ("arg1", origin.explanation().to_string()),
+                ("arg0", origin.label_id().to_string()),
+                ("arg1", origin.explanation_id().to_string()),
             ],
         ));
         Confirm {
@@ -2802,11 +2836,14 @@ fn failure_json(evidence: Option<&workflow::UpdateFailure>) -> serde_json::Value
     match evidence {
         Some(e) => serde_json::json!({
             "phase": e.phase, "write_started": e.write_started,
+            "progress": format!("{:?}", e.progress),
+            "payload_bytes_accepted": e.payload_bytes_accepted,
             "temporary_firmware": e.temporary_firmware, "completed_stages": e.completed_stages,
             "safe_to_probe": false,
         }),
         None => serde_json::json!({
-            "phase": "unknown", "write_started": null, "temporary_firmware": null,
+            "phase": "unknown", "write_started": null, "progress": "Unknown",
+            "payload_bytes_accepted": null, "temporary_firmware": null,
             "completed_stages": null, "safe_to_probe": false,
         }),
     }
@@ -2882,17 +2919,42 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
     }));
     let result = match result {
         Ok(result) => result.map_err(|e: anyhow::Error| {
+            if matches!(job, Job::Analysis { .. })
+                && matches!(
+                    e.downcast_ref::<workflow::InspectionError>(),
+                    Some(workflow::InspectionError::Cancelled)
+                )
+            {
+                let _ = tx.send(Msg::Event(Event::Message(format!(
+                    "Analysis cancelled: {e:#}"
+                ))));
+                let _ = tx.send(Msg::AnalysisCancelled);
+                return "domain.firmware_analysis_cancelled".into();
+            }
             let _ = tx.send(Msg::Event(Event::Message(format!(
                 "Operation failed: {e:#}"
             ))));
             if let Some(evidence) = e.downcast_ref::<workflow::UpdateFailure>() {
+                let _ = tx.send(Msg::Event(Event::Message(format!(
+                    "Update evidence: phase={:?} progress={:?} payload_bytes_accepted_in_stage={:?} impact={:?}; write_started is a legacy command-attempt flag",
+                    evidence.phase, evidence.progress, evidence.payload_bytes_accepted,
+                    evidence.impact()
+                ))));
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
             }
             let message = workflow::user_error(&e).encoded();
             let _ = tx.send(Msg::UserGuidance(message.clone()));
             message
         }),
-        Err(_) => Err(WORKER_PANIC.into()),
+        Err(payload) => {
+            let detail = payload
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("non-string panic payload");
+            let _ = tx.send(Msg::Event(Event::Message(worker_panic_detail(&job, detail))));
+            Err(WORKER_PANIC.into())
+        }
     };
     if check_after {
         if let Some(after) = post_update_snapshot(&result, || {
@@ -2909,6 +2971,19 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
     }
     let _ = tx.send(Msg::Done(result));
     wake();
+}
+
+fn worker_panic_detail(job: &Job, detail: &str) -> String {
+    let update_possible = match job {
+        Job::Flash(options) => options.execute,
+        Job::Recovery(options) => options.execute,
+        _ => false,
+    };
+    if update_possible {
+        format!("Worker panic; update state unknown: {detail}")
+    } else {
+        format!("Worker panic; operation outcome unknown: {detail}")
+    }
 }
 
 /// The worker's side of the flash sheet: hand the authorized plan to the

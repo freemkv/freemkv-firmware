@@ -22,6 +22,18 @@ enum Task {
 
 type BootPreview = Result<(BootSettings, BootSupport), (String, String)>;
 
+fn user_guidance(error: &anyhow::Error) -> String {
+    match error.downcast_ref::<ops::VerificationFailure>() {
+        Some(ops::VerificationFailure::ExistingImage) => {
+            "domain.firmware_integrity_verification_failed_see_region_results".into()
+        }
+        Some(ops::VerificationFailure::GeneratedImage) => {
+            "domain.generated_firmware_failed_integrity_verification".into()
+        }
+        None => freemkv_flash::workflow::user_error(error).encoded(),
+    }
+}
+
 pub struct FwApp {
     language: Language,
     preferences: Preferences,
@@ -226,9 +238,19 @@ impl FwApp {
                     let _ = tx.send(Msg::Event(freemkv_flash::output::Event::Message(format!(
                         "Operation failed: {e:#}"
                     ))));
-                    freemkv_flash::workflow::user_error(&e).encoded()
+                    user_guidance(&e)
                 }),
-                Err(_) => Err("errors.worker".into()),
+                Err(payload) => {
+                    let detail = payload
+                        .downcast_ref::<&str>()
+                        .copied()
+                        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                        .unwrap_or("non-string panic payload");
+                    let _ = tx.send(Msg::Event(freemkv_flash::output::Event::Message(format!(
+                        "Worker panic; operation outcome unknown: {detail}"
+                    ))));
+                    Err("errors.worker".into())
+                }
             };
             let _ = tx.send(Msg::Done(result));
             ctx.request_repaint();
@@ -354,7 +376,11 @@ impl FwApp {
                 }
                 Err(TryRecvError::Disconnected) => {
                     self.boot_rx = None;
-                    self.boot_error = Some("errors.analysis".into());
+                    self.boot_error = Some("errors.worker".into());
+                    self.log.push(
+                        "Firmware analysis worker disconnected before reporting completion; analysis outcome unknown."
+                            .into(),
+                    );
                 }
                 Err(TryRecvError::Empty) => {
                     ctx.request_repaint_after(std::time::Duration::from_millis(100));

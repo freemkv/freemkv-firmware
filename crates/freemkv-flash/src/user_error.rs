@@ -1,6 +1,7 @@
 //! Customer guidance selected from error evidence. Technical chains stay in diagnostics.
 use crate::backend::{
-    BackupReadRestricted, CurrentFirmwareRequired, HardwareMismatch, UpdateFailure,
+    BackupReadRestricted, CurrentFirmwareRequired, HardwareMismatch, UnverifiedUpdateOutcome,
+    UpdateFailure, UpdateImpact,
 };
 use crate::localization::{self, Language};
 
@@ -33,11 +34,46 @@ impl UserError {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
             "errors.backup_restricted"
-        } else if error
-            .downcast_ref::<UpdateFailure>()
-            .is_some_and(|failure| failure.write_started || failure.temporary_firmware)
+        } else if let Some(unverified) = error.downcast_ref::<UnverifiedUpdateOutcome>() {
+            match &unverified.0 {
+                crate::backend::UpdateOutcome::Completed(e) if e.temporary_firmware => {
+                    "errors.temporary_firmware"
+                }
+                _ => "errors.update_uncertain",
+            }
+        } else if let Some(inspection) = error.downcast_ref::<crate::inspection::InspectionError>()
         {
-            "errors.update_uncertain"
+            use crate::inspection::InspectionError;
+            match inspection {
+                InspectionError::UnsupportedFormat(_) => "modify.not_supported",
+                InspectionError::UnrecognizedFormat => {
+                    "domain.this_firmware_format_was_not_recognized"
+                }
+                InspectionError::UnsupportedPair => {
+                    "domain.these_firmware_formats_cannot_currently_be_compared"
+                }
+                InspectionError::PackageRequired => {
+                    "domain.for_pioneer_inspection_select_the_tar_package_containing_the_firmware"
+                }
+                InspectionError::Cancelled => {
+                    arguments.push(("operation", "ui.firmware_analysis".into()));
+                    "status.operation_cancelled"
+                }
+                InspectionError::TwoDrives => {
+                    "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive"
+                }
+            }
+        } else if let Some(failure) = error
+            .downcast_ref::<UpdateFailure>()
+            .filter(|failure| failure.impact() != UpdateImpact::Blocked)
+        {
+            match failure.impact() {
+                UpdateImpact::Blocked => unreachable!("filtered above"),
+                UpdateImpact::EntryUncertain => "errors.update_not_started",
+                UpdateImpact::PayloadUncertain => "errors.update_uncertain",
+                UpdateImpact::TemporaryFirmware => "errors.temporary_firmware",
+                UpdateImpact::Unknown => "errors.update_uncertain",
+            }
         } else if let Some(io) = error
             .chain()
             .find_map(|cause| cause.downcast_ref::<std::io::Error>())
@@ -114,6 +150,86 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cancelled_inspection_is_not_a_failure_or_retry_prompt() {
+        let error = anyhow::Error::new(crate::inspection::InspectionError::Cancelled);
+        let guidance = UserError::of(&error);
+        assert_eq!(guidance.id, "status.operation_cancelled");
+        for language in Language::ALL {
+            let text = guidance.render(language);
+            assert!(!text.contains("{operation}"), "{}: {text}", language.code());
+        }
+        assert_eq!(guidance.render(Language::En), "Firmware analysis cancelled");
+    }
+
+    #[test]
+    fn inspection_error_variants_have_specific_localized_guidance() {
+        use crate::inspection::InspectionError;
+        for (error, expected) in [
+            (
+                InspectionError::UnsupportedFormat("Pioneer".into()),
+                "modify.not_supported",
+            ),
+            (
+                InspectionError::UnrecognizedFormat,
+                "domain.this_firmware_format_was_not_recognized",
+            ),
+            (
+                InspectionError::UnsupportedPair,
+                "domain.these_firmware_formats_cannot_currently_be_compared",
+            ),
+            (
+                InspectionError::PackageRequired,
+                "domain.for_pioneer_inspection_select_the_tar_package_containing_the_firmware",
+            ),
+            (
+                InspectionError::TwoDrives,
+                "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive",
+            ),
+        ] {
+            let error = anyhow::Error::new(error);
+            let guidance = UserError::of(&error);
+            assert_eq!(guidance.id, expected);
+            for language in Language::ALL {
+                let message = guidance.render(language);
+                assert!(!message.is_empty());
+                assert_ne!(message, expected);
+            }
+            assert!(!guidance.render(Language::En).contains("try again"));
+        }
+    }
+
+    #[test]
+    fn unverified_outcome_retains_temporary_firmware_evidence() {
+        let outcome = crate::backend::UpdateOutcome::Completed(crate::backend::UpdateEvidence {
+            target_started: false,
+            target_identity: String::new(),
+            verified_regions: Vec::new(),
+            unverified_regions: Vec::new(),
+            completed_stages: Vec::new(),
+            temporary_firmware: true,
+        });
+        let error = anyhow::Error::new(UnverifiedUpdateOutcome(outcome));
+        assert_eq!(UserError::of(&error).id, "errors.temporary_firmware");
+        assert!(format!("{error:#}").contains("temporary_firmware: true"));
+    }
+
+    #[test]
+    fn unverified_target_startup_does_not_suggest_generic_retry() {
+        let outcome = crate::backend::UpdateOutcome::Completed(crate::backend::UpdateEvidence {
+            target_started: false,
+            target_identity: String::new(),
+            verified_regions: Vec::new(),
+            unverified_regions: Vec::new(),
+            completed_stages: Vec::new(),
+            temporary_firmware: false,
+        });
+        let error = anyhow::Error::new(UnverifiedUpdateOutcome(outcome));
+        let guidance = UserError::of(&error);
+        assert_eq!(guidance.id, "errors.update_uncertain");
+        assert!(!guidance.render(Language::En).contains("then try again"));
+    }
+
+    #[test]
     fn technical_causes_stay_in_diagnostics_and_never_enter_user_guidance() {
         let error =
             anyhow::anyhow!("SCSI CHECK CONDITION cdb=[3c,06,00,09,80] offset=0x98000 [E4000]")
@@ -150,6 +266,8 @@ mod tests {
         let error = anyhow::anyhow!("SCSI transport error").context(UpdateFailure {
             phase: "upload".into(),
             write_started: true,
+            progress: crate::backend::UpdateProgress::PayloadAttempted,
+            payload_bytes_accepted: Some(0),
             temporary_firmware: false,
             completed_stages: Vec::new(),
         });
@@ -157,6 +275,55 @@ mod tests {
         assert_eq!(guidance.id, "errors.update_uncertain");
         assert!(!guidance.render(Language::En).contains("try again"));
         assert!(format!("{error:#}").contains("SCSI transport error"));
+    }
+
+    #[test]
+    fn failure_guidance_uses_typed_progress_across_every_catalog() {
+        use crate::backend::UpdateProgress;
+        for (progress, temporary, expected) in [
+            (
+                UpdateProgress::EntryAttempted,
+                false,
+                "errors.update_not_started",
+            ),
+            (
+                UpdateProgress::PayloadAttempted,
+                false,
+                "errors.update_uncertain",
+            ),
+            (
+                UpdateProgress::PayloadAccepted,
+                false,
+                "errors.update_uncertain",
+            ),
+            (
+                UpdateProgress::UploadComplete,
+                false,
+                "errors.update_uncertain",
+            ),
+            (
+                UpdateProgress::EntryAttempted,
+                true,
+                "errors.temporary_firmware",
+            ),
+            (UpdateProgress::Unknown, false, "errors.update_uncertain"),
+        ] {
+            let error = anyhow::anyhow!("private SCSI detail").context(UpdateFailure {
+                phase: "test".into(),
+                write_started: true,
+                progress,
+                payload_bytes_accepted: Some(0),
+                temporary_firmware: temporary,
+                completed_stages: Vec::new(),
+            });
+            let guidance = UserError::of(&error);
+            assert_eq!(guidance.id, expected);
+            for language in Language::ALL {
+                let text = guidance.render(language);
+                assert!(!text.contains("private SCSI detail"));
+                assert!(!text.trim().is_empty());
+            }
+        }
     }
 
     #[test]

@@ -179,7 +179,7 @@ fn report_update(
     use freemkv_flash::workflow::UpdateOutcome;
     println!("{label} {}", outcome.summary());
     if matches!(outcome, UpdateOutcome::Completed(_)) && !outcome.safe_to_probe() {
-        anyhow::bail!("{}", outcome.summary());
+        return Err(freemkv_flash::backend::UnverifiedUpdateOutcome(outcome).into());
     }
     Ok(())
 }

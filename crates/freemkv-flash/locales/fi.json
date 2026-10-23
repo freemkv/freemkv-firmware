@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Kieli",
     "errors.operation_failed": "Toiminto epäonnistui.",
-    "errors.update_not_started": "Päivitys ei käynnistynyt.",
+    "errors.update_not_started": "Päivitystilaan siirtymisen komentoa yritettiin lähettää, mutta laiteohjelmiston tietoja ei lähetetty. Asema saattaa olla päivitystilassa; pidä se kytkettynä ja tarkista se ennen uutta yritystä.",
     "errors.partial_firmware": "Laiteohjelmisto voi olla keskeneräinen. Pidä asema kytkettynä ja tarkista se ennen uutta yritystä.",
     "errors.temporary_firmware": "Väliaikainen laiteohjelmisto voi jäädä asemaan. Pidä asema kytkettynä ja tarkista se ennen uutta yritystä.",
     "menu.refresh_drives": "Päivitä asemat",

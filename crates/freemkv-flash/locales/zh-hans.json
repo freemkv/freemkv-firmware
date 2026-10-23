@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "语言",
     "errors.operation_failed": "操作失败。",
-    "errors.update_not_started": "更新尚未开始。",
+    "errors.update_not_started": "已尝试发送进入更新模式的命令，但未发送任何固件数据。光驱可能处于更新模式；请保持连接并检查其状态，然后再重试。",
     "errors.partial_firmware": "固件可能不完整。请保持驱动器连接，并在重试前检查。",
     "errors.temporary_firmware": "可能仍有临时固件。请保持驱动器连接并检查后再重试。",
     "menu.refresh_drives": "刷新驱动器",

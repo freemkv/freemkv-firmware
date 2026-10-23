@@ -670,14 +670,62 @@ impl UpdateOutcome {
     }
 }
 
-/// Failure context retained across generic layers. Unclassified failures must
-/// also be treated as unsafe for further automatic device probes.
+/// A completed executor returned evidence that cannot confirm the final target.
+/// Front-ends keep this typed result instead of reducing it to a summary string.
+#[derive(Debug)]
+pub struct UnverifiedUpdateOutcome(pub UpdateOutcome);
+
+impl std::fmt::Display for UnverifiedUpdateOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "update outcome not verified: {:?}", self.0)
+    }
+}
+
+impl std::error::Error for UnverifiedUpdateOutcome {}
+
+/// The furthest update command boundary supported by backend evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateProgress {
+    /// No update command was issued.
+    Preflight,
+    /// An update-entry command was attempted; no firmware payload was sent.
+    EntryAttempted,
+    /// A payload command was attempted, but acceptance is not established.
+    PayloadAttempted,
+    /// At least one payload command was accepted by the transport.
+    PayloadAccepted,
+    /// The complete payload was accepted; programming or startup is unconfirmed.
+    UploadComplete,
+    /// The backend cannot establish where the worker stopped.
+    Unknown,
+}
+
+/// The consequence shown to a user, selected from typed transport evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateImpact {
+    /// The update was blocked before a device update command.
+    Blocked,
+    /// Entry was attempted, with zero payload bytes sent.
+    EntryUncertain,
+    /// Firmware payload may be incomplete or unverified.
+    PayloadUncertain,
+    /// An intermediate image may remain installed.
+    TemporaryFirmware,
+    /// The update outcome is unknown.
+    Unknown,
+}
+
+/// Facts retained when an update fails, including its last known protocol milestone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateFailure {
     /// Stage or protocol phase where the failure occurred.
     pub phase: String,
     /// Whether a firmware-update command may have reached the drive.
     pub write_started: bool,
+    /// Furthest protocol milestone known when the failure was reported.
+    pub progress: UpdateProgress,
+    /// Payload bytes acknowledged in the failing stage, when observable.
+    pub payload_bytes_accepted: Option<usize>,
     /// Whether an intermediate or temporary image may remain installed.
     pub temporary_firmware: bool,
     /// Stages known to have completed before the failure.
@@ -686,14 +734,39 @@ pub struct UpdateFailure {
 
 impl std::fmt::Display for UpdateFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "update failed during {} (write started: {}; temporary firmware: {}; completed stages: {:?})",
-            self.phase, self.write_started, self.temporary_firmware, self.completed_stages)
+        match self.progress {
+            UpdateProgress::EntryAttempted => write!(f,
+                "update failed during {} (entry command attempted; no firmware payload sent; temporary firmware: {}; completed stages: {:?})",
+                self.phase, self.temporary_firmware, self.completed_stages),
+            _ if self.write_started => write!(f,
+                "update failed during {} (progress: {:?}; payload bytes accepted in stage: {:?}; temporary firmware: {}; completed stages: {:?})",
+                self.phase, self.progress, self.payload_bytes_accepted,
+                self.temporary_firmware, self.completed_stages),
+            _ => write!(f,
+                "update failed during {} (write started: false; temporary firmware: {}; completed stages: {:?})",
+                self.phase, self.temporary_firmware, self.completed_stages),
+        }
     }
 }
 
 impl std::error::Error for UpdateFailure {}
 
 impl UpdateFailure {
+    /// Do not infer a payload write from an entry command alone.
+    pub fn impact(&self) -> UpdateImpact {
+        if self.temporary_firmware {
+            return UpdateImpact::TemporaryFirmware;
+        }
+        match self.progress {
+            UpdateProgress::Preflight => UpdateImpact::Blocked,
+            UpdateProgress::EntryAttempted => UpdateImpact::EntryUncertain,
+            UpdateProgress::PayloadAttempted
+            | UpdateProgress::PayloadAccepted
+            | UpdateProgress::UploadComplete => UpdateImpact::PayloadUncertain,
+            UpdateProgress::Unknown => UpdateImpact::Unknown,
+        }
+    }
+
     /// Attach evidence only at a boundary that cannot issue firmware writes.
     pub(crate) fn before_write(phase: &str, error: anyhow::Error) -> anyhow::Error {
         if error.is::<Self>() {
@@ -702,6 +775,8 @@ impl UpdateFailure {
         error.context(Self {
             phase: phase.into(),
             write_started: false,
+            progress: UpdateProgress::Preflight,
+            payload_bytes_accepted: Some(0),
             temporary_firmware: false,
             completed_stages: Vec::new(),
         })

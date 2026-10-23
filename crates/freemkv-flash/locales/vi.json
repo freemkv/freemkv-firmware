@@ -3,7 +3,7 @@
   "messages": {
     "settings.language": "Ngôn ngữ",
     "errors.operation_failed": "Thao tác không thành công.",
-    "errors.update_not_started": "Quá trình cập nhật chưa bắt đầu.",
+    "errors.update_not_started": "Đã thử gửi lệnh vào chế độ cập nhật, nhưng chưa gửi dữ liệu chương trình cơ sở nào. Ổ đĩa có thể đang ở chế độ cập nhật; hãy giữ kết nối và kiểm tra ổ đĩa trước khi thử lại.",
     "errors.partial_firmware": "Firmware có thể chưa hoàn chỉnh. Hãy giữ ổ đĩa kết nối và kiểm tra trước khi thử lại.",
     "errors.temporary_firmware": "Có thể còn firmware tạm thời. Hãy giữ ổ đĩa kết nối và kiểm tra trước khi thử lại.",
     "menu.refresh_drives": "Làm mới ổ đĩa",

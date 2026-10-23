@@ -1355,7 +1355,7 @@ impl Shell {
                     };
                     t += 1;
                     let translated =
-                        crate::localization::render(self.app.borrow().language, origin.label());
+                        crate::localization::render(self.app.borrow().language, origin.label_id());
                     let text = translated.as_str();
                     if fresh {
                         set_text(lbl, text);

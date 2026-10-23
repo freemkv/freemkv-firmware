@@ -363,7 +363,8 @@ fn panel_item(
             };
             ui.colored_label(
                 color,
-                egui::RichText::new(crate::localization::render(language, origin.label())).strong(),
+                egui::RichText::new(crate::localization::render(language, origin.label_id()))
+                    .strong(),
             );
         }
         Item::Text(t) => {

@@ -130,17 +130,23 @@ fn execute(
     plan: &recovery::PreparedRecovery,
 ) -> Result<UpdateOutcome> {
     super::flash::log_transfer(plan.plan());
-    let result = {
+    let (result, accepted_bytes, upload_complete, entry_attempted) = {
         let shared = SharedDevice::new(&mut *writer);
         let (mut reads, mut writes) =
             (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
         let mut runtime = super::flash::Runtime::new();
-        plan.flash_completed(
+        let result = plan.flash_completed(
             FlashTransport {
                 reads: &mut reads,
                 writes: &mut writes,
             },
             &mut runtime,
+        );
+        (
+            result,
+            runtime.payload_bytes_accepted(),
+            runtime.upload_complete(),
+            writes.empty_write_attempted(),
         )
     };
     let completion = result.map_err(|error| {
@@ -155,6 +161,32 @@ fn execute(
             recovery::Error::Startup => ("target startup confirmation", true),
             _ => ("recovery receiver preflight", false),
         };
+        let progress =
+            match &error {
+                recovery::Error::Flash(mediatek_optical::update::FlashError::Entry(_))
+                    if entry_attempted =>
+                {
+                    crate::backend::UpdateProgress::EntryAttempted
+                }
+                recovery::Error::Flash(mediatek_optical::update::FlashError::Entry(_)) => {
+                    crate::backend::UpdateProgress::Preflight
+                }
+                recovery::Error::Flash(mediatek_optical::update::FlashError::Transfer {
+                    ..
+                }) if accepted_bytes == 0 => crate::backend::UpdateProgress::PayloadAttempted,
+                recovery::Error::Flash(mediatek_optical::update::FlashError::Transfer {
+                    ..
+                }) => crate::backend::UpdateProgress::PayloadAccepted,
+                recovery::Error::Startup => crate::backend::UpdateProgress::UploadComplete,
+                recovery::Error::Flash(_) if upload_complete => {
+                    crate::backend::UpdateProgress::UploadComplete
+                }
+                recovery::Error::Flash(_) if accepted_bytes > 0 => {
+                    crate::backend::UpdateProgress::PayloadAccepted
+                }
+                recovery::Error::Flash(_) => crate::backend::UpdateProgress::PayloadAttempted,
+                _ => crate::backend::UpdateProgress::Preflight,
+            };
         let source = match error {
             recovery::Error::Flash(error) => super::flash::flash_error(error),
             error => anyhow::Error::new(error),
@@ -163,7 +195,10 @@ fn execute(
             .context("MediaTek recovery failed")
             .context(UpdateFailure {
                 phase: phase.into(),
-                write_started,
+                write_started: write_started
+                    && progress != crate::backend::UpdateProgress::Preflight,
+                progress,
+                payload_bytes_accepted: Some(accepted_bytes),
                 temporary_firmware: false,
                 completed_stages: vec![],
             })

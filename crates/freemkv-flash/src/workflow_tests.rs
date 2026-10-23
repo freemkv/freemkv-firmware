@@ -33,6 +33,8 @@ fn precheck_evidence_never_overwrites_an_execution_failure() {
     let evidence = UpdateFailure {
         phase: "target upload".into(),
         write_started: true,
+        progress: crate::backend::UpdateProgress::PayloadAttempted,
+        payload_bytes_accepted: Some(0),
         temporary_firmware: true,
         completed_stages: vec!["intermediate".into()],
     };

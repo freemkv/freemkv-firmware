@@ -3,6 +3,18 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.14.2] - 2026-10-22
+
+### freemkv Flash
+
+- Include servo coefficient evidence when matching Pioneer hardware families, including boards that previously skipped it. This separates firmware patterns formerly grouped together, including SAT 8000 versus 8680.
+- Use pioneer-optical 1.0.1 for both firmware selection and receiver family gates.
+- Report flash failure milestones and localized error outcomes consistently across frontends.
+
+### freemkv Modify
+
+- Preserve specific integrity-verification guidance and report background worker failures in diagnostic logs.
+
 ## [0.14.1] - 2026-10-21
 
 ### freemkv Flash

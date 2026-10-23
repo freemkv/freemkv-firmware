@@ -977,7 +977,7 @@ impl Controller {
             Item::Origin(origin) => {
                 let text = crate::localization::render(
                     self.ivars().app.borrow().as_ref().unwrap().language,
-                    origin.label(),
+                    origin.label_id(),
                 );
                 let l = bold(mtm, &text);
                 let color = match origin {
