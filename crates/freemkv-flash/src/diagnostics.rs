@@ -335,7 +335,10 @@ impl Write for NativeWriter {
 
 impl Drop for NativeWriter {
     fn drop(&mut self) {
-        eprintln!("[native] {}", String::from_utf8_lossy(&self.0).trim_end());
+        record(format!(
+            "[native] {}",
+            String::from_utf8_lossy(&self.0).trim_end()
+        ));
     }
 }
 

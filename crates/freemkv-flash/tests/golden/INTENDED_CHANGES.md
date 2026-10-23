@@ -10,6 +10,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| CLI_INFO | 0.14.4: CLI drive information groups and aligns the shared GUI identity, interface, capabilities, region and settings fields. GUI field values and device-command transcript remain unchanged. Native transport traces stay in diagnostics. |
 | HUMAN_ERRORS | 0.14.1: optional DVD region, Pioneer identity and settings read failures show Unavailable. Full causes remain in English diagnostics. No device commands or values from successful reads change. |
 | PRECHECK | 0.14.0: proven pre-write failures retain phase and no-write evidence; hardware mismatches have actionable model guidance with original family identifiers in diagnostics. Pioneer preview explicitly leaves installed compatibility pending. No SCSI commands, payloads, programming order or compatibility gates change. |
 | FMT | Snapshot normalization removes trailing display padding, including empty structured `MSG` rows and terminal prompts. Commands, payload bytes, message content and assertions are unchanged; the historical v0.11.2 snapshots remain untouched. |
@@ -423,92 +424,944 @@ reason: P4
 ## classify_and_unknown_info.txt
 
 ### info with the Unknown handler on MediaTek firmware-image mock
-reason: M-ENC, HUMAN_ERRORS
+reason: M-ENC, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (30) ---
+-device: mock://in-memory
+-inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
+-banner: <none>
+-family: Unknown (live backup/flash unavailable)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
-+DVD region: Unavailable
+---- events (62) ---
+-MSG      device: mock://in-memory
++--- text (41) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:      HL-DT-ST
++  Model:             BD-RE BU40N
++  Firmware version:  1.00
++  Drive family:      Unknown
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Unavailable
++  Firmware update:   Unavailable
++--- events (73) ---
+-MSG      inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
+-MSG      banner: <none>
+-MSG      family: Unknown (live backup/flash unavailable)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 ---- scsi transcript (18) ---
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:      HL-DT-ST
++MSG        Model:             BD-RE BU40N
++MSG        Firmware version:  1.00
++MSG        Drive family:      Unknown
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Unavailable
++MSG        Firmware update:   Unavailable
 +--- scsi transcript (19) ---
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 ```
 
 ### info with the Unknown handler on MockScsiDevice::mtk
-reason: FMT, HUMAN_ERRORS
+reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (30) ---
+-device: mock://in-memory
+-inquiry: vendor='' product='' rev=''
+-banner: <none>
+-family: Unknown (live backup/flash unavailable)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
-+DVD region: Unavailable
+---- events (62) ---
+-MSG      device: mock://in-memory
 -FIELD    Manufacturer = 
 -FIELD    Model = 
 -FIELD    Firmware version = 
++--- text (41) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:
++  Model:
++  Firmware version:
++  Drive family:      Unknown
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Unavailable
++  Firmware update:   Unavailable
++--- events (73) ---
 +FIELD    Manufacturer =
 +FIELD    Model =
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='' product='' rev=''
+-MSG      banner: <none>
+-MSG      family: Unknown (live backup/flash unavailable)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:
++MSG        Model:
++MSG        Firmware version:
++MSG        Drive family:      Unknown
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Unavailable
++MSG        Firmware update:   Unavailable
 ```
 
 ### info with the Unknown handler on MockScsiDevice::pioneer
-reason: FMT, HUMAN_ERRORS
+reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (30) ---
+-device: mock://in-memory
+-inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
+-banner: <none>
+-family: Unknown (live backup/flash unavailable)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
-+DVD region: Unavailable
+---- events (62) ---
+-MSG      device: mock://in-memory
++--- text (41) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:      PIONEER
++  Model:             BDR-UD04
++  Firmware version:
++  Drive family:      Unknown
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Unavailable
++  Firmware update:   Unavailable
++--- events (73) ---
 -FIELD    Firmware version = 
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
+-MSG      banner: <none>
+-MSG      family: Unknown (live backup/flash unavailable)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:      PIONEER
++MSG        Model:             BDR-UD04
++MSG        Firmware version:
++MSG        Drive family:      Unknown
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Unavailable
++MSG        Firmware update:   Unavailable
 ```
 
 ### info with the Unknown handler on MockScsiDevice::renesas
-reason: FMT, HUMAN_ERRORS
+reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (30) ---
+-device: mock://in-memory
+-inquiry: vendor='RENESAS' product='' rev=''
+-banner: <none>
+-family: Unknown (live backup/flash unavailable)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
-+DVD region: Unavailable
+---- events (62) ---
+-MSG      device: mock://in-memory
++--- text (41) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:      RENESAS
++  Model:
++  Firmware version:
++  Drive family:      Unknown
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Unavailable
++  Firmware update:   Unavailable
++--- events (73) ---
 -FIELD    Model = 
 -FIELD    Firmware version = 
 +FIELD    Model =
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='RENESAS' product='' rev=''
+-MSG      banner: <none>
+-MSG      family: Unknown (live backup/flash unavailable)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:      RENESAS
++MSG        Model:
++MSG        Firmware version:
++MSG        Drive family:      Unknown
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Unavailable
++MSG        Firmware update:   Unavailable
 ```
 
 ### info with the Unknown handler on ambiguous: MediaTek and Pioneer both match
-reason: FMT, HUMAN_ERRORS
+reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (30) ---
+-device: mock://in-memory
+-inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
+-banner: <none>
+-family: Unknown (live backup/flash unavailable)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
-+DVD region: Unavailable
+---- events (62) ---
+-MSG      device: mock://in-memory
++--- text (41) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:      PIONEER
++  Model:             BDR-UD04
++  Firmware version:
++  Drive family:      Unknown
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Unavailable
++  Firmware update:   Unavailable
++--- events (73) ---
 -FIELD    Firmware version = 
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
+-MSG      banner: <none>
+-MSG      family: Unknown (live backup/flash unavailable)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:      PIONEER
++MSG        Model:             BDR-UD04
++MSG        Firmware version:
++MSG        Drive family:      Unknown
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Unavailable
++MSG        Firmware update:   Unavailable
 ```
 
 ### info with the Unknown handler on blank mock (matches no backend)
-reason: FMT, HUMAN_ERRORS
+reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (30) ---
+-device: mock://in-memory
+-inquiry: vendor='' product='' rev=''
+-banner: <none>
+-family: Unknown (live backup/flash unavailable)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
-+DVD region: Unavailable
+---- events (62) ---
+-MSG      device: mock://in-memory
 -FIELD    Manufacturer = 
 -FIELD    Model = 
 -FIELD    Firmware version = 
++--- text (41) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:
++  Model:
++  Firmware version:
++  Drive family:      Unknown
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Unavailable
++  Firmware update:   Unavailable
++--- events (73) ---
 +FIELD    Manufacturer =
 +FIELD    Model =
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='' product='' rev=''
+-MSG      banner: <none>
+-MSG      family: Unknown (live backup/flash unavailable)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:
++MSG        Model:
++MSG        Firmware version:
++MSG        Drive family:      Unknown
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Unavailable
++MSG        Firmware update:   Unavailable
 ```
 
 ## flash_dry_run.txt
@@ -8769,31 +9622,179 @@ reason: P4
 ## info_mtk.txt
 
 ### MTK info: classify-only mock (MockScsiDevice::mtk)
-reason: R5, R7, M-CHIP, FMT, HUMAN_ERRORS
+reason: R5, R7, M-CHIP, FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
 ---- text (33) ---
-+--- text (34) ---
+-device: mock://in-memory
+-inquiry: vendor='' product='' rev=''
+-banner: MT1959 Boot BU5
+-family: MediaTek MT19xx (live backup + flash supported)
 -flash: MediaTek MT1959 — executable (hardware-proven)
-+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
-+DVD region: Unavailable
-+chipset: MT1959
+-firmware: unknown (unrecognized — not in the built-in catalog)
++--- text (48) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:
++  Model:
++  Firmware version:
++  Drive family:      MediaTek MT19xx
++  Firmware banner:   MT1959 Boot BU5
++  flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Supported
++  Firmware update:   Supported
++
++Drive information
++  chipset:   MT1959
++  firmware:  unknown (unrecognized — not in the built-in catalog)
 ---- events (65) ---
-+--- events (67) ---
+-MSG      device: mock://in-memory
 -FIELD    Manufacturer = 
 -FIELD    Model = 
 -FIELD    Firmware version = 
++--- events (81) ---
 +FIELD    Manufacturer =
 +FIELD    Model =
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='' product='' rev=''
+-MSG      banner: MT1959 Boot BU5
+-MSG      family: MediaTek MT19xx (live backup + flash supported)
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
-+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
+-MSG      firmware: unknown (unrecognized — not in the built-in catalog)
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:
++MSG        Model:
++MSG        Firmware version:
++MSG        Drive family:      MediaTek MT19xx
++MSG        Firmware banner:   MT1959 Boot BU5
++MSG        flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Supported
++MSG        Firmware update:   Supported
 +FIELD    Chipset = MT1959
-+MSG      chipset: MT1959
++MSG
++MSG      Drive information
++MSG        chipset:   MT1959
++MSG        firmware:  unknown (unrecognized — not in the built-in catalog)
 ---- scsi transcript (21) ---
 +--- scsi transcript (23) ---
 +IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
@@ -8801,37 +9802,177 @@ reason: R5, R7, M-CHIP, FMT, HUMAN_ERRORS
 ```
 
 ### MTK info: mock exposing a drive-read firmware image
-reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, HUMAN_ERRORS
+reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, HUMAN_ERRORS, CLI_INFO
 ```diff
 ---- text (33) ---
-+--- text (34) ---
+-device: mock://in-memory
+-inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
 -banner: <none>
-+banner: MT1959 Boot BU5
+-family: MediaTek MT19xx (live backup + flash supported)
 -flash: MediaTek MT1959 — executable (hardware-proven)
-+flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
 -firmware: unknown (unrecognized — not in the built-in catalog)
 -          fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
 ---- events (65) ---
-+DVD region: Unavailable
-+chipset: MT1959
-+firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
+-MSG      device: mock://in-memory
++--- text (48) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:      HL-DT-ST
++  Model:             BD-RE BU40N
++  Firmware version:  1.00
++  Drive family:      MediaTek MT19xx
++  Firmware banner:   MT1959 Boot BU5
++  flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Supported
++  Firmware update:   Supported
++
++Drive information
++  chipset:   MT1959
++  firmware:  HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
 +          fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
-+--- events (67) ---
++--- events (81) ---
+-MSG      inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
 -MSG      banner: <none>
-+MSG      banner: MT1959 Boot BU5
+-MSG      family: MediaTek MT19xx (live backup + flash supported)
 -MSG      flash: MediaTek MT1959 — executable (hardware-proven)
-+MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 -MSG      firmware: unknown (unrecognized — not in the built-in catalog)
 -MSG                fingerprint d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88
 ---- scsi transcript (21) ---
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:      HL-DT-ST
++MSG        Model:             BD-RE BU40N
++MSG        Firmware version:  1.00
++MSG        Drive family:      MediaTek MT19xx
++MSG        Firmware banner:   MT1959 Boot BU5
++MSG        flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Supported
++MSG        Firmware update:   Supported
 +FIELD    Chipset = MT1959
-+MSG      chipset: MT1959
-+MSG      firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
++MSG
++MSG      Drive information
++MSG        chipset:   MT1959
++MSG        firmware:  HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
 +MSG                fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
 +--- scsi transcript (24) ---
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -8842,22 +9983,136 @@ reason: R5, R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, HUMAN_ERRORS
 ## info_pioneer.txt
 
 ### Pioneer info: MockScsiDevice::pioneer
-reason: FMT, HUMAN_ERRORS
+reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (36) ---
+-device: mock://in-memory
+-inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
+-banner: <none>
+-family: Pioneer (live backup + flash supported)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
 -Pioneer identity: Not reported
-+Pioneer identity: Unavailable
+-Product code: Not reported
+-Manufactured: Not reported
+-Product origin: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
 -Quiet Drive: Invalid or incomplete response
 -PureRead: Invalid or incomplete response
-+DVD region: Unavailable
-+Quiet Drive: Unavailable
-+PureRead: Unavailable
+---- events (74) ---
+-MSG      device: mock://in-memory
++--- text (51) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:      PIONEER
++  Model:             BDR-UD04
++  Firmware version:
++  Drive family:      Pioneer
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Additional information
++  Pioneer identity:  Unavailable
++  Product code:      Not reported
++  Manufactured:      Not reported
++  Product origin:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Supported
++  Firmware update:   Supported
++
++Drive settings
++  Quiet Drive:  Unavailable
++  PureRead:     Unavailable
++--- events (89) ---
 -FIELD    Firmware version = 
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='PIONEER' product='BDR-UD04' rev=''
+-MSG      banner: <none>
+-MSG      family: Pioneer (live backup + flash supported)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
 -FIELD    Pioneer identity = Not reported
 -MSG      Pioneer identity: Not reported
 +FIELD    Pioneer identity = Unavailable
-+MSG      Pioneer identity: Unavailable
+-MSG      Product code: Not reported
+-MSG      Manufactured: Not reported
+-MSG      Product origin: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 -FIELD    Quiet Drive = Invalid or incomplete response
@@ -8865,32 +10120,194 @@ reason: FMT, HUMAN_ERRORS
 -FIELD    PureRead = Invalid or incomplete response
 -MSG      PureRead: Invalid or incomplete response
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:      PIONEER
++MSG        Model:             BDR-UD04
++MSG        Firmware version:
++MSG        Drive family:      Pioneer
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Additional information
++MSG        Pioneer identity:  Unavailable
++MSG        Product code:      Not reported
++MSG        Manufactured:      Not reported
++MSG        Product origin:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Supported
++MSG        Firmware update:   Supported
 +FIELD    Quiet Drive = Unavailable
-+MSG      Quiet Drive: Unavailable
 +FIELD    PureRead = Unavailable
-+MSG      PureRead: Unavailable
++MSG
++MSG      Drive settings
++MSG        Quiet Drive:  Unavailable
++MSG        PureRead:     Unavailable
 ```
 
 ### Renesas info: MockScsiDevice::renesas (Pioneer backend)
-reason: FMT, HUMAN_ERRORS
+reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```diff
+---- text (36) ---
+-device: mock://in-memory
+-inquiry: vendor='RENESAS' product='' rev=''
+-banner: <none>
+-family: Pioneer (live backup + flash supported)
+-Serial number: Not reported
+-Buffer size: Not reported
+-Loader type: Not reported
+-Interface type: Not reported
 -Pioneer identity: Not reported
-+Pioneer identity: Unavailable
+-Product code: Not reported
+-Manufactured: Not reported
+-Product origin: Not reported
+-CD-ROM: Read: Unknown    Write: No
+-CD-R: Read: Unknown    Write: Unknown
+-CD-RW: Read: Unknown    Write: Unknown
+-DVD-ROM: Read: Unknown    Write: No
+-DVD-R: Read: Unknown    Write: Unknown
+-DVD-R DL: Read: Unknown    Write: Unknown
+-DVD-RW: Read: Unknown    Write: Unknown
+-DVD+R: Read: Unknown    Write: Unknown
+-DVD+R DL: Read: Unknown    Write: Unknown
+-DVD+RW: Read: Unknown    Write: Unknown
+-DVD+RW DL: Read: Unknown    Write: Unknown
+-DVD-RAM: Read: Unknown    Write: Unknown
+-BD-ROM: Read: Unknown    Write: No
+-BD-R: Read: Unknown    Write: Unknown
+-BD-R XL: Read: Unknown    Write: Unknown
+-BD-RE: Read: Unknown    Write: Unknown
+-BD-RE XL: Read: Unknown    Write: Unknown
+-HD DVD-ROM: Read: Unknown    Write: No
+-HD DVD-R: Read: Unknown    Write: Unknown
+-HD DVD-RAM: Read: Unknown    Write: Unknown
+-HD DVD-RW: Read: Unknown    Write: Unknown
 -DVD region: Invalid or incomplete response
 -Quiet Drive: Invalid or incomplete response
 -PureRead: Invalid or incomplete response
-+DVD region: Unavailable
-+Quiet Drive: Unavailable
-+PureRead: Unavailable
+---- events (74) ---
+-MSG      device: mock://in-memory
++--- text (51) ---
++
++Drive information
++  Device:            mock://in-memory
++  Manufacturer:      RENESAS
++  Model:
++  Firmware version:
++  Drive family:      Pioneer
++  Serial number:     Not reported
++  Buffer size:       Not reported
++  Loader type:       Not reported
++  Interface type:    Not reported
++
++Additional information
++  Pioneer identity:  Unavailable
++  Product code:      Not reported
++  Manufactured:      Not reported
++  Product origin:    Not reported
++
++Media capabilities
++  CD-ROM:            Read: Unknown    Write: No
++  CD-R:              Read: Unknown    Write: Unknown
++  CD-RW:             Read: Unknown    Write: Unknown
++  DVD-ROM:           Read: Unknown    Write: No
++  DVD-R:             Read: Unknown    Write: Unknown
++  DVD-R DL:          Read: Unknown    Write: Unknown
++  DVD-RW:            Read: Unknown    Write: Unknown
++  DVD+R:             Read: Unknown    Write: Unknown
++  DVD+R DL:          Read: Unknown    Write: Unknown
++  DVD+RW:            Read: Unknown    Write: Unknown
++  DVD+RW DL:         Read: Unknown    Write: Unknown
++  DVD-RAM:           Read: Unknown    Write: Unknown
++  BD-ROM:            Read: Unknown    Write: No
++  BD-R:              Read: Unknown    Write: Unknown
++  BD-R XL:           Read: Unknown    Write: Unknown
++  BD-RE:             Read: Unknown    Write: Unknown
++  BD-RE XL:          Read: Unknown    Write: Unknown
++  HD DVD-ROM:        Read: Unknown    Write: No
++  HD DVD-R:          Read: Unknown    Write: Unknown
++  HD DVD-RAM:        Read: Unknown    Write: Unknown
++  HD DVD-RW:         Read: Unknown    Write: Unknown
++
++DVD region
++  DVD region:        Unavailable
++
++Available operations
++  Backup:            Supported
++  Firmware update:   Supported
++
++Drive settings
++  Quiet Drive:  Unavailable
++  PureRead:     Unavailable
++--- events (89) ---
 -FIELD    Model = 
 -FIELD    Firmware version = 
 +FIELD    Model =
 +FIELD    Firmware version =
+-MSG      inquiry: vendor='RENESAS' product='' rev=''
+-MSG      banner: <none>
+-MSG      family: Pioneer (live backup + flash supported)
+-MSG      Serial number: Not reported
+-MSG      Buffer size: Not reported
+-MSG      Loader type: Not reported
+-MSG      Interface type: Not reported
 -FIELD    Pioneer identity = Not reported
 -MSG      Pioneer identity: Not reported
 +FIELD    Pioneer identity = Unavailable
-+MSG      Pioneer identity: Unavailable
+-MSG      Product code: Not reported
+-MSG      Manufactured: Not reported
+-MSG      Product origin: Not reported
+-MSG      CD-ROM: Read: Unknown    Write: No
+-MSG      CD-R: Read: Unknown    Write: Unknown
+-MSG      CD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD-ROM: Read: Unknown    Write: No
+-MSG      DVD-R: Read: Unknown    Write: Unknown
+-MSG      DVD-R DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RW: Read: Unknown    Write: Unknown
+-MSG      DVD+R: Read: Unknown    Write: Unknown
+-MSG      DVD+R DL: Read: Unknown    Write: Unknown
+-MSG      DVD+RW: Read: Unknown    Write: Unknown
+-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
+-MSG      DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      BD-ROM: Read: Unknown    Write: No
+-MSG      BD-R: Read: Unknown    Write: Unknown
+-MSG      BD-R XL: Read: Unknown    Write: Unknown
+-MSG      BD-RE: Read: Unknown    Write: Unknown
+-MSG      BD-RE XL: Read: Unknown    Write: Unknown
+-MSG      HD DVD-ROM: Read: Unknown    Write: No
+-MSG      HD DVD-R: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
+-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 -FIELD    DVD region = Invalid or incomplete response
 -MSG      DVD region: Invalid or incomplete response
 -FIELD    Quiet Drive = Invalid or incomplete response
@@ -8898,11 +10315,59 @@ reason: FMT, HUMAN_ERRORS
 -FIELD    PureRead = Invalid or incomplete response
 -MSG      PureRead: Invalid or incomplete response
 +FIELD    DVD region = Unavailable
-+MSG      DVD region: Unavailable
++MSG
++MSG      Drive information
++MSG        Device:            mock://in-memory
++MSG        Manufacturer:      RENESAS
++MSG        Model:
++MSG        Firmware version:
++MSG        Drive family:      Pioneer
++MSG        Serial number:     Not reported
++MSG        Buffer size:       Not reported
++MSG        Loader type:       Not reported
++MSG        Interface type:    Not reported
++MSG
++MSG      Additional information
++MSG        Pioneer identity:  Unavailable
++MSG        Product code:      Not reported
++MSG        Manufactured:      Not reported
++MSG        Product origin:    Not reported
++MSG
++MSG      Media capabilities
++MSG        CD-ROM:            Read: Unknown    Write: No
++MSG        CD-R:              Read: Unknown    Write: Unknown
++MSG        CD-RW:             Read: Unknown    Write: Unknown
++MSG        DVD-ROM:           Read: Unknown    Write: No
++MSG        DVD-R:             Read: Unknown    Write: Unknown
++MSG        DVD-R DL:          Read: Unknown    Write: Unknown
++MSG        DVD-RW:            Read: Unknown    Write: Unknown
++MSG        DVD+R:             Read: Unknown    Write: Unknown
++MSG        DVD+R DL:          Read: Unknown    Write: Unknown
++MSG        DVD+RW:            Read: Unknown    Write: Unknown
++MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
++MSG        DVD-RAM:           Read: Unknown    Write: Unknown
++MSG        BD-ROM:            Read: Unknown    Write: No
++MSG        BD-R:              Read: Unknown    Write: Unknown
++MSG        BD-R XL:           Read: Unknown    Write: Unknown
++MSG        BD-RE:             Read: Unknown    Write: Unknown
++MSG        BD-RE XL:          Read: Unknown    Write: Unknown
++MSG        HD DVD-ROM:        Read: Unknown    Write: No
++MSG        HD DVD-R:          Read: Unknown    Write: Unknown
++MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
++MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
++MSG
++MSG      DVD region
++MSG        DVD region:        Unavailable
++MSG
++MSG      Available operations
++MSG        Backup:            Supported
++MSG        Firmware update:   Supported
 +FIELD    Quiet Drive = Unavailable
-+MSG      Quiet Drive: Unavailable
 +FIELD    PureRead = Unavailable
-+MSG      PureRead: Unavailable
++MSG
++MSG      Drive settings
++MSG        Quiet Drive:  Unavailable
++MSG        PureRead:     Unavailable
 ```
 
 ## mtk_backup_variants.txt

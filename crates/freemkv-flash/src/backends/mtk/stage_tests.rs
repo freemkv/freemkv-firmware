@@ -76,6 +76,18 @@ fn image(revision: &[u8; 4], code: u8) -> Vec<u8> {
     mediatek_optical::image::cmac::resign(&bytes).unwrap()
 }
 
+#[test]
+fn recovery_selects_standalone_mediatek_bin_and_rejects_invalid_input() {
+    let bytes = image(b"1.V9", 3);
+    assert_eq!(
+        crate::workflow::recovery_target(&bytes, None).unwrap(),
+        bytes
+    );
+    assert!(crate::workflow::recovery_target(&bytes, Some("firmware.bin")).is_err());
+    assert!(crate::workflow::recovery_target(&vec![0; 0x200000], None).is_err());
+    // Payload integrity remains the backend preparation gate, as in Flash.
+}
+
 fn flash_single_image(
     dev: &mut MockScsiDevice,
     current: &[u8],

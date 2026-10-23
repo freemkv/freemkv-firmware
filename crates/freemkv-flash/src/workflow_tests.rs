@@ -1,6 +1,19 @@
 use super::*;
 
 #[test]
+fn recovery_requires_tar_for_standalone_pioneer_components() {
+    let package = crate::backends::pioneer::test_oem_recovery_package("PIONEER");
+    assert_eq!(recovery_target(&package, None).unwrap(), package);
+    let mut archive = tar::Archive::new(package.as_slice());
+    for entry in archive.entries().unwrap() {
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        entry.unwrap().read_to_end(&mut bytes).unwrap();
+        assert!(recovery_target(&bytes, None).is_err());
+    }
+}
+
+#[test]
 fn hardware_mismatch_guidance_keeps_models_but_not_family_hashes() {
     let source =
         anyhow::anyhow!("family mismatch: installed cf3183a51bc41e42, target 31ce81c2dbb0fdb");

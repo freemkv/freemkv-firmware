@@ -1,108 +1,136 @@
 
 === MTK info: mock exposing a drive-read firmware image ===
 result: OK
---- text (34) ---
-device: mock://in-memory
-inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
-banner: MT1959 Boot BU5
-family: MediaTek MT19xx (live backup + flash supported)
-flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
-Serial number: Not reported
-Buffer size: Not reported
-Loader type: Not reported
-Interface type: Not reported
-CD-ROM: Read: Unknown    Write: No
-CD-R: Read: Unknown    Write: Unknown
-CD-RW: Read: Unknown    Write: Unknown
-DVD-ROM: Read: Unknown    Write: No
-DVD-R: Read: Unknown    Write: Unknown
-DVD-R DL: Read: Unknown    Write: Unknown
-DVD-RW: Read: Unknown    Write: Unknown
-DVD+R: Read: Unknown    Write: Unknown
-DVD+R DL: Read: Unknown    Write: Unknown
-DVD+RW: Read: Unknown    Write: Unknown
-DVD+RW DL: Read: Unknown    Write: Unknown
-DVD-RAM: Read: Unknown    Write: Unknown
-BD-ROM: Read: Unknown    Write: No
-BD-R: Read: Unknown    Write: Unknown
-BD-R XL: Read: Unknown    Write: Unknown
-BD-RE: Read: Unknown    Write: Unknown
-BD-RE XL: Read: Unknown    Write: Unknown
-HD DVD-ROM: Read: Unknown    Write: No
-HD DVD-R: Read: Unknown    Write: Unknown
-HD DVD-RAM: Read: Unknown    Write: Unknown
-HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Unavailable
-chipset: MT1959
-firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
+--- text (48) ---
+
+Drive information
+  Device:            mock://in-memory
+  Manufacturer:      HL-DT-ST
+  Model:             BD-RE BU40N
+  Firmware version:  1.00
+  Drive family:      MediaTek MT19xx
+  Firmware banner:   MT1959 Boot BU5
+  flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+  Serial number:     Not reported
+  Buffer size:       Not reported
+  Loader type:       Not reported
+  Interface type:    Not reported
+
+Media capabilities
+  CD-ROM:            Read: Unknown    Write: No
+  CD-R:              Read: Unknown    Write: Unknown
+  CD-RW:             Read: Unknown    Write: Unknown
+  DVD-ROM:           Read: Unknown    Write: No
+  DVD-R:             Read: Unknown    Write: Unknown
+  DVD-R DL:          Read: Unknown    Write: Unknown
+  DVD-RW:            Read: Unknown    Write: Unknown
+  DVD+R:             Read: Unknown    Write: Unknown
+  DVD+R DL:          Read: Unknown    Write: Unknown
+  DVD+RW:            Read: Unknown    Write: Unknown
+  DVD+RW DL:         Read: Unknown    Write: Unknown
+  DVD-RAM:           Read: Unknown    Write: Unknown
+  BD-ROM:            Read: Unknown    Write: No
+  BD-R:              Read: Unknown    Write: Unknown
+  BD-R XL:           Read: Unknown    Write: Unknown
+  BD-RE:             Read: Unknown    Write: Unknown
+  BD-RE XL:          Read: Unknown    Write: Unknown
+  HD DVD-ROM:        Read: Unknown    Write: No
+  HD DVD-R:          Read: Unknown    Write: Unknown
+  HD DVD-RAM:        Read: Unknown    Write: Unknown
+  HD DVD-RW:         Read: Unknown    Write: Unknown
+
+DVD region
+  DVD region:        Unavailable
+
+Available operations
+  Backup:            Supported
+  Firmware update:   Supported
+
+Drive information
+  chipset:   MT1959
+  firmware:  HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
           fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
---- events (67) ---
-MSG      device: mock://in-memory
+--- events (81) ---
 FIELD    Manufacturer = HL-DT-ST
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = 1.00
 FIELD    Drive family = MediaTek MT19xx
-MSG      inquiry: vendor='HL-DT-ST' product='BD-RE BU40N' rev='1.00'
-MSG      banner: MT1959 Boot BU5
 FIELD    Backup = Supported
 FIELD    Firmware update = Supported
-MSG      family: MediaTek MT19xx (live backup + flash supported)
-MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 FIELD    Serial number = Not reported
-MSG      Serial number: Not reported
 FIELD    Buffer size = Not reported
-MSG      Buffer size: Not reported
 FIELD    Loader type = Not reported
-MSG      Loader type: Not reported
 FIELD    Interface type = Not reported
-MSG      Interface type: Not reported
 FIELD    CD-ROM = Read: Unknown    Write: No
-MSG      CD-ROM: Read: Unknown    Write: No
 FIELD    CD-R = Read: Unknown    Write: Unknown
-MSG      CD-R: Read: Unknown    Write: Unknown
 FIELD    CD-RW = Read: Unknown    Write: Unknown
-MSG      CD-RW: Read: Unknown    Write: Unknown
 FIELD    DVD-ROM = Read: Unknown    Write: No
-MSG      DVD-ROM: Read: Unknown    Write: No
 FIELD    DVD-R = Read: Unknown    Write: Unknown
-MSG      DVD-R: Read: Unknown    Write: Unknown
 FIELD    DVD-R DL = Read: Unknown    Write: Unknown
-MSG      DVD-R DL: Read: Unknown    Write: Unknown
 FIELD    DVD-RW = Read: Unknown    Write: Unknown
-MSG      DVD-RW: Read: Unknown    Write: Unknown
 FIELD    DVD+R = Read: Unknown    Write: Unknown
-MSG      DVD+R: Read: Unknown    Write: Unknown
 FIELD    DVD+R DL = Read: Unknown    Write: Unknown
-MSG      DVD+R DL: Read: Unknown    Write: Unknown
 FIELD    DVD+RW = Read: Unknown    Write: Unknown
-MSG      DVD+RW: Read: Unknown    Write: Unknown
 FIELD    DVD+RW DL = Read: Unknown    Write: Unknown
-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
 FIELD    DVD-RAM = Read: Unknown    Write: Unknown
-MSG      DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    BD-ROM = Read: Unknown    Write: No
-MSG      BD-ROM: Read: Unknown    Write: No
 FIELD    BD-R = Read: Unknown    Write: Unknown
-MSG      BD-R: Read: Unknown    Write: Unknown
 FIELD    BD-R XL = Read: Unknown    Write: Unknown
-MSG      BD-R XL: Read: Unknown    Write: Unknown
 FIELD    BD-RE = Read: Unknown    Write: Unknown
-MSG      BD-RE: Read: Unknown    Write: Unknown
 FIELD    BD-RE XL = Read: Unknown    Write: Unknown
-MSG      BD-RE XL: Read: Unknown    Write: Unknown
 FIELD    HD DVD-ROM = Read: Unknown    Write: No
-MSG      HD DVD-ROM: Read: Unknown    Write: No
 FIELD    HD DVD-R = Read: Unknown    Write: Unknown
-MSG      HD DVD-R: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 FIELD    DVD region = Unavailable
-MSG      DVD region: Unavailable
+MSG
+MSG      Drive information
+MSG        Device:            mock://in-memory
+MSG        Manufacturer:      HL-DT-ST
+MSG        Model:             BD-RE BU40N
+MSG        Firmware version:  1.00
+MSG        Drive family:      MediaTek MT19xx
+MSG        Firmware banner:   MT1959 Boot BU5
+MSG        flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+MSG        Serial number:     Not reported
+MSG        Buffer size:       Not reported
+MSG        Loader type:       Not reported
+MSG        Interface type:    Not reported
+MSG
+MSG      Media capabilities
+MSG        CD-ROM:            Read: Unknown    Write: No
+MSG        CD-R:              Read: Unknown    Write: Unknown
+MSG        CD-RW:             Read: Unknown    Write: Unknown
+MSG        DVD-ROM:           Read: Unknown    Write: No
+MSG        DVD-R:             Read: Unknown    Write: Unknown
+MSG        DVD-R DL:          Read: Unknown    Write: Unknown
+MSG        DVD-RW:            Read: Unknown    Write: Unknown
+MSG        DVD+R:             Read: Unknown    Write: Unknown
+MSG        DVD+R DL:          Read: Unknown    Write: Unknown
+MSG        DVD+RW:            Read: Unknown    Write: Unknown
+MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
+MSG        DVD-RAM:           Read: Unknown    Write: Unknown
+MSG        BD-ROM:            Read: Unknown    Write: No
+MSG        BD-R:              Read: Unknown    Write: Unknown
+MSG        BD-R XL:           Read: Unknown    Write: Unknown
+MSG        BD-RE:             Read: Unknown    Write: Unknown
+MSG        BD-RE XL:          Read: Unknown    Write: Unknown
+MSG        HD DVD-ROM:        Read: Unknown    Write: No
+MSG        HD DVD-R:          Read: Unknown    Write: Unknown
+MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
+MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
+MSG
+MSG      DVD region
+MSG        DVD region:        Unavailable
+MSG
+MSG      Available operations
+MSG        Backup:            Supported
+MSG        Firmware update:   Supported
 FIELD    Chipset = MT1959
-MSG      chipset: MT1959
-MSG      firmware: HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
+MSG
+MSG      Drive information
+MSG        chipset:   MT1959
+MSG        firmware:  HL-DT-STBD-RE BU40N 1.00 (unrecognized — not in the built-in catalog)
 MSG                fingerprint d15415b32ba2297a2859a25c08e1c27d84bc80591be453220dd670e67d512288
 --- scsi transcript (24) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -132,108 +160,136 @@ IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 
 === MTK info: classify-only mock (MockScsiDevice::mtk) ===
 result: OK
---- text (34) ---
-device: mock://in-memory
-inquiry: vendor='' product='' rev=''
-banner: MT1959 Boot BU5
-family: MediaTek MT19xx (live backup + flash supported)
-flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
-Serial number: Not reported
-Buffer size: Not reported
-Loader type: Not reported
-Interface type: Not reported
-CD-ROM: Read: Unknown    Write: No
-CD-R: Read: Unknown    Write: Unknown
-CD-RW: Read: Unknown    Write: Unknown
-DVD-ROM: Read: Unknown    Write: No
-DVD-R: Read: Unknown    Write: Unknown
-DVD-R DL: Read: Unknown    Write: Unknown
-DVD-RW: Read: Unknown    Write: Unknown
-DVD+R: Read: Unknown    Write: Unknown
-DVD+R DL: Read: Unknown    Write: Unknown
-DVD+RW: Read: Unknown    Write: Unknown
-DVD+RW DL: Read: Unknown    Write: Unknown
-DVD-RAM: Read: Unknown    Write: Unknown
-BD-ROM: Read: Unknown    Write: No
-BD-R: Read: Unknown    Write: Unknown
-BD-R XL: Read: Unknown    Write: Unknown
-BD-RE: Read: Unknown    Write: Unknown
-BD-RE XL: Read: Unknown    Write: Unknown
-HD DVD-ROM: Read: Unknown    Write: No
-HD DVD-R: Read: Unknown    Write: Unknown
-HD DVD-RAM: Read: Unknown    Write: Unknown
-HD DVD-RW: Read: Unknown    Write: Unknown
-DVD region: Unavailable
-chipset: MT1959
-firmware: unknown (unrecognized — not in the built-in catalog)
+--- text (48) ---
+
+Drive information
+  Device:            mock://in-memory
+  Manufacturer:
+  Model:
+  Firmware version:
+  Drive family:      MediaTek MT19xx
+  Firmware banner:   MT1959 Boot BU5
+  flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+  Serial number:     Not reported
+  Buffer size:       Not reported
+  Loader type:       Not reported
+  Interface type:    Not reported
+
+Media capabilities
+  CD-ROM:            Read: Unknown    Write: No
+  CD-R:              Read: Unknown    Write: Unknown
+  CD-RW:             Read: Unknown    Write: Unknown
+  DVD-ROM:           Read: Unknown    Write: No
+  DVD-R:             Read: Unknown    Write: Unknown
+  DVD-R DL:          Read: Unknown    Write: Unknown
+  DVD-RW:            Read: Unknown    Write: Unknown
+  DVD+R:             Read: Unknown    Write: Unknown
+  DVD+R DL:          Read: Unknown    Write: Unknown
+  DVD+RW:            Read: Unknown    Write: Unknown
+  DVD+RW DL:         Read: Unknown    Write: Unknown
+  DVD-RAM:           Read: Unknown    Write: Unknown
+  BD-ROM:            Read: Unknown    Write: No
+  BD-R:              Read: Unknown    Write: Unknown
+  BD-R XL:           Read: Unknown    Write: Unknown
+  BD-RE:             Read: Unknown    Write: Unknown
+  BD-RE XL:          Read: Unknown    Write: Unknown
+  HD DVD-ROM:        Read: Unknown    Write: No
+  HD DVD-R:          Read: Unknown    Write: Unknown
+  HD DVD-RAM:        Read: Unknown    Write: Unknown
+  HD DVD-RW:         Read: Unknown    Write: Unknown
+
+DVD region
+  DVD region:        Unavailable
+
+Available operations
+  Backup:            Supported
+  Firmware update:   Supported
+
+Drive information
+  chipset:   MT1959
+  firmware:  unknown (unrecognized — not in the built-in catalog)
           fingerprint fe47043787640c7d3f50b7a8e13ae22b07fc74f41826cb532effebf110816305
---- events (67) ---
-MSG      device: mock://in-memory
+--- events (81) ---
 FIELD    Manufacturer =
 FIELD    Model =
 FIELD    Firmware version =
 FIELD    Drive family = MediaTek MT19xx
-MSG      inquiry: vendor='' product='' rev=''
-MSG      banner: MT1959 Boot BU5
 FIELD    Backup = Supported
 FIELD    Firmware update = Supported
-MSG      family: MediaTek MT19xx (live backup + flash supported)
-MSG      flash: MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
 FIELD    Serial number = Not reported
-MSG      Serial number: Not reported
 FIELD    Buffer size = Not reported
-MSG      Buffer size: Not reported
 FIELD    Loader type = Not reported
-MSG      Loader type: Not reported
 FIELD    Interface type = Not reported
-MSG      Interface type: Not reported
 FIELD    CD-ROM = Read: Unknown    Write: No
-MSG      CD-ROM: Read: Unknown    Write: No
 FIELD    CD-R = Read: Unknown    Write: Unknown
-MSG      CD-R: Read: Unknown    Write: Unknown
 FIELD    CD-RW = Read: Unknown    Write: Unknown
-MSG      CD-RW: Read: Unknown    Write: Unknown
 FIELD    DVD-ROM = Read: Unknown    Write: No
-MSG      DVD-ROM: Read: Unknown    Write: No
 FIELD    DVD-R = Read: Unknown    Write: Unknown
-MSG      DVD-R: Read: Unknown    Write: Unknown
 FIELD    DVD-R DL = Read: Unknown    Write: Unknown
-MSG      DVD-R DL: Read: Unknown    Write: Unknown
 FIELD    DVD-RW = Read: Unknown    Write: Unknown
-MSG      DVD-RW: Read: Unknown    Write: Unknown
 FIELD    DVD+R = Read: Unknown    Write: Unknown
-MSG      DVD+R: Read: Unknown    Write: Unknown
 FIELD    DVD+R DL = Read: Unknown    Write: Unknown
-MSG      DVD+R DL: Read: Unknown    Write: Unknown
 FIELD    DVD+RW = Read: Unknown    Write: Unknown
-MSG      DVD+RW: Read: Unknown    Write: Unknown
 FIELD    DVD+RW DL = Read: Unknown    Write: Unknown
-MSG      DVD+RW DL: Read: Unknown    Write: Unknown
 FIELD    DVD-RAM = Read: Unknown    Write: Unknown
-MSG      DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    BD-ROM = Read: Unknown    Write: No
-MSG      BD-ROM: Read: Unknown    Write: No
 FIELD    BD-R = Read: Unknown    Write: Unknown
-MSG      BD-R: Read: Unknown    Write: Unknown
 FIELD    BD-R XL = Read: Unknown    Write: Unknown
-MSG      BD-R XL: Read: Unknown    Write: Unknown
 FIELD    BD-RE = Read: Unknown    Write: Unknown
-MSG      BD-RE: Read: Unknown    Write: Unknown
 FIELD    BD-RE XL = Read: Unknown    Write: Unknown
-MSG      BD-RE XL: Read: Unknown    Write: Unknown
 FIELD    HD DVD-ROM = Read: Unknown    Write: No
-MSG      HD DVD-ROM: Read: Unknown    Write: No
 FIELD    HD DVD-R = Read: Unknown    Write: Unknown
-MSG      HD DVD-R: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RAM = Read: Unknown    Write: Unknown
-MSG      HD DVD-RAM: Read: Unknown    Write: Unknown
 FIELD    HD DVD-RW = Read: Unknown    Write: Unknown
-MSG      HD DVD-RW: Read: Unknown    Write: Unknown
 FIELD    DVD region = Unavailable
-MSG      DVD region: Unavailable
+MSG
+MSG      Drive information
+MSG        Device:            mock://in-memory
+MSG        Manufacturer:
+MSG        Model:
+MSG        Firmware version:
+MSG        Drive family:      MediaTek MT19xx
+MSG        Firmware banner:   MT1959 Boot BU5
+MSG        flash:             MediaTek MT19xx (proven on MT1959) — executable (hardware-proven)
+MSG        Serial number:     Not reported
+MSG        Buffer size:       Not reported
+MSG        Loader type:       Not reported
+MSG        Interface type:    Not reported
+MSG
+MSG      Media capabilities
+MSG        CD-ROM:            Read: Unknown    Write: No
+MSG        CD-R:              Read: Unknown    Write: Unknown
+MSG        CD-RW:             Read: Unknown    Write: Unknown
+MSG        DVD-ROM:           Read: Unknown    Write: No
+MSG        DVD-R:             Read: Unknown    Write: Unknown
+MSG        DVD-R DL:          Read: Unknown    Write: Unknown
+MSG        DVD-RW:            Read: Unknown    Write: Unknown
+MSG        DVD+R:             Read: Unknown    Write: Unknown
+MSG        DVD+R DL:          Read: Unknown    Write: Unknown
+MSG        DVD+RW:            Read: Unknown    Write: Unknown
+MSG        DVD+RW DL:         Read: Unknown    Write: Unknown
+MSG        DVD-RAM:           Read: Unknown    Write: Unknown
+MSG        BD-ROM:            Read: Unknown    Write: No
+MSG        BD-R:              Read: Unknown    Write: Unknown
+MSG        BD-R XL:           Read: Unknown    Write: Unknown
+MSG        BD-RE:             Read: Unknown    Write: Unknown
+MSG        BD-RE XL:          Read: Unknown    Write: Unknown
+MSG        HD DVD-ROM:        Read: Unknown    Write: No
+MSG        HD DVD-R:          Read: Unknown    Write: Unknown
+MSG        HD DVD-RAM:        Read: Unknown    Write: Unknown
+MSG        HD DVD-RW:         Read: Unknown    Write: Unknown
+MSG
+MSG      DVD region
+MSG        DVD region:        Unavailable
+MSG
+MSG      Available operations
+MSG        Backup:            Supported
+MSG        Firmware update:   Supported
 FIELD    Chipset = MT1959
-MSG      chipset: MT1959
-MSG      firmware: unknown (unrecognized — not in the built-in catalog)
+MSG
+MSG      Drive information
+MSG        chipset:   MT1959
+MSG        firmware:  unknown (unrecognized — not in the built-in catalog)
 MSG                fingerprint fe47043787640c7d3f50b7a8e13ae22b07fc74f41826cb532effebf110816305
 --- scsi transcript (23) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
