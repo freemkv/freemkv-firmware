@@ -144,16 +144,17 @@ pub fn recognize_among<B: Backend + ?Sized + 'static>(
     Ok(pick)
 }
 
-/// The format of a flash input bound for `backend`'s drive, if it reads files.
+/// The shared Flash/Recovery format policy for `backend`'s drive.
 /// A recognized file is its recognized format whichever drive is attached (the
 /// engine then refuses a foreign one). Otherwise a file named for another
 /// backend's format is that format, else the drive's backend names it.
-pub fn flash_input_format(
+pub fn update_input_format(
     backend: &dyn Backend,
     path: &Path,
     bytes: &[u8],
 ) -> Result<Option<&'static FileFormat>> {
     if let Some((_, recognized)) = recognize(bytes)? {
+        recognized.format.ensure_update_input()?;
         return Ok(Some(recognized.format));
     }
     let id = backend.descriptor().id;
@@ -161,7 +162,11 @@ pub fn flash_input_format(
         .filter(|other| other.descriptor().id != id)
         .filter_map(|other| other.files())
         .find_map(|files| files.claims_by_name(path));
-    Ok(foreign.or_else(|| backend.files().map(|f| f.classify_input(path, bytes))))
+    let format = foreign.or_else(|| backend.files().map(|f| f.classify_input(path, bytes)));
+    if let Some(format) = format {
+        format.ensure_update_input()?;
+    }
+    Ok(format)
 }
 
 #[cfg(test)]

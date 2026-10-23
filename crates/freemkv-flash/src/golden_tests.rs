@@ -2800,6 +2800,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
+    "CLI_INFO",
     "HUMAN_ERRORS",
     "PRECHECK",
     "R1",
@@ -2826,6 +2827,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
+    "CLI_INFO",
     "HUMAN_ERRORS",
     "PRECHECK",
     "P1",

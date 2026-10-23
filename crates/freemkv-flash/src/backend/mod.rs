@@ -79,8 +79,22 @@ pub struct FileFormat {
     pub label: &'static str,
     /// Usual file-name endings, for pickers and help text.
     pub extensions: &'static [&'static str],
+    /// May Flash and Recovery use this as an update input (not merely inspect it)?
+    pub update_input: bool,
     /// How a flash treats this format.
     pub role: FormatRole,
+}
+
+impl FileFormat {
+    /// Shared format gate for Flash, Recovery and their Current references.
+    pub fn ensure_update_input(&self) -> Result<()> {
+        anyhow::ensure!(
+            self.update_input,
+            "{} is inspection-only; use a TAR package for Pioneer updates",
+            self.label
+        );
+        Ok(())
+    }
 }
 
 /// Family name shown for a drive no backend recognizes.

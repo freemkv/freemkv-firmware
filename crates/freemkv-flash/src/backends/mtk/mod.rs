@@ -856,6 +856,7 @@ pub const IMAGE: FileFormat = FileFormat {
     id: "mtk-image",
     label: "MediaTek firmware image",
     extensions: &["bin"],
+    update_input: true,
     role: FormatRole::Image,
 };
 
@@ -864,6 +865,7 @@ pub const PACKAGE: FileFormat = FileFormat {
     id: "mtk-package",
     label: "MediaTek release package",
     extensions: &["tar"],
+    update_input: true,
     role: FormatRole::Package,
 };
 
@@ -872,6 +874,7 @@ pub const LEGACY_TAR: FileFormat = FileFormat {
     id: "mtk-legacy-tar",
     label: "MediaTek 0.10.x backup archive",
     extensions: &["tar"],
+    update_input: true,
     role: FormatRole::Backup,
 };
 

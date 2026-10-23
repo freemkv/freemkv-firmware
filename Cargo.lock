@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.14.3"
+version = "0.14.4"
 dependencies = [
  "anyhow",
  "mediatek-optical",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.14.3"
+version = "0.14.4"
 dependencies = [
  "aes",
  "anyhow",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.14.3"
+version = "0.14.4"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -1455,7 +1455,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.14.3"
+version = "0.14.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -1468,7 +1468,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.14.3"
+version = "0.14.4"
 dependencies = [
  "anyhow",
  "eframe",
@@ -3258,9 +3258,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pioneer-optical"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e695d8c0b978ebf7ef5bdad312e38a7460b1fa6f9d81712bf28ab9935fcce9e4"
+checksum = "71921446347900c73d59a88825c6988101500a1757d0c21f45b77a0674d5d104"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",

@@ -317,6 +317,20 @@ pub fn file_extensions() -> Vec<&'static str> {
     extensions(registry::backends().flat_map(|b| b.descriptor().formats))
 }
 
+/// Update pickers use the same per-format permission as Flash and Recovery.
+pub fn update_extensions(formats: &[crate::backend::FileFormat]) -> Vec<&'static str> {
+    extensions(formats.iter().filter(|format| format.update_input))
+}
+
+/// All update formats when a drive has not yet been identified.
+pub fn update_file_extensions() -> Vec<&'static str> {
+    extensions(
+        registry::backends()
+            .flat_map(|b| b.descriptor().formats)
+            .filter(|f| f.update_input),
+    )
+}
+
 /// The distinct endings of `formats`, in first-seen order.
 pub fn extensions<'a>(
     formats: impl IntoIterator<Item = &'a crate::backend::FileFormat>,
@@ -643,7 +657,7 @@ fn open_flash(
         current.is_none() || handler.flash().is_some_and(|f| f.accepts_current()),
         "this flash backend does not accept a Current firmware reference"
     );
-    let input_format = registry::flash_input_format(handler, &args.input, &input)?
+    let input_format = registry::update_input_format(handler, &args.input, &input)?
         .context("backend reads no firmware files")?;
     let drive_model = handler
         .identity(&mut ReadDevice::for_backend(dev.as_mut(), handler))
@@ -827,9 +841,6 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
     }
     crate::diagnostics::record(format!("recovery options: {args:?}"));
     let input = read_capped(&args.input)?;
-    if input.get(257..262) != Some(b"ustar") {
-        bail!("Recovery accepts TAR packages only");
-    }
     let target = recovery_target(&input, args.member.as_deref())?;
     let supplied = match &args.current {
         CurrentFirmware::File(path) => {
@@ -862,6 +873,7 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
             if facet.requires_current() && matches!(args.current, CurrentFirmware::NotRequired) {
                 bail!("this recovery backend requires --current or --read-from-drive");
             }
+            registry::update_input_format(backend, &args.input, &input)?;
             return Ok(RecoveryInput {
                 dev,
                 backend,
@@ -890,7 +902,7 @@ pub fn current_firmware_image(input: &[u8], member: Option<&str>) -> Result<Vec<
             member.is_none(),
             "--current-member requires a Current TAR package"
         );
-        Ok(input.to_vec())
+        recovery_target(input, None)
     }
 }
 

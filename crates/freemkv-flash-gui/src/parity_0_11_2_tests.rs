@@ -504,17 +504,17 @@ fn pioneer_dump_runs_the_0_11_2_job_under_the_cli_name() {
 // ── flash ─────────────────────────────────────────────────────────────────
 
 #[test]
-fn flash_picker_accepts_tar_packages_and_bin_images() {
+fn pioneer_flash_picker_uses_tar_update_policy() {
     let mut app = pioneer_app();
     app.dispatch(Input::SelectTask(Task::Flash));
     covers(
         open_filter(&press(&mut app, "Choose firmware…")),
-        ("Firmware or backup", &["tar", "bin"]),
+        ("Firmware or backup", &["tar"]),
     );
     app.dispatch(Input::Chosen(Pick::FlashFirmware, "/fw/a.tar".into()));
     covers(
         open_filter(&press(&mut app, "Change file…")),
-        ("Firmware or backup", &["tar", "bin"]),
+        ("Firmware or backup", &["tar"]),
     );
 }
 
@@ -578,7 +578,7 @@ fn recover(app: &mut App, input: &Path) {
     app.dispatch(Input::SelectTask(Task::Recovery));
     covers(
         open_filter(&press(app, "Choose firmware…")),
-        v0_11_2::FIRMWARE_FILTER,
+        ("Firmware or backup", &["tar"]),
     );
     app.dispatch(Input::Chosen(Pick::RecoveryInput, input.into()));
     let before = jobs(app);
@@ -629,7 +629,7 @@ fn recovery_from_a_current_file_matches_0_11_2() {
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, false));
     covers(
         open_filter(&press(&mut app, "Choose Current…")),
-        v0_11_2::FIRMWARE_FILTER,
+        ("Firmware or backup", &["tar"]),
     );
     let current = PathBuf::from("/fw/current.backup.tar");
     app.dispatch(Input::Chosen(Pick::RecoveryCurrent, current.clone()));

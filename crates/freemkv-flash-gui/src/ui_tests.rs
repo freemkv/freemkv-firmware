@@ -27,7 +27,7 @@ impl Profile {
             inspect: true,
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
-            flash_extensions: vec!["bin"],
+            flash_extensions: vec!["bin", "tar"],
             recovery_without_live_protocol: false,
             notes: Vec::new(),
         }
@@ -707,7 +707,7 @@ fn flash_starts_with_a_firmware_chooser() {
             pick: Pick::FlashFirmware,
             filter: Some(FileFilter {
                 name: "Firmware or backup",
-                extensions: vec!["tar", "bin"],
+                extensions: vec!["bin", "tar"],
             })
         }]
     );
@@ -735,6 +735,7 @@ struct SheetBackend {
 }
 
 static SHEET_FORMAT: FileFormat = FileFormat {
+    update_input: true,
     id: "sheet-image",
     label: "Sheet test image",
     extensions: &["bin"],
