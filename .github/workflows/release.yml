@@ -462,8 +462,6 @@ jobs:
         working-directory: .
         run: |
           set -euo pipefail
-          # Keep Ubuntu's signed sources; avoid the hosted amd64 Azure mirror's slow downloads.
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config dpkg-dev lintian xvfb \
             desktop-file-utils imagemagick libgtk-4-dev libadwaita-1-dev
