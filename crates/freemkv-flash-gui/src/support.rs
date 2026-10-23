@@ -155,6 +155,7 @@ impl Journal {
             dir: self.dir.clone(),
             session_id: self.session_id.clone(),
             unsaved: self.unsaved.clone(),
+            artifact: None,
         }
     }
 }
@@ -164,9 +165,20 @@ pub struct BundleSource {
     dir: PathBuf,
     session_id: String,
     unsaved: Vec<Value>,
+    artifact: Option<ReportArtifact>,
+}
+
+#[derive(Clone)]
+pub struct ReportArtifact {
+    pub path: PathBuf,
+    pub kind: &'static str,
 }
 
 impl BundleSource {
+    pub fn with_artifact(mut self, artifact: ReportArtifact) -> Self {
+        self.artifact = Some(artifact);
+        self
+    }
     #[cfg(test)]
     pub fn bundle(&self, scope: Scope) -> Result<PathBuf> {
         self.bundle_with_control(scope, None)
@@ -246,8 +258,25 @@ impl BundleSource {
             .filter_map(|p| fs::metadata(p).ok())
             .map(|m| m.len())
             .sum::<u64>();
-        if size > BUNDLE_LIMIT {
-            bail!("The selected logs exceed 50 MiB. Choose this session or remove old logs.");
+        let artifact_size = if let Some(artifact) = &self.artifact {
+            anyhow::ensure!(
+                matches!(artifact.kind, "dump" | "backup"),
+                "Invalid report artifact type"
+            );
+            anyhow::ensure!(
+                fs::symlink_metadata(&artifact.path)?.file_type().is_file(),
+                "The selected firmware artifact is no longer a regular file."
+            );
+            fs::metadata(&artifact.path)?.len()
+        } else {
+            0
+        };
+        if size
+            .saturating_add(artifact_size)
+            .saturating_add(event_bytes as u64)
+            > BUNDLE_LIMIT
+        {
+            bail!("The selected artifact, logs, and history exceed 50 MiB. Choose this session or submit a smaller artifact.");
         }
         let mut reports = self.dir.join("reports");
         if fs::create_dir_all(&reports).is_err() {
@@ -298,6 +327,40 @@ impl BundleSource {
             serde_json::to_writer(&mut zip, &event)?;
             zip.write_all(b"\n")?;
         }
+        let artifact_manifest = if let Some(artifact) = &self.artifact {
+            use sha2::{Digest, Sha256};
+            let archive_path = format!("artifacts/{}.bin", artifact.kind);
+            zip.start_file(&archive_path, opts)?;
+            let mut source = File::open(&artifact.path)?;
+            let mut hash = Sha256::new();
+            let mut bytes = 0u64;
+            let mut buffer = [0u8; 32 * 1024];
+            loop {
+                check()?;
+                let n = source.read(&mut buffer)?;
+                if n == 0 {
+                    break;
+                }
+                bytes += n as u64;
+                anyhow::ensure!(
+                    size.saturating_add(bytes)
+                        .saturating_add(event_bytes as u64)
+                        <= BUNDLE_LIMIT,
+                    "The selected artifact grew beyond the 50 MiB report limit."
+                );
+                hash.update(&buffer[..n]);
+                zip.write_all(&buffer[..n])?;
+            }
+            Some(json!({
+                "kind": artifact.kind,
+                "path": archive_path,
+                "filename": artifact.path.file_name().and_then(|n| n.to_str()),
+                "bytes": bytes,
+                "sha256": format!("{:x}", hash.finalize()),
+            }))
+        } else {
+            None
+        };
         zip.start_file("manifest.json", opts)?;
         serde_json::to_writer_pretty(
             &mut zip,
@@ -310,6 +373,7 @@ impl BundleSource {
                 "session_id": self.session_id,
                 "logs": included,
                 "missing_logs": missing,
+                "artifact": artifact_manifest,
             }),
         )?;
         zip.finish().context("Could not finish report ZIP")?;
@@ -354,6 +418,48 @@ impl Drop for Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn artifact_submission_keeps_selected_file_and_diagnostic_log_together() {
+        let dir = std::env::temp_dir().join(format!("freemkv-support-{}", random_id().unwrap()));
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        let log = dir.join("freemkv-flash-test.log");
+        fs::write(&log, b"diagnostic evidence").unwrap();
+        journal
+            .record("operation_finished", json!({"log_file": log}))
+            .unwrap();
+        let dump = dir.join("drive-dump.bin");
+        fs::write(&dump, b"firmware bytes").unwrap();
+        let source = journal.source().with_artifact(ReportArtifact {
+            path: dump,
+            kind: "dump",
+        });
+        let path = source.bundle(Scope::Session).unwrap();
+        let mut zip = zip::ZipArchive::new(File::open(path).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        zip.by_name("artifacts/dump.bin")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        assert_eq!(bytes, b"firmware bytes");
+        bytes.clear();
+        zip.by_name("logs/freemkv-flash-test.log")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        assert_eq!(bytes, b"diagnostic evidence");
+        let mut manifest = String::new();
+        zip.by_name("manifest.json")
+            .unwrap()
+            .read_to_string(&mut manifest)
+            .unwrap();
+        let manifest: Value = serde_json::from_str(&manifest).unwrap();
+        assert_eq!(manifest["artifact"]["kind"], "dump");
+        assert_eq!(manifest["artifact"]["bytes"], 14);
+        drop(zip);
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn journal_persists_opened_and_closed_events_as_jsonl() {

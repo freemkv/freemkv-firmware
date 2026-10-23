@@ -54,13 +54,32 @@ fn profile_of(mut dev: MockScsiDevice) -> Profile {
 #[test]
 fn recovery_is_offered_for_an_unsupported_identified_drive() {
     let profile = profile_of(receiver(b"BDR 8A10"));
-    assert_eq!(profile.tasks, [Task::Recovery]);
+    assert_eq!(profile.tasks, [Task::Dump, Task::Recovery]);
     assert_eq!(profile.chips, ["Pioneer"]);
-    assert_eq!((profile.backup_name, profile.dump_name), (None, None));
+    assert_eq!(profile.backup_name, None);
+    assert_eq!(
+        profile.dump_name.as_deref(),
+        Some("BD-RW___BDR-UD04_1.14.dump.bin")
+    );
+    assert!(profile.recovery_without_live_protocol);
+    assert_eq!(profile.can_read, Some(true));
 
     let profile = profile_of(MockScsiDevice::new());
     assert!(profile.tasks.is_empty() && !profile.inspect);
     assert_eq!(profile.chips, ["modify.not_supported"]);
+}
+
+#[test]
+fn rec_profile_offers_dump_without_backup_or_flash() {
+    for hardware in [b"REC 8301", b"REC 8800", b"REC 8C00"] {
+        let profile = profile_of(receiver(hardware));
+        assert!(profile.tasks.contains(&Task::Dump));
+        assert!(!profile.tasks.contains(&Task::Backup));
+        assert!(!profile.tasks.contains(&Task::Flash));
+        assert!(profile.dump_name.is_some());
+        assert!(profile.backup_name.is_none());
+        assert!(!profile.flash_current);
+    }
 }
 
 #[test]

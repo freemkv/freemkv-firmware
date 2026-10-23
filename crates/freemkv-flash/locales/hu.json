@@ -27,6 +27,8 @@
     "status.ready": "Kész",
     "action.view_log": "Napló megtekintése",
     "action.submit_report": "Jelentés küldése",
+    "action.submit_dump": "Memóriakép beküldése",
+    "action.submit_backup": "Biztonsági mentés beküldése",
     "menu.file": "Fájl",
     "menu.edit": "Szerkesztés",
     "menu.view": "Nézet",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "A kikapcsolódás: {arg0}• jelenlegi állapot nem ellenőrzött",
     "legacy.arg0_active_and_saved": "{arg0} (az aktív és megmentett)",
     "legacy.backup_saved": "Backup: Megtakarítás {path} ({bytes} A bajtok",
-    "legacy.backup_missing": "biztonsági mentés: NONE - flashing anélkül, hogy a rollback biztonsági mentés (ez az optikai lemez nem lehet visszahívni)"
+    "legacy.backup_missing": "biztonsági mentés: NONE - flashing anélkül, hogy a rollback biztonsági mentés (ez az optikai lemez nem lehet visszahívni)",
+    "ui.backup_dump_review": "Ha nem menthető biztonsági másolat, mentsen nyers memóriaképet, és küldje be a diagnosztikai naplókkal együtt, hogy megvizsgálhassuk a biztonsági mentés támogatását."
   }
 }

@@ -27,6 +27,8 @@
     "status.ready": "Gotowe",
     "action.view_log": "Pokaż dziennik",
     "action.submit_report": "Wyślij raport",
+    "action.submit_dump": "Prześlij zrzut",
+    "action.submit_backup": "Prześlij kopię zapasową",
     "menu.file": "Plik",
     "menu.edit": "Edycja",
     "menu.view": "Widok",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Złapany : {arg0}aktualny stan niepotwierdzony",
     "legacy.arg0_active_and_saved": "{arg0} (aktywny i uratowany)",
     "legacy.backup_saved": "Kopia zapasów: Zbawił {path} ({bytes} Bytów )",
-    "legacy.backup_missing": "Backup: NONE – flashing bez backupów (taki napęd optyczny nie może być odwracany)"
+    "legacy.backup_missing": "Backup: NONE – flashing bez backupów (taki napęd optyczny nie może być odwracany)",
+    "ui.backup_dump_review": "Jeśli nie można zapisać kopii zapasowej, zapisz surowy zrzut i prześlij go z dziennikami diagnostycznymi, abyśmy mogli zbadać obsługę kopii zapasowych."
   }
 }

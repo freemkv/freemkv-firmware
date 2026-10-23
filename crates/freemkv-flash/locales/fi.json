@@ -27,6 +27,8 @@
     "status.ready": "Valmis",
     "action.view_log": "Näytä loki",
     "action.submit_report": "Lähetä raportti",
+    "action.submit_dump": "Lähetä muistivedos",
+    "action.submit_backup": "Lähetä varmuuskopio",
     "menu.file": "Tiedosto",
     "menu.edit": "Muokkaa",
     "menu.view": "Näytä",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Jäähdytettyä : {arg0}• Nykyinen tilanne ei ole tarkistettu",
     "legacy.arg0_active_and_saved": "{arg0} (aktiivinen ja pelastettu)",
     "legacy.backup_saved": "Backup: pelastettu {path} ({bytes} ja bytejä)",
-    "legacy.backup_missing": "varmuuskopiointi: NONE - flashing ilman rollback varmuuskopiointi (tämä optinen ohjaus ei voi rullata takaisin)"
+    "legacy.backup_missing": "varmuuskopiointi: NONE - flashing ilman rollback varmuuskopiointi (tämä optinen ohjaus ei voi rullata takaisin)",
+    "ui.backup_dump_review": "Jos varmuuskopiota ei voi tallentaa, tallenna raaka muistivedos ja lähetä se diagnostiikkalokien kanssa, jotta voimme selvittää varmuuskopioinnin tuen."
   }
 }

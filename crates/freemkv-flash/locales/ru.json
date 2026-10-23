@@ -27,6 +27,8 @@
     "status.ready": "Готово",
     "action.view_log": "Показать журнал",
     "action.submit_report": "Отправить отчёт",
+    "action.submit_dump": "Отправить дамп",
+    "action.submit_backup": "Отправить резервную копию",
     "menu.file": "Файл",
     "menu.edit": "Правка",
     "menu.view": "Вид",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Пропущенный : {arg0}· текущее состояние не подтверждено",
     "legacy.arg0_active_and_saved": "{arg0} (активный и сохранившийся)",
     "legacy.backup_saved": "Backup: спасены {path} ({bytes} Битсы )",
-    "legacy.backup_missing": "Backup: NONE — flashing without a rollback backup (этот оптический диск не может быть перевернут назад)"
+    "legacy.backup_missing": "Backup: NONE — flashing without a rollback backup (этот оптический диск не может быть перевернут назад)",
+    "ui.backup_dump_review": "Если резервную копию сохранить не удаётся, сохраните необработанный дамп и отправьте его вместе с журналами диагностики, чтобы мы могли изучить возможность поддержки резервного копирования."
   }
 }

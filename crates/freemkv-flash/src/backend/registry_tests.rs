@@ -140,6 +140,76 @@ fn classify_pioneer_from_read_buffer_f1() {
     assert_eq!(matched(&mut dev), Some("pioneer-oem"));
 }
 
+fn pioneer_capture_device(hardware: &[u8]) -> MockScsiDevice {
+    let mut inquiry = vec![b' '; 96];
+    inquiry[0] = 5;
+    inquiry[8..16].copy_from_slice(b"PIONEER ");
+    inquiry[16..32].copy_from_slice(b"BD-RW BDR-L08SHB");
+    inquiry[32..36].copy_from_slice(b"1.00");
+    let mut f1 = vec![b' '; 48];
+    f1[16..24].copy_from_slice(hardware);
+    MockScsiDevice::new()
+        .on(|c| c.first() == Some(&0x12), inquiry)
+        .on(|c| c.get(..3) == Some(&[0x3c, 2, 0xf1]), f1)
+}
+
+#[test]
+fn rec_and_new_pioneer_identities_offer_dump_without_oem_write_facets() {
+    for hardware in [b"REC 8301", b"REC 8800", b"REC 8C00", b"NEW 1234"] {
+        let mut dev = pioneer_capture_device(hardware);
+        let resolved = resolve(&mut dev).unwrap().expect("Pioneer dump route");
+        let caps = crate::backend::Capabilities::of(resolved.backend);
+        assert!(caps.dump);
+        assert!(!caps.backup && !caps.flash && !caps.recovery && !caps.flash_current);
+        assert!(resolved.backend.files().is_none());
+        assert!(dev.writes.is_empty());
+        assert!(crate::workflow::classify_gated(&mut dev).is_err());
+        assert!(dev.writes.is_empty());
+    }
+}
+
+#[test]
+fn rec_dump_reaches_existing_memory_capture_and_saves_raw_bytes() {
+    for hardware in [b"REC 8301", b"REC 8800", b"REC 8C00"] {
+        let mut dev = pioneer_capture_device(hardware)
+            .on(|c| c.get(..3) == Some(&[0x3c, 2, 0xb0]), vec![0x5a; 0x8000]);
+        let resolved = resolve(&mut dev).unwrap().expect("Pioneer dump route");
+        let out = std::env::temp_dir().join(format!(
+            "rec-dump-{}-{}.bin",
+            std::process::id(),
+            String::from_utf8_lossy(hardware)
+        ));
+        crate::engine::backup(&mut dev, resolved.backend, &out, true).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+        assert_eq!(&bytes[0x410000..0x418000], &[0x5a; 0x8000]);
+        assert!(crate::backends::pioneer::dump::directory(&bytes)
+            .unwrap()
+            .is_some());
+        assert_eq!(
+            dev.writes,
+            [(pioneer_optical::cdb::knock().to_vec(), vec![])]
+        );
+        std::fs::remove_file(&out).unwrap();
+        let reads = dev.reads.len();
+        assert!(crate::engine::backup(&mut dev, resolved.backend, &out, false).is_err());
+        assert!(!out.exists());
+        assert_eq!(dev.reads.len(), reads);
+    }
+}
+
+#[test]
+fn dump_fallback_does_not_accept_empty_or_nonprintable_hardware() {
+    for hardware in [
+        b"        ",
+        b"REC \0\0\0\0",
+        b"\xff\xff\xff\xff\xff\xff\xff\xff",
+    ] {
+        let mut dev = pioneer_capture_device(hardware);
+        assert!(resolve(&mut dev).unwrap().is_none());
+        assert!(dev.writes.is_empty());
+    }
+}
+
 #[test]
 fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
     for product in [

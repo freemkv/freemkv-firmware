@@ -27,6 +27,8 @@
     "status.ready": "A punt",
     "action.view_log": "Mostra el registre",
     "action.submit_report": "Envia l’informe",
+    "action.submit_dump": "Envia el bolcat",
+    "action.submit_backup": "Envia la còpia de seguretat",
     "menu.file": "Fitxer",
     "menu.edit": "Edita",
     "menu.view": "Visualitza",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Es va escapar: {arg0}· L'estat actual no verificat",
     "legacy.arg0_active_and_saved": "{arg0} (Actiu i rescatat)",
     "legacy.backup_saved": "Recuperació: salvada {path} ({bytes} Els bitllets)",
-    "legacy.backup_missing": "Backup: NO - flashing sense una backup de rellotge (aquest disc òptic no es pot rellotjar enrere)"
+    "legacy.backup_missing": "Backup: NO - flashing sense una backup de rellotge (aquest disc òptic no es pot rellotjar enrere)",
+    "ui.backup_dump_review": "Si no es pot desar una còpia de seguretat, deseu un bolcat en brut i envieu-lo amb els registres de diagnòstic perquè puguem revisar la compatibilitat."
   }
 }

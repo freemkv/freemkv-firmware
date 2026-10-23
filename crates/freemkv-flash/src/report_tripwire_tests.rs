@@ -260,8 +260,8 @@ fn pioneer_rows_interleave_at_slots() {
 
 // ---- R6: recovery is reachable without a probe match ------------------------
 
-/// A Pioneer receiver whose vendor identity does not satisfy the protocol
-/// probe (its platform field is not a SAT/ATA/SCSI code), e.g. mid-update.
+/// A Pioneer receiver without an OEM protocol match, e.g. mid-update.
+/// Its valid identity now permits raw Dump independently of Recovery.
 fn unprobeable_receiver() -> MockScsiDevice {
     pioneer_with(b"", b"SN1", b"BDR 8A10")
 }
@@ -270,8 +270,16 @@ fn unprobeable_receiver() -> MockScsiDevice {
 fn recovery_offered_for_unsupported_identified_drive() {
     let mut dev = unprobeable_receiver();
     let profile = crate::workflow::profile_on(&mut dev).expect("a profile, not an error");
-    assert!(profile.backend.is_none(), "no protocol probe matched");
-    assert_eq!(profile.capabilities, crate::backend::Capabilities::NONE);
+    assert_eq!(profile.backend.as_ref().unwrap().0.id.0, "pioneer-dump");
+    assert_eq!(
+        profile.capabilities,
+        crate::backend::Capabilities {
+            dump: true,
+            deep_salvage: true,
+            ..crate::backend::Capabilities::NONE
+        }
+    );
+    assert_eq!(profile.can_read(), Some(true));
     assert_eq!(
         profile.recovery.map(|d| d.id),
         Some(crate::backends::pioneer::DESCRIPTOR.id)
@@ -292,7 +300,10 @@ fn recovery_offered_for_unsupported_identified_drive() {
 #[test]
 fn recovery_identify_needs_no_probe() {
     let mut dev = Rec::new(unprobeable_receiver());
-    assert!(registry::resolve(&mut dev).unwrap().is_none());
+    let resolved = registry::resolve(&mut dev).unwrap().unwrap();
+    assert!(resolved.backend.flash().is_none());
+    assert!(resolved.backend.backup().is_none());
+    assert!(resolved.backend.recovery().is_none());
     let mut dev = Rec::new(unprobeable_receiver());
     let receiver = Pioneer::new()
         .recovery()
@@ -537,6 +548,7 @@ fn conformance_probe_rejects_unknown_mmc_drive() {
     let own: &[(&str, fn() -> MockScsiDevice)] = &[
         ("mtk19xx", MockScsiDevice::mtk),
         ("pioneer-oem", MockScsiDevice::pioneer),
+        ("pioneer-dump", unprobeable_receiver),
     ];
     for backend in registry::backends() {
         let id = backend.descriptor().id;

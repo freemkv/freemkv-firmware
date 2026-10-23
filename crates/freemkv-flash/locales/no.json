@@ -27,6 +27,8 @@
     "status.ready": "Klar",
     "action.view_log": "Vis logg",
     "action.submit_report": "Send rapport",
+    "action.submit_dump": "Send inn dump",
+    "action.submit_backup": "Send inn sikkerhetskopi",
     "menu.file": "Fil",
     "menu.edit": "Rediger",
     "menu.view": "Vis",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Skipet av: {arg0}• Aktuell status ikke verifisert",
     "legacy.arg0_active_and_saved": "{arg0} (Aktiv og reddet)",
     "legacy.backup_saved": "Backup: redde {path} ({bytes} byter)",
-    "legacy.backup_missing": "backup: NONE – flashing uten en rollback backup (dette optiske enheten kan ikke rulles tilbake)"
+    "legacy.backup_missing": "backup: NONE – flashing uten en rollback backup (dette optiske enheten kan ikke rulles tilbake)",
+    "ui.backup_dump_review": "Hvis en sikkerhetskopi ikke kan lagres, lagre en rå dump og send den inn med diagnoselogger, slik at vi kan undersøke støtte for sikkerhetskopiering."
   }
 }
