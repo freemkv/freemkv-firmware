@@ -766,6 +766,8 @@ pub struct App {
     preview_compatibility_pending: Option<bool>,
     report_rx: Option<Receiver<Result<String, String>>>,
     report_control: Option<crate::support::Submission>,
+    artifact_in_progress: Option<crate::support::ReportArtifact>,
+    report_artifact: Option<crate::support::ReportArtifact>,
     recovery_planning: Option<(Target, RecoveryOptions)>,
     origin_rx: Vec<(Pick, PathBuf, Receiver<OriginReply>)>,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -885,6 +887,8 @@ impl App {
             preview_compatibility_pending: None,
             report_rx: None,
             report_control: None,
+            artifact_in_progress: None,
+            report_artifact: None,
             recovery_planning: None,
             origin_rx: Vec::new(),
             flash_origin: None,
@@ -1288,12 +1292,20 @@ impl App {
                 self.refresh_diagnostic_view();
             }
             Input::SubmitReport if self.report_rx.is_none() => {
-                self.record_event("report_requested", serde_json::json!({}));
+                self.record_event(
+                    "report_requested",
+                    serde_json::json!({
+                        "artifact": self.report_artifact.as_ref().map(|a| a.kind),
+                    }),
+                );
                 let Some(journal) = &self.journal else {
                     self.diagnostic_notice = Some("ui.report_history_is_unavailable".into());
                     return Vec::new();
                 };
-                let source = journal.source();
+                let mut source = journal.source();
+                if let Some(artifact) = &self.report_artifact {
+                    source = source.with_artifact(artifact.clone());
+                }
                 let (tx, rx) = mpsc::channel();
                 let control = crate::support::Submission::new();
                 self.report_control = Some(control.clone());
@@ -1483,6 +1495,7 @@ impl App {
                 // The native save panel has already confirmed replacing an existing file.
                 let replace = path.symlink_metadata().is_ok();
                 let (label, job) = if pick == Pick::Dump {
+                    self.task = Task::Dump;
                     ("ui.raw_dump", Job::Dump { out: path, replace })
                 } else {
                     ("task.backup", Job::Backup { out: path, replace })
@@ -1717,6 +1730,18 @@ impl App {
             self.log.push("ui.no_optical_drive_selected".into());
             return Vec::new();
         }
+        self.artifact_in_progress = match &job {
+            Job::Backup { out, .. } => Some(crate::support::ReportArtifact {
+                path: out.clone(),
+                kind: "backup",
+            }),
+            Job::Dump { out, .. } => Some(crate::support::ReportArtifact {
+                path: out.clone(),
+                kind: "dump",
+            }),
+            _ => None,
+        };
+        self.report_artifact = None;
         self.result_task = self.task;
         self.action = label.to_string();
         self.status = crate::localization::message(
@@ -1846,6 +1871,12 @@ impl App {
                         }
                     },
                     Ok(Msg::Done(result)) => {
+                        self.report_artifact = if result.is_ok() {
+                            self.artifact_in_progress.take()
+                        } else {
+                            self.artifact_in_progress = None;
+                            None
+                        };
                         recovery_planned = self.recovery_planning.take().filter(|_| {
                             matches!(result, Ok(Some(workflow::UpdateOutcome::Planned)))
                         });
@@ -2331,7 +2362,7 @@ impl App {
             Task::Inspect | Task::Compare => self.analysis_panel(enabled),
             Task::Backup | Task::Dump => {
                 let dump = self.task == Task::Dump;
-                vec![
+                let mut items = vec![
                     Item::Text(if dump {
                         "ui.capture_all_accessible_drive_memory_into_a_raw_fil".into()
                     } else {
@@ -2353,7 +2384,25 @@ impl App {
                             )
                         }],
                     },
-                ]
+                ];
+                let offer_dump = !dump
+                    && self.ready_profile().is_some_and(|profile| {
+                        profile.tasks.contains(&Task::Dump)
+                            && (!profile.tasks.contains(&Task::Backup)
+                                || (self.result_task == Task::Backup && self.failure.is_some()))
+                    });
+                if offer_dump {
+                    items.push(Item::Note("ui.backup_dump_review".into()));
+                    items.push(Item::Buttons {
+                        label: None,
+                        buttons: vec![Button::new(
+                            "ui.save_raw_dump",
+                            Input::Choose(Pick::Dump),
+                            enabled && selected,
+                        )],
+                    });
+                }
+                items
             }
             Task::Flash | Task::Recovery => {
                 self.firmware_panel(enabled, self.task == Task::Recovery)
@@ -2678,7 +2727,11 @@ impl App {
                 )
             } else {
                 Button::new(
-                    "action.submit_report",
+                    match self.report_artifact.as_ref().map(|a| a.kind) {
+                        Some("dump") => "action.submit_dump",
+                        Some("backup") => "action.submit_backup",
+                        _ => "action.submit_report",
+                    },
                     Input::SubmitReport,
                     self.journal.is_some(),
                 )

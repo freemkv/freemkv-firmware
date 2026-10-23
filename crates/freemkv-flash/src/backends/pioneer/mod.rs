@@ -644,6 +644,40 @@ pub(crate) fn verify_preflash_backup(backup: &[u8], input: &[u8]) -> Result<()> 
 #[derive(Default)]
 pub struct Pioneer;
 
+/// Raw capture for Pioneer identities without an OEM backup/update backend.
+pub(crate) struct DumpOnly;
+
+static DUMP_DESCRIPTOR: Descriptor = Descriptor {
+    id: BackendId("pioneer-dump"),
+    display_name: "Pioneer",
+    flash_summary: None,
+    formats: &[],
+};
+
+impl Backend for DumpOnly {
+    fn descriptor(&self) -> &'static Descriptor {
+        &DUMP_DESCRIPTOR
+    }
+
+    fn probe(&self, dev: &mut ReadDevice<'_>, identity: &Identity) -> Result<Option<Match>> {
+        if !identity.vendor.eq_ignore_ascii_case("PIONEER") {
+            return Ok(None);
+        }
+        let valid = matches!(dev.command_in(&pioneer_optical::cdb::vendor_identity(), 48), Ok(d)
+            if d.len() == 48
+                && d[16..24].iter().all(|b| (0x20..=0x7e).contains(b))
+                && d[16..24].iter().any(|b| *b != b' '));
+        Ok(valid.then_some(Match {
+            backend: DUMP_DESCRIPTOR.id,
+            evidence: "PIONEER vendor INQUIRY + F1 identity; raw capture only",
+        }))
+    }
+
+    fn dump(&self) -> Option<&dyn DumpFacet> {
+        Some(&Pioneer)
+    }
+}
+
 impl Pioneer {
     /// Create a fresh Pioneer family handle with no cached session state.
     pub const fn new() -> Self {

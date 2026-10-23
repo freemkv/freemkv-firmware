@@ -27,6 +27,8 @@
     "status.ready": "Klar",
     "action.view_log": "Visa logg",
     "action.submit_report": "Skicka rapport",
+    "action.submit_dump": "Skicka dump",
+    "action.submit_backup": "Skicka säkerhetskopia",
     "menu.file": "Arkiv",
     "menu.edit": "Redigera",
     "menu.view": "Visa",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Förskjutning : {arg0}• Aktuell status inte verifierad",
     "legacy.arg0_active_and_saved": "{arg0} (Aktiv och sparat)",
     "legacy.backup_saved": "Backup: sparas {path} ({bytes} bytes )",
-    "legacy.backup_missing": "Backup: NONE – flashing utan en rollback backup (detta optiska skivan kan inte rullas tillbaka)"
+    "legacy.backup_missing": "Backup: NONE – flashing utan en rollback backup (detta optiska skivan kan inte rullas tillbaka)",
+    "ui.backup_dump_review": "Om en säkerhetskopia inte kan sparas, spara en rå dump och skicka den med diagnostikloggarna så att vi kan undersöka stödet för säkerhetskopiering."
   }
 }

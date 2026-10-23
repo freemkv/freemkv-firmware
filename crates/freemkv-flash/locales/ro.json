@@ -27,6 +27,8 @@
     "status.ready": "Pregătit",
     "action.view_log": "Afișează jurnalul",
     "action.submit_report": "Trimite raportul",
+    "action.submit_dump": "Trimite dump",
+    "action.submit_backup": "Trimite copia de siguranță",
     "menu.file": "Fișier",
     "menu.edit": "Editare",
     "menu.view": "Vizualizare",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Încălcată : {arg0}• starea actuală nu este verificată",
     "legacy.arg0_active_and_saved": "{arg0} (Activ și salvat)",
     "legacy.backup_saved": "Cuvânt cheie: salvat {path} ({bytes} în byte)",
-    "legacy.backup_missing": "backup: NONE – flashing fără backup de rulare (acest disc optic nu poate fi rulat înapoi)"
+    "legacy.backup_missing": "backup: NONE – flashing fără backup de rulare (acest disc optic nu poate fi rulat înapoi)",
+    "ui.backup_dump_review": "Dacă nu se poate salva o copie de siguranță, salvați un dump brut și trimiteți-l împreună cu jurnalele de diagnostic, pentru a putea analiza suportul pentru copii de siguranță."
   }
 }

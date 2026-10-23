@@ -27,6 +27,8 @@
     "status.ready": "Έτοιμο",
     "action.view_log": "Προβολή αρχείου καταγραφής",
     "action.submit_report": "Υποβολή αναφοράς",
+    "action.submit_dump": "Υποβολή αποτύπωσης",
+    "action.submit_backup": "Υποβολή αντιγράφου ασφαλείας",
     "menu.file": "Αρχείο",
     "menu.edit": "Επεξεργασία",
     "menu.view": "Προβολή",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Απεργία : {arg0}· Η τρέχουσα κατάσταση δεν έχει επαληθευτεί",
     "legacy.arg0_active_and_saved": "{arg0} (Ενεργός και διατηρημένος)",
     "legacy.backup_saved": "Ετικέτες: Save {path} ({bytes} Μπάτρες )",
-    "legacy.backup_missing": "Backup: NONE – flashing χωρίς backup rollback (η οπτική μονάδα δεν μπορεί να περιστρέφεται πίσω)"
+    "legacy.backup_missing": "Backup: NONE – flashing χωρίς backup rollback (η οπτική μονάδα δεν μπορεί να περιστρέφεται πίσω)",
+    "ui.backup_dump_review": "Αν δεν μπορεί να αποθηκευτεί αντίγραφο ασφαλείας, αποθηκεύστε μια ακατέργαστη αποτύπωση και υποβάλετέ την με τα διαγνωστικά αρχεία καταγραφής, ώστε να εξετάσουμε την υποστήριξη αντιγράφων ασφαλείας."
   }
 }

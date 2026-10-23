@@ -1676,7 +1676,9 @@ fn production_every_audited_normal_rebuilds_through_backup() {
     }
     assert_eq!(
         rebuilt_hashes.len(),
-        459,
+        report["summary"]["verified_normal_images"]
+            .as_u64()
+            .unwrap() as usize,
         "full eligible corpus must be exercised"
     );
 }

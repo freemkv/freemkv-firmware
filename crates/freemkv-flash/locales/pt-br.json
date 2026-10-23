@@ -27,6 +27,8 @@
     "status.ready": "Pronto",
     "action.view_log": "Ver registro",
     "action.submit_report": "Enviar relatório",
+    "action.submit_dump": "Enviar dump",
+    "action.submit_backup": "Enviar backup",
     "menu.file": "Arquivo",
     "menu.edit": "Editar",
     "menu.view": "Exibir",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Escapado em: {arg0}Estado atual não verificado",
     "legacy.arg0_active_and_saved": "{arg0} (Activo e salvo)",
     "legacy.backup_saved": "Backup: Salvação {path} ({bytes} bits)",
-    "legacy.backup_missing": "backup: NÃO – flashing sem uma backup de rolagem (este disco óptico não pode ser rolado de volta)"
+    "legacy.backup_missing": "backup: NÃO – flashing sem uma backup de rolagem (este disco óptico não pode ser rolado de volta)",
+    "ui.backup_dump_review": "Se não for possível salvar um backup, salve um dump bruto e envie-o com os logs de diagnóstico para que possamos avaliar o suporte a backups."
   }
 }

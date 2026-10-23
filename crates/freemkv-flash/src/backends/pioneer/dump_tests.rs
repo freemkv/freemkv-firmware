@@ -61,6 +61,57 @@ fn capture_preserves_addresses_records_gaps_and_captures_log_first() {
     assert!(directory(&corrupt).is_err());
     assert!(directory(&b[..100]).unwrap().is_none());
 }
+
+#[test]
+fn release_dump_read_route_keeps_b0_map_and_read_knock() {
+    struct Transcript {
+        reads: Vec<Vec<u8>>,
+        writes: Vec<(Vec<u8>, Vec<u8>)>,
+    }
+    impl ScsiDevice for Transcript {
+        fn describe(&self) -> String {
+            "release transcript".into()
+        }
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            self.reads.push(cdb.to_vec());
+            Ok(vec![0; len])
+        }
+        fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+            self.writes.push((cdb.to_vec(), data.to_vec()));
+            Ok(())
+        }
+    }
+    let mut dev = Transcript {
+        reads: vec![],
+        writes: vec![],
+    };
+    let bytes = capture(&mut dev).unwrap();
+    assert_eq!(dev.reads[0], pioneer_optical::cdb::read_diagnostic_log());
+    assert_eq!(dev.reads[1], pioneer_optical::cdb::inquiry(96));
+    assert_eq!(
+        dev.writes,
+        vec![(pioneer_optical::cdb::knock().to_vec(), vec![])]
+    );
+    let map = directory(&bytes).unwrap().unwrap();
+    for (name, offset) in [
+        ("low_memory", 0),
+        ("high_registers", 0xc00000),
+        ("high_register_alias", 0xc02000),
+        ("controller_memory", 0xc10000),
+    ] {
+        assert!(map["sections"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|section| { section["file_offset"] == offset && section["name"] == name }));
+    }
+    assert!(dev
+        .reads
+        .iter()
+        .skip(2)
+        .any(|cdb| cdb[0] == 0x3c && cdb[2] == 0xb0));
+    assert!(dev.reads.iter().all(|cdb| cdb[0] != 0x3c || cdb[2] != 0xf4));
+}
 #[test]
 fn disconnect_preserves_partial_capture_and_stops_commands() {
     let mut d = Device {

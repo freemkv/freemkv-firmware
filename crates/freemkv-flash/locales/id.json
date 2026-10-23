@@ -27,6 +27,8 @@
     "status.ready": "Siap",
     "action.view_log": "Lihat log",
     "action.submit_report": "Kirim laporan",
+    "action.submit_dump": "Kirim dump",
+    "action.submit_backup": "Kirim cadangan",
     "menu.file": "Berkas",
     "menu.edit": "Edit",
     "menu.view": "Tampilan",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Dipecat : {arg0}Status yang tidak terkonfirmasi",
     "legacy.arg0_active_and_saved": "{arg0} (Aktif dan diselamatkan)",
     "legacy.backup_saved": "Backup : disimpan {path} ({bytes} dan bytes)",
-    "legacy.backup_missing": "backup: NONE — flashing tanpa backup rollback (disk optik ini tidak dapat roll back)"
+    "legacy.backup_missing": "backup: NONE — flashing tanpa backup rollback (disk optik ini tidak dapat roll back)",
+    "ui.backup_dump_review": "Jika cadangan tidak dapat disimpan, simpan dump mentah dan kirimkan bersama log diagnostik agar kami dapat meninjau dukungan pencadangan."
   }
 }

@@ -27,6 +27,8 @@
     "status.ready": "Bereit",
     "action.view_log": "Protokoll anzeigen",
     "action.submit_report": "Bericht senden",
+    "action.submit_dump": "Speicherabbild senden",
+    "action.submit_backup": "Sicherung senden",
     "menu.file": "Datei",
     "menu.edit": "Bearbeiten",
     "menu.view": "Ansicht",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Schlafen : {arg0}• Aktuelle Zustände nicht verifiziert",
     "legacy.arg0_active_and_saved": "{arg0} (Aktive und gespeichert)",
     "legacy.backup_saved": "Backup: gespeichert {path} ({bytes} und byte)",
-    "legacy.backup_missing": "Backup: NONE – Blitzung ohne Backup-Rollback (dieser optische Festplatte kann nicht zurückgeladen werden)"
+    "legacy.backup_missing": "Backup: NONE – Blitzung ohne Backup-Rollback (dieser optische Festplatte kann nicht zurückgeladen werden)",
+    "ui.backup_dump_review": "Falls keine Sicherung gespeichert werden kann, speichern Sie ein rohes Speicherabbild und senden Sie es mit den Diagnoseprotokollen, damit wir die Sicherungsunterstützung prüfen können."
   }
 }

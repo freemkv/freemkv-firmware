@@ -25,7 +25,7 @@ fn every_authenticated_rebuildable_hoard_normal_is_covered() {
     // against its Kernel and reproducing the entire OEM envelope byte-for-byte.
     let audit: serde_json::Value = serde_json::from_str(include_str!("n_coverage.json")).unwrap();
     let hashes = audit["eligible_normal_images"].as_array().unwrap();
-    assert_eq!(hashes.len(), 459);
+    assert_eq!(hashes.len(), 491);
     assert!(audit["missing_before_refresh"]
         .as_array()
         .unwrap()

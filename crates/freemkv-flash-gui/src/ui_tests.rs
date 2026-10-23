@@ -2408,6 +2408,65 @@ fn report_cancellation_is_available_and_completion_restores_submit() {
 }
 
 #[test]
+fn completed_capture_offers_its_file_and_failed_capture_offers_report_only() {
+    for (task, pick, label) in [
+        (Task::Dump, Pick::Dump, "Submit Dump"),
+        (Task::Backup, Pick::Backup, "Submit Backup"),
+    ] {
+        let mut app = one_drive();
+        app.dispatch(Input::SelectTask(task));
+        let path = std::env::temp_dir().join(format!("capture-{task:?}.bin"));
+        app.dispatch(Input::Chosen(pick, path.clone()));
+        finish(&mut app, Ok(()));
+        assert_eq!(app.report_artifact.as_ref().unwrap().path, path);
+        assert_eq!(app.view().results.unwrap().submit_report.text, label);
+
+        app.dispatch(Input::Chosen(pick, path));
+        finish(&mut app, Err("read failed".into()));
+        assert!(app.report_artifact.is_none());
+        assert_eq!(
+            app.view().results.unwrap().submit_report.text,
+            "Submit Report"
+        );
+    }
+}
+
+#[test]
+fn unavailable_or_failed_backup_offers_dump_and_keeps_its_submission_identity() {
+    for unavailable in [false, true] {
+        let mut app = one_drive();
+        if unavailable {
+            let mut profile = Profile::every_task();
+            profile.tasks.retain(|task| *task != Task::Backup);
+            profile.backup_name = None;
+            app.set_profile(Ok(profile));
+        }
+        app.dispatch(Input::SelectTask(Task::Backup));
+        if !unavailable {
+            assert!(!has_text(&app.view(), "Save raw dump…"));
+            app.dispatch(Input::Chosen(Pick::Backup, "failed-backup.tar".into()));
+            finish(&mut app, Err("OEM backup unavailable".into()));
+        }
+        let action = button(&app.view(), "Save raw dump…").input;
+        assert!(matches!(
+            &app.dispatch(action)[..],
+            [Effect::SaveFile {
+                pick: Pick::Dump,
+                ..
+            }]
+        ));
+        app.dispatch(Input::Chosen(Pick::Dump, "review-dump.bin".into()));
+        assert!(matches!(last_job(&app).2, Job::Dump { .. }));
+        assert_eq!(app.task, Task::Dump);
+        finish(&mut app, Ok(()));
+        assert_eq!(
+            app.view().results.unwrap().submit_report.text,
+            "Submit Dump"
+        );
+    }
+}
+
+#[test]
 fn disconnected_report_worker_has_localized_notice_and_english_diagnostic() {
     let mut app = one_drive();
     let (tx, rx) = mpsc::channel();

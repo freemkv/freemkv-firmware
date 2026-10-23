@@ -27,6 +27,8 @@
     "status.ready": "Sẵn sàng",
     "action.view_log": "Xem nhật ký",
     "action.submit_report": "Gửi báo cáo",
+    "action.submit_dump": "Gửi bản kết xuất",
+    "action.submit_backup": "Gửi bản sao lưu",
     "menu.file": "Tệp",
     "menu.edit": "Chỉnh sửa",
     "menu.view": "Hiển thị",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Đã bỏ qua: {arg0}• Tình trạng hiện tại chưa được xác minh",
     "legacy.arg0_active_and_saved": "{arg0} (Những hoạt động và tiết kiệm)",
     "legacy.backup_saved": "Backup: được tiết kiệm {path} ({bytes} Bút)",
-    "legacy.backup_missing": "backup: NONE — flashing mà không có backup rollback (đĩa optic này không thể quay trở lại)"
+    "legacy.backup_missing": "backup: NONE — flashing mà không có backup rollback (đĩa optic này không thể quay trở lại)",
+    "ui.backup_dump_review": "Nếu không thể lưu bản sao lưu, hãy lưu bản kết xuất thô và gửi cùng nhật ký chẩn đoán để chúng tôi xem xét khả năng hỗ trợ sao lưu."
   }
 }
