@@ -34,13 +34,13 @@ pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Result<()>
     let info = info_report(dev, drive);
     let (before, after) = info.report.rows.split_at(info.settings_at);
     crate::output::show(&Report {
-        rows: before.to_vec(),
+        rows: drive_info_cli_rows(before),
     });
     if let Some(settings) = info.settings {
         crate::output::publish(crate::output::Event::DeviceSettings(settings));
     }
     crate::output::show(&Report {
-        rows: after.to_vec(),
+        rows: drive_info_cli_rows(after),
     });
     Ok(())
 }
@@ -72,42 +72,18 @@ pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Inf
     let family = drive.map_or(UNKNOWN_FAMILY, |d| d.descriptor().display_name);
     let caps = drive.map_or(Capabilities::NONE, Capabilities::of);
     let supported = |on: bool| Value::text(if on { "Supported" } else { "Unavailable" });
-    let (tone, capability) = match (caps.backup, caps.flash) {
-        (_, true) => (Tone::Ok, "live backup + flash supported"),
-        (true, false) => (Tone::Warn, "live backup supported; live flash unavailable"),
-        (false, false) => (Tone::Warn, "live backup/flash unavailable"),
-    };
     let mut rows = vec![
-        Row::cli("device", "device", Value::text(&describe)),
-        Row::gui("vendor", "Manufacturer", Value::text(&id.vendor)),
-        Row::gui("product", "Model", Value::text(&id.product)),
-        Row::gui("revision", "Firmware version", Value::text(&id.revision)),
-        Row::gui("family", "Drive family", Value::text(family)),
-        Row::cli(
-            "inquiry",
-            "inquiry",
-            Value::text(&format!(
-                "vendor='{}' product='{}' rev='{}'",
-                id.vendor, id.product, id.revision
-            )),
-        ),
-        Row::cli(
-            "banner",
-            "banner",
-            Value::text(id.banner.as_deref().unwrap_or("<none>")),
-        ),
-        Row::gui("backup", "Backup", supported(caps.backup)).in_group(Group::Operations),
-        Row::gui("flash", "Firmware update", supported(caps.flash)).in_group(Group::Operations),
-        Row::cli(
-            "capability",
-            "family",
-            Value::Styled(vec![
-                Span::new(Tone::Plain, &format!("{family} (")),
-                Span::new(tone, capability),
-                Span::new(Tone::Plain, ")"),
-            ]),
-        ),
+        Row::cli("device", "Device", Value::text(&describe)),
+        Row::both("vendor", "Manufacturer", Value::text(&id.vendor)),
+        Row::both("product", "Model", Value::text(&id.product)),
+        Row::both("revision", "Firmware version", Value::text(&id.revision)),
+        Row::both("family", "Drive family", Value::text(family)),
+        Row::both("backup", "Backup", supported(caps.backup)).in_group(Group::Operations),
+        Row::both("flash", "Firmware update", supported(caps.flash)).in_group(Group::Operations),
     ];
+    if let Some(banner) = &id.banner {
+        rows.push(Row::cli("banner", "Firmware banner", Value::text(banner)));
+    }
     // The flash line appears only when the backend has a runnable recipe.
     if let Some(summary) = drive.and_then(|d| d.descriptor().flash_summary) {
         rows.push(Row::cli("flash_summary", "flash", Value::text(summary)));
@@ -143,6 +119,59 @@ pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Inf
         settings: settings.and_then(Result::ok),
         settings_at,
     }
+}
+
+/// Keep GUI facts intact while formatting the CLI from those same rows.
+fn drive_info_cli_rows(rows: &[Row]) -> Vec<Row> {
+    let mut result: Vec<Row> = rows
+        .iter()
+        .cloned()
+        .map(|mut row| {
+            row.cli_label = None;
+            row
+        })
+        .collect();
+    let width = rows
+        .iter()
+        .filter_map(|r| r.cli_label.as_ref())
+        .map(|s| s.chars().count())
+        .max()
+        .unwrap_or(0);
+    for (group, title) in [
+        (Group::General, "Drive information"),
+        (Group::Additional, "Additional information"),
+        (Group::Media, "Media capabilities"),
+        (Group::Region, "DVD region"),
+        (Group::Settings, "Drive settings"),
+        (Group::Operations, "Available operations"),
+    ] {
+        let members: Vec<_> = rows
+            .iter()
+            .filter(|r| r.group == group && r.cli_label.is_some())
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        result.push(Row::line(
+            "info_section",
+            Value::Message(format!("\n{title}")),
+        ));
+        for row in members {
+            let label = row.cli_label.as_deref().unwrap();
+            let line = if label.is_empty() {
+                row.value.cli()
+            } else {
+                format!(
+                    "  {:width$}  {}",
+                    format!("{label}:"),
+                    row.value.cli(),
+                    width = width + 1
+                )
+            };
+            result.push(Row::line(row.key, Value::Message(line)));
+        }
+    }
+    result
 }
 
 /// The CLI's installed-firmware lines.

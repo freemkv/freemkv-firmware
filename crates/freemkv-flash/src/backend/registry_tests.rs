@@ -318,9 +318,9 @@ fn classify_unknown_when_no_discriminator() {
 }
 
 #[test]
-fn flash_input_formats_follow_the_drive_and_foreign_package_names() {
+fn update_input_formats_follow_the_drive_and_foreign_package_names() {
     let path = std::path::Path::new;
-    let format = |b: &dyn Backend, p| flash_input_format(b, path(p), b"").unwrap().unwrap().id;
+    let format = |b: &dyn Backend, p| update_input_format(b, path(p), b"").unwrap().unwrap().id;
     assert_eq!(format(&MTK, "dump.tar"), "mtk-package");
     assert_eq!(format(&MTK, "fw.bin"), "mtk-image");
     assert_eq!(format(&MTK, "image"), "mtk-image");
@@ -328,7 +328,7 @@ fn flash_input_formats_follow_the_drive_and_foreign_package_names() {
     assert_eq!(format(&MTK, "UD04.firmware.tar"), "pioneer-package");
     assert_eq!(format(&MTK, "UD04.INSTALLER.TAR"), "pioneer-package");
     assert_eq!(format(&PIONEER, "x.tar"), "pioneer-package");
-    assert_eq!(format(&PIONEER, "normal.enc"), "pioneer-envelope");
+    assert!(update_input_format(&PIONEER, path("normal.enc"), b"").is_err());
 }
 
 #[test]
@@ -343,7 +343,7 @@ fn unrecognized_tar_is_not_evidence_of_pioneer_firmware() {
         .unwrap();
     let bytes = tar.into_inner().unwrap();
     assert!(recognize(&bytes).unwrap().is_none());
-    let format = flash_input_format(&MTK, Path::new("WH16NS58_1.V9-patched.tar"), &bytes)
+    let format = update_input_format(&MTK, Path::new("WH16NS58_1.V9-patched.tar"), &bytes)
         .unwrap()
         .unwrap();
     assert_eq!(format.id, "mtk-package");

@@ -130,7 +130,7 @@ struct FlashArgs {
     /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`).
     /// Omit to auto-pick the only connected drive.
     device: Option<String>,
-    /// Input: MTK image or backup (.bin), 0.10.x MTK backup (.tar), Pioneer .enc, or a Pioneer envelope tar.
+    /// Input: MediaTek BIN or TAR package/backup; Pioneer TAR package.
     /// Pioneer inputs are dry-run by default; live writes need --execute --i-understand-risk and a pre-flash backup.
     #[arg(short, long)]
     input: PathBuf,

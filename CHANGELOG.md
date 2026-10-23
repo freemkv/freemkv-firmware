@@ -3,6 +3,17 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.14.4] - 2026-10-23
+
+### freemkv Flash
+
+- Show CLI drive information in grouped, aligned sections using the same identity and capability fields as the GUI. Keep native transport traces in diagnostic logs instead of flooding the terminal.
+- Accept standalone BIN files and TAR packages for MediaTek in both Flash and Recovery. Pioneer updates continue to require TAR packages. File pickers and validation now share the same backend format rules.
+- Use pioneer-optical 1.0.2 to analyze compressed and uncompressed firmware consistently for hardware families, UHD capability and Kernel ABI requirements.
+- Track Pioneer FE9F interface setup as a family signal, including explicit zero-valued register initialization writes.
+- Restore matching between BDR-S08 and BDR-S11JX SAT 8800 firmware whose equivalent servo rows were stored in different regions or orders. Distinct SAT 8801 board evidence remains separate.
+- Reject unresolved compressed firmware evidence instead of scanning compressed bytes as instructions. Hardware-family catalogs use the new `pioneer.hardware.v3` scheme.
+
 ## [0.14.3] - 2026-10-23
 
 ### freemkv Flash

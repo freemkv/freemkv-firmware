@@ -1,8 +1,15 @@
 //! Package member selection for recovery front ends.
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 /// Select exactly one MediaTek member; other backend packages remain intact.
 pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
+    if input.get(257..262) != Some(b"ustar") {
+        anyhow::ensure!(member.is_none(), "--member requires a TAR package");
+        let (_, recognized) = crate::backend::registry::recognize(input)?
+            .context("unrecognized update input; select a MediaTek BIN or firmware TAR package")?;
+        recognized.format.ensure_update_input()?;
+        return Ok(input.to_vec());
+    }
     // Recognize the manifest discriminator, without accepting malformed MTK
     // packages as another backend's input.
     let mut archive = tar::Archive::new(input);

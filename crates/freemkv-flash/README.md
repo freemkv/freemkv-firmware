@@ -50,7 +50,7 @@ reported but does not interrupt firmware programming.
 | `check FILE` | no | Inspects a firmware file without a drive. |
 | `backup` | no | Saves validated firmware; unsigned Pioneer candidates still need target authentication to flash. |
 | `dump` | RAM logging when supported | Raw capture of accessible memory: Pioneer at least 6 MiB; MediaTek 2 MiB mapped window. Gaps are reported. |
-| `recover` | with `--execute` | Pioneer recovery from Current and target packages, without backups. |
+| `recover` | with `--execute` | MediaTek BIN/TAR or Pioneer TAR recovery, without backups. |
 | `flash` | with `--execute` | Checks and plans a flash; writes only with every safety flag. |
 
 ```sh
@@ -97,6 +97,13 @@ reports gaps and is not automatically a flashable update image.
 
 ## Recovery
 
+Flash and Recovery share backend-owned input rules: MediaTek accepts standalone
+BIN images and TAR packages; Pioneer accepts TAR packages. Bare Pioneer envelopes
+remain available for inspection. For a paired MediaTek TAR, Recovery requires
+`--member` to select exactly one image; `--current-member` selects the installed
+image independently when Current is also a paired TAR.
+
+
 ```sh
 freemkv-flash recover E: --current current.tar -i target.tar
 freemkv-flash recover E: --current current.tar -i target.tar --execute --i-understand-risk
@@ -104,7 +111,7 @@ freemkv-flash recover E: --current current.tar -i target.tar --execute --i-under
 freemkv-flash recover E: --read-from-drive -i target.tar --execute --i-understand-risk
 ```
 
-Choose exactly one Current source. Unsupported drives are rejected before firmware reads or update commands. Both packages must contain Pioneer Kernel and
+For Pioneer, choose exactly one Current source. Unsupported drives are rejected before firmware reads or update commands. Both packages must contain Pioneer Kernel and
 Normal. A supplied Current file avoids firmware memory reads; identity/status
 queries still run. Recovery makes no backups or firmware readback verification and bypasses
 installed-versus-target compatibility policy. It derives receiver credentials from

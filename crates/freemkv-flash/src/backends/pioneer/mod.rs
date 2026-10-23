@@ -690,6 +690,7 @@ pub const PACKAGE: FileFormat = FileFormat {
     id: "pioneer-package",
     label: "Pioneer firmware bundle",
     extensions: &["firmware.tar", "installer.tar", "tar"],
+    update_input: true,
     role: FormatRole::Package,
 };
 
@@ -698,6 +699,7 @@ pub const ENVELOPE: FileFormat = FileFormat {
     id: "pioneer-envelope",
     label: "Pioneer firmware envelope",
     extensions: &["enc", "bin"],
+    update_input: false,
     role: FormatRole::Image,
 };
 

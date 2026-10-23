@@ -188,17 +188,21 @@ fn backup_flash_recover_send_no_standard_snapshot() {
 // ---- R4: rows reproduce the CLI and the GUI ---------------------------------
 
 #[test]
-fn info_cli_stdout_matches_0_11_2() {
-    for (file, scenario, dev, pioneer) in pioneer_info_cases() {
-        let expected = baseline(file, scenario, "text");
-        let mut rec = Rec::new(dev);
-        let report = crate::engine::info_report(&mut rec, backend(pioneer)).report;
-        assert_eq!(strip(&report.cli_lines()), expected, "{scenario}");
-    }
-    for (file, scenario, dev, pioneer) in pioneer_info_cases() {
+fn info_cli_shows_shared_identity_and_grouped_details() {
+    for (_, scenario, dev, pioneer) in pioneer_info_cases() {
         let (outcome, _) = drive_run(dev, |d| crate::engine::info(d, backend(pioneer)));
-        let expected = baseline(file, scenario, "text");
-        assert_eq!(strip(&outcome.text), expected, "{scenario}");
+        let text = outcome.text.join("\n");
+        for label in [
+            "Drive information",
+            "Manufacturer:",
+            "Model:",
+            "Firmware version:",
+            "Media capabilities",
+            "Available operations",
+        ] {
+            assert!(text.contains(label), "{scenario}: missing {label}");
+        }
+        assert!(!text.contains("inquiry: vendor="), "{scenario}");
     }
 }
 
@@ -209,9 +213,14 @@ fn info_gui_events_match_0_11_2() {
         let expected = baseline(file, scenario, "events");
         let events: Vec<String> = strip(&outcome.events)
             .into_iter()
+            .filter(|e| e.starts_with("FIELD ") || e.starts_with("SETTINGS "))
             .map(|e| e.trim_end().to_string())
             .collect();
-        let expected: Vec<String> = expected.iter().map(|e| e.trim_end().to_string()).collect();
+        let expected: Vec<String> = expected
+            .iter()
+            .filter(|e| e.starts_with("FIELD ") || e.starts_with("SETTINGS "))
+            .map(|e| e.trim_end().to_string())
+            .collect();
         assert_eq!(events, expected, "{scenario}");
     }
 }
@@ -772,7 +781,12 @@ fn one_recognizer_serves_flash_check_and_inspect() {
         std::fs::write(&path, &bytes).unwrap();
         // Flash input: the recognized format, whichever drive is attached.
         for drive in registry::backends() {
-            let flash = registry::flash_input_format(drive, &path, &bytes).unwrap();
+            let flash = registry::update_input_format(drive, &path, &bytes);
+            if !r.format.update_input {
+                assert!(flash.is_err(), "{name} must remain inspection-only");
+                continue;
+            }
+            let flash = flash.unwrap();
             assert_eq!(
                 flash.map(|f| f.id),
                 Some(format),

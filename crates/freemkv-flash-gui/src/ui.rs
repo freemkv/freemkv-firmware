@@ -1372,17 +1372,21 @@ impl App {
         }
         match pick {
             Pick::CheckFile => open(None),
-            Pick::FlashFirmware => {
-                let extensions = vec!["tar", "bin"];
+            Pick::FlashFirmware
+            | Pick::RecoveryInput
+            | Pick::FlashCurrent
+            | Pick::RecoveryCurrent => {
+                let extensions = self
+                    .ready_profile()
+                    .map_or_else(workflow::update_file_extensions, |p| {
+                        p.flash_extensions.clone()
+                    });
                 open(Some(FileFilter {
                     name: crate::localization::get(self.language, "filter.firmware_backup"),
                     extensions,
                 }))
             }
-            Pick::FlashCurrent
-            | Pick::RecoveryCurrent
-            | Pick::RecoveryInput
-            | Pick::AnalysisFile(_) => open(Some(FileFilter {
+            Pick::AnalysisFile(_) => open(Some(FileFilter {
                 name: crate::localization::get(self.language, "filter.firmware"),
                 extensions: workflow::file_extensions(),
             })),
