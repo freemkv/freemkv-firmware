@@ -27,6 +27,8 @@
     "status.ready": "準備完了",
     "action.view_log": "ログを表示",
     "action.submit_report": "レポートを送信",
+    "action.submit_dump": "ダンプを送信",
+    "action.submit_backup": "バックアップを送信",
     "menu.file": "ファイル",
     "menu.edit": "編集",
     "menu.view": "表示",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "乗り越え: {arg0}現状が確認されていない",
     "legacy.arg0_active_and_saved": "{arg0} (アクティブ・保存)",
     "legacy.backup_saved": "バックアップ:保存 {path} ({bytes} バイト)",
-    "legacy.backup_missing": "バックアップ: NONE - ロールバックバックアップなしでフラッシュ(この光学ドライブは回転できない)"
+    "legacy.backup_missing": "バックアップ: NONE - ロールバックバックアップなしでフラッシュ(この光学ドライブは回転できない)",
+    "ui.backup_dump_review": "バックアップを保存できない場合は、生のダンプを保存し、診断ログとともに送信してください。バックアップ対応の検討に使用します。"
   }
 }

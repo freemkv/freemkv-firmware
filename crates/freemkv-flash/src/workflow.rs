@@ -297,12 +297,13 @@ pub struct DriveProfile {
 }
 
 impl DriveProfile {
-    /// The optical backend's installed-firmware read capability. Unknown means
-    /// no backend has identified the drive; do not guess from its model name.
+    /// The update/recovery backend's installed-firmware read capability.
+    /// A dump-only match must not replace an identified recovery reader.
     pub fn can_read(&self) -> Option<bool> {
         let id = self
             .backend
             .as_ref()
+            .filter(|_| self.capabilities.flash || self.capabilities.recovery)
             .map(|(descriptor, _)| descriptor.id)
             .or_else(|| self.recovery.map(|descriptor| descriptor.id))?;
         registry::backends()

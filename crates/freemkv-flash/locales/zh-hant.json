@@ -27,6 +27,8 @@
     "status.ready": "就緒",
     "action.view_log": "檢視記錄",
     "action.submit_report": "提交報告",
+    "action.submit_dump": "提交傾印",
+    "action.submit_backup": "提交備份",
     "menu.file": "檔案",
     "menu.edit": "編輯",
     "menu.view": "檢視",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "滑雪: {arg0}現狀未經驗證",
     "legacy.arg0_active_and_saved": "{arg0} (活躍和儲存)",
     "legacy.backup_saved": "備份:儲存 {path} ({bytes} 位元)",
-    "legacy.backup_missing": "備份: 沒有 - 沒有滾回備份的閃光(這個光學驅動器不能重新滾動)"
+    "legacy.backup_missing": "備份: 沒有 - 沒有滾回備份的閃光(這個光學驅動器不能重新滾動)",
+    "ui.backup_dump_review": "如果無法儲存備份，請儲存原始傾印並連同診斷記錄一起提交，以便我們研究備份支援。"
   }
 }

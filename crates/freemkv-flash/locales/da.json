@@ -27,6 +27,8 @@
     "status.ready": "Klar",
     "action.view_log": "Vis log",
     "action.submit_report": "Indsend rapport",
+    "action.submit_dump": "Indsend dump",
+    "action.submit_backup": "Indsend sikkerhedskopi",
     "menu.file": "Filer",
     "menu.edit": "Rediger",
     "menu.view": "Vis",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Skudt af: {arg0}• Den nuværende status, der ikke er verifiseret",
     "legacy.arg0_active_and_saved": "{arg0} (aktivt og reddet)",
     "legacy.backup_saved": "Backup: gemt {path} ({bytes} af bytte)",
-    "legacy.backup_missing": "backup: NONE – flashing uden en rollback backup (den optiske disk kan ikke rulles tilbage)"
+    "legacy.backup_missing": "backup: NONE – flashing uden en rollback backup (den optiske disk kan ikke rulles tilbage)",
+    "ui.backup_dump_review": "Hvis en sikkerhedskopi ikke kan gemmes, kan du gemme et råt dump og indsende det med diagnoselogfiler, så vi kan undersøge understøttelse af sikkerhedskopiering."
   }
 }

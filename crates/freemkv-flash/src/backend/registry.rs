@@ -16,6 +16,7 @@ use crate::platform::ScsiDevice;
 
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
+static PIONEER_DUMP: pioneer::DumpOnly = pioneer::DumpOnly;
 
 /// Origin evidence is supplied by protocol file analysis, not the front end.
 pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
@@ -52,7 +53,10 @@ static BACKENDS: [&'static dyn Backend; 2] = [&MTK, &PIONEER];
 
 /// Every registered protocol backend, in probe order.
 pub fn backends() -> impl Iterator<Item = &'static dyn Backend> {
-    BACKENDS.iter().copied()
+    BACKENDS
+        .iter()
+        .copied()
+        .chain(std::iter::once(&PIONEER_DUMP as &dyn Backend))
 }
 
 /// A unique backend match, with device identity kept separate from the
@@ -67,12 +71,12 @@ pub struct Resolved {
     pub matched: Match,
 }
 
-/// Run every registered, read-only protocol probe. Ambiguous matches fail
-/// closed rather than allowing registry order to select a writer.
+/// Probe OEM protocols first, then raw capture if none matches. Ambiguous OEM
+/// matches fail closed rather than allowing registry order to select a writer.
 pub fn resolve(dev: &mut dyn ScsiDevice) -> Result<Option<Resolved>> {
     let identity = read_identity(&mut ReadDevice::without_unlocks(dev));
     let mut found: Option<(&'static dyn Backend, Match)> = None;
-    for backend in backends() {
+    for backend in BACKENDS {
         let mut probe_dev = ReadDevice::for_backend(dev, backend);
         if let Some(matched) = backend.probe(&mut probe_dev, &identity)? {
             if matched.backend != backend.descriptor().id {
@@ -89,6 +93,14 @@ pub fn resolve(dev: &mut dyn ScsiDevice) -> Result<Option<Resolved>> {
             }
             found = Some((backend, matched));
         }
+    }
+    // A dump-only fallback cannot compete with an OEM protocol match or
+    // broaden that protocol's backup/update capabilities.
+    if found.is_none() {
+        let mut probe_dev = ReadDevice::for_backend(dev, &PIONEER_DUMP);
+        found = PIONEER_DUMP
+            .probe(&mut probe_dev, &identity)?
+            .map(|matched| (&PIONEER_DUMP as &dyn Backend, matched));
     }
     Ok(found.map(|(backend, matched)| Resolved {
         identity,

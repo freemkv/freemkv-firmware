@@ -27,6 +27,8 @@
     "status.ready": "Listo",
     "action.view_log": "Ver registro",
     "action.submit_report": "Enviar informe",
+    "action.submit_dump": "Enviar volcado",
+    "action.submit_backup": "Enviar copia de seguridad",
     "menu.file": "Archivo",
     "menu.edit": "Editar",
     "menu.view": "Ver",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Escapado en: {arg0}El estado actual no se verifica",
     "legacy.arg0_active_and_saved": "{arg0} (Activo y salvado)",
     "legacy.backup_saved": "Backup: salvado {path} ({bytes} de los bytes)",
-    "legacy.backup_missing": "Backup: NO – flashing sin una backup de rollo (este disco óptico no puede ser rolado de vuelta)"
+    "legacy.backup_missing": "Backup: NO – flashing sin una backup de rollo (este disco óptico no puede ser rolado de vuelta)",
+    "ui.backup_dump_review": "Si no se puede guardar una copia de seguridad, guarde un volcado sin procesar y envíelo con los registros de diagnóstico para que podamos evaluar la compatibilidad con las copias de seguridad."
   }
 }

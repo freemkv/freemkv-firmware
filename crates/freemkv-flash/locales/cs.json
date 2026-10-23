@@ -27,6 +27,8 @@
     "status.ready": "Připraveno",
     "action.view_log": "Zobrazit protokol",
     "action.submit_report": "Odeslat hlášení",
+    "action.submit_dump": "Odeslat výpis",
+    "action.submit_backup": "Odeslat zálohu",
     "menu.file": "Soubor",
     "menu.edit": "Úpravy",
     "menu.view": "Zobrazení",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Připravte se: {arg0}• současný stav neprověřený",
     "legacy.arg0_active_and_saved": "{arg0} (aktivní a zachráněné)",
     "legacy.backup_saved": "Zálohování: zachráněno {path} ({bytes} byty )",
-    "legacy.backup_missing": "zálohování: NONE - flashing bez backup rollback (tento optický disk nelze otáčet zpět)"
+    "legacy.backup_missing": "zálohování: NONE - flashing bez backup rollback (tento optický disk nelze otáčet zpět)",
+    "ui.backup_dump_review": "Pokud nelze uložit zálohu, uložte surový výpis a odešlete jej s diagnostickými protokoly, abychom mohli posoudit podporu zálohování."
   }
 }

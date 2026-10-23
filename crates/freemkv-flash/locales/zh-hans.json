@@ -27,6 +27,8 @@
     "status.ready": "就绪",
     "action.view_log": "查看日志",
     "action.submit_report": "提交报告",
+    "action.submit_dump": "提交转储",
+    "action.submit_backup": "提交备份",
     "menu.file": "文件",
     "menu.edit": "编辑",
     "menu.view": "视图",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "滑雪: {arg0}现状未经验证",
     "legacy.arg0_active_and_saved": "{arg0} (活跃和保存)",
     "legacy.backup_saved": "备份:保存 {path} ({bytes} 比特)",
-    "legacy.backup_missing": "备份: 没有 - 没有滚回备份的闪光(这个光学驱动器不能重新滚动)"
+    "legacy.backup_missing": "备份: 没有 - 没有滚回备份的闪光(这个光学驱动器不能重新滚动)",
+    "ui.backup_dump_review": "如果无法保存备份，请保存原始转储并连同诊断日志一起提交，以便我们研究备份支持。"
   }
 }

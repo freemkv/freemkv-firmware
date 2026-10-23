@@ -27,6 +27,8 @@
     "status.ready": "Pripravené",
     "action.view_log": "Zobraziť denník",
     "action.submit_report": "Odoslať hlásenie",
+    "action.submit_dump": "Odoslať výpis",
+    "action.submit_backup": "Odoslať zálohu",
     "menu.file": "Súbor",
     "menu.edit": "Úpravy",
     "menu.view": "Zobrazenie",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Skúsený : {arg0}Aktuálny stav nie je overený",
     "legacy.arg0_active_and_saved": "{arg0} (aktívne a zachované)",
     "legacy.backup_saved": "Zálohovanie: zachránené {path} ({bytes} byty )",
-    "legacy.backup_missing": "Zálohovanie: NONE - flashing bez rollback zálohovanie (tento optický disk sa nedá vrátiť späť)"
+    "legacy.backup_missing": "Zálohovanie: NONE - flashing bez rollback zálohovanie (tento optický disk sa nedá vrátiť späť)",
+    "ui.backup_dump_review": "Ak sa záloha nedá uložiť, uložte surový výpis a odošlite ho s diagnostickými protokolmi, aby sme mohli posúdiť podporu zálohovania."
   }
 }

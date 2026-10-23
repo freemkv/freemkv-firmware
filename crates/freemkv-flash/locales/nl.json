@@ -27,6 +27,8 @@
     "status.ready": "Gereed",
     "action.view_log": "Logboek bekijken",
     "action.submit_report": "Rapport verzenden",
+    "action.submit_dump": "Dump indienen",
+    "action.submit_backup": "Back-up indienen",
     "menu.file": "Bestand",
     "menu.edit": "Bewerken",
     "menu.view": "Beeld",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Gevallen door: {arg0}• de huidige status niet gecontroleerd",
     "legacy.arg0_active_and_saved": "{arg0} (Actief en bewaard)",
     "legacy.backup_saved": "Backup: gered {path} ({bytes} De bytes)",
-    "legacy.backup_missing": "backup: NONE — flashing zonder een rollback backup (dit optische schijf kan niet terug worden gegooid)"
+    "legacy.backup_missing": "backup: NONE — flashing zonder een rollback backup (dit optische schijf kan niet terug worden gegooid)",
+    "ui.backup_dump_review": "Als een back-up niet kan worden opgeslagen, sla dan een ruwe dump op en dien deze samen met de diagnoselogboeken in, zodat we de ondersteuning voor back-ups kunnen onderzoeken."
   }
 }

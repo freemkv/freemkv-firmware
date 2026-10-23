@@ -27,6 +27,8 @@
     "status.ready": "Hazır",
     "action.view_log": "Günlüğü görüntüle",
     "action.submit_report": "Rapor gönder",
+    "action.submit_dump": "Dökümü gönder",
+    "action.submit_backup": "Yedeği gönder",
     "menu.file": "Dosya",
     "menu.edit": "Düzenle",
     "menu.view": "Görünüm",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "Kaybolan : {arg0}• Mevcut durum doğrulanmamıştır",
     "legacy.arg0_active_and_saved": "{arg0} (Aktif ve kurtarılmış)",
     "legacy.backup_saved": "Kaynak: kurtarıldı {path} ({bytes} Bitkiler )",
-    "legacy.backup_missing": "yedekleme: NONE — bir rollback yedekleme olmadan flashing (bu optik sürücü geri döndürülemez)"
+    "legacy.backup_missing": "yedekleme: NONE — bir rollback yedekleme olmadan flashing (bu optik sürücü geri döndürülemez)",
+    "ui.backup_dump_review": "Yedek kaydedilemiyorsa ham dökümü kaydedin ve yedekleme desteğini inceleyebilmemiz için tanılama günlükleriyle birlikte gönderin."
   }
 }

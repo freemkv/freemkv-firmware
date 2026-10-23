@@ -763,9 +763,9 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "clipboard-win"
-version = "5.4.1"
+version = "5.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4"
+checksum = "052af7878466feccda12ba7a6a67d019d712f296809559b47c12c8cc196d3a9a"
 dependencies = [
  "error-code",
 ]
@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.14.2"
+version = "0.14.3"
 dependencies = [
  "anyhow",
  "mediatek-optical",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.14.2"
+version = "0.14.3"
 dependencies = [
  "aes",
  "anyhow",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.14.2"
+version = "0.14.3"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -1455,7 +1455,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.14.2"
+version = "0.14.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1468,7 +1468,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.14.2"
+version = "0.14.3"
 dependencies = [
  "anyhow",
  "eframe",

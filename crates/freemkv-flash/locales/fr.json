@@ -27,6 +27,8 @@
     "status.ready": "Prêt",
     "action.view_log": "Afficher le journal",
     "action.submit_report": "Envoyer un rapport",
+    "action.submit_dump": "Envoyer le dump",
+    "action.submit_backup": "Envoyer la sauvegarde",
     "menu.file": "Fichier",
     "menu.edit": "Édition",
     "menu.view": "Affichage",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "A dépassé : {arg0}L’état actuel n’est pas vérifié",
     "legacy.arg0_active_and_saved": "{arg0} (Actif et sauvé)",
     "legacy.backup_saved": "Étiquette : sauvé {path} ({bytes} les bytes)",
-    "legacy.backup_missing": "Backup: NONE — flashing sans backup de roulement (ce disque optique ne peut pas être roulé en arrière)"
+    "legacy.backup_missing": "Backup: NONE — flashing sans backup de roulement (ce disque optique ne peut pas être roulé en arrière)",
+    "ui.backup_dump_review": "Si une sauvegarde ne peut pas être enregistrée, enregistrez un dump brut et envoyez-le avec les journaux de diagnostic pour nous permettre d’étudier la prise en charge des sauvegardes."
   }
 }

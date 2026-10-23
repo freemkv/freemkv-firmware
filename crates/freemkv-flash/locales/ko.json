@@ -27,6 +27,8 @@
     "status.ready": "준비됨",
     "action.view_log": "로그 보기",
     "action.submit_report": "보고서 제출",
+    "action.submit_dump": "덤프 제출",
+    "action.submit_backup": "백업 제출",
     "menu.file": "파일",
     "menu.edit": "편집",
     "menu.view": "보기",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "잃어버린 : {arg0}· 현재 상태가 확인되지 않은",
     "legacy.arg0_active_and_saved": "{arg0} (활성 및 저장)",
     "legacy.backup_saved": "백업 : 저장 {path} ({bytes} 바이트",
-    "legacy.backup_missing": "백업: NONE - 롤버크 백업 없이 플래시 (이 광 드라이브는 뒤로 롤할 수 없음)"
+    "legacy.backup_missing": "백업: NONE - 롤버크 백업 없이 플래시 (이 광 드라이브는 뒤로 롤할 수 없음)",
+    "ui.backup_dump_review": "백업을 저장할 수 없는 경우 원시 덤프를 저장하고 진단 로그와 함께 제출해 주세요. 백업 지원 여부를 검토하는 데 사용됩니다."
   }
 }

@@ -27,6 +27,8 @@
     "status.ready": "Ready",
     "action.view_log": "View Log",
     "action.submit_report": "Submit Report",
+    "action.submit_dump": "Submit Dump",
+    "action.submit_backup": "Submit Backup",
     "menu.file": "File",
     "menu.edit": "Edit",
     "menu.view": "View",
@@ -555,6 +557,7 @@
     "legacy.skipped_arg0_current_state_not_verified": "skipped: {arg0}; current state not verified",
     "legacy.arg0_active_and_saved": "{arg0} (active and saved)",
     "legacy.backup_saved": "backup: saved {path} ({bytes} bytes)",
-    "legacy.backup_missing": "backup: NONE — flashing without a rollback backup (this drive cannot be rolled back)"
+    "legacy.backup_missing": "backup: NONE — flashing without a rollback backup (this drive cannot be rolled back)",
+    "ui.backup_dump_review": "If a backup cannot be saved, save a raw dump and submit it with diagnostic logs so we can review backup support."
   }
 }

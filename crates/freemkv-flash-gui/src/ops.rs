@@ -62,7 +62,7 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
     Profile {
         can_read: p.can_read(),
         flash_current: caps.flash_current,
-        recovery_without_live_protocol: p.backend.is_none() && p.recovery.is_some(),
+        recovery_without_live_protocol: !caps.recovery && p.recovery.is_some(),
         chips,
         tasks,
         inspect: caps.inspect,
