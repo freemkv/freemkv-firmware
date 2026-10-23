@@ -61,7 +61,7 @@ const REQUIRED: &[(&str, &str)] = &[
         "R3 standard info scope",
         "backup_flash_recover_send_no_standard_snapshot",
     ),
-    ("R4 report rows", "info_cli_stdout_matches_0_11_2"),
+    ("R4 report rows", "info_cli_shows_shared_identity_and_grouped_details"),
     ("R4 report rows", "info_gui_events_match_0_11_2"),
     ("R4 report rows", "pioneer_rows_interleave_at_slots"),
     (
