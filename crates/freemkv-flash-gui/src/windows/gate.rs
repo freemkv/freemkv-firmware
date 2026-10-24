@@ -10,16 +10,21 @@ use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
+use freemkv_flash::workflow::Event;
 use winsafe::{self as w, co, msg, prelude::*};
 
 use super::{send_raw, Shell, TDM_CLICK_BUTTON, TD_CANCEL};
 use crate::gui_gate::{self, Capture, Gate, Order, Region, SheetRun, TabRun};
-use crate::ui::{Input, ProfileState, Task};
+use crate::ui::{Effect, Input, Msg, ProfileState, Task};
 
 /// One shot: start the gate once the window is shown and painted.
 const TIMER_GATE: usize = 9;
+/// Probe the blocked-close warning from its nested native message loop.
+const TIMER_CLOSE_PROBE: usize = 10;
+const CLOSE_MARKER: &str = "GUI gate: worker polled while the close warning was visible";
 const TDM_CLICK_VERIFICATION: u32 = 0x0400 + 113;
 /// `PrintWindow`: draw the full content, DirectComposition included.
 const PW_RENDERFULLCONTENT: u32 = 2;
@@ -40,8 +45,19 @@ struct Probe {
     done: bool,
 }
 
+struct CloseProbe {
+    sender: Sender<Msg>,
+    expected: String,
+    started: Instant,
+    done: bool,
+    opened: bool,
+    polled: bool,
+    visible_after_poll: bool,
+}
+
 thread_local! {
     static PROBE: RefCell<Option<Probe>> = const { RefCell::new(None) };
+    static CLOSE_PROBE: RefCell<Option<CloseProbe>> = const { RefCell::new(None) };
 }
 
 /// Run the gate from a timer once the window is shown.
@@ -58,6 +74,11 @@ pub(super) fn install(shell: &Shell, dir: PathBuf) {
     shell.wnd.on().wm_timer(TIMER_GATE, move || {
         let _ = me.wnd.hwnd().KillTimer(TIMER_GATE);
         run(&me, &dir);
+        Ok(())
+    });
+    let me = shell.clone();
+    shell.wnd.on().wm_timer(TIMER_CLOSE_PROBE, move || {
+        probe_close_warning(&me);
         Ok(())
     });
 }
@@ -124,8 +145,138 @@ fn run(me: &Shell, dir: &Path) {
     let first = sheet(me, dir, true, &mut g);
     let reopened = sheet(me, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
+    close_warning(me, &mut g);
     g.no_drive_io("end", &me.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+/// Exercise the production WM_CLOSE and WM_TIMER handlers with a synthetic active job.
+/// Keep the sender alive until the receiver is removed, so no disconnect changes the job.
+fn close_warning(me: &Shell, g: &mut Gate) {
+    let ready = gui_gate::inert(&me.app.borrow());
+    g.check("close-warning-inert-before-job", ready, "synthetic fixture");
+    if !ready {
+        return;
+    }
+    let expected = crate::localization::render(me.app.borrow().language, crate::ui::CLOSE_BLOCKED);
+    let (sender, receiver) = mpsc::channel();
+    me.app.borrow_mut().rx = Some(receiver);
+    CLOSE_PROBE.with(|p| {
+        *p.borrow_mut() = Some(CloseProbe {
+            sender: sender.clone(),
+            expected,
+            started: Instant::now(),
+            done: false,
+            opened: false,
+            polled: false,
+            visible_after_poll: false,
+        });
+    });
+    // Install through the shell's normal effect and keep its real polling timer active.
+    // The probe runs first, making the marker check deterministic even on a slow runner.
+    let armed = me.wnd.hwnd().SetTimer(TIMER_CLOSE_PROBE, 50, None).is_ok();
+    g.check("close-warning-probe-timer", armed, "native timer installed");
+    if armed {
+        me.perform(vec![Effect::StartTicking]);
+        // No App or probe borrow may span this call: WM_CLOSE opens a modal message loop.
+        send_raw(me.wnd.hwnd(), co::WM::CLOSE.raw(), 0, 0);
+    }
+    let probe = CLOSE_PROBE.with(|p| p.borrow_mut().take());
+    let app = me.app.borrow();
+    g.check(
+        "close-warning-opened",
+        probe.as_ref().is_some_and(|p| p.opened),
+        "visible owned #32770 dialog with the localized warning text",
+    );
+    g.check(
+        "close-warning-polls-worker",
+        probe
+            .as_ref()
+            .is_some_and(|p| p.polled && p.visible_after_poll),
+        "unique marker consumed by production WM_TIMER while warning remained visible",
+    );
+    g.check(
+        "close-warning-keeps-job-and-window",
+        me.wnd.hwnd().IsWindow() && app.rx.is_some() && app.inert && !app.view().can_close,
+        "WM_CLOSE returned with the synthetic job still active",
+    );
+    drop(app);
+    me.app.borrow_mut().rx = None;
+    let _ = me.wnd.hwnd().KillTimer(super::TIMER_TICK);
+    let _ = me.wnd.hwnd().KillTimer(TIMER_CLOSE_PROBE);
+    drop(sender);
+}
+
+/// Find only a message box owned by the main window, optionally checking its text.
+fn close_dialog(me: &Shell, expected: Option<&str>) -> Option<w::HWND> {
+    let (thread_id, _) = me.wnd.hwnd().GetWindowThreadProcessId();
+    let mut found = None;
+    let _ = w::EnumThreadWindows(thread_id, |hwnd| {
+        if !hwnd.IsWindowVisible()
+            || hwnd.GetClassName().ok().as_deref() != Some("#32770")
+            || !hwnd
+                .GetWindow(co::GW::OWNER)
+                .is_ok_and(|owner| owner == *me.wnd.hwnd())
+        {
+            return true;
+        }
+        let mut matches = expected.is_none();
+        hwnd.EnumChildWindows(|child| {
+            matches |= child.GetWindowText().ok().as_deref() == expected;
+            !matches
+        });
+        if matches {
+            found = Some(hwnd);
+            return false;
+        }
+        true
+    });
+    found
+}
+
+/// Runs inside MessageBox's native loop. Never retain a test borrow across SendMessage.
+fn probe_close_warning(me: &Shell) {
+    let pending = CLOSE_PROBE.with(|p| {
+        p.borrow().as_ref().filter(|p| !p.done).map(|p| {
+            (
+                p.expected.clone(),
+                p.started.elapsed() >= Duration::from_secs(10),
+                p.sender.clone(),
+            )
+        })
+    });
+    let Some((expected, timed_out, sender)) = pending else {
+        return;
+    };
+    let dialog = close_dialog(me, Some(&expected));
+    if dialog.is_none() && !timed_out {
+        return;
+    }
+    let _ = me.wnd.hwnd().KillTimer(TIMER_CLOSE_PROBE);
+    CLOSE_PROBE.with(|p| {
+        if let Some(p) = p.borrow_mut().as_mut() {
+            p.done = true;
+            p.opened = dialog.is_some();
+        }
+    });
+    if let Some(dialog) = dialog {
+        let sent = sender.send(Msg::Event(Event::Message(CLOSE_MARKER.into())));
+        // This is the shell's actual registered polling callback, reached with MessageBox
+        // still on the stack. Unfixed code panics here on the App's retained Ref borrow.
+        send_raw(me.wnd.hwnd(), co::WM::TIMER.raw(), super::TIMER_TICK, 0);
+        let polled = sent.is_ok() && me.app.borrow().log.iter().any(|s| s == CLOSE_MARKER);
+        CLOSE_PROBE.with(|p| {
+            if let Some(p) = p.borrow_mut().as_mut() {
+                p.polled = polled;
+                p.visible_after_poll = dialog.IsWindowVisible();
+            }
+        });
+        send_raw(&dialog, co::WM::COMMAND.raw(), 1, 0); // IDOK
+    } else if let Some(dialog) = close_dialog(me, None) {
+        // A changed caption must fail the check without leaving its modal window hung.
+        send_raw(&dialog, co::WM::CLOSE.raw(), 0, 0);
+    }
+    // gui_gate::arm's process watchdog also bounds a modal loop that stops servicing timers.
 }
 
 fn close_next_picker(thread_id: u32) -> std::thread::JoinHandle<bool> {
