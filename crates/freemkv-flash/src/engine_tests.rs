@@ -1231,7 +1231,14 @@ fn chip_gate_refuses_cross_generation_images() {
     let img = crate::cmac::resign(&img).unwrap();
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
-    assert!(gate.to_string().contains("cannot be overridden"), "{gate}");
+    assert!(
+        format!("{gate:#}").contains("cannot be overridden"),
+        "{gate:#}"
+    );
+    assert_eq!(
+        crate::workflow::user_error(&gate).id,
+        "errors.incompatible_firmware"
+    );
     let normal = Mtk
         .validate_image(
             &mut ReadDevice::without_unlocks(&mut dev),

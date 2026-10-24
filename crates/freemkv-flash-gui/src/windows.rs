@@ -2112,7 +2112,7 @@ fn add_children(parent: &gui::TreeViewItem<()>, kids: &[Node]) {
 }
 
 /// Run the Win32 shell until the window closes.
-pub fn run() {
+pub fn run() -> i32 {
     // The file dialogs are COM objects: the apartment lives as long as the app.
     let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
     #[cfg(debug_assertions)]
@@ -2126,6 +2126,11 @@ pub fn run() {
         gate::install(&shell, dir);
     }
     if let Err(e) = shell.wnd.run_main(None) {
-        let _ = w::HWND::NULL.MessageBox(&e.to_string(), "freemkv", co::MB::ICONERROR);
+        crate::application_failure(&format!("Win32 event loop failed: {e}"), false);
+        let app = shell.app.borrow();
+        let message = app.runtime_issue().render(app.language);
+        let _ = w::HWND::NULL.MessageBox(&message, "freemkv", co::MB::ICONERROR);
+        return 1;
     }
+    0
 }

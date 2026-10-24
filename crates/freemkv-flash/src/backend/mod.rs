@@ -177,13 +177,7 @@ pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
     match try_read_identity(dev) {
         Ok(id) => id,
         Err(error) => {
-            eprintln!(
-                "{}",
-                crate::style::amber(&format!(
-                    "warning: could not read the drive identity ({error:#}); check device \
-                     permissions/connection — the drive may be reported as unsupported"
-                ))
-            );
+            crate::diagnostics::record(format!("could not read drive identity: {error:#}"));
             Identity::default()
         }
     }
@@ -352,6 +346,7 @@ pub fn unsupported_family_error(family: &str) -> anyhow::Error {
          Identification probes may have been sent; no firmware write or backup file was produced. \
          Run `freemkv-flash info DEVICE` to record the identity before adding a backend."
     )
+    .context(crate::user_error::IssueCode::UnsupportedDrive)
 }
 
 // ---- The trait and its facets -----------------------------------------------
@@ -438,6 +433,11 @@ pub struct Recognized {
 
 /// File recognition and description.
 pub trait FileFacet {
+    /// Offline family evidence for an early refusal when Current is supplied.
+    /// Missing evidence leaves the complete admission checks mandatory.
+    fn family_evidence(&self, _bytes: &[u8]) -> Option<(String, String)> {
+        None
+    }
     /// This backend's claim on `bytes`, if any. The registry resolves claims
     /// once for flash input, `check`, `info <file>` and inspection.
     fn recognize(&self, bytes: &[u8]) -> Option<Recognized>;
@@ -924,8 +924,19 @@ impl std::fmt::Display for UnsupportedFamilyOverride {
 }
 impl std::error::Error for UnsupportedFamilyOverride {}
 
-/// Recovery without automatic backups or installed-versus-target policy.
+/// Recovery without automatic backups or Flash-only tray gates. Each backend
+/// owns its recovery admission policy and declares any explicit family override.
 pub trait RecoveryFacet {
+    /// Prepare once; the returned object owns every loaded firmware byte.
+    fn prepare(
+        &self,
+        dev: &mut ReadDevice<'_>,
+        receiver: &RecoveryTarget,
+        current: Option<&[u8]>,
+        target: &[u8],
+        bypass_family_check: bool,
+    ) -> Result<Box<dyn PreparedRecoveryUpdate>>;
+
     /// A classified drive may need a Current file before its receiver can be identified.
     fn accepts_current_for_identification(&self) -> bool {
         false
@@ -976,6 +987,12 @@ pub trait RecoveryFacet {
         current: Option<&[u8]>,
         target: &[u8],
     ) -> Result<UpdateOutcome>;
+}
+
+/// Backend-owned recovery state retained from preparation through confirmation.
+pub trait PreparedRecoveryUpdate: Send {
+    /// Execute the exact prepared bytes, then verify the written firmware.
+    fn execute(&self, dev: &mut WriteDevice<'_>) -> Result<UpdateOutcome>;
 }
 
 /// Firmware inspection.

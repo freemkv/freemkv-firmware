@@ -285,7 +285,9 @@ pub use mock::MockScsiDevice;
 /// `info`/`dump` paths simply never issue a write.
 pub fn open(path: &str, writable: bool) -> Result<Box<dyn ScsiDevice>> {
     let _ = writable;
-    Ok(Box::new(adapter::TransportDevice::open(path)?))
+    Ok(Box::new(adapter::TransportDevice::open(path).map_err(
+        |e| e.context(crate::user_error::IssueCode::Connection),
+    )?))
 }
 
 /// Enumerate optical drives via the platform (IOKit / sysfs / setupapi). This is

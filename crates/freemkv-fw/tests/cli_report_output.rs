@@ -118,6 +118,14 @@ fn verify_of_a_corrupted_image_exits_non_zero() {
         stdout.contains("MISMATCH"),
         "the failing region must be named in the table: {stdout}"
     );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let language = freemkv_flash::localization::Preferences::user().load();
+    for key in ["errors.firmware_invalid", "errors.no_firmware_write"] {
+        assert!(
+            stderr.contains(freemkv_flash::localization::get(language, key)),
+            "{stderr}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -134,8 +142,33 @@ fn verify_of_a_missing_path_exits_non_zero_and_explains_itself_on_stderr() {
         "a path that could not even be read must not exit 0"
     );
     assert!(
-        stderr.contains("error:") && stderr.contains("reading"),
+        stderr.contains(freemkv_flash::localization::get(
+            freemkv_flash::localization::Preferences::user().load(),
+            "errors.file_missing"
+        )) && stderr.contains(freemkv_flash::localization::get(
+            freemkv_flash::localization::Preferences::user().load(),
+            "errors.no_firmware_write"
+        )),
         "the failure must be reported on stderr, naming what went wrong: {stderr}"
+    );
+}
+
+#[test]
+fn invalid_options_explain_the_problem_and_no_firmware_write_in_the_selected_language() {
+    let out = run(&["verify"]);
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let language = freemkv_flash::localization::Preferences::user().load();
+    for key in ["errors.command_options", "errors.no_firmware_write"] {
+        assert!(
+            stderr.contains(freemkv_flash::localization::get(language, key)),
+            "{stderr}"
+        );
+    }
+    assert!(
+        !stderr.contains("Usage:"),
+        "parser diagnostics must stay in the saved log: {stderr}"
     );
 }
 
@@ -319,6 +352,15 @@ fn legacy_modified_image_requires_original_oem_and_writes_nothing() {
     ]);
     assert!(!out.status.success());
     assert!(!output.exists());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("original OEM image"));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let language = freemkv_flash::localization::Preferences::user().load();
+    assert!(stderr.contains(freemkv_flash::localization::get(
+        language,
+        "errors.already_modified"
+    )));
+    assert!(stderr.contains(freemkv_flash::localization::get(
+        language,
+        "errors.no_firmware_write"
+    )));
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -11,8 +11,6 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use freemkv_flash::style;
-
 /// freemkv standalone optical-drive firmware backup and flasher.
 #[derive(Parser, Debug)]
 #[command(
@@ -188,7 +186,10 @@ fn report_update(
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match freemkv_flash::cli::parse::<Cli>() {
+        Ok(cli) => cli,
+        Err(code) => return code,
+    };
     let result = match cli.command {
         Some(Command::List) => freemkv_flash::workflow::list(),
         Some(Command::Info { device }) => freemkv_flash::workflow::info(device.as_deref()),
@@ -230,13 +231,9 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!(
-                "{} {}",
-                style::red("error:"),
-                freemkv_flash::workflow::error_message(&e)
-            );
+            freemkv_flash::cli::print_error(&e);
             if e.is::<freemkv_flash::backend::CurrentFirmwareRequired>() {
-                eprintln!("Use --current <FILE>; add --current-member <NAME> for a paired TAR.");
+                eprintln!("--current <FILE> [--current-member <NAME>]");
             }
             ExitCode::FAILURE
         }

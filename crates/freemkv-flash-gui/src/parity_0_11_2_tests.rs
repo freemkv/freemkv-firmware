@@ -144,6 +144,9 @@ fn call(job: &Job) -> Call {
             execute: o.execute,
             acknowledged_risk: o.acknowledged_risk,
         },
+        Job::ExecuteRecovery(_) => {
+            panic!("prepared recovery has no equivalent path-based 0.11.2 call")
+        }
         Job::Analysis { request, .. } => match request {
             Request::Inspect(a) => Call::Inspect(src(a)),
             Request::Compare(a, b) => Call::Compare(src(a), src(b)),
@@ -592,9 +595,11 @@ fn recover(app: &mut App, input: &Path) {
         matches!(&app.dry_run.as_ref().unwrap().last().unwrap().2, Job::Recovery(o) if !o.execute && !o.acknowledged_risk)
     );
     assert!(app.view().confirm.is_none());
-    app.worker
-        .take()
-        .unwrap()
+    let worker = app.worker.take().unwrap();
+    worker
+        .send(Msg::PreparedRecovery(workflow::PreparedRecovery::default()))
+        .unwrap();
+    worker
         .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
         .unwrap();
     app.poll();
@@ -610,6 +615,33 @@ fn recover(app: &mut App, input: &Path) {
     assert_eq!(jobs(app), before + 1, "no tick, no recovery write");
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
+    assert!(matches!(
+        app.dry_run.as_ref().unwrap().last().unwrap().2,
+        Job::ExecuteRecovery(_)
+    ));
+}
+
+/// Input selection preserves old behavior, while confirmation consumes prepared bytes.
+fn prepared_recovery_inputs(app: &App) -> Sent {
+    let (_, device, job) = app
+        .dry_run
+        .as_ref()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|(_, _, job)| matches!(job, Job::Recovery(_)))
+        .unwrap();
+    let Job::Recovery(options) = job else {
+        unreachable!()
+    };
+    let mut options = options.clone();
+    options.execute = true;
+    options.acknowledged_risk = true;
+    Sent {
+        label: "Recovery".into(),
+        device: device.clone(),
+        call: call(&Job::Recovery(options)),
+    }
 }
 
 #[test]
@@ -619,7 +651,10 @@ fn recovery_reading_current_from_the_drive_matches_0_11_2() {
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, true));
     let input = PathBuf::from("/fw/target.firmware.tar");
     recover(&mut app, &input);
-    assert_eq!(sent(&app), v0_11_2::recover(PIONEER, &input, true, None));
+    assert_eq!(
+        prepared_recovery_inputs(&app),
+        v0_11_2::recover(PIONEER, &input, true, None)
+    );
 }
 
 #[test]
@@ -636,7 +671,7 @@ fn recovery_from_a_current_file_matches_0_11_2() {
     let input = PathBuf::from("/fw/target.firmware.tar");
     recover(&mut app, &input);
     assert_eq!(
-        sent(&app),
+        prepared_recovery_inputs(&app),
         v0_11_2::recover(PIONEER, &input, false, Some(&current))
     );
 }
@@ -651,7 +686,7 @@ fn recovery_read_from_drive_wins_over_a_current_file_as_in_0_11_2() {
     let input = PathBuf::from("/fw/target.firmware.tar");
     recover(&mut app, &input);
     assert_eq!(
-        sent(&app),
+        prepared_recovery_inputs(&app),
         v0_11_2::recover(PIONEER, &input, true, Some(&current))
     );
 }

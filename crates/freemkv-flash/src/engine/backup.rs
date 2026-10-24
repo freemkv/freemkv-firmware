@@ -40,6 +40,12 @@ pub(super) fn save_validated_with_replace(
     replace: bool,
     validate: impl Fn(&[u8]) -> Result<()>,
 ) -> Result<usize> {
+    crate::output::publish(crate::output::Event::Phase {
+        phase: "saving",
+        component: "task.backup",
+        done: None,
+        total: None,
+    });
     validate(bytes)?;
     if !replace && path.symlink_metadata().is_ok() {
         bail!(
@@ -72,6 +78,12 @@ pub(super) fn save_validated_with_replace(
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "verifying",
+            component: "task.backup",
+            done: Some(0),
+            total: Some(bytes.len()),
+        });
         let saved = std::fs::read(&temp)?;
         if saved != bytes {
             bail!(
@@ -97,6 +109,12 @@ pub(super) fn save_validated_with_replace(
             published.len(),
             path
         ));
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "verifying",
+            component: "task.backup",
+            done: Some(published.len()),
+            total: Some(bytes.len()),
+        });
         #[cfg(unix)]
         {
             let parent = path

@@ -115,7 +115,10 @@ const REQUIRED: &[(&str, &str)] = &[
     ("R9 drop-in", "cli_and_gui_text_name_no_vendor"),
     ("R10 native GUI", "ui_model_is_toolkit_free"),
     ("R10 native GUI", "every_shell_renders_only_the_ui_model"),
-    ("R11 dependency pins", "pioneer_optical_stays_pinned"),
+    (
+        "R11 dependency pins",
+        "optical_dependencies_stay_content_pinned",
+    ),
     ("R12 sanitizing", "every_drive_string_is_clean"),
     ("R12 sanitizing", "paths_and_hex_render_unmangled"),
     (

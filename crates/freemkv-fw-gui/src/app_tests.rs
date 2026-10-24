@@ -14,11 +14,12 @@ fn integrity_verdicts_have_specific_catalog_guidance_and_english_diagnostics() {
     ] {
         let error = anyhow::Error::new(failure);
         let guidance = user_guidance(&error);
-        assert_eq!(guidance, key);
         for language in Language::ALL {
             let text = localization::render(language, &guidance);
             assert!(!text.is_empty());
             assert_ne!(text, key);
+            assert!(text.contains(localization::get(language, key)));
+            assert!(text.contains(localization::get(language, "errors.no_firmware_write")));
         }
         let diagnostic = format!("{error:#}");
         assert!(diagnostic.contains("integrity") && diagnostic.contains("verification"));
@@ -118,7 +119,9 @@ fn disconnected_boot_preview_has_localized_failure_and_english_diagnostic() {
     app.boot_rx = Some(rx);
     drop(tx);
     app.boot_preview(&egui::Context::default());
-    assert_eq!(app.boot_error.as_deref(), Some("errors.worker"));
+    let text = localization::render(Language::En, app.boot_error.as_deref().unwrap());
+    assert!(text.contains(localization::get(Language::En, "errors.worker")));
+    assert!(text.contains(localization::get(Language::En, "errors.no_firmware_write")));
     assert!(app
         .log
         .iter()
@@ -233,10 +236,9 @@ fn operation_errors_translate_with_the_ui_but_activity_and_saved_logs_stay_engli
     let (tx, rx) = mpsc::channel();
     app.running = true;
     app.rx = Some(rx);
-    let guidance = freemkv_flash::workflow::user_error(&anyhow::anyhow!(
-        "firmware image invalid at private 0x1234"
-    ))
-    .encoded();
+    let error = anyhow::anyhow!("firmware image invalid at private 0x1234")
+        .context(freemkv_flash::user_error::IssueCode::FirmwareInvalid);
+    let guidance = freemkv_flash::workflow::user_error(&error).encoded();
     tx.send(Msg::Done(Err(guidance))).unwrap();
     app.pump();
     let text = rendered_text(&mut app);

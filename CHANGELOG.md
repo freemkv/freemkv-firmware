@@ -3,6 +3,24 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.0] - Unreleased
+
+### freemkv Flash
+
+- Keep prepared recovery firmware in memory through confirmation, avoiding another
+  complete drive read when recovery starts. Check the connected drive again before
+  writing and retain independent verification after the update.
+- Show reading, writing, restart and verification status for both supported drive
+  protocols, with measured percentages where available and a waiting indicator
+  while the drive restarts.
+- Explain incomplete Current firmware and other operation problems in the selected
+  language, including whether firmware was written and the next action to take.
+- Check incompatible supplied Current and target files before reading the drive.
+  When Current comes from the drive, keep the existing backup-first checks.
+- Use the selected language for command-option errors in both command-line tools.
+- Keep the same clear error and write-status guidance in packaging, offline
+  analysis, verification refusals and interrupted desktop operations.
+
 ## [0.14.5] - 2026-10-23
 
 ### freemkv Flash

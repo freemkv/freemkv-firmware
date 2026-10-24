@@ -806,7 +806,7 @@ fn one_recognizer_serves_flash_check_and_inspect() {
             }
             // An archive Flash refuses fails inspection for Flash's reason.
             (_, _, Err(e)) if name == "fixture.tar" => {
-                assert!(format!("{e:#}").starts_with(&refusal), "{e:#}")
+                assert!(format!("{e:#}").contains(&refusal), "{e:#}")
             }
             // Both MediaTek formats inspect, through the MediaTek provider.
             (_, "mtk-image" | "mtk-legacy-tar", Ok(inspection)) => {

@@ -1,7 +1,7 @@
 
 === MTK execute: .bin with pre-flash backup ===
 result: OK
---- text (215) ---
+--- text (213) ---
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -213,11 +213,9 @@ flashing firmware: 97%
 flashing firmware: 98%
 flashing firmware: 99%
 flashing firmware: 100%
-warning: could not parse the post-flash REQUEST SENSE response (16 bytes); relying on read-back verify
 upload complete (2 MiB); waiting for the drive to finish programming...
-warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 verifying...
---- events (218) ---
+--- events (216) ---
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
@@ -436,9 +434,7 @@ PROGRESS flashing firmware 2048000/2097152
 PROGRESS flashing firmware 2064384/2097152
 PROGRESS flashing firmware 2080768/2097152
 PROGRESS flashing firmware 2097152/2097152
-MSG      warning: could not parse the post-flash REQUEST SENSE response (16 bytes); relying on read-back verify
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
-MSG      warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 MSG      verifying...
 FIELD    Firmware running = HL-DT-STBD-RE BU40N     1.00
 --- scsi transcript (1917) ---
@@ -2364,7 +2360,7 @@ image chunks streamed: 128 x 16384 bytes
 
 === MTK execute: read-back mismatch ===
 result: ERR update failed during firmware readback (progress: UploadComplete; payload bytes accepted in stage: Some(2097152); temporary firmware: false; completed stages: []): MediaTek update failed: read-back differs at 0x01105e (read 0x00, wrote 0x11); 61346 of 61440 protected bytes differ
---- text (215) ---
+--- text (213) ---
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -2576,11 +2572,9 @@ flashing firmware: 97%
 flashing firmware: 98%
 flashing firmware: 99%
 flashing firmware: 100%
-warning: could not parse the post-flash REQUEST SENSE response (16 bytes); relying on read-back verify
 upload complete (2 MiB); waiting for the drive to finish programming...
-warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 verifying...
---- events (217) ---
+--- events (215) ---
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
@@ -2799,9 +2793,7 @@ PROGRESS flashing firmware 2048000/2097152
 PROGRESS flashing firmware 2064384/2097152
 PROGRESS flashing firmware 2080768/2097152
 PROGRESS flashing firmware 2097152/2097152
-MSG      warning: could not parse the post-flash REQUEST SENSE response (16 bytes); relying on read-back verify
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
-MSG      warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 MSG      verifying...
 --- scsi transcript (1915) ---
 MEDIUM -> ClosedEmpty
@@ -4723,7 +4715,7 @@ saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70d
 
 === MTK execute: restore the saved .tar ===
 result: OK
---- text (216) ---
+--- text (214) ---
 == reflash backup firmware (per-unit data retained as reference) ==
 reading drive memory: 0%
 reading drive memory: 1%
@@ -4936,11 +4928,9 @@ flashing firmware: 97%
 flashing firmware: 98%
 flashing firmware: 99%
 flashing firmware: 100%
-warning: could not parse the post-flash REQUEST SENSE response (16 bytes); relying on read-back verify
 upload complete (2 MiB); waiting for the drive to finish programming...
-warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 verifying...
---- events (219) ---
+--- events (217) ---
 MSG      == reflash backup firmware (per-unit data retained as reference) ==
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
@@ -5160,9 +5150,7 @@ PROGRESS flashing firmware 2048000/2097152
 PROGRESS flashing firmware 2064384/2097152
 PROGRESS flashing firmware 2080768/2097152
 PROGRESS flashing firmware 2097152/2097152
-MSG      warning: could not parse the post-flash REQUEST SENSE response (16 bytes); relying on read-back verify
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
-MSG      warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 MSG      verifying...
 FIELD    Firmware running = HL-DT-STBD-RE BU40N     1.00
 --- scsi transcript (1917) ---
@@ -7086,7 +7074,7 @@ IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
 
 === MTK execute: no risk acknowledgement ===
-result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
+result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): errors.acknowledgement: SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (568) ---
@@ -7660,14 +7648,14 @@ IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c060009a30000000e00 alloc=14 -> ok 14
 
 === MTK execute: disc loaded ===
-result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
+result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): errors.disc_present: a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> DiscPresent
 
 === MTK execute: tray open ===
-result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): the tray is OPEN — refusing to flash. Close the empty tray and retry. This update pass has not started.
+result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): errors.tray_open: the tray is OPEN — refusing to flash. Close the empty tray and retry. This update pass has not started.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -7676,14 +7664,14 @@ refused runs left a file at disc.tar: <not created>
 refused runs left a file at never.tar: <not created>
 
 === Pioneer execute: no risk acknowledgement ===
-result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
+result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): errors.acknowledgement: SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> ClosedEmpty
 
 === Pioneer execute: pre-flash backup cannot be read ===
-result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (2) ---
@@ -7691,14 +7679,14 @@ MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 96
 
 === Pioneer execute: disc loaded ===
-result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
+result: ERR update failed during tray check (write started: false; temporary firmware: false; completed stages: []): errors.disc_present: a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> DiscPresent
 
 === MTK execute: Pioneer bundle sent to an MTK drive ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -7706,7 +7694,7 @@ MEDIUM -> ClosedEmpty
 failed Pioneer backup left a file: <not created>
 
 === MTK execute: MT1939 image on an MT1959 drive ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.incompatible_firmware: This gate cannot be overridden.: image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (3) ---
@@ -7716,7 +7704,7 @@ IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 saved pre-flash backup: <not created>
 
 === MTK execute: raw drive read as input ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---

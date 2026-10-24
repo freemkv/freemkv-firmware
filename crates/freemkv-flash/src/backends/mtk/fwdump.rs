@@ -110,6 +110,12 @@ pub(crate) fn capture_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> 
         }
         off += len;
         progress.set(off);
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "reading",
+            component: "filter.firmware",
+            done: Some(off),
+            total: Some(IMAGE_SIZE),
+        });
     }
     Ok((image, readable, gaps))
 }

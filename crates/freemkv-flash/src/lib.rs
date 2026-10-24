@@ -73,5 +73,7 @@ pub mod package;
 /// Shared user-interface message catalogs; never used to translate diagnostic logs.
 pub mod localization;
 
+/// Terminal parsing and localized error presentation shared by both tools.
+pub mod cli;
 /// Localizable customer guidance; diagnostic errors preserve their complete source chains.
 pub mod user_error;

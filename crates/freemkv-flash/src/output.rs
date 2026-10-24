@@ -9,6 +9,17 @@ use std::io::{self, Write};
 /// Presentation-independent updates from an operation.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
+    /// Protocol-neutral work or waiting; absent counts mean no measurable percentage.
+    Phase {
+        /// Stable phase name used by every backend and session report.
+        phase: &'static str,
+        /// Localizable region label, independent of protocol details.
+        component: &'static str,
+        /// Completed bytes, when measurable.
+        done: Option<usize>,
+        /// Total bytes, when measurable.
+        total: Option<usize>,
+    },
     /// Normalized settings from the selected Pioneer protocol codec.
     DeviceSettings(device_settings::Settings),
     /// Diagnostic text for optional details.
@@ -30,6 +41,7 @@ pub enum Event {
 type Sink = Box<dyn FnMut(Event)>;
 thread_local! {
     static SINK: RefCell<Option<Sink>> = RefCell::new(None);
+    static TERMINAL_PHASE: RefCell<Option<(String, Option<usize>)>> = const { RefCell::new(None) };
 }
 
 /// Deliver this thread's operation output to a GUI instead of process file descriptors.
@@ -37,6 +49,12 @@ thread_local! {
 pub fn capture<R>(mut sink: impl FnMut(String) + 'static, operation: impl FnOnce() -> R) -> R {
     capture_events(
         move |event| match event {
+            Event::Phase {
+                phase,
+                component,
+                done,
+                total,
+            } => sink(format!("{phase} {component}: {done:?}/{total:?}")),
             Event::Message(text) => sink(text),
             Event::Progress { label, done, total } => sink(format!(
                 "{label}: {}%",
@@ -73,9 +91,69 @@ pub fn publish(event: Event) -> bool {
             sink(event);
             true
         } else {
+            if let Event::Phase {
+                phase,
+                component,
+                done,
+                total,
+            } = event
+            {
+                terminal_phase(phase, component, done, total);
+            }
             false
         }
     })
+}
+
+fn terminal_phase(phase: &str, component: &str, done: Option<usize>, total: Option<usize>) {
+    let percent = done
+        .zip(total)
+        .filter(|(_, total)| *total > 0)
+        .map(|(done, total)| {
+            done.saturating_mul(100)
+                .checked_div(total)
+                .unwrap_or(0)
+                .min(100)
+        });
+    let key = format!("{phase}:{component}");
+    let changed = TERMINAL_PHASE.with(|state| {
+        let mut state = state.borrow_mut();
+        let bucket = percent.map(|p| p / 5);
+        if state
+            .as_ref()
+            .is_some_and(|old| old.0 == key && old.1 == bucket)
+        {
+            return false;
+        }
+        *state = Some((key, bucket));
+        true
+    });
+    if changed {
+        let language = crate::localization::Preferences::user().load();
+        let label = crate::localization::message(
+            &format!("phase.{phase}"),
+            &[("component", component.to_owned())],
+        );
+        let label = crate::localization::render(language, &label);
+        let mut stderr = io::stderr().lock();
+        if let Some(percent) = percent {
+            let _ = writeln!(stderr, "{label}: {percent}%");
+        } else {
+            let _ = writeln!(stderr, "{label}");
+        }
+    }
+}
+
+/// Present a catalog warning without exposing its technical diagnostic cause.
+pub fn guidance(id: &'static str) {
+    if !publish(Event::Message(id.into())) {
+        let language = crate::localization::Preferences::user().load();
+        let _ = writeln!(
+            io::stderr().lock(),
+            "{}",
+            crate::localization::render(language, id)
+        );
+    }
 }
 
 // Resolve presentation messages for logs without changing what reaches the GUI.
@@ -95,7 +173,7 @@ fn diagnostic_event(event: &Event) -> String {
                 }
             }
         }
-        Event::DeviceSettings(_) => {}
+        Event::DeviceSettings(_) | Event::Phase { .. } => {}
     }
     format!("{diagnostic:?}")
 }

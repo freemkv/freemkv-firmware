@@ -318,6 +318,6 @@ fn log_write_failure_surfaces_health_without_failing_the_operation() {
     );
     assert_eq!(result.unwrap(), 42);
     assert_eq!(warnings.lock().unwrap().len(), 1);
-    assert!(warnings.lock().unwrap()[0].contains("write failed"));
+    assert_eq!(warnings.lock().unwrap()[0], "errors.logging");
     std::fs::remove_dir_all(directory).unwrap();
 }

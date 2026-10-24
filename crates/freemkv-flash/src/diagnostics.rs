@@ -93,8 +93,12 @@ pub fn with_operation_id<T>(id: &str, work: impl FnOnce() -> T) -> T {
 }
 
 fn logging_failed(message: String) {
-    eprintln!("warning: {message}");
-    crate::output::field("Diagnostic warning", message);
+    if crate::output::captured() {
+        crate::output::publish(crate::output::Event::Message(message));
+    }
+    let language = crate::localization::Preferences::user().load();
+    eprintln!("{}", crate::localization::get(language, "errors.logging"));
+    crate::output::field("Diagnostic warning", "errors.logging");
 }
 
 /// Append a diagnostic without cluttering the UI. A failed log never interrupts a burn.

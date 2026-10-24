@@ -28,7 +28,7 @@ fn entry_failure_translations_say_no_firmware_payload_was_sent() {
         (Language::Da, "ingen firmwaredata"),
         (Language::De, "keine Firmware-Daten"),
         (Language::El, "δεν στάλθηκαν δεδομένα"),
-        (Language::En, "no firmware payload was sent"),
+        (Language::En, "no firmware data was sent"),
         (Language::Es, "no se enviaron datos"),
         (Language::Es419, "no se enviaron datos"),
         (Language::Fi, "ei lähetetty"),

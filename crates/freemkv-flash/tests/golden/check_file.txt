@@ -346,7 +346,7 @@ MSG      built for: HL-DT-ST BD-RE BE14NU40 (MT1939)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file mtk_legacy_0_10_backup.tar ===
-result: ERR not a MediaTek firmware backup: undetectable — the boot loader banner at 0x3000 names no supported MT19xx generation (only MT1959 and MT1939 are handled; unpack packed/truncated dumps first)
+result: ERR operation has no firmware write capability: errors.firmware_invalid: not a MediaTek firmware backup: undetectable — the boot loader banner at 0x3000 names no supported MT19xx generation (only MT1959 and MT1939 are handled; unpack packed/truncated dumps first)
 --- text (5) ---
 Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_legacy_0_10_backup.tar
@@ -594,7 +594,7 @@ MSG      image: unrecognized — no known drive-family signature (truncated, pac
 MSG      Diagnostic log saved: <LOG>
 
 === check_file missing file ===
-result: ERR reading firmware image <TMP>/check-file/does-not-exist.bin: No such file or directory (os error 2)
+result: ERR operation has no firmware write capability: reading firmware image <TMP>/check-file/does-not-exist.bin: No such file or directory (os error 2)
 --- text (2) ---
 Diagnostic log: <LOG>
 Diagnostic log saved: <LOG>
