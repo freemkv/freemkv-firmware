@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 fn analysis(bytes: &[u8]) -> FirmwareAnalysis {
     FirmwareAnalysis {
         identity: Identity {
+            metadata: Default::default(),
             component: "Test component".into(),
             sha256: format!("{:x}", Sha256::digest(bytes)),
             family: None,
@@ -98,16 +99,18 @@ fn different_families_are_comparable_and_unknown_is_not_same() {
     assert_eq!(
         a.compare(&b, Options::default(), &Control::default())
             .unwrap()
-            .same_family,
-        None
+            .facts
+            .family,
+        crate::firmware_comparison::FamilyRelationship::Unknown
     );
     a.identity.family = Some("a".into());
     b.identity.family = Some("b".into());
     assert_eq!(
         a.compare(&b, Options::default(), &Control::default())
             .unwrap()
-            .same_family,
-        Some(false)
+            .facts
+            .family,
+        crate::firmware_comparison::FamilyRelationship::Different
     );
 }
 #[test]
@@ -322,4 +325,34 @@ fn isolated_target_bytes_are_not_relocation_evidence() {
         .iter()
         .any(|c| c.kind == ChangeKind::RelocatedReference));
     accounted(&result.regions[0]);
+}
+
+#[test]
+fn shared_facts_keep_user_direction_and_family_scheme_distinct() {
+    use crate::firmware_comparison::{ComponentIdentity, FamilyRelationship, VersionRelationship};
+    let mut a = analysis(b"older image");
+    let mut b = analysis(b"newer image");
+    a.identity.metadata = ComponentIdentity {
+        name: "Drive".into(),
+        revision: "1.02".into(),
+        lineage: Some("edition".into()),
+    };
+    b.identity.metadata = ComponentIdentity {
+        name: "Drive".into(),
+        revision: "1.10".into(),
+        lineage: Some("edition".into()),
+    };
+    a.identity.family = Some("same-value".into());
+    b.identity.family = Some("same-value".into());
+    b.identity.family_scheme = "another-scheme".into();
+    for (left, right, direction) in [
+        (&a, &b, VersionRelationship::Newer),
+        (&b, &a, VersionRelationship::Older),
+    ] {
+        let result = left
+            .compare(right, Options::default(), &Control::default())
+            .unwrap();
+        assert_eq!(result.facts.version, direction);
+        assert_eq!(result.facts.family, FamilyRelationship::NotComparable);
+    }
 }

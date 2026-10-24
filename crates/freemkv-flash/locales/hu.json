@@ -19,6 +19,16 @@
     "task.dump": "Kiolvasás",
     "task.flash": "Firmware frissítése",
     "task.recovery": "Helyreállítás",
+    "recovery.bypass_family_check": "A firmwarecsalád ellenőrzésének megkerülése (nagyon kockázatos)",
+    "recovery.bypass_family_title": "Hardvercsalád-ellenőrzés megkerülése",
+    "recovery.bypass_family_warning": "A firmware hardvercsalád-ellenőrzésének megkerülését kérted. Ez az ellenőrzés segít megakadályozni, hogy más hardverhez készült firmware kerüljön a meghajtóra. Megkerülése végleg működésképtelenné teheti a meghajtót, és előfordulhat, hogy a helyreállítás vagy a korábbi firmware visszaírása lehetetlen.",
+    "recovery.bypass_family_code": "A kockázat elfogadásának megerősítéséhez írd be ezt: {code}.",
+    "recovery.bypass_family_continue": "Megkerülés engedélyezése",
+    "recovery.bypass_family_code_failed": "Nem sikerült létrehozni a megerősítő kódot. A firmwarecsalád ellenőrzése bekapcsolva marad.",
+    "recovery.bypass_family_ack": "Tudomásul veszem, hogy a firmwarecsalád ellenőrzésének megkerülése végleg működésképtelenné teheti ezt a meghajtót, és a helyreállítás lehetetlen lehet.",
+    "recovery.family_enforced": "Nincs automatikus biztonsági mentés; a firmwarecsalád ellenőrzése érvényesül",
+    "recovery.family_bypassed": "Nincs automatikus biztonsági mentés; a firmwarecsalád ellenőrzése kifejezetten megkerülve (nagyon kockázatos)",
+    "recovery.family_override_unsupported": "Ez a helyreállítási háttérprogram nem támogatja a firmwarecsalád ellenőrzésének megkerülését.",
     "action.read_info": "Meghajtó adatainak beolvasása",
     "action.check_file": "Fájl ellenőrzése…",
     "info.connect_drive": "Csatlakoztasson egy optikai meghajtót, majd válassza a Frissítés lehetőséget.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (az aktív és megmentett)",
     "legacy.backup_saved": "Backup: Megtakarítás {path} ({bytes} A bajtok",
     "legacy.backup_missing": "biztonsági mentés: NONE - flashing anélkül, hogy a rollback biztonsági mentés (ez az optikai lemez nem lehet visszahívni)",
-    "ui.backup_dump_review": "Ha nem menthető biztonsági másolat, mentsen nyers memóriaképet, és küldje be a diagnosztikai naplókkal együtt, hogy megvizsgálhassuk a biztonsági mentés támogatását."
+    "ui.backup_dump_review": "Ha nem menthető biztonsági másolat, mentsen nyers memóriaképet, és küldje be a diagnosztikai naplókkal együtt, hogy megvizsgálhassuk a biztonsági mentés támogatását.",
+    "verification.startup": "Indítás",
+    "verification.not_checked": "Nincs ellenőrizve",
+    "verification.not_requested": "Nem kért",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

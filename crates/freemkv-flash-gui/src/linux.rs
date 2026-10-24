@@ -749,6 +749,17 @@ impl Shell {
         if let Some(n) = &c.note {
             extra.append(&widgets::label(n, &[]));
         }
+        if let Some(value) = &c.code_entry {
+            let entry = gtk::Entry::new();
+            entry.set_text(value);
+            entry.set_max_length(5);
+            entry.set_input_purpose(gtk::InputPurpose::Digits);
+            let me = self.clone();
+            entry.connect_changed(move |entry| {
+                me.send(Input::FamilyOverrideCode(entry.text().to_string()));
+            });
+            extra.append(&entry);
+        }
         let ack = gtk::CheckButton::with_label(&c.ack_text);
         ack.set_visible(!c.ack_text.is_empty());
         ack.set_active(c.ack_checked);

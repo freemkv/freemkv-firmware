@@ -19,6 +19,16 @@
     "task.dump": "傾印",
     "task.flash": "寫入韌體",
     "task.recovery": "復原",
+    "recovery.bypass_family_check": "略過韌體系列檢查（風險極高）",
+    "recovery.bypass_family_title": "略過硬體系列檢查",
+    "recovery.bypass_family_warning": "你要求略過韌體的硬體系列檢查。此檢查有助於防止將適用於其他硬體的韌體寫入你的光碟機。略過檢查可能導致光碟機永久無法使用，而且可能無法復原或刷回原韌體。",
+    "recovery.bypass_family_code": "如要確認接受此風險，請輸入 {code} 以繼續。",
+    "recovery.bypass_family_continue": "啟用略過檢查",
+    "recovery.bypass_family_code_failed": "無法產生確認碼。韌體系列檢查仍保持啟用。",
+    "recovery.bypass_family_ack": "我了解，略過韌體系列檢查可能導致此光碟機永久無法使用，且可能無法復原。",
+    "recovery.family_enforced": "不自動備份；強制執行韌體系列檢查",
+    "recovery.family_bypassed": "不自動備份；明確略過韌體系列檢查（風險極高）",
+    "recovery.family_override_unsupported": "此復原後端不支援略過韌體系列檢查。",
     "action.read_info": "讀取光碟機資訊",
     "action.check_file": "檢查檔案…",
     "info.connect_drive": "連接光碟機，然後選取「重新整理」。",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (活躍和儲存)",
     "legacy.backup_saved": "備份:儲存 {path} ({bytes} 位元)",
     "legacy.backup_missing": "備份: 沒有 - 沒有滾回備份的閃光(這個光學驅動器不能重新滾動)",
-    "ui.backup_dump_review": "如果無法儲存備份，請儲存原始傾印並連同診斷記錄一起提交，以便我們研究備份支援。"
+    "ui.backup_dump_review": "如果無法儲存備份，請儲存原始傾印並連同診斷記錄一起提交，以便我們研究備份支援。",
+    "verification.startup": "啟動",
+    "verification.not_checked": "未檢查",
+    "verification.not_requested": "未要求",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

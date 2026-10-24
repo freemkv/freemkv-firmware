@@ -403,8 +403,13 @@ pub fn family_gate(
     installed: Option<&FamilyKey>,
     target: Option<&FamilyKey>,
 ) -> Result<(), String> {
+    use crate::firmware_comparison::FamilyRelationship;
+    let relation = FamilyRelationship::compare(
+        installed.map(|f| (pioneer_optical::image::FAMILY_SCHEME, f.0.as_str())),
+        target.map(|f| (pioneer_optical::image::FAMILY_SCHEME, f.0.as_str())),
+    );
     match (installed, target) {
-        (Some(i), Some(t)) if i == t => Ok(()),
+        (Some(_), Some(_)) if relation == FamilyRelationship::Same => Ok(()),
         (Some(i), Some(t)) => Err(format!(
             "family mismatch: installed firmware is family {i}, target is family {t} \
              (different silicon/optical platform; not crossflash-compatible)"

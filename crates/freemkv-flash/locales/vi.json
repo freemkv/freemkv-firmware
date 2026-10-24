@@ -19,6 +19,16 @@
     "task.dump": "Kết xuất",
     "task.flash": "Ghi firmware",
     "task.recovery": "Khôi phục",
+    "recovery.bypass_family_check": "Bỏ qua kiểm tra dòng firmware (rất rủi ro)",
+    "recovery.bypass_family_title": "Bỏ qua kiểm tra dòng phần cứng",
+    "recovery.bypass_family_warning": "Bạn đã yêu cầu bỏ qua kiểm tra dòng phần cứng của firmware. Kiểm tra này giúp ngăn firmware dành cho phần cứng khác được ghi vào ổ đĩa. Bỏ qua kiểm tra có thể khiến ổ đĩa hỏng vĩnh viễn; việc khôi phục hoặc cài lại firmware trước đó có thể không thực hiện được.",
+    "recovery.bypass_family_code": "Để xác nhận bạn chấp nhận rủi ro này, hãy nhập {code} để tiếp tục.",
+    "recovery.bypass_family_continue": "Bật bỏ qua",
+    "recovery.bypass_family_code_failed": "Không thể tạo mã xác nhận. Kiểm tra dòng firmware vẫn được bật.",
+    "recovery.bypass_family_ack": "Tôi hiểu rằng bỏ qua kiểm tra dòng firmware có thể khiến ổ đĩa này hỏng vĩnh viễn và việc khôi phục có thể không thực hiện được.",
+    "recovery.family_enforced": "Không tự động sao lưu; áp dụng kiểm tra dòng firmware",
+    "recovery.family_bypassed": "Không tự động sao lưu; chủ động bỏ qua kiểm tra dòng firmware (rất rủi ro)",
+    "recovery.family_override_unsupported": "Bộ xử lý khôi phục này không hỗ trợ bỏ qua kiểm tra dòng firmware.",
     "action.read_info": "Đọc thông tin ổ đĩa",
     "action.check_file": "Kiểm tra tệp…",
     "info.connect_drive": "Kết nối ổ đĩa quang rồi chọn Làm mới.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Những hoạt động và tiết kiệm)",
     "legacy.backup_saved": "Backup: được tiết kiệm {path} ({bytes} Bút)",
     "legacy.backup_missing": "backup: NONE — flashing mà không có backup rollback (đĩa optic này không thể quay trở lại)",
-    "ui.backup_dump_review": "Nếu không thể lưu bản sao lưu, hãy lưu bản kết xuất thô và gửi cùng nhật ký chẩn đoán để chúng tôi xem xét khả năng hỗ trợ sao lưu."
+    "ui.backup_dump_review": "Nếu không thể lưu bản sao lưu, hãy lưu bản kết xuất thô và gửi cùng nhật ký chẩn đoán để chúng tôi xem xét khả năng hỗ trợ sao lưu.",
+    "verification.startup": "Khởi động",
+    "verification.not_checked": "Chưa kiểm tra",
+    "verification.not_requested": "Không được yêu cầu",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

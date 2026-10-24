@@ -18,14 +18,7 @@ impl Field {
         }
     }
 }
-/// A namespaced compatibility fingerprint, not a broad vendor/chipset label.
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-pub struct HardwareFamily {
-    /// Derivation namespace/version.
-    pub scheme: String,
-    /// Opaque printable fingerprint.
-    pub id: String,
-}
+pub use crate::firmware_comparison::{FamilyRelationship, HardwareFamily};
 /// One record with its original position and all interpreted fields.
 #[derive(Clone, Debug, Serialize)]
 pub struct RecordView {
@@ -252,18 +245,6 @@ impl Inspection {
         out
     }
 }
-/// Relationship between namespaced family identifiers.
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
-pub enum FamilyRelationship {
-    /// Both fingerprints match under one scheme.
-    Same,
-    /// Both fingerprints are known and differ under one scheme.
-    Different,
-    /// At least one fingerprint is unavailable.
-    Unknown,
-    /// The fingerprints use unrelated derivation schemes.
-    NotComparable,
-}
 /// High-level content findings for one logical firmware region.
 #[derive(Debug, Serialize)]
 pub struct RegionSummary {
@@ -300,6 +281,8 @@ impl RegionSummary {
 /// Provider-neutral comparison section.
 #[derive(Debug, Serialize)]
 pub struct ComparisonSection {
+    /// Shared relation facts, absent when a component could not be compared.
+    pub facts: Option<crate::firmware_comparison::ComparisonFacts>,
     /// Component or region name.
     pub name: String,
     /// Summary of established findings.

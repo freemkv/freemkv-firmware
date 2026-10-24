@@ -170,6 +170,9 @@ struct RecoveryArgs {
     /// Acknowledge that recovery can permanently disable the drive.
     #[arg(long)]
     i_understand_risk: bool,
+    /// VERY RISKY: bypass the Recovery firmware family check; may permanently disable the drive.
+    #[arg(long)]
+    bypass_family_check: bool,
 }
 
 fn report_update(
@@ -211,6 +214,7 @@ fn main() -> ExitCode {
                 },
                 execute: args.execute,
                 acknowledged_risk: args.i_understand_risk,
+                bypass_family_check: args.bypass_family_check,
             })
             .and_then(|outcome| report_update("Recovery", outcome))
         }

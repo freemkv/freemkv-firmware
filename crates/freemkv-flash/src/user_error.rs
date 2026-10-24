@@ -30,6 +30,8 @@ impl UserError {
                     .to_string(),
             ));
             "errors.hardware_mismatch"
+        } else if error.is::<crate::backend::UnsupportedFamilyOverride>() {
+            "recovery.family_override_unsupported"
         } else if error.is::<CurrentFirmwareRequired>() {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
@@ -131,6 +133,53 @@ impl UserError {
                 "errors.cannot_finish"
             }
         };
+        if let Some(evidence) = error.downcast_ref::<crate::backend::UpdateVerification>() {
+            use crate::backend::ComponentVerification as V;
+            let state = |value| {
+                match value {
+                    V::Matched => "domain.verified",
+                    V::Mismatched => "domain.mismatch",
+                    V::Unavailable => "domain.unavailable",
+                    V::NotChecked => "verification.not_checked",
+                    V::NotRequested => "verification.not_requested",
+                }
+                .to_string()
+            };
+            let guidance = localization::message(id, &arguments);
+            return Self {
+                id: "errors.verification_details",
+                arguments: vec![
+                    ("guidance", guidance),
+                    ("selected_label", "ui.firmware_to_flash".into()),
+                    (
+                        "selected",
+                        crate::style::printable(&evidence.selected_identity).to_string(),
+                    ),
+                    ("drive_label", "domain.drive".into()),
+                    (
+                        "observed",
+                        evidence
+                            .observed_identity
+                            .clone()
+                            .unwrap_or_else(|| "domain.not_reported".into()),
+                    ),
+                    ("kernel_label", "domain.kernel".into()),
+                    ("kernel", state(evidence.kernel)),
+                    ("normal_label", "domain.normal".into()),
+                    ("normal", state(evidence.normal)),
+                    ("startup_label", "verification.startup".into()),
+                    (
+                        "startup",
+                        if evidence.startup_confirmed {
+                            "domain.verified"
+                        } else {
+                            "status.target_uncertain"
+                        }
+                        .into(),
+                    ),
+                ],
+            };
+        }
         Self { id, arguments }
     }
 
@@ -148,6 +197,28 @@ impl UserError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verification_failure_preserves_independent_results_in_every_language() {
+        use crate::backend::{ComponentVerification as V, UpdateVerification};
+        let error = anyhow::anyhow!("technical transport detail").context(UpdateVerification {
+            kernel: V::Matched,
+            normal: V::Mismatched,
+            startup_confirmed: true,
+            observed_identity: Some("PIONEER BDR-UD04 1.14".into()),
+            selected_identity: "Slimtype EB1 HLE2".into(),
+        });
+        let guidance = UserError::of(&error);
+        for language in Language::ALL {
+            let text = guidance.render(language);
+            assert!(text.contains("PIONEER BDR-UD04 1.14") && text.contains("Slimtype EB1 HLE2"));
+            assert!(!text.contains("technical transport detail") && !text.contains("{kernel}"));
+        }
+        let text = guidance.render(Language::En);
+        assert!(text.contains("Kernel: Verified"));
+        assert!(text.contains("Normal: Mismatch"));
+        assert!(text.contains("Startup: Verified"));
+    }
 
     #[test]
     fn cancelled_inspection_is_not_a_failure_or_retry_prompt() {

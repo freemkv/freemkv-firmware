@@ -439,16 +439,19 @@ fn unpatched_update_reports_target_startup_and_readback_limits() {
 }
 
 #[test]
-fn different_running_revision_is_not_target_completion() {
+fn different_running_revision_does_not_skip_normal_readback() {
     let plan = plan(false);
     let mut drive = Drive::new(&plan);
     drive.wrong_target_revision = true;
-    let error = execute(&mut drive, &plan).unwrap_err();
-    let state = error
-        .downcast_ref::<crate::backend::UpdateFailure>()
-        .unwrap();
-    assert_eq!(state.phase, "target startup");
-    assert!(state.write_started);
+    let outcome = crate::backends::pioneer::flash::execute_with_sleep(
+        &mut crate::engine::gates::ungated_for_tests(&mut drive),
+        crate::backends::pioneer::flash::PreparedFlash::Complete(&plan),
+        pioneer_optical::receiver::ExecutionMode::Flash,
+        &mut |_| {},
+    )
+    .unwrap();
+    // This fixture cannot expose Normal: changed branding does not waive it.
+    assert!(!outcome.fully_verified());
     assert_eq!(drive.finishes, 1);
 }
 

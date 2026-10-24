@@ -19,6 +19,16 @@
     "task.dump": "转储",
     "task.flash": "刷写",
     "task.recovery": "恢复",
+    "recovery.bypass_family_check": "跳过固件系列检查（风险极高）",
+    "recovery.bypass_family_title": "跳过硬件系列检查",
+    "recovery.bypass_family_warning": "你请求跳过固件的硬件系列检查。此检查有助于防止将适用于其他硬件的固件写入你的驱动器。跳过检查可能导致驱动器永久无法使用，而且可能无法恢复或刷回原固件。",
+    "recovery.bypass_family_code": "如要确认接受此风险，请输入 {code} 以继续。",
+    "recovery.bypass_family_continue": "启用跳过检查",
+    "recovery.bypass_family_code_failed": "无法生成确认码。固件系列检查仍保持启用。",
+    "recovery.bypass_family_ack": "我明白，跳过固件系列检查可能导致此驱动器永久无法使用，并且可能无法恢复。",
+    "recovery.family_enforced": "不自动备份；强制执行固件系列检查",
+    "recovery.family_bypassed": "不自动备份；明确跳过固件系列检查（风险极高）",
+    "recovery.family_override_unsupported": "此恢复后端不支持跳过固件系列检查。",
     "action.read_info": "读取驱动器信息",
     "action.check_file": "检查文件…",
     "info.connect_drive": "连接光盘驱动器，然后选择“刷新”。",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (活跃和保存)",
     "legacy.backup_saved": "备份:保存 {path} ({bytes} 比特)",
     "legacy.backup_missing": "备份: 没有 - 没有滚回备份的闪光(这个光学驱动器不能重新滚动)",
-    "ui.backup_dump_review": "如果无法保存备份，请保存原始转储并连同诊断日志一起提交，以便我们研究备份支持。"
+    "ui.backup_dump_review": "如果无法保存备份，请保存原始转储并连同诊断日志一起提交，以便我们研究备份支持。",
+    "verification.startup": "启动",
+    "verification.not_checked": "未检查",
+    "verification.not_requested": "未请求",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

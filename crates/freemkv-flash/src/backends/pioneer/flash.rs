@@ -6,7 +6,7 @@
 #[cfg(test)]
 use crate::backends::pioneer::FLASH_CHUNK;
 
-use crate::backend::WriteDevice;
+use crate::backend::{ComponentVerification, UpdateVerification, WriteDevice};
 use crate::style;
 use crate::transport::{ScsiTransport, SharedDevice};
 #[cfg(test)]
@@ -50,10 +50,26 @@ pub(super) fn execute_with_sleep(
         reads: &mut reads,
         writes: &mut writes,
     };
+    let info = match &plan {
+        PreparedFlash::Complete(plan) => plan.target_info(),
+        PreparedFlash::Normal(plan) => plan.target_info(),
+    };
+    let selected_identity = format!("{} {}", info.model, info.revision);
     let mut runtime = Runtime {
         start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
         completed_passes: 0,
+        verification: UpdateVerification {
+            kernel: if matches!(&plan, PreparedFlash::Complete(_)) {
+                ComponentVerification::NotChecked
+            } else {
+                ComponentVerification::NotRequested
+            },
+            normal: ComponentVerification::NotChecked,
+            startup_confirmed: false,
+            observed_identity: None,
+            selected_identity,
+        },
         kernel: style::Progress::new("flashing kernel", 0),
         normal: style::Progress::new("flashing normal", 0),
         device: &shared,
@@ -72,7 +88,11 @@ pub(super) fn execute_with_sleep(
         PreparedFlash::Complete(plan) => plan.execute(io, &mut runtime, mode),
         PreparedFlash::Normal(plan) => plan.execute(io, &mut runtime),
     }
-    .map_err(|error| execution_error(error, restoration_required, runtime.completed_passes))?;
+    .map_err(|error| {
+        crate::diagnostics::record(format!("UPDATE VERIFICATION: {}", runtime.verification));
+        execution_error(error, restoration_required, runtime.completed_passes)
+            .context(runtime.verification.clone())
+    })?;
     println!("{}", super::post_flash_line(&outcome.identity));
     let mut verified_regions = Vec::new();
     if outcome.kernel_verified {
@@ -173,11 +193,20 @@ struct Runtime<'a, 'd> {
     start: crate::runtime_clock::Clock,
     waited: Duration,
     completed_passes: usize,
+    verification: UpdateVerification,
     kernel: style::Progress,
     normal: style::Progress,
 }
 impl UpdateRuntime for Runtime<'_, '_> {
     fn starting(&mut self, kernel: usize, normal: usize) {
+        self.verification.kernel = if kernel == 0 {
+            ComponentVerification::NotRequested
+        } else {
+            ComponentVerification::NotChecked
+        };
+        self.verification.normal = ComponentVerification::NotChecked;
+        self.verification.startup_confirmed = false;
+        self.verification.observed_identity = None;
         println!(
             "\n{}",
             style::bold("EXECUTING flash — do not power off or disconnect the drive...")
@@ -210,6 +239,37 @@ impl UpdateRuntime for Runtime<'_, '_> {
 }
 
 impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
+    fn verified(&mut self, pass: FlashPass, role: Role, matched: bool) {
+        let state = if matched {
+            ComponentVerification::Matched
+        } else {
+            ComponentVerification::Mismatched
+        };
+        match role {
+            Role::Kernel => self.verification.kernel = state,
+            Role::Normal => self.verification.normal = state,
+        }
+        crate::diagnostics::record(format!(
+            "Pioneer verification: pass={pass:?} role={role:?} result={state:?}"
+        ));
+    }
+    fn observed_identity(&mut self, pass: FlashPass, id: &pioneer_optical::Identity) {
+        self.verification.observed_identity = Some(format!(
+            "{} {} {}",
+            style::printable(id.vendor()),
+            style::printable(id.product()),
+            style::printable(id.revision())
+        ));
+        crate::diagnostics::record(format!(
+            "Pioneer identity observed: pass={pass:?} {}",
+            self.verification.observed_identity.as_deref().unwrap()
+        ));
+    }
+    fn startup_confirmed(&mut self, pass: FlashPass) {
+        self.verification.startup_confirmed = true;
+        crate::diagnostics::record(format!("Pioneer Normal startup confirmed: pass={pass:?}"));
+    }
+
     fn verification_unavailable(
         &mut self,
         pass: FlashPass,
@@ -217,6 +277,10 @@ impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
         address: Option<u32>,
         reason: &dyn std::fmt::Debug,
     ) {
+        match role {
+            Role::Kernel => self.verification.kernel = ComponentVerification::Unavailable,
+            Role::Normal => self.verification.normal = ComponentVerification::Unavailable,
+        }
         crate::diagnostics::record(format!("Pioneer verification unavailable: pass={pass:?} region={role:?} address={address:?} reason={reason:?}"));
     }
 

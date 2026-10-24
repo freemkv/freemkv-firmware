@@ -19,6 +19,16 @@
     "task.dump": "Zrzut",
     "task.flash": "Wgraj firmware",
     "task.recovery": "Odzyskiwanie",
+    "recovery.bypass_family_check": "Pomiń kontrolę rodziny firmware (bardzo ryzykowne)",
+    "recovery.bypass_family_title": "Pomiń kontrolę rodziny sprzętu",
+    "recovery.bypass_family_warning": "Zażądano pominięcia kontroli rodziny sprzętu firmware. Ta kontrola pomaga zapobiec zapisaniu na napędzie firmware przeznaczonego dla innego sprzętu. Jej pominięcie może trwale unieruchomić napęd, a odzyskanie go lub ponowne wgranie poprzedniego firmware może być niemożliwe.",
+    "recovery.bypass_family_code": "Aby potwierdzić akceptację ryzyka, wpisz {code}, aby kontynuować.",
+    "recovery.bypass_family_continue": "Włącz pominięcie",
+    "recovery.bypass_family_code_failed": "Nie udało się wygenerować kodu potwierdzającego. Kontrola rodziny firmware pozostaje włączona.",
+    "recovery.bypass_family_ack": "Rozumiem, że pominięcie kontroli rodziny firmware może trwale unieruchomić ten napęd i że odzyskanie go może być niemożliwe.",
+    "recovery.family_enforced": "Brak automatycznej kopii zapasowej; kontrola rodziny firmware jest wymagana",
+    "recovery.family_bypassed": "Brak automatycznej kopii zapasowej; kontrola rodziny firmware została jawnie pominięta (bardzo ryzykowne)",
+    "recovery.family_override_unsupported": "Ten moduł odzyskiwania nie obsługuje pomijania kontroli rodziny firmware.",
     "action.read_info": "Odczytaj informacje o napędzie",
     "action.check_file": "Sprawdź plik…",
     "info.connect_drive": "Podłącz napęd optyczny i wybierz Odśwież.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (aktywny i uratowany)",
     "legacy.backup_saved": "Kopia zapasów: Zbawił {path} ({bytes} Bytów )",
     "legacy.backup_missing": "Backup: NONE – flashing bez backupów (taki napęd optyczny nie może być odwracany)",
-    "ui.backup_dump_review": "Jeśli nie można zapisać kopii zapasowej, zapisz surowy zrzut i prześlij go z dziennikami diagnostycznymi, abyśmy mogli zbadać obsługę kopii zapasowych."
+    "ui.backup_dump_review": "Jeśli nie można zapisać kopii zapasowej, zapisz surowy zrzut i prześlij go z dziennikami diagnostycznymi, abyśmy mogli zbadać obsługę kopii zapasowych.",
+    "verification.startup": "Uruchomienie",
+    "verification.not_checked": "Nie sprawdzono",
+    "verification.not_requested": "Nie zażądano",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

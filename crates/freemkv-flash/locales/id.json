@@ -19,6 +19,16 @@
     "task.dump": "Dump",
     "task.flash": "Flash",
     "task.recovery": "Pemulihan",
+    "recovery.bypass_family_check": "Lewati pemeriksaan keluarga firmware (sangat berisiko)",
+    "recovery.bypass_family_title": "Lewati pemeriksaan keluarga perangkat keras",
+    "recovery.bypass_family_warning": "Anda meminta untuk melewati pemeriksaan keluarga perangkat keras firmware. Pemeriksaan ini membantu mencegah firmware yang ditujukan untuk perangkat keras lain ditulis ke drive Anda. Melewatinya dapat membuat drive rusak permanen, dan pemulihan atau pemasangan kembali firmware mungkin tidak dapat dilakukan.",
+    "recovery.bypass_family_code": "Untuk mengakui risiko ini, masukkan {code} untuk melanjutkan.",
+    "recovery.bypass_family_continue": "Aktifkan pengabaian",
+    "recovery.bypass_family_code_failed": "Kode konfirmasi tidak dapat dibuat. Pemeriksaan keluarga firmware tetap aktif.",
+    "recovery.bypass_family_ack": "Saya memahami bahwa melewati pemeriksaan keluarga firmware dapat merusak drive ini secara permanen dan pemulihan mungkin tidak dapat dilakukan.",
+    "recovery.family_enforced": "Tanpa cadangan otomatis; pemeriksaan keluarga firmware diberlakukan",
+    "recovery.family_bypassed": "Tanpa cadangan otomatis; pemeriksaan keluarga firmware secara tegas dilewati (sangat berisiko)",
+    "recovery.family_override_unsupported": "Backend pemulihan ini tidak mendukung pengabaian pemeriksaan keluarga firmware.",
     "action.read_info": "Baca info drive",
     "action.check_file": "Periksa file…",
     "info.connect_drive": "Sambungkan drive optik, lalu pilih Segarkan.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Aktif dan diselamatkan)",
     "legacy.backup_saved": "Backup : disimpan {path} ({bytes} dan bytes)",
     "legacy.backup_missing": "backup: NONE — flashing tanpa backup rollback (disk optik ini tidak dapat roll back)",
-    "ui.backup_dump_review": "Jika cadangan tidak dapat disimpan, simpan dump mentah dan kirimkan bersama log diagnostik agar kami dapat meninjau dukungan pencadangan."
+    "ui.backup_dump_review": "Jika cadangan tidak dapat disimpan, simpan dump mentah dan kirimkan bersama log diagnostik agar kami dapat meninjau dukungan pencadangan.",
+    "verification.startup": "Pengaktifan",
+    "verification.not_checked": "Belum diperiksa",
+    "verification.not_requested": "Tidak diminta",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

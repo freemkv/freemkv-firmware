@@ -87,6 +87,7 @@ impl Task {
 pub(crate) struct Profile {
     pub(crate) can_read: Option<bool>,
     pub(crate) flash_current: bool,
+    pub(crate) recovery_family_override: bool,
     /// Shown beside the drive: the family (or "Unsupported"), then what it offers.
     pub(crate) chips: Vec<String>,
     /// The drive tasks offered; Info, Inspect and Compare need no profile.
@@ -167,6 +168,7 @@ pub enum Effect {
 pub enum CheckId {
     FlashReadFromDrive,
     RecoveryReadFromDrive,
+    RecoveryBypassFamily,
     RiskAck,
     /// Save a live analysis capture as a backup rather than a raw read.
     CaptureAsBackup,
@@ -197,6 +199,7 @@ pub enum Input {
     Recover,
     RecoveryMember(String),
     RecoveryCurrentMember(String),
+    FamilyOverrideCode(String),
     RunAnalysis,
     CancelAnalysis,
     Confirm,
@@ -453,6 +456,8 @@ pub struct Confirm {
     pub note: Option<String>,
     pub ack_text: String,
     pub ack_checked: bool,
+    /// Typed response for a code challenge, absent for ordinary confirmations.
+    pub code_entry: Option<String>,
     pub confirm: Button,
     pub cancel: Button,
 }
@@ -701,6 +706,7 @@ pub(crate) enum Msg {
     Event(Event),
     DriveAfter(String),
     FailureEvidence(workflow::UpdateFailure),
+    RecoveryFamilyMismatch,
     AnalysisCancelled,
     UserGuidance(String),
     PreviewCompatibilityPending(bool),
@@ -725,6 +731,10 @@ pub(crate) struct Target {
 /// What a confirmation sheet asks.
 #[derive(Clone, Debug)]
 pub(crate) enum Sheet {
+    FamilyOverride {
+        code: String,
+        entered: String,
+    },
     WithoutBackup {
         reason: String,
         reply: Sender<bool>,
@@ -786,6 +796,9 @@ pub struct App {
     pub(crate) recovery_input: Option<PathBuf>,
     pub(crate) recovery_current: Option<PathBuf>,
     pub(crate) recovery_read: bool,
+    recovery_bypass_family: bool,
+    pub(crate) recovery_family_mismatch: bool,
+    last_family_code: Option<u32>,
     recovery_member: Option<String>,
     recovery_members: Vec<String>,
     recovery_current_members: Vec<String>,
@@ -907,6 +920,9 @@ impl App {
             recovery_input: None,
             recovery_current: None,
             recovery_read: true,
+            recovery_bypass_family: false,
+            recovery_family_mismatch: false,
+            last_family_code: None,
             recovery_member: None,
             recovery_members: Vec::new(),
             recovery_current_members: Vec::new(),
@@ -1012,6 +1028,9 @@ impl App {
                     self.flash_read = false;
                     self.recovery_read = false;
                 }
+                if !profile.recovery_family_override {
+                    self.recovery_bypass_family = false;
+                }
                 self.log.extend(profile.notes.iter().cloned());
                 ProfileState::Ready(profile)
             }
@@ -1073,8 +1092,10 @@ impl App {
     pub(crate) fn refresh(&mut self, drives: Vec<DriveChoice>) {
         if !drives.iter().any(|d| d.path == self.device) {
             self.device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
+            self.recovery_bypass_family = false;
             self.risk_ack = false;
             self.pending = None;
+            self.recovery_family_mismatch = false;
         }
         self.drives = drives;
         self.record_event(
@@ -1130,6 +1151,8 @@ impl App {
                         self.device = path;
                         self.flash_read = true;
                         self.recovery_read = true;
+                        self.recovery_bypass_family = false;
+                        self.recovery_family_mismatch = false;
                         self.risk_ack = false;
                         self.rows.clear();
                         self.status = "status.ready".into();
@@ -1143,6 +1166,9 @@ impl App {
                 return self.start_profile();
             }
             Input::SelectTask(task) if !self.busy() => {
+                if task != self.task {
+                    self.recovery_bypass_family = false;
+                }
                 self.task = task;
             }
             Input::Choose(pick) => return self.choose(pick),
@@ -1157,10 +1183,51 @@ impl App {
                 if !self.busy() && self.can_read() =>
             {
                 if self.recovery_read != on {
+                    self.recovery_family_mismatch = false;
+                    self.recovery_bypass_family = false;
                     self.clear_flash_result();
                 }
                 self.recovery_read = on;
                 return self.refresh_current_profile();
+            }
+            Input::SetCheck(CheckId::RecoveryBypassFamily, on)
+                if !self.busy()
+                    && self.task == Task::Recovery
+                    && self.recovery_family_override_supported() =>
+            {
+                self.recovery_bypass_family = false;
+                self.risk_ack = false;
+                self.clear_flash_result();
+                if on {
+                    let mut random = [0; 4];
+                    if getrandom::fill(&mut random).is_err() {
+                        self.failure = Some("recovery.bypass_family_code_failed".into());
+                        return Vec::new();
+                    }
+                    let mut value = 10000 + u32::from_ne_bytes(random) % 90000;
+                    if self.last_family_code == Some(value) {
+                        value = 10000 + (value - 10000 + 1) % 90000;
+                    }
+                    self.last_family_code = Some(value);
+                    let code = value.to_string();
+                    let target = self.target(FlashOptions::default());
+                    self.ask(
+                        target,
+                        Sheet::FamilyOverride {
+                            code,
+                            entered: String::new(),
+                        },
+                    );
+                }
+            }
+            Input::FamilyOverrideCode(value) => {
+                if let Some(Pending {
+                    sheet: Sheet::FamilyOverride { entered, .. },
+                    ..
+                }) = &mut self.pending
+                {
+                    *entered = value;
+                }
             }
             Input::SetCheck(CheckId::RiskAck, on) if self.pending.is_some() => self.risk_ack = on,
             Input::SetCheck(CheckId::CaptureAsBackup, on) if !self.busy() => {
@@ -1214,6 +1281,8 @@ impl App {
             Input::RecoveryMember(member) if !self.busy() => {
                 if self.recovery_members.contains(&member) {
                     if self.recovery_member.as_ref() != Some(&member) {
+                        self.recovery_family_mismatch = false;
+                        self.recovery_bypass_family = false;
                         self.clear_flash_result();
                     }
                     self.recovery_member = Some(member);
@@ -1222,6 +1291,8 @@ impl App {
             Input::RecoveryCurrentMember(member) if !self.busy() => {
                 if self.recovery_current_members.contains(&member) {
                     if self.recovery_current_member.as_ref() != Some(&member) {
+                        self.recovery_family_mismatch = false;
+                        self.recovery_bypass_family = false;
                         self.clear_flash_result();
                     }
                     self.recovery_current_member = Some(member);
@@ -1251,7 +1322,10 @@ impl App {
                         .flatten(),
                     execute: false,
                     acknowledged_risk: false,
+                    bypass_family_check: self.recovery_bypass_family
+                        && self.recovery_family_override_supported(),
                 };
+                self.recovery_bypass_family = false;
                 let effects = self.start_job(
                     "ui.recovery_plan",
                     target.device.clone(),
@@ -1376,6 +1450,8 @@ impl App {
             | Pick::RecoveryInput
             | Pick::FlashCurrent
             | Pick::RecoveryCurrent => {
+                self.recovery_family_mismatch = false;
+                self.recovery_bypass_family = false;
                 let extensions = self
                     .ready_profile()
                     .map_or_else(workflow::update_file_extensions, |p| {
@@ -1473,6 +1549,8 @@ impl App {
                 return self.read_origin(pick, path);
             }
             Pick::RecoveryCurrent => {
+                self.recovery_family_mismatch = false;
+                self.recovery_bypass_family = false;
                 self.clear_flash_result();
                 self.recovery_read = false;
                 self.recovery_current_members =
@@ -1489,6 +1567,8 @@ impl App {
                 self.flash_current = Some(path);
             }
             Pick::RecoveryInput => {
+                self.recovery_family_mismatch = false;
+                self.recovery_bypass_family = false;
                 self.clear_flash_result();
                 self.recovery_member = None;
                 self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
@@ -1560,6 +1640,13 @@ impl App {
         } else {
             Vec::new()
         }
+    }
+
+    fn recovery_family_override_supported(&self) -> bool {
+        self.recovery_family_mismatch
+            && self
+                .ready_profile()
+                .is_some_and(|p| p.recovery_family_override)
     }
 
     fn recovery_ready(&self) -> bool {
@@ -1649,6 +1736,32 @@ impl App {
     }
 
     fn confirm(&mut self) -> Vec<Effect> {
+        if matches!(
+            &self.pending,
+            Some(Pending {
+                sheet: Sheet::FamilyOverride { .. },
+                ..
+            })
+        ) {
+            let Some(Pending {
+                target,
+                sheet: Sheet::FamilyOverride { code, entered },
+            }) = self.pending.take()
+            else {
+                unreachable!()
+            };
+            self.risk_ack = false;
+            self.recovery_bypass_family = entered == code
+                && target.device == self.device
+                && self.recovery_family_override_supported();
+            if self.recovery_bypass_family {
+                self.record_event(
+                    "recovery_family_override_acknowledged",
+                    serde_json::json!({"device": self.device}),
+                );
+            }
+            return Vec::new();
+        }
         let backup_question = self
             .pending
             .as_ref()
@@ -1754,6 +1867,9 @@ impl App {
         );
         self.failure = None;
         self.failure_evidence = None;
+        if matches!(&job, Job::Recovery(_)) {
+            self.recovery_family_mismatch = false;
+        }
         self.analysis_cancelled = false;
         self.backup_waived = false;
         self.preview_compatibility_pending = None;
@@ -1773,6 +1889,10 @@ impl App {
                 "operation": label,
                 "drive_before": self.device_label(),
                 "device": device,
+                "bypass_family_check": match &job {
+                    Job::Recovery(o) => Some(o.bypass_family_check),
+                    _ => None,
+                },
                 "input": match &job {
                     Job::Flash(o) | Job::PlanFlash(o) => Some(o.input.display().to_string()),
                     Job::Recovery(o) => Some(o.input.display().to_string()),
@@ -1850,6 +1970,11 @@ impl App {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => self.event(event),
                     Ok(Msg::FailureEvidence(evidence)) => self.failure_evidence = Some(evidence),
+                    Ok(Msg::RecoveryFamilyMismatch) => {
+                        if self.recovery_planning.is_some() {
+                            self.recovery_family_mismatch = true;
+                        }
+                    }
                     Ok(Msg::AnalysisCancelled) => self.analysis_cancelled = true,
                     Ok(Msg::UserGuidance(message)) => self.failure = Some(message),
                     Ok(Msg::PreviewCompatibilityPending(pending)) => {
@@ -2445,6 +2570,14 @@ impl App {
         let mut items = Vec::new();
         if recovery {
             items.push(Item::Warning(FORCE_WARNING.into()));
+            if self.recovery_family_override_supported() {
+                items.push(Item::Check {
+                    id: CheckId::RecoveryBypassFamily,
+                    text: "recovery.bypass_family_check".into(),
+                    checked: self.recovery_bypass_family,
+                    enabled,
+                });
+            }
         }
         if recovery || self.flash_current_supported() {
             items.push(Item::Heading("ui.current_firmware".into()));
@@ -2755,6 +2888,28 @@ impl App {
             ),
         ];
         let (recovery, warnings, prompt) = match &pending.sheet {
+            Sheet::FamilyOverride { code, entered } => {
+                return Confirm {
+                    title: "recovery.bypass_family_title".into(),
+                    details: vec![details.remove(0)],
+                    danger: "recovery.bypass_family_warning".into(),
+                    warnings: Vec::new(),
+                    prompt: Some(crate::localization::message(
+                        "recovery.bypass_family_code",
+                        &[("code", code.clone())],
+                    )),
+                    note: None,
+                    ack_text: String::new(),
+                    ack_checked: false,
+                    code_entry: Some(entered.clone()),
+                    confirm: Button::primary(
+                        "recovery.bypass_family_continue",
+                        Input::Confirm,
+                        entered.len() == 5 && entered.bytes().all(|b| b.is_ascii_digit()),
+                    ),
+                    cancel: Button::new("ui.cancel", Input::CancelConfirm, true),
+                };
+            }
             Sheet::WithoutBackup { reason, .. } => {
                 return Confirm {
                     title: "backup.unavailable".into(),
@@ -2765,6 +2920,7 @@ impl App {
                     note: None,
                     ack_text: String::new(),
                     ack_checked: false,
+                    code_entry: None,
                     confirm: Button::primary("action.yes", Input::Confirm, true),
                     cancel: Button::new("action.no", Input::CancelConfirm, true),
                 };
@@ -2793,7 +2949,11 @@ impl App {
                         &[("member", member.to_string())],
                     ));
                 }
-                (true, vec![FORCE_WARNING.to_string()], None)
+                let mut warnings = vec![FORCE_WARNING.to_string()];
+                if options.bypass_family_check {
+                    warnings.push("recovery.bypass_family_warning".into());
+                }
+                (true, warnings, None)
             }
             Sheet::Flash { sheet, .. } => {
                 details.extend(sheet.plan.iter().cloned());
@@ -2842,8 +3002,11 @@ impl App {
             warnings,
             prompt,
             note: (!recovery && !self.backup_waived).then(|| BACKUP_KEPT.to_owned()),
-            ack_text: RISK_ACK.into(),
+            ack_text: if matches!(&pending.sheet, Sheet::Recovery { options, .. } if options.bypass_family_check) {
+                "recovery.bypass_family_ack"
+            } else { RISK_ACK }.into(),
             ack_checked: self.risk_ack,
+            code_entry: None,
             confirm: Button::primary(
                 if recovery {
                     "ui.recover"
@@ -2998,6 +3161,10 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                     evidence.impact()
                 ))));
                 let _ = tx.send(Msg::FailureEvidence(evidence.clone()));
+            }
+            if matches!(&job, Job::Recovery(options) if !options.execute)
+                && workflow::is_hardware_mismatch(&e) {
+                let _ = tx.send(Msg::RecoveryFamilyMismatch);
             }
             let message = workflow::user_error(&e).encoded();
             let _ = tx.send(Msg::UserGuidance(message.clone()));

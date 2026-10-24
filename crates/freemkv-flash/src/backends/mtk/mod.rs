@@ -740,39 +740,6 @@ pub(crate) fn read_mt19_banner(dev: &mut dyn ScsiDevice) -> Option<String> {
     (!banner.is_empty()).then_some(banner)
 }
 
-/// True iff GET CONFIGURATION returns a complete firmware-date feature
-/// (0x010C), one half of the MT19xx protocol probe.
-pub(crate) fn get_config_is_mtk(dev: &mut dyn ScsiDevice) -> bool {
-    match (Acquire::GetConfig {
-        feature: FEATURE_FWDATE,
-        alloc: 32,
-    })
-    .run(dev)
-    {
-        Ok(_) => true,
-        Err(error) => {
-            crate::diagnostics::record(format!("MediaTek feature probe did not match: {error:#}"));
-            false
-        }
-    }
-}
-
-/// True iff the drive's boot banner at `0x003000` carries the ASCII **`MT19`**
-/// family signature ("MT1959 Boot ..." / "MT1939 Boot ..."). Backstops the
-/// standard MMC feature check so a compliant non-MTK drive that also
-/// implements feature 0x010C cannot be misclassified as MTK.
-pub(crate) fn has_mt19_banner(dev: &mut dyn ScsiDevice) -> bool {
-    let Ok(rom) = dev.command_in(
-        &cdb::read_memory(ROM_003000_OFFSET, ROM_003000_LEN),
-        ROM_003000_LEN as usize,
-    ) else {
-        return false;
-    };
-    rom.len() == ROM_003000_LEN as usize
-        && mediatek_optical::Identity::parse(&[0; mediatek_optical::INQUIRY_LEN], &rom, &[])
-            .is_some_and(|id| id.is_mt19())
-}
-
 /// Read `len` bytes at `offset`, retrying once: the chip gate must not fail
 /// open on a transient read error.
 fn read_exact_retry(dev: &mut dyn ScsiDevice, offset: u32, len: u32) -> Option<Vec<u8>> {
@@ -898,18 +865,8 @@ impl Backend for Mtk {
         &DESCRIPTOR
     }
 
-    fn probe(&self, dev: &mut ReadDevice<'_>, identity: &Identity) -> Result<Option<Match>> {
-        // A Pioneer INQUIRY is enough to rule out MT19xx. Do not issue MTK
-        // vendor ROM reads at this unrelated controller.
-        if identity.vendor.eq_ignore_ascii_case("PIONEER") {
-            return Ok(None);
-        }
-        Ok(
-            (get_config_is_mtk(dev) && has_mt19_banner(dev)).then_some(Match {
-                backend: DESCRIPTOR.id,
-                evidence: "MMC 0x010C + MT19 boot ROM banner",
-            }),
-        )
+    fn probe(&self, dev: &mut ReadDevice<'_>, _identity: &Identity) -> Result<Option<Match>> {
+        crate::backend::registry::probe_backend(dev, DESCRIPTOR.id)
     }
 
     fn identity(&self, dev: &mut ReadDevice<'_>) -> Identity {

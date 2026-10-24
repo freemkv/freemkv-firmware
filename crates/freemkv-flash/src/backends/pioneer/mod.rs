@@ -16,6 +16,7 @@ use crate::backend::{
     ReadDevice, Recognized, RecoveryFacet, RecoveryTarget, SavedBackup, SettingsFacet,
     UpdateOutcome, WriteDevice,
 };
+#[cfg(test)]
 use crate::platform::ScsiDevice;
 
 /// Offline reconstruction of Pioneer backup candidates from captured images.
@@ -659,18 +660,8 @@ impl Backend for DumpOnly {
         &DUMP_DESCRIPTOR
     }
 
-    fn probe(&self, dev: &mut ReadDevice<'_>, identity: &Identity) -> Result<Option<Match>> {
-        if !identity.vendor.eq_ignore_ascii_case("PIONEER") {
-            return Ok(None);
-        }
-        let valid = matches!(dev.command_in(&pioneer_optical::cdb::vendor_identity(), 48), Ok(d)
-            if d.len() == 48
-                && d[16..24].iter().all(|b| (0x20..=0x7e).contains(b))
-                && d[16..24].iter().any(|b| *b != b' '));
-        Ok(valid.then_some(Match {
-            backend: DUMP_DESCRIPTOR.id,
-            evidence: "PIONEER vendor INQUIRY + F1 identity; raw capture only",
-        }))
+    fn probe(&self, dev: &mut ReadDevice<'_>, _identity: &Identity) -> Result<Option<Match>> {
+        crate::backend::registry::probe_backend(dev, DUMP_DESCRIPTOR.id)
     }
 
     fn dump(&self) -> Option<&dyn DumpFacet> {
@@ -720,17 +711,8 @@ impl Backend for Pioneer {
         &DESCRIPTOR
     }
 
-    fn probe(&self, dev: &mut ReadDevice<'_>, identity: &Identity) -> Result<Option<Match>> {
-        // Vendor identity selects the read-only probe; the hardware response
-        // establishes the protocol. Product names are display text, not gates.
-        Ok(
-            (identity.vendor.eq_ignore_ascii_case("PIONEER") && read_buffer_f1_ok(dev)).then_some(
-                Match {
-                    backend: DESCRIPTOR.id,
-                    evidence: "PIONEER vendor INQUIRY + READ BUFFER 02/F1 hardware",
-                },
-            ),
-        )
+    fn probe(&self, dev: &mut ReadDevice<'_>, _identity: &Identity) -> Result<Option<Match>> {
+        crate::backend::registry::probe_backend(dev, DESCRIPTOR.id)
     }
 
     fn allowed_data_out(&self) -> &'static [CdbPattern] {
@@ -1039,12 +1021,27 @@ impl RecoveryFacet for Pioneer {
         recovery::NOT_A_RECEIVER
     }
 
+    fn supports_family_override(&self) -> bool {
+        true
+    }
+
     fn recover(
+        &self,
+        dev: DeviceAccess<'_, '_>,
+        receiver: &RecoveryTarget,
+        current: Option<&[u8]>,
+        target: &[u8],
+    ) -> Result<UpdateOutcome> {
+        self.recover_with_family_override(dev, receiver, current, target, false)
+    }
+
+    fn recover_with_family_override(
         &self,
         mut dev: DeviceAccess<'_, '_>,
         receiver: &RecoveryTarget,
         current: Option<&[u8]>,
         target: &[u8],
+        bypass_family_check: bool,
     ) -> Result<UpdateOutcome> {
         let evidence = receiver
             .state::<Option<recovery::Current>>()
@@ -1069,12 +1066,17 @@ impl RecoveryFacet for Pioneer {
                 &captured
             }
         };
-        let plan = recovery::Plan::with_current(evidence, target).map_err(|error| {
-            crate::backend::UpdateFailure::before_write("recovery preparation", error)
-        })?;
+        let plan = recovery::Plan::with_family_override(evidence, target, bypass_family_check)
+            .map_err(|error| {
+                crate::backend::UpdateFailure::before_write("recovery preparation", error)
+            })?;
         crate::output::field(
             "Recovery",
-            "No automatic backup; compatibility policy bypassed",
+            if bypass_family_check {
+                "recovery.family_bypassed"
+            } else {
+                "recovery.family_enforced"
+            },
         );
         if plan.was_reencoded() {
             crate::output::field(
@@ -1134,18 +1136,6 @@ mod matrix_tests;
 #[cfg(test)]
 #[path = "receiver_gate_tests.rs"]
 mod receiver_gate_tests;
-
-fn read_buffer_f1_ok(dev: &mut dyn ScsiDevice) -> bool {
-    // This is the firmware receiver's 48-byte identity response, not the
-    // unrelated READ BUFFER mode-0/F1 8-byte probe once used here.
-    let cdb = pioneer_optical::cdb::vendor_identity();
-    matches!(dev.command_in(&cdb, 48), Ok(d)
-        if d.len() == 48
-            && d[16..24].iter().all(|b| (0x20..=0x7e).contains(b))
-            && [b"SAT ".as_slice(), b"ATA ".as_slice(), b"SCSI".as_slice()]
-                .iter()
-                .any(|prefix| d[16..24].starts_with(prefix)))
-}
 
 #[cfg(test)]
 #[path = "prepared_tests.rs"]

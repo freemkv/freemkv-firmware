@@ -1,0 +1,82 @@
+{
+  "scope": "Static public-API and call-site audit of both optical libraries and freemkv-flash adapters; not a firmware-handler safety proof or completed cleanup",
+  "status": "Protocol detection implementation in progress; other findings are recommendations, not claimed fixes",
+  "api_layers": [
+    "decoded identity",
+    "validated protocol evidence",
+    "receiver binding and compatibility",
+    "prepared execution",
+    "verification receipt",
+    "UI formatting"
+  ],
+  "findings": [
+    {
+      "priority": "high",
+      "title": "Identity is parsed data, not protocol proof",
+      "evidence": "pioneer-optical/src/lib.rs:Identity::parse/class; mediatek-optical/src/lib.rs:Identity::parse/is_mt19",
+      "recommendation": "Keep legacy Identity accessors compatible; add protocol::Evidence with private construction, explicit incomplete errors and parsed Identity access. Do not add a second drive-name classifier."
+    },
+    {
+      "priority": "high",
+      "title": "Discovery and receiver detection use different evidence",
+      "evidence": "freemkv-flash/src/backend/registry.rs; backends/pioneer/recovery.rs; mediatek-optical/src/recovery.rs",
+      "recommendation": "One app discovery orchestration; library response parsers; receiver detection remains deeper firmware/ABI validation. Remove vendor shortcuts from discovery and audit recovery separately."
+    },
+    {
+      "priority": "high",
+      "title": "identify APIs hide or conflate evidence failures",
+      "evidence": "mediatek-optical/src/drive.rs:identify; freemkv-flash/src/backend/mod.rs:read_identity",
+      "recommendation": "Optional field read errors are currently collapsed to empty bytes/default identity. Preserve per-query failures in discovery; keep compatibility adapters for presentation."
+    },
+    {
+      "priority": "high",
+      "title": "Boolean targets hides why identity differs",
+      "evidence": "pioneer-optical/src/envelope/mod.rs:targets_drive; receiver/execution_safe.rs",
+      "recommendation": "Expose structured identity facts, then apply named binding/startup policies. Exact bytes, platform, naming, tags and operating state are independent. Do not globally relax receiver binding."
+    },
+    {
+      "priority": "medium",
+      "title": "Comparison APIs cover different representations",
+      "evidence": "pioneer-optical/src/envelope/comparison.rs; freemkv-flash/src/firmware_comparison.rs; inspection/comparison/engine.rs",
+      "recommendation": "Share fact types/adapters where useful; retain explicit distinctions between exact decoded bytes, normalized executable similarity, family and version direction. Envelope::compare is not an update compatibility decision."
+    },
+    {
+      "priority": "medium",
+      "title": "Family identity loses namespace in adapters",
+      "evidence": "pioneer-optical/src/image.rs:Family/FamilyFingerprint; freemkv-flash/src/backends/pioneer/flash_plan.rs:FamilyKey; firmware_comparison.rs",
+      "recommendation": "Carry typed family scheme and value until serialization. Remove surrogate current-pioneer namespaces when adapters can preserve the real scheme. Missing family is never a match."
+    },
+    {
+      "priority": "medium",
+      "title": "Completion receipts differ between vendors and app",
+      "evidence": "pioneer-optical/src/receiver/execution_safe.rs:FlashOutcome; mediatek-optical/src/update/completion.rs:Completion; freemkv-flash/src/backend/mod.rs:UpdateVerification",
+      "recommendation": "Return component readback and coverage plus startup evidence with failures; avoid reconstructing the only durable result from callbacks. Keep progress callbacks as presentation."
+    },
+    {
+      "priority": "medium",
+      "title": "Several public execution layers need clear entry points",
+      "evidence": "pioneer-optical/src/drive.rs:Session; drive/update.rs:execute_plan; receiver/preparation.rs; receiver/execution_safe.rs",
+      "recommendation": "Document prepared receiver execution as the normal host API. Low-level CDB/session APIs remain expert tools with explicit contracts. These are layers, not automatically duplicate algorithms."
+    },
+    {
+      "priority": "medium",
+      "title": "Standard MMC types live under the Pioneer namespace",
+      "evidence": "pioneer-optical/src/device/info.rs:Inquiry/Feature; both lib.rs:Identity; freemkv-flash/src/backend/mod.rs:Identity",
+      "recommendation": "Display DTO is legitimate, but standard INQUIRY parsing should have one owner. Prefer an existing transport/MMC layer if suitable; avoid a new shared crate solely for a few fields."
+    },
+    {
+      "priority": "medium",
+      "title": "Semantic API terms need separation",
+      "evidence": "pioneer-optical:DriveClass; Envelope::update_dialect; receiver::Receiver; device::Device; analysis::Identity",
+      "recommendation": "Use inquiry/device identity for live reports, firmware identity for package metadata, protocol evidence for recognition, receiver for update ABI, and typed family for compatibility. Keep 1.0.x changes additive."
+    },
+    {
+      "priority": "medium",
+      "title": "Low-level count validation is inconsistent",
+      "evidence": "pioneer-optical/src/drive.rs:read vs device/mod.rs:Device::read",
+      "recommendation": "drive::read clamps oversized reported lengths, while Device::read rejects them. Audit transport count contracts before consolidating; add fault-injection tests before changing established semantics."
+    }
+  ],
+  "migration": "Additive 1.0.x APIs; preserve existing public entry points as compatibility adapters; no silent changes to receiver, ABI or verification policy.",
+  "validation": "Baseline core: 632 passed/18 ignored. Baseline optical libraries green. ASUS regression reproduced before detector changes. Full after suites required; no release with known regression."
+}

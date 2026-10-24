@@ -5,9 +5,11 @@ use crate::platform::ScsiDevice;
 #[cfg(test)]
 use anyhow::bail;
 use anyhow::{ensure, Context, Result};
+#[cfg(test)]
+use pioneer_optical::cdb;
 use pioneer_optical::envelope::{Envelope, Update};
 use pioneer_optical::receiver::{ExecutionMode, PreparedUpdate, Receiver};
-use pioneer_optical::{cdb, Identity};
+use pioneer_optical::Identity;
 #[cfg(test)]
 use std::time::Duration;
 
@@ -64,16 +66,26 @@ impl Current {
 impl Plan {
     #[cfg(test)]
     pub(crate) fn prepare(current: &[u8], target: &[u8]) -> Result<Self> {
-        Self::with_current(&Current::load(current)?, target)
+        Self::with_family_override(&Current::load(current)?, target, false)
     }
 
-    pub(crate) fn with_current(current: &Current, target: &[u8]) -> Result<Self> {
+    pub(crate) fn with_family_override(
+        current: &Current,
+        target: &[u8],
+        bypass_family_check: bool,
+    ) -> Result<Self> {
         let (kernel, normal) = classify_flash_input(target)?;
         let kernel = kernel.context("Firmware to flash must include Kernel and Normal")?;
         let normal = normal.context("Firmware to flash must include Kernel and Normal")?;
         let target = super::normal_prepare::pair(&kernel, &normal)?;
         let reencoded = target.normal_transfer() != normal;
-        Self::assemble(&current.kernel, &current.normal, target, reencoded)
+        Self::assemble(
+            &current.kernel,
+            &current.normal,
+            target,
+            reencoded,
+            bypass_family_check,
+        )
     }
 
     #[cfg(test)]
@@ -86,7 +98,7 @@ impl Plan {
         } else {
             target
         };
-        Self::assemble(current.kernel(), current.normal(), target, changed)
+        Self::assemble(current.kernel(), current.normal(), target, changed, false)
     }
 
     fn assemble(
@@ -94,14 +106,34 @@ impl Plan {
         normal: &Envelope,
         target: Update,
         reencoded: bool,
+        bypass_family_check: bool,
     ) -> Result<Self> {
         let receiver = Receiver::detect_with_kernel(normal, kernel)
             .context("Current firmware receiver requirements are unsupported")?;
         #[cfg(test)]
         let control = receiver.entry_control(&normal.image[..16])?;
-        let prepared = receiver
-            .prepare(target)
-            .map_err(super::flash::preparation_error)?;
+        let target_model = target.normal().info().model.clone();
+        let prepared = if bypass_family_check {
+            receiver.prepare_without_family_check(target)
+        } else {
+            receiver.prepare(target)
+        }
+        .map_err(|error| {
+            if matches!(
+                &error,
+                pioneer_optical::receiver::PreparationError::Compatibility(
+                    pioneer_optical::receiver::Error::FamilyMismatch { .. }
+                )
+            ) {
+                anyhow::Error::new(crate::backend::HardwareMismatch {
+                    installed_model: normal.info().model.clone(),
+                    target_model,
+                    source: super::flash::preparation_error(error),
+                })
+            } else {
+                super::flash::preparation_error(error)
+            }
+        })?;
         Ok(Self {
             prepared,
             reencoded,
@@ -159,48 +191,26 @@ pub(crate) fn find_receiver(dev: &mut dyn ScsiDevice) -> Result<Option<Identity>
     find_receiver_with_current(dev, None)
 }
 
-/// Supplied decoded receiver code authorizes the vendor identity probe for OEM
-/// drives. A vendor name alone never selects an additional protocol probe.
+/// Shared protocol evidence identifies OEM drives; Current binds the installed receiver.
 pub(crate) fn find_receiver_with_current(
     dev: &mut dyn ScsiDevice,
     current: Option<&Current>,
 ) -> Result<Option<Identity>> {
-    let inquiry = dev
-        .command_in(
-            &cdb::inquiry(pioneer_optical::INQUIRY_LEN as u8),
-            pioneer_optical::INQUIRY_LEN,
-        )
-        .context("Recovery could not identify the selected drive; no firmware written")?;
-    ensure!(
-        inquiry.len() >= pioneer_optical::INQUIRY_LEN,
-        "Recovery received a truncated drive identity; no firmware written"
-    );
-    let field = |bytes: &[u8]| {
-        String::from_utf8_lossy(bytes)
-            .trim_matches([' ', '\0'])
-            .to_owned()
+    use crate::backend::detection::{self, Conclusion, Evidence};
+    let detection = detection::detect(dev)?;
+    let identity = match detection.conclusion {
+        Conclusion::Detected(Evidence::Pioneer(evidence)) => evidence.identity().clone(),
+        Conclusion::Ambiguous => anyhow::bail!("ambiguous firmware protocol; no firmware written"),
+        Conclusion::Unknown if current.is_some() => match detection.pioneer_identity {
+            Some(id) if id.revision() == "0000" => id,
+            _ => return Ok(None),
+        },
+        _ => return Ok(None),
     };
-    let expected_vendor = current.map_or("PIONEER", |c| c.kernel.info().vendor.as_str());
-    if inquiry[0] & 0x1f != 5 || field(&inquiry[8..16]) != expected_vendor {
-        return Ok(None);
-    }
-    // The verified loader may only expose a partial product/platform identity.
-    // Running Normal firmware must match the supplied installed model first.
     if let Some(current) = current {
-        if field(&inquiry[32..36]) != "0000"
-            && field(&inquiry[16..32]).split_whitespace().last()
-                != Some(current.normal.info().model.as_str())
+        if identity.vendor() != current.kernel.info().vendor
+            || (identity.revision() != "0000" && !current.normal.targets(&identity))
         {
-            return Ok(None);
-        }
-    }
-    let vendor = dev
-        .command_in(&cdb::vendor_identity(), pioneer_optical::IDENTITY_LEN)
-        .context("Recovery could not read the Pioneer receiver identity; no firmware written")?;
-    let identity = Identity::parse(&inquiry, &vendor)
-        .context("Recovery received a truncated Pioneer receiver identity; no firmware written")?;
-    if let Some(current) = current {
-        if identity.revision() != "0000" && !current.normal.targets(&identity) {
             return Ok(None);
         }
     }

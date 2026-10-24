@@ -328,3 +328,41 @@ fn real_dump_enables_logging_through_its_limited_grant() {
     );
     assert_eq!(drive.mask(), 0x9249_2490 | 0x0004_0000);
 }
+
+#[test]
+fn family_override_does_not_bypass_recovery_write_acknowledgment() {
+    let mut mock = MockScsiDevice::pioneer();
+    let result = crate::engine::recover_identified(
+        &mut mock,
+        &Pioneer::new(),
+        None,
+        Some(b"current"),
+        b"target",
+        crate::engine::RecoveryExecution {
+            execute: true,
+            acknowledged_risk: false,
+            bypass_family_check: true,
+        },
+    );
+    assert!(result.is_err());
+    assert!(mock.writes.is_empty() && mock.reads.is_empty());
+}
+
+#[test]
+fn unsupported_family_override_fails_before_device_io() {
+    let mut mock = MockScsiDevice::new();
+    let result = crate::engine::recover_identified(
+        &mut mock,
+        &crate::backends::mtk::Mtk,
+        None,
+        None,
+        b"target",
+        crate::engine::RecoveryExecution {
+            bypass_family_check: true,
+            ..Default::default()
+        },
+    );
+    let error = result.unwrap_err();
+    assert!(error.is::<crate::backend::UnsupportedFamilyOverride>());
+    assert!(mock.writes.is_empty() && mock.reads.is_empty());
+}
