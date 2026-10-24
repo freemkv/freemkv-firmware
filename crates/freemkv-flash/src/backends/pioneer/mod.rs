@@ -1056,6 +1056,15 @@ impl RecoveryFacet for Pioneer {
             .map_err(|error| {
                 crate::backend::UpdateFailure::before_write("recovery preparation", error)
             })?;
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "preparing",
+            component: "filter.firmware",
+            done: None,
+            total: None,
+        });
+        let target = recovery::Target::load(target).map_err(|error| {
+            crate::backend::UpdateFailure::before_write("recovery preparation", error)
+        })?;
         let captured;
         let evidence = match evidence {
             Some(evidence) => evidence,
@@ -1080,7 +1089,8 @@ impl RecoveryFacet for Pioneer {
             done: None,
             total: None,
         });
-        let plan = recovery::Plan::with_current_policy(evidence, target, bypass_family_check)
+        let plan = target
+            .bind(evidence, bypass_family_check)
             .map_err(|error| {
                 crate::backend::UpdateFailure::before_write("recovery preparation", error)
             })?;

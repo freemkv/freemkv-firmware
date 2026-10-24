@@ -25,6 +25,34 @@ pub(crate) struct Current {
     normal: Envelope,
 }
 
+/// Validated target bytes retained while Current is acquired.
+pub(crate) struct Target {
+    update: Update,
+    reencoded: bool,
+}
+
+impl Target {
+    pub(crate) fn load(bytes: &[u8]) -> Result<Self> {
+        let (kernel, normal) = classify_flash_input(bytes)
+            .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
+        let kernel = kernel.context(crate::user_error::IssueCode::FirmwareInvalid)?;
+        let normal = normal.context(crate::user_error::IssueCode::FirmwareInvalid)?;
+        let update = super::normal_prepare::pair(&kernel, &normal)?;
+        let reencoded = update.normal_transfer() != normal;
+        Ok(Self { update, reencoded })
+    }
+
+    pub(crate) fn bind(self, current: &Current, bypass_family_check: bool) -> Result<Plan> {
+        Plan::assemble_policy(
+            &current.kernel,
+            &current.normal,
+            self.update,
+            self.reencoded,
+            bypass_family_check,
+        )
+    }
+}
+
 impl crate::backend::PreparedRecoveryUpdate for Plan {
     fn execute(&self, dev: &mut WriteDevice<'_>) -> Result<UpdateOutcome> {
         Plan::execute(self, dev)
@@ -93,24 +121,13 @@ impl Plan {
         Self::with_current_policy(current, target, false)
     }
 
+    #[cfg(test)]
     pub(crate) fn with_current_policy(
         current: &Current,
         target: &[u8],
         bypass_family_check: bool,
     ) -> Result<Self> {
-        let (kernel, normal) = classify_flash_input(target)
-            .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
-        let kernel = kernel.context(crate::user_error::IssueCode::FirmwareInvalid)?;
-        let normal = normal.context(crate::user_error::IssueCode::FirmwareInvalid)?;
-        let target = super::normal_prepare::pair(&kernel, &normal)?;
-        let reencoded = target.normal_transfer() != normal;
-        Self::assemble_policy(
-            &current.kernel,
-            &current.normal,
-            target,
-            reencoded,
-            bypass_family_check,
-        )
+        Target::load(target)?.bind(current, bypass_family_check)
     }
 
     #[cfg(test)]

@@ -1680,6 +1680,46 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
     assert_ne!(installed.family(), target.family());
     let current = Current::load(&archive(&installed, false)).unwrap();
     let target_bytes = archive(&target, false);
+    // A complete cross-family target still needs Current evidence. The target
+    // check cannot substitute protocol identity for the captured receiver.
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget};
+    let mut capture = CaptureSentinel::default();
+    let receiver = RecoveryTarget::new("test".into(), None::<Current>);
+    let error = super::super::Pioneer
+        .prepare(
+            &mut ReadDevice::for_backend(&mut capture, &super::super::Pioneer),
+            &receiver,
+            None,
+            &target_bytes,
+            false,
+        )
+        .err()
+        .expect("capture sentinel must fail before family comparison");
+    assert!(capture.memory_reads > 0);
+    assert!(error
+        .chain()
+        .any(|e| e.is::<crate::backend::CurrentFirmwareRequired>()));
+    for bypass in [false, true] {
+        let mut capture = CaptureSentinel::default();
+        let receiver = RecoveryTarget::new(
+            "test".into(),
+            Some(Current::load(&archive(&installed, false)).unwrap()),
+        );
+        let result = super::super::Pioneer.prepare(
+            &mut ReadDevice::for_backend(&mut capture, &super::super::Pioneer),
+            &receiver,
+            None,
+            &target_bytes,
+            bypass,
+        );
+        assert_eq!(result.is_ok(), bypass);
+        if let Err(error) = result {
+            assert!(error
+                .chain()
+                .any(|e| e.is::<crate::backend::HardwareMismatch>()));
+        }
+        assert_eq!(capture.reads, 0, "supplied Current must be reused");
+    }
     let refusal = Plan::with_family_override(&current, &target_bytes, false)
         .err()
         .unwrap();
@@ -1962,4 +2002,105 @@ fn failed_or_partial_current_capture_suggests_supplied_firmware() {
         assert!(text.contains("could not be read"));
         assert!(text.contains("Current firmware"));
     }
+}
+
+#[derive(Default)]
+struct CaptureSentinel {
+    identity: Drive,
+    reads: usize,
+    memory_reads: usize,
+}
+impl ScsiDevice for CaptureSentinel {
+    fn describe(&self) -> String {
+        "capture sentinel".into()
+    }
+    fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
+        self.reads += 1;
+        if command.get(2) == Some(&0xb0) {
+            self.memory_reads += 1;
+            bail!("capture sentinel");
+        }
+        self.identity.command_in(command, len)
+    }
+    fn command_out(&mut self, command: &[u8], bytes: &[u8]) -> Result<()> {
+        assert_eq!(command, cdb::knock());
+        assert!(bytes.is_empty());
+        Ok(())
+    }
+    fn command_out_strict(&mut self, command: &[u8], bytes: &[u8]) -> Result<()> {
+        self.command_out(command, bytes)
+    }
+}
+
+fn preparation_error_before_capture(target: &[u8]) {
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget, UpdateFailure};
+    let mut drive = CaptureSentinel::default();
+    let receiver = RecoveryTarget::new("test".into(), None::<Current>);
+    let error = super::super::Pioneer
+        .prepare(
+            &mut ReadDevice::for_backend(&mut drive, &super::super::Pioneer),
+            &receiver,
+            None,
+            target,
+            false,
+        )
+        .err()
+        .expect("invalid target must fail");
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert!(!failure.write_started);
+    assert_eq!(failure.progress, crate::backend::UpdateProgress::Preflight);
+    assert_eq!(
+        drive.reads, 0,
+        "invalid target must be rejected before Current capture: {error:#}"
+    );
+    assert!(!error
+        .chain()
+        .any(|e| e.is::<crate::backend::CurrentFirmwareRequired>()));
+}
+
+#[test]
+fn recovery_target_errors_precede_live_capture() {
+    preparation_error_before_capture(b"not a firmware package");
+    let pair = fixture_pair(false, 1);
+    let mut tar = tar::Builder::new(Vec::new());
+    let normal = pair.normal_transfer();
+    let mut header = tar::Header::new_gnu();
+    header.set_size(normal.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "normal.enc", normal).unwrap();
+    preparation_error_before_capture(&tar.into_inner().unwrap());
+}
+
+#[test]
+fn recovery_valid_target_still_captures_current() {
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget};
+    let target = archive(&fixture_pair(false, 1), false);
+    let mut drive = CaptureSentinel::default();
+    let receiver = RecoveryTarget::new("test".into(), None::<Current>);
+    let error = super::super::Pioneer
+        .prepare(
+            &mut ReadDevice::for_backend(&mut drive, &super::super::Pioneer),
+            &receiver,
+            None,
+            &target,
+            false,
+        )
+        .err()
+        .expect("capture sentinel must fail");
+    assert!(
+        drive.memory_reads > 0,
+        "valid target must reach firmware capture: {error:#}"
+    );
+    assert!(error
+        .chain()
+        .any(|e| e.is::<crate::backend::CurrentFirmwareRequired>()));
+}
+
+#[test]
+fn recovery_original_td05_rejected_before_capture_when_configured() {
+    let Ok(path) = std::env::var("FREEMKV_TD05_BAD_TARGET") else {
+        return;
+    };
+    preparation_error_before_capture(&std::fs::read(path).unwrap());
 }
