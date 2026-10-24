@@ -123,7 +123,7 @@ impl FlashFacet for Mtk {
         if req.enc_override.is_some_and(|requested| requested != enc) {
             bail!("encoding override contradicts the active MediaTek receiver");
         }
-        let mut block = vec![
+        let mut block: Vec<_> = vec![
             PlanLine::Header("== flash plan ==".into()),
             PlanLine::Field("device", dev.describe()),
             PlanLine::Field(
@@ -143,7 +143,10 @@ impl FlashFacet for Mtk {
                     style::human_size(image.len())
                 ),
             ),
-        ];
+        ]
+        .into_iter()
+        .map(|line| PlanLine::Detail(Box::new(line)))
+        .collect();
         if req.current.is_some() {
             block.push(PlanLine::Field("receiver code source", "Selected Current firmware; live identity and build metadata matched. Live receiver code was not compared.".into()));
         }
@@ -151,9 +154,9 @@ impl FlashFacet for Mtk {
             block.extend(crossflash_lines(&live, &image)?);
         }
         block.extend([PlanLine::Backup, PlanLine::Text(String::new())]);
-        block.push(PlanLine::Text(
+        block.push(PlanLine::Detail(Box::new(PlanLine::Text(
             "The receiver-bound command sequence is validated before execution".into(),
-        ));
+        ))));
         let mut plan = FlashPlan::new(Plan {
             image,
             final_prepared,

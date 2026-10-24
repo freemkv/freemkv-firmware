@@ -233,6 +233,71 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     run.opened = dialog.is_visible() && dialog.is_mapped();
     run.unticked = Some(!ack.is_active());
     run.confirm_before = confirm.as_ref().map(|b| b.is_sensitive());
+    let disclosure = descendants(&root)
+        .into_iter()
+        .find_map(|widget| widget.downcast::<gtk::Expander>().ok());
+    g.check(
+        "confirmation-has-details",
+        disclosure.is_some(),
+        "technical details disclosure",
+    );
+    if let Some(disclosure) = disclosure {
+        g.check(
+            "confirmation-details-start-collapsed",
+            !disclosure.is_expanded(),
+            "fresh confirmation",
+        );
+        for expanded in [true, false] {
+            WidgetExt::activate(&disclosure);
+            settle(SETTLE);
+            g.check(
+                "confirmation-details-toggle",
+                disclosure.is_expanded() == expanded,
+                "native activation",
+            );
+            g.check(
+                "confirmation-details-do-not-authorize",
+                !ack.is_active()
+                    && confirm
+                        .as_ref()
+                        .is_some_and(|button| !button.is_sensitive())
+                    && shell.view().confirm.is_some_and(|view| !view.ack_checked),
+                "disclosure leaves risk acknowledgement untouched",
+            );
+            let expected = if expanded {
+                &c.hide_details_label
+            } else {
+                &c.details_label
+            };
+            g.check(
+                "confirmation-details-label",
+                disclosure.label().as_deref() == Some(expected.as_str()),
+                expected,
+            );
+        }
+        let labels: Vec<String> = descendants(disclosure.upcast_ref())
+            .iter()
+            .filter_map(|widget| {
+                widget
+                    .downcast_ref::<gtk::Label>()
+                    .map(|label| label.text().to_string())
+            })
+            .collect();
+        g.check(
+            "confirmation-details-preserve-content",
+            c.technical_details
+                .iter()
+                .all(|detail| labels.contains(detail)),
+            "all technical rows retained",
+        );
+    }
+    g.check(
+        "confirmation-safe-keyboard-defaults",
+        libadwaita::prelude::MessageDialogExt::default_response(&dialog).as_deref()
+            == Some("cancel")
+            && libadwaita::prelude::MessageDialogExt::close_response(&dialog) == "cancel",
+        "Enter default and Escape close response are Cancel",
+    );
     if tick {
         // As a click does: GTK's own activate signal toggles the box and runs the shell's
         // toggled handler.
@@ -245,9 +310,14 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     let name = if tick { "sheet" } else { "sheet-reopened" };
     g.save(dir, name, capture(&root).as_ref());
 
-    match button(&root, &c.cancel.text) {
-        Some(b) => b.emit_clicked(),
-        None => libadwaita::prelude::MessageDialogExt::response(&dialog, "cancel"),
+    if tick {
+        match button(&root, &c.cancel.text) {
+            Some(b) => b.emit_clicked(),
+            None => libadwaita::prelude::MessageDialogExt::response(&dialog, "cancel"),
+        }
+    } else {
+        // GTK's actual keyboard default activation path (Enter).
+        dialog.emit_activate_default();
     }
     let closed = || {
         shell.view().confirm.is_none() && shell.confirm.borrow().is_none() && !dialog.is_visible()

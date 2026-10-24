@@ -126,6 +126,7 @@ pub(crate) fn configure_style(ctx: &egui::Context) {
 pub struct Shell {
     pub(crate) app: crate::ui::App,
     report_prompt: Option<(String, String)>,
+    confirmation_visible: bool,
 }
 
 impl Shell {
@@ -136,6 +137,7 @@ impl Shell {
         let mut shell = Self {
             app,
             report_prompt: None,
+            confirmation_visible: false,
         };
         shell.perform(ctx, effects);
         shell
@@ -195,8 +197,9 @@ impl Shell {
         let mut out = Vec::new();
         main_panel(ui, &view, &mut out);
         if let Some(confirm) = &view.confirm {
-            confirm_window(&ctx, confirm, &mut out);
+            confirm_window(&ctx, confirm, !self.confirmation_visible, &mut out);
         }
+        self.confirmation_visible = view.confirm.is_some();
         if let Some(diag) = &view.diagnostics {
             diagnostics_window(&ctx, diag, &mut out);
         }
@@ -633,7 +636,7 @@ fn tick(ui: &mut egui::Ui, state: Tri) {
 
 // ── windows ───────────────────────────────────────────────────────────────
 
-fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
+fn confirm_window(ctx: &egui::Context, c: &Confirm, fresh: bool, out: &mut Vec<Input>) {
     let mut open = true;
     egui::Window::new(&c.title)
         .default_width(480.0)
@@ -642,14 +645,10 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
         .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
         .open(&mut open)
         .show(ctx, |ui| {
-            let (drive_image, current) = c.details.split_at(c.details.len().min(2));
-            for line in drive_image {
+            for line in &c.details {
                 ui.label(line);
             }
             ui.colored_label(DANGER, &c.danger);
-            for line in current {
-                ui.label(line);
-            }
             for w in &c.warnings {
                 ui.colored_label(CAUTION, w);
             }
@@ -658,6 +657,33 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
             }
             if let Some(n) = &c.note {
                 ui.label(n);
+            }
+            if !c.technical_details.is_empty() {
+                let id = ui.make_persistent_id("confirmation-technical-details");
+                let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ctx, id, false,
+                );
+                if fresh {
+                    state.set_open(false);
+                    state.store(ctx);
+                }
+                let label = if state.is_open() {
+                    &c.hide_details_label
+                } else {
+                    &c.details_label
+                };
+                egui::CollapsingHeader::new(label)
+                    .id_salt("confirmation-technical-details")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        egui::ScrollArea::vertical()
+                            .max_height(180.0)
+                            .show(ui, |ui| {
+                                for line in &c.technical_details {
+                                    ui.label(line);
+                                }
+                            });
+                    });
             }
             ui.add_space(12.0);
             if let Some(entered) = &c.code_entry {

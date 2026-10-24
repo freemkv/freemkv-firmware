@@ -590,6 +590,7 @@ pub fn flash(
             )
         })?;
     authorized.set_backup(&backup_line);
+    authorized.set_backup_evidence(saved.as_ref());
     for warning in &authorized.warnings {
         eprintln!("{}", style::amber(warning));
     }
@@ -714,6 +715,7 @@ fn flash_facet(drive: &dyn Backend) -> Result<&dyn FlashFacet> {
 pub(crate) fn emit_plan(lines: &[PlanLine], backup: &str) {
     for line in lines {
         match line {
+            PlanLine::Detail(line) => emit_plan(std::slice::from_ref(line.as_ref()), backup),
             PlanLine::Block(text) => print!("{text}"),
             line => println!("{}", render_plan_line(line, backup)),
         }
@@ -723,6 +725,7 @@ pub(crate) fn emit_plan(lines: &[PlanLine], backup: &str) {
 /// One plan line as the terminal shows it.
 pub fn render_plan_line(line: &PlanLine, backup: &str) -> String {
     match line {
+        PlanLine::Detail(line) => render_plan_line(line, backup),
         PlanLine::Header(text) => style::header(text),
         PlanLine::Field(label, value) => style::kv(label, value),
         PlanLine::Backup => style::kv("backup", backup),

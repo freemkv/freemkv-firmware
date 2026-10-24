@@ -1622,6 +1622,7 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
     let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
     let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
     let authorized = authorize_installed(plan, Some(&archive(&installed, false))).unwrap();
+
     let prepared = authorized.state::<super::super::Prepared>().unwrap();
     assert_eq!(
         prepared.complete.as_ref().unwrap().normal_transfer(),
@@ -2103,4 +2104,57 @@ fn recovery_original_td05_rejected_before_capture_when_configured() {
         return;
     };
     preparation_error_before_capture(&std::fs::read(path).unwrap());
+}
+
+#[test]
+fn confirmation_cleanup_real_pioneer_authorization_keeps_restoration_warning() {
+    let installed = fixture_pair(true, 1);
+    let target = fixture_pair(false, 0xff);
+    let plan = crate::backend::FlashPlan::new(
+        super::super::execute_plan(&archive(&target, false)).unwrap(),
+    );
+    let authorized =
+        super::super::authorize_installed(plan, Some(&archive(&installed, false))).unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    assert!(sheet
+        .warnings
+        .iter()
+        .any(|s| s == super::super::DOWNGRADE_WARNING));
+    assert!(sheet.technical_details.is_empty());
+    assert_eq!(sheet.confirmation, authorized.confirmation);
+}
+
+#[test]
+fn confirmation_cleanup_real_recovery_emits_experimental_and_two_pass_requirements() {
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget};
+    use std::{cell::RefCell, rc::Rc};
+    let installed = archive(&fixture_pair(true, 1), false);
+    let target = archive(&fixture_pair(false, 0xff), true);
+    let receiver = RecoveryTarget::new("test".into(), Some(Current::load(&installed).unwrap()));
+    let mut drive = CaptureSentinel::default();
+    let rows = Rc::new(RefCell::new(Vec::new()));
+    let captured = rows.clone();
+    crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Report(report) = event {
+                captured.borrow_mut().extend(report.gui_fields());
+            }
+        },
+        || {
+            super::super::Pioneer.prepare(
+                &mut ReadDevice::for_backend(&mut drive, &super::super::Pioneer),
+                &receiver,
+                None,
+                &target,
+                false,
+            )
+        },
+    )
+    .unwrap();
+    let rows = rows.borrow();
+    assert!(rows
+        .iter()
+        .any(|(_, value)| value.contains("experimental, offline-proven, hardware-unproven")));
+    assert!(rows.iter().any(|(_, value)| value.contains("Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel")));
+    assert_eq!(drive.reads, 0);
 }

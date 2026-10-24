@@ -38,9 +38,11 @@ struct Probe {
     run: SheetRun,
     shot: Option<Capture>,
     done: bool,
+    disclosure: Vec<(&'static str, bool)>,
 }
 
 thread_local! {
+    static EXPANSIONS: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
     static PROBE: RefCell<Option<Probe>> = const { RefCell::new(None) };
 }
 
@@ -379,8 +381,10 @@ fn sheet(me: &Shell, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             run: SheetRun::default(),
             shot: None,
             done: false,
+            disclosure: Vec::new(),
         })
     });
+    EXPANSIONS.with(|events| events.borrow_mut().clear());
     gui_gate::open_flash_sheet(&mut me.app.borrow_mut());
     me.render();
     let until = Instant::now() + Duration::from_secs(10);
@@ -391,6 +395,13 @@ fn sheet(me: &Shell, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     let Some(mut probe) = probe else {
         return SheetRun::default();
     };
+    for (name, passed) in &probe.disclosure {
+        g.check(
+            name,
+            *passed,
+            "native disclosure leaves acknowledgement and authorization unchanged",
+        );
+    }
     let name = if tick { "sheet" } else { "sheet-reopened" };
     g.save(dir, name, probe.shot.as_ref());
     let gone = probe.dialog.as_ref().is_none_or(|d| !d.IsWindow());
@@ -431,12 +442,31 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
         confirm_before: confirm.as_ref().map(|b| b.IsWindowEnabled()),
         ..Default::default()
     };
+    let mut disclosure = Vec::new();
+    disclosure.push((
+        "confirmation-details-present",
+        !c.technical_details.is_empty(),
+    ));
+    disclosure.push((
+        "confirmation-details-start-collapsed",
+        !super::confirm_flags().has(co::TDF::EXPANDED_BY_DEFAULT)
+            && button(dialog, &c.details_label).is_some_and(|b| b.IsWindowVisible())
+            && EXPANSIONS.with(|events| events.borrow().is_empty()),
+    ));
+    disclosure.push((
+        "confirmation-details-without-ack",
+        toggle_details(me, dialog, &c),
+    ));
     if tick {
         send_raw(dialog, TDM_CLICK_VERIFICATION, 1, 0);
         pump(150);
         let acked = me.view().confirm.is_some_and(|v| v.ack_checked);
         run.ticked = Some((acked, confirm.as_ref().map(|b| b.IsWindowEnabled())));
         run.box_reads_ticked = Some(me.risk_box.get());
+        disclosure.push((
+            "confirmation-details-preserve-ack",
+            toggle_details(me, dialog, &c),
+        ));
     }
     let shot = capture(dialog);
     let raw = unsafe { w::HWND::from_ptr(dialog.ptr()) };
@@ -447,10 +477,55 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
             run,
             shot,
             done: true,
+            disclosure,
         })
     });
     send_raw(dialog, TDM_CLICK_BUTTON, TD_CANCEL.into(), 0);
     true
+}
+
+/// Record the actual common-control notification; clicking Details cannot dispatch
+/// a model input or change the risk checkbox.
+pub(super) fn disclosure_changed(expanded: bool) {
+    EXPANSIONS.with(|events| events.borrow_mut().push(expanded));
+}
+
+fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool {
+    let state = || {
+        let confirm = me.view().confirm?;
+        Some((
+            confirm.ack_checked,
+            me.risk_box.get(),
+            button(dialog, &c.confirm.text)?.IsWindowEnabled(),
+        ))
+    };
+    let before = state();
+    let height = || dialog.GetWindowRect().ok().map(|r| r.bottom - r.top);
+    let collapsed_height = height();
+    let Some(expand) = button(dialog, &c.details_label) else {
+        return false;
+    };
+    EXPANSIONS.with(|events| events.borrow_mut().clear());
+    send_raw(&expand, 0x00f5, 0, 0); // BM_CLICK on the real expando control
+    pump(200);
+    let expanded_height = height();
+    let expanded = EXPANSIONS.with(|events| events.borrow().as_slice() == [true]);
+    let unchanged_expanded = before.is_some() && state() == before;
+    let Some(collapse) = button(dialog, &c.hide_details_label) else {
+        return false;
+    };
+    send_raw(&collapse, 0x00f5, 0, 0);
+    pump(200);
+    let collapsed = EXPANSIONS.with(|events| events.borrow().as_slice() == [true, false]);
+    expanded
+        && collapsed
+        && unchanged_expanded
+        && state() == before
+        && expanded_height
+            .zip(collapsed_height)
+            .is_some_and(|(expanded, collapsed)| expanded > collapsed)
+        && height() == collapsed_height
+        && button(dialog, &c.details_label).is_some_and(|b| b.IsWindowVisible())
 }
 
 /// The dialog's button (or checkbox) window whose caption is `text`.

@@ -734,6 +734,15 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     let authorized = Mtk
         .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
         .unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    assert!(sheet
+        .notices
+        .iter()
+        .any(|s| s.contains("Live receiver code was not compared.")));
+    assert!(!sheet
+        .technical_details
+        .iter()
+        .any(|s| s.contains("Live receiver code was not compared.")));
     let executable = authorized.state::<Executable>().unwrap();
     assert_eq!(
         executable.prepared.plan().encoding().body,
@@ -973,4 +982,75 @@ fn planning_captures_code_once_and_execution_revalidates_once_before_writing() {
         2,
         "the mandatory prewrite gate must revalidate the cached code exactly once"
     );
+}
+
+#[test]
+fn confirmation_cleanup_real_two_stage_plan_keeps_startup_requirement_visible() {
+    let current = image(b"1.00", 1);
+    let intermediate = image(b"INTM", 2);
+    let target = image(b"1.05", 3);
+    let mut dev = MockScsiDevice::new().with_firmware_image(current.clone());
+    let req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    let backup = crate::engine::gates::saved_for_tests(current);
+    let authorized = Mtk
+        .authorize(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            plan,
+            Some(&backup),
+        )
+        .unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    assert!(sheet.notices.iter().any(
+        |s| s.contains("Two-stage update: intermediate, confirm startup, then final firmware")
+    ));
+    assert!(!sheet.notices.iter().any(|s| s.contains("signature at")));
+    assert!(sheet
+        .technical_details
+        .iter()
+        .any(|s| s.contains("signature at")));
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn confirmation_cleanup_real_crossflash_plan_keeps_identity_and_rollback_warnings() {
+    let current = image(b"1.00", 1);
+    let mut target = image(b"1.05", 3);
+    target[0x1ec008..0x1ec018].copy_from_slice(b"BD-RE BU50N     ");
+    let target = crate::cmac::resign(&target).unwrap();
+    let mut dev = MockScsiDevice::new().with_firmware_image(current.clone());
+    let req = request(target, &super::super::IMAGE);
+    let mut plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    // Even an outer informational wrapper cannot hide a producer's warning.
+    for line in &mut plan.after_backup {
+        if matches!(line, PlanLine::Warning(_)) {
+            *line = PlanLine::Detail(Box::new(PlanLine::Spaced(Box::new(line.clone()))));
+        }
+    }
+    let backup = crate::engine::gates::saved_for_tests(current);
+    let authorized = Mtk
+        .authorize(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            plan,
+            Some(&backup),
+        )
+        .unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    for phrase in [
+        "CROSSFLASH:",
+        "the drive will identify as",
+        "your backup restores",
+    ] {
+        assert!(
+            sheet.warnings.iter().any(|s| s.contains(phrase)),
+            "{phrase}: {:?}",
+            sheet.warnings
+        );
+        assert!(!sheet.technical_details.iter().any(|s| s.contains(phrase)));
+    }
+    assert!(dev.writes.is_empty());
 }
