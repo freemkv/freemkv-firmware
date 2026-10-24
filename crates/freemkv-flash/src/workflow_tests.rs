@@ -484,3 +484,40 @@ fn firmware_read_capability_comes_from_normal_or_recovery_backend_without_io() {
     profile.recovery = Some(&crate::backends::pioneer::DESCRIPTOR);
     assert_eq!(profile.can_read(), Some(true));
 }
+
+#[test]
+fn backup_failure_guidance_preserves_cause_and_requests_a_dump_in_every_language() {
+    use crate::localization::{self, Language};
+    use crate::user_error::{IssueCode, NoFirmwareWrite};
+    for cause in [IssueCode::UnsupportedDrive, IssueCode::Connection] {
+        let error = backup_error(anyhow::Error::new(cause), false).context(NoFirmwareWrite);
+        let issue = user_error(&error);
+        assert_eq!(issue.id, "errors.backup_dump_guidance");
+        assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+        for language in Language::ALL {
+            let text = issue.render(language);
+            assert!(text.contains(localization::get(language, cause.message_id())));
+            assert!(text.contains(localization::get(language, "action.submit_dump")));
+            assert!(text.contains(localization::get(language, "errors.no_firmware_write")));
+            assert!(!text.contains("{cause}") && !text.contains("{submit_dump}"));
+        }
+    }
+    let error = backup_error(
+        std::io::Error::from(std::io::ErrorKind::PermissionDenied).into(),
+        false,
+    )
+    .context(NoFirmwareWrite);
+    assert!(user_error(&error)
+        .render(Language::En)
+        .contains(localization::get(Language::En, "errors.permission_denied")));
+}
+
+#[test]
+fn failed_dump_does_not_request_another_dump() {
+    use crate::user_error::{IssueCode, NoFirmwareWrite};
+    let error =
+        backup_error(anyhow::Error::new(IssueCode::Connection), true).context(NoFirmwareWrite);
+    let issue = user_error(&error);
+    assert_eq!(issue.id, "errors.connection");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+}

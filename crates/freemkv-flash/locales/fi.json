@@ -79,6 +79,7 @@
     "errors.already_modified": "Tämä firmware on jo muokattu.Valitse alkuperäinen OEM firmware tiedosto.",
     "errors.current_mismatch": "Nykyisen laiteohjelmiston tiedot eivät vastaa tätä asemaa. Valitse oikea asema ja lue sen laiteohjelmisto uudelleen tai valitse sitä vastaava nykyisen laiteohjelmiston tiedosto.",
     "errors.firmware_invalid": "Tämä kiinteistötiedosto ei voinut lukea tai vahvistaa.Valitse yhteensopiva OEM-tiedosto ja yritä uudelleen.",
+    "errors.backup_dump_guidance": "Varmuuskopiointia ei voitu suorittaa loppuun. {cause} Tallenna raakavedos ja lähetä se meille sovelluksen toiminnolla ”{submit_dump}”, jotta voimme tutkia ongelmaa.",
     "errors.backup_failed": "Täydellinen varmuuskopio ei voinut luoda. tarkista optiset laitteen yhteys ja yritä uudelleen.",
     "errors.current_incomplete": "Asennetun laiteohjelmiston tiedosto on puutteellinen. Valitse täydellinen kopio tai Lue asemasta.",
     "errors.no_drive": "Optista asemaa ei löytynyt. Liitä asema ja päivitä luettelo.",

@@ -78,6 +78,7 @@
     "errors.already_modified": "This firmware is already modified. Choose an original OEM firmware file.",
     "errors.current_mismatch": "The Current firmware information does not match this drive. Select the intended drive, then read its firmware again or choose its matching Current firmware file.",
     "errors.firmware_invalid": "This firmware file could not be read or validated. Choose a compatible OEM file and try again.",
+    "errors.backup_dump_guidance": "The backup could not be completed. {cause} Save a raw dump, then use “{submit_dump}” in the app to send it to us so we can investigate.",
     "errors.backup_failed": "A complete backup could not be created. Check the drive connection and try again.",
     "errors.current_incomplete": "The selected Current firmware file is incomplete. Choose a complete copy of the installed firmware or select Read from drive.",
     "errors.no_drive": "No optical drive was found. Connect the drive and refresh the list.",

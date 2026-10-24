@@ -79,6 +79,7 @@
     "errors.already_modified": "Denne firmware er allerede modifisert.Vilg en original OEM firmware-fil.",
     "errors.current_mismatch": "Opplysningene om den gjeldende fastvaren stemmer ikke med denne stasjonen. Velg riktig stasjon og les fastvaren på nytt, eller velg den tilhørende filen med gjeldende fastvare.",
     "errors.firmware_invalid": "Dette firmware-filen kan ikke leses eller valideres.Velg en kompatibel OEM-fil og prøv igjen.",
+    "errors.backup_dump_guidance": "Sikkerhetskopien kunne ikke fullføres. {cause} Lagre en rå dump, og bruk deretter «{submit_dump}» i appen for å sende den til oss, slik at vi kan undersøke problemet.",
     "errors.backup_failed": "En fullstendig sikkerhetskopiering kan ikke opprettes. sjekk den optiske drive-tilkoblingen og prøv igjen.",
     "errors.current_incomplete": "Filen med installert fastvare er ufullstendig. Velg en fullstendig kopi eller Les fra stasjonen.",
     "errors.no_drive": "Ingen optisk stasjon ble funnet. Koble til stasjonen og oppdater listen.",

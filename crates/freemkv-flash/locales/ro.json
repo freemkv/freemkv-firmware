@@ -79,6 +79,7 @@
     "errors.already_modified": "Acest firmware este deja modificat. alegeți un fișier original de firmware OEM.",
     "errors.current_mismatch": "Informațiile firmware-ului actual nu corespund acestei unități. Selectați unitatea dorită, apoi citiți din nou firmware-ul sau alegeți fișierul actual corespunzător.",
     "errors.firmware_invalid": "Acest fișier firmware nu poate fi citit sau validat. alegeți un fișier OEM compatibil și încercați din nou.",
+    "errors.backup_dump_guidance": "Copia de siguranță nu a putut fi finalizată. {cause} Salvați un dump brut, apoi folosiți „{submit_dump}” în aplicație pentru a ni-l trimite, astfel încât să putem investiga problema.",
     "errors.backup_failed": "Nu se poate crea o backup completă. verificați conexiunea optică și încercați din nou.",
     "errors.current_incomplete": "Fișierul firmware-ului actual este incomplet. Alegeți o copie completă a firmware-ului instalat sau Citire de pe unitate.",
     "errors.no_drive": "Nu a fost găsită nicio unitate optică. Conectați unitatea și reîmprospătați lista.",

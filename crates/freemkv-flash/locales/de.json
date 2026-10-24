@@ -79,6 +79,7 @@
     "errors.already_modified": "Diese Firmware ist bereits modifiziert. Wählen Sie eine ursprüngliche OEM Firmware-Datei.",
     "errors.current_mismatch": "Die Informationen zur aktuellen Firmware passen nicht zu diesem Laufwerk. Wählen Sie das richtige Laufwerk und lesen Sie dessen Firmware erneut oder wählen Sie die passende Datei der aktuellen Firmware.",
     "errors.firmware_invalid": "Diese Firmware-Datei kann nicht gelesen oder validiert werden. Wählen Sie eine kompatible OEM-Datei und versuchen Sie erneut.",
+    "errors.backup_dump_guidance": "Die Sicherung konnte nicht abgeschlossen werden. {cause} Speichern Sie einen Rohdump und senden Sie ihn uns über „{submit_dump}“ in der App, damit wir das Problem untersuchen können.",
     "errors.backup_failed": "Eine vollständige Backup konnte nicht erstellt werden. Überprüfen Sie die optische Anschluss-Drive und versuchen Sie erneut.",
     "errors.current_incomplete": "Die Datei der installierten Firmware ist unvollständig. Wählen Sie eine vollständige Kopie oder Vom Laufwerk lesen.",
     "errors.no_drive": "Kein optisches Laufwerk gefunden. Schließen Sie das Laufwerk an und aktualisieren Sie die Liste.",

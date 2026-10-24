@@ -79,6 +79,7 @@
     "errors.already_modified": "Firmware ini sudah diubah. pilih file firmware OEM asli.",
     "errors.current_mismatch": "Informasi firmware saat ini tidak cocok dengan drive ini. Pilih drive yang benar, lalu baca ulang firmwarenya atau pilih file firmware saat ini yang sesuai.",
     "errors.firmware_invalid": "File firmware ini tidak dapat dibaca atau validasi. pilih file OEM yang kompatibel dan coba lagi.",
+    "errors.backup_dump_guidance": "Pencadangan tidak dapat diselesaikan. {cause} Simpan dump mentah, lalu gunakan “{submit_dump}” di aplikasi untuk mengirimkannya kepada kami agar kami dapat menyelidiki masalahnya.",
     "errors.backup_failed": "Tidak dapat membuat backup lengkap. periksa koneksi drive optik dan coba lagi.",
     "errors.current_incomplete": "File firmware saat ini tidak lengkap. Pilih salinan lengkap firmware yang terpasang atau Baca dari drive.",
     "errors.no_drive": "Drive optik tidak ditemukan. Hubungkan drive dan segarkan daftar.",

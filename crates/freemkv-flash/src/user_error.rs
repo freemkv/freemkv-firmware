@@ -98,6 +98,17 @@ pub fn explain(error: anyhow::Error, code: IssueCode) -> anyhow::Error {
     }
 }
 
+/// Marks a backup failure that can be investigated with a separate raw dump.
+#[derive(Debug)]
+pub(crate) struct BackupAttempt;
+
+impl std::fmt::Display for BackupAttempt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("backup did not complete")
+    }
+}
+impl std::error::Error for BackupAttempt {}
+
 /// Evidence attached only by workflows whose capabilities cannot write firmware.
 #[derive(Debug)]
 pub struct NoFirmwareWrite;
@@ -128,6 +139,33 @@ pub struct UserError {
 impl UserError {
     /// Classify structured evidence first. Unknown failures receive conservative guidance.
     pub fn of(error: &anyhow::Error) -> Self {
+        let issue = Self::classify(error);
+        if error.is::<BackupAttempt>() {
+            issue.with_backup_guidance()
+        } else {
+            issue
+        }
+    }
+
+    /// Add the backup investigation action without losing its cause or write evidence.
+    /// Repeated callers do not duplicate guidance; uncertain updates remain unchanged.
+    pub fn with_backup_guidance(self) -> Self {
+        if self.id == "errors.backup_dump_guidance"
+            || self.consequence != Some("errors.no_firmware_write")
+        {
+            return self;
+        }
+        Self {
+            id: "errors.backup_dump_guidance",
+            arguments: vec![
+                ("cause", localization::message(self.id, &self.arguments)),
+                ("submit_dump", "action.submit_dump".into()),
+            ],
+            consequence: self.consequence,
+        }
+    }
+
+    fn classify(error: &anyhow::Error) -> Self {
         let mut arguments = Vec::new();
         let failure = error.downcast_ref::<UpdateFailure>();
         let consequence = match failure {
@@ -292,6 +330,20 @@ impl UserError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backup_guidance_is_idempotent_and_does_not_relabel_uncertain_writes() {
+        let read_only =
+            UserError::of(&anyhow::Error::new(IssueCode::Connection).context(NoFirmwareWrite));
+        let guided = read_only.with_backup_guidance();
+        assert_eq!(guided.clone().with_backup_guidance(), guided);
+        let uncertain = UserError {
+            id: "errors.update_uncertain",
+            arguments: Vec::new(),
+            consequence: None,
+        };
+        assert_eq!(uncertain.clone().with_backup_guidance(), uncertain);
+    }
 
     #[test]
     fn failed_live_capture_does_not_claim_a_selected_current_file_is_incomplete() {

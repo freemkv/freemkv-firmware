@@ -79,6 +79,7 @@
     "errors.already_modified": "此韌體已修改. 選擇原始 OEM 韌體檔案。",
     "errors.current_mismatch": "目前韌體資訊與此光碟機不符。請選擇預期的光碟機，然後重新讀取其韌體，或選擇與其相符的目前韌體檔案。",
     "errors.firmware_invalid": "此韌體檔案無法閱讀或驗證. 選擇相容的 OEM 檔案,然後再試一次。",
+    "errors.backup_dump_guidance": "無法完成備份。{cause} 請儲存原始傾印，然後在應用程式中使用「{submit_dump}」傳送給我們，以便調查問題。",
     "errors.backup_failed": "無法建立完整的備份,請檢查光學驅動器連線並嘗試一次。",
     "errors.current_incomplete": "所選目前韌體檔案不完整。請選擇已安裝韌體的完整副本，或選擇「從光碟機讀取」。",
     "errors.no_drive": "找不到光碟機。請連接光碟機並重新整理清單。",

@@ -79,6 +79,7 @@
     "errors.already_modified": "Este firmware já está modificado. Escolha um arquivo original de firmware OEM.",
     "errors.current_mismatch": "As informações do firmware atual não correspondem a esta unidade. Selecione a unidade correta e leia o firmware novamente ou escolha o arquivo atual correspondente.",
     "errors.firmware_invalid": "Este arquivo de firmware não pode ser lido ou validado. Escolha um arquivo OEM compatível e tente novamente.",
+    "errors.backup_dump_guidance": "Não foi possível concluir o backup. {cause} Salve um dump bruto e use “{submit_dump}” no aplicativo para nos enviar o arquivo, para que possamos investigar o problema.",
     "errors.backup_failed": "Uma backup completa não poderia ser criada. Verifique a conexão de disco óptico e tente novamente.",
     "errors.current_incomplete": "O arquivo do firmware atual está incompleto. Escolha uma cópia completa do firmware instalado ou Ler da unidade.",
     "errors.no_drive": "Nenhuma unidade óptica foi encontrada. Conecte a unidade e atualize a lista.",

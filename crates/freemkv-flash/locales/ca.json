@@ -79,6 +79,7 @@
     "errors.already_modified": "Aquest firmware ja està modificat. triar un arxiu original de firmware OEM.",
     "errors.current_mismatch": "La informació del microprogramari actual no coincideix amb aquesta unitat. Seleccioneu la unitat correcta i torneu a llegir-ne el microprogramari o trieu el fitxer actual corresponent.",
     "errors.firmware_invalid": "Aquest arxiu de firmware no es pot llegir o validar. triar un arxiu OEM compatible i intentar-ho de nou.",
+    "errors.backup_dump_guidance": "No s’ha pogut completar la còpia de seguretat. {cause} Deseu un bolcat en brut i feu servir «{submit_dump}» a l’aplicació per enviar-nos-el i ajudar-nos a investigar el problema.",
     "errors.backup_failed": "No es pot crear una còpia de seguretat completa. comprova la connexió de disc òptic i intenta de nou.",
     "errors.current_incomplete": "El fitxer del microprogramari actual és incomplet. Trieu una còpia completa del microprogramari instal·lat o Llegir de la unitat.",
     "errors.no_drive": "No s’ha trobat cap unitat òptica. Connecteu-la i actualitzeu la llista.",
