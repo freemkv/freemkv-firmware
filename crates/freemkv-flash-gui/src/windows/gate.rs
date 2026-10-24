@@ -663,10 +663,19 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
         "confirmation-details-present",
         !c.technical_details.is_empty(),
     ));
+    let details_control = button(dialog, &c.details_label);
+    let initial_expansions = EXPANSIONS.with(|events| events.borrow().clone());
+    eprintln!(
+        "GATE TRACE details start: expanded_by_default={} control_visible={} class={:?} text={:?} events={initial_expansions:?}",
+        super::confirm_flags().has(co::TDF::EXPANDED_BY_DEFAULT),
+        details_control.as_ref().is_some_and(|b| b.IsWindowVisible()),
+        details_control.as_ref().and_then(|b| b.GetClassName().ok()),
+        details_control.as_ref().and_then(|b| b.GetWindowText().ok()),
+    );
     disclosure.push((
         "confirmation-details-start-collapsed",
         !super::confirm_flags().has(co::TDF::EXPANDED_BY_DEFAULT)
-            && button(dialog, &c.details_label).is_some_and(|b| b.IsWindowVisible())
+            && details_control.is_some_and(|b| b.IsWindowVisible())
             && EXPANSIONS.with(|events| events.borrow().is_empty()),
     ));
     disclosure.push((
@@ -719,8 +728,16 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
     let height = || dialog.GetWindowRect().ok().map(|r| r.bottom - r.top);
     let collapsed_height = height();
     let Some(expand) = button(dialog, &c.details_label) else {
+        eprintln!("GATE TRACE details toggle: collapsed control not found");
         return false;
     };
+    eprintln!(
+        "GATE TRACE details toggle before: class={:?} text={:?} visible={} bounds={:?} height={collapsed_height:?} state={before:?}",
+        expand.GetClassName().ok(),
+        expand.GetWindowText().ok(),
+        expand.IsWindowVisible(),
+        expand.GetWindowRect().ok().map(|r| (r.left, r.top, r.right, r.bottom)),
+    );
     EXPANSIONS.with(|events| events.borrow_mut().clear());
     send_raw(&expand, 0x00f5, 0, 0); // BM_CLICK on the real expando control
     pump(200);
@@ -728,8 +745,19 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
     let expanded = EXPANSIONS.with(|events| events.borrow().as_slice() == [true]);
     let unchanged_expanded = before.is_some() && state() == before;
     let Some(collapse) = button(dialog, &c.hide_details_label) else {
+        let events = EXPANSIONS.with(|events| events.borrow().clone());
+        eprintln!(
+            "GATE TRACE details toggle expanded: notification={expanded} events={events:?} height={expanded_height:?} state={:?}; expanded control not found",
+            state(),
+        );
         return false;
     };
+    let expanded_events = EXPANSIONS.with(|events| events.borrow().clone());
+    eprintln!(
+        "GATE TRACE details toggle expanded: notification={expanded} events={expanded_events:?} height={expanded_height:?} state={:?} collapse_visible={}",
+        state(),
+        collapse.IsWindowVisible(),
+    );
     send_raw(&collapse, 0x00f5, 0, 0);
     pump(200);
     let collapsed = EXPANSIONS.with(|events| events.borrow().as_slice() == [true, false]);
