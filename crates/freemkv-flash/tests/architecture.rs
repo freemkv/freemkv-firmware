@@ -1701,7 +1701,7 @@ fn vendor_scan_skips_comments_and_tests() {
 fn pioneer_optical_stays_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
     let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
-    for (name, version) in [("pioneer-optical", "1.0.3"), ("mediatek-optical", "1.0.1")] {
+    for (name, version) in [("pioneer-optical", "1.0.4"), ("mediatek-optical", "1.0.1")] {
         let line = manifest
             .lines()
             .find(|line| line.trim_start().starts_with(name))
