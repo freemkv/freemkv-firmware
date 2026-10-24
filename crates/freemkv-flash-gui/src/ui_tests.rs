@@ -195,6 +195,7 @@ fn flash_defaults_to_drive_reads_and_requires_current_only_when_unchecked() {
     app.dispatch(Input::FlashNow);
     assert_eq!(app.dry_run.as_ref().unwrap().len(), jobs);
     app.dispatch(Input::Chosen(Pick::FlashCurrent, "installed.bin".into()));
+    finish_selected_files(&mut app);
     assert!(button(&app.view(), "Flash now").enabled);
     app.dispatch(Input::FlashNow);
     let (_, _, Job::PlanFlash(options)) = last_job(&app) else {
@@ -220,6 +221,7 @@ fn flash_paired_current_selection_is_explicit_and_frozen_through_confirmation() 
     app.flash_input = Some("modified.tar".into());
     app.dispatch(Input::SetCheck(CheckId::FlashReadFromDrive, false));
     app.dispatch(Input::Chosen(Pick::FlashCurrent, "original.tar".into()));
+    finish_selected_files(&mut app);
     app.flash_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
     assert!(!button(&app.view(), "Flash now").enabled);
     app.dispatch(Input::FlashCurrentMember("not-a-member.bin".into()));
@@ -342,22 +344,28 @@ fn origin_workers_do_not_relabel_a_new_selection_and_both_tabs_finish() {
     let (flash_tx, flash_rx) = mpsc::channel();
     let (recovery_tx, recovery_rx) = mpsc::channel();
     app.origin_rx = vec![
-        (Pick::FlashFirmware, "old.tar".into(), old_rx),
-        (Pick::FlashFirmware, "new.tar".into(), flash_rx),
-        (Pick::RecoveryInput, "capture.tar".into(), recovery_rx),
+        (0, Pick::FlashFirmware, "old.tar".into(), old_rx),
+        (0, Pick::FlashFirmware, "new.tar".into(), flash_rx),
+        (0, Pick::RecoveryInput, "capture.tar".into(), recovery_rx),
     ];
     old_tx
         .send((
             Pick::FlashFirmware,
             "old.tar".into(),
-            Ok(FileOrigin::OemLikely),
+            Ok(workflow::SelectedFileInfo {
+                origin: FileOrigin::OemLikely,
+                members: Vec::new(),
+            }),
         ))
         .unwrap();
     recovery_tx
         .send((
             Pick::RecoveryInput,
             "capture.tar".into(),
-            Ok(FileOrigin::UserBackupLikely),
+            Ok(workflow::SelectedFileInfo {
+                origin: FileOrigin::UserBackupLikely,
+                members: Vec::new(),
+            }),
         ))
         .unwrap();
     assert!(app.poll_origin());
@@ -367,7 +375,10 @@ fn origin_workers_do_not_relabel_a_new_selection_and_both_tabs_finish() {
         .send((
             Pick::FlashFirmware,
             "new.tar".into(),
-            Ok(FileOrigin::Unknown),
+            Ok(workflow::SelectedFileInfo {
+                origin: FileOrigin::Unknown,
+                members: Vec::new(),
+            }),
         ))
         .unwrap();
     assert!(app.poll_origin());
@@ -415,7 +426,7 @@ fn disconnected_origin_worker_stops_checking_without_exposing_english_in_ui() {
     app.flash_input = Some("selected.bin".into());
     let (tx, rx) = mpsc::channel();
     app.origin_rx
-        .push((Pick::FlashFirmware, "selected.bin".into(), rx));
+        .push((0, Pick::FlashFirmware, "selected.bin".into(), rx));
     drop(tx);
     assert!(app.poll_origin());
     assert_eq!(
@@ -902,6 +913,7 @@ fn flash_starts_with_a_firmware_chooser() {
         Pick::FlashFirmware,
         "/fw/firmware.tar".into(),
     ));
+    finish_selected_files(&mut app);
     let view = app.view();
     for text in ["Change file…", "Flash now", "Check file"] {
         assert!(button(&view, text).enabled, "{text}");
@@ -1494,6 +1506,7 @@ fn recovery_requires_both_inputs_and_a_drive() {
     assert!(app.pending.is_none());
 
     app.dispatch(Input::Chosen(Pick::RecoveryInput, "new.tar".into()));
+    finish_selected_files(&mut app);
     assert!(
         button(&app.view(), "Recover").enabled,
         "drive reads are the default"
@@ -1509,6 +1522,7 @@ fn recovery_requires_both_inputs_and_a_drive() {
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, false));
     assert!(!button(&app.view(), "Recover").enabled);
     app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "old.tar".into()));
+    finish_selected_files(&mut app);
     assert!(button(&app.view(), "Recover").enabled);
 }
 
@@ -1562,6 +1576,7 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     app.dispatch(Input::RecoveryMember("firmware.bin".into()));
     assert!(has_text(&app.view(), "Current firmware"));
     app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "1.V9.tar".into()));
+    finish_selected_files(&mut app);
     app.recovery_current_members = vec!["intermediate.bin".into(), "firmware.bin".into()];
     assert!(!button(&app.view(), "Recover").enabled);
     app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
@@ -2605,6 +2620,7 @@ fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
     app.answer_profile(Ok(Profile::default()));
     app.dispatch(Input::SelectTask(Task::Recovery));
     app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "installed.tar".into()));
+    finish_selected_files(&mut app);
     assert!(matches!(app.profile, ProfileState::Probing));
     assert!(app.profile_worker.is_some());
     let assisted = Profile {
@@ -2615,6 +2631,7 @@ fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
     app.answer_profile(Ok(assisted));
     assert!(app.ready_profile().unwrap().tasks.contains(&Task::Recovery));
     app.dispatch(Input::Chosen(Pick::RecoveryCurrent, "other.tar".into()));
+    finish_selected_files(&mut app);
     assert!(matches!(app.profile, ProfileState::Probing));
     app.answer_profile(Ok(Profile::default()));
     assert!(app.ready_profile().unwrap().tasks.is_empty());
@@ -3162,6 +3179,7 @@ fn backend_read_restriction_hides_automatic_current_and_requires_a_file_in_both_
             "stale checkbox events cannot bypass the backend policy"
         );
         app.dispatch(Input::Chosen(pick, "installed.bin".into()));
+        finish_selected_files(&mut app);
         assert!(button(&app.view(), action).enabled);
     }
 }
@@ -3233,7 +3251,7 @@ fn origin_check_keeps_technical_causes_in_logs_and_clean_copy_in_the_form() {
     app.flash_input = Some("selected.bin".into());
     let (tx, rx) = mpsc::channel();
     app.origin_rx
-        .push((Pick::FlashFirmware, "selected.bin".into(), rx));
+        .push((0, Pick::FlashFirmware, "selected.bin".into(), rx));
     tx.send((
         Pick::FlashFirmware,
         PathBuf::from("selected.bin"),
@@ -3787,6 +3805,7 @@ fn report_prompt_waits_until_workers_and_their_confirmations_finish() {
     app.journal = Some(Journal::memory_at(std::env::temp_dir()));
     app.task = Task::Recovery;
     app.dispatch(Input::Chosen(Pick::RecoveryInput, "firmware.tar".into()));
+    finish_selected_files(&mut app);
     app.dispatch(Input::Recover);
     assert!(app.recovery_planning.is_some());
     assert!(
@@ -3925,4 +3944,122 @@ fn unusable_saved_backup_warning_describes_rollback_availability_not_file_existe
     assert_eq!(std::fs::read(&flashing.backup).unwrap(), [1, 2, 3]);
     std::fs::remove_file(&flashing.backup).unwrap();
     assert!(confirm.warnings.iter().any(|s| s == "No usable backup is available for this update. You may be unable to restore the current firmware if the update fails."), "{:?}", confirm.warnings);
+}
+
+/// Complete only local selected-file metadata workers; workflow jobs stay under each test's control.
+fn finish_selected_files(app: &mut App) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !app.origin_rx.is_empty() || !app.origin_pending.is_empty() {
+        assert!(
+            Instant::now() < deadline,
+            "selected-file inspection did not finish"
+        );
+        app.poll_origin();
+        std::thread::yield_now();
+    }
+}
+
+#[test]
+fn unchanged_analysis_views_share_the_localized_tree() {
+    let mut app = one_drive();
+    app.set_analysis(Some(ResultView::Inspect(mtk_inspection(
+        "resource-tree.bin",
+        |_| {},
+    ))));
+    app.analysis_open = true;
+    let first = app.view().analysis.unwrap().tree;
+    let second = app.view().analysis.unwrap().tree;
+    assert!(
+        Arc::ptr_eq(&first, &second),
+        "unchanged analysis must reuse its localized tree"
+    );
+    app.dispatch(Input::SetLanguage(crate::localization::Language::Fr));
+    let french = app.view().analysis.unwrap().tree;
+    assert!(!Arc::ptr_eq(&first, &french));
+    assert_ne!(first.title, french.title);
+    assert!(Arc::ptr_eq(&french, &app.view().analysis.unwrap().tree));
+}
+
+#[test]
+fn outstanding_file_inspection_is_bounded_while_choices_change() {
+    let mut app = one_drive();
+    let (_held, rx) = mpsc::channel();
+    app.origin_rx
+        .push((0, Pick::FlashFirmware, "held.tar".into(), rx));
+    for i in 0..100 {
+        app.dispatch(Input::Chosen(
+            Pick::FlashFirmware,
+            format!("missing-{i}.tar").into(),
+        ));
+    }
+    assert_eq!(
+        app.origin_rx.len(),
+        1,
+        "only one selected-file inspector may run at a time"
+    );
+    assert_eq!(
+        app.origin_pending.len(),
+        1,
+        "obsolete queued choices must be coalesced"
+    );
+    assert_eq!(app.origin_pending[0].2, PathBuf::from("missing-99.tar"));
+}
+
+#[test]
+fn selected_release_members_arrive_from_the_background_inspector() {
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-selected-members-{}",
+        workflow::new_operation_id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../freemkv-flash/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+    let archive = dir.join("release.tar");
+    workflow::package_image(&fixture, &archive).unwrap();
+    let mut app = one_drive();
+    app.dispatch(Input::Chosen(Pick::RecoveryInput, archive.clone()));
+    assert!(
+        app.recovery_members.is_empty(),
+        "chooser must not parse package members on the GUI thread"
+    );
+    assert!(!app.recovery_ready());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !app.origin_rx.is_empty() || !app.origin_pending.is_empty() {
+        assert!(
+            Instant::now() < deadline,
+            "file inspection worker did not finish"
+        );
+        app.poll_origin();
+        std::thread::yield_now();
+    }
+    assert_eq!(app.recovery_members, ["firmware.bin"]);
+    assert!(app.recovery_origin.as_ref().is_some_and(Result::is_ok));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn reselecting_the_same_path_does_not_adopt_an_old_inspection() {
+    let mut app = one_drive();
+    let path = PathBuf::from("same-path.bin");
+    app.flash_input = Some(path.clone());
+    let (tx, rx) = mpsc::channel();
+    app.origin_rx
+        .push((0, Pick::FlashFirmware, path.clone(), rx));
+    app.dispatch(Input::Chosen(Pick::FlashFirmware, path.clone()));
+    tx.send((
+        Pick::FlashFirmware,
+        path,
+        Ok(workflow::SelectedFileInfo {
+            origin: FileOrigin::OemLikely,
+            members: Vec::new(),
+        }),
+    ))
+    .unwrap();
+    app.poll_origin();
+    assert_eq!(
+        app.flash_origin, None,
+        "a same-path reselect must await its new generation"
+    );
+    assert_eq!(app.origin_rx.len(), 1);
+    assert!(app.origin_pending.is_empty());
 }

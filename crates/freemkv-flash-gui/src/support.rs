@@ -60,6 +60,28 @@ fn private_file(path: &Path, append: bool) -> io::Result<File> {
     options.open(path)
 }
 
+/// Own only a report created exclusively by this attempt; errors leave no partial ZIP.
+struct PartialReport(Option<PathBuf>);
+
+impl Drop for PartialReport {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0 {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn new_report_file(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
 pub struct Journal {
     dir: PathBuf,
     file: Option<File>,
@@ -287,6 +309,10 @@ impl BundleSource {
         control: Option<&Submission>,
     ) -> Result<BuiltBundle> {
         let check = || control.map_or(Ok(()), Submission::check);
+        self.bundle_checked(scope, check)
+    }
+
+    fn bundle_checked(&self, scope: Scope, check: impl Fn() -> Result<()>) -> Result<BuiltBundle> {
         check()?;
         anyhow::ensure!(
             self.description.len() <= DESCRIPTION_LIMIT,
@@ -400,9 +426,15 @@ impl BundleSource {
             reports = std::env::temp_dir().join("freemkv-reports");
             fs::create_dir_all(&reports)?;
         }
-        let name = format!("freemkv-report-{}-{}.zip", stamp(), self.session_id);
+        let name = format!(
+            "freemkv-report-{}-{}-{}.zip",
+            stamp(),
+            self.session_id,
+            random_id()?
+        );
         let path = reports.join(name);
-        let file = private_file(&path, false)?;
+        let file = new_report_file(&path)?;
+        let mut partial = PartialReport(Some(path.clone()));
         let mut zip = zip::ZipWriter::new(file);
         let opts =
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
@@ -504,6 +536,8 @@ impl BundleSource {
             }),
         )?;
         zip.finish().context("Could not finish report ZIP")?;
+        check()?;
+        partial.0 = None;
         let receipt_key = match artifact_manifest.as_ref().and_then(|a| a["kind"].as_str()) {
             Some("dump") => "report.sent_dump",
             Some("backup") => "report.sent_backup",
@@ -595,6 +629,58 @@ mod tests {
         assert_eq!(manifest["artifact"]["kind"], "dump");
         assert_eq!(manifest["artifact"]["bytes"], 14);
         drop(zip);
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn failed_attachment_copy_does_not_leave_a_partial_zip() {
+        let dir =
+            std::env::temp_dir().join(format!("freemkv-support-partial-{}", random_id().unwrap()));
+        let journal = Journal::open_at(dir.clone()).unwrap();
+        let dump = dir.join("dump.bin");
+        fs::write(&dump, b"original").unwrap();
+        let artifact = ReportArtifact::pending(dump.clone(), "dump")
+            .capture("device", "Drive", "operation")
+            .unwrap();
+        let source = journal.source().with_artifact(artifact);
+        fs::write(&dump, b"modified").unwrap();
+        assert!(source.bundle(Scope::Session).is_err());
+        assert_eq!(
+            fs::read_dir(dir.join("reports")).unwrap().count(),
+            0,
+            "failed artifact verification must remove its incomplete report ZIP"
+        );
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn cancellation_during_zip_creation_removes_only_the_partial_report() {
+        let dir =
+            std::env::temp_dir().join(format!("freemkv-support-cancel-{}", random_id().unwrap()));
+        let journal = Journal::open_at(dir.clone()).unwrap();
+        let reports = dir.join("reports");
+        fs::create_dir_all(&reports).unwrap();
+        let completed = reports.join("completed.zip");
+        fs::write(&completed, b"completed report").unwrap();
+        assert!(new_report_file(&completed).is_err());
+        assert_eq!(fs::read(&completed).unwrap(), b"completed report");
+        let source = journal.source();
+        let control = Submission::new();
+        let result = source.bundle_checked(Scope::Session, || {
+            if fs::read_dir(&reports).unwrap().count() > 1 {
+                control.cancel();
+            }
+            control.check()
+        });
+        assert!(result.is_err());
+        assert!(
+            control.cancelled(),
+            "test must cancel after the new ZIP actually exists"
+        );
+        assert_eq!(fs::read_dir(&reports).unwrap().count(), 1);
+        assert_eq!(fs::read(&completed).unwrap(), b"completed report");
         drop(journal);
         fs::remove_dir_all(dir).unwrap();
     }

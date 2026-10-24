@@ -576,3 +576,30 @@ fn confirmation_cleanup_preserves_nested_warnings_unknown_rows_and_terminal_text
     let waived = FlashSheet::of(&authorized);
     assert!(waived.saved_backup.is_none() && waived.backup_waived);
 }
+
+#[cfg(unix)]
+#[test]
+fn selected_file_metadata_rejects_fifo_and_accepts_a_regular_file() {
+    use std::ffi::CString;
+    let dir = std::env::temp_dir().join(format!("freemkv-selected-file-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let fifo = dir.join("not-a-file.bin");
+    let name = CString::new(fifo.as_os_str().as_encoded_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let requested = fifo.clone();
+    let worker = std::thread::spawn(move || {
+        tx.send(selected_file_info(&requested)).unwrap();
+    });
+    assert!(rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("a FIFO must not block the selected-file worker")
+        .is_err());
+    worker.join().unwrap();
+    let regular = dir.join("regular.bin");
+    std::fs::write(&regular, b"unrecognized firmware").unwrap();
+    let result = selected_file_info(&regular).unwrap();
+    assert_eq!(result.origin, FileOrigin::Unknown);
+    assert!(result.members.is_empty());
+    std::fs::remove_dir_all(dir).unwrap();
+}

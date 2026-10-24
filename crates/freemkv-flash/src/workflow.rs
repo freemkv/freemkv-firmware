@@ -81,11 +81,46 @@ impl FileOrigin {
     }
 }
 
+/// Origin and selectable members computed from one bounded local file read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelectedFileInfo {
+    /// Origin of the original selected bytes, never a transfer-signed copy.
+    pub origin: FileOrigin,
+    /// Selectable recovery components; empty for non-selectable backend packages.
+    pub members: Vec<String>,
+}
+
+/// Inspect one regular local file without opening devices or blocking on a FIFO.
+pub fn selected_file_info(path: &Path) -> Result<SelectedFileInfo> {
+    anyhow::ensure!(
+        std::fs::metadata(path)?.is_file(),
+        "selected firmware is not a regular file"
+    );
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options
+        .open(path)
+        .with_context(|| format!("Cannot read {}", path.display()))?;
+    anyhow::ensure!(
+        file.metadata()?.is_file(),
+        "selected firmware is not a regular file"
+    );
+    let bytes = read_capped_file(path, file)?;
+    Ok(SelectedFileInfo {
+        origin: registry::file_origin(&bytes),
+        members: crate::package::recovery_members(&bytes)?,
+    })
+}
+
 /// Inspect the original selected bytes; never classify a transfer-signed copy.
 /// This reads only a local file and does not contact a drive.
 pub fn selected_file_origin(path: &Path) -> Result<FileOrigin> {
-    let bytes = read_capped(path).with_context(|| format!("Cannot read {}", path.display()))?;
-    Ok(registry::file_origin(&bytes))
+    Ok(selected_file_info(path)?.origin)
 }
 
 /// One optical drive, discovered even when its tray is empty.
@@ -864,12 +899,15 @@ impl FlashSheet {
 /// size validation runs. The cap is far above any real firmware/backup artifact
 /// (largest Pioneer envelope is ~4.5 MiB; an MTK image 2 MiB).
 pub fn read_capped(path: &Path) -> Result<Vec<u8>> {
+    read_capped_file(path, std::fs::File::open(path)?)
+}
+
+fn read_capped_file(path: &Path, file: std::fs::File) -> Result<Vec<u8>> {
     use std::io::Read;
     const MAX_INPUT: u64 = 64 * 1024 * 1024;
     crate::diagnostics::record(format!(
         "input file: opening path={path:?} maximum_bytes={MAX_INPUT}"
     ));
-    let file = std::fs::File::open(path)?;
     let mut buf = Vec::new();
     file.take(MAX_INPUT + 1).read_to_end(&mut buf)?;
     if buf.len() as u64 > MAX_INPUT {
