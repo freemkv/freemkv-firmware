@@ -2866,7 +2866,10 @@ fn recovery_family_override_requires_fresh_explicit_confirmation() {
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
     assert!(matches!(&last_job(&app).2, Job::ExecuteRecovery(_)));
-    assert!(!app.recovery_bypass_family, "the override is consumed by one preparation");
+    assert!(
+        !app.recovery_bypass_family,
+        "the override is consumed by one preparation"
+    );
 }
 
 #[test]
