@@ -643,3 +643,182 @@ fn plugin_failure_is_not_misreported_as_an_exclusive_lock() {
     assert!(message.contains("E1006: ioreg:123 0xe00002be"));
     assert!(!message.contains("already open by another process"));
 }
+
+#[test]
+fn diagnostic_native_sense_is_preserved_without_retry() {
+    for (key, asc, ascq) in [(5, 0x24, 0), (5, 0x20, 0), (6, 0x29, 0), (2, 0x3a, 0)] {
+        let mut dev = dev_with(ScsiSense {
+            sense_key: key,
+            asc,
+            ascq,
+        });
+        let error = dev
+            .diagnostic_in(&[0x3c, 6, 0, 0, 0x30, 0, 0, 0, 32, 0], 32, 5000)
+            .unwrap_err();
+        assert_eq!(super::super::sense_triplet(&error), Some((key, asc, ascq)));
+    }
+}
+
+#[test]
+fn diagnostic_status_sense_is_preserved_only_for_check_condition() {
+    for format in [0x70, 0x71, 0x72, 0x73] {
+        let mut sense = fixed_sense(5, 0x24, 0);
+        sense[0] = format;
+        if format >= 0x72 {
+            sense[1] = 5;
+            sense[2] = 0x24;
+            sense[3] = 0;
+        }
+        let mut dev = TransportDevice {
+            inner: Box::new(StatusTransport {
+                status: CHECK_CONDITION,
+                sense,
+            }),
+            path: "test".into(),
+        };
+        let error = dev.diagnostic_in(&[0x3c], 32, 5000).unwrap_err();
+        assert_eq!(super::super::sense_triplet(&error), Some((5, 0x24, 0)));
+    }
+    for (status, sense) in [(CHECK_CONDITION, [0; 32]), (8, fixed_sense(5, 0x24, 0))] {
+        let mut dev = TransportDevice {
+            inner: Box::new(StatusTransport { status, sense }),
+            path: "test".into(),
+        };
+        let error = dev.diagnostic_in(&[0x3c], 32, 5000).unwrap_err();
+        assert_eq!(super::super::sense_triplet(&error), None);
+    }
+}
+
+#[test]
+fn protocol_detection_survives_opposite_native_probe_rejection() {
+    use crate::backend::detection::{self, Conclusion, Evidence};
+    struct ProbeTransport {
+        pioneer: bool,
+        status_reply: bool,
+        sense: Option<ScsiSense>,
+        calls: usize,
+    }
+    impl ScsiTransport for ProbeTransport {
+        fn execute(
+            &mut self,
+            cdb: &[u8],
+            direction: DataDirection,
+            buf: &mut [u8],
+            timeout: u32,
+        ) -> libfreemkv::error::Result<ScsiResult> {
+            assert_eq!(direction, DataDirection::FromDevice);
+            assert_eq!(timeout, 5000);
+            let step = self.calls;
+            self.calls += 1;
+            assert!(step < 3, "probes must not retry or issue extra commands");
+            let supported = match step {
+                0 => {
+                    assert_eq!(cdb[0], 0x12);
+                    buf[0] = 5;
+                    buf[8..16].copy_from_slice(b"ACME    ");
+                    buf[16..32].copy_from_slice(b"OPTICAL DRIVE   ");
+                    true
+                }
+                1 => {
+                    assert_eq!(cdb, pioneer_optical::cdb::vendor_identity());
+                    if self.pioneer {
+                        buf[16..24].copy_from_slice(b"SAT 8410");
+                        buf[24..28].copy_from_slice(b"ID84");
+                        buf[32..36].copy_from_slice(b"ID84");
+                    }
+                    self.pioneer
+                }
+                _ => {
+                    assert_eq!(cdb, mediatek_optical::cdb::read_memory(0x3000, 32));
+                    if !self.pioneer {
+                        buf[..16].copy_from_slice(b"MT1959 Boot BU5 ");
+                    }
+                    !self.pioneer
+                }
+            };
+            if supported {
+                return Ok(ScsiResult {
+                    status: 0,
+                    bytes_transferred: buf.len(),
+                    sense: [0; 32],
+                });
+            }
+            if self.status_reply {
+                let s = self.sense.unwrap();
+                Ok(ScsiResult {
+                    status: CHECK_CONDITION,
+                    bytes_transferred: 0,
+                    sense: fixed_sense(s.sense_key, s.asc, s.ascq),
+                })
+            } else {
+                Err(FError::ScsiError {
+                    opcode: cdb[0],
+                    status: CHECK_CONDITION,
+                    sense: self.sense,
+                })
+            }
+        }
+    }
+    for pioneer in [true, false] {
+        for status_reply in [true, false] {
+            for (sense, accepted) in [
+                (
+                    Some(ScsiSense {
+                        sense_key: 5,
+                        asc: 0x24,
+                        ascq: 0,
+                    }),
+                    true,
+                ),
+                (
+                    Some(ScsiSense {
+                        sense_key: 5,
+                        asc: 0x20,
+                        ascq: 0,
+                    }),
+                    true,
+                ),
+                (
+                    Some(ScsiSense {
+                        sense_key: 2,
+                        asc: 4,
+                        ascq: 1,
+                    }),
+                    false,
+                ),
+                (
+                    Some(ScsiSense {
+                        sense_key: 6,
+                        asc: 0x29,
+                        ascq: 0,
+                    }),
+                    false,
+                ),
+                (None, false),
+            ] {
+                if status_reply && sense.is_none() {
+                    continue;
+                }
+                let mut dev = TransportDevice {
+                    inner: Box::new(ProbeTransport {
+                        pioneer,
+                        status_reply,
+                        sense,
+                        calls: 0,
+                    }),
+                    path: "test".into(),
+                };
+                let result = detection::detect(&mut dev);
+                if accepted {
+                    match result.unwrap().conclusion {
+                        Conclusion::Detected(Evidence::Pioneer(_)) => assert!(pioneer),
+                        Conclusion::Detected(Evidence::Mediatek(_)) => assert!(!pioneer),
+                        other => panic!("wrong detection: {other:?}"),
+                    }
+                } else {
+                    assert!(result.unwrap_err().is::<detection::Unavailable>());
+                }
+            }
+        }
+    }
+}
