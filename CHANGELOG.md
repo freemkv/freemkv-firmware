@@ -23,6 +23,8 @@ Versions are independent of the freemkv ripping applications.
 - Keep backup refusals and confirmation prompts in the selected language.
   Distinguish a failed drive read from an incomplete selected Current firmware
   file, and use the same risk guidance in Flash and Recovery.
+- Give specific guidance for unsupported or malformed firmware files and existing
+  backup destinations, with clear next steps for inspection and recovery refusals.
 
 ## [0.14.5] - 2026-10-23
 

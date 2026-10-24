@@ -184,10 +184,8 @@ impl UserError {
         {
             use crate::inspection::InspectionError;
             match inspection {
-                InspectionError::UnsupportedFormat(_) => "modify.not_supported",
-                InspectionError::UnrecognizedFormat => {
-                    "domain.this_firmware_format_was_not_recognized"
-                }
+                InspectionError::UnsupportedFormat(_) => "errors.unsupported_firmware",
+                InspectionError::UnrecognizedFormat => "errors.firmware_invalid",
                 InspectionError::UnsupportedPair => {
                     "domain.these_firmware_formats_cannot_currently_be_compared"
                 }
@@ -454,11 +452,11 @@ mod tests {
         for (error, expected) in [
             (
                 InspectionError::UnsupportedFormat("Pioneer".into()),
-                "modify.not_supported",
+                "errors.unsupported_firmware",
             ),
             (
                 InspectionError::UnrecognizedFormat,
-                "domain.this_firmware_format_was_not_recognized",
+                "errors.firmware_invalid",
             ),
             (
                 InspectionError::UnsupportedPair,
@@ -473,15 +471,15 @@ mod tests {
                 "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive",
             ),
         ] {
-            let error = anyhow::Error::new(error);
+            let error = anyhow::Error::new(error).context(NoFirmwareWrite);
             let guidance = UserError::of(&error);
             assert_eq!(guidance.id, expected);
             for language in Language::ALL {
                 let message = guidance.render(language);
                 assert!(!message.is_empty());
                 assert_ne!(message, expected);
+                assert!(message.contains(localization::get(language, "errors.no_firmware_write")));
             }
-            assert!(!guidance.render(Language::En).contains("try again"));
         }
     }
 

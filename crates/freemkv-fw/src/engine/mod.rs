@@ -182,7 +182,12 @@ pub trait Engine {
 /// Select the engine for `image`'s detected chip family, or fail cleanly if the
 /// family is unidentified or not yet supported.
 pub fn detect(image: &[u8]) -> Result<Box<dyn Engine>> {
-    let chip = family::detect_chip(image)?;
+    let chip = family::detect_chip(image).map_err(|error| {
+        freemkv_flash::user_error::explain(
+            error,
+            freemkv_flash::user_error::IssueCode::UnsupportedFirmware,
+        )
+    })?;
     for_family(chip.family)
 }
 
