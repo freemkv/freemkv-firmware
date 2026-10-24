@@ -663,21 +663,10 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
         "confirmation-details-present",
         !c.technical_details.is_empty(),
     ));
-    let details_control = button(dialog, &c.details_label);
     let initial_expansions = EXPANSIONS.with(|events| events.borrow().clone());
-    eprintln!(
-        "GATE TRACE details start: expanded_by_default={} control_visible={} class={:?} text={:?} events={initial_expansions:?} controls={:?}",
-        super::confirm_flags().has(co::TDF::EXPANDED_BY_DEFAULT),
-        details_control.as_ref().is_some_and(|b| b.IsWindowVisible()),
-        details_control.as_ref().and_then(|b| b.GetClassName().ok()),
-        details_control.as_ref().and_then(|b| b.GetWindowText().ok()),
-        dialog_controls(dialog),
-    );
     disclosure.push((
         "confirmation-details-start-collapsed",
-        !super::confirm_flags().has(co::TDF::EXPANDED_BY_DEFAULT)
-            && details_control.is_some_and(|b| b.IsWindowVisible())
-            && EXPANSIONS.with(|events| events.borrow().is_empty()),
+        !super::confirm_flags().has(co::TDF::EXPANDED_BY_DEFAULT) && initial_expansions.is_empty(),
     ));
     disclosure.push((
         "confirmation-details-without-ack",
@@ -728,40 +717,16 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
     let before = state();
     let height = || dialog.GetWindowRect().ok().map(|r| r.bottom - r.top);
     let collapsed_height = height();
-    let Some(expand) = button(dialog, &c.details_label) else {
-        eprintln!("GATE TRACE details toggle: collapsed control not found");
+    let Some(point) = expando_point(dialog, c) else {
         return false;
     };
-    eprintln!(
-        "GATE TRACE details toggle before: class={:?} text={:?} visible={} bounds={:?} height={collapsed_height:?} state={before:?} controls={:?}",
-        expand.GetClassName().ok(),
-        expand.GetWindowText().ok(),
-        expand.IsWindowVisible(),
-        expand.GetWindowRect().ok().map(|r| (r.left, r.top, r.right, r.bottom)),
-        dialog_controls(dialog),
-    );
     EXPANSIONS.with(|events| events.borrow_mut().clear());
-    send_raw(&expand, 0x00f5, 0, 0); // BM_CLICK on the real expando control
+    click_expando(&point.0, point.1);
     pump(200);
     let expanded_height = height();
     let expanded = EXPANSIONS.with(|events| events.borrow().as_slice() == [true]);
     let unchanged_expanded = before.is_some() && state() == before;
-    let Some(collapse) = button(dialog, &c.hide_details_label) else {
-        let events = EXPANSIONS.with(|events| events.borrow().clone());
-        eprintln!(
-            "GATE TRACE details toggle expanded: notification={expanded} events={events:?} height={expanded_height:?} state={:?}; expanded control not found",
-            state(),
-        );
-        return false;
-    };
-    let expanded_events = EXPANSIONS.with(|events| events.borrow().clone());
-    eprintln!(
-        "GATE TRACE details toggle expanded: notification={expanded} events={expanded_events:?} height={expanded_height:?} state={:?} collapse_visible={} controls={:?}",
-        state(),
-        collapse.IsWindowVisible(),
-        dialog_controls(dialog),
-    );
-    send_raw(&collapse, 0x00f5, 0, 0);
+    click_expando(&point.0, point.1);
     pump(200);
     let collapsed = EXPANSIONS.with(|events| events.borrow().as_slice() == [true, false]);
     expanded
@@ -772,23 +737,51 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
             .zip(collapsed_height)
             .is_some_and(|(expanded, collapsed)| expanded > collapsed)
         && height() == collapsed_height
-        && button(dialog, &c.details_label).is_some_and(|b| b.IsWindowVisible())
 }
 
-fn dialog_controls(dialog: &w::HWND) -> Vec<String> {
-    let mut controls = Vec::new();
+/// The TaskDialog expando is rendered by its DirectUI surface rather than an enumerable
+/// Button HWND. In this synthetic fixture it shares a row with the standard response
+/// buttons, so hit the disclosure at the left edge of that row with real mouse messages.
+fn expando_point(dialog: &w::HWND, c: &crate::ui::Confirm) -> Option<(w::HWND, isize)> {
+    let cancel = button(dialog, &c.cancel.text)?;
+    let dialog_rect = dialog.GetWindowRect().ok()?;
+    let cancel_rect = cancel.GetWindowRect().ok()?;
+    let direct_ui = direct_ui_child(dialog)?;
+    let dpi = dialog.GetDpiForWindow().max(96);
+    let screen_point = w::POINT::with(
+        dialog_rect.left + (48 * dpi / 96) as i32,
+        (cancel_rect.top + cancel_rect.bottom) / 2,
+    );
+    let point = direct_ui.ScreenToClient(screen_point).ok()?;
+    let bounds = direct_ui.GetClientRect().ok()?;
+    if point.x < bounds.left
+        || point.x >= bounds.right
+        || point.y < bounds.top
+        || point.y >= bounds.bottom
+    {
+        return None;
+    }
+    let packed = ((point.y as u32 & 0xffff) << 16 | (point.x as u32 & 0xffff)) as isize;
+    Some((direct_ui, packed))
+}
+
+fn direct_ui_child(dialog: &w::HWND) -> Option<w::HWND> {
+    let mut found = None;
     dialog.EnumChildWindows(|h: w::HWND| {
-        controls.push(format!(
-            "id={:?} class={:?} text={:?} visible={} enabled={}",
-            h.GetDlgCtrlID().ok(),
-            h.GetClassName().ok(),
-            h.GetWindowText().ok(),
-            h.IsWindowVisible(),
-            h.IsWindowEnabled(),
-        ));
+        if h.GetClassName().is_ok_and(|name| name == "DirectUIHWND") {
+            found = Some(h);
+            return false;
+        }
         true
     });
-    controls
+    found
+}
+
+fn click_expando(direct_ui: &w::HWND, point: isize) {
+    // The TaskDialog notifies TDN_EXPANDO_BUTTON_CLICKED only after the real control is
+    // activated; BM_CLICK cannot reach this owner-drawn DirectUI child.
+    send_raw(direct_ui, 0x0201, 1, point); // WM_LBUTTONDOWN, MK_LBUTTON
+    send_raw(direct_ui, 0x0202, 0, point); // WM_LBUTTONUP
 }
 
 /// The dialog's button (or checkbox) window whose caption is `text`.
