@@ -166,7 +166,8 @@ pub struct FlashOptions {
     pub acknowledged_risk: bool,
 }
 
-/// Keep actionable guidance separate from diagnostic evidence and source chains.
+/// English guidance for diagnostics and compatibility tests. User interfaces must
+/// retain [`user_error`]'s stable IDs until rendering in the selected language.
 pub fn error_message(error: &anyhow::Error) -> String {
     crate::user_error::UserError::of(error).render(crate::localization::Language::En)
 }

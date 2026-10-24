@@ -7671,7 +7671,7 @@ result: ERR update failed during risk acknowledgement (write started: false; tem
 MEDIUM -> ClosedEmpty
 
 === Pioneer execute: pre-flash backup cannot be read ===
-result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: operation has no firmware write capability: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (2) ---

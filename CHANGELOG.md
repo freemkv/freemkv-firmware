@@ -20,6 +20,11 @@ Versions are independent of the freemkv ripping applications.
 - Use the selected language for command-option errors in both command-line tools.
 - Keep the same clear error and write-status guidance in packaging, offline
   analysis, verification refusals and interrupted desktop operations.
+- Keep backup refusals and confirmation prompts in the selected language.
+  Distinguish a failed drive read from an incomplete selected Current firmware
+  file, and use the same risk guidance in Flash and Recovery.
+- Give specific guidance for unsupported or malformed firmware files and existing
+  backup destinations, with clear next steps for inspection and recovery refusals.
 
 ## [0.14.5] - 2026-10-23
 

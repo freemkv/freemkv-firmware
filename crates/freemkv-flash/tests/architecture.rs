@@ -1735,6 +1735,20 @@ fn optical_dependencies_stay_content_pinned() {
     }
 }
 
+#[test]
+fn production_error_sinks_never_use_the_english_diagnostic_renderer() {
+    let mut uses = Vec::new();
+    for source in production_sources() {
+        for at in word_hits(&source.code, "error_message") {
+            uses.push((source.path.clone(), item_at(&items(&source.code), at)));
+        }
+    }
+    assert_eq!(
+        uses,
+        [("src/workflow.rs".to_owned(), "fn error_message".to_owned())]
+    );
+}
+
 /// Device-layer items that hold or lend a device type, as `(file, item,
 /// reason)`: a [`hiding_types`] declaration or a [`lenders`] fn (`fn <name>
 /// lends <type>`). Anything else the layer exported could carry a device type

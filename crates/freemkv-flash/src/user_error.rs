@@ -12,7 +12,7 @@ pub enum IssueCode {
     CurrentIncomplete,
     /// A selected target cannot be decoded or validated.
     FirmwareInvalid,
-    /// The selected installed firmware does not describe the connected drive.
+    /// Installed-firmware evidence does not describe the connected drive.
     CurrentMismatch,
     /// The drive changed or could not be bound to the prepared session.
     DriveChanged,
@@ -30,7 +30,7 @@ pub enum IssueCode {
     Acknowledgement,
     /// The existing firmware cannot be modified again.
     AlreadyModified,
-    /// This application cannot prepare the selected update format.
+    /// This application cannot prepare the requested update from this firmware.
     UnsupportedFirmware,
     /// The firmware's hardware differs; no display identity was available.
     IncompatibleFirmware,
@@ -48,12 +48,14 @@ pub enum IssueCode {
     TrayOpen,
     /// A loaded disc must be removed before updating.
     DiscPresent,
-    /// No supported update method exists for the connected drive.
+    /// The requested operation is unavailable for the selected drive.
     UnsupportedDrive,
     /// The operator declined before the update began.
     Cancelled,
     /// The live drive did not confirm that freemkv firmware is installed.
     FirmwareNotDetected,
+    /// Backup bypass needs an interactive answer before an update can start.
+    BackupConfirmationRequired,
 }
 
 impl IssueCode {
@@ -83,6 +85,7 @@ impl IssueCode {
             Self::UnsupportedDrive => "errors.unsupported_drive",
             Self::Cancelled => "ui.cancelled_no_firmware_was_written",
             Self::FirmwareNotDetected => "errors.drive_firmware_unconfirmed",
+            Self::BackupConfirmationRequired => "errors.backup_confirmation_required",
         }
     }
 }
@@ -162,14 +165,14 @@ impl UserError {
                     .to_string(),
             ));
             "errors.hardware_mismatch"
-        } else if let Some(code) = error.downcast_ref::<IssueCode>() {
-            code.message_id()
         } else if error.is::<crate::backend::UnsupportedFamilyOverride>() {
             "recovery.family_override_unsupported"
         } else if error.is::<CurrentFirmwareRequired>() {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
             "errors.backup_restricted"
+        } else if let Some(code) = error.downcast_ref::<IssueCode>() {
+            code.message_id()
         } else if let Some(unverified) = error.downcast_ref::<UnverifiedUpdateOutcome>() {
             match &unverified.0 {
                 crate::backend::UpdateOutcome::Completed(e) if e.temporary_firmware => {
@@ -181,10 +184,8 @@ impl UserError {
         {
             use crate::inspection::InspectionError;
             match inspection {
-                InspectionError::UnsupportedFormat(_) => "modify.not_supported",
-                InspectionError::UnrecognizedFormat => {
-                    "domain.this_firmware_format_was_not_recognized"
-                }
+                InspectionError::UnsupportedFormat(_) => "errors.unsupported_firmware",
+                InspectionError::UnrecognizedFormat => "errors.firmware_invalid",
                 InspectionError::UnsupportedPair => {
                     "domain.these_firmware_formats_cannot_currently_be_compared"
                 }
@@ -296,6 +297,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn failed_live_capture_does_not_claim_a_selected_current_file_is_incomplete() {
+        let error = UpdateFailure::before_write(
+            "current firmware capture",
+            anyhow::Error::new(CurrentFirmwareRequired {
+                source: anyhow::anyhow!("captured Kernel only")
+                    .context(IssueCode::CurrentIncomplete),
+            }),
+        );
+        let issue = UserError::of(&error);
+        assert_eq!(issue.id, "errors.current_required");
+        assert_eq!(issue.consequence, Some("errors.update_blocked"));
+        for language in Language::ALL {
+            assert!(issue
+                .render(language)
+                .contains(localization::get(language, "errors.current_required")));
+        }
+    }
+
+    #[test]
     fn every_application_issue_has_guidance_in_every_catalog() {
         use IssueCode::*;
         for code in [
@@ -322,6 +342,7 @@ mod tests {
             UnsupportedDrive,
             Cancelled,
             FirmwareNotDetected,
+            BackupConfirmationRequired,
         ] {
             for language in Language::ALL {
                 let text = localization::get(language, code.message_id());
@@ -431,11 +452,11 @@ mod tests {
         for (error, expected) in [
             (
                 InspectionError::UnsupportedFormat("Pioneer".into()),
-                "modify.not_supported",
+                "errors.unsupported_firmware",
             ),
             (
                 InspectionError::UnrecognizedFormat,
-                "domain.this_firmware_format_was_not_recognized",
+                "errors.firmware_invalid",
             ),
             (
                 InspectionError::UnsupportedPair,
@@ -450,15 +471,15 @@ mod tests {
                 "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive",
             ),
         ] {
-            let error = anyhow::Error::new(error);
+            let error = anyhow::Error::new(error).context(NoFirmwareWrite);
             let guidance = UserError::of(&error);
             assert_eq!(guidance.id, expected);
             for language in Language::ALL {
                 let message = guidance.render(language);
                 assert!(!message.is_empty());
                 assert_ne!(message, expected);
+                assert!(message.contains(localization::get(language, "errors.no_firmware_write")));
             }
-            assert!(!guidance.render(Language::En).contains("try again"));
         }
     }
 

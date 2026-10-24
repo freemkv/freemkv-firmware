@@ -1,6 +1,43 @@
 //! Unit tests for [`super`] (the generic engine: flash flow + safety gate).
 
 use super::*;
+
+#[test]
+fn backup_failure_question_retains_localized_cause_and_no_write_evidence() {
+    struct Decline;
+    impl Confirm for Decline {
+        fn confirm(&mut self, _: &crate::backend::AuthorizedPlan) -> Result<bool> {
+            panic!("no final write consent")
+        }
+        fn proceed_without_backup(&mut self, reason: &str) -> Result<bool> {
+            assert!(
+                reason.starts_with('\u{1e}'),
+                "retain stable message IDs through the confirmation boundary"
+            );
+            for language in crate::localization::Language::ALL {
+                let text = crate::localization::render(language, reason);
+                assert!(text.contains(crate::localization::get(language, "errors.backup_failed")));
+                assert!(text.contains(crate::localization::get(
+                    language,
+                    "errors.no_firmware_write"
+                )));
+                assert!(!text.contains("private status 0x1234"));
+            }
+            Ok(false)
+        }
+    }
+    let error = offer_flash_without_backup(
+        &mut Decline,
+        anyhow::anyhow!("private status 0x1234")
+            .context(crate::user_error::IssueCode::BackupFailed),
+    )
+    .err()
+    .expect("declining must refuse the update");
+    assert_eq!(
+        crate::workflow::user_error(&error).id,
+        "errors.backup_failed"
+    );
+}
 use crate::backend::{BackupFacet, DumpFacet, FileFacet};
 use crate::backends::mtk::crossflash::{decide_model, ensure_image_matches_drive};
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};

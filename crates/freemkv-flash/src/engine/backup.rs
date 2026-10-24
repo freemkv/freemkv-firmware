@@ -48,10 +48,14 @@ pub(super) fn save_validated_with_replace(
     });
     validate(bytes)?;
     if !replace && path.symlink_metadata().is_ok() {
-        bail!(
-            "backup {} already exists (existing backups are never overwritten)",
-            path.display()
-        );
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "backup {} already exists (existing backups are never overwritten)",
+                path.display()
+            ),
+        )
+        .into());
     }
     static NEXT_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let mut temp_name = path
