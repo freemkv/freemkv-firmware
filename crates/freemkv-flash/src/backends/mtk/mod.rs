@@ -900,6 +900,14 @@ impl Backend for Mtk {
 }
 
 impl FileFacet for Mtk {
+    fn family_evidence(&self, bytes: &[u8]) -> Option<(String, String)> {
+        let package = crate::mediatek_package::Package::parse(bytes).ok();
+        let image = package
+            .as_ref()
+            .map_or(bytes, |p| p.intermediate().unwrap_or(p.firmware()));
+        let evidence = offline_prefilter(image);
+        Some((evidence.family?, evidence.model.unwrap_or_default()))
+    }
     /// A tar of exactly the 0.10.x backup members is structural; a MediaTek
     /// chip signature found anywhere else is heuristic.
     fn recognize(&self, bytes: &[u8]) -> Option<crate::backend::Recognized> {

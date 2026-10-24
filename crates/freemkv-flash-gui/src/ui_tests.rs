@@ -1312,12 +1312,7 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.dispatch(Input::Confirm);
     let (label, device, job) = last_job(&app);
     assert_eq!((label.as_str(), device.as_str()), ("Recovery", "drive-a"));
-    let Job::Recovery(options) = job else {
-        panic!("expected a recovery job")
-    };
-    assert!(options.execute && options.acknowledged_risk);
-    assert!(matches!(options.current, CurrentFirmware::ReadFromDrive));
-    assert_eq!(options.input, PathBuf::from("new.tar"));
+    assert!(matches!(job, Job::ExecuteRecovery(_)));
 }
 
 // ── job lifecycle and events ──────────────────────────────────────────────
@@ -1352,14 +1347,7 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
     let (_, _, job) = last_job(&app);
-    let Job::Recovery(options) = job else {
-        panic!("Recovery job required")
-    };
-    assert!(
-        matches!(&options.current, CurrentFirmware::File(path) if path==&PathBuf::from("1.V9.tar"))
-    );
-    assert_eq!(options.current_member.as_deref(), Some("intermediate.bin"));
-    assert_eq!(options.member.as_deref(), Some("firmware.bin"));
+    assert!(matches!(job, Job::ExecuteRecovery(_)));
 }
 
 #[test]
@@ -1416,6 +1404,50 @@ fn job_lifecycle_reports_progress_then_completion() {
     assert_eq!(status.text, "Drive information complete");
     assert!(status.progress.is_none());
     assert_eq!(app.log.last().unwrap(), "✓ done.");
+}
+
+#[test]
+fn restart_is_indeterminate_and_legacy_updates_cannot_overwrite_structured_status() {
+    let mut app = one_drive();
+    app.start_job(
+        "task.recovery",
+        "drive-a".into(),
+        Job::ExecuteRecovery(workflow::PreparedRecovery::default()),
+    );
+    app.event(Event::Phase {
+        phase: "writing",
+        component: "domain.normal",
+        done: Some(100),
+        total: Some(100),
+    });
+    assert_eq!(
+        app.view().status.unwrap().progress.unwrap().fraction,
+        Some(1.0)
+    );
+    app.event(Event::Phase {
+        phase: "restarting",
+        component: "filter.firmware",
+        done: None,
+        total: None,
+    });
+    let status = app.view().status.unwrap();
+    assert!(status.text.contains("restart"));
+    assert_eq!(status.progress.unwrap().fraction, None);
+    app.event(Event::Progress {
+        label: "old transfer".into(),
+        done: 100,
+        total: 100,
+    });
+    assert!(app.view().status.unwrap().text.contains("restart"));
+    app.event(Event::Phase {
+        phase: "verifying",
+        component: "domain.normal",
+        done: Some(50),
+        total: Some(100),
+    });
+    let status = app.view().status.unwrap();
+    assert!(status.text.contains("Verifying Normal"));
+    assert_eq!(status.progress.unwrap().fraction, Some(0.5));
 }
 
 #[test]
@@ -1512,9 +1544,13 @@ fn non_info_results_are_plain_fields() {
 fn refresh_removes_disconnected_selection_and_its_consent() {
     let mut app = dry(vec![drive("ioreg:old", "ioreg:old", "Drive")]);
     app.risk_ack = true;
+    app.recovery_bypass_family = true;
+    app.prepared_recovery = Some(workflow::PreparedRecovery::default());
     app.refresh(vec![drive("ioreg:new", "ioreg:new", "Reconnected drive")]);
     assert_eq!(app.device, "ioreg:new");
     assert!(!app.risk_ack);
+    assert!(!app.recovery_bypass_family);
+    assert!(app.prepared_recovery.is_none());
     app.refresh(Vec::new());
     assert!(app.device.is_empty());
     assert!(app.view().drives.items.is_empty());
@@ -1525,9 +1561,11 @@ fn selecting_another_drive_clears_its_results() {
     let mut app = ready(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
     app.rows = vec![row("Model", "A", Group::General)];
     app.failure = Some("old".into());
+    app.recovery_bypass_family = true;
     app.dispatch(Input::SelectDrive(1));
     assert_eq!(app.device, "b");
     assert!(app.rows.is_empty() && app.failure.is_none());
+    assert!(!app.recovery_bypass_family);
     app.answer_profile(Ok(Profile::every_task()));
     app.dispatch(Input::SelectDrive(7));
     assert_eq!(app.device, "b", "an out-of-range index is ignored");
@@ -1744,6 +1782,12 @@ fn panic_diagnostic_only_names_unknown_update_state_for_executing_updates() {
         worker_panic_detail(&Job::Flash(options), detail),
         "Worker panic; update state unknown: synthetic panic"
     );
+    let read_only = worker_panic_issue(&Job::Info);
+    assert_eq!(read_only.id, "errors.unexpected");
+    assert_eq!(read_only.consequence, Some("errors.no_firmware_write"));
+    let writing = worker_panic_issue(&Job::ExecuteRecovery(workflow::PreparedRecovery::default()));
+    assert_eq!(writing.id, "errors.update_uncertain");
+    assert!(writing.consequence.is_none());
 }
 
 #[test]
@@ -2318,6 +2362,9 @@ fn recovery_plan_passes(app: &mut App) {
     assert!(matches!(job, Job::Recovery(o) if !o.execute && !o.acknowledged_risk));
     let worker = app.worker.take().unwrap();
     worker
+        .send(Msg::PreparedRecovery(workflow::PreparedRecovery::default()))
+        .unwrap();
+    worker
         .send(Msg::Event(field_event(
             "Recovery plan",
             "Two passes: temporary Kernel, then verified pristine restoration",
@@ -2619,9 +2666,7 @@ fn worker_input_failure_has_precheck_evidence_without_opening_a_drive() {
         .iter()
         .any(|msg| matches!(msg, Msg::FailureEvidence(e)
         if e.phase == "input and drive checks" && !e.write_started && !e.temporary_firmware)));
-    assert!(messages
-        .iter()
-        .any(|msg| matches!(msg, Msg::UserGuidance(_))));
+    assert!(messages.iter().any(|msg| matches!(msg, Msg::UserIssue(_))));
     assert!(messages.iter().any(|msg| matches!(msg, Msg::Done(Err(_)))));
     assert!(!messages
         .iter()
@@ -2820,9 +2865,8 @@ fn recovery_family_override_requires_fresh_explicit_confirmation() {
     assert!(app.dispatch(Input::Confirm).is_empty());
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
-    assert!(
-        matches!(&last_job(&app).2, Job::Recovery(o) if o.execute && o.acknowledged_risk && o.bypass_family_check)
-    );
+    assert!(matches!(&last_job(&app).2, Job::ExecuteRecovery(_)));
+    assert!(!app.recovery_bypass_family, "the override is consumed by one preparation");
 }
 
 #[test]

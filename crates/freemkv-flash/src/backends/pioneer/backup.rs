@@ -653,6 +653,22 @@ fn read_region_strict(
         let n = (len - image.len()).min(READ_CHUNK);
         image.extend(read_chunk(dev, off, n)?);
         progress.set(image.len());
+        crate::output::publish(crate::output::Event::Phase {
+            phase: if verb == "verifying" {
+                "verifying"
+            } else {
+                "reading"
+            },
+            component: if start == KERNEL_IMAGE_BASE {
+                "domain.kernel"
+            } else if start == NORMAL_IMAGE_BASE {
+                "domain.normal"
+            } else {
+                "filter.firmware"
+            },
+            done: Some(image.len()),
+            total: Some(len),
+        });
     }
     Ok(image)
 }

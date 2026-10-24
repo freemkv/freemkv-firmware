@@ -294,7 +294,7 @@ IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer execute: Normal for another Kernel tag, refused after the backup ===
-result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
+result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.unsupported_firmware: malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
 --- text (6) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -335,7 +335,7 @@ IN   cdb=120000006000 alloc=96 -> ok 96
 saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer execute: disc inserted after the backup ===
-result: ERR update failed during final tray check (write started: false; temporary firmware: false; completed stages: []): a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
+result: ERR update failed during final tray check (write started: false; temporary firmware: false; completed stages: []): errors.disc_present: a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 --- text (7) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
@@ -380,18 +380,41 @@ saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132f
 
 === Pioneer CLI execute: stdin is not a TTY ===
 result: OK
---- terminal (12) ---
+--- terminal (35) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   reading kernel...
+Reading Kernel: 50%
+Reading Kernel: 100%
   verifying kernel...
+Verifying Kernel: 50%
+Verifying Kernel: 100%
+Reading Normal: 100%
+Verifying Normal: 100%
+Reading Normal: 100%
+Verifying Normal: 100%
+Saving Backup
+Verifying Backup: 0%
+Verifying Backup: 100%
 backup: saved <TMP>/pioneer-cli-non-tty/backup.tar (146432 bytes)
+Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
 
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
+Writing Kernel: 46%
+Writing Kernel: 93%
+Writing Kernel: 100%
+Writing Normal: 44%
+Writing Normal: 88%
+Writing Normal: 100%
+Waiting for the drive to restart…
+Verifying Kernel: 0%
+Verifying Kernel: 100%
+Verifying Normal: 0%
+Verifying Normal: 100%
 post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
 --- scsi transcript (58) ---
 MEDIUM -> ClosedEmpty

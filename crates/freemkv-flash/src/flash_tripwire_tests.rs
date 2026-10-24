@@ -163,7 +163,7 @@ fn pioneer_confirmation_text_is_returned_not_prompted() {
     let (outcome, transcript) = drive_run(MockScsiDevice::echoing(), |d| {
         crate::engine::flash(d, &Confirming, &confirming_request(), &mut front_end)
     });
-    assert_eq!(outcome.result, "ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): flash aborted at confirmation prompt");
+    assert_eq!(outcome.result, "ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): ui.cancelled_no_firmware_was_written: flash aborted at confirmation prompt");
     assert_eq!(front_end.0, [Some(CONFIRM_TEXT.to_string())]);
     assert!(outcome.text.iter().any(|l| l == CONFIRM_TEXT));
     assert!(

@@ -1192,7 +1192,7 @@ IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 
 === MTK dry run: bad CMAC refused ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -1208,7 +1208,7 @@ IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === MTK dry run: wrong size refused ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware .bin must be exactly 2097152 bytes, got 1024
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: firmware .bin must be exactly 2097152 bytes, got 1024
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
@@ -1271,7 +1271,7 @@ MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read
 --- scsi transcript (0) ---
 
 === Pioneer dry run: header-only bundle ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
@@ -1297,7 +1297,7 @@ MSG      DRY RUN: no firmware writes or backup capture. Drive discovery may read
 --- scsi transcript (0) ---
 
 === Pioneer dry run: UD04 Normal .bin ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): malformed bundle: Normal slot carries a component whose header declares File Type "unknown", not "Normal"
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: malformed bundle: Normal slot carries a component whose header declares File Type "unknown", not "Normal"
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
@@ -1309,13 +1309,13 @@ result: ERR update failed during package and receiver checks (write started: fal
 --- scsi transcript (0) ---
 
 === Pioneer dry run: Tar kind refused ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): Pioneer planning requires an envelope or Pioneer bundle
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: Pioneer planning requires an envelope or Pioneer bundle
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (0) ---
 
 === MTK drive given a Pioneer bundle ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: a Pioneer firmware bundle cannot be flashed to this mtk19xx drive
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---

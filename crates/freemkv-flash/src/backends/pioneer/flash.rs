@@ -12,6 +12,21 @@ use crate::transport::{ScsiTransport, SharedDevice};
 #[cfg(test)]
 use anyhow::anyhow;
 use anyhow::Result;
+
+impl From<pioneer_optical::operation::IssueKind> for crate::user_error::IssueCode {
+    fn from(kind: pioneer_optical::operation::IssueKind) -> Self {
+        use pioneer_optical::operation::IssueKind;
+        match kind {
+            IssueKind::InvalidFirmware => Self::FirmwareInvalid,
+            IssueKind::UnsupportedFirmware => Self::UnsupportedFirmware,
+            IssueKind::ReceiverMismatch => Self::CurrentMismatch,
+            IssueKind::HardwareMismatch => Self::IncompatibleFirmware,
+            IssueKind::Connection => Self::Connection,
+            IssueKind::Verification | IssueKind::Update => Self::UpdateUncertain,
+            IssueKind::Unexpected => Self::Unexpected,
+        }
+    }
+}
 use pioneer_optical::drive::UpdateRuntime;
 #[cfg(test)]
 use pioneer_optical::drive::{UpdateError, UpdateOptions};
@@ -145,15 +160,18 @@ where
     E: std::error::Error + Send + Sync + CodedError + 'static,
 {
     let code = error.code();
+    let issue = crate::user_error::IssueCode::from(error.kind());
     let status = crate::crossflash::refusal_status(&error);
     let guidance = if status == crate::crossflash::CompatibilityStatus::SoftNo {
         "Intermediate transfer is required but not implemented. No firmware was written."
     } else {
         "No firmware was written. Check that the firmware package is complete and compatible with this drive"
     };
-    anyhow::Error::new(error).context(format!(
-        "Cannot prepare this firmware update [{code}]. {guidance}"
-    ))
+    anyhow::Error::new(error)
+        .context(format!(
+            "Cannot prepare this firmware update [{code}]. {guidance}"
+        ))
+        .context(issue)
 }
 
 fn execution_error(
@@ -200,6 +218,25 @@ struct Runtime<'a, 'd> {
     normal: style::Progress,
 }
 impl UpdateRuntime for Runtime<'_, '_> {
+    fn operation_progress(&mut self, progress: pioneer_optical::operation::Progress) {
+        use pioneer_optical::operation::{Component, Phase};
+        crate::output::publish(crate::output::Event::Phase {
+            phase: match progress.phase {
+                Phase::Reading => "reading",
+                Phase::Preparing => "preparing",
+                Phase::Writing => "writing",
+                Phase::Restarting => "restarting",
+                Phase::Verifying => "verifying",
+            },
+            component: match progress.component {
+                Component::Firmware => "filter.firmware",
+                Component::Kernel => "domain.kernel",
+                Component::Normal => "domain.normal",
+            },
+            done: progress.done,
+            total: progress.total,
+        });
+    }
     fn starting(&mut self, kernel: usize, normal: usize) {
         self.verification.kernel = if kernel == 0 {
             ComponentVerification::NotRequested

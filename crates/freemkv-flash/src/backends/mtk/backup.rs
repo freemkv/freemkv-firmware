@@ -303,7 +303,8 @@ fn validate_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
     }
     if let Some(model) = target_model {
         ensure_image_matches_drive(image, model)
-            .context("backup image model/family does not match the target drive")?;
+            .context("backup image model/family does not match the target drive")
+            .context(crate::user_error::IssueCode::BackupMismatch)?;
     }
     Ok(())
 }

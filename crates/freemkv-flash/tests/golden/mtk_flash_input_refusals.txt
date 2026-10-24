@@ -1,20 +1,20 @@
 
 === MTK dry run: raw drive read as input ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: this is a raw drive read (its boot page is the read-back copy), not a flashable image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's update image. This gate cannot be overridden.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> ClosedEmpty
 
 === MTK dry run: unknown boot page, validly signed ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): the image's boot page is not one any known OEM build stores — refusing to flash an image whose boot page may not start the drive
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: the image's boot page is not one any known OEM build stores — refusing to flash an image whose boot page may not start the drive
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> ClosedEmpty
 
 === MTK dry run: MT1939 image on an MT1959 drive ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations. This gate cannot be overridden.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.incompatible_firmware: This gate cannot be overridden.: image is MT1939 firmware but this drive is MT1959 silicon — refusing to flash across chip generations
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (3) ---
@@ -23,14 +23,14 @@ IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === MTK dry run: unsigned image ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
 MEDIUM -> ClosedEmpty
 
 === MTK dry run: all zeros ===
-result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
+result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: firmware image fails its AES-CMAC integrity check — refusing to flash. A mis-signed or corrupted image is rejected by the drive's boot authenticator and can brick the drive.
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---

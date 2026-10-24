@@ -21,6 +21,7 @@ use crate::backend::{
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::report::{Group, Report, Row, Slot, Span, Tone, Value};
 use crate::style;
+use crate::user_error::{explain, IssueCode};
 
 pub(crate) mod backup;
 pub mod gates;
@@ -401,6 +402,16 @@ pub fn backup_with_replace(
 
 /// Run a backend's recovery: read-only on a dry run, through the recovery
 /// write grant (execute + acknowledgement; no tray check, no backup) otherwise.
+pub(crate) fn execute_prepared_recovery(
+    dev: &mut dyn ScsiDevice,
+    plan: &dyn crate::backend::PreparedRecoveryUpdate,
+) -> Result<crate::backend::UpdateOutcome> {
+    let mut writer = gates::recovery(dev, true, true)
+        .map_err(|e| crate::backend::UpdateFailure::before_write("risk acknowledgement", e))?;
+    plan.execute(&mut writer)
+}
+
+/// Prepare and optionally execute one recovery with an engine-owned write grant.
 pub fn recover(
     dev: &mut dyn ScsiDevice,
     drive: &dyn Backend,
@@ -453,7 +464,10 @@ pub fn recover_identified(
         .recovery()
         .with_context(|| format!("{} offers no recovery", drive.descriptor().id))
         .map_err(|error| {
-            crate::backend::UpdateFailure::before_write("recovery capability checks", error)
+            crate::backend::UpdateFailure::before_write(
+                "recovery capability checks",
+                error.context(IssueCode::UnsupportedDrive),
+            )
         })?;
     if bypass_family_check && !facet.supports_family_override() {
         return Err(crate::backend::UpdateFailure::before_write(
@@ -466,7 +480,8 @@ pub fn recover_identified(
             Some(receiver) => Ok(receiver),
             None => facet
                 .identify_with_current(&mut ReadDevice::for_backend(dev, drive), current)?
-                .with_context(|| facet.unidentified()),
+                .with_context(|| facet.unidentified())
+                .map_err(|error| error.context(IssueCode::UnsupportedDrive)),
         }
     };
     if execute {
@@ -529,14 +544,24 @@ pub fn flash(
     if let Err(block) = check_safety(req.acknowledged_risk) {
         return Err(crate::backend::UpdateFailure::before_write(
             "risk acknowledgement",
-            anyhow::anyhow!("SAFETY GATE: {}", block.0),
+            anyhow::anyhow!("SAFETY GATE: {}", block.0).context(IssueCode::Acknowledgement),
         ));
     }
     facet
         .preflight(&mut ReadDevice::for_backend(dev, drive), &plan)
-        .map_err(|error| crate::backend::UpdateFailure::before_write("preflight", error))?;
-    let saved = capture_required_backup(dev, drive, facet, &plan, req, confirm)
-        .map_err(|error| crate::backend::UpdateFailure::before_write("backup", error))?;
+        .map_err(|error| {
+            crate::backend::UpdateFailure::before_write(
+                "preflight",
+                explain(error, IssueCode::Connection),
+            )
+        })?;
+    let saved =
+        capture_required_backup(dev, drive, facet, &plan, req, confirm).map_err(|error| {
+            crate::backend::UpdateFailure::before_write(
+                "backup",
+                explain(error, IssueCode::BackupFailed),
+            )
+        })?;
     let backup_line = match &saved {
         Some(s) => s.summary().to_string(),
         None => {
@@ -545,10 +570,19 @@ pub fn flash(
     };
     emit_plan(&plan.after_backup, &backup_line);
     let reader = &mut ReadDevice::for_backend(dev, drive);
+    crate::output::publish(crate::output::Event::Phase {
+        phase: "preparing",
+        component: "filter.firmware",
+        done: None,
+        total: None,
+    });
     let mut authorized = facet
         .authorize(reader, plan, saved.as_ref())
         .map_err(|error| {
-            crate::backend::UpdateFailure::before_write("compatibility checks", error)
+            crate::backend::UpdateFailure::before_write(
+                "compatibility checks",
+                explain(error, IssueCode::UnsupportedFirmware),
+            )
         })?;
     authorized.set_backup(&backup_line);
     for warning in &authorized.warnings {
@@ -565,7 +599,7 @@ pub fn flash(
     {
         return Err(crate::backend::UpdateFailure::before_write(
             "confirmation",
-            anyhow::anyhow!("flash aborted at confirmation prompt"),
+            anyhow::anyhow!("flash aborted at confirmation prompt").context(IssueCode::Cancelled),
         ));
     }
     // The last tray check sits right before the first write: the backup and
@@ -594,7 +628,10 @@ pub fn plan_flash(
     let plan = facet
         .plan(&mut ReadDevice::for_backend(dev, drive), req)
         .map_err(|error| {
-            crate::backend::UpdateFailure::before_write("package and receiver checks", error)
+            crate::backend::UpdateFailure::before_write(
+                "package and receiver checks",
+                explain(error, IssueCode::FirmwareInvalid),
+            )
         })?;
     emit_plan(&plan.notes, "");
     Ok(plan)
@@ -643,7 +680,12 @@ fn dry_run(
     emit_plan(&plan.dry_run, DRY_RUN_BACKUP);
     let tail = facet
         .preflight(&mut ReadDevice::for_backend(dev, drive), plan)
-        .map_err(|error| crate::backend::UpdateFailure::before_write("preflight", error))?;
+        .map_err(|error| {
+            crate::backend::UpdateFailure::before_write(
+                "preflight",
+                explain(error, IssueCode::Connection),
+            )
+        })?;
     emit_plan(&tail, "");
     Ok(plan
         .notes
@@ -692,7 +734,7 @@ fn required_backup_path(req: &FlashRequest) -> Result<&Path> {
     let out = req
         .predump_out
         .as_deref()
-        .context("no preflash backup path supplied")?;
+        .context(crate::user_error::IssueCode::BackupDestination)?;
     // Fail fast, before the multi-minute capture, if the destination is taken.
     if out.symlink_metadata().is_ok() {
         bail!(
@@ -780,7 +822,7 @@ fn offer_flash_without_backup(
 /// while the drive services a medium can wedge the controller mid-program. On
 /// `--execute` this aborts before any backup or write; a dry run warns.
 pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result<()> {
-    let status = dev.medium_status().context("could not check whether the tray is closed and empty; refusing before firmware writes. Check the drive connection and retry")?;
+    let status = dev.medium_status().context("could not check whether the tray is closed and empty; refusing before firmware writes. Check the drive connection and retry").map_err(|e| explain(e, IssueCode::Connection))?;
     let (condition, action) = match status {
         MediumStatus::ClosedEmpty => return Ok(()),
         MediumStatus::DiscPresent => (
@@ -790,7 +832,14 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result
         MediumStatus::TrayOpen => ("the tray is OPEN", "Close the empty tray and retry."),
     };
     if execute {
-        bail!("{condition} — refusing to flash. {action} This update pass has not started.");
+        return Err(anyhow::anyhow!(
+            "{condition} — refusing to flash. {action} This update pass has not started."
+        )
+        .context(if status == MediumStatus::DiscPresent {
+            IssueCode::DiscPresent
+        } else {
+            IssueCode::TrayOpen
+        }));
     }
     println!(
         "{}",

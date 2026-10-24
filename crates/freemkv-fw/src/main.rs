@@ -143,7 +143,10 @@ enum Command {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match freemkv_flash::cli::parse::<Cli>() {
+        Ok(cli) => cli,
+        Err(code) => return code,
+    };
     let operation = match &cli.command {
         Command::Create { .. } => "create",
         Command::Verify { .. } => "verify",
@@ -202,7 +205,7 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("{} {e:#}", style::red("error:"));
+            freemkv_flash::cli::print_error(&e);
             ExitCode::FAILURE
         }
     }
