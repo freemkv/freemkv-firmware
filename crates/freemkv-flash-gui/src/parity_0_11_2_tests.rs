@@ -266,6 +266,7 @@ mod v0_11_2 {
 
 const PIONEER: &str = "disk4";
 const OTHER: &str = "disk5";
+const CURRENT_RISK_ACK: &str = "I understand the risk and want to continue.";
 
 /// The profile the real Pioneer backend reports for a mock BDR-UD04 (SAT
 /// platform): every task, Recovery included.
@@ -356,6 +357,27 @@ fn press(app: &mut App, text: &str) -> Vec<Effect> {
         .unwrap_or_else(|| panic!("no button {text}: {:?}", app.view().panel));
     assert!(button.enabled, "{text} is disabled");
     app.dispatch(button.input)
+}
+
+/// Selected firmware is inspected asynchronously before Flash/Recovery enables.
+/// Let that production worker finish before exercising the shell action.
+fn wait_enabled(app: &mut App, text: &str) {
+    let start = std::time::Instant::now();
+    loop {
+        app.poll();
+        if panel_buttons(app)
+            .iter()
+            .any(|button| button.text == text && button.enabled)
+        {
+            return;
+        }
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(10),
+            "{text} did not become enabled: {:?}",
+            app.view().panel
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
 }
 
 fn open_filter(effects: &[Effect]) -> Option<FileFilter> {
@@ -516,6 +538,7 @@ fn flash_now_sends_the_0_11_2_options_after_an_unticked_confirmation() {
     app.dispatch(Input::SelectTask(Task::Flash));
     let input = PathBuf::from("/fw/BDR-UD04_1.14.firmware.tar");
     app.dispatch(Input::Chosen(Pick::FlashFirmware, input.clone()));
+    wait_enabled(&mut app, "Flash now");
     press(&mut app, "Flash now");
     finish(&mut app, Ok(()));
     assert_eq!(sent(&app), v0_11_2::flash_now(PIONEER, &input));
@@ -529,12 +552,17 @@ fn flash_now_sends_the_0_11_2_options_after_an_unticked_confirmation() {
     let sheet = app.view().confirm.expect("the flash sheet");
     assert_eq!(
         (sheet.title.as_str(), sheet.danger.as_str()),
-        ("Confirm flash", v0_11_2::DANGER)
+        (
+            "Update this drive?",
+            "Updating firmware can permanently disable this drive. Keep it connected and do not turn off the computer until the update finishes."
+        )
     );
+    assert_ne!(sheet.danger, v0_11_2::DANGER);
     assert_eq!(
         (sheet.ack_text.as_str(), sheet.ack_checked),
-        (v0_11_2::RISK_ACK, false)
+        (CURRENT_RISK_ACK, false)
     );
+    assert_ne!(sheet.ack_text, v0_11_2::RISK_ACK);
     assert!(!sheet.confirm.enabled);
     app.dispatch(Input::Confirm);
     assert!(answer.try_recv().is_err(), "no tick, no write");
@@ -551,6 +579,7 @@ fn flash_dry_run_is_the_read_only_plan_with_0_11_2_preview_options() {
     app.dispatch(Input::SelectTask(Task::Flash));
     let input = PathBuf::from("/fw/BDR-UD04_1.14.firmware.tar");
     app.dispatch(Input::Chosen(Pick::FlashFirmware, input.clone()));
+    wait_enabled(&mut app, "Flash now");
     press(&mut app, "Flash now");
     let plan = sent(&app);
     let old = v0_11_2::preview(PIONEER, &input);
@@ -571,6 +600,7 @@ fn recover(app: &mut App, input: &Path) {
         ("Firmware or backup", &["tar"]),
     );
     app.dispatch(Input::Chosen(Pick::RecoveryInput, input.into()));
+    wait_enabled(app, "Recover");
     let before = jobs(app);
     press(app, "Recover");
     assert_eq!(
@@ -596,7 +626,7 @@ fn recover(app: &mut App, input: &Path) {
     assert_eq!(sheet.warnings, ["Recovery skips automatic backups and some compatibility checks. Incompatible firmware can make the drive unusable."]);
     assert_eq!(
         (sheet.ack_text.as_str(), sheet.ack_checked),
-        (v0_11_2::RISK_ACK, false)
+        (CURRENT_RISK_ACK, false)
     );
     app.dispatch(Input::Confirm);
     assert_eq!(jobs(app), before + 1, "no tick, no recovery write");
