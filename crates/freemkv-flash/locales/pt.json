@@ -1,6 +1,7 @@
 {
   "language_name": "Português",
   "messages": {
+    "errors.backup_partial": "Só foi possível ler parte do firmware. O ficheiro guardado está incompleto: não o use para restaurar a unidade. Não foi escrito firmware. Verifique a ligação e crie uma nova cópia de segurança completa.",
     "settings.language": "Idioma",
     "errors.operation_failed": "A operação falhou.",
     "errors.update_not_started": "Foi tentado o envio do comando para entrar no modo de atualização, mas não foram enviados dados do firmware. A unidade poderá estar em modo de atualização; mantenha-a ligada e verifique-a antes de tentar novamente.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Resultado incerto - o alvo não confirmado",
     "status.target_verified": "Total - Objetivo Verificado",
     "status.readback_limited": "Avaliação de regras limitada - readback verification limited",
-    "errors.update_uncertain": "A atualização do firmware não terminou.Mantenha o disco óptico conectado e inspecione antes de retirar.Salve o log de diagnóstico se você precisar de ajuda.",
+    "errors.update_uncertain": "Não foi possível confirmar o resultado final da atualização. O firmware pode ter sido escrito. Mantenha a unidade ligada e guarde um relatório de diagnóstico antes de tentar outra atualização.",
     "modify.firmware_image": "Imagem de firmware",
     "modify.boot_settings": "Instalações de barco",
     "modify.applied_each_time_the_drive_starts": "Aplique a cada vez que a unidade óptica começa.",

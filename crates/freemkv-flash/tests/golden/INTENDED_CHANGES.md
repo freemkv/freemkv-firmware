@@ -10591,9 +10591,27 @@ reason: R8, M-ENC, M-LIFECYCLE
 ### MTK dump: firmware read fails at 0x100000
 reason: R8, M-ENC, M-LIFECYCLE
 ```diff
+---- text (111) ---
++--- text (106) ---
+-Unreadable ranges filled with FF: [
+-    (
+-        0x100000,
+-        0x100200,
+-    ),
+-]
 -backup sha256: 39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
++errors.backup_partial
 +backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
+---- events (115) ---
++--- events (110) ---
+-MSG      Unreadable ranges filled with FF: [
+-MSG          (
+-MSG              0x100000,
+-MSG              0x100200,
+-MSG          ),
+-MSG      ]
 -MSG      backup sha256: 39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
++MSG      errors.backup_partial
 +MSG      backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 -saved file: 2097152 bytes sha256=39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
 +saved file: 2097152 bytes sha256=1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
@@ -32424,6 +32442,10 @@ reason: P4, P5, PRECHECK
 ```diff
 -result: ERR backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update; aborting flash: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 +result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
+-  Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
++errors.backup_partial
+-MSG        Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
++MSG      errors.backup_partial
 -saved pre-flash backup: 71680 bytes sha256=1ca0f8fd812313de0e9f42418df7eb1d378763bb0629b9b7dc25bc61799c43f2
 +saved pre-flash backup: 71680 bytes sha256=262d81dcf0bbe4661d5a92cbd3018fcdf8a833a03c02ee4311016ea47d661aeb
 ```

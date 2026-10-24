@@ -1,6 +1,7 @@
 {
   "language_name": "繁體中文",
   "messages": {
+    "errors.backup_partial": "只能讀取部分韌體。儲存的檔案不完整，不得用於還原光碟機。未寫入任何韌體。請檢查連接並重新建立完整備份。",
     "settings.language": "語言",
     "errors.operation_failed": "操作失敗。",
     "errors.update_not_started": "已嘗試傳送進入更新模式的命令，但未傳送任何韌體資料。光碟機可能處於更新模式；請保持連線並檢查其狀態，然後再重試。",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "結果不確定 - 目標初創未確認",
     "status.target_verified": "完整 - 目標驗證",
     "status.readback_limited": "目標開始 - readback 驗證限制",
-    "errors.update_uncertain": "硬體更新未完成. 保持光學驅動器連線並在退出之前檢查它. 如果需要幫助,請儲存診斷日誌。",
+    "errors.update_uncertain": "無法確認韌體更新的最終結果。韌體可能已被寫入。請保持光碟機連接，並在嘗試另一次更新前儲存診斷報告。",
     "modify.firmware_image": "Firmware 影象",
     "modify.boot_settings": "船上設定",
     "modify.applied_each_time_the_drive_starts": "每次啟動光學驅動時都使用。",

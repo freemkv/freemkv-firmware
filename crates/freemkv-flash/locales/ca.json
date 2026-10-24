@@ -1,6 +1,7 @@
 {
   "language_name": "Català",
   "messages": {
+    "errors.backup_partial": "Només s’ha pogut llegir una part del microprogramari. El fitxer resultant és incomplet: no l’utilitzeu per restaurar la unitat. No s’ha escrit cap microprogramari. Comproveu la connexió i feu una còpia de seguretat completa nova.",
     "settings.language": "Idioma",
     "errors.operation_failed": "L’operació ha fallat.",
     "errors.update_not_started": "S’ha intentat enviar l’ordre d’entrada al mode d’actualització, però no s’ha enviat cap dada del microprogramari. La unitat pot estar en mode d’actualització; manteniu-la connectada i examineu-la abans de tornar-ho a provar.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "resultats incerts - la start-up objectiu no confirmada",
     "status.target_verified": "Complet - Objectiu verificat",
     "status.readback_limited": "Objectiu iniciat - verificació de readback limitada",
-    "errors.update_uncertain": "L'actualització del firmware no s'ha acabat.Mantenir el disc òptic connectat i inspeccionar-lo abans de retirar-se.Save the diagnostic log if you need help.",
+    "errors.update_uncertain": "No s’ha pogut confirmar el resultat final de l’actualització. És possible que s’hagi escrit microprogramari. Manteniu la unitat connectada i deseu un informe de diagnòstic abans de provar una altra actualització.",
     "modify.firmware_image": "Imatge de firmware",
     "modify.boot_settings": "Instal·lació de vaixells",
     "modify.applied_each_time_the_drive_starts": "Aplica't cada vegada que comença el motor òptic.",

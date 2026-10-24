@@ -1,6 +1,7 @@
 {
   "language_name": "Nederlands",
   "messages": {
+    "errors.backup_partial": "Slechts een deel van de firmware kon worden gelezen. Het opgeslagen bestand is onvolledig: gebruik het niet om het station te herstellen. Er is geen firmware geschreven. Controleer de verbinding en maak een nieuwe volledige back-up.",
     "settings.language": "Taal",
     "errors.operation_failed": "De bewerking is mislukt.",
     "errors.update_not_started": "Er is geprobeerd de opdracht te verzenden om de updatemodus te openen, maar er zijn geen firmwaregegevens verzonden. Het station kan in de updatemodus staan; laat het aangesloten en controleer het voordat u het opnieuw probeert.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Resultaten onzeker - doelstart niet bevestigd",
     "status.target_verified": "complete - doelgerichte verificatie",
     "status.readback_limited": "Goed begonnen – readback verification limited",
-    "errors.update_uncertain": "De firmware-update is niet voltooid. Houd de optische schijf verbonden en inspecteer het voordat het teruggaat. Save the diagnostic log if you need help.",
+    "errors.update_uncertain": "Het eindresultaat van de firmware-update kon niet worden bevestigd. Er is mogelijk firmware geschreven. Laat het station aangesloten en sla een diagnoserapport op voordat u nog een update probeert.",
     "modify.firmware_image": "Firmware afbeelding",
     "modify.boot_settings": "Boot Settings",
     "modify.applied_each_time_the_drive_starts": "Gebruik elke keer dat de optische drive begint.",

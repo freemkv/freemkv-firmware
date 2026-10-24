@@ -1,6 +1,7 @@
 {
   "language_name": "Italiano",
   "messages": {
+    "errors.backup_partial": "È stato possibile leggere solo parte del firmware. Il file salvato è incompleto: non usarlo per ripristinare l’unità. Nessun firmware è stato scritto. Controlla il collegamento e crea un nuovo backup completo.",
     "settings.language": "Lingua",
     "errors.operation_failed": "L’operazione non è riuscita.",
     "errors.update_not_started": "È stato tentato il comando per entrare in modalità di aggiornamento, ma non sono stati inviati dati del firmware. L’unità potrebbe essere in modalità di aggiornamento; lasciala collegata e controllala prima di riprovare.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Risultati incerti - startup target non confermato",
     "status.target_verified": "Trattamento - obiettivo verificato",
     "status.readback_limited": "Obiettivo iniziato - verifica di readback limitata",
-    "errors.update_uncertain": "L'aggiornamento del firmware non è finito.Mantenere il disco ottico connesso e controllarlo prima di ritirarsi.Salva il log diagnostico se hai bisogno di aiuto.",
+    "errors.update_uncertain": "Non è stato possibile confermare il risultato finale dell’aggiornamento. Il firmware potrebbe essere stato scritto. Tieni l’unità collegata e salva un rapporto diagnostico prima di tentare un altro aggiornamento.",
     "modify.firmware_image": "Immagine firmware",
     "modify.boot_settings": "Settimenti di Boot",
     "modify.applied_each_time_the_drive_starts": "Applicare ogni volta che si avvia la guida ottica.",

@@ -2637,7 +2637,7 @@ fn prepare_failure_does_not_claim_partial_firmware_in_gui() {
         .unwrap();
     app.poll();
     let status = crate::localization::english(&app.status);
-    assert!(status.contains("no firmware payload was sent"));
+    assert!(status.contains("no firmware data was sent"));
     assert!(!status.contains("firmware may be incomplete"));
     assert_eq!(
         failure_json(app.failure_evidence.as_ref())["payload_bytes_accepted"],

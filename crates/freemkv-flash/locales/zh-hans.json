@@ -1,6 +1,7 @@
 {
   "language_name": "简体中文",
   "messages": {
+    "errors.backup_partial": "只能读取部分固件。保存的文件不完整，不得用于恢复光驱。未写入任何固件。请检查连接并重新创建完整备份。",
     "settings.language": "语言",
     "errors.operation_failed": "操作失败。",
     "errors.update_not_started": "已尝试发送进入更新模式的命令，但未发送任何固件数据。光驱可能处于更新模式；请保持连接并检查其状态，然后再重试。",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "结果不确定 - 目标初创未确认",
     "status.target_verified": "完整 - 目标验证",
     "status.readback_limited": "目标开始 - readback 验证限制",
-    "errors.update_uncertain": "硬件更新未完成. 保持光学驱动器连接并在退出之前检查它. 如果需要帮助,请保存诊断日志。",
+    "errors.update_uncertain": "无法确认固件更新的最终结果。固件可能已被写入。请保持光驱连接，并在尝试另一次更新前保存诊断报告。",
     "modify.firmware_image": "Firmware 图像",
     "modify.boot_settings": "船上设置",
     "modify.applied_each_time_the_drive_starts": "每次启动光学驱动时都使用。",

@@ -475,12 +475,10 @@ fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
             construct_signed_candidate(&kernel, &normal, &envelope_id, &revision)
         }
         Err(error) => {
-            eprintln!(
-                "  {}",
-                crate::style::amber(&format!(
-                    "Normal region not recovered ({error:#}); saving Kernel only"
-                ))
-            );
+            crate::diagnostics::record(format!(
+                "Normal region not recovered ({error:#}); saving Kernel only"
+            ));
+            crate::output::guidance("errors.backup_partial");
             let envelope_id = embedded_envelope_id(&inquiry, &kernel, &[])?;
             let kernel_env = build_kernel_envelope(&kernel, &envelope_id)?;
             assemble_tar(&[kernel_env])
@@ -728,15 +726,13 @@ fn read_region_deep_gaps(
     }
     if !gaps.is_empty() {
         let total: usize = gaps.iter().map(|(_, l)| l).sum();
-        eprintln!(
-            "  {}",
-            crate::style::amber(&format!(
-                "recover: {total} byte(s) across {} gap(s) could not be read and were zero-filled",
-                gaps.len()
-            ))
-        );
+        crate::diagnostics::record(format!(
+            "recover: {total} byte(s) across {} gap(s) could not be read and were zero-filled",
+            gaps.len()
+        ));
+        crate::output::guidance("errors.backup_partial");
         for (off, l) in &gaps {
-            eprintln!("    gap {off:#x}..{:#x}", off + l);
+            crate::diagnostics::record(format!("gap {off:#x}..{:#x}", off + l));
         }
     }
     Ok((image, gaps))

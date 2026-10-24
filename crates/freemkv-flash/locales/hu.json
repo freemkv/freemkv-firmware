@@ -1,6 +1,7 @@
 {
   "language_name": "Magyar",
   "messages": {
+    "errors.backup_partial": "Csak a firmware egy részét sikerült kiolvasni. A mentett fájl hiányos: ne használja a meghajtó visszaállítására. Nem történt firmware-írás. Ellenőrizze a kapcsolatot, és készítsen új, teljes biztonsági mentést.",
     "settings.language": "Nyelv",
     "errors.operation_failed": "A művelet nem sikerült.",
     "errors.update_not_started": "Megkíséreltük a frissítési módba léptető parancs elküldését, de nem küldtünk firmware-adatokat. A meghajtó frissítési módban lehet; tartsa csatlakoztatva, és vizsgálja meg, mielőtt újra próbálkozna.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "eredmény bizonytalan - cél startup nem erősített",
     "status.target_verified": "Teljes – cél ellenőrzés",
     "status.readback_limited": "Cél kezdődött – visszajelzés ellenőrzés korlátozott",
-    "errors.update_uncertain": "A firmware frissítés nem ért véget. tartsa az optikai lemezt csatlakoztatva, és ellenőrizze, mielőtt visszavonul. mentse a diagnosztikai naplót, ha segítségre van szüksége.",
+    "errors.update_uncertain": "A frissítés végső eredményét nem sikerült megerősíteni. Lehetséges, hogy firmware íródott a meghajtóra. Hagyja csatlakoztatva a meghajtót, és mentsen diagnosztikai jelentést, mielőtt újabb frissítést kísérel meg.",
     "modify.firmware_image": "Firmware képek",
     "modify.boot_settings": "Boot beállítások",
     "modify.applied_each_time_the_drive_starts": "Minden alkalommal, amikor az optikai hajtás elindul.",

@@ -1,6 +1,7 @@
 {
   "language_name": "Norsk",
   "messages": {
+    "errors.backup_partial": "Bare en del av fastvaren kunne leses. Den lagrede filen er ufullstendig: ikke bruk den til å gjenopprette stasjonen. Ingen fastvare ble skrevet. Kontroller tilkoblingen og lag en ny fullstendig sikkerhetskopi.",
     "settings.language": "Språk",
     "errors.operation_failed": "Operasjonen mislyktes.",
     "errors.update_not_started": "Kommandoen for å gå inn i oppdateringsmodus ble forsøkt sendt, men ingen fastvaredata ble sendt. Stasjonen kan være i oppdateringsmodus; hold den tilkoblet og undersøk den før du prøver igjen.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Utfall usikkert – målstart ikke bekreftet",
     "status.target_verified": "Fullstendig - mål verifisert",
     "status.readback_limited": "Målstart – begrenset verifisering av tilbakemelding",
-    "errors.update_uncertain": "Firmware-oppdateringen er ikke ferdig. Hold den optiske enheten koblet til og sjekk den før tilbakemelding. Spare diagnostisk logg hvis du trenger hjelp.",
+    "errors.update_uncertain": "Det endelige resultatet av fastvareoppdateringen kunne ikke bekreftes. Fastvare kan ha blitt skrevet. La stasjonen være tilkoblet, og lagre en diagnoserapport før du prøver en ny oppdatering.",
     "modify.firmware_image": "Firmware bilde",
     "modify.boot_settings": "Boot innstillinger",
     "modify.applied_each_time_the_drive_starts": "Brukes hver gang det optiske drevet starter.",

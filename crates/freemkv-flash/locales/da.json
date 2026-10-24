@@ -1,6 +1,7 @@
 {
   "language_name": "Dansk",
   "messages": {
+    "errors.backup_partial": "Kun en del af firmwaren kunne læses. Den gemte fil er ufuldstændig: brug den ikke til at gendanne drevet. Ingen firmware blev skrevet. Kontrollér forbindelsen, og lav en ny komplet sikkerhedskopi.",
     "settings.language": "Sprog",
     "errors.operation_failed": "Handlingen mislykkedes.",
     "errors.update_not_started": "Kommandoen til at gå i opdateringstilstand blev forsøgt, men ingen firmwaredata blev sendt. Drevet kan være i opdateringstilstand; hold det tilsluttet, og undersøg det, før du prøver igen.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Resultatet er usikker – målstart ikke bekræftet",
     "status.target_verified": "Målsætninger – målbeskyttelse",
     "status.readback_limited": "Målstart – begrænset tilbagevenden verifikation",
-    "errors.update_uncertain": "Firmware-opdateringen er ikke færdig. Hold optikken forbundet og inspicere den før tilbagetrækning. Spare diagnostisk log, hvis du har brug for hjælp.",
+    "errors.update_uncertain": "Det endelige resultat af opdateringen kunne ikke bekræftes. Firmware kan være blevet skrevet. Lad drevet være tilsluttet, og gem en diagnoserapport, før du forsøger en ny opdatering.",
     "modify.firmware_image": "Firmware billede",
     "modify.boot_settings": "Boet indstillinger",
     "modify.applied_each_time_the_drive_starts": "Anvendes hver gang den optiske drive starter.",

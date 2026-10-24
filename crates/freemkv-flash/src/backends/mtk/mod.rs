@@ -1038,7 +1038,8 @@ impl DumpFacet for Mtk {
         if !gaps.is_empty() {
             let message = format!("Unreadable ranges filled with FF: {gaps:#x?}");
             crate::output::field("Dump gaps", &message);
-            eprintln!("{message}");
+            crate::diagnostics::record(message);
+            crate::output::guidance("errors.backup_partial");
         }
         Ok(image)
     }

@@ -184,7 +184,7 @@ fn recovery_entry_policy_continues_once_while_flash_stops_before_streaming() {
             assert!(!diagnostic.contains("write started: true"));
             let guidance =
                 crate::user_error::UserError::of(&error).render(crate::localization::Language::En);
-            assert!(guidance.contains("no firmware payload was sent"));
+            assert!(guidance.contains("no firmware data was sent"));
             assert!(!guidance.contains("firmware may be incomplete"));
             assert!(dev.writes.is_empty());
         }

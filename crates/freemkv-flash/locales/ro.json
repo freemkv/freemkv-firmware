@@ -1,6 +1,7 @@
 {
   "language_name": "Română",
   "messages": {
+    "errors.backup_partial": "A putut fi citită doar o parte din firmware. Fișierul salvat este incomplet: nu îl folosiți pentru restaurarea unității. Nu s-a scris firmware. Verificați conexiunea și creați o nouă copie de siguranță completă.",
     "settings.language": "Limbă",
     "errors.operation_failed": "Operația a eșuat.",
     "errors.update_not_started": "S-a încercat trimiterea comenzii de intrare în modul de actualizare, dar nu s-au trimis date de firmware. Unitatea poate fi în modul de actualizare; păstrați-o conectată și verificați-o înainte de a încerca din nou.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "rezultatul neclar – start-up-ul țintă nu a fost confirmat",
     "status.target_verified": "Verificare - obiectivul verificat",
     "status.readback_limited": "Obiectivul a început – verificarea readback limitată",
-    "errors.update_uncertain": "Actualizarea firmware-ului nu s-a terminat. mențineți discul optic conectat și verificați-l înainte de retragere. salvați jurnalul de diagnostic dacă aveți nevoie de ajutor.",
+    "errors.update_uncertain": "Rezultatul final al actualizării nu a putut fi confirmat. Este posibil ca firmware-ul să fi fost scris. Păstrați unitatea conectată și salvați un raport de diagnosticare înainte de a încerca altă actualizare.",
     "modify.firmware_image": "Imaginea firmware",
     "modify.boot_settings": "Setări de navă",
     "modify.applied_each_time_the_drive_starts": "Se aplică de fiecare dată când începe motorul optic.",

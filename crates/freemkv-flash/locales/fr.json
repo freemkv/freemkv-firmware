@@ -1,6 +1,7 @@
 {
   "language_name": "Français",
   "messages": {
+    "errors.backup_partial": "Seule une partie du micrologiciel a pu être lue. Le fichier enregistré est incomplet : ne l’utilisez pas pour restaurer le lecteur. Aucun micrologiciel n’a été écrit. Vérifiez la connexion et créez une nouvelle sauvegarde complète.",
     "settings.language": "Langue",
     "errors.operation_failed": "L’opération a échoué.",
     "errors.update_not_started": "La commande d’entrée en mode de mise à jour a été tentée, mais aucune donnée du micrologiciel n’a été envoyée. Le lecteur peut être en mode de mise à jour ; laissez-le connecté et vérifiez son état avant de réessayer.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Résultat incertain - start-up cible non confirmé",
     "status.target_verified": "Célèbre - objectif vérifié",
     "status.readback_limited": "Objectif commencé - Vérification de reprise limitée",
-    "errors.update_uncertain": "La mise à jour du firmware n'a pas été terminée. gardez le lecteur optique connecté et vérifiez-le avant de retraire. Sauvez le journal de diagnostic si vous avez besoin d'aide.",
+    "errors.update_uncertain": "Le résultat final de la mise à jour n’a pas pu être confirmé. Le micrologiciel a peut-être été écrit. Laissez le lecteur connecté et enregistrez un rapport de diagnostic avant de tenter une autre mise à jour.",
     "modify.firmware_image": "Images de firmware",
     "modify.boot_settings": "Boîte de réglages",
     "modify.applied_each_time_the_drive_starts": "Appliquer chaque fois que le moteur optique commence.",

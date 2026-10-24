@@ -1,6 +1,7 @@
 {
   "language_name": "Polski",
   "messages": {
+    "errors.backup_partial": "Udało się odczytać tylko część oprogramowania napędu. Zapisany plik jest niepełny: nie używaj go do przywracania napędu. Nie zapisano oprogramowania w napędzie. Sprawdź połączenie i utwórz nową pełną kopię zapasową.",
     "settings.language": "Język",
     "errors.operation_failed": "Operacja nie powiodła się.",
     "errors.update_not_started": "Podjęto próbę wysłania polecenia wejścia w tryb aktualizacji, ale nie wysłano żadnych danych oprogramowania układowego. Napęd może być w trybie aktualizacji; pozostaw go podłączonego i sprawdź przed ponowną próbą.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Wynik niepewny – start-up nie potwierdzony",
     "status.target_verified": "Zakończony - sprawdzony cel",
     "status.readback_limited": "Początek celów – ograniczona weryfikacja readback",
-    "errors.update_uncertain": "Aktualizacja oprogramowania nie zakończyła się. utrzymaj dysk optyczny podłączony i sprawdź go przed wycofaniem.",
+    "errors.update_uncertain": "Nie udało się potwierdzić końcowego wyniku aktualizacji. Oprogramowanie napędu mogło zostać zapisane. Pozostaw napęd podłączony i zapisz raport diagnostyczny przed próbą kolejnej aktualizacji.",
     "modify.firmware_image": "Zdjęcie firmware",
     "modify.boot_settings": "Ustawienia łodzi",
     "modify.applied_each_time_the_drive_starts": "Zastosuj je za każdym razem, gdy zaczyna się napęd optyczny.",

@@ -7,14 +7,14 @@ Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   reading kernel...
   verifying kernel...
-  Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
+errors.backup_partial
 --- events (6) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
 MSG        reading kernel...
 MSG        verifying kernel...
-MSG        Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
+MSG      errors.backup_partial
 --- scsi transcript (16) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36

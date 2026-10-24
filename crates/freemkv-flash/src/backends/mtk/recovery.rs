@@ -108,6 +108,12 @@ impl RecoveryFacet for Mtk {
         let bound = receiver
             .state::<RecoveryReceiver>()
             .map_err(|error| UpdateFailure::before_write("recovery preparation", error))?;
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "preparing",
+            component: "filter.firmware",
+            done: None,
+            total: None,
+        });
         let plan = bound.receiver.prepare(target).map_err(|e| {
             use mediatek_optical::CodedError;
             let issue = crate::user_error::IssueCode::from(e.kind());

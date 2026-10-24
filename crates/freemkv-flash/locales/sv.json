@@ -1,6 +1,7 @@
 {
   "language_name": "Svenska",
   "messages": {
+    "errors.backup_partial": "Bara en del av firmwaren kunde läsas. Den sparade filen är ofullständig: använd den inte för att återställa enheten. Ingen firmware skrevs. Kontrollera anslutningen och skapa en ny fullständig säkerhetskopia.",
     "settings.language": "Språk",
     "errors.operation_failed": "Åtgärden misslyckades.",
     "errors.update_not_started": "Ett försök gjordes att skicka kommandot för att gå in i uppdateringsläge, men inga firmwaredata skickades. Enheten kan vara i uppdateringsläge; låt den vara ansluten och kontrollera den innan du försöker igen.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Resultat osäker – målstart inte bekräftat",
     "status.target_verified": "Fullständig - målkontroll",
     "status.readback_limited": "Målstart – readback verification limited",
-    "errors.update_uncertain": "Firmware-uppdateringen är inte klar.Håll den optiska disken ansluten och kontrollera den innan avgången.Spar diagnostisk logg om du behöver hjälp.",
+    "errors.update_uncertain": "Det slutliga resultatet av uppdateringen kunde inte bekräftas. Firmware kan ha skrivits. Låt enheten vara ansluten och spara en diagnostikrapport innan du försöker uppdatera igen.",
     "modify.firmware_image": "Firmware bild",
     "modify.boot_settings": "Boot inställningar",
     "modify.applied_each_time_the_drive_starts": "Applicera varje gång den optiska strömmen startar.",

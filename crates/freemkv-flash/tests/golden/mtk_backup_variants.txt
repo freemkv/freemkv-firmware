@@ -5140,7 +5140,7 @@ saved file: <not created>
 
 === MTK dump: firmware read fails at 0x100000 ===
 result: OK
---- text (111) ---
+--- text (106) ---
 Backing up BD-RE BU40N → <TMP>/mtk-backup/dump_read_fail.bak
 reading drive memory: 0%
 reading drive memory: 1%
@@ -5243,16 +5243,11 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-Unreadable ranges filled with FF: [
-    (
-        0x100000,
-        0x100200,
-    ),
-]
+errors.backup_partial
 backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- events (115) ---
+--- events (110) ---
 MSG      Backing up BD-RE BU40N → <TMP>/mtk-backup/dump_read_fail.bak
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
@@ -5362,12 +5357,7 @@ FIELD    Dump gaps = Unreadable ranges filled with FF: [
         0x100200,
     ),
 ]
-MSG      Unreadable ranges filled with FF: [
-MSG          (
-MSG              0x100000,
-MSG              0x100200,
-MSG          ),
-MSG      ]
+MSG      errors.backup_partial
 MSG      backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 FIELD    Saved to = <TMP>/mtk-backup/dump_read_fail.bak
 MSG      wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).

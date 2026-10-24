@@ -1,6 +1,7 @@
 {
   "language_name": "Türkçe",
   "messages": {
+    "errors.backup_partial": "Aygıt yazılımının yalnızca bir kısmı okunabildi. Kaydedilen dosya eksiktir: sürücüyü geri yüklemek için kullanmayın. Aygıt yazılımı yazılmadı. Bağlantıyı kontrol edin ve yeni bir tam yedek oluşturun.",
     "settings.language": "Dil",
     "errors.operation_failed": "İşlem başarısız oldu.",
     "errors.update_not_started": "Güncelleme moduna giriş komutu gönderilmeye çalışıldı, ancak hiçbir aygıt yazılımı verisi gönderilmedi. Sürücü güncelleme modunda olabilir; bağlı tutun ve yeniden denemeden önce durumunu inceleyin.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Sonuç belirsiz - hedef başlangıç belirsiz",
     "status.target_verified": "Tam - hedef doğrulanmış",
     "status.readback_limited": "hedef başlatıldı - readback doğrulama sınırlı",
-    "errors.update_uncertain": "Firmware güncellemesi bitmedi. optik sürücüyü bağlamaya ve geri çekilmeden önce kontrol etmeye devam edin. yardımcı olmanız durumunda teşhis güncellemesi kaydedin.",
+    "errors.update_uncertain": "Aygıt yazılımı güncellemesinin son sonucu doğrulanamadı. Aygıt yazılımı yazılmış olabilir. Sürücüyü bağlı tutun ve başka bir güncelleme denemeden önce tanılama raporu kaydedin.",
     "modify.firmware_image": "Firmware Görüntüsü",
     "modify.boot_settings": "Boot ayarları",
     "modify.applied_each_time_the_drive_starts": "Optik sürüşün başladığı her seferinde uygulayın.",

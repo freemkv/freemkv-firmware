@@ -1073,6 +1073,12 @@ impl RecoveryFacet for Pioneer {
                 &captured
             }
         };
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "preparing",
+            component: "filter.firmware",
+            done: None,
+            total: None,
+        });
         let plan = recovery::Plan::with_current_policy(evidence, target, bypass_family_check)
             .map_err(|error| {
                 crate::backend::UpdateFailure::before_write("recovery preparation", error)

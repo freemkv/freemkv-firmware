@@ -1,6 +1,7 @@
 {
   "language_name": "日本語",
   "messages": {
+    "errors.backup_partial": "ファームウェアの一部しか読み取れませんでした。保存されるファイルは不完全です。ドライブの復元には使用しないでください。ファームウェアは書き込まれていません。接続を確認し、新しく完全なバックアップを作成してください。",
     "settings.language": "言語",
     "errors.operation_failed": "操作に失敗しました。",
     "errors.update_not_started": "更新モードに入るコマンドを試行しましたが、ファームウェアのデータは送信されていません。ドライブが更新モードになっている可能性があります。接続を維持し、状態を確認してから再試行してください。",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "結果不確実 - ターゲットスタートアップが確認されていない",
     "status.target_verified": "目標確認(目標確認)",
     "status.readback_limited": "ターゲット開始 - readback verification limited",
-    "errors.update_uncertain": "ファームウェアアップデートは完了しませんでした. 光学ドライブを接続してリリースする前にチェックしてください. 助けを必要とする場合は診断記録を保存します。",
+    "errors.update_uncertain": "ファームウェア更新の最終結果を確認できませんでした。ファームウェアが書き込まれた可能性があります。ドライブを接続したままにし、別の更新を試す前に診断レポートを保存してください。",
     "modify.firmware_image": "ファームウェアイメージ",
     "modify.boot_settings": "ボート設定",
     "modify.applied_each_time_the_drive_starts": "オプティックドライブが始まるたびに適用します。",

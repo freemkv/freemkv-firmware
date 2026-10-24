@@ -1,6 +1,7 @@
 {
   "language_name": "Bahasa Indonesia",
   "messages": {
+    "errors.backup_partial": "Hanya sebagian firmware yang dapat dibaca. File yang disimpan tidak lengkap: jangan gunakan untuk memulihkan drive. Tidak ada firmware yang ditulis. Periksa koneksi dan buat cadangan lengkap yang baru.",
     "settings.language": "Bahasa",
     "errors.operation_failed": "Operasi gagal.",
     "errors.update_not_started": "Perintah untuk masuk ke mode pembaruan telah dicoba, tetapi tidak ada data firmware yang dikirim. Drive mungkin berada dalam mode pembaruan; biarkan tetap terhubung dan periksa sebelum mencoba lagi.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Hasil yang tidak pasti - target startup tidak disahkan",
     "status.target_verified": "Selengkapnya - target verified",
     "status.readback_limited": "Target dimulai — readback verification limited",
-    "errors.update_uncertain": "Update firmware tidak selesai.Tahan drive optik terhubung dan periksa sebelum penarikan.Selamatkan log diagnostik jika Anda membutuhkan bantuan.",
+    "errors.update_uncertain": "Hasil akhir pembaruan firmware tidak dapat dipastikan. Firmware mungkin telah ditulis. Biarkan drive tetap terhubung dan simpan laporan diagnostik sebelum mencoba pembaruan lain.",
     "modify.firmware_image": "Gambar Firmware",
     "modify.boot_settings": "Pengaturan Boot",
     "modify.applied_each_time_the_drive_starts": "Gunakan setiap kali drive optik dimulai.",

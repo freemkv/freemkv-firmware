@@ -144,6 +144,18 @@ fn terminal_phase(phase: &str, component: &str, done: Option<usize>, total: Opti
     }
 }
 
+/// Present a catalog warning without exposing its technical diagnostic cause.
+pub fn guidance(id: &'static str) {
+    if !publish(Event::Message(id.into())) {
+        let language = crate::localization::Preferences::user().load();
+        let _ = writeln!(
+            io::stderr().lock(),
+            "{}",
+            crate::localization::render(language, id)
+        );
+    }
+}
+
 // Resolve presentation messages for logs without changing what reaches the GUI.
 fn diagnostic_event(event: &Event) -> String {
     let mut diagnostic = event.clone();

@@ -1,6 +1,7 @@
 {
   "language_name": "Suomi",
   "messages": {
+    "errors.backup_partial": "Vain osa laiteohjelmistosta voitiin lukea. Tallennettu tiedosto on puutteellinen: älä käytä sitä aseman palauttamiseen. Laiteohjelmistoa ei kirjoitettu. Tarkista yhteys ja tee uusi täydellinen varmuuskopio.",
     "settings.language": "Kieli",
     "errors.operation_failed": "Toiminto epäonnistui.",
     "errors.update_not_started": "Päivitystilaan siirtymisen komentoa yritettiin lähettää, mutta laiteohjelmiston tietoja ei lähetetty. Asema saattaa olla päivitystilassa; pidä se kytkettynä ja tarkista se ennen uutta yritystä.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "tulos epävarma – kohdennettua startupia ei vahvistettu",
     "status.target_verified": "Täydellinen - Tavoite todistettu",
     "status.readback_limited": "Tavoite aloitettiin – readback-todistus rajoitettu",
-    "errors.update_uncertain": "Firmware-päivitys ei ole valmis. Pidä optiset levyt yhteydessä ja tarkista se ennen retrying. Tallenna diagnostinen arkisto, jos tarvitset apua.",
+    "errors.update_uncertain": "Laiteohjelmiston päivityksen lopputulosta ei voitu vahvistaa. Laiteohjelmistoa on saatettu kirjoittaa. Pidä asema liitettynä ja tallenna diagnostiikkaraportti ennen uutta päivitysyritystä.",
     "modify.firmware_image": "Firmware kuvaa",
     "modify.boot_settings": "Boot asetukset",
     "modify.applied_each_time_the_drive_starts": "Käytetään joka kerta, kun optinen ohjaus käynnistyy.",

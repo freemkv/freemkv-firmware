@@ -1,6 +1,7 @@
 {
   "language_name": "Deutsch",
   "messages": {
+    "errors.backup_partial": "Nur ein Teil der Firmware konnte gelesen werden. Die gespeicherte Datei ist unvollständig: Verwenden Sie sie nicht zur Wiederherstellung des Laufwerks. Es wurde keine Firmware geschrieben. Prüfen Sie die Verbindung und erstellen Sie eine neue vollständige Sicherung.",
     "settings.language": "Sprache",
     "errors.operation_failed": "Der Vorgang ist fehlgeschlagen.",
     "errors.update_not_started": "Es wurde versucht, den Befehl zum Wechsel in den Update-Modus zu senden, aber es wurden keine Firmware-Daten gesendet. Das Laufwerk könnte im Update-Modus sein; lassen Sie es angeschlossen und prüfen Sie es, bevor Sie es erneut versuchen.",
@@ -170,7 +171,7 @@
     "status.target_uncertain": "Ergebnis unsicher – Zielstart nicht bestätigt",
     "status.target_verified": "Vollständige - Zielverifiziert",
     "status.readback_limited": "Zielbeginn – readback verification limited",
-    "errors.update_uncertain": "Die Firmware-Update wurde nicht abgeschlossen.Halten Sie den optischen Disk verbunden und überprüfen Sie es vor dem Rücktritt.Spear the diagnostic log if you need help.",
+    "errors.update_uncertain": "Das endgültige Ergebnis der Aktualisierung konnte nicht bestätigt werden. Firmware wurde möglicherweise geschrieben. Lassen Sie das Laufwerk angeschlossen und speichern Sie einen Diagnosebericht, bevor Sie eine weitere Aktualisierung versuchen.",
     "modify.firmware_image": "Firmware Bild",
     "modify.boot_settings": "Boot Settings",
     "modify.applied_each_time_the_drive_starts": "Anwenden Sie jedes Mal, wenn die optische Anleitung beginnt.",
