@@ -302,17 +302,22 @@ pub fn backup_with_replace(
     if dump {
         drive
             .dump()
-            .with_context(|| format!("no firmware dump capability for {id}"))?;
+            .with_context(|| format!("no firmware dump capability for {id}"))
+            .map_err(|error| error.context(IssueCode::UnsupportedDrive))?;
     } else if facet.is_none() {
-        bail!("no firmware backup capability for {id}");
+        return Err(anyhow::anyhow!("no firmware backup capability for {id}")
+            .context(IssueCode::UnsupportedDrive));
     }
     let infix = facet.map_or("dump", |f| f.format().infix);
     // Fail fast before the multi-minute capture if the output already exists.
     if !replace && out.symlink_metadata().is_ok() {
-        bail!(
-            "backup {} already exists (backups are never overwritten); choose another -o path or remove it",
-            out.display()
-        );
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "backup {} already exists (backups are never overwritten); choose another -o path or remove it",
+                out.display()
+            ),
+        ).into());
     }
     let target_model = drive
         .identity(&mut ReadDevice::for_backend(dev, drive))
@@ -737,11 +742,15 @@ fn required_backup_path(req: &FlashRequest) -> Result<&Path> {
         .context(crate::user_error::IssueCode::BackupDestination)?;
     // Fail fast, before the multi-minute capture, if the destination is taken.
     if out.symlink_metadata().is_ok() {
-        bail!(
-            "pre-flash backup path {} already exists (existing backups are never overwritten). \
-             Move/remove it or pass --backup <new-path>.",
-            out.display()
-        );
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "pre-flash backup path {} already exists (existing backups are never overwritten). \
+                 Move/remove it or pass --backup <new-path>.",
+                out.display()
+            ),
+        )
+        .into());
     }
     Ok(out)
 }

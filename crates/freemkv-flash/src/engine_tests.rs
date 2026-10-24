@@ -948,8 +948,23 @@ fn execute_refuses_unsaved_or_existing_backup_before_write() {
     std::fs::write(&out, b"existing backup").unwrap();
     req.predump_out = Some(out.clone());
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    assert!(format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err())
-        .contains("existing backups are never overwritten"));
+    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.file_exists");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
+    assert!(format!("{error:#}").contains("existing backups are never overwritten"));
+    assert!(
+        dev.reads.is_empty(),
+        "refuse before slow capture or planning"
+    );
+    assert!(dev.writes.is_empty());
+    assert_eq!(std::fs::read(&out).unwrap(), b"existing backup");
+    let mut dev = MockScsiDevice::new();
+    let error = crate::user_error::read_only(backup(&mut dev, &Mtk, &out, false)).unwrap_err();
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.file_exists");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
     assert_eq!(std::fs::read(&out).unwrap(), b"existing backup");
     std::fs::remove_file(out).unwrap();
