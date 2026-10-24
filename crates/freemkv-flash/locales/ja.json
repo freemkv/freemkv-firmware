@@ -631,6 +631,9 @@
     "verification.startup": "起動",
     "verification.not_checked": "未確認",
     "verification.not_requested": "要求なし",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "ログを別のアプリで開けませんでした。こちらの診断ビューアーを確認してください。",
+    "errors.clipboard": "テキストをコピーできませんでした。もう一度お試しください。",
+    "errors.confirmation_dialog": "更新の確認画面を開けませんでした。更新はキャンセルされました。ファームウェアは書き込まれていません。もう一度お試しください。"
   }
 }

@@ -631,6 +631,9 @@
     "verification.startup": "Opstart",
     "verification.not_checked": "Ikke kontrolleret",
     "verification.not_requested": "Ikke anmodet",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Loggen kunne ikke åbnes i en anden app. Se diagnosevisningen her.",
+    "errors.clipboard": "Teksten kunne ikke kopieres. Prøv igen.",
+    "errors.confirmation_dialog": "Bekræftelsen af opdateringen kunne ikke åbnes. Opdateringen blev annulleret. Ingen firmware blev skrevet. Prøv igen."
   }
 }

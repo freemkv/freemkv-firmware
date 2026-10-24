@@ -631,6 +631,9 @@
     "verification.startup": "Uruchomienie",
     "verification.not_checked": "Nie sprawdzono",
     "verification.not_requested": "Nie zażądano",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Nie udało się otworzyć dziennika w innej aplikacji. Sprawdź tutejszy podgląd diagnostyczny.",
+    "errors.clipboard": "Nie udało się skopiować tekstu. Spróbuj ponownie.",
+    "errors.confirmation_dialog": "Nie udało się otworzyć potwierdzenia aktualizacji. Aktualizacja została anulowana. Nie zapisano żadnego oprogramowania sprzętowego. Spróbuj ponownie."
   }
 }

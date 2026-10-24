@@ -882,9 +882,21 @@ impl Shell {
                     let response = self.report_prompt(&summary, &description);
                     self.send(response);
                 }
-                Effect::CopyText(text) => self.copy(&text),
+                Effect::CopyText(text) => {
+                    if let Err(error) = self.copy(&text) {
+                        self.send(Input::ShellFailed(
+                            ui::ShellFailure::Copy,
+                            format!("{error:?}"),
+                        ));
+                    }
+                }
                 Effect::OpenPath(path) => {
-                    let _ = crate::external::open_path(&path);
+                    if let Err(error) = crate::external::open_path(&path) {
+                        self.send(Input::ShellFailed(
+                            crate::ui::ShellFailure::OpenLog,
+                            format!("{error:#}"),
+                        ));
+                    }
                 }
                 Effect::StartTicking => {
                     if let Err(_e) = self.wnd.hwnd().SetTimer(TIMER_TICK, TICK_MS, None) {
@@ -965,10 +977,8 @@ impl Shell {
             })
     }
 
-    fn copy(&self, text: &str) {
-        let Ok(clip) = self.wnd.hwnd().OpenClipboard() else {
-            return;
-        };
+    fn copy(&self, text: &str) -> w::SysResult<()> {
+        let clip = self.wnd.hwnd().OpenClipboard()?;
         let wide: Vec<u8> = text
             .replace("\r\n", "\n")
             .replace('\n', "\r\n")
@@ -976,8 +986,9 @@ impl Shell {
             .chain(std::iter::once(0))
             .flat_map(u16::to_le_bytes)
             .collect();
-        let _ = clip.EmptyClipboard();
-        let _ = clip.SetClipboardData(co::CF::UNICODETEXT, &wide);
+        clip.EmptyClipboard()?;
+        clip.SetClipboardData(co::CF::UNICODETEXT, &wide)?;
+        Ok(())
     }
 
     fn tone(&self, c: &impl GuiWindow, tone: Tone) {
@@ -1038,7 +1049,7 @@ impl Shell {
             .hwnd()
             .EnableWindow(v.controls_enabled && v.tabs.iter().any(|t| t.enabled));
         self.render_status(v.status.as_ref());
-        self.render_results(v.results.as_ref());
+        self.render_results(v.results.as_ref(), v.language);
         if self.memo.borrow().log != v.log {
             set_edit_lines(&self.log, &v.log);
             self.memo.borrow_mut().log.clone_from(&v.log);
@@ -1048,9 +1059,16 @@ impl Shell {
         self.render_diagnostics(v.diagnostics.as_ref());
         self.render_analysis(&v);
         self.painting.set(false);
-        if v.confirm.is_some() && !self.confirming.replace(true) {
+        if v.confirm.is_some() {
             // Not from inside the handler that asked: the dialog runs its own modal loop.
-            let _ = self.wnd.hwnd().SetTimer(TIMER_CONFIRM, 1, None);
+            if let Err(error) = schedule_confirmation(&self.confirming, || {
+                self.wnd.hwnd().SetTimer(TIMER_CONFIRM, 1, None).map(drop)
+            }) {
+                self.send(Input::ShellFailed(
+                    ui::ShellFailure::Confirmation,
+                    format!("{error:?}"),
+                ));
+            }
         }
     }
 
@@ -1117,7 +1135,7 @@ impl Shell {
         }
     }
 
-    fn render_results(&self, results: Option<&Results>) {
+    fn render_results(&self, results: Option<&Results>, language: crate::localization::Language) {
         if self.memo.borrow().results.as_ref() == Some(&results.cloned()) {
             return;
         }
@@ -1143,7 +1161,7 @@ impl Shell {
         if grouped {
             for (id, card) in r.cards.iter().enumerate() {
                 self.add_group(id as i32, &card.title, card.subtitle.as_deref());
-                for (label, value) in card_rows(&card.body) {
+                for (label, value) in card_rows(&card.body, language) {
                     self.add_row(&label, &value, Some(id as i32));
                 }
             }
@@ -1248,20 +1266,38 @@ impl Shell {
         show(&self.log_title, false);
         show(&self.log, false);
 
-        let (Some(st), Some(r)) = (&v.status, &v.results) else {
-            for c in [
-                &self.status,
-                &self.progress_label,
-                &self.note,
-                &self.failure,
-                &self.notice,
-            ] {
+        if let Some(st) = &v.status {
+            put(&self.status, col.take(s.px(lay::LINE_H)));
+            if st.progress.is_some() {
+                put(&self.progress_label, col.take(s.px(lay::LINE_H)));
+                put(&self.progress, col.take(s.px(lay::PROGRESS_H)));
+            } else {
+                show(&self.progress_label, false);
+                show(&self.progress, false);
+            }
+            if st.note.is_some() {
+                let h = measure(
+                    self.note.hwnd(),
+                    &self.note.hwnd().GetWindowText().unwrap_or_default(),
+                    Some(col.w),
+                )
+                .1;
+                self.tone(&self.note, Tone::Secondary);
+                put(&self.note, col.take(h));
+            } else {
+                show(&self.note, false);
+            }
+            if let Some(b) = &st.cancel {
+                let mut l = col.line(s.px(lay::ROW_H));
+                put(&self.cancel.btn, l.take(self.button_w(s, b)));
+            }
+        }
+        let Some(r) = &v.results else {
+            for c in [&self.failure, &self.notice] {
                 show(c, false);
             }
-            show(&self.progress, false);
             show(&self.list, false);
             for b in [
-                &self.cancel,
                 &self.open_results,
                 &self.save_log,
                 &self.view_log,
@@ -1271,32 +1307,6 @@ impl Shell {
             }
             return;
         };
-        // Status and progress.
-        put(&self.status, col.take(s.px(lay::LINE_H)));
-        let running = st.progress.is_some();
-        if running {
-            put(&self.progress_label, col.take(s.px(lay::LINE_H)));
-            put(&self.progress, col.take(s.px(lay::PROGRESS_H)));
-        } else {
-            show(&self.progress_label, false);
-            show(&self.progress, false);
-        }
-        if st.note.is_some() {
-            let h = measure(
-                self.note.hwnd(),
-                &self.note.hwnd().GetWindowText().unwrap_or_default(),
-                Some(col.w),
-            )
-            .1;
-            self.tone(&self.note, Tone::Secondary);
-            put(&self.note, col.take(h));
-        } else {
-            show(&self.note, false);
-        }
-        if let Some(b) = &st.cancel {
-            let mut l = col.line(s.px(lay::ROW_H));
-            put(&self.cancel.btn, l.take(self.button_w(s, b)));
-        }
 
         // Results: the list takes what the rows above and below it leave.
         let bottom = ch - pad;
@@ -2195,17 +2205,32 @@ impl Shell {
 }
 
 /// A card's rows as (label, value) pairs for the list view.
-fn card_rows(body: &CardBody) -> Vec<(String, String)> {
+fn card_rows(body: &CardBody, language: crate::localization::Language) -> Vec<(String, String)> {
     let mut out = Vec::new();
     match body {
         CardBody::Rows(rows) => out.extend(rows.iter().cloned()),
         CardBody::Media { left, right } => {
             for r in left.iter().chain(right) {
-                out.push((r.label.clone(), media_ticks(r)));
+                out.push((r.label.clone(), media_ticks(r, language)));
             }
         }
     }
     out
+}
+
+/// A failed timer must release the latch so another update can ask again.
+fn schedule_confirmation<E>(
+    confirming: &Cell<bool>,
+    schedule: impl FnOnce() -> Result<(), E>,
+) -> Result<(), E> {
+    if confirming.replace(true) {
+        return Ok(());
+    }
+    if let Err(error) = schedule() {
+        confirming.set(false);
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn glyph(on: bool) -> char {
@@ -2217,7 +2242,7 @@ fn glyph(on: bool) -> char {
 }
 
 /// "R/W: ☑ ☐", with a blank for a capability the drive did not report.
-fn media_ticks(r: &MediaRow) -> String {
+fn media_ticks(r: &MediaRow, language: crate::localization::Language) -> String {
     let tick = |t: Tri| match t {
         Tri::Yes => glyph(true),
         Tri::No => glyph(false),
@@ -2226,13 +2251,13 @@ fn media_ticks(r: &MediaRow) -> String {
     match r.write {
         Some(wr) => format!(
             "{}: {} {}",
-            crate::localization::get(crate::localization::Language::En, "media.header"),
+            crate::localization::get(language, "media.header"),
             tick(r.read),
             tick(wr)
         ),
         None => format!(
             "{}: {}",
-            crate::localization::get(crate::localization::Language::En, "media.header"),
+            crate::localization::get(language, "media.header"),
             tick(r.read)
         ),
     }
@@ -2306,4 +2331,54 @@ pub fn run() -> i32 {
         return 1;
     }
     0
+}
+
+#[cfg(test)]
+mod known_error_tests {
+    use super::*;
+
+    #[test]
+    fn failed_confirmation_schedule_releases_latch_and_success_does_not_duplicate() {
+        let confirming = Cell::new(false);
+        assert_eq!(
+            schedule_confirmation(&confirming, || Err("allocation failed")),
+            Err("allocation failed")
+        );
+        assert!(!confirming.get());
+        let calls = Cell::new(0);
+        for _ in 0..2 {
+            assert_eq!(
+                schedule_confirmation(&confirming, || {
+                    calls.set(calls.get() + 1);
+                    Ok::<_, &str>(())
+                }),
+                Ok(())
+            );
+        }
+        assert!(confirming.get());
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn media_header_uses_selected_language_and_retains_unknown_ticks() {
+        for language in crate::localization::Language::ALL {
+            let row = MediaRow {
+                label: "DVD".into(),
+                read: Tri::Yes,
+                write: Some(Tri::Unknown),
+            };
+            assert_eq!(
+                media_ticks(&row, language),
+                format!(
+                    "{}: ☑  ",
+                    crate::localization::get(language, "media.header")
+                )
+            );
+            let read_only = MediaRow { write: None, ..row };
+            assert_eq!(
+                media_ticks(&read_only, language),
+                format!("{}: ☑", crate::localization::get(language, "media.header"))
+            );
+        }
+    }
 }

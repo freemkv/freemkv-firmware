@@ -174,7 +174,15 @@ impl Shell {
                 }
                 Effect::CopyText(text) => ctx.copy_text(text),
                 Effect::OpenPath(path) => {
-                    let _ = crate::external::open_path(&path);
+                    if let Err(error) = crate::external::open_path(&path) {
+                        self.send(
+                            ctx,
+                            Input::ShellFailed(
+                                crate::ui::ShellFailure::OpenLog,
+                                format!("{error:#}"),
+                            ),
+                        );
+                    }
                 }
                 // egui repaints on the worker's waker and on the running-job timer below.
                 Effect::StartTicking | Effect::StopTicking => {}

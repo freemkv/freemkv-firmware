@@ -631,6 +631,9 @@
     "verification.startup": "Pornire",
     "verification.not_checked": "Neverificat",
     "verification.not_requested": "Nesolicitat",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Jurnalul nu a putut fi deschis în altă aplicație. Consultați vizualizatorul de diagnostic de aici.",
+    "errors.clipboard": "Textul nu a putut fi copiat. Încercați din nou.",
+    "errors.confirmation_dialog": "Confirmarea actualizării nu a putut fi deschisă. Actualizarea a fost anulată. Nu a fost scris niciun firmware. Încercați din nou."
   }
 }

@@ -631,6 +631,9 @@
     "verification.startup": "Oppstart",
     "verification.not_checked": "Ikke kontrollert",
     "verification.not_requested": "Ikke forespurt",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Loggen kunne ikke åpnes i en annen app. Se diagnosevisningen her.",
+    "errors.clipboard": "Teksten kunne ikke kopieres. Prøv igjen.",
+    "errors.confirmation_dialog": "Bekreftelsen av oppdateringen kunne ikke åpnes. Oppdateringen ble avbrutt. Ingen fastvare ble skrevet. Prøv igjen."
   }
 }

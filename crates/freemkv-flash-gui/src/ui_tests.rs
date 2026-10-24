@@ -3926,3 +3926,137 @@ fn unusable_saved_backup_warning_describes_rollback_availability_not_file_existe
     std::fs::remove_file(&flashing.backup).unwrap();
     assert!(confirm.warnings.iter().any(|s| s == "No usable backup is available for this update. You may be unable to restore the current firmware if the update fails."), "{:?}", confirm.warnings);
 }
+
+#[test]
+fn shell_log_opener_failure_falls_back_to_the_actual_log() {
+    let dir = std::env::temp_dir().join(workflow::new_operation_id());
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("diagnostic.log");
+    std::fs::write(&path, "original diagnostic content\n").unwrap();
+    let mut app = one_drive();
+    app.diagnostic_log = Some(path.clone());
+    assert_eq!(app.dispatch(Input::ViewLog), [Effect::OpenPath(path)]);
+    app.dispatch(Input::ShellFailed(
+        ShellFailure::OpenLog,
+        "OS technical reason 0x123".into(),
+    ));
+    let diagnostics = app.view().diagnostics.expect("in-app fallback opens");
+    assert_eq!(*diagnostics.lines, ["original diagnostic content"]);
+    assert_eq!(
+        diagnostics.notice.as_deref(),
+        Some("The log could not be opened in another app. Check the diagnostic viewer here.")
+    );
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("OS technical reason 0x123")));
+    assert!(!diagnostics.notice.unwrap().contains("0x123"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn shell_copy_failure_is_visible_without_claiming_a_firmware_failure() {
+    let mut app = one_drive();
+    app.dispatch(Input::OpenDiagnostics);
+    let status = app.status.clone();
+    app.dispatch(Input::ShellFailed(
+        ShellFailure::Copy,
+        "clipboard busy 0x123".into(),
+    ));
+    let view = app.view();
+    assert_eq!(
+        view.diagnostics.unwrap().notice.as_deref(),
+        Some("The text could not be copied. Try again.")
+    );
+    assert_eq!(app.analysis_notice.as_deref(), Some("errors.clipboard"));
+    assert_eq!(app.status, status);
+    assert!(app.failure.is_none());
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("clipboard busy 0x123")));
+}
+
+#[test]
+fn shell_confirmation_schedule_failure_cancels_waiting_flash_and_keeps_its_reason() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet(&mut app, None);
+    app.dispatch(Input::ShellFailed(
+        ShellFailure::Confirmation,
+        "SetTimer OS error 0x123".into(),
+    ));
+    assert!(
+        app.pending.is_none(),
+        "failed dialog must release waiting worker"
+    );
+    assert!(flashing.result().is_err());
+    assert!(!flashing.executed());
+    let start = Instant::now();
+    while app.running() {
+        assert!(start.elapsed() < Duration::from_secs(20));
+        app.poll();
+    }
+    let view = app.view();
+    assert!(view.confirm.is_none());
+    assert!(view.controls_enabled);
+    assert!(view.results.unwrap().notice.unwrap().contains("The update confirmation could not open. The update was cancelled. No firmware was written. Try again."));
+    assert!(flashing.backup.exists());
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("SetTimer OS error 0x123")));
+    std::fs::remove_file(flashing.backup).unwrap();
+}
+
+#[test]
+fn stale_confirmation_failure_never_claims_no_write_without_pending_consent() {
+    let mut app = one_drive();
+    let status = app.status.clone();
+    app.dispatch(Input::ShellFailed(
+        ShellFailure::Confirmation,
+        "stale timer failure".into(),
+    ));
+    assert_eq!(app.status, status);
+    assert!(app.diagnostic_notice.is_none());
+}
+
+#[test]
+fn shell_failures_are_localized_in_every_catalog_and_keep_technical_details_out() {
+    for language in crate::localization::Language::ALL {
+        for (kind, id) in [
+            (ShellFailure::OpenLog, "errors.open_log"),
+            (ShellFailure::Copy, "errors.clipboard"),
+            (ShellFailure::Confirmation, "errors.confirmation_dialog"),
+        ] {
+            let mut app = one_drive();
+            app.language = language;
+            app.diagnostics_open = true;
+            let (reply, answer) = mpsc::channel();
+            if kind == ShellFailure::Confirmation {
+                app.pending = Some(Pending {
+                    target: Target {
+                        device: "drive-a".into(),
+                        label: "Drive A".into(),
+                        options: FlashOptions::default(),
+                    },
+                    sheet: Sheet::Flash {
+                        sheet: FlashSheet::default(),
+                        reply,
+                    },
+                });
+            }
+            app.dispatch(Input::ShellFailed(kind, "OS_DETAIL_NOT_FOR_USER".into()));
+            let view = app.view();
+            let notice = view.diagnostics.unwrap().notice.unwrap();
+            assert_eq!(notice, crate::localization::get(language, id));
+            assert!(!notice.contains("OS_DETAIL_NOT_FOR_USER"));
+            assert!(app
+                .log
+                .iter()
+                .any(|line| line.contains("OS_DETAIL_NOT_FOR_USER")));
+            if kind == ShellFailure::Confirmation {
+                assert_eq!(answer.try_recv(), Ok(false));
+            }
+        }
+    }
+}

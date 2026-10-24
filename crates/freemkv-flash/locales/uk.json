@@ -631,6 +631,9 @@
     "verification.startup": "Запуск",
     "verification.not_checked": "Не перевірено",
     "verification.not_requested": "Не запитано",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Не вдалося відкрити журнал в іншій програмі. Перегляньте вікно діагностики тут.",
+    "errors.clipboard": "Не вдалося скопіювати текст. Спробуйте ще раз.",
+    "errors.confirmation_dialog": "Не вдалося відкрити підтвердження оновлення. Оновлення скасовано. Прошивку не записано. Спробуйте ще раз."
   }
 }

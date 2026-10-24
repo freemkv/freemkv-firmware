@@ -631,6 +631,9 @@
     "verification.startup": "Εκκίνηση",
     "verification.not_checked": "Δεν ελέγχθηκε",
     "verification.not_requested": "Δεν ζητήθηκε",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Δεν ήταν δυνατό το άνοιγμα του αρχείου καταγραφής σε άλλη εφαρμογή. Ελέγξτε την προβολή διαγνωστικών εδώ.",
+    "errors.clipboard": "Δεν ήταν δυνατή η αντιγραφή του κειμένου. Δοκιμάστε ξανά.",
+    "errors.confirmation_dialog": "Δεν ήταν δυνατό το άνοιγμα της επιβεβαίωσης ενημέρωσης. Η ενημέρωση ακυρώθηκε. Δεν γράφτηκε υλικολογισμικό. Δοκιμάστε ξανά."
   }
 }

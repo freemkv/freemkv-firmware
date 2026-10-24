@@ -631,6 +631,9 @@
     "verification.startup": "Arranque",
     "verification.not_checked": "Não verificado",
     "verification.not_requested": "Não solicitado",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Não foi possível abrir o registo noutra aplicação. Consulte aqui o visualizador de diagnóstico.",
+    "errors.clipboard": "Não foi possível copiar o texto. Tente novamente.",
+    "errors.confirmation_dialog": "Não foi possível abrir a confirmação da atualização. A atualização foi cancelada. Não foi escrito qualquer firmware. Tente novamente."
   }
 }

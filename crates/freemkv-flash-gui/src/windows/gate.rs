@@ -121,6 +121,7 @@ fn run(me: &Shell, dir: &Path) {
         );
     }
 
+    origin_error_results(me, dir, &mut g);
     report_prompts(me, &mut g);
     firmware_pickers(me, &mut g);
     me.send(Input::SelectTask(Task::Flash));
@@ -129,6 +130,38 @@ fn run(me: &Shell, dir: &Path) {
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     g.no_drive_io("end", &me.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+/// An origin-only error has diagnostic actions even before any task has a status.
+fn origin_error_results(me: &Shell, dir: &Path, g: &mut Gate) {
+    me.send(Input::SelectTask(Task::Flash));
+    let missing = std::env::temp_dir()
+        .join(format!("freemkv-gate-missing-{}", std::process::id()))
+        .join("missing-firmware.bin");
+    me.send(Input::Chosen(crate::ui::Pick::FlashFirmware, missing));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while me.view().results.is_none() && Instant::now() < deadline {
+        pump(50);
+    }
+    let view = me.view();
+    g.check(
+        "origin-error-without-status",
+        view.status.is_none() && view.results.is_some(),
+        "file-origin failure independently supplies diagnostic actions",
+    );
+    g.check(
+        "origin-error-actions-visible",
+        me.view_log.btn.hwnd().IsWindowVisible() && me.submit_report.btn.hwnd().IsWindowVisible(),
+        "View log and Submit report remain visible without an operation status",
+    );
+    g.check(
+        "origin-error-actions-bound",
+        me.view_log.input.borrow().as_ref() == Some(&Input::ViewLog)
+            && me.submit_report.input.borrow().as_ref() == Some(&Input::SubmitReport),
+        "visible actions retain their actual model inputs",
+    );
+    g.save(dir, "origin-error", capture(me.wnd.hwnd()).as_ref());
+    g.no_drive_io("origin-error", &me.app.borrow());
 }
 
 #[derive(Clone, Copy, Debug)]

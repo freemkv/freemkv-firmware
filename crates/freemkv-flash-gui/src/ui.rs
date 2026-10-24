@@ -197,6 +197,16 @@ pub enum Side {
     B,
 }
 
+/// A desktop action whose failure must be reported by the neutral model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShellFailure {
+    OpenLog,
+    #[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
+    Copy,
+    #[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
+    Confirmation,
+}
+
 /// Every user action a shell can forward.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Input {
@@ -208,6 +218,7 @@ pub enum Input {
     Chosen(Pick, PathBuf),
     #[cfg_attr(not(feature = "native"), allow(dead_code))]
     DialogFailed(Pick, String),
+    ShellFailed(ShellFailure, String),
     SetCheck(CheckId, bool),
     ReadInfo,
     FlashNow,
@@ -1309,6 +1320,34 @@ impl App {
                     self.status = issue.encoded();
                     self.failure = Some(issue.encoded());
                     self.user_issue = Some(issue);
+                }
+            }
+            Input::ShellFailed(kind, detail) => {
+                self.log
+                    .push(format!("Desktop action failed ({kind:?}): {detail}"));
+                self.record_event(
+                    "desktop_action_failed",
+                    serde_json::json!({"action": format!("{kind:?}"), "detail": detail}),
+                );
+                match kind {
+                    ShellFailure::OpenLog => {
+                        self.diagnostics_open = true;
+                        self.refresh_diagnostic_view();
+                        self.diagnostic_notice = Some("errors.open_log".into());
+                    }
+                    ShellFailure::Copy => {
+                        self.diagnostic_notice = Some("errors.clipboard".into());
+                        self.analysis_notice = Some("errors.clipboard".into());
+                    }
+                    ShellFailure::Confirmation if self.pending.is_some() => {
+                        self.dispatch(Input::CancelConfirm);
+                        self.diagnostic_notice = Some("errors.confirmation_dialog".into());
+                        if !self.running() {
+                            self.result_task = self.task;
+                            self.status = "errors.confirmation_dialog".into();
+                        }
+                    }
+                    ShellFailure::Confirmation => {}
                 }
             }
             Input::Chosen(pick, path) => return self.chosen(pick, path),

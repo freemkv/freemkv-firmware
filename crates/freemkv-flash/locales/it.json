@@ -631,6 +631,9 @@
     "verification.startup": "Avvio",
     "verification.not_checked": "Non controllato",
     "verification.not_requested": "Non richiesto",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Impossibile aprire il registro in un’altra app. Consulta qui il visualizzatore diagnostico.",
+    "errors.clipboard": "Impossibile copiare il testo. Riprova.",
+    "errors.confirmation_dialog": "Impossibile aprire la conferma dell’aggiornamento. L’aggiornamento è stato annullato. Nessun firmware è stato scritto. Riprova."
   }
 }

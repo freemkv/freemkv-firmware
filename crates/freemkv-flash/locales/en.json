@@ -631,6 +631,9 @@
     "verification.startup": "Startup",
     "verification.not_checked": "Not checked",
     "verification.not_requested": "Not requested",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "The log could not be opened in another app. Check the diagnostic viewer here.",
+    "errors.clipboard": "The text could not be copied. Try again.",
+    "errors.confirmation_dialog": "The update confirmation could not open. The update was cancelled. No firmware was written. Try again."
   }
 }

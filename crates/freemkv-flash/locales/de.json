@@ -631,6 +631,9 @@
     "verification.startup": "Start",
     "verification.not_checked": "Nicht geprüft",
     "verification.not_requested": "Nicht angefordert",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Das Protokoll konnte nicht in einer anderen App geöffnet werden. Sehen Sie hier in der Diagnoseansicht nach.",
+    "errors.clipboard": "Der Text konnte nicht kopiert werden. Versuchen Sie es erneut.",
+    "errors.confirmation_dialog": "Die Bestätigung für das Update konnte nicht geöffnet werden. Das Update wurde abgebrochen. Es wurde keine Firmware geschrieben. Versuchen Sie es erneut."
   }
 }

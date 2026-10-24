@@ -631,6 +631,9 @@
     "verification.startup": "Khởi động",
     "verification.not_checked": "Chưa kiểm tra",
     "verification.not_requested": "Không được yêu cầu",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Không thể mở nhật ký trong ứng dụng khác. Hãy kiểm tra trình xem chẩn đoán tại đây.",
+    "errors.clipboard": "Không thể sao chép văn bản. Hãy thử lại.",
+    "errors.confirmation_dialog": "Không thể mở xác nhận cập nhật. Bản cập nhật đã bị hủy. Chưa ghi chương trình cơ sở nào. Hãy thử lại."
   }
 }
