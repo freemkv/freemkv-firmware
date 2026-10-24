@@ -952,9 +952,10 @@ FIELD    Saved to = <TMP>/backup/mtk_dump.bin
 MSG      wrote <TMP>/backup/mtk_dump.bin (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
 MSG      RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- scsi transcript (514) ---
+--- scsi transcript (515) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096

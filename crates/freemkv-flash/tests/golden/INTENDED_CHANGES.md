@@ -172,7 +172,7 @@ reason: R1, R8, M-BAK, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK dump (recover): raw memory
-reason: R8, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```diff
 -backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 +backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
@@ -180,6 +180,9 @@ reason: R8, M-ENC, M-LIFECYCLE
 +MSG      backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
 -saved file: 2097152 bytes sha256=aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 +saved file: 2097152 bytes sha256=98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
+---- scsi transcript (514) ---
++--- scsi transcript (515) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ### Pioneer backup: bounded replay of a UD04
@@ -10549,8 +10552,10 @@ reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK backup: firmware read fails at 0x100000
-reason: M-BAK
+reason: M-BAK, OPERATION_015
 ```diff
+-result: ERR backup needs every firmware byte, but read 2096640 of 2097152; unreadable ranges [
++result: ERR errors.backup_failed: backup needs every firmware byte, but read 2096640 of 2097152; unreadable ranges [
 ---- scsi transcript (522) ---
 +--- scsi transcript (523) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -10567,7 +10572,7 @@ reason: R1, R4, M-BAK
 ```
 
 ### MTK dump: MT1939 drive read (build not in the catalog)
-reason: R8, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```diff
 -backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
 +backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
@@ -10575,10 +10580,13 @@ reason: R8, M-ENC, M-LIFECYCLE
 +MSG      backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 -saved file: 2097152 bytes sha256=933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
 +saved file: 2097152 bytes sha256=61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
+---- scsi transcript (514) ---
++--- scsi transcript (515) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ### MTK dump: MT1959 drive read
-reason: R8, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```diff
 -backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
 +backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
@@ -10586,10 +10594,13 @@ reason: R8, M-ENC, M-LIFECYCLE
 +MSG      backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 -saved file: 2097152 bytes sha256=1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
 +saved file: 2097152 bytes sha256=47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
+---- scsi transcript (514) ---
++--- scsi transcript (515) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ### MTK dump: firmware read fails at 0x100000
-reason: R8, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```diff
 ---- text (111) ---
 +--- text (106) ---
@@ -10615,10 +10626,13 @@ reason: R8, M-ENC, M-LIFECYCLE
 +MSG      backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 -saved file: 2097152 bytes sha256=39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
 +saved file: 2097152 bytes sha256=1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
+---- scsi transcript (522) ---
++--- scsi transcript (523) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ### MTK dump: unknown boot page
-reason: R8, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```diff
 -backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
 +backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
@@ -10626,6 +10640,9 @@ reason: R8, M-ENC, M-LIFECYCLE
 +MSG      backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 -saved file: 2097152 bytes sha256=e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
 +saved file: 2097152 bytes sha256=e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
+---- scsi transcript (514) ---
++--- scsi transcript (515) ---
++IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ## mtk_flash_input_refusals.txt
@@ -32275,10 +32292,10 @@ reason: P4, P7, P8, P9, FMT, P10
 ```
 
 ### Pioneer execute: Normal for another Kernel tag, refused after the backup
-reason: P2, PRECHECK
+reason: P2, PRECHECK, OPERATION_015
 ```diff
 -result: ERR malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
-+result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.unsupported_firmware: malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
++result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.installed_firmware_mismatch: malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
 ---- scsi transcript (23) ---
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
