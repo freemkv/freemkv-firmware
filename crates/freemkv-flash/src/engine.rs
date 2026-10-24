@@ -801,15 +801,11 @@ fn offer_flash_without_backup(
     error: anyhow::Error,
 ) -> Result<Option<SavedBackup>> {
     crate::diagnostics::record(format!("Backup unavailable: {error:#}"));
-    let reason = crate::workflow::error_message(&error);
+    // Backup capture has only read capabilities, before the update write grant.
+    let error = error.context(crate::user_error::NoFirmwareWrite);
+    let reason = crate::workflow::user_error(&error).encoded();
     if confirm.proceed_without_backup(&reason)? {
-        eprintln!(
-            "{}",
-            style::amber(
-                "Proceeding WITHOUT a rollback backup at your request. Every other safety check \
-                 still applies.",
-            )
-        );
+        crate::diagnostics::record("Proceeding without a rollback backup at the operator's request; other safety checks remain enforced.");
         Ok(None)
     } else {
         Err(error.context(

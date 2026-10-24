@@ -261,25 +261,45 @@ impl crate::backend::Confirm for TerminalConfirm {
 
     fn proceed_without_backup(&mut self, reason: &str) -> anyhow::Result<bool> {
         use std::io::IsTerminal;
-        println!("{}", crate::style::amber(reason));
-        // No backup is a bigger decision than the normal flash confirmation, so
-        // it needs an explicit human yes: never auto-proceed on a non-terminal.
-        if !std::io::stdin().is_terminal() {
-            println!(
-                "{}",
-                crate::style::dim(
-                    "stdin is not a TTY; cannot ask whether to flash without a backup — aborting."
-                )
-            );
-            return Ok(false);
-        }
-        proceed_without_backup_with(&mut std::io::stdin().lock())
+        confirm_backup_with(
+            reason,
+            std::io::stdin().is_terminal(),
+            &mut std::io::stdin().lock(),
+            crate::localization::Preferences::user().load(),
+        )
     }
 }
 
-/// The `proceed_without_backup` prompt with its input injected (TTY path).
-pub(crate) fn proceed_without_backup_with(reader: &mut impl io::BufRead) -> anyhow::Result<bool> {
-    print!("Flash without a backup? [y/N] ");
+/// Render the backup refusal at the terminal boundary, preserving explicit consent.
+pub(crate) fn confirm_backup_with(
+    reason: &str,
+    is_tty: bool,
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
+    println!(
+        "{}",
+        crate::style::amber(&crate::localization::render(language, reason))
+    );
+    // Without an interactive answer, never auto-proceed without the backup.
+    if !is_tty {
+        return Err(
+            anyhow::Error::new(crate::user_error::IssueCode::BackupConfirmationRequired)
+                .context(crate::user_error::NoFirmwareWrite),
+        );
+    }
+    proceed_without_backup_with(reader, language)
+}
+
+/// The backup question with its input and language supplied by the caller.
+pub(crate) fn proceed_without_backup_with(
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
+    print!(
+        "{} [y/N] ",
+        crate::localization::get(language, "backup.proceed")
+    );
     let _ = io::stdout().flush();
     let mut line = String::new();
     reader.read_line(&mut line)?;

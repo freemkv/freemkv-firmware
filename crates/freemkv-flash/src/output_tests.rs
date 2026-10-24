@@ -2,6 +2,37 @@ use super::*;
 use std::sync::{Arc, Mutex};
 
 #[test]
+fn backup_bypass_without_interactive_input_is_localized_and_never_auto_approved() {
+    let reason = crate::user_error::UserError {
+        id: "errors.backup_failed",
+        arguments: Vec::new(),
+        consequence: Some("errors.no_firmware_write"),
+    }
+    .encoded();
+    let mut input = b"yes\n".as_slice();
+    let error = confirm_backup_with(
+        &reason,
+        false,
+        &mut input,
+        crate::localization::Language::Fr,
+    )
+    .unwrap_err();
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.backup_confirmation_required");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    let text = issue.render(crate::localization::Language::Fr);
+    assert!(text.contains(crate::localization::get(
+        crate::localization::Language::Fr,
+        "errors.backup_confirmation_required"
+    )));
+    assert!(!text.contains("TTY"));
+    assert_eq!(
+        input, b"yes\n",
+        "no answer can be consumed without an interactive terminal"
+    );
+}
+
+#[test]
 fn captures_both_streams_and_restores_after_panic() {
     let messages = Arc::new(Mutex::new(Vec::new()));
     let received = messages.clone();
@@ -62,11 +93,15 @@ fn confirm_on_a_tty_requires_an_explicit_yes() {
 fn proceed_without_backup_prompt_requires_an_explicit_yes() {
     for input in ["y\n", "yes\n", "Y\n", "YES\n"] {
         let mut bytes = input.as_bytes();
-        assert!(proceed_without_backup_with(&mut bytes).unwrap());
+        assert!(
+            proceed_without_backup_with(&mut bytes, crate::localization::Language::En).unwrap()
+        );
     }
     for input in ["\n", "n\n", "no\n", "nope\n"] {
         let mut bytes = input.as_bytes();
-        assert!(!proceed_without_backup_with(&mut bytes).unwrap());
+        assert!(
+            !proceed_without_backup_with(&mut bytes, crate::localization::Language::En).unwrap()
+        );
     }
 }
 

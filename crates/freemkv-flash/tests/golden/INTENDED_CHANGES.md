@@ -9512,7 +9512,7 @@ reason: PRECHECK
 reason: P5, PRECHECK
 ```diff
 -result: ERR pre-flash backup failed; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
-+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
++result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: operation has no firmware write capability: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 ```
 
 ## info_file.txt
@@ -32441,7 +32441,7 @@ reason: P2, FMT, PRECHECK
 reason: P4, P5, PRECHECK
 ```diff
 -result: ERR backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update; aborting flash: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
-+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
++result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: operation has no firmware write capability: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 -  Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
 +errors.backup_partial
 -MSG        Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only

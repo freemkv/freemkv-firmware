@@ -411,9 +411,9 @@ fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
     };
     let error =
         crate::engine::recover(&mut dev, &Mtk, Some(&original), &target, true, true).unwrap_err();
-    assert!(
-        crate::workflow::error_message(&error).contains("Current firmware file does not match"),
-        "{error:#}"
+    assert_eq!(
+        crate::workflow::user_error(&error).id,
+        "errors.current_mismatch"
     );
     let evidence = error
         .downcast_ref::<crate::backend::UpdateFailure>()
