@@ -48,7 +48,7 @@
     "action.no": "No",
     "action.save_log": "Save Log…",
     "errors.hardware_mismatch": "The underlying hardware for these firmwares is not compatible. Installed firmware: {installed}. Selected firmware: {selected}.",
-    "errors.current_required": "Choose the firmware currently installed in this drive as Current firmware, then try again.",
+    "errors.current_required": "The installed firmware could not be read or identified completely. Select a file matching the firmware currently installed in this drive under Current firmware, then try again.",
     "errors.backup_restricted": "This firmware cannot be backed up. This is normal for many MediaTek drives.",
     "errors.file_missing": "The selected file could not be found. Choose the file again.",
     "errors.permission_denied": "Access was denied. Check file permissions and close other applications using the drive, then try again.",

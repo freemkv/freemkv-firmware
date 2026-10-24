@@ -1052,25 +1052,24 @@ impl RecoveryFacet for Pioneer {
                 crate::backend::UpdateFailure::before_write("recovery preparation", error)
             })?;
         let captured;
-        let current: &[u8] = match current {
-            Some(bytes) => bytes,
+        let evidence = match evidence {
+            Some(evidence) => evidence,
             None => {
-                captured = crate::backends::pioneer::backup::capture_signed_candidate(dev.scsi())
-                    .context("cannot read Current firmware; supply a Current firmware file instead")
-                    .map_err(|error| {
-                        crate::backend::UpdateFailure::before_write(
-                            "current firmware capture",
-                            error,
-                        )
-                    })?;
+                // Validate the captured pair here: a Kernel-only partial backup
+                // is a capture failure, not an invalid target firmware file.
+                captured = match current {
+                    Some(bytes) => recovery::Current::load(bytes),
+                    None => recovery::captured_current(
+                        crate::backends::pioneer::backup::capture_signed_candidate(dev.scsi()),
+                    ),
+                }
+                .map_err(|error| {
+                    crate::backend::UpdateFailure::before_write("current firmware capture", error)
+                })?;
                 &captured
             }
         };
-        let plan = match evidence {
-            Some(evidence) => recovery::Plan::with_current(evidence, target),
-            None => recovery::Plan::prepare(current, target),
-        }
-        .map_err(|error| {
+        let plan = recovery::Plan::with_current(evidence, target).map_err(|error| {
             crate::backend::UpdateFailure::before_write("recovery preparation", error)
         })?;
         crate::output::field(

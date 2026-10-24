@@ -1899,3 +1899,23 @@ fn oem_identity_without_decoded_current_protocol_evidence_never_probes_vendor() 
         assert_eq!(dev.writes, 0);
     }
 }
+
+#[test]
+fn failed_or_partial_current_capture_suggests_supplied_firmware() {
+    for capture in [
+        Err(anyhow::anyhow!(
+            "short firmware read at 0x5c0000: 17920/18176"
+        )),
+        Ok(Vec::new()),
+    ] {
+        let error = captured_current(capture).err().expect("capture must fail");
+        assert!(error.is::<crate::backend::CurrentFirmwareRequired>());
+        let wrapped =
+            crate::backend::UpdateFailure::before_write("current firmware capture", error);
+        let guidance = crate::user_error::UserError::of(&wrapped);
+        assert_eq!(guidance.id, "errors.current_required");
+        let text = guidance.render(crate::localization::Language::En);
+        assert!(text.contains("could not be read"));
+        assert!(text.contains("Current firmware"));
+    }
+}

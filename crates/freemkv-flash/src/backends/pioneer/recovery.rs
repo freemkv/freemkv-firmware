@@ -23,6 +23,13 @@ pub(crate) struct Current {
     normal: Envelope,
 }
 
+/// A failed or partial live capture asks for a supplied Current file.
+pub(super) fn captured_current(capture: Result<Vec<u8>>) -> Result<Current> {
+    capture
+        .and_then(|bytes| Current::load(&bytes))
+        .map_err(|source| crate::backend::CurrentFirmwareRequired { source }.into())
+}
+
 impl Current {
     pub(crate) fn load(bytes: &[u8]) -> Result<Self> {
         let (kernel, normal) = classify_flash_input(bytes)?;
@@ -55,6 +62,7 @@ impl Current {
 }
 
 impl Plan {
+    #[cfg(test)]
     pub(crate) fn prepare(current: &[u8], target: &[u8]) -> Result<Self> {
         Self::with_current(&Current::load(current)?, target)
     }
