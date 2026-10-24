@@ -1,6 +1,11 @@
 {
   "language_name": "Slovenčina",
   "messages": {
+    "errors.backup_required": "Táto aktualizácia vyžaduje úplnú zálohu nainštalovaného firmvéru. Uložte diagnostickú správu a požiadajte o pomoc.",
+    "confirm.proceed": "Pokračovať?",
+    "confirm.non_interactive": "Pokračuje sa so súhlasom, ktorý už bol udelený tomuto príkazu.",
+    "errors.current_invalid": "Vybraný súbor aktuálneho firmvéru sa nepodarilo overiť. Vyberte úplný súbor zodpovedajúci firmvéru nainštalovanému v tejto mechanike.",
+    "errors.file_dialog": "Okno výberu súboru nemohlo dokončiť akciu. Skúste to znova alebo uložte diagnostickú správu a požiadajte o pomoc.",
     "errors.backup_confirmation_required": "Na pokračovanie aktualizácie bez zálohy je potrebná vaša odpoveď. Spustite príkaz v okne terminálu, kde môžete odpovedať na otázku.",
     "errors.drive_firmware_unconfirmed": "Mechanika nepotvrdila, že používa firmvér freemkv. Skontrolujte, či ste vybrali správnu mechaniku. Ak áno, uložte diagnostickú správu pre získanie pomoci.",
     "errors.backup_partial": "Podarilo sa prečítať iba časť firmvéru. Uložený súbor je neúplný: nepoužívajte ho na obnovu mechaniky. Nebol zapísaný žiadny firmvér. Skontrolujte pripojenie a vytvorte novú úplnú zálohu.",

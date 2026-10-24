@@ -78,6 +78,22 @@ fn confirm_auto_proceeds_when_stdin_is_not_a_tty() {
 }
 
 #[test]
+fn confirmations_use_the_selected_language_and_keep_no_as_the_default() {
+    for language in crate::localization::Language::ALL {
+        let prompt = consent_prompt(language, "confirm.proceed");
+        assert!(prompt.contains(crate::localization::get(language, "confirm.proceed")));
+        assert!(prompt.contains(crate::localization::get(language, "action.yes")));
+        assert!(prompt.contains(crate::localization::get(language, "action.no")));
+        let yes = format!("{}\n", crate::localization::get(language, "action.yes"));
+        assert!(confirm_in_language(true, &mut yes.as_bytes(), language).unwrap());
+        let no = format!("{}\n", crate::localization::get(language, "action.no"));
+        assert!(!confirm_in_language(true, &mut no.as_bytes(), language).unwrap());
+        assert!(!confirm_in_language(true, &mut b"\n".as_slice(), language).unwrap());
+        assert!(confirm_in_language(false, &mut b"".as_slice(), language).unwrap());
+    }
+}
+
+#[test]
 fn confirm_on_a_tty_requires_an_explicit_yes() {
     for input in ["y\n", "yes\n", "Y\n", "YES\n"] {
         let mut bytes = input.as_bytes();

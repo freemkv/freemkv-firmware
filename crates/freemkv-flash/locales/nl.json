@@ -1,6 +1,11 @@
 {
   "language_name": "Nederlands",
   "messages": {
+    "errors.backup_required": "Deze update vereist een volledige back-up van de geïnstalleerde firmware. Sla een diagnostisch rapport op om hulp te krijgen.",
+    "confirm.proceed": "Doorgaan?",
+    "confirm.non_interactive": "Er wordt doorgegaan met de toestemming die al voor deze opdracht is gegeven.",
+    "errors.current_invalid": "Het geselecteerde bestand met de huidige firmware kon niet worden gevalideerd. Kies een volledig bestand dat overeenkomt met de firmware op dit station.",
+    "errors.file_dialog": "Het venster voor bestandsselectie kon de actie niet voltooien. Probeer het opnieuw of sla een diagnostisch rapport op om hulp te krijgen.",
     "errors.backup_confirmation_required": "Deze update heeft uw antwoord nodig voordat deze zonder back-up kan doorgaan. Voer de opdracht uit in een terminalvenster waarin u de vraag kunt beantwoorden.",
     "errors.drive_firmware_unconfirmed": "Het station heeft niet bevestigd dat het freemkv-firmware gebruikt. Controleer of u het juiste station hebt geselecteerd. Als dat klopt, sla dan een diagnoserapport op om hulp te krijgen.",
     "errors.backup_partial": "Slechts een deel van de firmware kon worden gelezen. Het opgeslagen bestand is onvolledig: gebruik het niet om het station te herstellen. Er is geen firmware geschreven. Controleer de verbinding en maak een nieuwe volledige back-up.",

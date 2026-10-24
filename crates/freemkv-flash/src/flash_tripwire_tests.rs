@@ -203,7 +203,7 @@ fn flash_never_writes_without_saved_backup() {
         engine_flash(d, &Pioneer::new(), &req)
     });
     assert!(
-        outcome.result.contains("pre-flash backup failed"),
+        outcome.result.contains("errors.backup_required"),
         "{}",
         outcome.result
     );
@@ -569,6 +569,9 @@ macro_rules! test_backend {
             }
         }
         impl FlashFacet for $ty {
+            fn can_proceed_without_backup(&self) -> bool {
+                true // These synthetic executors do not need installed receiver bytes.
+            }
             fn preflight(
                 &self,
                 _: &mut ReadDevice<'_>,

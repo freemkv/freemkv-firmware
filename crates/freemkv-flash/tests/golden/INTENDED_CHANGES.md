@@ -14,7 +14,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
-| OPERATION_015 | 0.15.0: typed localized user issues retain pre-write and read-only evidence; internal error chains gain stable cause markers. Recovery states whether its family gate is retained or explicitly bypassed. Expected restart command failures remain in diagnostics rather than user warnings. Write ordering, payloads and verification comparisons are unchanged. |
+| OPERATION_015 | 0.15.0: confirmation prompts and accepted answers use the selected language; Pioneer requires a usable installed backup and never offers a bypass it cannot execute. Typed localized user issues retain pre-write and read-only evidence; internal error chains gain stable cause markers. Recovery states whether its family gate is retained or explicitly bypassed. Expected restart command failures remain in diagnostics rather than user warnings. Write ordering, payloads and verification comparisons are unchanged. |
 | CLI_INFO | 0.14.4: CLI drive information groups and aligns the shared GUI identity, interface, capabilities, region and settings fields. GUI field values and device-command transcript remain unchanged. Native transport traces stay in diagnostics. |
 | HUMAN_ERRORS | 0.14.1: optional DVD region, Pioneer identity and settings read failures show Unavailable. Full causes remain in English diagnostics. No device commands or values from successful reads change. |
 | PRECHECK | 0.14.0: proven pre-write failures retain phase and no-write evidence; hardware mismatches have actionable model guidance with original family identifiers in diagnostics. Pioneer preview explicitly leaves installed compatibility pending. No SCSI commands, payloads, programming order or compatibility gates change. |
@@ -9509,10 +9509,10 @@ reason: PRECHECK
 ```
 
 ### Pioneer execute: pre-flash backup cannot be read
-reason: P5, PRECHECK
+reason: P5, PRECHECK, OPERATION_015
 ```diff
 -result: ERR pre-flash backup failed; aborting flash: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
-+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: operation has no firmware write capability: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
++result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_required: operation has no firmware write capability: Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created: Pioneer transport returned 96 bytes for a 36-byte buffer
 ```
 
 ## info_file.txt
@@ -12000,43 +12000,52 @@ reason: P4, PRECHECK
 ## pioneer_confirm_prompt.txt
 
 ### Pioneer prompt: TTY answers n
-reason: FMT, PRECHECK
+reason: FMT, PRECHECK, OPERATION_015
 ```diff
 -result: ERR flash aborted at confirmation prompt
 +result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): ui.cancelled_no_firmware_was_written: flash aborted at confirmation prompt
 -Proceed? [y/N] 
-+Proceed? [y/N]
++Proceed? [Yes/No]
 -MSG      Proceed? [y/N] 
-+MSG      Proceed? [y/N]
++MSG      Proceed? [Yes/No]
 ```
 
 ### Pioneer prompt: TTY answers y
-reason: FMT
+reason: FMT, OPERATION_015
 ```diff
 -Proceed? [y/N] 
-+Proceed? [y/N]
++Proceed? [Yes/No]
 -MSG      Proceed? [y/N] 
-+MSG      Proceed? [y/N]
++MSG      Proceed? [Yes/No]
 ```
 
 ### Pioneer prompt: TTY answers yes
-reason: FMT
+reason: FMT, OPERATION_015
 ```diff
 -Proceed? [y/N] 
-+Proceed? [y/N]
++Proceed? [Yes/No]
 -MSG      Proceed? [y/N] 
-+MSG      Proceed? [y/N]
++MSG      Proceed? [Yes/No]
 ```
 
 ### Pioneer prompt: TTY input ends
-reason: FMT, PRECHECK
+reason: FMT, PRECHECK, OPERATION_015
 ```diff
 -result: ERR flash aborted at confirmation prompt
 +result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): ui.cancelled_no_firmware_was_written: flash aborted at confirmation prompt
 -Proceed? [y/N] 
-+Proceed? [y/N]
++Proceed? [Yes/No]
 -MSG      Proceed? [y/N] 
-+MSG      Proceed? [y/N]
++MSG      Proceed? [Yes/No]
+```
+
+### Pioneer prompt: stdin is not a TTY
+reason: OPERATION_015
+```diff
+-stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
++Proceeding with the consent already supplied to this command.
+-MSG      stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
++MSG      Proceeding with the consent already supplied to this command.
 ```
 
 ## pioneer_corpus.txt
@@ -32123,7 +32132,7 @@ reason: P10
 ## pioneer_execute.txt
 
 ### Pioneer CLI execute: stdin is not a TTY
-reason: P4, P7, P8, P9, P10
+reason: P4, P7, P8, P9, P10, OPERATION_015
 ```diff
 ---- terminal (13) ---
 +--- terminal (35) ---
@@ -32139,6 +32148,8 @@ reason: P4, P7, P8, P9, P10
 +Verifying Backup: 0%
 +Verifying Backup: 100%
 +Preparing Firmware
+-stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
++Proceeding with the consent already supplied to this command.
 -flash complete; drive returned ready.
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
@@ -32326,7 +32337,7 @@ reason: P2, PRECHECK
 ## pioneer_execute_tty.txt
 
 ### Pioneer CLI execute: TTY answers n
-reason: P2, FMT, PRECHECK
+reason: P2, FMT, PRECHECK, OPERATION_015
 ```diff
 -result: ERR flash aborted at confirmation prompt
 ---- terminal (8) ---
@@ -32346,7 +32357,7 @@ reason: P2, FMT, PRECHECK
 +Preparing Firmware
 -Proceed? [y/N] 
 ---- scsi transcript (23) ---
-+Proceed? [y/N]
++Proceed? [Yes/No]
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
@@ -32354,7 +32365,7 @@ reason: P2, FMT, PRECHECK
 ```
 
 ### Pioneer CLI execute: TTY answers y
-reason: P4, P7, P8, P9, FMT, P10
+reason: P4, P7, P8, P9, FMT, P10, OPERATION_015
 ```diff
 ---- terminal (12) ---
 +--- terminal (34) ---
@@ -32371,7 +32382,7 @@ reason: P4, P7, P8, P9, FMT, P10
 +Verifying Backup: 100%
 +Preparing Firmware
 -Proceed? [y/N] 
-+Proceed? [y/N]
++Proceed? [Yes/No]
 -flash complete; drive returned ready.
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
@@ -32410,7 +32421,7 @@ reason: P4, P7, P8, P9, FMT, P10
 ```
 
 ### Pioneer CLI execute: disc inserted after the backup, TTY answers y
-reason: P2, FMT, PRECHECK
+reason: P2, FMT, PRECHECK, OPERATION_015
 ```diff
 -result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 ---- terminal (5) ---
@@ -32430,7 +32441,7 @@ reason: P2, FMT, PRECHECK
 +backup: saved <TMP>/tty-disc/backup.tar (146432 bytes)
 +Preparing Firmware
 +This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-+Proceed? [y/N]
++Proceed? [Yes/No]
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 ```
@@ -32438,10 +32449,10 @@ reason: P2, FMT, PRECHECK
 ## pioneer_flash_bundle_failures.txt
 
 ### Pioneer execute: installed backup is Kernel-only
-reason: P4, P5, PRECHECK
+reason: P4, P5, PRECHECK, OPERATION_015
 ```diff
 -result: ERR backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update; aborting flash: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
-+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_failed: pre-flash backup failed and flashing without one was declined; aborting flash: operation has no firmware write capability: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
++result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_required: operation has no firmware write capability: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 -  Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
 +errors.backup_partial
 -MSG        Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only

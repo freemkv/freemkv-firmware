@@ -1,6 +1,11 @@
 {
   "language_name": "Polski",
   "messages": {
+    "errors.backup_required": "Ta aktualizacja wymaga kompletnej kopii zapasowej zainstalowanego oprogramowania układowego. Zapisz raport diagnostyczny, aby uzyskać pomoc.",
+    "confirm.proceed": "Kontynuować?",
+    "confirm.non_interactive": "Kontynuowanie za zgodą już udzieloną dla tego polecenia.",
+    "errors.current_invalid": "Nie udało się zweryfikować wybranego pliku bieżącego oprogramowania układowego. Wybierz kompletny plik zgodny z oprogramowaniem zainstalowanym w tym napędzie.",
+    "errors.file_dialog": "Okno wyboru pliku nie mogło ukończyć działania. Spróbuj ponownie lub zapisz raport diagnostyczny, aby uzyskać pomoc.",
     "errors.backup_confirmation_required": "Aktualizacja wymaga odpowiedzi przed kontynuowaniem bez kopii zapasowej. Uruchom polecenie w oknie terminala, w którym możesz odpowiedzieć na pytanie.",
     "errors.drive_firmware_unconfirmed": "Napęd nie potwierdził, że używa oprogramowania freemkv. Sprawdź, czy wybrano właściwy napęd. Jeśli tak, zapisz raport diagnostyczny, aby uzyskać pomoc.",
     "errors.backup_partial": "Udało się odczytać tylko część oprogramowania napędu. Zapisany plik jest niepełny: nie używaj go do przywracania napędu. Nie zapisano oprogramowania w napędzie. Sprawdź połączenie i utwórz nową pełną kopię zapasową.",

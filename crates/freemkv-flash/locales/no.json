@@ -1,6 +1,11 @@
 {
   "language_name": "Norsk",
   "messages": {
+    "errors.backup_required": "Denne oppdateringen krever en fullstendig sikkerhetskopi av den installerte fastvaren. Lagre en diagnostikkrapport for å få hjelp.",
+    "confirm.proceed": "Fortsette?",
+    "confirm.non_interactive": "Fortsetter med samtykket som allerede er gitt til denne kommandoen.",
+    "errors.current_invalid": "Den valgte filen med gjeldende fastvare kunne ikke valideres. Velg en fullstendig fil som samsvarer med fastvaren installert på denne stasjonen.",
+    "errors.file_dialog": "Vinduet for filvalg kunne ikke fullføre handlingen. Prøv igjen, eller lagre en diagnostikkrapport for å få hjelp.",
     "errors.backup_confirmation_required": "Oppdateringen trenger svaret ditt før den kan fortsette uten sikkerhetskopi. Kjør kommandoen i et terminalvindu der du kan svare på spørsmålet.",
     "errors.drive_firmware_unconfirmed": "Stasjonen bekreftet ikke at den bruker freemkv-fastvare. Kontroller at du valgte riktig stasjon. Hvis det er riktig, lagre en diagnoserapport for å få hjelp.",
     "errors.backup_partial": "Bare en del av fastvaren kunne leses. Den lagrede filen er ufullstendig: ikke bruk den til å gjenopprette stasjonen. Ingen fastvare ble skrevet. Kontroller tilkoblingen og lag en ny fullstendig sikkerhetskopi.",

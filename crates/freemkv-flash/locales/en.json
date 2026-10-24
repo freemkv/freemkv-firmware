@@ -1,6 +1,11 @@
 {
   "language_name": "English",
   "messages": {
+    "errors.backup_required": "This update requires a complete backup of the installed firmware. Save a diagnostic report for help.",
+    "confirm.proceed": "Proceed?",
+    "confirm.non_interactive": "Proceeding with the consent already supplied to this command.",
+    "errors.current_invalid": "The selected Current firmware file could not be validated. Choose a complete file matching the firmware installed in this drive.",
+    "errors.file_dialog": "The file selection window could not finish. Try again or save a diagnostic report for help.",
     "errors.backup_confirmation_required": "This update needs your answer before it can continue without a backup. Run the command in a terminal window where you can answer the question.",
     "errors.drive_firmware_unconfirmed": "The drive did not confirm that it is running freemkv firmware. Check that you selected the intended drive. If it is correct, save a diagnostic report for help.",
     "settings.language": "Language",

@@ -1,6 +1,11 @@
 {
   "language_name": "Português (Brasil)",
   "messages": {
+    "errors.backup_required": "Esta atualização requer um backup completo do firmware instalado. Salve um relatório de diagnóstico para obter ajuda.",
+    "confirm.proceed": "Continuar?",
+    "confirm.non_interactive": "Continuando com o consentimento já fornecido para este comando.",
+    "errors.current_invalid": "Não foi possível validar o arquivo de firmware atual selecionado. Escolha um arquivo completo que corresponda ao firmware instalado nesta unidade.",
+    "errors.file_dialog": "A janela de seleção de arquivos não conseguiu concluir a ação. Tente novamente ou salve um relatório de diagnóstico para obter ajuda.",
     "errors.backup_confirmation_required": "Esta atualização precisa da sua resposta antes de continuar sem backup. Execute o comando em uma janela de terminal onde possa responder à pergunta.",
     "errors.drive_firmware_unconfirmed": "A unidade não confirmou que está usando o firmware freemkv. Confira se selecionou a unidade correta. Se estiver correta, salve um relatório de diagnóstico para obter ajuda.",
     "errors.backup_partial": "Só foi possível ler parte do firmware. O arquivo salvo está incompleto: não o use para restaurar a unidade. Nenhum firmware foi gravado. Verifique a conexão e crie um novo backup completo.",

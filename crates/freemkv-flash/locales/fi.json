@@ -1,6 +1,11 @@
 {
   "language_name": "Suomi",
   "messages": {
+    "errors.backup_required": "Tämä päivitys edellyttää täydellistä varmuuskopiota asennetusta laiteohjelmistosta. Tallenna diagnostiikkaraportti avun saamista varten.",
+    "confirm.proceed": "Jatketaanko?",
+    "confirm.non_interactive": "Jatketaan tälle komennolle jo annetulla suostumuksella.",
+    "errors.current_invalid": "Valittua nykyisen laiteohjelmiston tiedostoa ei voitu vahvistaa. Valitse täydellinen tiedosto, joka vastaa asemaan asennettua laiteohjelmistoa.",
+    "errors.file_dialog": "Tiedostonvalintaikkuna ei voinut suorittaa toimintoa loppuun. Yritä uudelleen tai tallenna diagnostiikkaraportti avun saamista varten.",
     "errors.backup_confirmation_required": "Päivitys tarvitsee vastauksesi ennen jatkamista ilman varmuuskopiota. Suorita komento pääteikkunassa, jossa voit vastata kysymykseen.",
     "errors.drive_firmware_unconfirmed": "Asema ei vahvistanut käyttävänsä freemkv-laiteohjelmistoa. Tarkista, että valitsit oikean aseman. Jos valinta on oikein, tallenna diagnostiikkaraportti avun saamiseksi.",
     "errors.backup_partial": "Vain osa laiteohjelmistosta voitiin lukea. Tallennettu tiedosto on puutteellinen: älä käytä sitä aseman palauttamiseen. Laiteohjelmistoa ei kirjoitettu. Tarkista yhteys ja tee uusi täydellinen varmuuskopio.",

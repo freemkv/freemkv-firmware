@@ -1,6 +1,11 @@
 {
   "language_name": "Türkçe",
   "messages": {
+    "errors.backup_required": "Bu güncelleme, yüklü ürün yazılımının tam yedeğini gerektirir. Yardım almak için bir tanılama raporu kaydedin.",
+    "confirm.proceed": "Devam edilsin mi?",
+    "confirm.non_interactive": "Bu komut için önceden verilen onayla devam ediliyor.",
+    "errors.current_invalid": "Seçilen mevcut ürün yazılımı dosyası doğrulanamadı. Bu sürücüde yüklü ürün yazılımıyla eşleşen eksiksiz bir dosya seçin.",
+    "errors.file_dialog": "Dosya seçme penceresi işlemi tamamlayamadı. Yeniden deneyin veya yardım almak için bir tanılama raporu kaydedin.",
     "errors.backup_confirmation_required": "Bu güncellemenin yedek olmadan devam edebilmesi için yanıtınız gerekiyor. Komutu, soruyu yanıtlayabileceğiniz bir terminal penceresinde çalıştırın.",
     "errors.drive_firmware_unconfirmed": "Sürücü freemkv aygıt yazılımını kullandığını doğrulamadı. Amaçladığınız sürücüyü seçtiğinizi kontrol edin. Seçim doğruysa yardım almak için tanılama raporu kaydedin.",
     "errors.backup_partial": "Aygıt yazılımının yalnızca bir kısmı okunabildi. Kaydedilen dosya eksiktir: sürücüyü geri yüklemek için kullanmayın. Aygıt yazılımı yazılmadı. Bağlantıyı kontrol edin ve yeni bir tam yedek oluşturun.",

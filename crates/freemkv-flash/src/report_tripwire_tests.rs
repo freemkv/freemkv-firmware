@@ -135,7 +135,7 @@ fn info_transcript_matches_0_11_2() {
     // The snapshot is read once even when the drive answers every field.
     let mut dev = Rec::new(pioneer_with(b"", b"SN1", b"SAT 8A10"));
     let before = crate::standard::reads();
-    crate::engine::info_report(&mut dev, backend(true));
+    crate::engine::info_report(&mut dev, backend(true)).unwrap();
     assert_eq!(crate::standard::reads(), before + 1);
     let modes = dev
         .transcript()
@@ -228,7 +228,9 @@ fn info_gui_events_match_0_11_2() {
 #[test]
 fn pioneer_rows_interleave_at_slots() {
     let mut dev = pioneer_with(b"", b"SN1", b"SAT 8A10");
-    let report = crate::engine::info_report(&mut dev, backend(true)).report;
+    let report = crate::engine::info_report(&mut dev, backend(true))
+        .unwrap()
+        .report;
     let k = keys(&report.rows);
     let identity = first(&k, "hardware_type");
     assert!(first(&k, "interface") < identity, "{k:?}");
@@ -255,7 +257,9 @@ fn pioneer_rows_interleave_at_slots() {
     // MediaTek's chipset row comes after everything standard, before the
     // firmware lines, with a GUI and a CLI label of its own.
     let mut dev = mtk_drive();
-    let report = crate::engine::info_report(&mut dev, Some(&Mtk)).report;
+    let report = crate::engine::info_report(&mut dev, Some(&Mtk))
+        .unwrap()
+        .report;
     let k = keys(&report.rows);
     let chipset = first(&k, "chipset");
     assert!(first(&k, "region") < chipset);
@@ -599,7 +603,9 @@ fn details_reuse_probe_data_without_repeat_reads() {
     // Info reads the identity and the standard snapshot once each; the vendor
     // identity (F1) is read only inside the snapshot.
     let mut dev = Rec::new(pioneer_with(b"", b"SN1", b"SAT 8A10"));
-    let report = crate::engine::info_report(&mut dev, backend(true)).report;
+    let report = crate::engine::info_report(&mut dev, backend(true))
+        .unwrap()
+        .report;
     let t = dev.transcript();
     let count = |prefix: &str| t.iter().filter(|l| l.contains(prefix)).count();
     assert_eq!(count("cdb=120000006000"), 2, "{t:#?}");
@@ -657,6 +663,7 @@ fn every_drive_string_is_clean() {
     assert!(replaced("Hardware type"));
     let mut dev = pioneer_with(b"2017\x1b[2J", b"SN", b"SAT \x1b[31m");
     for row in crate::engine::info_report(&mut dev, backend(true))
+        .unwrap()
         .report
         .rows
     {

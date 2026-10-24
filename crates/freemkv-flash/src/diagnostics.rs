@@ -13,6 +13,7 @@ const KEEP_START: usize = 64 * 1024;
 const MAX_EVENT: usize = 32 * 1024;
 
 struct Log {
+    path: PathBuf,
     file: File,
     start: Instant,
     bytes: usize,
@@ -93,6 +94,16 @@ pub fn with_operation_id<T>(id: &str, work: impl FnOnce() -> T) -> T {
 }
 
 fn logging_failed(message: String) {
+    // Preserve technical evidence outside the failed primary log while keeping
+    // the visible warning localized. Never recurse through `record` here.
+    if let Ok((path, mut log)) = create_log(
+        &std::env::temp_dir().join("freemkv-logs"),
+        "logging-failure",
+    ) {
+        if log.write(&message).and_then(|()| log.file.flush()).is_ok() {
+            crate::output::field("Diagnostic log", path.display().to_string());
+        }
+    }
     if crate::output::captured() {
         crate::output::publish(crate::output::Event::Message(message));
     }
@@ -105,16 +116,18 @@ fn logging_failed(message: String) {
 pub fn record(text: impl AsRef<str>) {
     let error = LOG.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let error = slot.as_mut().and_then(|log| log.write(text.as_ref()).err());
+        let error = slot.as_mut().and_then(|log| {
+            log.write(text.as_ref()).err().map(|error| {
+                format!("Diagnostic log write failed at {}: {error}; file logging disabled for this operation", log.path.display())
+            })
+        });
         if error.is_some() {
             *slot = None;
         }
         error
     });
     if let Some(error) = error {
-        logging_failed(format!(
-            "Diagnostic log write failed: {error}; file logging disabled for this operation"
-        ));
+        logging_failed(error);
     }
 }
 
@@ -194,8 +207,9 @@ fn create_log(directory: &Path, application: &str) -> io::Result<(PathBuf, Log)>
     }
     let file = options.open(&path)?;
     Ok((
-        path,
+        path.clone(),
         Log {
+            path,
             file,
             start: Instant::now(),
             bytes: 0,
@@ -244,8 +258,24 @@ fn run_at_named<T>(
     if LOG.with(|slot| slot.borrow().is_some()) {
         return work();
     }
-    let created = create_log(directory, application)
-        .or_else(|_| create_log(&std::env::temp_dir().join("freemkv-logs"), application));
+    let created: io::Result<_> = create_log(directory, application).or_else(|primary| {
+        let fallback = std::env::temp_dir().join("freemkv-logs");
+        let (path, mut log) = create_log(&fallback, application).map_err(|secondary| {
+            io::Error::new(
+                secondary.kind(),
+                format!(
+                    "Cannot create diagnostic log in {}: {primary}; fallback {}: {secondary}",
+                    directory.display(),
+                    fallback.display()
+                ),
+            )
+        })?;
+        log.write(&format!(
+            "Primary diagnostic log unavailable in {}: {primary}; using fallback",
+            directory.display()
+        ))?;
+        Ok((path, log))
+    });
     let path = match created {
         Ok((path, log)) => {
             LOG.with(|slot| *slot.borrow_mut() = Some(log));

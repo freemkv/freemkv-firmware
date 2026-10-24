@@ -84,7 +84,8 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
 
 #[cfg(test)]
 fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
-    let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")?;
+    let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")
+        .map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?;
     let (kernel, normal) = classify_flash_input(backup)?;
     receiver_from_components(kernel.as_deref(), normal.as_deref())
 }
@@ -501,7 +502,7 @@ pub(crate) fn authorize_installed(
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
     let (installed_kernel, installed_normal) = classify_flash_input(installed.context(
         "installed firmware backup is required to recover the receiver control key; refusing update entry"
-    )?)?;
+    ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
     if kernel.is_none() {
         flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
             .map_err(anyhow::Error::msg)?;

@@ -903,10 +903,12 @@ fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
 
 #[test]
 fn installed_receiver_requires_a_backup() {
-    assert!(installed_receiver(None)
-        .unwrap_err()
-        .to_string()
-        .contains("backup is required"));
+    let error = installed_receiver(None).unwrap_err();
+    assert_eq!(
+        crate::user_error::UserError::of(&error).id,
+        "errors.backup_required"
+    );
+    assert!(format!("{error:#}").contains("backup is required"));
 }
 
 #[test]

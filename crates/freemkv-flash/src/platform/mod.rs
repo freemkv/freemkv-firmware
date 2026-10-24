@@ -286,7 +286,7 @@ pub use mock::MockScsiDevice;
 pub fn open(path: &str, writable: bool) -> Result<Box<dyn ScsiDevice>> {
     let _ = writable;
     Ok(Box::new(adapter::TransportDevice::open(path).map_err(
-        |e| e.context(crate::user_error::IssueCode::Connection),
+        |e| crate::user_error::explain(e, crate::user_error::IssueCode::Connection),
     )?))
 }
 

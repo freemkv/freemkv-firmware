@@ -64,6 +64,30 @@ fn entry_failure_translations_say_no_firmware_payload_was_sent() {
 }
 
 #[test]
+fn operation_contract_keys_exist_independently_of_catalog_parity() {
+    for language in Language::ALL {
+        for key in [
+            "phase.reading",
+            "phase.saving",
+            "phase.preparing",
+            "phase.writing",
+            "phase.restarting",
+            "phase.verifying",
+            "errors.update_blocked",
+            "errors.no_firmware_write",
+            "errors.hardware_mismatch",
+            "errors.temporary_firmware",
+            "errors.update_not_started",
+            "errors.update_uncertain",
+            "errors.verification_details",
+            "errors.file_dialog",
+        ] {
+            assert!(!get(language, key).trim().is_empty(), "{language:?}: {key}");
+        }
+    }
+}
+
+#[test]
 fn every_embedded_catalog_has_the_same_nonempty_message_ids() {
     let english = Language::En.catalog()["messages"].as_object().unwrap();
     let expected: BTreeSet<_> = english.keys().collect();

@@ -1,6 +1,11 @@
 {
   "language_name": "Svenska",
   "messages": {
+    "errors.backup_required": "Denna uppdatering kräver en fullständig säkerhetskopia av den installerade firmwaren. Spara en diagnostikrapport för att få hjälp.",
+    "confirm.proceed": "Fortsätta?",
+    "confirm.non_interactive": "Fortsätter med det samtycke som redan getts för detta kommando.",
+    "errors.current_invalid": "Den valda filen med nuvarande firmware kunde inte valideras. Välj en fullständig fil som motsvarar den firmware som är installerad i denna enhet.",
+    "errors.file_dialog": "Fönstret för filval kunde inte slutföra åtgärden. Försök igen eller spara en diagnostikrapport för att få hjälp.",
     "errors.backup_confirmation_required": "Uppdateringen behöver ditt svar innan den kan fortsätta utan säkerhetskopia. Kör kommandot i ett terminalfönster där du kan besvara frågan.",
     "errors.drive_firmware_unconfirmed": "Enheten bekräftade inte att den använder freemkv-firmware. Kontrollera att du har valt rätt enhet. Om det stämmer, spara en diagnostikrapport för att få hjälp.",
     "errors.backup_partial": "Bara en del av firmwaren kunde läsas. Den sparade filen är ofullständig: använd den inte för att återställa enheten. Ingen firmware skrevs. Kontrollera anslutningen och skapa en ny fullständig säkerhetskopia.",

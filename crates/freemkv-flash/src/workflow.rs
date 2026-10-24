@@ -311,6 +311,14 @@ pub struct DriveProfile {
 }
 
 impl DriveProfile {
+    /// File selection remains available when live update admission is unavailable.
+    pub fn firmware_picker_formats(&self) -> FirmwarePickerFormats {
+        FirmwarePickerFormats::prefer(update_extensions(
+            self.recovery
+                .map_or(self.flash_formats, |descriptor| descriptor.formats),
+        ))
+    }
+
     /// The update/recovery backend's installed-firmware read capability.
     /// A dump-only match must not replace an identified recovery reader.
     pub fn can_read(&self) -> Option<bool> {
@@ -323,6 +331,46 @@ impl DriveProfile {
         registry::backends()
             .find(|backend| backend.descriptor().id == id)
             .map(|backend| backend.can_read())
+    }
+}
+
+/// A presentation policy, separate from drive capabilities: a nonempty filter or all files.
+/// The private representation cannot export an empty extension list to a frontend.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FirmwarePickerFormats(Option<Vec<&'static str>>);
+
+impl Default for FirmwarePickerFormats {
+    fn default() -> Self {
+        Self::prefer(Vec::new())
+    }
+}
+
+impl FirmwarePickerFormats {
+    /// Prefer known receiver formats; otherwise use the registry's supported update files.
+    /// If the registry has none, explicitly request an unfiltered chooser.
+    pub fn prefer(mut extensions: Vec<&'static str>) -> Self {
+        extensions.retain(|extension| Self::valid_suffix(extension));
+        if extensions.is_empty() {
+            extensions = update_file_extensions();
+            extensions.retain(|extension| Self::valid_suffix(extension));
+        }
+        Self((!extensions.is_empty()).then_some(extensions))
+    }
+
+    /// A nonempty list, or `None` for an unfiltered chooser. This never returns `Some([])`.
+    pub fn extensions(&self) -> Option<&[&'static str]> {
+        self.0.as_deref()
+    }
+
+    /// Literal suffixes must not introduce path separators, NULs or glob alternatives.
+    pub fn valid_suffix(suffix: &str) -> bool {
+        !suffix.is_empty()
+            && suffix.split('.').all(|part| {
+                !part.is_empty()
+                    && part
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-'))
+            })
     }
 }
 
@@ -440,24 +488,29 @@ pub fn profile_on_with_current(
 /// Recognition selects an implementation, never proves drive compatibility.
 /// `identify_with_current` owns parsing and the live protocol binding checks.
 fn current_recovery_backend(current: &[u8]) -> Result<&'static dyn Backend> {
-    let (backend, _) = registry::recognize(current)?
-        .context("Current firmware has no recognized protocol format")?;
+    let (backend, _) = registry::recognize(current)
+        .map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+        })?
+        .context("Current firmware has no recognized protocol format")
+        .map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+        })?;
     anyhow::ensure!(
         backend
             .recovery()
             .is_some_and(|facet| facet.accepts_current_for_identification()),
-        "this firmware format cannot identify a recovery receiver"
+        anyhow::anyhow!("this firmware format cannot identify a recovery receiver")
+            .context(crate::user_error::IssueCode::CurrentInvalid)
     );
     Ok(backend)
 }
 
 /// [`profile`] on an open device.
 pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
-    let resolved = registry::resolve(dev)?;
-    let identity = match &resolved {
-        Some(r) => r.identity.clone(),
-        None => crate::backend::read_identity(&mut ReadDevice::without_unlocks(dev)),
-    };
+    let detection = crate::backend::detection::detect(dev)?;
+    let identity = detection.identity.clone();
+    let resolved = registry::resolve_detection(detection)?;
     // Identification errors only mean "not offered": a profile never fails
     // merely because a drive is unsupported.
     let mut recovery_errors = Vec::new();
@@ -505,7 +558,7 @@ pub fn details(device: &str) -> Result<crate::report::Report> {
         let selector = resolve_device(Some(device))?;
         let mut dev = platform::open(&selector, false)?;
         let backend = resolved_backend(dev.as_mut())?;
-        Ok(engine::info_report(dev.as_mut(), backend).report)
+        Ok(engine::info_report(dev.as_mut(), backend)?.report)
     }))
 }
 
@@ -658,10 +711,10 @@ fn open_flash(
 )> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
-    anyhow::ensure!(
-        args.current.is_some() || args.current_member.is_none(),
-        "--current-member requires --current"
-    );
+    if args.current.is_none() && args.current_member.is_some() {
+        return Err(anyhow::anyhow!("--current-member requires --current")
+            .context(crate::user_error::IssueCode::CommandOptions));
+    }
     let current = args
         .current
         .as_ref()
@@ -673,10 +726,12 @@ fn open_flash(
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
-    anyhow::ensure!(
-        current.is_none() || handler.flash().is_some_and(|f| f.accepts_current()),
-        "this flash backend does not accept a Current firmware reference"
-    );
+    if current.is_some() && !handler.flash().is_some_and(|f| f.accepts_current()) {
+        return Err(anyhow::anyhow!(
+            "this flash backend does not accept a Current firmware reference"
+        )
+        .context(crate::user_error::IssueCode::CommandOptions));
+    }
     let input_format = registry::update_input_format(handler, &args.input, &input)?
         .context("backend reads no firmware files")?;
     let drive_model = handler
@@ -758,11 +813,12 @@ pub fn read_capped(path: &Path) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     file.take(MAX_INPUT + 1).read_to_end(&mut buf)?;
     if buf.len() as u64 > MAX_INPUT {
-        bail!(
+        return Err(anyhow::anyhow!(
             "input {} exceeds the {} MiB cap for a firmware file; refusing to load",
             path.display(),
             MAX_INPUT / (1024 * 1024)
-        );
+        )
+        .context(crate::user_error::IssueCode::FirmwareInvalid));
     }
     use sha2::{Digest, Sha256};
     crate::diagnostics::record(format!(
@@ -879,6 +935,14 @@ pub fn recover(args: RecoveryOptions) -> Result<UpdateOutcome> {
 #[derive(Clone, Default)]
 pub struct PreparedRecovery(Arc<std::sync::Mutex<Option<RecoverySession>>>);
 
+/// Equality identifies the same retained session, including clones after consumption.
+impl PartialEq for PreparedRecovery {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for PreparedRecovery {}
+
 struct RecoverySession {
     selector: String,
     backend: &'static dyn Backend,
@@ -908,12 +972,8 @@ impl PreparedRecovery {
 /// Load recovery inputs once, keeping the executable envelopes alive through consent.
 pub fn prepare_recovery(args: RecoveryOptions) -> Result<PreparedRecovery> {
     crate::diagnostics::run("recovery preparation", || {
-        let mut input = open_recovery(&args).map_err(|e| {
-            UpdateFailure::before_write(
-                "recovery precheck",
-                crate::user_error::explain(e, crate::user_error::IssueCode::FirmwareInvalid),
-            )
-        })?;
+        let mut input = open_recovery(&args)
+            .map_err(|error| UpdateFailure::before_write("recovery precheck", error))?;
         let facet = input
             .backend
             .recovery()
@@ -1051,7 +1111,10 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
             supplied.as_deref(),
         )? {
             if facet.requires_current() && matches!(args.current, CurrentFirmware::NotRequired) {
-                bail!("this recovery backend requires --current or --read-from-drive");
+                return Err(anyhow::anyhow!(
+                    "this recovery backend requires --current or --read-from-drive"
+                )
+                .context(crate::user_error::IssueCode::CommandOptions));
             }
             registry::update_input_format(backend, &args.input, &input)?;
             return Ok(RecoveryInput {
@@ -1073,20 +1136,29 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
 
 /// Select exactly one member from a package with independent recovery images.
 pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
-    crate::package::recovery_target(input, member)
+    crate::package::recovery_target(input, member).map_err(|error| {
+        crate::user_error::explain(error, crate::user_error::IssueCode::FirmwareInvalid)
+    })
 }
 
 /// Resolve a Current reference without ever treating the target as installed.
 pub fn current_firmware_image(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
     if input.get(257..262) == Some(b"ustar") {
-        recovery_target(input, member)
+        crate::package::recovery_target(input, member)
             .context("selecting Current firmware: use --current-member for a paired TAR")
+            .map_err(|error| {
+                crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+            })
     } else {
-        anyhow::ensure!(
-            member.is_none(),
-            "--current-member requires a Current TAR package"
-        );
-        recovery_target(input, None)
+        if member.is_some() {
+            return Err(
+                anyhow::anyhow!("--current-member requires a Current TAR package")
+                    .context(crate::user_error::IssueCode::CommandOptions),
+            );
+        }
+        crate::package::recovery_target(input, None).map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+        })
     }
 }
 
