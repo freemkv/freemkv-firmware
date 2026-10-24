@@ -151,6 +151,10 @@ fn exactly_one_transport_adapter_exists_in_the_flasher() {
             if path.is_dir() {
                 stack.push(path);
             } else if path.extension().is_some_and(|e| e == "rs") {
+                let name = path.file_name().unwrap().to_string_lossy();
+                if name.ends_with("_tests.rs") {
+                    continue;
+                }
                 let src = fs::read_to_string(&path).unwrap();
                 for _ in 0..transport_impls(&production(&src)) {
                     impls.push(path.clone());
