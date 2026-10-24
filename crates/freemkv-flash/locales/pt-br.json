@@ -19,6 +19,16 @@
     "task.dump": "Despejo",
     "task.flash": "Gravar firmware",
     "task.recovery": "Recuperação",
+    "recovery.bypass_family_check": "Ignorar a verificação da família do firmware (muito arriscado)",
+    "recovery.bypass_family_title": "Ignorar a verificação da família do hardware",
+    "recovery.bypass_family_warning": "Você pediu para ignorar a verificação da família de hardware do firmware. Essa verificação ajuda a impedir que um firmware destinado a outro hardware seja gravado na unidade. Ignorá-la pode inutilizar a unidade permanentemente, e talvez não seja possível recuperá-la ou reinstalar o firmware anterior.",
+    "recovery.bypass_family_code": "Para confirmar que aceita esse risco, digite {code} para continuar.",
+    "recovery.bypass_family_continue": "Ativar a ignorância",
+    "recovery.bypass_family_code_failed": "Não foi possível gerar o código de confirmação. A verificação da família do firmware continua ativada.",
+    "recovery.bypass_family_ack": "Entendo que ignorar a verificação da família do firmware pode inutilizar esta unidade permanentemente e que talvez seja impossível recuperá-la.",
+    "recovery.family_enforced": "Sem backup automático; verificação da família do firmware aplicada",
+    "recovery.family_bypassed": "Sem backup automático; verificação da família do firmware ignorada explicitamente (muito arriscado)",
+    "recovery.family_override_unsupported": "Este mecanismo de recuperação não permite ignorar a verificação da família do firmware.",
     "action.read_info": "Ler informações da unidade",
     "action.check_file": "Verificar arquivo…",
     "info.connect_drive": "Conecte uma unidade óptica e selecione Atualizar.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Activo e salvo)",
     "legacy.backup_saved": "Backup: Salvação {path} ({bytes} bits)",
     "legacy.backup_missing": "backup: NÃO – flashing sem uma backup de rolagem (este disco óptico não pode ser rolado de volta)",
-    "ui.backup_dump_review": "Se não for possível salvar um backup, salve um dump bruto e envie-o com os logs de diagnóstico para que possamos avaliar o suporte a backups."
+    "ui.backup_dump_review": "Se não for possível salvar um backup, salve um dump bruto e envie-o com os logs de diagnóstico para que possamos avaliar o suporte a backups.",
+    "verification.startup": "Inicialização",
+    "verification.not_checked": "Não verificado",
+    "verification.not_requested": "Não solicitado",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

@@ -19,6 +19,16 @@
     "task.dump": "ダンプ",
     "task.flash": "書き込み",
     "task.recovery": "復元",
+    "recovery.bypass_family_check": "ファームウェアファミリーチェックを省略（非常に危険）",
+    "recovery.bypass_family_title": "ハードウェアファミリーチェックを省略",
+    "recovery.bypass_family_warning": "ファームウェアのハードウェアファミリーチェックを省略するよう要求しました。このチェックは、別のハードウェア向けのファームウェアがドライブに書き込まれるのを防ぐためのものです。省略するとドライブが永久に使用不能になるおそれがあり、復旧や以前のファームウェアへの書き戻しができない場合があります。",
+    "recovery.bypass_family_code": "このリスクを了承するには、続行するために {code} と入力してください。",
+    "recovery.bypass_family_continue": "省略を有効にする",
+    "recovery.bypass_family_code_failed": "確認コードを生成できませんでした。ファームウェアファミリーチェックは有効のままです。",
+    "recovery.bypass_family_ack": "ファームウェアファミリーチェックを省略すると、このドライブが永久に使用不能になり、復旧できない場合があることを理解しました。",
+    "recovery.family_enforced": "自動バックアップなし；ファームウェアファミリーチェックを適用",
+    "recovery.family_bypassed": "自動バックアップなし；ファームウェアファミリーチェックを明示的に省略（非常に危険）",
+    "recovery.family_override_unsupported": "この復旧バックエンドはファームウェアファミリーチェックの省略に対応していません。",
     "action.read_info": "ドライブ情報を読み取る",
     "action.check_file": "ファイルを確認…",
     "info.connect_drive": "光学ドライブを接続して「更新」を選択してください。",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (アクティブ・保存)",
     "legacy.backup_saved": "バックアップ:保存 {path} ({bytes} バイト)",
     "legacy.backup_missing": "バックアップ: NONE - ロールバックバックアップなしでフラッシュ(この光学ドライブは回転できない)",
-    "ui.backup_dump_review": "バックアップを保存できない場合は、生のダンプを保存し、診断ログとともに送信してください。バックアップ対応の検討に使用します。"
+    "ui.backup_dump_review": "バックアップを保存できない場合は、生のダンプを保存し、診断ログとともに送信してください。バックアップ対応の検討に使用します。",
+    "verification.startup": "起動",
+    "verification.not_checked": "未確認",
+    "verification.not_requested": "要求なし",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

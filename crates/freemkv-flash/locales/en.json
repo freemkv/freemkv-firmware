@@ -19,6 +19,16 @@
     "task.dump": "Dump",
     "task.flash": "Flash",
     "task.recovery": "Recovery",
+    "recovery.bypass_family_check": "Bypass firmware family check (very risky)",
+    "recovery.bypass_family_title": "Bypass hardware family check",
+    "recovery.bypass_family_warning": "You have asked to bypass the firmware family hardware check. This check helps prevent firmware intended for different hardware from being written to your drive. Bypassing it may permanently disable the drive, and recovery or flashing back may be impossible.",
+    "recovery.bypass_family_code": "To acknowledge this risk, enter {code} to continue.",
+    "recovery.bypass_family_continue": "Enable bypass",
+    "recovery.bypass_family_code_failed": "The confirmation code could not be generated. The firmware family check remains enabled.",
+    "recovery.bypass_family_ack": "I understand that bypassing the firmware family check may permanently disable this drive and that recovery may be impossible.",
+    "recovery.family_enforced": "No automatic backup; firmware family check enforced",
+    "recovery.family_bypassed": "No automatic backup; firmware family check explicitly bypassed (very risky)",
+    "recovery.family_override_unsupported": "This recovery backend does not support bypassing the firmware family check.",
     "action.read_info": "Read drive information",
     "action.check_file": "Check file…",
     "info.connect_drive": "Connect an optical drive, then select Refresh.",
@@ -48,7 +58,7 @@
     "action.no": "No",
     "action.save_log": "Save Log…",
     "errors.hardware_mismatch": "The underlying hardware for these firmwares is not compatible. Installed firmware: {installed}. Selected firmware: {selected}.",
-    "errors.current_required": "Choose the firmware currently installed in this drive as Current firmware, then try again.",
+    "errors.current_required": "The installed firmware could not be read or identified completely. Select a file matching the firmware currently installed in this drive under Current firmware, then try again.",
     "errors.backup_restricted": "This firmware cannot be backed up. This is normal for many MediaTek drives.",
     "errors.file_missing": "The selected file could not be found. Choose the file again.",
     "errors.permission_denied": "Access was denied. Check file permissions and close other applications using the drive, then try again.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (active and saved)",
     "legacy.backup_saved": "backup: saved {path} ({bytes} bytes)",
     "legacy.backup_missing": "backup: NONE — flashing without a rollback backup (this drive cannot be rolled back)",
-    "ui.backup_dump_review": "If a backup cannot be saved, save a raw dump and submit it with diagnostic logs so we can review backup support."
+    "ui.backup_dump_review": "If a backup cannot be saved, save a raw dump and submit it with diagnostic logs so we can review backup support.",
+    "verification.startup": "Startup",
+    "verification.not_checked": "Not checked",
+    "verification.not_requested": "Not requested",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

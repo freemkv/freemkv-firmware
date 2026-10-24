@@ -19,6 +19,16 @@
     "task.dump": "Dump",
     "task.flash": "Flasher",
     "task.recovery": "Récupération",
+    "recovery.bypass_family_check": "Ignorer la vérification de famille du micrologiciel (très risqué)",
+    "recovery.bypass_family_title": "Ignorer la vérification de famille du matériel",
+    "recovery.bypass_family_warning": "Vous avez demandé à ignorer la vérification de famille matérielle du micrologiciel. Cette vérification aide à empêcher l’écriture sur le lecteur d’un micrologiciel destiné à un autre matériel. L’ignorer peut rendre le lecteur définitivement inutilisable, et sa récupération ou la réinstallation d’un ancien micrologiciel peut être impossible.",
+    "recovery.bypass_family_code": "Pour confirmer que vous acceptez ce risque, saisissez {code} pour continuer.",
+    "recovery.bypass_family_continue": "Activer l’ignorance",
+    "recovery.bypass_family_code_failed": "Impossible de générer le code de confirmation. La vérification de famille du micrologiciel reste activée.",
+    "recovery.bypass_family_ack": "Je comprends qu’ignorer la vérification de famille du micrologiciel peut rendre ce lecteur définitivement inutilisable et que sa récupération peut être impossible.",
+    "recovery.family_enforced": "Aucune sauvegarde automatique ; vérification de famille du micrologiciel appliquée",
+    "recovery.family_bypassed": "Aucune sauvegarde automatique ; vérification de famille du micrologiciel explicitement ignorée (très risqué)",
+    "recovery.family_override_unsupported": "Ce moteur de récupération ne permet pas d’ignorer la vérification de famille du micrologiciel.",
     "action.read_info": "Lire les informations du lecteur",
     "action.check_file": "Vérifier le fichier…",
     "info.connect_drive": "Connectez un lecteur optique, puis sélectionnez Actualiser.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Actif et sauvé)",
     "legacy.backup_saved": "Étiquette : sauvé {path} ({bytes} les bytes)",
     "legacy.backup_missing": "Backup: NONE — flashing sans backup de roulement (ce disque optique ne peut pas être roulé en arrière)",
-    "ui.backup_dump_review": "Si une sauvegarde ne peut pas être enregistrée, enregistrez un dump brut et envoyez-le avec les journaux de diagnostic pour nous permettre d’étudier la prise en charge des sauvegardes."
+    "ui.backup_dump_review": "Si une sauvegarde ne peut pas être enregistrée, enregistrez un dump brut et envoyez-le avec les journaux de diagnostic pour nous permettre d’étudier la prise en charge des sauvegardes.",
+    "verification.startup": "Démarrage",
+    "verification.not_checked": "Non vérifié",
+    "verification.not_requested": "Non demandé",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

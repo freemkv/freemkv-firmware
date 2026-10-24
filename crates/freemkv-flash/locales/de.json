@@ -19,6 +19,16 @@
     "task.dump": "Abbild",
     "task.flash": "Flashen",
     "task.recovery": "Wiederherstellung",
+    "recovery.bypass_family_check": "Firmware-Familienprüfung umgehen (sehr riskant)",
+    "recovery.bypass_family_title": "Hardware-Familienprüfung umgehen",
+    "recovery.bypass_family_warning": "Du möchtest die Hardware-Familienprüfung der Firmware umgehen. Diese Prüfung hilft zu verhindern, dass Firmware für andere Hardware auf dein Laufwerk geschrieben wird. Das Umgehen kann das Laufwerk dauerhaft unbrauchbar machen; eine Wiederherstellung oder das Zurückflashen ist möglicherweise nicht möglich.",
+    "recovery.bypass_family_code": "Gib {code} ein, um das Risiko zu bestätigen und fortzufahren.",
+    "recovery.bypass_family_continue": "Umgehung aktivieren",
+    "recovery.bypass_family_code_failed": "Der Bestätigungscode konnte nicht erstellt werden. Die Firmware-Familienprüfung bleibt aktiviert.",
+    "recovery.bypass_family_ack": "Mir ist bewusst, dass das Umgehen der Firmware-Familienprüfung dieses Laufwerk dauerhaft unbrauchbar machen kann und eine Wiederherstellung möglicherweise unmöglich ist.",
+    "recovery.family_enforced": "Keine automatische Sicherung; Firmware-Familienprüfung erzwungen",
+    "recovery.family_bypassed": "Keine automatische Sicherung; Firmware-Familienprüfung ausdrücklich umgangen (sehr riskant)",
+    "recovery.family_override_unsupported": "Dieses Wiederherstellungs-Backend unterstützt das Umgehen der Firmware-Familienprüfung nicht.",
     "action.read_info": "Laufwerksinformationen lesen",
     "action.check_file": "Datei prüfen…",
     "info.connect_drive": "Schließen Sie ein optisches Laufwerk an und wählen Sie Aktualisieren.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Aktive und gespeichert)",
     "legacy.backup_saved": "Backup: gespeichert {path} ({bytes} und byte)",
     "legacy.backup_missing": "Backup: NONE – Blitzung ohne Backup-Rollback (dieser optische Festplatte kann nicht zurückgeladen werden)",
-    "ui.backup_dump_review": "Falls keine Sicherung gespeichert werden kann, speichern Sie ein rohes Speicherabbild und senden Sie es mit den Diagnoseprotokollen, damit wir die Sicherungsunterstützung prüfen können."
+    "ui.backup_dump_review": "Falls keine Sicherung gespeichert werden kann, speichern Sie ein rohes Speicherabbild und senden Sie es mit den Diagnoseprotokollen, damit wir die Sicherungsunterstützung prüfen können.",
+    "verification.startup": "Start",
+    "verification.not_checked": "Nicht geprüft",
+    "verification.not_requested": "Nicht angefordert",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

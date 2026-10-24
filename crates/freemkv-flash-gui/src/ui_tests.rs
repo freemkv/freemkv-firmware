@@ -22,6 +22,7 @@ impl Profile {
         Self {
             can_read: Some(true),
             flash_current: true,
+            recovery_family_override: true,
             chips: vec!["Test family".into()],
             tasks: vec![Task::Backup, Task::Dump, Task::Flash, Task::Recovery],
             inspect: true,
@@ -65,7 +66,16 @@ fn one_drive() -> App {
 #[test]
 fn update_forms_share_layout_and_default_to_reading_current_from_drive() {
     fn presentation(mut panel: Vec<Item>) -> Vec<Item> {
-        panel.retain(|item| !matches!(item, Item::Warning(_)));
+        panel.retain(|item| {
+            !matches!(
+                item,
+                Item::Warning(_)
+                    | Item::Check {
+                        id: CheckId::RecoveryBypassFamily,
+                        ..
+                    }
+            )
+        });
         for item in &mut panel {
             match item {
                 Item::Check { id, .. } => *id = CheckId::FlashReadFromDrive,
@@ -2750,4 +2760,203 @@ fn origin_check_keeps_technical_causes_in_logs_and_clean_copy_in_the_form() {
         .panel
         .iter()
         .any(|item| matches!(item, Item::Note(text) if text.contains("private offset"))));
+}
+
+fn recovery_mismatch_app() -> App {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("target.tar".into());
+    app.dispatch(Input::Recover);
+    let worker = app.worker.as_ref().unwrap();
+    worker.send(Msg::RecoveryFamilyMismatch).unwrap();
+    worker
+        .send(Msg::Done(Err("different families".into())))
+        .unwrap();
+    app.poll();
+    app
+}
+
+#[test]
+fn recovery_family_override_requires_fresh_explicit_confirmation() {
+    let mut app = recovery_mismatch_app();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("target.tar".into());
+    assert!(!app.recovery_bypass_family);
+    app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+    assert!(!app.recovery_bypass_family);
+    let confirm = app.view().confirm.unwrap();
+    assert_eq!(confirm.code_entry.as_deref(), Some(""));
+    assert!(!confirm.confirm.enabled);
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::Confirm);
+    assert!(!app.recovery_bypass_family);
+    app.dispatch(Input::FamilyOverrideCode("wrong".into()));
+    app.dispatch(Input::Confirm);
+    assert!(!app.recovery_bypass_family);
+    app.dispatch(Input::CancelConfirm);
+    assert!(!app.recovery_bypass_family && app.pending.is_none());
+    app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+    let Some(Pending {
+        sheet: Sheet::FamilyOverride { code, entered },
+        ..
+    }) = &app.pending
+    else {
+        panic!("expected code challenge")
+    };
+    assert_eq!(code.len(), 5);
+    assert!(code.bytes().all(|b| b.is_ascii_digit()));
+    assert!(entered.is_empty());
+    let code = code.clone();
+    app.dispatch(Input::FamilyOverrideCode(code));
+    assert!(app.view().confirm.unwrap().confirm.enabled);
+    app.dispatch(Input::Confirm);
+    assert!(app.recovery_bypass_family && app.pending.is_none());
+    app.dispatch(Input::Recover);
+    assert!(
+        matches!(&last_job(&app).2, Job::Recovery(o) if o.bypass_family_check && !o.execute && !o.acknowledged_risk)
+    );
+    recovery_plan_passes(&mut app);
+    assert!(!app.view().confirm.unwrap().confirm.enabled);
+    assert!(app.dispatch(Input::Confirm).is_empty());
+    app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
+    app.dispatch(Input::Confirm);
+    assert!(
+        matches!(&last_job(&app).2, Job::Recovery(o) if o.execute && o.acknowledged_risk && o.bypass_family_check)
+    );
+}
+
+#[test]
+fn recovery_family_override_is_not_available_in_flash_or_unsupported_profiles() {
+    let mut app = one_drive();
+    app.task = Task::Flash;
+    app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+    assert!(!app.recovery_bypass_family);
+    assert!(!has_text(
+        &app.view(),
+        "Bypass firmware family check (very risky)"
+    ));
+    app.task = Task::Recovery;
+    let mut profile = Profile::every_task();
+    profile.recovery_family_override = false;
+    app.set_profile(Ok(profile));
+    app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+    assert!(!app.recovery_bypass_family);
+    assert!(!has_text(
+        &app.view(),
+        "Bypass firmware family check (very risky)"
+    ));
+}
+
+#[test]
+fn recovery_code_rejects_every_inexact_input_without_starting_work() {
+    let mut app = recovery_mismatch_app();
+    let before = app.dry_run.as_ref().unwrap().len();
+    let mut last_code = None;
+    for invalid in 0..8 {
+        app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+        let Some(Pending {
+            sheet: Sheet::FamilyOverride { code, entered },
+            ..
+        }) = &app.pending
+        else {
+            panic!("missing challenge")
+        };
+        assert!(entered.is_empty());
+        assert_ne!(last_code.as_ref(), Some(code));
+        let code = code.clone();
+        let value = match invalid {
+            0 => String::new(),
+            1 => format!(
+                "{}",
+                10000 + ((code.parse::<u32>().unwrap() - 10000 + 1) % 90000)
+            ),
+            2 => code[..4].into(),
+            3 => format!("{code}0"),
+            4 => format!(" {code}"),
+            5 => format!("{code} "),
+            6 => "abcde".into(),
+            _ => "１２３４５".into(),
+        };
+        app.dispatch(Input::FamilyOverrideCode(value));
+        assert_eq!(app.view().confirm.unwrap().confirm.enabled, invalid == 1);
+        app.dispatch(Input::Confirm);
+        assert!(!app.recovery_bypass_family);
+        assert!(
+            app.pending.is_none(),
+            "wrong submission must close and clear popup"
+        );
+        app.dispatch(Input::FamilyOverrideCode(code.clone()));
+        app.dispatch(Input::Confirm);
+        assert!(
+            !app.recovery_bypass_family,
+            "closed code cannot be replayed"
+        );
+        assert_eq!(app.dry_run.as_ref().unwrap().len(), before);
+        last_code = Some(code);
+    }
+}
+
+#[test]
+fn recovery_override_only_appears_after_a_proven_family_mismatch() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    assert!(!has_text(
+        &app.view(),
+        "Bypass firmware family check (very risky)"
+    ));
+    app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+    assert!(app.pending.is_none());
+    app.recovery_input = Some("target.tar".into());
+    app.dispatch(Input::Recover);
+    recovery_plan_passes(&mut app);
+    app.dispatch(Input::CancelConfirm);
+    assert!(!has_text(
+        &app.view(),
+        "Bypass firmware family check (very risky)"
+    ));
+    let app = recovery_mismatch_app();
+    assert!(has_text(
+        &app.view(),
+        "Bypass firmware family check (very risky)"
+    ));
+}
+
+#[test]
+fn recovery_override_consent_is_consumed_even_if_final_confirmation_is_cancelled() {
+    let mut app = recovery_mismatch_app();
+    app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+    let Some(Pending {
+        sheet: Sheet::FamilyOverride { code, .. },
+        ..
+    }) = &app.pending
+    else {
+        panic!("missing challenge")
+    };
+    app.dispatch(Input::FamilyOverrideCode(code.clone()));
+    app.dispatch(Input::Confirm);
+    app.dispatch(Input::Recover);
+    assert!(!app.recovery_bypass_family);
+    recovery_plan_passes(&mut app);
+    app.dispatch(Input::CancelConfirm);
+    app.dispatch(Input::Recover);
+    assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.bypass_family_check && !o.execute));
+}
+
+#[test]
+fn family_override_consent_is_revoked_when_selected_firmware_changes() {
+    let mut app = recovery_mismatch_app();
+    app.task = Task::Recovery;
+    app.dispatch(Input::SetCheck(CheckId::RecoveryBypassFamily, true));
+    let Some(Pending {
+        sheet: Sheet::FamilyOverride { code, .. },
+        ..
+    }) = &app.pending
+    else {
+        panic!("missing challenge")
+    };
+    app.dispatch(Input::FamilyOverrideCode(code.clone()));
+    app.dispatch(Input::Confirm);
+    assert!(app.recovery_bypass_family);
+    app.dispatch(Input::Chosen(Pick::RecoveryInput, "another.tar".into()));
+    assert!(!app.recovery_bypass_family);
 }

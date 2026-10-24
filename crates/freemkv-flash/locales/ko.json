@@ -19,6 +19,16 @@
     "task.dump": "덤프",
     "task.flash": "플래시",
     "task.recovery": "복구",
+    "recovery.bypass_family_check": "펌웨어 계열 검사 건너뛰기 (매우 위험)",
+    "recovery.bypass_family_title": "하드웨어 계열 검사 건너뛰기",
+    "recovery.bypass_family_warning": "펌웨어의 하드웨어 계열 검사를 건너뛰도록 요청했습니다. 이 검사는 다른 하드웨어용 펌웨어가 드라이브에 기록되는 것을 방지하는 데 도움이 됩니다. 검사를 건너뛰면 드라이브가 영구적으로 작동하지 않을 수 있으며, 복구하거나 이전 펌웨어를 다시 설치하지 못할 수도 있습니다.",
+    "recovery.bypass_family_code": "이 위험을 인정하려면 계속하기 위해 {code}를 입력하세요.",
+    "recovery.bypass_family_continue": "검사 건너뛰기 사용",
+    "recovery.bypass_family_code_failed": "확인 코드를 생성할 수 없습니다. 펌웨어 계열 검사는 계속 활성화됩니다.",
+    "recovery.bypass_family_ack": "펌웨어 계열 검사를 건너뛰면 이 드라이브가 영구적으로 작동하지 않을 수 있고 복구가 불가능할 수도 있음을 이해합니다.",
+    "recovery.family_enforced": "자동 백업 없음; 펌웨어 계열 검사 적용",
+    "recovery.family_bypassed": "자동 백업 없음; 펌웨어 계열 검사를 명시적으로 건너뜀 (매우 위험)",
+    "recovery.family_override_unsupported": "이 복구 백엔드는 펌웨어 계열 검사 건너뛰기를 지원하지 않습니다.",
     "action.read_info": "드라이브 정보 읽기",
     "action.check_file": "파일 확인…",
     "info.connect_drive": "광학 드라이브를 연결한 다음 새로 고침을 선택하세요.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (활성 및 저장)",
     "legacy.backup_saved": "백업 : 저장 {path} ({bytes} 바이트",
     "legacy.backup_missing": "백업: NONE - 롤버크 백업 없이 플래시 (이 광 드라이브는 뒤로 롤할 수 없음)",
-    "ui.backup_dump_review": "백업을 저장할 수 없는 경우 원시 덤프를 저장하고 진단 로그와 함께 제출해 주세요. 백업 지원 여부를 검토하는 데 사용됩니다."
+    "ui.backup_dump_review": "백업을 저장할 수 없는 경우 원시 덤프를 저장하고 진단 로그와 함께 제출해 주세요. 백업 지원 여부를 검토하는 데 사용됩니다.",
+    "verification.startup": "시작",
+    "verification.not_checked": "확인하지 않음",
+    "verification.not_requested": "요청하지 않음",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

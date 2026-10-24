@@ -19,6 +19,16 @@
     "task.dump": "Αποτύπωση",
     "task.flash": "Εγγραφή",
     "task.recovery": "Ανάκτηση",
+    "recovery.bypass_family_check": "Παράκαμψη του ελέγχου οικογένειας firmware (πολύ επικίνδυνο)",
+    "recovery.bypass_family_title": "Παράκαμψη ελέγχου οικογένειας υλικού",
+    "recovery.bypass_family_warning": "Ζητήσατε να παρακαμφθεί ο έλεγχος οικογένειας υλικού του firmware. Αυτός ο έλεγχος βοηθά να αποτραπεί η εγγραφή στη μονάδα firmware που προορίζεται για διαφορετικό υλικό. Η παράκαμψη μπορεί να αχρηστεύσει μόνιμα τη μονάδα και η ανάκτηση ή η επαναφορά firmware μπορεί να είναι αδύνατη.",
+    "recovery.bypass_family_code": "Για να επιβεβαιώσετε ότι αποδέχεστε αυτόν τον κίνδυνο, πληκτρολογήστε {code} για να συνεχίσετε.",
+    "recovery.bypass_family_continue": "Ενεργοποίηση παράκαμψης",
+    "recovery.bypass_family_code_failed": "Δεν ήταν δυνατή η δημιουργία του κωδικού επιβεβαίωσης. Ο έλεγχος οικογένειας firmware παραμένει ενεργός.",
+    "recovery.bypass_family_ack": "Κατανοώ ότι η παράκαμψη του ελέγχου οικογένειας firmware μπορεί να αχρηστεύσει μόνιμα αυτήν τη μονάδα και ότι η ανάκτηση μπορεί να είναι αδύνατη.",
+    "recovery.family_enforced": "Χωρίς αυτόματο αντίγραφο ασφαλείας· ο έλεγχος οικογένειας firmware εφαρμόζεται",
+    "recovery.family_bypassed": "Χωρίς αυτόματο αντίγραφο ασφαλείας· ο έλεγχος οικογένειας firmware παρακάμπτεται ρητά (πολύ επικίνδυνο)",
+    "recovery.family_override_unsupported": "Αυτό το σύστημα ανάκτησης δεν υποστηρίζει την παράκαμψη του ελέγχου οικογένειας firmware.",
     "action.read_info": "Ανάγνωση πληροφοριών μονάδας",
     "action.check_file": "Έλεγχος αρχείου…",
     "info.connect_drive": "Συνδέστε μια οπτική μονάδα και επιλέξτε Ανανέωση.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Ενεργός και διατηρημένος)",
     "legacy.backup_saved": "Ετικέτες: Save {path} ({bytes} Μπάτρες )",
     "legacy.backup_missing": "Backup: NONE – flashing χωρίς backup rollback (η οπτική μονάδα δεν μπορεί να περιστρέφεται πίσω)",
-    "ui.backup_dump_review": "Αν δεν μπορεί να αποθηκευτεί αντίγραφο ασφαλείας, αποθηκεύστε μια ακατέργαστη αποτύπωση και υποβάλετέ την με τα διαγνωστικά αρχεία καταγραφής, ώστε να εξετάσουμε την υποστήριξη αντιγράφων ασφαλείας."
+    "ui.backup_dump_review": "Αν δεν μπορεί να αποθηκευτεί αντίγραφο ασφαλείας, αποθηκεύστε μια ακατέργαστη αποτύπωση και υποβάλετέ την με τα διαγνωστικά αρχεία καταγραφής, ώστε να εξετάσουμε την υποστήριξη αντιγράφων ασφαλείας.",
+    "verification.startup": "Εκκίνηση",
+    "verification.not_checked": "Δεν ελέγχθηκε",
+    "verification.not_requested": "Δεν ζητήθηκε",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

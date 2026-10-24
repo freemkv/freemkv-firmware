@@ -19,6 +19,16 @@
     "task.dump": "Dump",
     "task.flash": "Flash",
     "task.recovery": "Gjenoppretting",
+    "recovery.bypass_family_check": "Omgå firmwarefamiliekontrollen (svært risikabelt)",
+    "recovery.bypass_family_title": "Omgå kontroll av maskinvarefamilie",
+    "recovery.bypass_family_warning": "Du har bedt om å omgå kontrollen av firmwarets maskinvarefamilie. Denne kontrollen bidrar til å hindre at firmware beregnet for annen maskinvare skrives til stasjonen. Omgåelse kan gjøre stasjonen permanent ubrukelig, og gjenoppretting eller tilbakeskriving kan være umulig.",
+    "recovery.bypass_family_code": "Skriv inn {code} for å bekrefte at du godtar risikoen og fortsette.",
+    "recovery.bypass_family_continue": "Aktiver omgåelse",
+    "recovery.bypass_family_code_failed": "Bekreftelseskoden kunne ikke opprettes. Firmwarefamiliekontrollen forblir aktivert.",
+    "recovery.bypass_family_ack": "Jeg forstår at omgåelse av firmwarefamiliekontrollen kan gjøre denne stasjonen permanent ubrukelig, og at gjenoppretting kan være umulig.",
+    "recovery.family_enforced": "Ingen automatisk sikkerhetskopi; firmwarefamiliekontroll håndheves",
+    "recovery.family_bypassed": "Ingen automatisk sikkerhetskopi; firmwarefamiliekontroll omgås uttrykkelig (svært risikabelt)",
+    "recovery.family_override_unsupported": "Denne gjenopprettingsmodulen støtter ikke omgåelse av firmwarefamiliekontrollen.",
     "action.read_info": "Les stasjonsinformasjon",
     "action.check_file": "Kontroller fil…",
     "info.connect_drive": "Koble til en optisk stasjon, og velg Oppdater.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Aktiv og reddet)",
     "legacy.backup_saved": "Backup: redde {path} ({bytes} byter)",
     "legacy.backup_missing": "backup: NONE – flashing uten en rollback backup (dette optiske enheten kan ikke rulles tilbake)",
-    "ui.backup_dump_review": "Hvis en sikkerhetskopi ikke kan lagres, lagre en rå dump og send den inn med diagnoselogger, slik at vi kan undersøke støtte for sikkerhetskopiering."
+    "ui.backup_dump_review": "Hvis en sikkerhetskopi ikke kan lagres, lagre en rå dump og send den inn med diagnoselogger, slik at vi kan undersøke støtte for sikkerhetskopiering.",
+    "verification.startup": "Oppstart",
+    "verification.not_checked": "Ikke kontrollert",
+    "verification.not_requested": "Ikke forespurt",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

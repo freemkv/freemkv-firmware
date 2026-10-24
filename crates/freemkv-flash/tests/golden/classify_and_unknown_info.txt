@@ -9,13 +9,10 @@ classify_gated: error No executable flash path or confirmed restorable backup is
 MSG      classify: Unknown
 MSG      resolve_backend: no match
 MSG      classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
---- scsi transcript (6) ---
+--- scsi transcript (3) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
 
 === classify MockScsiDevice::mtk ===
 result: OK
@@ -29,13 +26,13 @@ MSG      resolve_backend: Mtk backend=mtk19xx
 MSG      classify_gated: Mtk
 --- scsi transcript (9) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 28
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 28
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 28
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === classify MockScsiDevice::pioneer ===
@@ -48,13 +45,16 @@ classify_gated: Pioneer
 MSG      classify: Pioneer
 MSG      resolve_backend: Pioneer backend=pioneer-oem
 MSG      classify_gated: Pioneer
---- scsi transcript (6) ---
+--- scsi transcript (9) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === classify MockScsiDevice::renesas ===
 result: OK
@@ -66,49 +66,52 @@ classify_gated: error No executable flash path or confirmed restorable backup is
 MSG      classify: Unknown
 MSG      resolve_backend: no match
 MSG      classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
---- scsi transcript (6) ---
+--- scsi transcript (3) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
 
 === classify ambiguous: MediaTek and Pioneer both match ===
 result: OK
 --- text (3) ---
-classify: Pioneer
-resolve_backend: Pioneer backend=pioneer-oem
-classify_gated: Pioneer
+classify: Unknown
+resolve_backend: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
+classify_gated: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
 --- events (3) ---
-MSG      classify: Pioneer
-MSG      resolve_backend: Pioneer backend=pioneer-oem
-MSG      classify_gated: Pioneer
---- scsi transcript (6) ---
+MSG      classify: Unknown
+MSG      resolve_backend: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
+MSG      classify_gated: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
+--- scsi transcript (9) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === classify MediaTek firmware-image mock ===
 result: OK
 --- text (3) ---
-classify: Unknown
-resolve_backend: no match
-classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
+classify: Mtk
+resolve_backend: Mtk backend=mtk19xx
+classify_gated: Mtk
 --- events (3) ---
-MSG      classify: Unknown
-MSG      resolve_backend: no match
-MSG      classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
---- scsi transcript (6) ---
+MSG      classify: Mtk
+MSG      resolve_backend: Mtk backend=mtk19xx
+MSG      classify_gated: Mtk
+--- scsi transcript (9) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=120000006000 alloc=96 -> ok 96
-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === info with the Unknown handler on blank mock (matches no backend) ===
 result: OK

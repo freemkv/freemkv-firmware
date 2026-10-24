@@ -96,8 +96,8 @@ impl RegionComparison {
 /// A structured comparison. It does not establish behavioral equivalence.
 #[derive(Clone, Debug, Serialize)]
 pub struct Comparison {
-    /// Same hardware family, or None if either family is unavailable.
-    pub same_family: Option<bool>,
+    /// Shared exact-content, naming, version and family facts.
+    pub facts: crate::firmware_comparison::ComparisonFacts,
     /// Per-region findings.
     pub regions: Vec<RegionComparison>,
     /// True only for identical complete decoded components.
@@ -127,6 +127,12 @@ impl FirmwareAnalysis {
             self.compare_ordered(other, options, observer)?
         };
         if reverse {
+            use crate::firmware_comparison::VersionRelationship;
+            result.facts.version = match result.facts.version {
+                VersionRelationship::Newer => VersionRelationship::Older,
+                VersionRelationship::Older => VersionRelationship::Newer,
+                other => other,
+            };
             for region in &mut result.regions {
                 std::mem::swap(&mut region.left, &mut region.right);
                 std::mem::swap(&mut region.left_size, &mut region.right_size);
@@ -213,9 +219,34 @@ impl FirmwareAnalysis {
             .any(|c| c.kind == ChangeKind::Unresolved)
             && self.complete
             && other.complete;
-        Ok(Comparison { same_family: self.identity.family.as_ref().zip(other.identity.family.as_ref()).map(|(a,b)| self.identity.family_scheme == other.identity.family_scheme && a == b),
-            identical_decoded: complete && self.identity.component == other.identity.component && self.identity.sha256 == other.identity.sha256,
-            complete, regions, coverage: "Decoded bytes aligned; provider-established control-flow relocations are separate from content changes. Unresolved operands and unclassified data remain differences." })
+        let family = crate::firmware_comparison::FamilyRelationship::compare(
+            self.identity
+                .family
+                .as_deref()
+                .map(|id| (self.identity.family_scheme.as_str(), id)),
+            other
+                .identity
+                .family
+                .as_deref()
+                .map(|id| (other.identity.family_scheme.as_str(), id)),
+        );
+        let identical_decoded = complete
+            && self.identity.component == other.identity.component
+            && self.identity.sha256 == other.identity.sha256;
+        let contents = if !complete {
+            crate::firmware_comparison::Contents::Incomplete
+        } else if identical_decoded {
+            crate::firmware_comparison::Contents::Identical
+        } else {
+            crate::firmware_comparison::Contents::Different
+        };
+        Ok(Comparison {
+            facts: self.identity.metadata.compare(&other.identity.metadata, contents, family),
+            identical_decoded,
+            complete,
+            regions,
+            coverage: "Decoded bytes aligned; provider-established control-flow relocations are separate from content changes. Unresolved operands and unclassified data remain differences.",
+        })
     }
 }
 fn unmatched(a: Option<&Region>, b: Option<&Region>) -> RegionComparison {

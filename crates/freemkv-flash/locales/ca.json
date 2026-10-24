@@ -19,6 +19,16 @@
     "task.dump": "Bolcat",
     "task.flash": "Actualitza el microprogramari",
     "task.recovery": "Recuperació",
+    "recovery.bypass_family_check": "Omet la comprovació de família del microprogramari (molt arriscat)",
+    "recovery.bypass_family_title": "Ometre la comprovació de la família del maquinari",
+    "recovery.bypass_family_warning": "Has demanat ometre la comprovació de compatibilitat de la família de maquinari del microprogramari. Aquesta comprovació ajuda a evitar que s'escrigui a la unitat microprogramari destinat a un maquinari diferent. Ometre-la pot desactivar permanentment la unitat, i pot ser impossible recuperar-la o tornar-hi a instal·lar el microprogramari anterior.",
+    "recovery.bypass_family_code": "Per confirmar que acceptes aquest risc, introdueix {code} per continuar.",
+    "recovery.bypass_family_continue": "Activa l'omissió",
+    "recovery.bypass_family_code_failed": "No s'ha pogut generar el codi de confirmació. La comprovació de la família del microprogramari continua activada.",
+    "recovery.bypass_family_ack": "Entenc que ometre la comprovació de la família del microprogramari pot desactivar permanentment aquesta unitat i que pot ser impossible recuperar-la.",
+    "recovery.family_enforced": "Sense còpia de seguretat automàtica; comprovació de la família del microprogramari aplicada",
+    "recovery.family_bypassed": "Sense còpia de seguretat automàtica; comprovació de la família del microprogramari omesa expressament (molt arriscat)",
+    "recovery.family_override_unsupported": "Aquest sistema de recuperació no permet ometre la comprovació de la família del microprogramari.",
     "action.read_info": "Llegeix la informació de la unitat",
     "action.check_file": "Comprova el fitxer…",
     "info.connect_drive": "Connecta una unitat òptica i selecciona Actualitza.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Actiu i rescatat)",
     "legacy.backup_saved": "Recuperació: salvada {path} ({bytes} Els bitllets)",
     "legacy.backup_missing": "Backup: NO - flashing sense una backup de rellotge (aquest disc òptic no es pot rellotjar enrere)",
-    "ui.backup_dump_review": "Si no es pot desar una còpia de seguretat, deseu un bolcat en brut i envieu-lo amb els registres de diagnòstic perquè puguem revisar la compatibilitat."
+    "ui.backup_dump_review": "Si no es pot desar una còpia de seguretat, deseu un bolcat en brut i envieu-lo amb els registres de diagnòstic perquè puguem revisar la compatibilitat.",
+    "verification.startup": "Inici",
+    "verification.not_checked": "No comprovat",
+    "verification.not_requested": "No sol·licitat",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

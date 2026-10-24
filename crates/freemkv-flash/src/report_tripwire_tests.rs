@@ -307,7 +307,7 @@ fn recovery_offered_for_unsupported_identified_drive() {
 }
 
 #[test]
-fn recovery_identify_needs_no_probe() {
+fn recovery_identify_uses_shared_read_only_discovery() {
     let mut dev = Rec::new(unprobeable_receiver());
     let resolved = registry::resolve(&mut dev).unwrap().unwrap();
     assert!(resolved.backend.flash().is_none());
@@ -324,8 +324,9 @@ fn recovery_identify_needs_no_probe() {
     assert_eq!(
         dev.transcript(),
         [
-            "IN   cdb=120000002400 alloc=36 -> ok 96",
+            "IN   cdb=120000006000 alloc=96 -> ok 96",
             "IN   cdb=3c02f100000000003000 alloc=48 -> ok 48",
+            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
         ]
     );
     // Another vendor's drive is simply not identified.
@@ -549,7 +550,7 @@ fn unknown_mmc_drive() -> MockScsiDevice {
             |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
             feature,
         )
-        .on_fail(|cdb| cdb.first() == Some(&0x3C), "ILLEGAL REQUEST")
+        .on_sense(|cdb| cdb.first() == Some(&0x3C), 5, 0x24, 0)
 }
 
 #[test]

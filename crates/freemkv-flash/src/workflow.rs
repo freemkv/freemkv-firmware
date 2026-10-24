@@ -805,11 +805,17 @@ pub struct RecoveryOptions {
     pub execute: bool,
     /// Explicit acknowledgement of firmware-update risk.
     pub acknowledged_risk: bool,
+    /// Explicit Recovery-only override of the firmware family check.
+    pub bypass_family_check: bool,
 }
 
 /// Recover without automatic backups or installed-versus-target policy gates.
 pub fn recover(args: RecoveryOptions) -> Result<UpdateOutcome> {
     crate::diagnostics::run("recovery", || {
+        crate::diagnostics::record(format!(
+            "Recovery family-check override requested: {}",
+            args.bypass_family_check
+        ));
         let mut input = open_recovery(&args)
             .map_err(|error| UpdateFailure::before_write("recovery precheck", error))?;
         engine::recover_identified(
@@ -818,8 +824,11 @@ pub fn recover(args: RecoveryOptions) -> Result<UpdateOutcome> {
             Some(input.receiver),
             input.current.as_deref(),
             &input.target,
-            args.execute,
-            args.acknowledged_risk,
+            engine::RecoveryExecution {
+                execute: args.execute,
+                acknowledged_risk: args.acknowledged_risk,
+                bypass_family_check: args.bypass_family_check,
+            },
         )
         .inspect(|outcome| {
             crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
@@ -918,6 +927,21 @@ pub fn recovery_requires_current(profile: &DriveProfile) -> bool {
         .and_then(|d| registry::backends().find(|b| b.descriptor().id == d.id))
         .and_then(|b| b.recovery())
         .is_none_or(|r| r.requires_current())
+}
+
+/// Whether preparation established two known, different hardware families.
+/// Unknown families, parse failures and transport errors are not mismatches.
+pub fn is_hardware_mismatch(error: &anyhow::Error) -> bool {
+    error.is::<crate::backend::HardwareMismatch>()
+}
+
+/// Whether the identified recovery backend supports an explicit family override.
+pub fn recovery_supports_family_override(profile: &DriveProfile) -> bool {
+    profile
+        .recovery
+        .and_then(|d| registry::backends().find(|b| b.descriptor().id == d.id))
+        .and_then(|b| b.recovery())
+        .is_some_and(|r| r.supports_family_override())
 }
 
 /// Package a standalone firmware image without opening a drive or overwriting output.

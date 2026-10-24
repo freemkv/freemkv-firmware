@@ -19,6 +19,16 @@
     "task.dump": "Dump",
     "task.flash": "Flashen",
     "task.recovery": "Herstel",
+    "recovery.bypass_family_check": "Firmwarefamiliecontrole omzeilen (zeer riskant)",
+    "recovery.bypass_family_title": "Controle van hardwarefamilie omzeilen",
+    "recovery.bypass_family_warning": "Je hebt gevraagd de controle van de hardwarefamilie van de firmware te omzeilen. Deze controle helpt voorkomen dat firmware voor andere hardware naar je station wordt geschreven. Omzeilen kan het station permanent onbruikbaar maken; herstel of het terugzetten van eerdere firmware is mogelijk niet meer mogelijk.",
+    "recovery.bypass_family_code": "Voer {code} in om dit risico te erkennen en door te gaan.",
+    "recovery.bypass_family_continue": "Omzeiling inschakelen",
+    "recovery.bypass_family_code_failed": "De bevestigingscode kon niet worden aangemaakt. De firmwarefamiliecontrole blijft ingeschakeld.",
+    "recovery.bypass_family_ack": "Ik begrijp dat het omzeilen van de firmwarefamiliecontrole dit station permanent onbruikbaar kan maken en dat herstel onmogelijk kan zijn.",
+    "recovery.family_enforced": "Geen automatische back-up; firmwarefamiliecontrole afgedwongen",
+    "recovery.family_bypassed": "Geen automatische back-up; firmwarefamiliecontrole uitdrukkelijk omzeild (zeer riskant)",
+    "recovery.family_override_unsupported": "Deze herstelbackend ondersteunt het omzeilen van de firmwarefamiliecontrole niet.",
     "action.read_info": "Stationsinformatie lezen",
     "action.check_file": "Bestand controleren…",
     "info.connect_drive": "Sluit een optisch station aan en selecteer Vernieuwen.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Actief en bewaard)",
     "legacy.backup_saved": "Backup: gered {path} ({bytes} De bytes)",
     "legacy.backup_missing": "backup: NONE — flashing zonder een rollback backup (dit optische schijf kan niet terug worden gegooid)",
-    "ui.backup_dump_review": "Als een back-up niet kan worden opgeslagen, sla dan een ruwe dump op en dien deze samen met de diagnoselogboeken in, zodat we de ondersteuning voor back-ups kunnen onderzoeken."
+    "ui.backup_dump_review": "Als een back-up niet kan worden opgeslagen, sla dan een ruwe dump op en dien deze samen met de diagnoselogboeken in, zodat we de ondersteuning voor back-ups kunnen onderzoeken.",
+    "verification.startup": "Opstarten",
+    "verification.not_checked": "Niet gecontroleerd",
+    "verification.not_requested": "Niet aangevraagd",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

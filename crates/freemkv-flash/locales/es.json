@@ -19,6 +19,16 @@
     "task.dump": "Volcado",
     "task.flash": "Flashear",
     "task.recovery": "Recuperación",
+    "recovery.bypass_family_check": "Omitir la comprobación de familia del firmware (muy arriesgado)",
+    "recovery.bypass_family_title": "Omitir la comprobación de familia del hardware",
+    "recovery.bypass_family_warning": "Has solicitado omitir la comprobación de la familia de hardware del firmware. Esta comprobación ayuda a evitar que se escriba en la unidad firmware destinado a otro hardware. Omitirla puede dejar la unidad inutilizable de forma permanente, y quizá no sea posible recuperarla ni volver a instalar el firmware anterior.",
+    "recovery.bypass_family_code": "Para confirmar que aceptas este riesgo, escribe {code} para continuar.",
+    "recovery.bypass_family_continue": "Activar omisión",
+    "recovery.bypass_family_code_failed": "No se ha podido generar el código de confirmación. La comprobación de familia del firmware sigue activada.",
+    "recovery.bypass_family_ack": "Entiendo que omitir la comprobación de familia del firmware puede dejar esta unidad inutilizable de forma permanente y que quizá sea imposible recuperarla.",
+    "recovery.family_enforced": "Sin copia de seguridad automática; comprobación de familia del firmware aplicada",
+    "recovery.family_bypassed": "Sin copia de seguridad automática; comprobación de familia del firmware omitida expresamente (muy arriesgado)",
+    "recovery.family_override_unsupported": "Este sistema de recuperación no permite omitir la comprobación de familia del firmware.",
     "action.read_info": "Leer información de la unidad",
     "action.check_file": "Comprobar archivo…",
     "info.connect_drive": "Conecta una unidad óptica y selecciona Actualizar.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Activo y salvado)",
     "legacy.backup_saved": "Backup: salvado {path} ({bytes} de los bytes)",
     "legacy.backup_missing": "Backup: NO – flashing sin una backup de rollo (este disco óptico no puede ser rolado de vuelta)",
-    "ui.backup_dump_review": "Si no se puede guardar una copia de seguridad, guarde un volcado sin procesar y envíelo con los registros de diagnóstico para que podamos evaluar la compatibilidad con las copias de seguridad."
+    "ui.backup_dump_review": "Si no se puede guardar una copia de seguridad, guarde un volcado sin procesar y envíelo con los registros de diagnóstico para que podamos evaluar la compatibilidad con las copias de seguridad.",
+    "verification.startup": "Inicio",
+    "verification.not_checked": "No comprobado",
+    "verification.not_requested": "No solicitado",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

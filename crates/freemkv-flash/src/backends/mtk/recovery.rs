@@ -27,6 +27,14 @@ impl RecoveryFacet for Mtk {
         dev: &mut ReadDevice<'_>,
         current: Option<&[u8]>,
     ) -> Result<Option<RecoveryTarget>> {
+        use crate::backend::detection::{self, Conclusion, Evidence};
+        match detection::detect(dev)?.conclusion {
+            Conclusion::Detected(Evidence::Mediatek(_)) => {}
+            Conclusion::Ambiguous => {
+                anyhow::bail!("ambiguous firmware protocol; no firmware written")
+            }
+            _ => return Ok(None),
+        }
         let shared = SharedDevice::new(dev);
         let mut reads = ScsiTransport::reads(&shared);
         let result = match current {

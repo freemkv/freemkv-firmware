@@ -19,6 +19,16 @@
     "task.dump": "Döküm",
     "task.flash": "Yazdır",
     "task.recovery": "Kurtarma",
+    "recovery.bypass_family_check": "Ürün yazılımı ailesi denetimini atla (çok riskli)",
+    "recovery.bypass_family_title": "Donanım ailesi denetimini atla",
+    "recovery.bypass_family_warning": "Ürün yazılımının donanım ailesi denetimini atlamayı istediniz. Bu denetim, başka donanımlar için hazırlanmış ürün yazılımının sürücünüze yazılmasını önlemeye yardımcı olur. Denetimi atlamak sürücüyü kalıcı olarak kullanılamaz hâle getirebilir; kurtarma veya önceki ürün yazılımını yeniden yükleme mümkün olmayabilir.",
+    "recovery.bypass_family_code": "Bu riski kabul ettiğinizi onaylamak için devam etmek üzere {code} kodunu girin.",
+    "recovery.bypass_family_continue": "Atlamayı etkinleştir",
+    "recovery.bypass_family_code_failed": "Onay kodu oluşturulamadı. Ürün yazılımı ailesi denetimi etkin kalıyor.",
+    "recovery.bypass_family_ack": "Ürün yazılımı ailesi denetimini atlamanın bu sürücüyü kalıcı olarak kullanılamaz hâle getirebileceğini ve kurtarmanın mümkün olmayabileceğini anlıyorum.",
+    "recovery.family_enforced": "Otomatik yedekleme yok; ürün yazılımı ailesi denetimi uygulanıyor",
+    "recovery.family_bypassed": "Otomatik yedekleme yok; ürün yazılımı ailesi denetimi açıkça atlanıyor (çok riskli)",
+    "recovery.family_override_unsupported": "Bu kurtarma arka ucu ürün yazılımı ailesi denetiminin atlanmasını desteklemiyor.",
     "action.read_info": "Sürücü bilgilerini oku",
     "action.check_file": "Dosyayı denetle…",
     "info.connect_drive": "Bir optik sürücü bağlayıp Yenile’yi seçin.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Aktif ve kurtarılmış)",
     "legacy.backup_saved": "Kaynak: kurtarıldı {path} ({bytes} Bitkiler )",
     "legacy.backup_missing": "yedekleme: NONE — bir rollback yedekleme olmadan flashing (bu optik sürücü geri döndürülemez)",
-    "ui.backup_dump_review": "Yedek kaydedilemiyorsa ham dökümü kaydedin ve yedekleme desteğini inceleyebilmemiz için tanılama günlükleriyle birlikte gönderin."
+    "ui.backup_dump_review": "Yedek kaydedilemiyorsa ham dökümü kaydedin ve yedekleme desteğini inceleyebilmemiz için tanılama günlükleriyle birlikte gönderin.",
+    "verification.startup": "Başlatma",
+    "verification.not_checked": "Kontrol edilmedi",
+    "verification.not_requested": "İstenmedi",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

@@ -19,6 +19,16 @@
     "task.dump": "Výpis",
     "task.flash": "Nahrát firmware",
     "task.recovery": "Obnova",
+    "recovery.bypass_family_check": "Obejít kontrolu rodiny firmwaru (velmi riskantní)",
+    "recovery.bypass_family_title": "Obejití kontroly hardwarové rodiny",
+    "recovery.bypass_family_warning": "Požádali jste o obejití kontroly hardwarové rodiny firmwaru. Tato kontrola pomáhá zabránit zápisu firmwaru určeného pro jiný hardware do vaší jednotky. Její obejití může jednotku trvale znefunkčnit a obnovení nebo návrat k předchozímu firmwaru nemusí být možný.",
+    "recovery.bypass_family_code": "Chcete-li potvrdit přijetí tohoto rizika, zadejte {code} a pokračujte.",
+    "recovery.bypass_family_continue": "Povolit obejití",
+    "recovery.bypass_family_code_failed": "Potvrzovací kód se nepodařilo vygenerovat. Kontrola rodiny firmwaru zůstává zapnutá.",
+    "recovery.bypass_family_ack": "Rozumím, že obejití kontroly rodiny firmwaru může tuto jednotku trvale znefunkčnit a obnovení nemusí být možné.",
+    "recovery.family_enforced": "Bez automatické zálohy; kontrola rodiny firmwaru je vynucena",
+    "recovery.family_bypassed": "Bez automatické zálohy; kontrola rodiny firmwaru je výslovně obejita (velmi riskantní)",
+    "recovery.family_override_unsupported": "Tento backend obnovy nepodporuje obejití kontroly rodiny firmwaru.",
     "action.read_info": "Načíst informace o jednotce",
     "action.check_file": "Zkontrolovat soubor…",
     "info.connect_drive": "Připojte optickou jednotku a vyberte Obnovit.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (aktivní a zachráněné)",
     "legacy.backup_saved": "Zálohování: zachráněno {path} ({bytes} byty )",
     "legacy.backup_missing": "zálohování: NONE - flashing bez backup rollback (tento optický disk nelze otáčet zpět)",
-    "ui.backup_dump_review": "Pokud nelze uložit zálohu, uložte surový výpis a odešlete jej s diagnostickými protokoly, abychom mohli posoudit podporu zálohování."
+    "ui.backup_dump_review": "Pokud nelze uložit zálohu, uložte surový výpis a odešlete jej s diagnostickými protokoly, abychom mohli posoudit podporu zálohování.",
+    "verification.startup": "Spuštění",
+    "verification.not_checked": "Nezkontrolováno",
+    "verification.not_requested": "Nepožadováno",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

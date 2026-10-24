@@ -42,6 +42,28 @@ fn hardware_mismatch_guidance_keeps_models_but_not_family_hashes() {
 }
 
 #[test]
+fn family_override_requires_typed_hardware_mismatch_evidence() {
+    let mismatch = UpdateFailure::before_write(
+        "compatibility checks",
+        crate::backend::HardwareMismatch {
+            installed_model: "installed model".into(),
+            target_model: "target model".into(),
+            source: anyhow::anyhow!("family mismatch: installed hash, target hash"),
+        }
+        .into(),
+    );
+    assert!(crate::workflow::is_hardware_mismatch(&mismatch));
+
+    for error in [
+        anyhow::anyhow!("family mismatch: installed hash, target hash"),
+        anyhow::anyhow!("firmware family is unknown"),
+        anyhow::anyhow!("SCSI transport failed while reading firmware"),
+    ] {
+        assert!(!crate::workflow::is_hardware_mismatch(&error));
+    }
+}
+
+#[test]
 fn precheck_evidence_never_overwrites_an_execution_failure() {
     let evidence = UpdateFailure {
         phase: "target upload".into(),
@@ -63,7 +85,9 @@ fn current_detection_error_keeps_transport_diagnostics_out_of_user_guidance() {
     let error = anyhow::Error::new(crate::backend::CurrentFirmwareRequired {
         source: anyhow::anyhow!("SCSI invalid field in CDB at 0x98000 [E4000]"),
     });
-    assert!(error_message(&error).contains("Choose the firmware currently installed"));
+    assert!(
+        error_message(&error).contains("Select a file matching the firmware currently installed")
+    );
     assert!(!error_message(&error).contains("E4000"));
     assert!(format!("{error:#}").contains("SCSI invalid field in CDB at 0x98000 [E4000]"));
     let other = anyhow::anyhow!("original cause").context("operation failed");
@@ -201,28 +225,21 @@ fn is_receiver_identity_read(cdb: &[u8]) -> bool {
 }
 
 #[test]
-fn current_file_offers_oem_recovery_without_granting_normal_flash_capabilities() {
+fn validated_oem_protocol_offers_same_capabilities_independent_of_brand() {
     for vendor in ["PLEXTOR", "TEAC", "SONY", "ASUS", "ACME"] {
         let mut dev = oem_receiver(vendor);
         let unknown = profile_on(&mut dev).unwrap();
-        assert!(unknown.backend.is_none() && unknown.recovery.is_none());
-        assert!(!dev.reads.iter().any(|c| is_receiver_identity_read(c)));
+        assert!(unknown.backend.is_some() && unknown.recovery.is_some());
+        assert!(dev.reads.iter().any(|c| is_receiver_identity_read(c)));
         let current = crate::backends::pioneer::test_oem_recovery_package(vendor);
         let profile = profile_on_with_current(&mut dev, &current).unwrap();
-        assert!(profile.backend.is_none());
-        assert_eq!(profile.capabilities, Capabilities::NONE);
+        assert!(profile.backend.is_some());
+        assert!(profile.capabilities.flash && profile.capabilities.backup);
         assert_eq!(
             profile.recovery.map(|d| d.id),
             Some(crate::backends::pioneer::DESCRIPTOR.id),
             "{vendor}: {:?}",
             profile.recovery_errors
-        );
-        assert_eq!(
-            dev.reads
-                .iter()
-                .filter(|c| is_receiver_identity_read(c))
-                .count(),
-            1
         );
         assert!(dev.writes.is_empty());
     }
@@ -234,7 +251,7 @@ fn unrelated_or_invalid_current_never_authorizes_oem_service_probing() {
     let mut wrong_vendor = oem_receiver("ASUS");
     let profile = profile_on_with_current(&mut wrong_vendor, &current).unwrap();
     assert!(profile.recovery.is_none());
-    assert!(!wrong_vendor
+    assert!(wrong_vendor
         .reads
         .iter()
         .any(|c| is_receiver_identity_read(c)));
@@ -268,8 +285,10 @@ fn replaced_current_revokes_recovery_even_for_a_normally_recognized_drive() {
         assert!(refused.backend.is_none() && refused.recovery.is_none());
         assert_eq!(refused.capabilities, Capabilities::NONE);
         assert!(
-            dev.reads.iter().all(|c| c.first() == Some(&0x12)),
-            "only standard identity may be read before Current is bound: {:?}",
+            dev.reads
+                .iter()
+                .all(|c| matches!(c.first(), Some(0x12 | 0x3c))),
+            "only identification reads before Current is bound: {:?}",
             dev.reads
         );
         assert!(dev.writes.is_empty());

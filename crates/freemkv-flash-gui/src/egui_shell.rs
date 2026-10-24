@@ -610,6 +610,12 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
                 ui.label(n);
             }
             ui.add_space(12.0);
+            if let Some(entered) = &c.code_entry {
+                let mut value = entered.clone();
+                if ui.text_edit_singleline(&mut value).changed() {
+                    out.push(Input::FamilyOverrideCode(value));
+                }
+            }
             let mut ack = c.ack_checked;
             if !c.ack_text.is_empty() && ui.checkbox(&mut ack, &c.ack_text).changed() {
                 out.push(Input::SetCheck(crate::ui::CheckId::RiskAck, ack));

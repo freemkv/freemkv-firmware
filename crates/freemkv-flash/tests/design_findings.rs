@@ -99,7 +99,7 @@ const REQUIRED: &[(&str, &str)] = &[
     ),
     (
         "R6 recovery reachability",
-        "recovery_identify_needs_no_probe",
+        "recovery_identify_uses_shared_read_only_discovery",
     ),
     ("R7 golden coverage", "golden_coverage_is_complete"),
     ("R7 golden coverage", "golden_parity_with_0_11_2"),

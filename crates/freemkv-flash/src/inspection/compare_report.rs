@@ -8,12 +8,7 @@ pub(super) fn compare(
     right: Arc<Inspection>,
     control: &Control,
 ) -> Result<ComparisonReport> {
-    let family = match (&left.family, &right.family) {
-        (Some(a), Some(b)) if a.scheme != b.scheme => FamilyRelationship::NotComparable,
-        (Some(a), Some(b)) if a == b => FamilyRelationship::Same,
-        (Some(_), Some(_)) => FamilyRelationship::Different,
-        _ => FamilyRelationship::Unknown,
-    };
+    let family = FamilyRelationship::between(left.family.as_ref(), right.family.as_ref());
     let mut sections = Vec::new();
     for name in left
         .components
@@ -31,6 +26,7 @@ pub(super) fn compare(
         let a = left.analyses.iter().find(|a| a.identity.component == name);
         let b = right.analyses.iter().find(|a| a.identity.component == name);
         let mut section = ComparisonSection {
+            facts: None,
             name: name.into(),
             fields: Vec::new(),
             summary: Vec::new(),
@@ -40,6 +36,7 @@ pub(super) fn compare(
         };
         if let (Some(a), Some(b)) = (a, b) {
             let result = a.compare(b, comparison::Options::default(), control)?;
+            section.facts = Some(result.facts.clone());
             section.fields.push(Field::new(
                 "Decoded content",
                 if result.identical_decoded {
