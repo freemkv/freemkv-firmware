@@ -1612,6 +1612,7 @@ impl Shell {
             .chain(c.note.as_deref())
             .collect::<Vec<_>>()
             .join("\n\n");
+        let technical_details = c.technical_details.join("\n\n");
         let me = self.clone();
         let cfg = w::TASKDIALOGCONFIG {
             hwnd_parent: Some(self.wnd.hwnd()),
@@ -1626,6 +1627,11 @@ impl Shell {
             ],
             default_button_id: TD_CANCEL,
             verification_text: (!c.ack_text.is_empty()).then_some(&c.ack_text),
+            // Expanded information is native-local and starts collapsed. Safety
+            // warnings remain in the always-visible content/footer above.
+            more_info: (!technical_details.is_empty()).then_some(technical_details.as_str()),
+            more_info_btn_collapsed: Some(&c.details_label),
+            more_info_btn_expanded: Some(&c.hide_details_label),
             footer_text: (!footer.is_empty()).then_some(footer.as_str()),
             callback: Some(Box::new(move |hwnd: &w::HWND, tdn: w::Tdn| {
                 me.on_confirm(hwnd, tdn)
@@ -1893,6 +1899,10 @@ impl Shell {
                 .confirm
                 .is_some_and(|c: Confirm| c.confirm.enabled)
         };
+        #[cfg(debug_assertions)]
+        if let w::Tdn::ExpandoButtonClicked(expanded) = tdn {
+            gate::disclosure_changed(expanded);
+        }
         #[cfg(debug_assertions)]
         if matches!(tdn, w::Tdn::Timer(_)) && gate::probe(self, hwnd) {
             return co::HRESULT::S_OK;

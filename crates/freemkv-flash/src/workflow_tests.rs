@@ -521,3 +521,58 @@ fn failed_dump_does_not_request_another_dump() {
     assert_eq!(issue.id, "errors.connection");
     assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
 }
+
+#[test]
+fn confirmation_cleanup_preserves_nested_warnings_unknown_rows_and_terminal_text() {
+    use crate::backend::{FlashPlan, PlanLine};
+    let lines = vec![
+        PlanLine::Detail(Box::new(PlanLine::Spaced(Box::new(PlanLine::Warning(
+            "nested compatibility warning".into(),
+        ))))),
+        PlanLine::Spaced(Box::new(PlanLine::Detail(Box::new(PlanLine::Warning(
+            "nested rollback warning".into(),
+        ))))),
+        PlanLine::Field("new requirement", "unknown rows remain visible".into()),
+        PlanLine::Detail(Box::new(PlanLine::Field(
+            "receiver",
+            "signature at 0x1234".into(),
+        ))),
+        PlanLine::Backup,
+    ];
+    let mut plan = FlashPlan::new(());
+    plan.after_backup = lines.clone();
+    plan.notes.push(PlanLine::Text(
+        "required stage must start before continuing".into(),
+    ));
+    let mut authorized = AuthorizedPlan::new(plan, ());
+    // A legacy human string is not evidence that an artifact was saved.
+    authorized.set_backup("saved /invented/path (3 bytes)");
+    let sheet = FlashSheet::of(&authorized);
+    assert!(sheet.saved_backup.is_none());
+    assert!(!sheet.backup_waived);
+    assert_eq!(
+        sheet.warnings,
+        ["nested compatibility warning", "nested rollback warning"]
+    );
+    assert_eq!(
+        sheet.notices,
+        [
+            "required stage must start before continuing",
+            "new requirement: unknown rows remain visible"
+        ]
+    );
+    assert_eq!(sheet.technical_details, ["receiver: signature at 0x1234"]);
+    assert!(sheet
+        .plan
+        .iter()
+        .any(|s| s == "backup: saved /invented/path (3 bytes)"));
+    for line in lines {
+        assert_eq!(
+            engine::render_plan_line(&line, "backup"),
+            engine::render_plan_line(&PlanLine::Detail(Box::new(line)), "backup")
+        );
+    }
+    authorized.set_backup_evidence(None);
+    let waived = FlashSheet::of(&authorized);
+    assert!(waived.saved_backup.is_none() && waived.backup_waived);
+}

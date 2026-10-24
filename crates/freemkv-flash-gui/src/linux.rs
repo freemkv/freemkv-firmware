@@ -812,6 +812,27 @@ impl Shell {
         if let Some(n) = &c.note {
             extra.append(&widgets::label(n, &[]));
         }
+        if !c.technical_details.is_empty() {
+            let expander = gtk::Expander::new(Some(&c.details_label));
+            let body = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            for detail in &c.technical_details {
+                let label = widgets::label(detail, &[]);
+                label.set_selectable(true);
+                body.append(&label);
+            }
+            let scroll = gtk::ScrolledWindow::builder()
+                .hscrollbar_policy(gtk::PolicyType::Never)
+                .max_content_height(180)
+                .propagate_natural_height(true)
+                .child(&body)
+                .build();
+            expander.set_child(Some(&scroll));
+            let (show, hide) = (c.details_label.clone(), c.hide_details_label.clone());
+            expander.connect_expanded_notify(move |expander| {
+                expander.set_label(Some(if expander.is_expanded() { &hide } else { &show }));
+            });
+            extra.append(&expander);
+        }
         if let Some(value) = &c.code_entry {
             let entry = gtk::Entry::new();
             entry.set_text(value);

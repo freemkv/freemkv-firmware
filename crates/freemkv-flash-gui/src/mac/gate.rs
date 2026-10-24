@@ -193,6 +193,7 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     run.opened = main
         .attachedSheet()
         .is_some_and(|s| std::ptr::eq(&*s, &*sheet_window));
+    disclosure(c, dir, g);
     let ack = c.ivars().alert_ack.borrow().clone();
     let confirm = c.ivars().alert_confirm.borrow().clone();
     run.unticked = ack.as_ref().map(|b| b.state() == 0);
@@ -204,6 +205,7 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             let acked = c.view().confirm.is_some_and(|v| v.ack_checked);
             run.ticked = Some((acked, confirm.as_ref().map(|b| b.isEnabled())));
             run.box_reads_ticked = Some(ack.state() == 1);
+            disclosure(c, dir, g);
         }
     }
     let name = if tick { "sheet" } else { "sheet-reopened" };
@@ -221,8 +223,21 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
         .buttons()
         .iter()
         .find(|b| b.title().to_string() == cancel_text);
-    if let Some(b) = cancel {
-        unsafe { b.performClick(None) };
+    if tick {
+        if let Some(b) = cancel {
+            unsafe { b.performClick(None) };
+        }
+    } else {
+        let enter = ns("\r");
+        let key = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+            NSEventType::KeyDown, NSPoint::new(0.0, 0.0), NSEventModifierFlags::empty(),
+            0.0, sheet_window.windowNumber(), None, &enter, &enter, false, 36,
+        );
+        g.check(
+            "confirmation-return-cancels",
+            key.is_some_and(|key| sheet_window.performKeyEquivalent(&key)),
+            "Return activates Cancel after disclosure relayout",
+        );
     }
     let until = Instant::now() + Duration::from_secs(3);
     while Instant::now() < until && !closed(c, &main) {
@@ -230,6 +245,113 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     }
     run.closed = closed(c, &main);
     run
+}
+
+/// The disclosure is native-local state: even opening long Unicode technical text
+/// cannot acknowledge risk, remove a warning or change any model input.
+fn disclosure(c: &Controller, dir: &Path, g: &mut Gate) {
+    let details = c.ivars().alert_details.borrow().clone();
+    let alert = c.ivars().alert.borrow().clone().unwrap();
+    g.check(
+        "confirmation-details-control",
+        details.is_some(),
+        "technical plan has a Details control",
+    );
+    let Some((button, scroll)) = details else {
+        return;
+    };
+    let before = c.view();
+    let confirm = before.confirm.as_ref().unwrap();
+    g.check(
+        "confirmation-details-start-collapsed",
+        scroll.isHidden() && button.title().to_string() == confirm.details_label,
+        "a new sheet starts collapsed",
+    );
+    let height = alert.window().frame().size.height;
+    for expanded in [true, false] {
+        unsafe { button.performClick(None) };
+        settle(c, SETTLE);
+        let warnings_visible = alert.accessoryView().is_some_and(|accessory| {
+            confirm.warnings.iter().all(|warning| {
+                accessory.subviews().iter().any(|view| {
+                    view.downcast_ref::<super::NSTextField>()
+                        .is_some_and(|label| {
+                            !label.isHidden() && label.stringValue().to_string() == *warning
+                        })
+                })
+            })
+        });
+        let content = scroll.documentView().is_some_and(|document| {
+            document.subviews().iter().any(|view| {
+                view.downcast_ref::<super::NSTextField>()
+                    .is_some_and(|text| {
+                        text.stringValue().to_string() == confirm.technical_details.join("\n\n")
+                            && !text.isEditable()
+                    })
+            })
+        });
+        let iv = c.ivars();
+        let ack_unchanged = iv
+            .alert_ack
+            .borrow()
+            .as_ref()
+            .is_some_and(|ack| (ack.state() != 0) == confirm.ack_checked);
+        let write_unchanged = iv.alert_confirm.borrow().as_ref().is_some_and(|write| {
+            write.isEnabled() == confirm.confirm.enabled
+                && write.keyEquivalent().to_string().is_empty()
+        });
+        g.check(
+            if expanded {
+                "confirmation-details-expanded"
+            } else {
+                "confirmation-details-collapsed"
+            },
+            scroll.isHidden() != expanded
+                && content
+                && warnings_visible
+                && ack_unchanged
+                && write_unchanged
+                && c.view() == before
+                && button.title().to_string().as_str()
+                    == if expanded {
+                        &confirm.hide_details_label
+                    } else {
+                        &confirm.details_label
+                    },
+            "exact details, warnings, acknowledgement and write gate preserved",
+        );
+        g.check(
+            "confirmation-details-resizes",
+            if expanded {
+                alert.window().frame().size.height > height
+            } else {
+                (alert.window().frame().size.height - height).abs() < 1.0
+            },
+            "expanded text is scrollable; collapse restores the compact sheet",
+        );
+        if expanded {
+            g.check(
+                "confirmation-details-start-at-top",
+                scroll.contentView().bounds().origin.y.abs() < 1.0,
+                format!(
+                    "the first technical detail is immediately visible; clip {:?}",
+                    scroll.contentView().bounds()
+                ),
+            );
+        }
+        if expanded {
+            alert.window().display();
+            g.save(
+                dir,
+                "confirmation-details",
+                alert
+                    .window()
+                    .contentView()
+                    .and_then(|v| capture(&v))
+                    .as_ref(),
+            );
+        }
+    }
 }
 
 /// Open the flash file picker and cancel it through the panel's own `cancel:`: the picker

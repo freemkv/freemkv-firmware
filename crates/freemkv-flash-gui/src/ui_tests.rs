@@ -247,12 +247,14 @@ fn flash_paired_current_selection_is_explicit_and_frozen_through_confirmation() 
     app.flash_current = Some("another.tar".into());
     app.flash_current_member = Some("intermediate.bin".into());
     let confirm = app.view().confirm.unwrap();
-    assert!(confirm.details.contains(&"Current: original.tar".into()));
     assert!(confirm
-        .details
+        .technical_details
+        .contains(&"Current: original.tar".into()));
+    assert!(confirm
+        .technical_details
         .contains(&"Current member (receiver reference): firmware.bin".into()));
     assert!(!confirm
-        .details
+        .technical_details
         .iter()
         .any(|line| line.contains("another.tar")));
 }
@@ -322,6 +324,9 @@ fn selected_file_origin_is_visible_on_flash_recovery_and_confirmation() {
     let confirm = app.view().confirm.expect("recovery confirmation");
     assert!(confirm
         .details
+        .contains(&"File origin: User provided".to_owned()));
+    assert!(confirm
+        .technical_details
         .iter()
         .any(|line| line.contains("User provided")
             && line.contains("rather than identified as an original OEM release")));
@@ -391,7 +396,12 @@ fn french_flash_confirmation_resolves_nested_origin_catalog_ids() {
             reply,
         },
     });
-    let details = app.view().confirm.expect("confirmation").details;
+    let confirm = app.view().confirm.expect("confirmation");
+    assert_eq!(
+        confirm.details.last().unwrap(),
+        &crate::localization::get(app.language, "confirm.origin_unknown")
+    );
+    let details = confirm.technical_details;
     let origin = details.last().expect("origin warning");
     assert!(origin.contains("Origine inconnue"), "{origin}");
     assert!(origin.contains("L'origine du fichier"), "{origin}");
@@ -907,6 +917,7 @@ fn flash_starts_with_a_firmware_chooser() {
 /// records whether it wrote.
 struct SheetBackend {
     fail_backup: bool,
+    unusable_backup: bool,
     confirmation: Option<&'static str>,
     executed: AtomicBool,
 }
@@ -974,10 +985,17 @@ impl FlashFacet for SheetBackend {
     fn plan(&self, _: &mut ReadDevice<'_>, _: &FlashRequest) -> anyhow::Result<FlashPlan> {
         let mut plan = FlashPlan::new(());
         plan.after_backup = vec![
-            PlanLine::Header("== flash plan ==".into()),
+            PlanLine::Detail(Box::new(PlanLine::Header("== flash plan ==".into()))),
             PlanLine::Backup,
         ];
         Ok(plan)
+    }
+    fn verify_backup(&self, _: &FlashPlan, _: &[u8]) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.unusable_backup,
+            "capture does not cover the target region"
+        );
+        Ok(())
     }
     fn authorize(
         &self,
@@ -1037,12 +1055,22 @@ fn flash_until_sheet_with_backup(
     confirmation: Option<&'static str>,
     fail_backup: bool,
 ) -> Flashing {
+    flash_until_sheet_with_backup_coverage(app, confirmation, fail_backup, false)
+}
+
+fn flash_until_sheet_with_backup_coverage(
+    app: &mut App,
+    confirmation: Option<&'static str>,
+    fail_backup: bool,
+    unusable_backup: bool,
+) -> Flashing {
     app.flash_input = Some("firmware.tar".into());
     app.dispatch(Input::FlashNow);
     plan_passes(app);
     let worker = app.worker.take().expect("the flash job's worker");
     let backend = Arc::new(SheetBackend {
         fail_backup,
+        unusable_backup,
         confirmation,
         executed: AtomicBool::new(false),
     });
@@ -1142,10 +1170,15 @@ fn backup_yes_still_requires_a_separate_final_flash_confirmation() {
     assert!(!final_sheet.ack_checked);
     assert!(!final_sheet.confirm.enabled);
     assert!(
-        final_sheet.note.is_none(),
+        final_sheet.note.as_deref() == Some("Cancel leaves the drive’s firmware unchanged."),
         "must not claim an unsaved backup is kept"
     );
     assert!(final_sheet.warnings.iter().any(|s| s == BARRIER));
+    assert!(final_sheet.warnings.iter().any(|s| s == "No usable backup is available for this update. You may be unable to restore the current firmware if the update fails."));
+    assert!(!final_sheet
+        .details
+        .iter()
+        .any(|s| s.contains("Backup saved")));
     app.dispatch(Input::Confirm);
     assert!(flashing.waiting());
     assert!(!flashing.executed());
@@ -1212,35 +1245,59 @@ fn cancel_at_the_sheet_writes_nothing_and_keeps_the_backup() {
 }
 
 #[test]
+fn confirmation_cleanup_keeps_long_origin_out_of_visible_facts() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet(&mut app, None);
+    let confirm = app.view().confirm.unwrap();
+    assert!(
+        !confirm
+            .details
+            .iter()
+            .any(|s| s.contains(workflow::FileOrigin::Unknown.explanation())),
+        "long origin belongs in disclosure: {:?}",
+        confirm.details
+    );
+    app.dispatch(Input::CancelConfirm);
+    let _ = flashing.result();
+    let _ = std::fs::remove_file(&flashing.backup);
+}
+
+#[test]
 fn the_sheet_shows_the_authorized_plan_and_its_warnings() {
     let mut app = one_drive();
     let flashing = flash_until_sheet(&mut app, Some("This will flash: TEST"));
     let confirm = app.view().confirm.expect("the flash sheet");
-    assert_eq!(confirm.title, "Confirm flash");
+    assert_eq!(confirm.title, "Update this drive?");
     assert_eq!(confirm.warnings, [BARRIER]);
     assert_eq!(confirm.prompt.as_deref(), Some("This will flash: TEST"));
-    let saved = format!("backup: saved {} (3 bytes)", flashing.backup.display());
+    let saved = format!("Backup saved: {}", flashing.backup.display());
     assert_eq!(
         confirm.details,
         [
             "Drive: drive-a  Drive A".to_string(),
-            "Image: firmware.tar".into(),
-            "== flash plan ==".into(),
+            "Firmware: firmware.tar".into(),
             saved,
-            "Current: read from drive".into(),
-            format!(
-                "File origin: {}. {}",
-                workflow::FileOrigin::Unknown.label(),
-                workflow::FileOrigin::Unknown.explanation()
-            ),
+            "File origin could not be verified.".into(),
         ]
     );
+    assert!(confirm
+        .technical_details
+        .iter()
+        .any(|s| s == "== flash plan =="));
+    assert!(confirm
+        .technical_details
+        .iter()
+        .any(|s| s == "Current: read from drive"));
+    assert!(confirm
+        .technical_details
+        .iter()
+        .any(|s| s.contains(workflow::FileOrigin::Unknown.explanation())));
     assert_eq!(confirm.danger, crate::localization::english(FLASH_DANGER));
     assert_eq!(
         confirm.note.as_deref(),
         Some(crate::localization::english(BACKUP_KEPT).as_str())
     );
-    assert_eq!(confirm.confirm.text, "Flash now");
+    assert_eq!(confirm.confirm.text, "Update firmware");
     assert!(!app.view().controls_enabled && !app.view().can_close);
     app.dispatch(Input::CancelConfirm);
     let _ = flashing.result();
@@ -1473,7 +1530,7 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     assert_eq!((confirm.prompt, confirm.note), (None, None));
     assert_eq!(confirm.confirm.text, "Recover");
     assert!(confirm
-        .details
+        .technical_details
         .contains(&"Current: read from drive".to_string()));
     assert!(app.dispatch(Input::Confirm).is_empty());
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
@@ -1521,7 +1578,7 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     }
     let confirm = app.view().confirm.unwrap();
     assert!(confirm
-        .details
+        .technical_details
         .iter()
         .any(|s| s.contains("Current member (receiver reference): intermediate.bin")));
     assert!(confirm
@@ -2579,6 +2636,12 @@ fn recovery_plan_passes(app: &mut App) -> workflow::PreparedRecovery {
         )))
         .unwrap();
     worker
+        .send(Msg::Event(field_event(
+            "Recovery",
+            "Normal transfer encoding or local signature prepared for the receiving Kernel (experimental, offline-proven, hardware-unproven)",
+        )))
+        .unwrap();
+    worker
         .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
         .unwrap();
     app.poll();
@@ -2601,6 +2664,14 @@ fn recovery_prepares_before_consent_and_shows_required_restoration() {
         .details
         .iter()
         .any(|line| line.contains("Two passes") && line.contains("pristine restoration")));
+    assert!(confirm
+        .details
+        .iter()
+        .any(|line| line.contains("experimental, offline-proven, hardware-unproven")));
+    assert!(!confirm
+        .technical_details
+        .iter()
+        .any(|line| line.contains("experimental") || line.contains("Two passes")));
     assert!(!confirm.ack_checked && !confirm.confirm.enabled);
     app.dispatch(Input::CancelConfirm);
     assert!(
@@ -3734,4 +3805,124 @@ fn report_prompt_waits_until_workers_and_their_confirmations_finish() {
         app.dispatch(Input::SubmitReport).is_empty(),
         "profile worker owns busy state"
     );
+}
+
+#[test]
+fn confirmation_cleanup_missing_backup_evidence_never_claims_saved_or_waived() {
+    let mut app = one_drive();
+    app.flash_input = Some("/frozen/path/firmware.tar".into());
+    app.dispatch(Input::FlashNow);
+    plan_passes(&mut app);
+    let (reply, _answer) = mpsc::channel();
+    app.worker
+        .as_ref()
+        .unwrap()
+        .send(Msg::Authorized(FlashSheet::default(), reply))
+        .unwrap();
+    app.poll();
+    app.flash_input = Some("/changed/other.bin".into());
+    let confirm = app.view().confirm.unwrap();
+    assert!(confirm
+        .details
+        .contains(&"Firmware: firmware.tar".to_owned()));
+    assert!(confirm
+        .technical_details
+        .contains(&"Image: /frozen/path/firmware.tar".to_owned()));
+    assert!(!confirm.details.iter().any(|s| s.contains("Backup saved")));
+    assert!(!confirm
+        .warnings
+        .iter()
+        .any(|s| s.contains("No usable backup is available")));
+    assert_eq!(
+        confirm.note.as_deref(),
+        Some("Cancel leaves the drive’s firmware unchanged.")
+    );
+    app.dispatch(Input::CancelConfirm);
+}
+
+#[test]
+fn confirmation_cleanup_translates_disclosure_and_facts_in_every_language() {
+    let mut app = one_drive();
+    let (reply, _answer) = mpsc::channel();
+    app.pending = Some(Pending {
+        target: Target {
+            device: "drive-a".into(),
+            label: "Drive A".into(),
+            options: FlashOptions {
+                input: "/長いパス/firmware.tar".into(),
+                ..FlashOptions::default()
+            },
+        },
+        sheet: Sheet::Flash {
+            sheet: FlashSheet {
+                saved_backup: Some("/安全/backup.tar".into()),
+                ..FlashSheet::default()
+            },
+            reply,
+        },
+    });
+    for language in crate::localization::Language::ALL {
+        app.language = language;
+        let confirm = app.view().confirm.unwrap();
+        assert_eq!(
+            confirm.details_label,
+            crate::localization::get(language, "confirm.details")
+        );
+        assert_eq!(
+            confirm.hide_details_label,
+            crate::localization::get(language, "confirm.hide_details")
+        );
+        assert!(confirm.details.iter().any(|s| s.contains("firmware.tar")));
+        assert!(confirm
+            .details
+            .iter()
+            .any(|s| s.contains("/安全/backup.tar")));
+        assert!(confirm
+            .technical_details
+            .iter()
+            .any(|s| s.contains("/長いパス/firmware.tar")));
+        for value in confirm.details.iter().chain(&confirm.technical_details) {
+            assert!(
+                !value.contains("domain.")
+                    && !value.contains("confirm.")
+                    && !value.starts_with("ui."),
+                "{language:?}: {value}"
+            );
+        }
+        assert!(!confirm.confirm.enabled && !confirm.ack_checked);
+    }
+}
+
+#[test]
+fn unusable_saved_backup_warning_describes_rollback_availability_not_file_existence() {
+    let mut app = one_drive();
+    let flashing = flash_until_sheet_with_backup_coverage(&mut app, None, false, true);
+    assert_eq!(std::fs::read(&flashing.backup).unwrap(), [1, 2, 3]);
+    assert!(matches!(
+        app.pending.as_ref().map(|p| &p.sheet),
+        Some(Sheet::WithoutBackup { .. })
+    ));
+    app.dispatch(Input::Confirm);
+    let start = Instant::now();
+    while !matches!(
+        app.pending.as_ref().map(|p| &p.sheet),
+        Some(Sheet::Flash { .. })
+    ) {
+        assert!(start.elapsed() < Duration::from_secs(20));
+        std::thread::sleep(Duration::from_millis(10));
+        app.poll();
+    }
+    let confirm = app.view().confirm.unwrap();
+    assert!(!confirm.ack_checked && !confirm.confirm.enabled);
+    assert!(!confirm.details.iter().any(|s| s.contains("Backup saved")));
+    assert_eq!(
+        confirm.note.as_deref(),
+        Some("Cancel leaves the drive’s firmware unchanged.")
+    );
+    app.dispatch(Input::CancelConfirm);
+    assert!(flashing.result().is_err());
+    assert!(!flashing.executed());
+    assert_eq!(std::fs::read(&flashing.backup).unwrap(), [1, 2, 3]);
+    std::fs::remove_file(&flashing.backup).unwrap();
+    assert!(confirm.warnings.iter().any(|s| s == "No usable backup is available for this update. You may be unable to restore the current firmware if the update fails."), "{:?}", confirm.warnings);
 }

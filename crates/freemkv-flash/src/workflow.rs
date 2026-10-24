@@ -2,7 +2,7 @@
 
 use crate::backend::{
     registry, unsupported_family_error, Backend, BackendId, Capabilities, Descriptor, FlashRequest,
-    Match, ReadDevice, UNKNOWN_FAMILY,
+    Match, PlanLine, ReadDevice, UNKNOWN_FAMILY,
 };
 pub use crate::backend::{
     AuthorizedPlan, Confirm, CurrentFirmwareRequired, FlashPreview, HardwareMismatch,
@@ -779,6 +779,14 @@ impl Confirm for Preconfirmed {
 pub struct FlashSheet {
     /// The authorized plan as text, with the saved backup's `backup:` line.
     pub plan: Vec<String>,
+    /// Unclassified rows and requirements remain prominent by default.
+    pub notices: Vec<String>,
+    /// Only producer-declared optional technical information.
+    pub technical_details: Vec<String>,
+    /// Engine evidence of an actually saved rollback artifact.
+    pub saved_backup: Option<PathBuf>,
+    /// Explicitly authorized absence of rollback, never inferred from a path.
+    pub backup_waived: bool,
     /// Cautions from authorization (e.g. a generation barrier).
     pub warnings: Vec<String>,
     /// What the user confirms, when the backend words it.
@@ -794,14 +802,58 @@ impl FlashSheet {
             .iter()
             .map(|line| engine::render_plan_line(line, plan.backup()))
             .collect();
+        let mut notices = Vec::new();
+        let mut technical_details = Vec::new();
+        let mut warnings = plan.warnings.clone();
+        fn collect(
+            line: &PlanLine,
+            detail: bool,
+            backup: &str,
+            notices: &mut Vec<String>,
+            technical: &mut Vec<String>,
+            warnings: &mut Vec<String>,
+        ) {
+            match line {
+                PlanLine::Detail(line) => collect(line, true, backup, notices, technical, warnings),
+                PlanLine::Spaced(line) => {
+                    collect(line, detail, backup, notices, technical, warnings)
+                }
+                PlanLine::Warning(text) => warnings.push(text.clone()),
+                // The GUI renders a saved path from evidence, or an explicit waiver warning.
+                PlanLine::Backup => {}
+                line => {
+                    let text = engine::render_plan_line(line, backup);
+                    let destination = if detail { technical } else { notices };
+                    destination.extend(
+                        text.lines()
+                            .filter(|s| !s.trim().is_empty())
+                            .map(str::to_owned),
+                    );
+                }
+            }
+        }
+        for line in plan.plan.notes.iter().chain(&plan.plan.after_backup) {
+            collect(
+                line,
+                false,
+                plan.backup(),
+                &mut notices,
+                &mut technical_details,
+                &mut warnings,
+            );
+        }
         Self {
+            notices,
+            technical_details,
+            saved_backup: plan.saved_backup().map(Path::to_path_buf),
+            backup_waived: plan.backup_waived(),
             plan: text
                 .iter()
                 .flat_map(|t| t.lines())
                 .filter(|l| !l.trim().is_empty())
                 .map(str::to_owned)
                 .collect(),
-            warnings: plan.warnings.clone(),
+            warnings,
             confirmation: plan.confirmation.clone(),
         }
     }

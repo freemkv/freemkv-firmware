@@ -29,13 +29,13 @@ use crate::support::Journal;
 /// Shown wherever Recovery is offered or confirmed. Wording is part of the safety contract.
 pub const FORCE_WARNING: &str = "ui.recovery_skips_automatic_backups_and_some_compatib";
 /// The confirmation sheet's danger line.
-pub const FLASH_DANGER: &str = "ui.flashing_can_permanently_disable_the_drive_keep_it";
+pub const FLASH_DANGER: &str = "confirm.risk";
 /// The acknowledgement that must be ticked, fresh, before Flash or Recover is enabled.
-pub const RISK_ACK: &str = "ui.i_understand_and_want_to_update_this_drive";
+pub const RISK_ACK: &str = "confirm.ack";
 /// Under the progress bar while a job runs.
 pub const KEEP_CONNECTED: &str = "ui.keep_the_drive_connected_and_powered_until_this_fi";
 /// On the flash sheet: the backup is already saved, and cancelling is safe.
-pub const BACKUP_KEPT: &str = "ui.the_pre_flash_backup_is_saved_cancel_keeps_it_and_";
+pub const BACKUP_KEPT: &str = "confirm.cancel_saved";
 const CANCELLED: &str = "ui.cancelled_no_firmware_was_written";
 #[cfg(test)]
 const WORKER_PANIC: &str = "errors.unexpected";
@@ -467,7 +467,12 @@ pub const CLOSE_BLOCKED: &str = "ui.an_operation_is_still_running_keep_the_drive
 #[derive(Clone, Debug, PartialEq)]
 pub struct Confirm {
     pub title: String,
+    /// Decision facts and all unclassified requirements, always visible.
     pub details: Vec<String>,
+    /// Optional technical facts; disclosure never changes consent.
+    pub technical_details: Vec<String>,
+    pub details_label: String,
+    pub hide_details_label: String,
     pub danger: String,
     /// Cautions: a flash's authorization warnings, or the Recovery warning.
     pub warnings: Vec<String>,
@@ -674,6 +679,12 @@ fn translate_view(view: &mut View) {
         translate(language, &mut confirm.title);
         confirm
             .details
+            .iter_mut()
+            .for_each(|text| translate(language, text));
+        translate(language, &mut confirm.details_label);
+        translate(language, &mut confirm.hide_details_label);
+        confirm
+            .technical_details
             .iter_mut()
             .for_each(|text| translate(language, text));
         translate(language, &mut confirm.danger);
@@ -3134,15 +3145,33 @@ impl App {
                 &[("drive", pending.target.label.clone())],
             ),
             crate::localization::message(
-                "confirm.image",
-                &[("path", pending.target.options.input.display().to_string())],
+                "confirm.firmware",
+                &[(
+                    "filename",
+                    pending
+                        .target
+                        .options
+                        .input
+                        .file_name()
+                        .unwrap_or(pending.target.options.input.as_os_str())
+                        .to_string_lossy()
+                        .into_owned(),
+                )],
             ),
         ];
+        let mut technical_details = vec![crate::localization::message(
+            "confirm.image",
+            &[("path", pending.target.options.input.display().to_string())],
+        )];
+        let mut saved_backup = false;
         let (recovery, warnings, prompt) = match &pending.sheet {
             Sheet::FamilyOverride { code, entered } => {
                 return Confirm {
                     title: "recovery.bypass_family_title".into(),
                     details: vec![details.remove(0)],
+                    technical_details: Vec::new(),
+                    details_label: "confirm.details".into(),
+                    hide_details_label: "confirm.hide_details".into(),
                     danger: "recovery.bypass_family_warning".into(),
                     warnings: Vec::new(),
                     prompt: Some(crate::localization::message(
@@ -3165,6 +3194,9 @@ impl App {
                 return Confirm {
                     title: "backup.unavailable".into(),
                     details,
+                    technical_details,
+                    details_label: "confirm.details".into(),
+                    hide_details_label: "confirm.hide_details".into(),
                     danger: String::new(),
                     warnings: vec![reason.clone()],
                     prompt: Some("backup.proceed".into()),
@@ -3181,7 +3213,7 @@ impl App {
                     details.push("recovery.override_family".into());
                 }
                 details.extend(plan.iter().cloned());
-                details.push(match &options.current {
+                technical_details.push(match &options.current {
                     CurrentFirmware::NotRequired => {
                         "ui.receiver_detected_directly_no_current_firmware_req".into()
                     }
@@ -3192,7 +3224,7 @@ impl App {
                     CurrentFirmware::ReadFromDrive => "ui.current_read_from_drive".into(),
                 });
                 if let Some(member) = &options.current_member {
-                    details.push(crate::localization::message(
+                    technical_details.push(crate::localization::message(
                         "ui.current_member_receiver_reference_member",
                         &[("member", member.to_string())],
                     ));
@@ -3210,8 +3242,19 @@ impl App {
                 (true, warnings, None)
             }
             Sheet::Flash { sheet, .. } => {
-                details.extend(sheet.plan.iter().cloned());
-                details.push(match &pending.target.options.current {
+                details.extend(sheet.notices.iter().cloned());
+                technical_details.extend(sheet.technical_details.iter().cloned());
+                if let Some(path) = &sheet.saved_backup {
+                    saved_backup = true;
+                    details.insert(
+                        2,
+                        crate::localization::message(
+                            "confirm.backup_saved",
+                            &[("path", path.display().to_string())],
+                        ),
+                    );
+                }
+                technical_details.push(match &pending.target.options.current {
                     Some(path) => crate::localization::message(
                         "ui.current_arg0",
                         &[("arg0", format!("{}", path.display()))],
@@ -3219,12 +3262,16 @@ impl App {
                     None => "ui.current_read_from_drive".into(),
                 });
                 if let Some(member) = &pending.target.options.current_member {
-                    details.push(crate::localization::message(
+                    technical_details.push(crate::localization::message(
                         "ui.current_member_receiver_reference_member",
                         &[("member", member.to_string())],
                     ));
                 }
-                (false, sheet.warnings.clone(), sheet.confirmation.clone())
+                let mut warnings = sheet.warnings.clone();
+                if sheet.backup_waived {
+                    warnings.push("confirm.no_backup".into());
+                }
+                (false, warnings, sheet.confirmation.clone())
             }
         };
         let origin = if recovery {
@@ -3237,25 +3284,36 @@ impl App {
             .and_then(|r| r.as_ref().ok())
             .copied()
             .unwrap_or(workflow::FileOrigin::Unknown);
-        details.push(crate::localization::message(
+        technical_details.push(crate::localization::message(
             "ui.file_origin_arg0_arg1",
             &[
                 ("arg0", origin.label_id().to_string()),
                 ("arg1", origin.explanation_id().to_string()),
             ],
         ));
+        details.push(if origin == workflow::FileOrigin::Unknown {
+            "confirm.origin_unknown".into()
+        } else {
+            crate::localization::message(
+                "confirm.origin",
+                &[("origin", origin.label_id().to_owned())],
+            )
+        });
         Confirm {
+            technical_details,
+            details_label: "confirm.details".into(),
+            hide_details_label: "confirm.hide_details".into(),
             title: if recovery {
                 "ui.confirm_recovery"
             } else {
-                "ui.confirm_flash"
+                "confirm.update_title"
             }
             .into(),
             details,
             danger: FLASH_DANGER.into(),
             warnings,
             prompt,
-            note: (!recovery && !self.backup_waived).then(|| BACKUP_KEPT.to_owned()),
+            note: (!recovery).then(|| if saved_backup { BACKUP_KEPT } else { "confirm.cancel_unchanged" }.to_owned()),
             ack_text: if matches!(&pending.sheet, Sheet::Recovery { options, .. } if options.bypass_family_check) {
                 "recovery.bypass_family_ack"
             } else { RISK_ACK }.into(),
@@ -3265,7 +3323,7 @@ impl App {
                 if recovery {
                     "ui.recover"
                 } else {
-                    "ui.flash_now"
+                    "confirm.update"
                 },
                 Input::Confirm,
                 self.risk_ack,

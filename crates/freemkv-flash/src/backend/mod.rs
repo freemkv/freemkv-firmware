@@ -12,7 +12,7 @@
 
 use std::any::Any;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
@@ -541,6 +541,9 @@ pub enum PlanLine {
     Block(String),
     /// A line set off from the previous one by a blank line.
     Spaced(Box<PlanLine>),
+    /// Optional technical presentation; terminal output is unchanged.
+    /// Nested warnings must remain visible in every front-end.
+    Detail(Box<PlanLine>),
 }
 
 /// A pre-backup flash plan: what to show, plus backend-private state that only
@@ -587,6 +590,8 @@ pub struct AuthorizedPlan {
     /// What the user confirms; `None` needs no further confirmation.
     pub confirmation: Option<String>,
     backup: String,
+    saved_backup: Option<PathBuf>,
+    backup_waived: bool,
     state: Box<dyn Any + Send>,
 }
 
@@ -598,6 +603,8 @@ impl AuthorizedPlan {
             warnings: Vec::new(),
             confirmation: None,
             backup: String::new(),
+            saved_backup: None,
+            backup_waived: false,
             state: Box::new(state),
         }
     }
@@ -610,6 +617,21 @@ impl AuthorizedPlan {
 
     pub(crate) fn set_backup(&mut self, summary: &str) {
         self.backup = summary.to_string();
+    }
+
+    /// Actual saved artifact evidence, populated only by the engine.
+    pub fn saved_backup(&self) -> Option<&Path> {
+        self.saved_backup.as_deref()
+    }
+
+    /// Whether the engine obtained explicit consent to proceed without rollback.
+    pub fn backup_waived(&self) -> bool {
+        self.backup_waived
+    }
+
+    pub(crate) fn set_backup_evidence(&mut self, saved: Option<&SavedBackup>) {
+        self.saved_backup = saved.map(|backup| backup.path().to_path_buf());
+        self.backup_waived = saved.is_none();
     }
 
     /// The backend state, when this authorization was made by that backend.

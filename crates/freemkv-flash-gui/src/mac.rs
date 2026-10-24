@@ -515,6 +515,7 @@ struct Ivars {
     next_tag: Cell<isize>,
     alert: RefCell<Option<Retained<NSAlert>>>,
     report_alert: RefCell<Option<Retained<NSAlert>>>,
+    alert_details: RefCell<Option<(Retained<NSButton>, Retained<NSScrollView>)>>,
     alert_ack: RefCell<Option<Retained<NSButton>>>,
     alert_confirm: RefCell<Option<Retained<NSButton>>>,
     diag_win: RefCell<Option<Retained<NSWindow>>>,
@@ -608,6 +609,36 @@ define_class!(
             if let Some(id) = id {
                 self.send(Input::SetCheck(id, s.state() != 0));
             }
+        }
+
+        #[unsafe(method(onDetails:))]
+        fn on_details(&self, sender: Option<&AnyObject>) {
+            let Some(sender) = sender.and_then(|s| s.downcast_ref::<NSButton>()) else { return };
+            let details = self.ivars().alert_details.borrow().clone();
+            let alert = self.ivars().alert.borrow().clone();
+            let (Some((button, scroll)), Some(alert)) = (details, alert) else { return };
+            // Ignore a delayed action from a dismissed sheet.
+            if !std::ptr::eq(&*button, sender) { return; }
+            scroll.setHidden(!scroll.isHidden());
+            let title = button.title();
+            button.setTitle(&button.alternateTitle());
+            button.setAlternateTitle(&title);
+            if let Some(accessory) = alert.accessoryView() {
+                accessory.layoutSubtreeIfNeeded();
+                let size = accessory.fittingSize();
+                accessory.setFrame(rect(0.0, 0.0, size.width, size.height));
+                alert.layout();
+                if !scroll.isHidden() {
+                    let clip = scroll.contentView();
+                    clip.scrollToPoint(NSPoint::new(0.0, 0.0));
+                    scroll.reflectScrolledClipView(&clip);
+                }
+            }
+            // Relayout must not make the destructive action a keyboard default.
+            alert.window().setDefaultButtonCell(None);
+            let buttons = alert.buttons();
+            buttons.objectAtIndex(0).setKeyEquivalent(&ns(""));
+            buttons.objectAtIndex(1).setKeyEquivalent(&ns("\r"));
         }
 
         #[unsafe(method(onDrive:))]
@@ -1382,6 +1413,7 @@ impl Controller {
             (None, Some(alert)) => {
                 // The model withdrew the request; drop the sheet without answering it.
                 *iv.alert.borrow_mut() = None;
+                *iv.alert_details.borrow_mut() = None;
                 if let Some(w) = iv.window.borrow().as_ref() {
                     w.endSheet(&alert.window());
                 }
@@ -1439,6 +1471,33 @@ impl Controller {
                 .setActive(true);
             acc.addArrangedSubview(&entry);
         }
+        if !c.technical_details.is_empty() {
+            let disclosure = unsafe {
+                NSButton::buttonWithTitle_target_action(
+                    &ns(&c.details_label),
+                    Some(self),
+                    Some(sel!(onDetails:)),
+                    mtm,
+                )
+            };
+            disclosure.setAlternateTitle(&ns(&c.hide_details_label));
+            let text = wrapping(mtm, &c.technical_details.join("\n\n"), width - 16.0);
+            text.setFont(Some(&mono_font()));
+            text.setSelectable(true);
+            let scroll = scrolling(mtm, &text);
+            scroll
+                .widthAnchor()
+                .constraintEqualToConstant(width)
+                .setActive(true);
+            scroll
+                .heightAnchor()
+                .constraintEqualToConstant(160.0)
+                .setActive(true);
+            scroll.setHidden(true);
+            acc.addArrangedSubview(&disclosure);
+            acc.addArrangedSubview(&scroll);
+            *self.ivars().alert_details.borrow_mut() = Some((disclosure, scroll));
+        }
         let ack = self.checkbox(CheckId::RiskAck, &c.ack_text, c.ack_checked, true);
         ack.setHidden(c.ack_text.is_empty());
         acc.addArrangedSubview(&ack);
@@ -1460,6 +1519,7 @@ impl Controller {
             if me.ivars().alert.borrow_mut().take().is_none() {
                 return;
             }
+            *me.ivars().alert_details.borrow_mut() = None;
             *me.ivars().alert_ack.borrow_mut() = None;
             *me.ivars().alert_confirm.borrow_mut() = None;
             me.send(if response == NS_ALERT_FIRST {

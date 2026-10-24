@@ -153,8 +153,14 @@ pub fn open_flash_sheet(app: &mut App) {
                     "GUI gate: a synthetic plan; nothing is written.".into(),
                     "backup: gate.backup.bin".into(),
                 ],
+                notices: vec!["GUI gate: a synthetic plan; nothing is written.".into()],
+                technical_details: vec![
+                    "GUI gate: receiver address 0x1000; encoding synthetic.".into(),
+                    format!("/日本語/Résumé/{}/firmware.bin", "long-path-".repeat(40)),
+                ],
                 warnings: vec!["GUI gate: a synthetic warning.".into()],
                 confirmation: Some("Write the synthetic image?".into()),
+                ..Default::default()
             },
             reply,
         },
