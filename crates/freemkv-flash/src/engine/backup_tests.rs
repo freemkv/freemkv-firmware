@@ -4,7 +4,9 @@ use super::*;
 fn confirmed_replace_preserves_old_backup_until_new_bytes_validate() {
     let path = std::env::temp_dir().join(format!("fmkv-replace-{}", std::process::id()));
     std::fs::write(&path, b"old rollback").unwrap();
-    assert!(save_validated(&path, b"new rollback", |_| Ok(())).is_err());
+    let error = save_validated(&path, b"new rollback", |_| Ok(())).unwrap_err();
+    assert_eq!(crate::workflow::user_error(&error).id, "errors.file_exists");
+    assert_eq!(std::fs::read(&path).unwrap(), b"old rollback");
     assert!(
         save_validated_with_replace(&path, b"invalid", true, |_| anyhow::bail!("invalid")).is_err()
     );

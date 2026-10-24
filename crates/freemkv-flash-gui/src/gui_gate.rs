@@ -33,6 +33,19 @@ pub const DEADLINE: Duration = Duration::from_secs(90);
 /// The synthetic drive's id; no platform backend knows it.
 pub const DRIVE: &str = "freemkv-flash-gate:synthetic";
 
+/// Filter shapes of an unsupported/dump-only profile and the two update families.
+pub const PICKER_PROFILES: [(&str, &[&str]); 3] = [
+    ("unsupported", &[]),
+    ("image-package", &["bin", "tar"]),
+    ("package", &["firmware.tar", "installer.tar", "tar"]),
+];
+pub const FIRMWARE_PICKS: [Pick; 4] = [
+    Pick::FlashFirmware,
+    Pick::FlashCurrent,
+    Pick::RecoveryInput,
+    Pick::RecoveryCurrent,
+];
+
 /// The gate's directory, when the gate is on.
 pub fn dir() -> Option<PathBuf> {
     std::env::var_os(ENV)
@@ -98,14 +111,16 @@ pub fn fixture() -> App {
         inspect: true,
         backup_name: Some("GATE_1.00.backup.bin".into()),
         dump_name: Some("GATE_1.00.dump.bin".into()),
-        flash_extensions: vec!["bin"],
+        firmware_picker: crate::ui::FirmwarePickerFormats::prefer(vec!["bin"]),
         recovery_without_live_protocol: false,
         notes: Vec::new(),
     });
+    // Keep the inert native-shell fixture local and deterministic. The real picker
+    // asynchronously inspects firmware files, which this synthetic gate must not start.
+    app.flash_input = Some("gate-firmware.bin".into());
+    app.recovery_current = Some("gate-current.bin".into());
+    app.recovery_input = Some("gate-recovery.bin".into());
     for (pick, file) in [
-        (Pick::FlashFirmware, "gate-firmware.bin"),
-        (Pick::RecoveryCurrent, "gate-current.bin"),
-        (Pick::RecoveryInput, "gate-recovery.bin"),
         (Pick::AnalysisFile(0), "gate-a.bin"),
         (Pick::AnalysisFile(1), "gate-b.bin"),
     ] {
@@ -140,12 +155,24 @@ pub fn open_flash_sheet(app: &mut App) {
                     "GUI gate: a synthetic plan; nothing is written.".into(),
                     "backup: gate.backup.bin".into(),
                 ],
+                notices: vec!["GUI gate: a synthetic plan; nothing is written.".into()],
+                technical_details: vec![
+                    "GUI gate: receiver address 0x1000; encoding synthetic.".into(),
+                    format!("/日本語/Résumé/{}/firmware.bin", "long-path-".repeat(40)),
+                ],
                 warnings: vec!["GUI gate: a synthetic warning.".into()],
                 confirmation: Some("Write the synthetic image?".into()),
+                ..Default::default()
             },
             reply,
         },
     });
+}
+
+/// Synthetic worker event for the Windows gate's close-warning polling probe.
+#[cfg(target_os = "windows")]
+pub(crate) fn worker_message(text: &str) -> crate::ui::Msg {
+    crate::ui::Msg::Event(freemkv_flash::workflow::Event::Message(text.into()))
 }
 
 /// The model is still the gate's: inert, its profile answered, and no worker or profile

@@ -1622,6 +1622,7 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
     let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
     let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
     let authorized = authorize_installed(plan, Some(&archive(&installed, false))).unwrap();
+
     let prepared = authorized.state::<super::super::Prepared>().unwrap();
     assert_eq!(
         prepared.complete.as_ref().unwrap().normal_transfer(),
@@ -1680,6 +1681,46 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
     assert_ne!(installed.family(), target.family());
     let current = Current::load(&archive(&installed, false)).unwrap();
     let target_bytes = archive(&target, false);
+    // A complete cross-family target still needs Current evidence. The target
+    // check cannot substitute protocol identity for the captured receiver.
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget};
+    let mut capture = CaptureSentinel::default();
+    let receiver = RecoveryTarget::new("test".into(), None::<Current>);
+    let error = super::super::Pioneer
+        .prepare(
+            &mut ReadDevice::for_backend(&mut capture, &super::super::Pioneer),
+            &receiver,
+            None,
+            &target_bytes,
+            false,
+        )
+        .err()
+        .expect("capture sentinel must fail before family comparison");
+    assert!(capture.memory_reads > 0);
+    assert!(error
+        .chain()
+        .any(|e| e.is::<crate::backend::CurrentFirmwareRequired>()));
+    for bypass in [false, true] {
+        let mut capture = CaptureSentinel::default();
+        let receiver = RecoveryTarget::new(
+            "test".into(),
+            Some(Current::load(&archive(&installed, false)).unwrap()),
+        );
+        let result = super::super::Pioneer.prepare(
+            &mut ReadDevice::for_backend(&mut capture, &super::super::Pioneer),
+            &receiver,
+            None,
+            &target_bytes,
+            bypass,
+        );
+        assert_eq!(result.is_ok(), bypass);
+        if let Err(error) = result {
+            assert!(error
+                .chain()
+                .any(|e| e.is::<crate::backend::HardwareMismatch>()));
+        }
+        assert_eq!(capture.reads, 0, "supplied Current must be reused");
+    }
     let refusal = Plan::with_family_override(&current, &target_bytes, false)
         .err()
         .unwrap();
@@ -1708,7 +1749,6 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
         .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
         .unwrap_err();
     assert!(format!("{error:#}").contains("readback differs"));
-
     let plan = crate::backend::FlashPlan::new(
         super::super::execute_plan(&archive(&target, false)).unwrap(),
     );
@@ -1963,4 +2003,264 @@ fn failed_or_partial_current_capture_suggests_supplied_firmware() {
         assert!(text.contains("could not be read"));
         assert!(text.contains("Current firmware"));
     }
+}
+
+#[derive(Default)]
+struct CaptureSentinel {
+    identity: Drive,
+    reads: usize,
+    memory_reads: usize,
+}
+impl ScsiDevice for CaptureSentinel {
+    fn describe(&self) -> String {
+        "capture sentinel".into()
+    }
+    fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
+        self.reads += 1;
+        if command.get(2) == Some(&0xb0) {
+            self.memory_reads += 1;
+            bail!("capture sentinel");
+        }
+        self.identity.command_in(command, len)
+    }
+    fn command_out(&mut self, command: &[u8], bytes: &[u8]) -> Result<()> {
+        assert_eq!(command, cdb::knock());
+        assert!(bytes.is_empty());
+        Ok(())
+    }
+    fn command_out_strict(&mut self, command: &[u8], bytes: &[u8]) -> Result<()> {
+        self.command_out(command, bytes)
+    }
+}
+
+fn preparation_error_before_capture(target: &[u8]) {
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget, UpdateFailure};
+    let mut drive = CaptureSentinel::default();
+    let receiver = RecoveryTarget::new("test".into(), None::<Current>);
+    let error = super::super::Pioneer
+        .prepare(
+            &mut ReadDevice::for_backend(&mut drive, &super::super::Pioneer),
+            &receiver,
+            None,
+            target,
+            false,
+        )
+        .err()
+        .expect("invalid target must fail");
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert!(!failure.write_started);
+    assert_eq!(failure.progress, crate::backend::UpdateProgress::Preflight);
+    assert_eq!(
+        drive.reads, 0,
+        "invalid target must be rejected before Current capture: {error:#}"
+    );
+    assert!(!error
+        .chain()
+        .any(|e| e.is::<crate::backend::CurrentFirmwareRequired>()));
+}
+
+#[test]
+fn recovery_target_errors_precede_live_capture() {
+    preparation_error_before_capture(b"not a firmware package");
+    let pair = fixture_pair(false, 1);
+    let mut tar = tar::Builder::new(Vec::new());
+    let normal = pair.normal_transfer();
+    let mut header = tar::Header::new_gnu();
+    header.set_size(normal.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "normal.enc", normal).unwrap();
+    preparation_error_before_capture(&tar.into_inner().unwrap());
+}
+
+#[test]
+fn recovery_valid_target_still_captures_current() {
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget};
+    let target = archive(&fixture_pair(false, 1), false);
+    let mut drive = CaptureSentinel::default();
+    let receiver = RecoveryTarget::new("test".into(), None::<Current>);
+    let error = super::super::Pioneer
+        .prepare(
+            &mut ReadDevice::for_backend(&mut drive, &super::super::Pioneer),
+            &receiver,
+            None,
+            &target,
+            false,
+        )
+        .err()
+        .expect("capture sentinel must fail");
+    assert!(
+        drive.memory_reads > 0,
+        "valid target must reach firmware capture: {error:#}"
+    );
+    assert!(error
+        .chain()
+        .any(|e| e.is::<crate::backend::CurrentFirmwareRequired>()));
+}
+
+#[test]
+fn recovery_original_td05_rejected_before_capture_when_configured() {
+    let Ok(path) = std::env::var("FREEMKV_TD05_BAD_TARGET") else {
+        return;
+    };
+    preparation_error_before_capture(&std::fs::read(path).unwrap());
+}
+
+fn installed_compatibility_issue(installed: &[u8], target: &[u8]) -> crate::user_error::UserError {
+    use crate::backend::{FlashPlan, UpdateFailure};
+    use crate::user_error::{explain, IssueCode, UserError};
+    let plan =
+        FlashPlan::new(super::super::execute_plan(target).expect("target is independently valid"));
+    let error = super::super::authorize_installed(plan, Some(installed))
+        .err()
+        .expect("installed compatibility must refuse this target");
+    assert!(format!("{error:#}").contains("required-Kernel tag"));
+    UserError::of(&UpdateFailure::before_write(
+        "compatibility checks",
+        explain(error, IssueCode::UnsupportedFirmware),
+    ))
+}
+
+#[test]
+fn normal_only_installed_tag_mismatch_has_specific_guidance() {
+    use crate::backend::FlashPlan;
+    use crate::localization::{self, Language};
+    let current = fixture_pair(false, 1);
+    let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    let installed = archive(&current, false);
+    let issue = installed_compatibility_issue(&installed, target.normal_transfer());
+    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
+    for language in Language::ALL {
+        assert!(issue.render(language).contains(localization::get(
+            language,
+            "errors.installed_firmware_mismatch"
+        )));
+        assert!(issue
+            .render(language)
+            .contains(localization::get(language, "errors.update_blocked")));
+    }
+    let plan = FlashPlan::new(super::super::execute_plan(current.normal_transfer()).unwrap());
+    assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
+}
+
+#[test]
+fn real_td05_installed_tag_mismatch_when_configured() {
+    let Some(dir) = std::env::var_os("FREEMKV_TD05_COMPATIBILITY_FIXTURES") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    let current = std::fs::read(dir.join("current.tar")).unwrap();
+    let target = std::fs::read(dir.join("corrected-target.tar")).unwrap();
+    let issue = installed_compatibility_issue(&current, &target);
+    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
+    let current_normal = std::fs::read(dir.join("current-1.bin")).unwrap();
+    let plan = crate::backend::FlashPlan::new(super::super::execute_plan(&current_normal).unwrap());
+    super::super::authorize_installed(plan, Some(&current))
+        .expect("matching GENERAL firmware remains compatible");
+}
+
+#[test]
+fn installed_tag_mismatch_does_not_hide_invalid_current_or_target() {
+    use crate::backend::FlashPlan;
+    use crate::user_error::{IssueCode, UserError};
+    let current = fixture_pair(false, 1);
+    let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    // Missing installed Normal must fail receiver validation before comparing
+    // the valid GENERAL Kernel with the independently valid ID72 target.
+    for installed in [b"invalid Current".as_slice(), current.kernel_transfer()] {
+        let plan = FlashPlan::new(super::super::execute_plan(target.normal_transfer()).unwrap());
+        let error = super::super::authorize_installed(plan, Some(installed))
+            .err()
+            .unwrap();
+        assert_ne!(
+            error.downcast_ref::<IssueCode>(),
+            Some(&IssueCode::InstalledFirmwareMismatch)
+        );
+        assert_ne!(
+            UserError::of(&error).id,
+            "errors.installed_firmware_mismatch"
+        );
+    }
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, data) in [
+        ("kernel.enc", current.kernel_transfer()),
+        ("normal.enc", target.normal_transfer()),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, name, data).unwrap();
+    }
+    // A package inconsistent within itself is invalid input, not a statement
+    // about the installed drive. Truncated target input stays invalid too.
+    for malformed in [
+        tar.into_inner().unwrap(),
+        target.normal_transfer()[..0x100].to_vec(),
+    ] {
+        let error = super::super::execute_plan(&malformed).err().unwrap();
+        assert_ne!(
+            error.downcast_ref::<IssueCode>(),
+            Some(&IssueCode::InstalledFirmwareMismatch)
+        );
+        assert_ne!(
+            UserError::of(&error).id,
+            "errors.installed_firmware_mismatch"
+        );
+    }
+}
+
+#[test]
+fn confirmation_cleanup_real_pioneer_authorization_keeps_restoration_warning() {
+    let installed = fixture_pair(true, 1);
+    let target = fixture_pair(false, 0xff);
+    let plan = crate::backend::FlashPlan::new(
+        super::super::execute_plan(&archive(&target, false)).unwrap(),
+    );
+    let authorized =
+        super::super::authorize_installed(plan, Some(&archive(&installed, false))).unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    assert!(sheet
+        .warnings
+        .iter()
+        .any(|s| s == super::super::DOWNGRADE_WARNING));
+    assert!(sheet.technical_details.is_empty());
+    assert_eq!(sheet.confirmation, authorized.confirmation);
+}
+
+#[test]
+fn confirmation_cleanup_real_recovery_emits_experimental_and_two_pass_requirements() {
+    use crate::backend::{ReadDevice, RecoveryFacet, RecoveryTarget};
+    use std::{cell::RefCell, rc::Rc};
+    let installed = archive(&fixture_pair(true, 1), false);
+    let target = archive(&fixture_pair(false, 0xff), true);
+    let receiver = RecoveryTarget::new("test".into(), Some(Current::load(&installed).unwrap()));
+    let mut drive = CaptureSentinel::default();
+    let rows = Rc::new(RefCell::new(Vec::new()));
+    let captured = rows.clone();
+    crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Report(report) = event {
+                captured.borrow_mut().extend(report.gui_fields());
+            }
+        },
+        || {
+            super::super::Pioneer.prepare(
+                &mut ReadDevice::for_backend(&mut drive, &super::super::Pioneer),
+                &receiver,
+                None,
+                &target,
+                false,
+            )
+        },
+    )
+    .unwrap();
+    let rows = rows.borrow();
+    assert!(rows
+        .iter()
+        .any(|(_, value)| value.contains("experimental, offline-proven, hardware-unproven")));
+    assert!(rows.iter().any(|(_, value)| value.contains("Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel")));
+    assert_eq!(drive.reads, 0);
 }

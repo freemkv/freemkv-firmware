@@ -109,39 +109,72 @@ pub fn detect(dev: &mut dyn ScsiDevice) -> Result<Detection> {
             .push("INQUIRY: not an optical device".into());
         return Ok(result);
     }
-    let pioneer = read(
+    // A bridge can fail a foreign vendor command without failing the native
+    // protocol. Complete both bounded probes before drawing a conclusion.
+    let mut failures = Vec::new();
+    let pioneer_response = read(
         &mut dev,
         "Pioneer F1 identity",
         &pioneer_optical::cdb::vendor_identity(),
         48,
         &mut result.observations,
-    )?
+    );
+    let pioneer = match pioneer_response {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            result.observations.push(format!("{error:#}"));
+            failures.push(error);
+            None
+        }
+    }
     .and_then(|b| {
         result.pioneer_identity = pioneer_optical::Identity::parse(&inquiry, &b);
         match pioneer_optical::protocol::Evidence::parse(&inquiry, &b) {
             Ok(e) => e,
-            Err(_) => {
+            Err(source) => {
                 result
                     .observations
                     .push("Pioneer F1 identity: incomplete structure".into());
+                failures.push(
+                    Unavailable {
+                        command: "Pioneer F1 identity",
+                        source: source.into(),
+                    }
+                    .into(),
+                );
                 None
             }
         }
     });
-    let mediatek = read(
+    let mediatek_response = read(
         &mut dev,
         "MediaTek boot banner",
         &mediatek_optical::cdb::read_memory(0x3000, 32),
         32,
         &mut result.observations,
-    )?
+    );
+    let mediatek = match mediatek_response {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            result.observations.push(format!("{error:#}"));
+            failures.push(error);
+            None
+        }
+    }
     .and_then(
         |b| match mediatek_optical::protocol::Evidence::parse(&inquiry, &b) {
             Ok(e) => e,
-            Err(_) => {
+            Err(source) => {
                 result
                     .observations
                     .push("MediaTek boot banner: incomplete structure".into());
+                failures.push(
+                    Unavailable {
+                        command: "MediaTek boot banner",
+                        source: source.into(),
+                    }
+                    .into(),
+                );
                 None
             }
         },
@@ -159,5 +192,12 @@ pub fn detect(dev: &mut dyn ScsiDevice) -> Result<Detection> {
         "Protocol detection: {:?}; {:?}",
         result.conclusion, result.observations
     ));
+    if matches!(result.conclusion, Conclusion::Unknown) && !failures.is_empty() {
+        let primary = failures.remove(0);
+        return Err(primary.context(format!(
+            "Protocol discovery inconclusive: {}",
+            result.observations.join("; ")
+        )));
+    }
     Ok(result)
 }

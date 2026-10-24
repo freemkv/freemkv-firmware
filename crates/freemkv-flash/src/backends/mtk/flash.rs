@@ -4,6 +4,21 @@
 //! exact requested target. Verification quality remains part of the result.
 
 use anyhow::{anyhow, bail, Context, Result};
+
+impl From<mediatek_optical::operation::IssueKind> for crate::user_error::IssueCode {
+    fn from(kind: mediatek_optical::operation::IssueKind) -> Self {
+        use mediatek_optical::operation::IssueKind;
+        match kind {
+            IssueKind::InvalidFirmware => Self::FirmwareInvalid,
+            IssueKind::UnsupportedFirmware => Self::UnsupportedFirmware,
+            IssueKind::ReceiverMismatch => Self::CurrentMismatch,
+            IssueKind::HardwareMismatch => Self::IncompatibleFirmware,
+            IssueKind::Connection => Self::Connection,
+            IssueKind::Verification | IssueKind::Update => Self::UpdateUncertain,
+            IssueKind::Unexpected => Self::Unexpected,
+        }
+    }
+}
 use mediatek_optical::drive::Error as DriveError;
 use mediatek_optical::update::{
     FlashRuntime, FlashTransport, InstalledFirmware, PrepareError, PreparedUpdate, Stage, Status,
@@ -53,6 +68,9 @@ impl Authorized {
 }
 
 impl FlashFacet for Mtk {
+    fn can_proceed_without_backup(&self) -> bool {
+        true
+    }
     fn accepts_current(&self) -> bool {
         true
     }
@@ -105,7 +123,7 @@ impl FlashFacet for Mtk {
         if req.enc_override.is_some_and(|requested| requested != enc) {
             bail!("encoding override contradicts the active MediaTek receiver");
         }
-        let mut block = vec![
+        let mut block: Vec<_> = vec![
             PlanLine::Header("== flash plan ==".into()),
             PlanLine::Field("device", dev.describe()),
             PlanLine::Field(
@@ -125,7 +143,10 @@ impl FlashFacet for Mtk {
                     style::human_size(image.len())
                 ),
             ),
-        ];
+        ]
+        .into_iter()
+        .map(|line| PlanLine::Detail(Box::new(line)))
+        .collect();
         if req.current.is_some() {
             block.push(PlanLine::Field("receiver code source", "Selected Current firmware; live identity and build metadata matched. Live receiver code was not compared.".into()));
         }
@@ -133,9 +154,9 @@ impl FlashFacet for Mtk {
             block.extend(crossflash_lines(&live, &image)?);
         }
         block.extend([PlanLine::Backup, PlanLine::Text(String::new())]);
-        block.push(PlanLine::Text(
+        block.push(PlanLine::Detail(Box::new(PlanLine::Text(
             "The receiver-bound command sequence is validated before execution".into(),
-        ));
+        ))));
         let mut plan = FlashPlan::new(Plan {
             image,
             final_prepared,
@@ -151,9 +172,7 @@ impl FlashFacet for Mtk {
     }
 
     fn preflight(&self, dev: &mut ReadDevice<'_>, _plan: &FlashPlan) -> Result<Vec<PlanLine>> {
-        if let Err(e) = self.readiness(dev) {
-            bail!("read-only preflight failed: {e}");
-        }
+        self.readiness(dev).context("read-only preflight failed")?;
         Ok(vec![
             PlanLine::Ok(
                 "preflight",
@@ -270,14 +289,10 @@ fn execute_stage(
                     ("receiver revalidation", false)
                 }
                 mediatek_optical::receiver::ExecuteError::Flash(error) => failure_phase(error),
+                // Future library failures retain conservative write evidence.
+                _ => ("firmware update", true),
             };
-            let firmware_payload_started = !matches!(
-                &error,
-                mediatek_optical::receiver::ExecuteError::Receiver(_)
-                    | mediatek_optical::receiver::ExecuteError::Flash(
-                        mediatek_optical::update::FlashError::Entry(_)
-                    )
-            );
+            let firmware_payload_started = writes.payload_write_attempted();
             let operation_already_wrote = !completed_stages.is_empty();
             let progress = if operation_already_wrote {
                 crate::backend::UpdateProgress::UploadComplete
@@ -306,7 +321,13 @@ fn execute_stage(
                     _ if runtime.payload_bytes_accepted > 0 => {
                         crate::backend::UpdateProgress::PayloadAccepted
                     }
-                    _ => crate::backend::UpdateProgress::PayloadAttempted,
+                    _ if writes.payload_write_attempted() => {
+                        crate::backend::UpdateProgress::PayloadAttempted
+                    }
+                    _ if writes.empty_write_attempted() => {
+                        crate::backend::UpdateProgress::EntryAttempted
+                    }
+                    _ => crate::backend::UpdateProgress::Preflight,
                 }
             };
             let source = match error {
@@ -624,6 +645,25 @@ impl Runtime {
 }
 
 impl FlashRuntime<anyhow::Error> for Runtime {
+    fn operation_progress(&mut self, progress: mediatek_optical::operation::Progress) {
+        use mediatek_optical::operation::{Component, Phase};
+        crate::output::publish(crate::output::Event::Phase {
+            phase: match progress.phase {
+                Phase::Reading => "reading",
+                Phase::Preparing => "preparing",
+                Phase::Writing => "writing",
+                Phase::Restarting => "restarting",
+                Phase::Verifying => "verifying",
+            },
+            component: match progress.component {
+                Component::Firmware => "filter.firmware",
+                Component::Kernel => "domain.kernel",
+                Component::Normal => "domain.normal",
+            },
+            done: progress.done,
+            total: progress.total,
+        });
+    }
     fn elapsed(&self) -> std::time::Duration {
         self.start.elapsed()
     }
@@ -647,13 +687,12 @@ impl FlashRuntime<anyhow::Error> for Runtime {
             text(error)
         );
         crate::diagnostics::record(&message);
-        eprintln!("{message}");
     }
     fn commit_failed(&mut self, error: &DriveError<anyhow::Error>) {
-        eprintln!(
+        crate::diagnostics::record(format!(
             "MediaTek commit trailer returned an error: {}; checking completion and read-back",
             text(error)
-        );
+        ));
     }
     fn commit_not_ready(&mut self, error: &DriveError<anyhow::Error>) {
         crate::diagnostics::record(format!("MediaTek post-commit readiness: {}", text(error)));
@@ -662,23 +701,26 @@ impl FlashRuntime<anyhow::Error> for Runtime {
         match (stage, status) {
             (_, Status::Sense(_)) => {}
             (Stage::Commit, Status::Failed(error)) => {
-                eprintln!("warning: post-flash REQUEST SENSE failed: {}", text(error));
+                crate::diagnostics::record(format!(
+                    "post-flash REQUEST SENSE failed: {}",
+                    text(error)
+                ));
                 self.status(Stage::Commit, Status::Unparseable(0));
             }
-            (Stage::Commit, Status::Unparseable(n)) => eprintln!(
+            (Stage::Commit, Status::Unparseable(n)) => crate::diagnostics::record(format!(
                 "warning: could not parse the post-flash REQUEST SENSE response ({n} bytes); \
                  relying on read-back verify"
-            ),
-            (Stage::Settled, Status::Failed(error)) => eprintln!(
+            )),
+            (Stage::Settled, Status::Failed(error)) => crate::diagnostics::record(format!(
                 "warning: post-settle REQUEST SENSE errored ({}); relying on read-back verify — \
                  the drive settled but its final sense state is unknown.",
                 text(error)
-            ),
+            )),
             (Stage::Settled, Status::Unparseable(0)) => {}
-            (Stage::Settled, Status::Unparseable(n)) => eprintln!(
+            (Stage::Settled, Status::Unparseable(n)) => crate::diagnostics::record(format!(
                 "warning: post-settle REQUEST SENSE returned an unparseable {n}-byte reply; \
                  relying on read-back verify."
-            ),
+            )),
         }
     }
     fn uploaded(&mut self, bytes: usize) {
@@ -731,17 +773,21 @@ pub(crate) fn family_gate(error: &PrepareError) -> Option<String> {
 
 /// A refusal before any write, in the flasher's words.
 fn refusal(error: PrepareError) -> anyhow::Error {
+    use mediatek_optical::CodedError;
+    let issue = crate::user_error::IssueCode::from(error.kind());
     if let Some(reason) = family_gate(&error) {
-        return anyhow!("{reason}");
+        return anyhow::Error::new(error).context(reason).context(issue);
     }
     match error {
-        PrepareError::ChipMismatch { .. } => {
-            anyhow!("{error}. This gate cannot be overridden.")
-        }
-        PrepareError::UnknownDriveChip => {
-            anyhow!("{error}; refusing to flash")
-        }
-        other => anyhow!("{other}; refusing to flash"),
+        PrepareError::ChipMismatch { .. } => anyhow::Error::new(error)
+            .context("This gate cannot be overridden.")
+            .context(issue),
+        PrepareError::UnknownDriveChip => anyhow::Error::new(error)
+            .context("refusing to flash")
+            .context(issue),
+        other => anyhow::Error::new(other)
+            .context("refusing to flash")
+            .context(issue),
     }
 }
 

@@ -1,5 +1,5 @@
 use super::*;
-use crate::ui::{App, Pick, Profile};
+use crate::ui::{App, Profile};
 use freemkv_flash::report::{Group, Row};
 use freemkv_flash::workflow::DriveChoice;
 
@@ -183,8 +183,7 @@ fn confirmation_window_shows_the_gate_texts() {
     let mut s = shell(vec![drive("a", "Drive A")]);
     s.app.task = Task::Recovery;
     s.app.recovery_input = Some("new.tar".into());
-    s.app
-        .dispatch(Input::Chosen(Pick::RecoveryCurrent, "old.tar".into()));
+    s.app.recovery_current = Some("old.tar".into());
     s.app.dispatch(Input::Recover);
     s.app
         .worker
@@ -201,7 +200,7 @@ fn confirmation_window_shows_the_gate_texts() {
         crate::ui::FLASH_DANGER,
         crate::ui::FORCE_WARNING,
         crate::ui::RISK_ACK,
-        "Current: old.tar",
+        "File origin could not be verified.",
     ] {
         assert!(
             text.iter()

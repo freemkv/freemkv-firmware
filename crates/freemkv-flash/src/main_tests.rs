@@ -14,8 +14,10 @@ fn unverified_cli_result_uses_typed_consequence_instead_of_generic_retry() {
     );
     let error = report_update("Flash", outcome).unwrap_err();
     assert!(error.is::<freemkv_flash::backend::UnverifiedUpdateOutcome>());
-    let guidance = freemkv_flash::workflow::error_message(&error);
-    assert!(guidance.contains("Temporary firmware may remain"));
+    let issue = freemkv_flash::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.temporary_firmware");
+    let guidance = issue.render(freemkv_flash::localization::Language::En);
+    assert!(guidance.contains("save a diagnostic report before attempting another update"));
     assert!(!guidance.contains("then try again"));
     assert!(format!("{error:#}").contains("first stage"));
 }

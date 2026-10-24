@@ -15,7 +15,7 @@ use gtk4::prelude::*;
 
 use super::Shell;
 use crate::gui_gate::{self, Capture, Gate, Order, Region, SheetRun, TabRun};
-use crate::ui::{Input, Task};
+use crate::ui::{Input, ProfileState, Task};
 
 /// How long a step lets GTK lay out and draw before it looks.
 const SETTLE: Duration = Duration::from_millis(500);
@@ -70,12 +70,147 @@ fn run(shell: &Rc<Shell>, dir: &Path) {
         );
     }
 
+    firmware_pickers(shell, &mut g);
     shell.send(Input::SelectTask(Task::Flash));
     let first = sheet(shell, dir, true, &mut g);
     let reopened = sheet(shell, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
+    report_prompt(shell, &mut g);
     g.no_drive_io("end", &shell.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+/// Exercise the real multiline editor and response callbacks; the fixture's inert
+/// model consumes Send without starting a report worker or contacting HTTP.
+fn report_prompt(shell: &Rc<Shell>, g: &mut Gate) {
+    let description = "First line\n日本語 café 🦀\n  trailing spaces  ";
+    for response in ["cancel", "close", "send"] {
+        shell.send(Input::SubmitReport);
+        settle(SETTLE);
+        let dialog = shell.report_prompt.borrow().clone();
+        let Some(dialog) = dialog else {
+            g.check("report-prompt-opens", false, response);
+            return;
+        };
+        let root: gtk::Widget = dialog.clone().upcast();
+        let editor = descendants(&root)
+            .into_iter()
+            .find_map(|w| w.downcast::<gtk::TextView>().ok());
+        let Some(editor) = editor else {
+            g.check("report-prompt-editor", false, response);
+            return;
+        };
+        let buffer = editor.buffer();
+        if response != "cancel" {
+            g.check(
+                "report-draft-retained",
+                buffer
+                    .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                    .as_str()
+                    == description,
+                response,
+            );
+        }
+        let edited = if response == "send" {
+            "Sent draft\n日本語 café 🦀\n  "
+        } else {
+            description
+        };
+        buffer.set_text(edited);
+        shell.render();
+        g.check(
+            "report-editor-keeps-newlines-unicode",
+            buffer
+                .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                .as_str()
+                == edited,
+            response,
+        );
+        if response == "close" {
+            dialog.close();
+        } else {
+            let key = if response == "send" {
+                "report.send"
+            } else {
+                "ui.cancel"
+            };
+            let label = crate::localization::text(shell.view().language, key);
+            let control = button(&root, &label);
+            g.check("report-response-button", control.is_some(), response);
+            if let Some(control) = control {
+                control.emit_clicked();
+            }
+        }
+        settle(SETTLE);
+        g.check(
+            "report-prompt-closes",
+            shell.report_prompt.borrow().is_none(),
+            response,
+        );
+        let app = shell.app.borrow();
+        let (draft, open) = app.report_prompt_state();
+        g.check(
+            "report-response-reaches-model",
+            !open && draft == edited,
+            response,
+        );
+        g.no_drive_io(&format!("report {response}"), &app);
+    }
+    // The inert Send callback must have consumed the prompt and preserved the exact
+    // edited draft. Inspect a fresh effect, then dismiss it without presenting it.
+    let effects = shell.app.borrow_mut().dispatch(Input::SubmitReport);
+    g.check("report-send-received-description", effects.iter().any(|effect| {
+        matches!(effect, crate::ui::Effect::ReportPrompt { description: value, .. } if value == "Sent draft\n日本語 café 🦀\n  ")
+    }), "inert Send preserves the full edited text");
+    shell.send(Input::DismissReport(description.into()));
+}
+
+/// CI has no desktop portal; exercise GTK's real fallback chooser and dismiss it.
+fn firmware_pickers(shell: &Rc<Shell>, g: &mut Gate) {
+    let original = shell.app.borrow().profile.clone();
+    for (name, extensions) in gui_gate::PICKER_PROFILES {
+        if let ProfileState::Ready(profile) = &mut shell.app.borrow_mut().profile {
+            profile.firmware_picker = crate::ui::FirmwarePickerFormats::prefer(extensions.to_vec());
+        }
+        for pick in gui_gate::FIRMWARE_PICKS {
+            shell.send(Input::Choose(pick));
+            let until = Instant::now() + Duration::from_secs(5);
+            let mut picker = None;
+            while Instant::now() < until && picker.is_none() {
+                settle(Duration::from_millis(100));
+                picker = gtk::Window::list_toplevels()
+                    .into_iter()
+                    .find_map(|widget| {
+                        widget.downcast::<gtk::Window>().ok().filter(|dialog| {
+                            // FileDialog owns this fallback internally. Inspect its
+                            // native type without using the deprecated construction API.
+                            dialog.type_().name() == "GtkFileChooserDialog" && dialog.is_visible()
+                        })
+                    });
+            }
+            g.check(
+                "firmware-picker-opens",
+                picker.is_some(),
+                format!("{name} {pick:?}"),
+            );
+            if let Some(dialog) = picker {
+                dialog.close();
+                settle(SETTLE);
+                g.check(
+                    "firmware-picker-cancels",
+                    !dialog.is_visible() && shell.app.borrow().failure.is_none(),
+                    format!("{name} {pick:?}"),
+                );
+            }
+            g.check(
+                "firmware-picker-keeps-main-window",
+                shell.window.is_visible(),
+                format!("{name} {pick:?}"),
+            );
+            g.no_drive_io(&format!("picker {name} {pick:?}"), &shell.app.borrow());
+        }
+    }
+    shell.app.borrow_mut().profile = original;
 }
 
 /// Open the confirmation over the synthetic plan, read it, tick its box when `tick`, and
@@ -98,6 +233,91 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     run.opened = dialog.is_visible() && dialog.is_mapped();
     run.unticked = Some(!ack.is_active());
     run.confirm_before = confirm.as_ref().map(|b| b.is_sensitive());
+    let disclosure = descendants(&root)
+        .into_iter()
+        .find_map(|widget| widget.downcast::<gtk::Expander>().ok());
+    g.check(
+        "confirmation-has-details",
+        disclosure.is_some(),
+        "technical details disclosure",
+    );
+    if let Some(disclosure) = disclosure {
+        g.check(
+            "confirmation-details-start-collapsed",
+            !disclosure.is_expanded(),
+            "fresh confirmation",
+        );
+        let mut details_preserved = false;
+        let mut prominent_content_preserved = false;
+        for expanded in [true, false] {
+            WidgetExt::activate(&disclosure);
+            settle(SETTLE);
+            g.check(
+                "confirmation-details-toggle",
+                disclosure.is_expanded() == expanded,
+                "native activation",
+            );
+            g.check(
+                "confirmation-details-do-not-authorize",
+                !ack.is_active()
+                    && confirm
+                        .as_ref()
+                        .is_some_and(|button| !button.is_sensitive())
+                    && shell.view().confirm.is_some_and(|view| !view.ack_checked),
+                "disclosure leaves risk acknowledgement untouched",
+            );
+            let expected = if expanded {
+                &c.hide_details_label
+            } else {
+                &c.details_label
+            };
+            g.check(
+                "confirmation-details-label",
+                disclosure.label().as_deref() == Some(expected.as_str()),
+                expected,
+            );
+            let labels: Vec<String> = descendants(&root)
+                .iter()
+                .filter(|widget| widget.is_mapped())
+                .filter_map(|widget| {
+                    widget
+                        .downcast_ref::<gtk::Label>()
+                        .map(|label| label.text().to_string())
+                })
+                .collect();
+            if expanded {
+                details_preserved = c
+                    .technical_details
+                    .iter()
+                    .all(|detail| labels.iter().any(|label| label.contains(detail)));
+            } else {
+                let mut visible_copy = std::iter::once(&c.danger)
+                    .chain(c.warnings.iter())
+                    .chain(c.prompt.iter())
+                    .chain(c.note.iter())
+                    .chain(std::iter::once(&c.ack_text));
+                prominent_content_preserved =
+                    visible_copy.all(|text| labels.iter().any(|label| label.contains(text)));
+            }
+        }
+        g.check(
+            "confirmation-details-preserve-content",
+            details_preserved,
+            "all technical rows retained while expanded",
+        );
+        g.check(
+            "confirmation-collapse-preserves-copy",
+            prominent_content_preserved,
+            "risk, warnings and acknowledgement remain rendered after collapse",
+        );
+    }
+    g.check(
+        "confirmation-safe-keyboard-defaults",
+        libadwaita::prelude::MessageDialogExt::default_response(&dialog).as_deref()
+            == Some("cancel")
+            && libadwaita::prelude::MessageDialogExt::close_response(&dialog) == "cancel",
+        "Enter default and Escape close response are Cancel",
+    );
     if tick {
         // As a click does: GTK's own activate signal toggles the box and runs the shell's
         // toggled handler.
@@ -110,9 +330,14 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     let name = if tick { "sheet" } else { "sheet-reopened" };
     g.save(dir, name, capture(&root).as_ref());
 
-    match button(&root, &c.cancel.text) {
-        Some(b) => b.emit_clicked(),
-        None => libadwaita::prelude::MessageDialogExt::response(&dialog, "cancel"),
+    if tick {
+        match button(&root, &c.cancel.text) {
+            Some(b) => b.emit_clicked(),
+            None => libadwaita::prelude::MessageDialogExt::response(&dialog, "cancel"),
+        }
+    } else {
+        // GTK's actual keyboard default activation path (Enter).
+        dialog.emit_activate_default();
     }
     let closed = || {
         shell.view().confirm.is_none() && shell.confirm.borrow().is_none() && !dialog.is_visible()

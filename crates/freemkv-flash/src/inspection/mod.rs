@@ -108,7 +108,9 @@ impl std::error::Error for InspectionError {}
 
 /// Inspect one file or capture. File inspection performs no drive discovery.
 pub fn inspect(source: &Source, control: &Control) -> Result<Arc<Inspection>> {
-    crate::diagnostics::run("inspect", || load_source(source, control))
+    crate::user_error::read_only(crate::diagnostics::run("inspect", || {
+        load_source(source, control)
+    }))
 }
 fn load_source(source: &Source, control: &Control) -> Result<Arc<Inspection>> {
     control.check()?;
@@ -186,7 +188,7 @@ fn inspect_bytes(name: String, bytes: &[u8], control: &Control) -> Result<Inspec
 }
 /// Compare two sources, with files validated before any live capture.
 pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonReport> {
-    crate::diagnostics::run("compare", || {
+    crate::user_error::read_only(crate::diagnostics::run("compare", || {
         if matches!((a, b), (Source::Drive { .. }, Source::Drive { .. })) {
             return Err(InspectionError::TwoDrives.into());
         }
@@ -198,7 +200,7 @@ pub fn compare(a: &Source, b: &Source, control: &Control) -> Result<ComparisonRe
             (left, load_source(b, control).context("Source B")?)
         };
         compare_inspections(left, right, control)
-    })
+    }))
 }
 /// Compare retained analyses without recapturing or rereading either source.
 pub fn compare_inspections(

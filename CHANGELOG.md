@@ -3,6 +3,56 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.0] - Unreleased
+
+### freemkv Flash
+
+- Keep file inspection in a bounded background queue, reuse translated analysis,
+  and release obsolete controls and incomplete diagnostic archives.
+- Report desktop log, clipboard and confirmation failures in the selected language;
+  keep diagnostic actions available after file-origin inspection.
+- Prevent a Windows crash when an active operation displays its close warning
+  while background progress arrives.
+- Retain completed dump and backup attachments for diagnostic submissions. Ask for
+  an optional description, verify the attached bytes, and confirm exactly what was
+  sent after submission succeeds.
+- Keep firmware confirmations concise, with technical information under Details.
+  Show saved backup evidence, all warnings and a fresh risk acknowledgement.
+- Reject unusable recovery targets before a long drive capture. Explain when a
+  valid update does not match the installed firmware, without calling it corrupt.
+- Use the available freemkv command for MediaTek raw dumps, inspect MediaTek release
+  packages, and report incomplete reads without guessing a permanent restriction.
+- Report Pioneer Kernel-only backups as partial, and avoid repeating the same
+  target validation before authorization.
+- Recognize genuine MediaTek boot responses that include machine code after the
+  identity label, restoring supported non-Pioneer drive profiles. A failed foreign
+  vendor probe no longer hides a valid native protocol response.
+- Keep firmware file pickers usable for unrecognized and dump-only drives. Never
+  pass an empty filter to the operating system, and show localized guidance when
+  a native file dialog cannot complete. Native QA now opens and cancels all four
+  firmware pickers with both supported-format profiles and an unsupported profile.
+- Keep prepared recovery firmware in memory through confirmation, avoiding another
+  complete drive read when recovery starts. Check the connected drive again before
+  writing and retain independent verification after the update.
+- Show reading, writing, restart and verification status for both supported drive
+  protocols, with measured percentages where available and a waiting indicator
+  while the drive restarts.
+- Explain incomplete Current firmware and other operation problems in the selected
+  language, including whether firmware was written and the next action to take.
+- Check incompatible supplied Current and target files before reading the drive.
+  When Current comes from the drive, keep the existing backup-first checks.
+- Use the selected language for command-option errors in both command-line tools.
+- Keep the same clear error and write-status guidance in packaging, offline
+  analysis, verification refusals and interrupted desktop operations.
+- Keep backup refusals and confirmation prompts in the selected language.
+  Distinguish a failed drive read from an incomplete selected Current firmware
+  file, and use the same risk guidance in Flash and Recovery.
+- Require a usable Pioneer backup without offering an impossible bypass. Preserve
+  permission, connection and Current-file causes, and keep log-failure details in
+  fallback diagnostics. Confirmation answers also support the selected language.
+- Give specific guidance for unsupported or malformed firmware files and existing
+  backup destinations, with clear next steps for inspection and recovery refusals.
+
 ## [0.14.5] - 2026-10-23
 
 ### freemkv Flash

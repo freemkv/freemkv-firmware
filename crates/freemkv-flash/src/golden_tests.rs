@@ -173,12 +173,22 @@ fn run<T>(op: impl FnOnce() -> Result<T>) -> Outcome {
                 }
             }
             Event::DeviceSettings(_) => ev.borrow_mut().push("SETTINGS (present)".to_string()),
+            Event::Phase { .. } => {}
         },
         || result = Some(crate::runtime_clock::simulated(op)),
     );
     let result = match result.expect("operation ran") {
         Ok(_) => "OK".to_string(),
-        Err(e) => format!("ERR {e:#}"),
+        Err(e) => {
+            if e.is::<crate::backend::UpdateFailure>() {
+                assert_ne!(
+                    crate::workflow::user_error(&e).id,
+                    "errors.unexpected",
+                    "a known update failure needs an explicit user issue: {e:#}"
+                );
+            }
+            format!("ERR {e:#}")
+        }
     };
     let events = events.borrow().clone();
     let text = text.borrow().clone();
@@ -1561,7 +1571,7 @@ fn golden_flash_execute() {
         let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, family.as_ref(), &req));
         let expected_refusal = match title {
             "Pioneer execute: no risk acknowledgement" => "SAFETY GATE",
-            "Pioneer execute: pre-flash backup cannot be read" => "pre-flash backup failed",
+            "Pioneer execute: pre-flash backup cannot be read" => "errors.backup_required",
             "Pioneer execute: disc loaded" => "a disc is loaded",
             "MTK execute: Pioneer bundle sent to an MTK drive" => {
                 "a Pioneer firmware bundle cannot be flashed to this mtk19xx drive"
@@ -2806,6 +2816,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
     "F-OVERRIDE",
+    "OPERATION_015",
     "PROTO",
     "CLI_INFO",
     "HUMAN_ERRORS",
@@ -2835,6 +2846,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
     "F-OVERRIDE",
+    "OPERATION_015",
     "PROTO",
     "CLI_INFO",
     "HUMAN_ERRORS",

@@ -416,10 +416,9 @@ fn force_and_skip_backup_paths_are_gone() {
         &mut freemkv_flash::workflow::Preconfirmed,
     )
     .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("preflash backup path"),
-        "{error:#}"
-    );
+    let issue = freemkv_flash::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.backup_destination");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
     assert!(
         dev.writes.is_empty(),
         "a flash without a saved backup wrote"
@@ -1698,26 +1697,35 @@ fn vendor_scan_skips_comments_and_tests() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn pioneer_optical_stays_pinned() {
+fn optical_dependencies_stay_content_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
     let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
-    for (name, version) in [("pioneer-optical", "1.0.4"), ("mediatek-optical", "1.0.1")] {
+    for name in ["pioneer-optical", "mediatek-optical"] {
+        let version = "1.1.0";
         let line = manifest
             .lines()
             .find(|line| line.trim_start().starts_with(name))
             .expect("optical dependency");
         assert!(
-            line.contains(&format!("version = \"={version}\"")) && !line.contains("git ="),
-            "published {name} {version} must be pinned: {line}"
+            line.contains(&format!("version = \"={version}\"")) && !line.contains("path ="),
+            "{name} {version} must be pinned without a local path: {line}"
         );
         let package = lock
             .split("[[package]]")
             .find(|package| package.contains(&format!("name = \"{name}\"")))
             .expect("locked optical crate");
-        assert!(
-            package.contains(&format!("version = \"{version}\""))
-                && package.contains("registry+https://github.com/rust-lang/crates.io-index")
-        );
+        assert!(package.contains(&format!("version = \"{version}\"")));
+        if let Some((_, revision)) = line.split_once("rev = \"") {
+            // Unpublished release candidates use an immutable source revision.
+            let revision = revision.split('"').next().unwrap();
+            assert!(revision.len() == 40 && revision.bytes().all(|b| b.is_ascii_hexdigit()));
+            assert!(line.contains("git = \"https://github.com/MattJackson/"));
+            assert!(package.contains(&format!("?rev={revision}#{revision}")));
+            continue;
+        }
+        // Published releases retain exact registry versions and checksums.
+        assert!(!line.contains("git ="));
+        assert!(package.contains("registry+https://github.com/rust-lang/crates.io-index"));
         let checksum = package
             .lines()
             .find_map(|line| line.strip_prefix("checksum = \""))
@@ -1725,6 +1733,20 @@ fn pioneer_optical_stays_pinned() {
             .trim_end_matches('"');
         assert!(checksum.len() == 64 && checksum.bytes().all(|byte| byte.is_ascii_hexdigit()));
     }
+}
+
+#[test]
+fn production_error_sinks_never_use_the_english_diagnostic_renderer() {
+    let mut uses = Vec::new();
+    for source in production_sources() {
+        for at in word_hits(&source.code, "error_message") {
+            uses.push((source.path.clone(), item_at(&items(&source.code), at)));
+        }
+    }
+    assert_eq!(
+        uses,
+        [("src/workflow.rs".to_owned(), "fn error_message".to_owned())]
+    );
 }
 
 /// Device-layer items that hold or lend a device type, as `(file, item,

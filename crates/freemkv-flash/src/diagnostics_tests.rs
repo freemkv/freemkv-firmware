@@ -296,12 +296,16 @@ fn log_write_failure_surfaces_health_without_failing_the_operation() {
     std::fs::write(&readonly, "").unwrap();
     let warnings = Arc::new(Mutex::new(Vec::new()));
     let received = warnings.clone();
+    let paths = Arc::new(Mutex::new(Vec::new()));
+    let received_paths = paths.clone();
     let result = crate::output::capture_events(
         move |event| {
             if let crate::output::Event::Report(report) = event {
                 for (label, value) in report.gui_fields() {
                     if label == "Diagnostic warning" {
                         received.lock().unwrap().push(value);
+                    } else if label == "Diagnostic log" {
+                        received_paths.lock().unwrap().push(PathBuf::from(value));
                     }
                 }
             }
@@ -318,6 +322,17 @@ fn log_write_failure_surfaces_health_without_failing_the_operation() {
     );
     assert_eq!(result.unwrap(), 42);
     assert_eq!(warnings.lock().unwrap().len(), 1);
-    assert!(warnings.lock().unwrap()[0].contains("write failed"));
+    assert_eq!(warnings.lock().unwrap()[0], "errors.logging");
+    let paths = paths.lock().unwrap();
+    assert_eq!(
+        paths.len(),
+        2,
+        "primary log and fallback evidence must be announced"
+    );
+    let fallback = std::fs::read_to_string(&paths[1]).unwrap();
+    assert!(fallback.contains(&paths[0].display().to_string()));
+    assert!(fallback.contains("Diagnostic log write failed"));
+    assert!(fallback.contains("os error"));
+    std::fs::remove_file(&paths[1]).unwrap();
     std::fs::remove_dir_all(directory).unwrap();
 }

@@ -174,13 +174,7 @@ impl BackupArtifact {
 /// everything afterward — `oem::rebuild` (boot page from the catalog,
 /// drive-written regions reset to factory) and validation — is identical.
 pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
-    let (read, readable, gaps) = if super::fwdump::is_freemkv(dev) {
-        crate::diagnostics::record("MTK backup: drive runs freemkv firmware; reading via DumpAll");
-        super::fwdump::capture_full_image(dev)
-            .context("reading the drive's firmware via the freemkv dump command")?
-    } else {
-        crate::probe::read_full_image(dev).context("reading the drive's firmware")?
-    };
+    let (read, readable, gaps) = super::capture_raw(dev)?;
     if read.len() != super::IMAGE_SIZE || readable != read.len() || !gaps.is_empty() {
         return Err(incomplete_read(readable, &gaps));
     }
@@ -195,30 +189,14 @@ pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
     Ok(rebuilt.image)
 }
 
-/// Why a backup cannot be built from an incomplete drive read. When the boot
-/// banner itself did not answer, the firmware does not expose its flash to the
-/// read command we use at all (some drives answer only their calibration area),
-/// which is a different problem from a few unreadable spans.
+/// An incomplete capture does not establish why the drive did not return bytes.
 fn incomplete_read(readable: usize, gaps: &[(usize, usize)]) -> anyhow::Error {
-    let banner = mediatek_optical::layout::BANNER.start;
-    if gaps
-        .iter()
-        .any(|&(start, end)| (start..end).contains(&banner))
-    {
-        anyhow::anyhow!(
-            "this drive's firmware does not expose its flash to the read command freemkv \
-             uses (only {readable} of {} bytes answered: {gaps:#x?}), so a backup is not \
-             possible on this drive. `freemkv-flash dump` saves what the drive returns",
-            super::IMAGE_SIZE
-        )
-        .context(crate::backend::BackupReadRestricted)
-    } else {
-        anyhow::anyhow!(
-            "backup needs every firmware byte, but read {readable} of {}; unreadable ranges \
-             {gaps:#x?}. `dump` saves what the drive returned",
-            super::IMAGE_SIZE
-        )
-    }
+    anyhow::anyhow!(
+        "backup needs every firmware byte, but read {readable} of {}; unreadable ranges \
+         {gaps:#x?}. `dump` saves what the drive returned",
+        super::IMAGE_SIZE
+    )
+    .context(crate::user_error::IssueCode::BackupFailed)
 }
 
 /// One-line provenance for logs and the backup notice.
@@ -303,7 +281,8 @@ fn validate_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
     }
     if let Some(model) = target_model {
         ensure_image_matches_drive(image, model)
-            .context("backup image model/family does not match the target drive")?;
+            .context("backup image model/family does not match the target drive")
+            .context(crate::user_error::IssueCode::BackupMismatch)?;
     }
     Ok(())
 }

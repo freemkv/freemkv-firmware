@@ -41,10 +41,7 @@ const TICK_MS: u64 = 200;
 /// not start.
 pub fn run() -> i32 {
     if let Err(e) = adw::init() {
-        eprintln!(
-            "freemkv-flash-gui: cannot start the desktop app ({e}); the GTK4/libadwaita \
-             runtime is unavailable. Run with --egui for the fallback interface."
-        );
+        crate::application_failure(&format!("GTK/libadwaita initialization failed: {e}"), true);
         return 1;
     }
     let app = adw::Application::builder().application_id(APP_ID).build();
@@ -124,6 +121,7 @@ pub(crate) struct Shell {
     diag: RefCell<Option<DiagWindow>>,
     analysis: RefCell<Option<AnalysisWindow>>,
     confirm: RefCell<Option<ConfirmDialog>>,
+    report_prompt: RefCell<Option<adw::MessageDialog>>,
 
     memo: RefCell<Memo>,
     tick: RefCell<Option<glib::SourceId>>,
@@ -270,6 +268,7 @@ fn build_ui(gapp: &adw::Application) {
         diag: RefCell::new(None),
         analysis: RefCell::new(None),
         confirm: RefCell::new(None),
+        report_prompt: RefCell::new(None),
         memo: RefCell::new(Memo::default()),
         tick: RefCell::new(None),
         painting: Cell::new(false),
@@ -334,9 +333,20 @@ impl Shell {
                 Effect::SaveFile { pick, file_name } => {
                     self.choose_file(pick, None, Some(file_name))
                 }
+                Effect::ReportPrompt {
+                    summary,
+                    description,
+                } => {
+                    self.present_report_prompt(&summary, &description);
+                }
                 Effect::CopyText(text) => self.window.clipboard().set_text(&text),
                 Effect::OpenPath(path) => {
-                    let _ = crate::external::open_path(&path);
+                    if let Err(error) = crate::external::open_path(&path) {
+                        self.send(Input::ShellFailed(
+                            crate::ui::ShellFailure::OpenLog,
+                            format!("{error:#}"),
+                        ));
+                    }
                 }
                 Effect::StartTicking => self.start_tick(),
                 Effect::StopTicking => {
@@ -347,6 +357,55 @@ impl Shell {
             }
         }
         self.render();
+    }
+
+    fn present_report_prompt(self: &Rc<Self>, summary: &str, description: &str) {
+        let language = self.app.borrow().language;
+        let text = |key| crate::localization::text(language, key);
+        let dialog = adw::MessageDialog::new(
+            Some(&self.window),
+            Some(&text("report.prompt_title")),
+            Some(&crate::localization::render(language, summary)),
+        );
+        dialog.set_modal(true);
+        dialog.add_response("cancel", &text("ui.cancel"));
+        dialog.add_response("send", &text("report.send"));
+        dialog.set_default_response(Some("cancel"));
+        dialog.set_close_response("cancel");
+        let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        let label = widgets::label(&text("report.description_label"), &[]);
+        let editor = gtk::TextView::new();
+        editor.set_wrap_mode(gtk::WrapMode::WordChar);
+        editor.set_accepts_tab(false);
+        editor.buffer().set_text(description);
+        label.set_mnemonic_widget(Some(&editor));
+        extra.append(&label);
+        let scroll = gtk::ScrolledWindow::builder()
+            .min_content_height(140)
+            .min_content_width(400)
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .child(&editor)
+            .build();
+        extra.append(&scroll);
+        dialog.set_extra_child(Some(&extra));
+        let me = self.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if me.report_prompt.borrow().as_ref() != Some(dialog) {
+                return;
+            }
+            me.report_prompt.borrow_mut().take();
+            let buffer = editor.buffer();
+            let description = buffer
+                .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                .to_string();
+            me.send(if response == "send" {
+                Input::SendReport(description)
+            } else {
+                Input::DismissReport(description)
+            });
+        });
+        *self.report_prompt.borrow_mut() = Some(dialog.clone());
+        dialog.present();
     }
 
     fn start_tick(self: &Rc<Self>) {
@@ -372,7 +431,7 @@ impl Shell {
         save_as: Option<String>,
     ) {
         let dlg = gtk::FileDialog::builder().modal(true).build();
-        if let Some(f) = filter {
+        if let Some(f) = filter.and_then(ui::FileFilter::validated) {
             let ff = gtk::FileFilter::new();
             ff.set_name(Some(f.name));
             for e in &f.extensions {
@@ -384,10 +443,19 @@ impl Shell {
             dlg.set_default_filter(Some(&ff));
         }
         let me = self.clone();
-        let done = move |r: Result<gio::File, glib::Error>| {
-            if let Some(path) = r.ok().and_then(|f| f.path()) {
-                me.send(Input::Chosen(pick, path));
-            }
+        let done = move |r: Result<gio::File, glib::Error>| match r {
+            Ok(file) => match file.path() {
+                Some(path) => me.send(Input::Chosen(pick, path)),
+                None => me.send(Input::DialogFailed(
+                    pick,
+                    "File dialog returned no local path".into(),
+                )),
+            },
+            Err(error)
+                if error.matches(gtk::DialogError::Dismissed)
+                    || error.matches(gtk::DialogError::Cancelled)
+                    || error.matches(gio::IOErrorEnum::Cancelled) => {}
+            Err(error) => me.send(Input::DialogFailed(pick, error.to_string())),
         };
         match save_as {
             Some(name) => {
@@ -748,6 +816,27 @@ impl Shell {
         }
         if let Some(n) = &c.note {
             extra.append(&widgets::label(n, &[]));
+        }
+        if !c.technical_details.is_empty() {
+            let expander = gtk::Expander::new(Some(&c.details_label));
+            let body = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            for detail in &c.technical_details {
+                let label = widgets::label(detail, &[]);
+                label.set_selectable(true);
+                body.append(&label);
+            }
+            let scroll = gtk::ScrolledWindow::builder()
+                .hscrollbar_policy(gtk::PolicyType::Never)
+                .max_content_height(180)
+                .propagate_natural_height(true)
+                .child(&body)
+                .build();
+            expander.set_child(Some(&scroll));
+            let (show, hide) = (c.details_label.clone(), c.hide_details_label.clone());
+            expander.connect_expanded_notify(move |expander| {
+                expander.set_label(Some(if expander.is_expanded() { &hide } else { &show }));
+            });
+            extra.append(&expander);
         }
         if let Some(value) = &c.code_entry {
             let entry = gtk::Entry::new();

@@ -3,27 +3,26 @@
 //! `v0_11_2` transcribes, with line references, the job each 0.11.2 control
 //! started (`crates/freemkv-flash-gui/src/{app,analysis_ui,ops}.rs` at the
 //! v0.11.2 tag). Each test drives the 0.12 model with `Input`s, records the job
-//! through the `dry_run` seam, and compares the workflow call it makes with the
-//! 0.11.2 one. Where they differ by design, the test asserts both sides and
+//! through the model seam and real `ops::execute` dispatcher, then compares its
+//! workflow call with the 0.11.2 one. Where they differ by design, the test asserts both sides and
 //! names the commit that made the change.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use freemkv_flash::platform::MockScsiDevice;
 use freemkv_flash::report::{self, Group};
-use freemkv_flash::workflow::{
-    self, Control, CurrentFirmware, DriveChoice, Event, FlashSheet, Source,
-};
+use freemkv_flash::workflow::{self, Control, DriveChoice, Event, FlashSheet, Source};
 
-use crate::ops::{self, Job, Request, ResultView};
+use crate::ops::{self, Job, ResultView};
 use crate::ui::{
     App, Button, CardBody, CheckId, Effect, FileFilter, Input, Item, Msg, Pick, Side, Task,
 };
 
 /// A recovery's current-firmware source, as the workflow receives it.
 #[derive(Clone, Debug, PartialEq)]
-enum Current {
+pub(crate) enum Current {
     NotRequired,
     File(PathBuf),
     ReadFromDrive,
@@ -32,7 +31,7 @@ enum Current {
 /// An analysis source. `as_backup` has no 0.11.2 field; Pioneer captures a
 /// backup either way (`pioneer_capture_is_a_backup_either_way`).
 #[derive(Clone, Debug, PartialEq)]
-enum Src {
+pub(crate) enum Src {
     File(PathBuf),
     Drive {
         device: String,
@@ -46,10 +45,13 @@ enum Src {
 /// `FlashOptions::force` is absent: every 0.11.2 Flash job set it false and
 /// 954f51d removed the field.
 #[derive(Clone, Debug, PartialEq)]
-enum Call {
-    Info,
+pub(crate) enum Call {
+    Info {
+        device: Option<String>,
+    },
     CheckFile(PathBuf),
     Backup {
+        device: Option<String>,
         out: PathBuf,
         dump: bool,
         replace: bool,
@@ -89,7 +91,7 @@ struct Sent {
     call: Call,
 }
 
-fn src(source: &Source) -> Src {
+pub(crate) fn src(source: &Source) -> Src {
     match source {
         Source::File(path) => Src::File(path.clone()),
         Source::Drive {
@@ -105,50 +107,31 @@ fn src(source: &Source) -> Src {
     }
 }
 
-/// The call `ops::execute` makes for `job` (its arms match 0.11.2 `ops.rs:879-896`).
-fn call(job: &Job) -> Call {
-    match job {
-        Job::Info => Call::Info,
-        Job::InfoFile { input } => Call::CheckFile(input.clone()),
-        Job::Backup { out, replace } => Call::Backup {
-            out: out.clone(),
-            dump: false,
-            replace: *replace,
-        },
-        Job::Dump { out, replace } => Call::Backup {
-            out: out.clone(),
-            dump: true,
-            replace: *replace,
-        },
-        Job::Flash(o) => Call::Flash {
-            device: o.device.clone(),
-            input: o.input.clone(),
-            backup: o.backup.clone(),
-            execute: o.execute,
-            acknowledged_risk: o.acknowledged_risk,
-        },
-        Job::PlanFlash(o) => Call::Preview {
-            device: o.device.clone(),
-            input: o.input.clone(),
-            backup: o.backup.clone(),
-            acknowledged_risk: o.acknowledged_risk,
-        },
-        Job::Recovery(o) => Call::Recover {
-            device: o.device.clone(),
-            input: o.input.clone(),
-            current: match &o.current {
-                CurrentFirmware::NotRequired => Current::NotRequired,
-                CurrentFirmware::File(path) => Current::File(path.clone()),
-                CurrentFirmware::ReadFromDrive => Current::ReadFromDrive,
-            },
-            execute: o.execute,
-            acknowledged_risk: o.acknowledged_risk,
-        },
-        Job::Analysis { request, .. } => match request {
-            Request::Inspect(a) => Call::Inspect(src(a)),
-            Request::Compare(a, b) => Call::Compare(src(a), src(b)),
-        },
-    }
+thread_local! {
+    static OBSERVED: RefCell<Option<Vec<Call>>> = const { RefCell::new(None) };
+}
+
+/// Called by the workflow boundary double, from the real `ops::execute` arms.
+pub(crate) fn record(call: Call) -> bool {
+    OBSERVED.with(|observed| match observed.borrow_mut().as_mut() {
+        Some(calls) => {
+            calls.push(call);
+            true
+        }
+        None => false,
+    })
+}
+
+fn call(device: &str, job: &Job) -> Call {
+    OBSERVED.with(|observed| assert!(observed.replace(Some(Vec::new())).is_none()));
+    let result = ops::execute(device, job, &mut workflow::Preconfirmed);
+    let mut calls = OBSERVED.with(|observed| observed.take().unwrap());
+    assert!(
+        result.is_err(),
+        "the boundary double returns before any workflow IO"
+    );
+    assert_eq!(calls.len(), 1, "one actual workflow call per job");
+    calls.pop().unwrap()
 }
 
 /// What 0.11.2 started, transcribed from its sources at the v0.11.2 tag.
@@ -166,7 +149,13 @@ mod v0_11_2 {
 
     /// `app.rs:401-402`, "Read drive information".
     pub fn read_info(device: &str) -> Sent {
-        sent("Drive information", device, Call::Info)
+        sent(
+            "Drive information",
+            device,
+            Call::Info {
+                device: Some(device.into()),
+            },
+        )
     }
 
     /// `app.rs:404-411` ("Check file…" on Info) and `app.rs:524-530` (Flash's link).
@@ -189,6 +178,7 @@ mod v0_11_2 {
     pub fn backup(device: &str, out: &Path, dump: bool) -> Sent {
         let replace = out.symlink_metadata().is_ok();
         let call = Call::Backup {
+            device: Some(device.into()),
             out: out.into(),
             dump,
             replace,
@@ -201,7 +191,7 @@ mod v0_11_2 {
     /// enabled only once the box is ticked, sets `acknowledged_risk`.
     pub fn flash_now(device: &str, input: &Path) -> Sent {
         let call = Call::Flash {
-            device: None,
+            device: Some(device.into()),
             input: input.into(),
             backup: None,
             execute: true,
@@ -213,7 +203,7 @@ mod v0_11_2 {
     /// `app.rs:304-310`, `choose_flash(ctx, false)`. No 0.11.2 control called it.
     pub fn preview(device: &str, input: &Path) -> Sent {
         let call = Call::Preview {
-            device: None,
+            device: Some(device.into()),
             input: input.into(),
             backup: None,
             acknowledged_risk: false,
@@ -230,7 +220,7 @@ mod v0_11_2 {
             Current::File(current.expect("Recover needs Current").into())
         };
         let call = Call::Recover {
-            device: None,
+            device: Some(device.into()),
             input: input.into(),
             current,
             execute: true,
@@ -276,6 +266,7 @@ mod v0_11_2 {
 
 const PIONEER: &str = "disk4";
 const OTHER: &str = "disk5";
+const CURRENT_RISK_ACK: &str = "I understand the risk and want to continue.";
 
 /// The profile the real Pioneer backend reports for a mock BDR-UD04 (SAT
 /// platform): every task, Recovery included.
@@ -333,7 +324,7 @@ fn sent(app: &App) -> Sent {
     Sent {
         label: label.clone(),
         device: device.clone(),
-        call: call(job),
+        call: call(device, job),
     }
 }
 
@@ -366,6 +357,27 @@ fn press(app: &mut App, text: &str) -> Vec<Effect> {
         .unwrap_or_else(|| panic!("no button {text}: {:?}", app.view().panel));
     assert!(button.enabled, "{text} is disabled");
     app.dispatch(button.input)
+}
+
+/// Selected firmware is inspected asynchronously before Flash/Recovery enables.
+/// Let that production worker finish before exercising the shell action.
+fn wait_enabled(app: &mut App, text: &str) {
+    let start = std::time::Instant::now();
+    loop {
+        app.poll();
+        if panel_buttons(app)
+            .iter()
+            .any(|button| button.text == text && button.enabled)
+        {
+            return;
+        }
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(10),
+            "{text} did not become enabled: {:?}",
+            app.view().panel
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
 }
 
 fn open_filter(effects: &[Effect]) -> Option<FileFilter> {
@@ -526,6 +538,7 @@ fn flash_now_sends_the_0_11_2_options_after_an_unticked_confirmation() {
     app.dispatch(Input::SelectTask(Task::Flash));
     let input = PathBuf::from("/fw/BDR-UD04_1.14.firmware.tar");
     app.dispatch(Input::Chosen(Pick::FlashFirmware, input.clone()));
+    wait_enabled(&mut app, "Flash now");
     press(&mut app, "Flash now");
     finish(&mut app, Ok(()));
     assert_eq!(sent(&app), v0_11_2::flash_now(PIONEER, &input));
@@ -539,12 +552,17 @@ fn flash_now_sends_the_0_11_2_options_after_an_unticked_confirmation() {
     let sheet = app.view().confirm.expect("the flash sheet");
     assert_eq!(
         (sheet.title.as_str(), sheet.danger.as_str()),
-        ("Confirm flash", v0_11_2::DANGER)
+        (
+            "Update this drive?",
+            "Updating firmware can permanently disable this drive. Keep it connected and do not turn off the computer until the update finishes."
+        )
     );
+    assert_ne!(sheet.danger, v0_11_2::DANGER);
     assert_eq!(
         (sheet.ack_text.as_str(), sheet.ack_checked),
-        (v0_11_2::RISK_ACK, false)
+        (CURRENT_RISK_ACK, false)
     );
+    assert_ne!(sheet.ack_text, v0_11_2::RISK_ACK);
     assert!(!sheet.confirm.enabled);
     app.dispatch(Input::Confirm);
     assert!(answer.try_recv().is_err(), "no tick, no write");
@@ -561,6 +579,7 @@ fn flash_dry_run_is_the_read_only_plan_with_0_11_2_preview_options() {
     app.dispatch(Input::SelectTask(Task::Flash));
     let input = PathBuf::from("/fw/BDR-UD04_1.14.firmware.tar");
     app.dispatch(Input::Chosen(Pick::FlashFirmware, input.clone()));
+    wait_enabled(&mut app, "Flash now");
     press(&mut app, "Flash now");
     let plan = sent(&app);
     let old = v0_11_2::preview(PIONEER, &input);
@@ -581,6 +600,7 @@ fn recover(app: &mut App, input: &Path) {
         ("Firmware or backup", &["tar"]),
     );
     app.dispatch(Input::Chosen(Pick::RecoveryInput, input.into()));
+    wait_enabled(app, "Recover");
     let before = jobs(app);
     press(app, "Recover");
     assert_eq!(
@@ -592,9 +612,11 @@ fn recover(app: &mut App, input: &Path) {
         matches!(&app.dry_run.as_ref().unwrap().last().unwrap().2, Job::Recovery(o) if !o.execute && !o.acknowledged_risk)
     );
     assert!(app.view().confirm.is_none());
-    app.worker
-        .take()
-        .unwrap()
+    let worker = app.worker.take().unwrap();
+    worker
+        .send(Msg::PreparedRecovery(workflow::PreparedRecovery::default()))
+        .unwrap();
+    worker
         .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
         .unwrap();
     app.poll();
@@ -604,12 +626,39 @@ fn recover(app: &mut App, input: &Path) {
     assert_eq!(sheet.warnings, ["Recovery skips automatic backups and some compatibility checks. Incompatible firmware can make the drive unusable."]);
     assert_eq!(
         (sheet.ack_text.as_str(), sheet.ack_checked),
-        (v0_11_2::RISK_ACK, false)
+        (CURRENT_RISK_ACK, false)
     );
     app.dispatch(Input::Confirm);
     assert_eq!(jobs(app), before + 1, "no tick, no recovery write");
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
+    assert!(matches!(
+        app.dry_run.as_ref().unwrap().last().unwrap().2,
+        Job::ExecuteRecovery(_)
+    ));
+}
+
+/// Input selection preserves old behavior, while confirmation consumes prepared bytes.
+fn prepared_recovery_inputs(app: &App) -> Sent {
+    let (_, device, job) = app
+        .dry_run
+        .as_ref()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|(_, _, job)| matches!(job, Job::Recovery(_)))
+        .unwrap();
+    let Job::Recovery(options) = job else {
+        unreachable!()
+    };
+    let mut options = options.clone();
+    options.execute = true;
+    options.acknowledged_risk = true;
+    Sent {
+        label: "Recovery".into(),
+        device: device.clone(),
+        call: call(device, &Job::Recovery(options)),
+    }
 }
 
 #[test]
@@ -619,7 +668,10 @@ fn recovery_reading_current_from_the_drive_matches_0_11_2() {
     app.dispatch(Input::SetCheck(CheckId::RecoveryReadFromDrive, true));
     let input = PathBuf::from("/fw/target.firmware.tar");
     recover(&mut app, &input);
-    assert_eq!(sent(&app), v0_11_2::recover(PIONEER, &input, true, None));
+    assert_eq!(
+        prepared_recovery_inputs(&app),
+        v0_11_2::recover(PIONEER, &input, true, None)
+    );
 }
 
 #[test]
@@ -636,7 +688,7 @@ fn recovery_from_a_current_file_matches_0_11_2() {
     let input = PathBuf::from("/fw/target.firmware.tar");
     recover(&mut app, &input);
     assert_eq!(
-        sent(&app),
+        prepared_recovery_inputs(&app),
         v0_11_2::recover(PIONEER, &input, false, Some(&current))
     );
 }
@@ -651,7 +703,7 @@ fn recovery_read_from_drive_wins_over_a_current_file_as_in_0_11_2() {
     let input = PathBuf::from("/fw/target.firmware.tar");
     recover(&mut app, &input);
     assert_eq!(
-        sent(&app),
+        prepared_recovery_inputs(&app),
         v0_11_2::recover(PIONEER, &input, true, Some(&current))
     );
 }

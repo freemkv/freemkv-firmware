@@ -53,10 +53,9 @@ fn recovery_write_requires_execute_and_ack() {
     let mut mock = MockScsiDevice::pioneer();
     let error = crate::engine::recover(&mut mock, &Pioneer::new(), Some(b"x"), b"y", true, false)
         .unwrap_err();
-    assert!(
-        crate::workflow::error_message(&error).contains("acknowledging the risk"),
-        "{error}"
-    );
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.acknowledgement");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
     let evidence = error
         .downcast_ref::<crate::backend::UpdateFailure>()
         .unwrap();

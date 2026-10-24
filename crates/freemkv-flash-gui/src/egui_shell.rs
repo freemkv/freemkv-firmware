@@ -125,6 +125,8 @@ pub(crate) fn configure_style(ctx: &egui::Context) {
 /// The shell: the model plus nothing it could disagree with.
 pub struct Shell {
     pub(crate) app: crate::ui::App,
+    report_prompt: Option<(String, String)>,
+    confirmation_visible: bool,
 }
 
 impl Shell {
@@ -132,7 +134,11 @@ impl Shell {
         let waker = ctx.clone();
         app.set_waker(Arc::new(move || waker.request_repaint()));
         let effects = app.start();
-        let mut shell = Self { app };
+        let mut shell = Self {
+            app,
+            report_prompt: None,
+            confirmation_visible: false,
+        };
         shell.perform(ctx, effects);
         shell
     }
@@ -147,7 +153,7 @@ impl Shell {
             match effect {
                 Effect::OpenFile { pick, filter } => {
                     let mut dialog = rfd::FileDialog::new();
-                    if let Some(f) = filter {
+                    if let Some(f) = filter.and_then(crate::ui::FileFilter::validated) {
                         dialog = dialog.add_filter(f.name, &f.extensions);
                     }
                     if let Some(path) = dialog.pick_file() {
@@ -160,9 +166,23 @@ impl Shell {
                         self.send(ctx, Input::Chosen(pick, path));
                     }
                 }
+                Effect::ReportPrompt {
+                    summary,
+                    description,
+                } => {
+                    self.report_prompt = Some((summary, description));
+                }
                 Effect::CopyText(text) => ctx.copy_text(text),
                 Effect::OpenPath(path) => {
-                    let _ = crate::external::open_path(&path);
+                    if let Err(error) = crate::external::open_path(&path) {
+                        self.send(
+                            ctx,
+                            Input::ShellFailed(
+                                crate::ui::ShellFailure::OpenLog,
+                                format!("{error:#}"),
+                            ),
+                        );
+                    }
                 }
                 // egui repaints on the worker's waker and on the running-job timer below.
                 Effect::StartTicking | Effect::StopTicking => {}
@@ -185,13 +205,54 @@ impl Shell {
         let mut out = Vec::new();
         main_panel(ui, &view, &mut out);
         if let Some(confirm) = &view.confirm {
-            confirm_window(&ctx, confirm, &mut out);
+            confirm_window(&ctx, confirm, !self.confirmation_visible, &mut out);
         }
+        self.confirmation_visible = view.confirm.is_some();
         if let Some(diag) = &view.diagnostics {
             diagnostics_window(&ctx, diag, &mut out);
         }
         if let Some(window) = &view.analysis {
             analysis_window(&ctx, &window.tree, window.notice.as_deref(), &mut out);
+        }
+        if let Some((summary, description)) = &mut self.report_prompt {
+            let language = view.language;
+            let text = |key| crate::localization::text(language, key);
+            let mut answer = None;
+            let modal = egui::Modal::new(egui::Id::new("report-description")).show(&ctx, |ui| {
+                ui.set_width(480.0);
+                ui.heading(text("report.prompt_title"));
+                ui.label(crate::localization::render(language, summary));
+                ui.label(text("report.description_label"));
+                egui::ScrollArea::vertical()
+                    .max_height(220.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(description)
+                                .desired_rows(6)
+                                .desired_width(f32::INFINITY),
+                        );
+                    });
+                ui.horizontal(|ui| {
+                    if ui.button(text("ui.cancel")).clicked() {
+                        answer = Some(false);
+                    }
+                    if ui.button(text("report.send")).clicked() {
+                        answer = Some(true);
+                    }
+                });
+            });
+            if answer.is_none() && modal.should_close() {
+                answer = Some(false);
+            }
+            if let Some(send) = answer {
+                let description = description.clone();
+                self.report_prompt = None;
+                out.push(if send {
+                    Input::SendReport(description)
+                } else {
+                    Input::DismissReport(description)
+                });
+            }
         }
         for input in out {
             self.send(&ctx, input);
@@ -583,7 +644,7 @@ fn tick(ui: &mut egui::Ui, state: Tri) {
 
 // ── windows ───────────────────────────────────────────────────────────────
 
-fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
+fn confirm_window(ctx: &egui::Context, c: &Confirm, fresh: bool, out: &mut Vec<Input>) {
     let mut open = true;
     egui::Window::new(&c.title)
         .default_width(480.0)
@@ -592,14 +653,10 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
         .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
         .open(&mut open)
         .show(ctx, |ui| {
-            let (drive_image, current) = c.details.split_at(c.details.len().min(2));
-            for line in drive_image {
+            for line in &c.details {
                 ui.label(line);
             }
             ui.colored_label(DANGER, &c.danger);
-            for line in current {
-                ui.label(line);
-            }
             for w in &c.warnings {
                 ui.colored_label(CAUTION, w);
             }
@@ -608,6 +665,33 @@ fn confirm_window(ctx: &egui::Context, c: &Confirm, out: &mut Vec<Input>) {
             }
             if let Some(n) = &c.note {
                 ui.label(n);
+            }
+            if !c.technical_details.is_empty() {
+                let id = ui.make_persistent_id("confirmation-technical-details");
+                let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ctx, id, false,
+                );
+                if fresh {
+                    state.set_open(false);
+                    state.store(ctx);
+                }
+                let label = if state.is_open() {
+                    &c.hide_details_label
+                } else {
+                    &c.details_label
+                };
+                egui::CollapsingHeader::new(label)
+                    .id_salt("confirmation-technical-details")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        egui::ScrollArea::vertical()
+                            .max_height(180.0)
+                            .show(ui, |ui| {
+                                for line in &c.technical_details {
+                                    ui.label(line);
+                                }
+                            });
+                    });
             }
             ui.add_space(12.0);
             if let Some(entered) = &c.code_entry {

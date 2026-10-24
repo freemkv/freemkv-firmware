@@ -4,11 +4,11 @@ result: OK
 --- text (3) ---
 classify: Unknown
 resolve_backend: no match
-classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
+classify_gated: error errors.unsupported_drive: No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
 --- events (3) ---
 MSG      classify: Unknown
 MSG      resolve_backend: no match
-MSG      classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
+MSG      classify_gated: error errors.unsupported_drive: No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
 --- scsi transcript (3) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96
@@ -61,11 +61,11 @@ result: OK
 --- text (3) ---
 classify: Unknown
 resolve_backend: no match
-classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
+classify_gated: error errors.unsupported_drive: No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
 --- events (3) ---
 MSG      classify: Unknown
 MSG      resolve_backend: no match
-MSG      classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
+MSG      classify_gated: error errors.unsupported_drive: No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
 --- scsi transcript (3) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=120000006000 alloc=96 -> ok 96

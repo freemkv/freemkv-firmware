@@ -1,0 +1,84 @@
+{
+  "issue": "0.14.5 rejects valid MT19 boot responses, then profiles without update formats can send invalid filters to native firmware pickers.",
+  "reported_behavior": "0.14.5 exits when a firmware picker is clicked in Flash or Recovery with a non-Pioneer drive selected; 0.14.3 reportedly worked.",
+  "confirmed_source_path": [
+    "The 1.0.1 MediaTek evidence parser required padding after the first NUL in the entire 32-byte boot response. Real ROMs contain ARM instructions after that label. All 137 exact-prefix MT1939/MT1959 corpus windows were rejected; 0.14.3 used the more permissive identity parser.",
+    "Profile.flash_extensions is empty for profiles without recognized update formats.",
+    "App::choose previously used that empty vector whenever the profile was Ready, instead of the registry-wide fallback.",
+    "The Windows shell joined the vector into an empty pattern and unconditionally called IFileDialog::SetFileTypes.",
+    "The locked winsafe 0.0.29 binding represents an empty WString with an unallocated buffer and a null pointer. COMDLG_FILTERSPEC.pszSpec therefore did not point to a filter-pattern buffer."
+  ],
+  "version_history": {
+    "0.14.4": "6d08c93 changed profile filter generation to update-eligible formats and recovery-descriptor formats.",
+    "0.14.5": "050dd24 changed protocol detection and routing, which can change whether a selected drive has recognized update formats.",
+    "native_picker": "The Windows open-dialog implementation and winsafe dependency did not change between 0.14.3 and 0.14.5. The unsafe empty-filter path predates that range.",
+    "limit": "The supplied sessions do not contain a Windows crash stack for the reported non-Pioneer picker exit. They do not establish the exact first failing release or prove that every ASUS/LG device is unrecognized."
+  },
+  "report_evidence": {
+    "platform": "The ten supplied report bundles identify Windows x86_64.",
+    "versions": "1da41e42 and 7739c049 are 0.14.2; the other eight are 0.14.5.",
+    "scope": "The bundles contain Pioneer analysis, backup, update and recovery sessions, including compatibility refusals, an attempted update-entry failure and verified recoveries. These are separate from proof of a native picker crash.",
+    "privacy": "Do not commit raw report logs or device/user identifiers as regression fixtures."
+  },
+  "fix": [
+    "The optical library accepts code after the terminated label while retaining exact signature, supported chip, optical INQUIRY and complete response checks. FirmwarePickerFormats owns registered fallback formats independently of write capabilities; only valid nonempty suffix lists cross into the UI.",
+    "Never install an empty filter in any shell, including direct defensive handling at native boundaries.",
+    "Preserve ordinary Windows dialog errors instead of dropping them as cancellations; GTK errors and missing native result paths also reach localized guidance.",
+    "Keep technical dialog errors in diagnostics, add a localized cause/action in every catalog and prove no firmware write for firmware selection.",
+    "An export-dialog error during a running update is a separate notice; it must not replace the update result or claim that the update wrote nothing.",
+    "Record firmware-picker requests and their extension list before calling the native dialog, and record returned errors with structured issue data.",
+    "Run both bounded vendor probes independently. A validated signature survives failure of the foreign probe; conflicting valid signatures still refuse, and no-match incomplete/failed discovery remains an error rather than unsupported.",
+    "Preserve typed Current-file, native permission/open, required backup and explicit Unexpected causes. Localize confirmation prompts, require all operation keys in all 29 catalogs, and preserve diagnostic-log failures in a fallback file."
+  ],
+  "coverage_gap": "The model chooser assertion used a populated synthetic profile. Windows and Linux native gates walked tabs and confirmation dialogs without opening firmware pickers. The macOS picker gate used one populated synthetic profile.",
+  "regressions": [
+    "The new model regression fails before the fix on an empty Ready profile.",
+    "Exercise all four Current/target pickers with unsupported, image/package and package-only profiles, plus absent, probing and failed profile states.",
+    "Check localized dialog-failure guidance and no-write evidence in every language, and preserve active-update status when exporting diagnostics fails.",
+    "Native gates open and cancel actual file pickers for all four purposes and all three filter shapes, keeping the main window alive and proving no drive I/O."
+  ],
+  "safety": "A file-picker filter is a convenience only. File validation, drive recognition, compatibility admission and write authorization are unchanged. No new hardware flash is authorized.",
+  "corpus_evidence": {
+    "complete_mt19_images": 138,
+    "exact_prefix_windows": 137,
+    "recognized_before_fix": 0,
+    "recognized_after_fix": 137,
+    "nonmatching_prefix_retained_as_unknown": 1,
+    "samples_sha256": [
+      "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+      "dd27dc3901ea0ef2e8704a54c8e0f3be44d11cbef061b202f69ef96f70522681"
+    ],
+    "limitation": "Brand strings are presentation only; this does not claim every LiteOn or Plextor model implements MT19 or Pioneer protocols."
+  },
+  "dependency_integration": {
+    "mediatek_dev_base": "7a4b1746d265330e95ce76d24151035b511afd01",
+    "pioneer_dev_base": "3753f39cafa9100fcb039ce2407abdd0dca60bbe",
+    "mediatek_dev_tree": "23189f9e7656a835c391e29a24c63c07f07de22d",
+    "pioneer_dev_tree": "26627951c5da58358592c2a599e13ed3a7c89b2c",
+    "qa_equivalence": "The latest dev performance changes were replayed on the QA candidates; both QA candidate trees exactly match these dev trees, preserving all existing QA fixes and APIs.",
+    "policy": "The app pins these exact reviewed dev commits. Re-fetch dev before final QA to incorporate any later changes."
+  },
+  "audit_findings": {
+    "M1": "Explicit Unexpected survives boundary classification; regression covers all fallback contexts.",
+    "M2": "Current receiver errors retain typed mismatch and invalid-Current guidance.",
+    "M3": "Recovery separates package parsing, command-option errors and live transport errors.",
+    "M4": "Native open errors classify structured variants/status values, without parsing English prose.",
+    "M5": "All phase and consequence catalog keys are asserted independently of English catalog parity.",
+    "M6": "Recovery preparation test asserts Current and target member names before confirmation.",
+    "M7": "Receiver binding regression varies vendor, product, revision, banner, and empty identity fields.",
+    "L1": "Inspection-only input, invalid Current options and oversized files have typed guidance.",
+    "L2": "Backend backup requirement prevents an unusable bypass prompt and reports the required backup.",
+    "L3": "Info propagates failed INQUIRY instead of presenting an empty unsupported identity.",
+    "L4": "Log failure preserves primary path and I/O cause in fallback diagnostics without interrupting the operation.",
+    "L5": "Crossflash --help and -h display usage and exit successfully.",
+    "L6": "Prepared recovery execution documentation states its explicit authorized-execution contract.",
+    "L7": "Confirmation prompts and localized Yes/No answers are covered in all languages; scripted consent policy is retained.",
+    "L8": "Root and flash READMEs describe default family checks, explicit Pioneer override, and recovery backup behavior.",
+    "L9": "IssueCode variants and iterable catalog keys come from one macro definition.",
+    "L10": "Cancellation regression asserts both pending and prepared recovery are cleared.",
+    "L11": "Confirmation regression asserts identity of the retained prepared session passed to execution.",
+    "L12": "Unsafe-evidence regression includes concrete hardware mismatch and permission-denied causes.",
+    "L13": "Backup-question localization test proves the callback actually ran."
+  },
+  "validation_status": "The latest dependency pins are MediaTek dev 7a4b1746d265330e95ce76d24151035b511afd01 and Pioneer dev 3753f39cafa9100fcb039ce2407abdd0dca60bbe; both passed standalone CI. The ignored MediaTek protocol_corpus::every_complete_hoard_mt19_boot_window_is_recognized test ran on QA candidate source 6878bde394f31da7e50c31af2a496c4fffac65e0 (tree-identical to dev 7a4b174) and passed: 137 recognized, 0 rejected, 1 without the MT19 prefix. The 1,153 local workspace tests, Clippy run, 186-check macOS native gate, and 137-window replay previously recorded against older pins remain historical evidence for that earlier candidate. The current app hosted CI and release QA are the authoritative full validation for the updated pin pair. No separate local application corpus replay was run against these newer commits."
+}

@@ -5,9 +5,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use freemkv_flash::workflow::{
-    self, ComparisonReport, Confirm, Control, DriveChoice, DriveProfile, FlashOptions, Inspection,
+    ComparisonReport, Confirm, Control, DriveChoice, DriveProfile, FlashOptions, Inspection,
     RecoveryOptions, Source,
 };
+
+#[cfg(not(test))]
+use freemkv_flash::workflow;
+#[cfg(test)]
+#[path = "ops_workflow_tests.rs"]
+mod workflow;
 
 use crate::ui::{Profile, Task};
 
@@ -69,9 +75,7 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
         inspect: caps.inspect,
         backup_name: caps.backup.then(|| name(false)).flatten(),
         dump_name: caps.dump.then(|| name(true)).flatten(),
-        flash_extensions: workflow::update_extensions(
-            p.recovery.map_or(p.flash_formats, |d| d.formats),
-        ),
+        firmware_picker: p.firmware_picker_formats(),
         notes: p
             .recovery_errors
             .iter()
@@ -125,6 +129,8 @@ pub enum Job {
     PlanFlash(FlashOptions),
     Flash(FlashOptions),
     Recovery(RecoveryOptions),
+    /// Execute the envelopes retained by recovery preparation.
+    ExecuteRecovery(workflow::PreparedRecovery),
 }
 
 /// A job result preserves update evidence separately from analysis views.
@@ -133,6 +139,8 @@ pub enum JobResult {
     Preview(workflow::FlashPreview),
     Analysis(ResultView),
     Update(workflow::UpdateOutcome),
+    /// An immutable prepared session waiting for consent.
+    PreparedRecovery(workflow::PreparedRecovery),
 }
 
 /// Run the same operation as the matching CLI command; an analysis returns
@@ -153,7 +161,13 @@ pub fn execute(device: &str, job: &Job, confirm: &mut dyn Confirm) -> anyhow::Re
         Job::Recovery(options) => {
             let mut options = options.clone();
             options.device = Some(device.to_string());
+            if !options.execute {
+                return workflow::prepare_recovery(options).map(JobResult::PreparedRecovery);
+            }
             return workflow::recover(options).map(JobResult::Update);
+        }
+        Job::ExecuteRecovery(prepared) => {
+            return workflow::execute_recovery(prepared.clone(), true).map(JobResult::Update);
         }
         Job::PlanFlash(options) => {
             let mut options = options.clone();

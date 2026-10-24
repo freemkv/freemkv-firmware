@@ -184,7 +184,7 @@ fn recovery_entry_policy_continues_once_while_flash_stops_before_streaming() {
             assert!(!diagnostic.contains("write started: true"));
             let guidance =
                 crate::user_error::UserError::of(&error).render(crate::localization::Language::En);
-            assert!(guidance.contains("no firmware payload was sent"));
+            assert!(guidance.contains("no firmware data was sent"));
             assert!(!guidance.contains("firmware may be incomplete"));
             assert!(dev.writes.is_empty());
         }
@@ -411,9 +411,9 @@ fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
     };
     let error =
         crate::engine::recover(&mut dev, &Mtk, Some(&original), &target, true, true).unwrap_err();
-    assert!(
-        crate::workflow::error_message(&error).contains("Current firmware file does not match"),
-        "{error:#}"
+    assert_eq!(
+        crate::workflow::user_error(&error).id,
+        "errors.current_mismatch"
     );
     let evidence = error
         .downcast_ref::<crate::backend::UpdateFailure>()
@@ -734,6 +734,15 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     let authorized = Mtk
         .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
         .unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    assert!(sheet
+        .notices
+        .iter()
+        .any(|s| s.contains("Live receiver code was not compared.")));
+    assert!(!sheet
+        .technical_details
+        .iter()
+        .any(|s| s.contains("Live receiver code was not compared.")));
     let executable = authorized.state::<Executable>().unwrap();
     assert_eq!(
         executable.prepared.plan().encoding().body,
@@ -973,4 +982,127 @@ fn planning_captures_code_once_and_execution_revalidates_once_before_writing() {
         2,
         "the mandatory prewrite gate must revalidate the cached code exactly once"
     );
+}
+
+#[test]
+fn confirmation_cleanup_real_two_stage_plan_keeps_startup_requirement_visible() {
+    let current = image(b"1.00", 1);
+    let intermediate = image(b"INTM", 2);
+    let target = image(b"1.05", 3);
+    let mut dev = MockScsiDevice::new().with_firmware_image(current.clone());
+    let req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    let backup = crate::engine::gates::saved_for_tests(current);
+    let authorized = Mtk
+        .authorize(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            plan,
+            Some(&backup),
+        )
+        .unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    assert!(sheet.notices.iter().any(
+        |s| s.contains("Two-stage update: intermediate, confirm startup, then final firmware")
+    ));
+    assert!(!sheet.notices.iter().any(|s| s.contains("signature at")));
+    assert!(sheet
+        .technical_details
+        .iter()
+        .any(|s| s.contains("signature at")));
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn confirmation_cleanup_real_crossflash_plan_keeps_identity_and_rollback_warnings() {
+    let current = image(b"1.00", 1);
+    let mut target = image(b"1.05", 3);
+    target[0x1ec008..0x1ec018].copy_from_slice(b"BD-RE BU50N     ");
+    let target = crate::cmac::resign(&target).unwrap();
+    let mut dev = MockScsiDevice::new().with_firmware_image(current.clone());
+    let req = request(target, &super::super::IMAGE);
+    let mut plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    // Even an outer informational wrapper cannot hide a producer's warning.
+    for line in &mut plan.after_backup {
+        if matches!(line, PlanLine::Warning(_)) {
+            *line = PlanLine::Detail(Box::new(PlanLine::Spaced(Box::new(line.clone()))));
+        }
+    }
+    let backup = crate::engine::gates::saved_for_tests(current);
+    let authorized = Mtk
+        .authorize(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            plan,
+            Some(&backup),
+        )
+        .unwrap();
+    let sheet = crate::workflow::FlashSheet::of(&authorized);
+    for phrase in [
+        "CROSSFLASH:",
+        "the drive will identify as",
+        "your backup restores",
+    ] {
+        assert!(
+            sheet.warnings.iter().any(|s| s.contains(phrase)),
+            "{phrase}: {:?}",
+            sheet.warnings
+        );
+        assert!(!sheet.technical_details.iter().any(|s| s.contains(phrase)));
+    }
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn known_mtk_invalid_current_reference_has_current_guidance() {
+    use crate::backend::RecoveryFacet;
+    let installed = image(b"1.00", 1);
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(installed);
+    let error = Mtk
+        .identify_with_current(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            Some(b"bad current"),
+        )
+        .err()
+        .expect("invalid Current must be rejected");
+    assert_eq!(
+        crate::user_error::UserError::of(&error).id,
+        "errors.current_invalid"
+    );
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn known_mtk_preflight_keeps_original_transport_cause() {
+    struct Failure;
+    impl ScsiDevice for Failure {
+        fn command_in(&mut self, _: &[u8], _: usize) -> Result<Vec<u8>> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "preflight-access-denied",
+            )
+            .into())
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            panic!("preflight must not write")
+        }
+        fn describe(&self) -> String {
+            "preflight-failure".into()
+        }
+    }
+    let error = Mtk
+        .preflight(
+            &mut ReadDevice::without_unlocks(&mut Failure),
+            &FlashPlan::new(()),
+        )
+        .expect_err("transport failure must propagate");
+    assert_eq!(
+        error
+            .downcast_ref::<std::io::Error>()
+            .map(std::io::Error::kind),
+        Some(std::io::ErrorKind::PermissionDenied)
+    );
+    assert!(format!("{error:#}").contains("read-only preflight failed"));
 }

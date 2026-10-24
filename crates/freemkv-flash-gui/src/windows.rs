@@ -865,24 +865,44 @@ impl Shell {
     fn perform(&self, effects: Vec<Effect>) {
         for e in effects {
             match e {
-                Effect::OpenFile { pick, filter } => {
-                    if let Some(path) = self.open_dialog(filter) {
-                        self.send(Input::Chosen(pick, path.into()));
+                Effect::OpenFile { pick, filter } => match self.open_dialog(filter) {
+                    Ok(Some(path)) => self.send(Input::Chosen(pick, path.into())),
+                    Ok(None) => {}
+                    Err(error) => self.send(Input::DialogFailed(pick, format!("{error:?}"))),
+                },
+                Effect::SaveFile { pick, file_name } => match self.save_dialog(&file_name) {
+                    Ok(Some(path)) => self.send(Input::Chosen(pick, path.into())),
+                    Ok(None) => {}
+                    Err(error) => self.send(Input::DialogFailed(pick, format!("{error:?}"))),
+                },
+                Effect::ReportPrompt {
+                    summary,
+                    description,
+                } => {
+                    let response = self.report_prompt(&summary, &description);
+                    self.send(response);
+                }
+                Effect::CopyText(text) => {
+                    if let Err(error) = self.copy(&text) {
+                        self.send(Input::ShellFailed(
+                            ui::ShellFailure::Copy,
+                            format!("{error:?}"),
+                        ));
                     }
                 }
-                Effect::SaveFile { pick, file_name } => {
-                    if let Some(path) = self.save_dialog(&file_name) {
-                        self.send(Input::Chosen(pick, path.into()));
-                    }
-                }
-                Effect::CopyText(text) => self.copy(&text),
                 Effect::OpenPath(path) => {
-                    let _ = crate::external::open_path(&path);
+                    if let Err(error) = crate::external::open_path(&path) {
+                        self.send(Input::ShellFailed(
+                            crate::ui::ShellFailure::OpenLog,
+                            format!("{error:#}"),
+                        ));
+                    }
                 }
                 Effect::StartTicking => {
                     if let Err(_e) = self.wnd.hwnd().SetTimer(TIMER_TICK, TICK_MS, None) {
+                        let language = self.app.borrow().language;
                         let _ = self.wnd.hwnd().MessageBox(
-                            crate::localization::get(self.app.borrow().language, "errors.timer"),
+                            crate::localization::get(language, "errors.timer"),
                             "freemkv",
                             co::MB::ICONERROR,
                         );
@@ -897,60 +917,69 @@ impl Shell {
     }
 
     /// The OS open dialog (`IFileOpenDialog`), owned by and modal to the main window.
-    fn open_dialog(&self, filter: Option<ui::FileFilter>) -> Option<String> {
+    fn open_dialog(&self, filter: Option<ui::FileFilter>) -> w::HrResult<Option<String>> {
         let dlg = w::CoCreateInstance::<w::IFileOpenDialog>(
             &co::CLSID::FileOpenDialog,
             None::<&w::IUnknown>,
             co::CLSCTX::INPROC_SERVER,
-        )
-        .ok()?;
-        let opts = dlg.GetOptions().ok()? | co::FOS::FORCEFILESYSTEM | co::FOS::FILEMUSTEXIST;
-        dlg.SetOptions(opts).ok()?;
-        if let Some(f) = filter {
+        )?;
+        let opts = dlg.GetOptions()? | co::FOS::FORCEFILESYSTEM | co::FOS::FILEMUSTEXIST;
+        dlg.SetOptions(opts)?;
+        if let Some(f) = filter.and_then(ui::FileFilter::validated) {
             let spec = f
                 .extensions
                 .iter()
                 .map(|e| format!("*.{e}"))
                 .collect::<Vec<_>>()
                 .join(";");
-            let _ = dlg.SetFileTypes(&[(f.name, spec.as_str())]);
+            dlg.SetFileTypes(&[(f.name, spec.as_str())])?;
         }
-        if !dlg.Show(self.wnd.hwnd()).ok()? {
-            return None;
+        if !dlg.Show(self.wnd.hwnd())? {
+            return Ok(None);
         }
-        dlg.GetResult()
-            .ok()?
+        dlg.GetResult()?
             .GetDisplayName(co::SIGDN::FILESYSPATH)
-            .ok()
+            .and_then(|path| {
+                if path.is_empty() || path.contains('\0') {
+                    Err(co::HRESULT::E_INVALIDARG)
+                } else {
+                    Ok(Some(path))
+                }
+            })
     }
 
     /// The OS save dialog; it asks before replacing a file, which the model relies on.
-    fn save_dialog(&self, file_name: &str) -> Option<String> {
+    fn save_dialog(&self, file_name: &str) -> w::HrResult<Option<String>> {
+        if file_name.is_empty() || file_name.contains('\0') {
+            return Err(co::HRESULT::E_INVALIDARG);
+        }
         let dlg = w::CoCreateInstance::<w::IFileSaveDialog>(
             &co::CLSID::FileSaveDialog,
             None::<&w::IUnknown>,
             co::CLSCTX::INPROC_SERVER,
-        )
-        .ok()?;
-        let opts = dlg.GetOptions().ok()?
+        )?;
+        let opts = dlg.GetOptions()?
             | co::FOS::FORCEFILESYSTEM
             | co::FOS::OVERWRITEPROMPT
             | co::FOS::NOREADONLYRETURN;
-        dlg.SetOptions(opts).ok()?;
-        let _ = dlg.SetFileName(file_name);
-        if !dlg.Show(self.wnd.hwnd()).ok()? {
-            return None;
+        dlg.SetOptions(opts)?;
+        dlg.SetFileName(file_name)?;
+        if !dlg.Show(self.wnd.hwnd())? {
+            return Ok(None);
         }
-        dlg.GetResult()
-            .ok()?
+        dlg.GetResult()?
             .GetDisplayName(co::SIGDN::FILESYSPATH)
-            .ok()
+            .and_then(|path| {
+                if path.is_empty() || path.contains('\0') {
+                    Err(co::HRESULT::E_INVALIDARG)
+                } else {
+                    Ok(Some(path))
+                }
+            })
     }
 
-    fn copy(&self, text: &str) {
-        let Ok(clip) = self.wnd.hwnd().OpenClipboard() else {
-            return;
-        };
+    fn copy(&self, text: &str) -> w::SysResult<()> {
+        let clip = self.wnd.hwnd().OpenClipboard()?;
         let wide: Vec<u8> = text
             .replace("\r\n", "\n")
             .replace('\n', "\r\n")
@@ -958,8 +987,9 @@ impl Shell {
             .chain(std::iter::once(0))
             .flat_map(u16::to_le_bytes)
             .collect();
-        let _ = clip.EmptyClipboard();
-        let _ = clip.SetClipboardData(co::CF::UNICODETEXT, &wide);
+        clip.EmptyClipboard()?;
+        clip.SetClipboardData(co::CF::UNICODETEXT, &wide)?;
+        Ok(())
     }
 
     fn tone(&self, c: &impl GuiWindow, tone: Tone) {
@@ -1020,7 +1050,7 @@ impl Shell {
             .hwnd()
             .EnableWindow(v.controls_enabled && v.tabs.iter().any(|t| t.enabled));
         self.render_status(v.status.as_ref());
-        self.render_results(v.results.as_ref());
+        self.render_results(v.results.as_ref(), v.language);
         if self.memo.borrow().log != v.log {
             set_edit_lines(&self.log, &v.log);
             self.memo.borrow_mut().log.clone_from(&v.log);
@@ -1030,9 +1060,16 @@ impl Shell {
         self.render_diagnostics(v.diagnostics.as_ref());
         self.render_analysis(&v);
         self.painting.set(false);
-        if v.confirm.is_some() && !self.confirming.replace(true) {
+        if v.confirm.is_some() {
             // Not from inside the handler that asked: the dialog runs its own modal loop.
-            let _ = self.wnd.hwnd().SetTimer(TIMER_CONFIRM, 1, None);
+            if let Err(error) = schedule_confirmation(&self.confirming, || {
+                self.wnd.hwnd().SetTimer(TIMER_CONFIRM, 1, None).map(drop)
+            }) {
+                self.send(Input::ShellFailed(
+                    ui::ShellFailure::Confirmation,
+                    format!("{error:?}"),
+                ));
+            }
         }
     }
 
@@ -1099,7 +1136,7 @@ impl Shell {
         }
     }
 
-    fn render_results(&self, results: Option<&Results>) {
+    fn render_results(&self, results: Option<&Results>, language: crate::localization::Language) {
         if self.memo.borrow().results.as_ref() == Some(&results.cloned()) {
             return;
         }
@@ -1125,7 +1162,7 @@ impl Shell {
         if grouped {
             for (id, card) in r.cards.iter().enumerate() {
                 self.add_group(id as i32, &card.title, card.subtitle.as_deref());
-                for (label, value) in card_rows(&card.body) {
+                for (label, value) in card_rows(&card.body, language) {
                     self.add_row(&label, &value, Some(id as i32));
                 }
             }
@@ -1230,20 +1267,38 @@ impl Shell {
         show(&self.log_title, false);
         show(&self.log, false);
 
-        let (Some(st), Some(r)) = (&v.status, &v.results) else {
-            for c in [
-                &self.status,
-                &self.progress_label,
-                &self.note,
-                &self.failure,
-                &self.notice,
-            ] {
+        if let Some(st) = &v.status {
+            put(&self.status, col.take(s.px(lay::LINE_H)));
+            if st.progress.is_some() {
+                put(&self.progress_label, col.take(s.px(lay::LINE_H)));
+                put(&self.progress, col.take(s.px(lay::PROGRESS_H)));
+            } else {
+                show(&self.progress_label, false);
+                show(&self.progress, false);
+            }
+            if st.note.is_some() {
+                let h = measure(
+                    self.note.hwnd(),
+                    &self.note.hwnd().GetWindowText().unwrap_or_default(),
+                    Some(col.w),
+                )
+                .1;
+                self.tone(&self.note, Tone::Secondary);
+                put(&self.note, col.take(h));
+            } else {
+                show(&self.note, false);
+            }
+            if let Some(b) = &st.cancel {
+                let mut l = col.line(s.px(lay::ROW_H));
+                put(&self.cancel.btn, l.take(self.button_w(s, b)));
+            }
+        }
+        let Some(r) = &v.results else {
+            for c in [&self.failure, &self.notice] {
                 show(c, false);
             }
-            show(&self.progress, false);
             show(&self.list, false);
             for b in [
-                &self.cancel,
                 &self.open_results,
                 &self.save_log,
                 &self.view_log,
@@ -1253,32 +1308,6 @@ impl Shell {
             }
             return;
         };
-        // Status and progress.
-        put(&self.status, col.take(s.px(lay::LINE_H)));
-        let running = st.progress.is_some();
-        if running {
-            put(&self.progress_label, col.take(s.px(lay::LINE_H)));
-            put(&self.progress, col.take(s.px(lay::PROGRESS_H)));
-        } else {
-            show(&self.progress_label, false);
-            show(&self.progress, false);
-        }
-        if st.note.is_some() {
-            let h = measure(
-                self.note.hwnd(),
-                &self.note.hwnd().GetWindowText().unwrap_or_default(),
-                Some(col.w),
-            )
-            .1;
-            self.tone(&self.note, Tone::Secondary);
-            put(&self.note, col.take(h));
-        } else {
-            show(&self.note, false);
-        }
-        if let Some(b) = &st.cancel {
-            let mut l = col.line(s.px(lay::ROW_H));
-            put(&self.cancel.btn, l.take(self.button_w(s, b)));
-        }
 
         // Results: the list takes what the rows above and below it leave.
         let bottom = ch - pad;
@@ -1594,6 +1623,7 @@ impl Shell {
             .chain(c.note.as_deref())
             .collect::<Vec<_>>()
             .join("\n\n");
+        let technical_details = c.technical_details.join("\n\n");
         let me = self.clone();
         let cfg = w::TASKDIALOGCONFIG {
             hwnd_parent: Some(self.wnd.hwnd()),
@@ -1608,6 +1638,11 @@ impl Shell {
             ],
             default_button_id: TD_CANCEL,
             verification_text: (!c.ack_text.is_empty()).then_some(&c.ack_text),
+            // Expanded information is native-local and starts collapsed. Safety
+            // warnings remain in the always-visible content/footer above.
+            more_info: (!technical_details.is_empty()).then_some(technical_details.as_str()),
+            more_info_btn_collapsed: Some(&c.details_label),
+            more_info_btn_expanded: Some(&c.hide_details_label),
             footer_text: (!footer.is_empty()).then_some(footer.as_str()),
             callback: Some(Box::new(move |hwnd: &w::HWND, tdn: w::Tdn| {
                 me.on_confirm(hwnd, tdn)
@@ -1627,6 +1662,151 @@ impl Shell {
         } else {
             Input::CancelConfirm
         });
+    }
+
+    /// Own the draft outside App: Windows pumps messages while the modal is open.
+    /// Capture edits before destruction, including closing with Escape or the title bar.
+    fn report_prompt(&self, summary: &str, description: &str) -> Input {
+        let language = self.app.borrow().language;
+        let tr = |key| crate::localization::get(language, key);
+        let limit_message = crate::localization::render(
+            language,
+            &crate::localization::message(
+                "report.description_too_long",
+                &[("summary", summary.to_owned())],
+            ),
+        );
+        let summary = crate::localization::render(language, summary);
+        let dialog = gui::WindowModal::new(gui::WindowModalOpts {
+            title: tr("report.prompt_title"),
+            size: gui::dpi(620, 430),
+            ..Default::default()
+        });
+        let summary_label = gui::Label::new(
+            &dialog,
+            gui::LabelOpts {
+                text: &summary,
+                position: gui::dpi(20, 20),
+                size: gui::dpi(580, 100),
+                control_style: co::SS::LEFT | co::SS::NOPREFIX,
+                ..Default::default()
+            },
+        );
+        let _label = gui::Label::new(
+            &dialog,
+            gui::LabelOpts {
+                text: tr("report.description_label"),
+                position: gui::dpi(20, 125),
+                size: gui::dpi(580, 25),
+                control_style: co::SS::LEFT | co::SS::NOPREFIX,
+                ..Default::default()
+            },
+        );
+        let entry = gui::Edit::new(
+            &dialog,
+            gui::EditOpts {
+                text: description,
+                position: gui::dpi(20, 155),
+                width: gui::dpi_x(580),
+                height: gui::dpi_y(180),
+                control_style: co::ES::MULTILINE
+                    | co::ES::AUTOVSCROLL
+                    | co::ES::WANTRETURN
+                    | co::ES::NOHIDESEL,
+                window_style: co::WS::CHILD
+                    | co::WS::VISIBLE
+                    | co::WS::TABSTOP
+                    | co::WS::GROUP
+                    | co::WS::VSCROLL,
+                ..Default::default()
+            },
+        );
+        let cancel = gui::Button::new(
+            &dialog,
+            gui::ButtonOpts {
+                text: tr("ui.cancel"),
+                position: gui::dpi(240, 380),
+                width: gui::dpi_x(170),
+                ..Default::default()
+            },
+        );
+        let proceed = gui::Button::new(
+            &dialog,
+            gui::ButtonOpts {
+                text: tr("report.send"),
+                position: gui::dpi(430, 380),
+                width: gui::dpi_x(170),
+                ..Default::default()
+            },
+        );
+        let draft = Rc::new(RefCell::new(description.to_owned()));
+        let accepted = Rc::new(Cell::new(false));
+        let field = entry.clone();
+        let button = proceed.clone();
+        let label = summary_label.clone();
+        #[cfg(debug_assertions)]
+        let popup = dialog.clone();
+        let initial_valid = description.len() <= crate::support::DESCRIPTION_LIMIT;
+        let initial_message = if initial_valid {
+            summary.clone()
+        } else {
+            limit_message.clone()
+        };
+        dialog.on().wm_create(move |_| {
+            // The byte limit is visible validation, never silent native truncation.
+            field.limit_text(None);
+            button.hwnd().EnableWindow(initial_valid);
+            set_text(&label, &initial_message);
+            #[cfg(debug_assertions)]
+            gate::arm_report_probe(popup.hwnd())?;
+            Ok(0)
+        });
+        let field = entry.clone();
+        let text = draft.clone();
+        let button = proceed.clone();
+        let label = summary_label.clone();
+        entry.on().en_change(move || {
+            if let Ok(value) = field.text() {
+                let valid = value.len() <= crate::support::DESCRIPTION_LIMIT;
+                *text.borrow_mut() = value;
+                button.hwnd().EnableWindow(valid);
+                set_text(&label, if valid { &summary } else { &limit_message });
+            }
+            Ok(())
+        });
+        let popup = dialog.clone();
+        cancel.on().bn_clicked(move || {
+            popup.close();
+            Ok(())
+        });
+        // IsDialogMessage generates IDCANCEL for Escape even without an IDCANCEL button.
+        let popup = dialog.clone();
+        dialog.on().wm_command(2u16, co::BN::CLICKED, move || {
+            popup.close();
+            Ok(())
+        });
+        let popup = dialog.clone();
+        let chosen = accepted.clone();
+        let text = draft.clone();
+        proceed.on().bn_clicked(move || {
+            if text.borrow().len() > crate::support::DESCRIPTION_LIMIT {
+                return Ok(());
+            }
+            chosen.set(true);
+            popup.close();
+            Ok(())
+        });
+        #[cfg(debug_assertions)]
+        gate::install_report_probe(&dialog, &entry, &summary_label, &proceed, &cancel);
+        // Keep the label alive in release builds, too.
+        let _summary_label = summary_label;
+        let shown = dialog.show_modal(&self.wnd);
+        let description = draft.borrow().clone();
+        if shown.is_ok() && accepted.get() {
+            Input::SendReport(description)
+        } else {
+            Input::DismissReport(description)
+        }
     }
 
     /// Typed challenge uses a native edit control; policy remains in the shared model.
@@ -1730,6 +1910,10 @@ impl Shell {
                 .confirm
                 .is_some_and(|c: Confirm| c.confirm.enabled)
         };
+        #[cfg(debug_assertions)]
+        if let w::Tdn::ExpandoButtonClicked(expanded) = tdn {
+            gate::disclosure_changed(expanded);
+        }
         #[cfg(debug_assertions)]
         if matches!(tdn, w::Tdn::Timer(_)) && gate::probe(self, hwnd) {
             return co::HRESULT::S_OK;
@@ -1979,11 +2163,12 @@ impl Shell {
             if me.view().can_close {
                 me.wnd.hwnd().DestroyWindow()?;
             } else {
-                me.wnd.hwnd().MessageBox(
-                    &crate::localization::render(me.app.borrow().language, ui::CLOSE_BLOCKED),
-                    "freemkv",
-                    co::MB::ICONWARNING,
-                )?;
+                // MessageBox pumps window events; polling must be able to borrow App.
+                let message =
+                    crate::localization::render(me.app.borrow().language, ui::CLOSE_BLOCKED);
+                me.wnd
+                    .hwnd()
+                    .MessageBox(&message, "freemkv", co::MB::ICONWARNING)?;
             }
             Ok(())
         });
@@ -2022,17 +2207,32 @@ impl Shell {
 }
 
 /// A card's rows as (label, value) pairs for the list view.
-fn card_rows(body: &CardBody) -> Vec<(String, String)> {
+fn card_rows(body: &CardBody, language: crate::localization::Language) -> Vec<(String, String)> {
     let mut out = Vec::new();
     match body {
         CardBody::Rows(rows) => out.extend(rows.iter().cloned()),
         CardBody::Media { left, right } => {
             for r in left.iter().chain(right) {
-                out.push((r.label.clone(), media_ticks(r)));
+                out.push((r.label.clone(), media_ticks(r, language)));
             }
         }
     }
     out
+}
+
+/// A failed timer must release the latch so another update can ask again.
+fn schedule_confirmation<E>(
+    confirming: &Cell<bool>,
+    schedule: impl FnOnce() -> Result<(), E>,
+) -> Result<(), E> {
+    if confirming.replace(true) {
+        return Ok(());
+    }
+    if let Err(error) = schedule() {
+        confirming.set(false);
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn glyph(on: bool) -> char {
@@ -2044,7 +2244,7 @@ fn glyph(on: bool) -> char {
 }
 
 /// "R/W: ☑ ☐", with a blank for a capability the drive did not report.
-fn media_ticks(r: &MediaRow) -> String {
+fn media_ticks(r: &MediaRow, language: crate::localization::Language) -> String {
     let tick = |t: Tri| match t {
         Tri::Yes => glyph(true),
         Tri::No => glyph(false),
@@ -2053,13 +2253,13 @@ fn media_ticks(r: &MediaRow) -> String {
     match r.write {
         Some(wr) => format!(
             "{}: {} {}",
-            crate::localization::get(crate::localization::Language::En, "media.header"),
+            crate::localization::get(language, "media.header"),
             tick(r.read),
             tick(wr)
         ),
         None => format!(
             "{}: {}",
-            crate::localization::get(crate::localization::Language::En, "media.header"),
+            crate::localization::get(language, "media.header"),
             tick(r.read)
         ),
     }
@@ -2112,7 +2312,7 @@ fn add_children(parent: &gui::TreeViewItem<()>, kids: &[Node]) {
 }
 
 /// Run the Win32 shell until the window closes.
-pub fn run() {
+pub fn run() -> i32 {
     // The file dialogs are COM objects: the apartment lives as long as the app.
     let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
     #[cfg(debug_assertions)]
@@ -2126,6 +2326,63 @@ pub fn run() {
         gate::install(&shell, dir);
     }
     if let Err(e) = shell.wnd.run_main(None) {
-        let _ = w::HWND::NULL.MessageBox(&e.to_string(), "freemkv", co::MB::ICONERROR);
+        crate::application_failure(&format!("Win32 event loop failed: {e}"), false);
+        let message = {
+            let app = shell.app.borrow();
+            app.runtime_issue().render(app.language)
+        };
+        let _ = w::HWND::NULL.MessageBox(&message, "freemkv", co::MB::ICONERROR);
+        return 1;
+    }
+    0
+}
+
+#[cfg(test)]
+mod known_error_tests {
+    use super::*;
+
+    #[test]
+    fn failed_confirmation_schedule_releases_latch_and_success_does_not_duplicate() {
+        let confirming = Cell::new(false);
+        assert_eq!(
+            schedule_confirmation(&confirming, || Err("allocation failed")),
+            Err("allocation failed")
+        );
+        assert!(!confirming.get());
+        let calls = Cell::new(0);
+        for _ in 0..2 {
+            assert_eq!(
+                schedule_confirmation(&confirming, || {
+                    calls.set(calls.get() + 1);
+                    Ok::<_, &str>(())
+                }),
+                Ok(())
+            );
+        }
+        assert!(confirming.get());
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn media_header_uses_selected_language_and_retains_unknown_ticks() {
+        for language in crate::localization::Language::ALL {
+            let row = MediaRow {
+                label: "DVD".into(),
+                read: Tri::Yes,
+                write: Some(Tri::Unknown),
+            };
+            assert_eq!(
+                media_ticks(&row, language),
+                format!(
+                    "{}: ☑  ",
+                    crate::localization::get(language, "media.header")
+                )
+            );
+            let read_only = MediaRow { write: None, ..row };
+            assert_eq!(
+                media_ticks(&read_only, language),
+                format!("{}: ☑", crate::localization::get(language, "media.header"))
+            );
+        }
     }
 }

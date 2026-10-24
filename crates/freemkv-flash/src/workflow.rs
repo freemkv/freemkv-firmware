@@ -2,7 +2,7 @@
 
 use crate::backend::{
     registry, unsupported_family_error, Backend, BackendId, Capabilities, Descriptor, FlashRequest,
-    Match, ReadDevice, UNKNOWN_FAMILY,
+    Match, PlanLine, ReadDevice, UNKNOWN_FAMILY,
 };
 pub use crate::backend::{
     AuthorizedPlan, Confirm, CurrentFirmwareRequired, FlashPreview, HardwareMismatch,
@@ -19,6 +19,8 @@ pub use crate::inspection::{
 use crate::manifest::FlashMode;
 /// The event stream every workflow writes to, which a front-end subscribes to.
 pub use crate::output::{capture_events, Event};
+/// Structured localizable issues exposed through the frontend workflow boundary.
+pub use crate::user_error::UserError;
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
@@ -79,11 +81,46 @@ impl FileOrigin {
     }
 }
 
+/// Origin and selectable members computed from one bounded local file read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelectedFileInfo {
+    /// Origin of the original selected bytes, never a transfer-signed copy.
+    pub origin: FileOrigin,
+    /// Selectable recovery components; empty for non-selectable backend packages.
+    pub members: Vec<String>,
+}
+
+/// Inspect one regular local file without opening devices or blocking on a FIFO.
+pub fn selected_file_info(path: &Path) -> Result<SelectedFileInfo> {
+    anyhow::ensure!(
+        std::fs::metadata(path)?.is_file(),
+        "selected firmware is not a regular file"
+    );
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options
+        .open(path)
+        .with_context(|| format!("Cannot read {}", path.display()))?;
+    anyhow::ensure!(
+        file.metadata()?.is_file(),
+        "selected firmware is not a regular file"
+    );
+    let bytes = read_capped_file(path, file)?;
+    Ok(SelectedFileInfo {
+        origin: registry::file_origin(&bytes),
+        members: crate::package::recovery_members(&bytes)?,
+    })
+}
+
 /// Inspect the original selected bytes; never classify a transfer-signed copy.
 /// This reads only a local file and does not contact a drive.
 pub fn selected_file_origin(path: &Path) -> Result<FileOrigin> {
-    let bytes = read_capped(path).with_context(|| format!("Cannot read {}", path.display()))?;
-    Ok(registry::file_origin(&bytes))
+    Ok(selected_file_info(path)?.origin)
 }
 
 /// One optical drive, discovered even when its tray is empty.
@@ -164,21 +201,10 @@ pub struct FlashOptions {
     pub acknowledged_risk: bool,
 }
 
-/// Keep actionable guidance separate from diagnostic evidence and source chains.
+/// English guidance for diagnostics and compatibility tests. User interfaces must
+/// retain [`user_error`]'s stable IDs until rendering in the selected language.
 pub fn error_message(error: &anyhow::Error) -> String {
-    let guidance =
-        crate::user_error::UserError::of(error).render(crate::localization::Language::En);
-    if error
-        .downcast_ref::<UpdateFailure>()
-        .is_some_and(|e| e.impact() == crate::backend::UpdateImpact::Blocked)
-    {
-        format!(
-            "{} {guidance}",
-            crate::localization::get(crate::localization::Language::En, "errors.update_blocked")
-        )
-    } else {
-        guidance
-    }
+    crate::user_error::UserError::of(error).render(crate::localization::Language::En)
 }
 
 /// Localizable customer guidance for desktop front-ends.
@@ -186,18 +212,35 @@ pub fn user_error(error: &anyhow::Error) -> crate::user_error::UserError {
     crate::user_error::UserError::of(error)
 }
 
+/// Retain desktop/runtime faults in diagnostics and expose only localized guidance.
+/// `read_only` is true only when this entry point cannot have written firmware.
+pub fn application_failure(detail: &str, read_only: bool) -> UserError {
+    let result: Result<()> = crate::diagnostics::run("application runtime", || {
+        let error = anyhow::anyhow!("{detail}").context(crate::user_error::IssueCode::Unexpected);
+        Err(if read_only {
+            error.context(crate::user_error::NoFirmwareWrite)
+        } else {
+            error
+        })
+    });
+    user_error(&result.expect_err("application failure returns its diagnostic cause"))
+}
+
 /// Inspect a local firmware file without drive discovery or transport access.
 pub fn check_file(path: &Path) -> Result<()> {
-    crate::diagnostics::run("check-file", || check_file_inner(path))
+    crate::user_error::read_only(crate::diagnostics::run("check-file", || {
+        check_file_inner(path)
+    }))
 }
 
 fn check_file_inner(path: &Path) -> Result<()> {
     engine::info_file(path)
+        .map_err(|e| crate::user_error::explain(e, crate::user_error::IssueCode::FirmwareInvalid))
 }
 
 /// Inspect a drive or a local firmware image.
 pub fn info(target: Option<&str>) -> Result<()> {
-    crate::diagnostics::run("info", || info_inner(target))
+    crate::user_error::read_only(crate::diagnostics::run("info", || info_inner(target)))
 }
 
 fn info_inner(target: Option<&str>) -> Result<()> {
@@ -230,7 +273,10 @@ fn resolve_from(arg: Option<&str>, drives: &[DriveChoice]) -> Result<String> {
             .map_or_else(|| a.to_string(), |d| d.path.clone()));
     }
     match drives {
-        [] => bail!("no optical drive found (is one connected and powered on?)"),
+        [] => Err(
+            anyhow::anyhow!("no optical drive found (is one connected and powered on?)")
+                .context(crate::user_error::IssueCode::NoDrive),
+        ),
         [only] => Ok(only.path.clone()),
         many => {
             let choices = many
@@ -238,7 +284,10 @@ fn resolve_from(arg: Option<&str>, drives: &[DriveChoice]) -> Result<String> {
                 .map(|d| format!("  {}", d.list_line()))
                 .collect::<Vec<_>>()
                 .join("\n");
-            bail!("multiple drives found — pass a drive name or id:\n{choices}")
+            Err(
+                anyhow::anyhow!("multiple drives found — pass a drive name or id:\n{choices}")
+                    .context(crate::user_error::IssueCode::ChooseDrive),
+            )
         }
     }
 }
@@ -297,6 +346,14 @@ pub struct DriveProfile {
 }
 
 impl DriveProfile {
+    /// File selection remains available when live update admission is unavailable.
+    pub fn firmware_picker_formats(&self) -> FirmwarePickerFormats {
+        FirmwarePickerFormats::prefer(update_extensions(
+            self.recovery
+                .map_or(self.flash_formats, |descriptor| descriptor.formats),
+        ))
+    }
+
     /// The update/recovery backend's installed-firmware read capability.
     /// A dump-only match must not replace an identified recovery reader.
     pub fn can_read(&self) -> Option<bool> {
@@ -309,6 +366,46 @@ impl DriveProfile {
         registry::backends()
             .find(|backend| backend.descriptor().id == id)
             .map(|backend| backend.can_read())
+    }
+}
+
+/// A presentation policy, separate from drive capabilities: a nonempty filter or all files.
+/// The private representation cannot export an empty extension list to a frontend.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FirmwarePickerFormats(Option<Vec<&'static str>>);
+
+impl Default for FirmwarePickerFormats {
+    fn default() -> Self {
+        Self::prefer(Vec::new())
+    }
+}
+
+impl FirmwarePickerFormats {
+    /// Prefer known receiver formats; otherwise use the registry's supported update files.
+    /// If the registry has none, explicitly request an unfiltered chooser.
+    pub fn prefer(mut extensions: Vec<&'static str>) -> Self {
+        extensions.retain(|extension| Self::valid_suffix(extension));
+        if extensions.is_empty() {
+            extensions = update_file_extensions();
+            extensions.retain(|extension| Self::valid_suffix(extension));
+        }
+        Self((!extensions.is_empty()).then_some(extensions))
+    }
+
+    /// A nonempty list, or `None` for an unfiltered chooser. This never returns `Some([])`.
+    pub fn extensions(&self) -> Option<&[&'static str]> {
+        self.0.as_deref()
+    }
+
+    /// Literal suffixes must not introduce path separators, NULs or glob alternatives.
+    pub fn valid_suffix(suffix: &str) -> bool {
+        !suffix.is_empty()
+            && suffix.split('.').all(|part| {
+                !part.is_empty()
+                    && part
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-'))
+            })
     }
 }
 
@@ -347,11 +444,11 @@ pub fn extensions<'a>(
 /// Probe `device` read-only and ask every recovery backend whether it knows
 /// the receiver. An unsupported drive is a profile, not an error.
 pub fn profile(device: &str) -> Result<DriveProfile> {
-    crate::diagnostics::run("profile", || {
+    crate::user_error::read_only(crate::diagnostics::run("profile", || {
         let selector = resolve_device(Some(device))?;
         let mut dev = platform::open(&selector, false)?;
         profile_on(dev.as_mut())
-    })
+    }))
 }
 
 /// Profile with an explicitly selected installed-firmware reference. The file
@@ -362,12 +459,12 @@ pub fn profile_with_current(
     current: &Path,
     member: Option<&str>,
 ) -> Result<DriveProfile> {
-    crate::diagnostics::run("profile", || {
+    crate::user_error::read_only(crate::diagnostics::run("profile", || {
         let current = current_firmware_image(&read_capped(current)?, member)?;
         let selector = resolve_device(Some(device))?;
         let mut dev = platform::open(&selector, false)?;
         profile_on_with_current(dev.as_mut(), &current)
-    })
+    }))
 }
 
 /// Current-assisted profile on an open device. It never grants normal Flash,
@@ -426,24 +523,29 @@ pub fn profile_on_with_current(
 /// Recognition selects an implementation, never proves drive compatibility.
 /// `identify_with_current` owns parsing and the live protocol binding checks.
 fn current_recovery_backend(current: &[u8]) -> Result<&'static dyn Backend> {
-    let (backend, _) = registry::recognize(current)?
-        .context("Current firmware has no recognized protocol format")?;
+    let (backend, _) = registry::recognize(current)
+        .map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+        })?
+        .context("Current firmware has no recognized protocol format")
+        .map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+        })?;
     anyhow::ensure!(
         backend
             .recovery()
             .is_some_and(|facet| facet.accepts_current_for_identification()),
-        "this firmware format cannot identify a recovery receiver"
+        anyhow::anyhow!("this firmware format cannot identify a recovery receiver")
+            .context(crate::user_error::IssueCode::CurrentInvalid)
     );
     Ok(backend)
 }
 
 /// [`profile`] on an open device.
 pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
-    let resolved = registry::resolve(dev)?;
-    let identity = match &resolved {
-        Some(r) => r.identity.clone(),
-        None => crate::backend::read_identity(&mut ReadDevice::without_unlocks(dev)),
-    };
+    let detection = crate::backend::detection::detect(dev)?;
+    let identity = detection.identity.clone();
+    let resolved = registry::resolve_detection(detection)?;
     // Identification errors only mean "not offered": a profile never fails
     // merely because a drive is unsupported.
     let mut recovery_errors = Vec::new();
@@ -487,12 +589,12 @@ pub fn profile_on(dev: &mut dyn platform::ScsiDevice) -> Result<DriveProfile> {
 
 /// The drive's `info` rows, without showing them.
 pub fn details(device: &str) -> Result<crate::report::Report> {
-    crate::diagnostics::run("details", || {
+    crate::user_error::read_only(crate::diagnostics::run("details", || {
         let selector = resolve_device(Some(device))?;
         let mut dev = platform::open(&selector, false)?;
         let backend = resolved_backend(dev.as_mut())?;
-        Ok(engine::info_report(dev.as_mut(), backend).report)
-    })
+        Ok(engine::info_report(dev.as_mut(), backend)?.report)
+    }))
 }
 
 /// Print the optical drives, by the name or id every operation accepts.
@@ -523,9 +625,19 @@ pub fn backup_with_replace(
     dump: bool,
     replace: bool,
 ) -> Result<()> {
-    crate::diagnostics::run("backup/dump", || {
+    crate::user_error::read_only(crate::diagnostics::run("backup/dump", || {
         backup_with_replace_inner(device, out, dump, replace)
-    })
+            .map_err(|error| backup_error(error, dump))
+    }))
+}
+
+fn backup_error(error: anyhow::Error, dump: bool) -> anyhow::Error {
+    let error = crate::user_error::explain(error, crate::user_error::IssueCode::BackupFailed);
+    if dump {
+        error
+    } else {
+        error.context(crate::user_error::BackupAttempt)
+    }
 }
 
 fn backup_with_replace_inner(
@@ -602,7 +714,8 @@ fn flash_inner(args: FlashOptions, confirm: &mut dyn Confirm) -> Result<UpdateOu
     if args.execute && !args.acknowledged_risk {
         return Err(UpdateFailure::before_write(
             "risk acknowledgement",
-            anyhow::anyhow!("refusing to flash without acknowledging the risk"),
+            anyhow::anyhow!("refusing to flash without acknowledging the risk")
+                .context(crate::user_error::IssueCode::Acknowledgement),
         ));
     }
     let (mut dev, handler, req) = open_flash(&args)
@@ -641,22 +754,27 @@ fn open_flash(
 )> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
-    anyhow::ensure!(
-        args.current.is_some() || args.current_member.is_none(),
-        "--current-member requires --current"
-    );
+    if args.current.is_none() && args.current_member.is_some() {
+        return Err(anyhow::anyhow!("--current-member requires --current")
+            .context(crate::user_error::IssueCode::CommandOptions));
+    }
     let current = args
         .current
         .as_ref()
         .map(|path| current_firmware_image(&read_capped(path)?, args.current_member.as_deref()))
         .transpose()?;
+    if let Some(current) = &current {
+        check_supplied_family(current, &input)?;
+    }
     let selector = resolve_device(args.device.as_deref())?;
     let mut dev = platform::open(&selector, args.execute)?;
     let handler = resolve_capable(dev.as_mut(), |c| c.flash)?;
-    anyhow::ensure!(
-        current.is_none() || handler.flash().is_some_and(|f| f.accepts_current()),
-        "this flash backend does not accept a Current firmware reference"
-    );
+    if current.is_some() && !handler.flash().is_some_and(|f| f.accepts_current()) {
+        return Err(anyhow::anyhow!(
+            "this flash backend does not accept a Current firmware reference"
+        )
+        .context(crate::user_error::IssueCode::CommandOptions));
+    }
     let input_format = registry::update_input_format(handler, &args.input, &input)?
         .context("backend reads no firmware files")?;
     let drive_model = handler
@@ -696,6 +814,14 @@ impl Confirm for Preconfirmed {
 pub struct FlashSheet {
     /// The authorized plan as text, with the saved backup's `backup:` line.
     pub plan: Vec<String>,
+    /// Unclassified rows and requirements remain prominent by default.
+    pub notices: Vec<String>,
+    /// Only producer-declared optional technical information.
+    pub technical_details: Vec<String>,
+    /// Engine evidence of an actually saved rollback artifact.
+    pub saved_backup: Option<PathBuf>,
+    /// Explicitly authorized absence of rollback, never inferred from a path.
+    pub backup_waived: bool,
     /// Cautions from authorization (e.g. a generation barrier).
     pub warnings: Vec<String>,
     /// What the user confirms, when the backend words it.
@@ -711,14 +837,58 @@ impl FlashSheet {
             .iter()
             .map(|line| engine::render_plan_line(line, plan.backup()))
             .collect();
+        let mut notices = Vec::new();
+        let mut technical_details = Vec::new();
+        let mut warnings = plan.warnings.clone();
+        fn collect(
+            line: &PlanLine,
+            detail: bool,
+            backup: &str,
+            notices: &mut Vec<String>,
+            technical: &mut Vec<String>,
+            warnings: &mut Vec<String>,
+        ) {
+            match line {
+                PlanLine::Detail(line) => collect(line, true, backup, notices, technical, warnings),
+                PlanLine::Spaced(line) => {
+                    collect(line, detail, backup, notices, technical, warnings)
+                }
+                PlanLine::Warning(text) => warnings.push(text.clone()),
+                // The GUI renders a saved path from evidence, or an explicit waiver warning.
+                PlanLine::Backup => {}
+                line => {
+                    let text = engine::render_plan_line(line, backup);
+                    let destination = if detail { technical } else { notices };
+                    destination.extend(
+                        text.lines()
+                            .filter(|s| !s.trim().is_empty())
+                            .map(str::to_owned),
+                    );
+                }
+            }
+        }
+        for line in plan.plan.notes.iter().chain(&plan.plan.after_backup) {
+            collect(
+                line,
+                false,
+                plan.backup(),
+                &mut notices,
+                &mut technical_details,
+                &mut warnings,
+            );
+        }
         Self {
+            notices,
+            technical_details,
+            saved_backup: plan.saved_backup().map(Path::to_path_buf),
+            backup_waived: plan.backup_waived(),
             plan: text
                 .iter()
                 .flat_map(|t| t.lines())
                 .filter(|l| !l.trim().is_empty())
                 .map(str::to_owned)
                 .collect(),
-            warnings: plan.warnings.clone(),
+            warnings,
             confirmation: plan.confirmation.clone(),
         }
     }
@@ -729,20 +899,24 @@ impl FlashSheet {
 /// size validation runs. The cap is far above any real firmware/backup artifact
 /// (largest Pioneer envelope is ~4.5 MiB; an MTK image 2 MiB).
 pub fn read_capped(path: &Path) -> Result<Vec<u8>> {
+    read_capped_file(path, std::fs::File::open(path)?)
+}
+
+fn read_capped_file(path: &Path, file: std::fs::File) -> Result<Vec<u8>> {
     use std::io::Read;
     const MAX_INPUT: u64 = 64 * 1024 * 1024;
     crate::diagnostics::record(format!(
         "input file: opening path={path:?} maximum_bytes={MAX_INPUT}"
     ));
-    let file = std::fs::File::open(path)?;
     let mut buf = Vec::new();
     file.take(MAX_INPUT + 1).read_to_end(&mut buf)?;
     if buf.len() as u64 > MAX_INPUT {
-        bail!(
+        return Err(anyhow::anyhow!(
             "input {} exceeds the {} MiB cap for a firmware file; refusing to load",
             path.display(),
             MAX_INPUT / (1024 * 1024)
-        );
+        )
+        .context(crate::user_error::IssueCode::FirmwareInvalid));
     }
     use sha2::{Digest, Sha256};
     crate::diagnostics::record(format!(
@@ -777,6 +951,37 @@ fn default_backup_path(input: &Path, extension: &str) -> Option<PathBuf> {
 #[path = "workflow_tests.rs"]
 mod tests;
 
+/// Reject proven file-to-file family mismatches before contacting any drive.
+fn check_supplied_family(current: &[u8], target: &[u8]) -> Result<()> {
+    let Some((backend, _)) = registry::recognize(current)? else {
+        return Ok(());
+    };
+    if let Some((selected, _)) = registry::recognize(target)? {
+        if selected.descriptor().id != backend.descriptor().id {
+            return Err(crate::user_error::IssueCode::IncompatibleFirmware.into());
+        }
+    }
+    let Some(files) = backend.files() else {
+        return Ok(());
+    };
+    if let Some(((installed, installed_model), (selected, target_model))) = files
+        .family_evidence(current)
+        .zip(files.family_evidence(target))
+    {
+        if installed != selected {
+            return Err(crate::backend::HardwareMismatch {
+                installed_model,
+                target_model,
+                source: anyhow::anyhow!(
+                    "provided Current family {installed} differs from selected family {selected}"
+                ),
+            }
+            .into());
+        }
+    }
+    Ok(())
+}
+
 /// Receiver reference used by Recovery. Reading the drive is always explicit.
 #[derive(Clone, Debug)]
 pub enum CurrentFirmware {
@@ -805,38 +1010,157 @@ pub struct RecoveryOptions {
     pub execute: bool,
     /// Explicit acknowledgement of firmware-update risk.
     pub acknowledged_risk: bool,
-    /// Explicit Recovery-only override of the firmware family check.
+    /// Explicitly permit a known hardware-family mismatch during Recovery only.
     pub bypass_family_check: bool,
 }
 
-/// Recover without automatic backups or installed-versus-target policy gates.
+/// Prepare once and recover without automatic backups. Backend recovery admission
+/// checks and the declared family-override capability remain in force.
 pub fn recover(args: RecoveryOptions) -> Result<UpdateOutcome> {
     crate::diagnostics::run("recovery", || {
-        crate::diagnostics::record(format!(
-            "Recovery family-check override requested: {}",
-            args.bypass_family_check
-        ));
+        let execute = args.execute;
+        let acknowledged_risk = args.acknowledged_risk;
+        let prepared = prepare_recovery(args)?;
+        if execute {
+            execute_recovery(prepared, acknowledged_risk)
+        } else {
+            Ok(UpdateOutcome::Planned)
+        }
+    })
+}
+
+/// A single-use recovery session; clones share the same consumption guard.
+#[derive(Clone, Default)]
+pub struct PreparedRecovery(Arc<std::sync::Mutex<Option<RecoverySession>>>);
+
+/// Equality identifies the same retained session, including clones after consumption.
+impl PartialEq for PreparedRecovery {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for PreparedRecovery {}
+
+struct RecoverySession {
+    selector: String,
+    backend: &'static dyn Backend,
+    identity: crate::backend::Identity,
+    update: Box<dyn crate::backend::PreparedRecoveryUpdate>,
+}
+
+impl std::fmt::Debug for PreparedRecovery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreparedRecovery").finish_non_exhaustive()
+    }
+}
+
+impl PreparedRecovery {
+    fn take(&self) -> Result<RecoverySession> {
+        (|| {
+            self.0
+                .lock()
+                .map_err(|_| anyhow::Error::new(crate::user_error::IssueCode::PreparationExpired))?
+                .take()
+                .context(crate::user_error::IssueCode::PreparationExpired)
+        })()
+        .map_err(|e| UpdateFailure::before_write("prepared recovery", e))
+    }
+}
+
+/// Load recovery inputs once, keeping the executable envelopes alive through consent.
+pub fn prepare_recovery(args: RecoveryOptions) -> Result<PreparedRecovery> {
+    crate::diagnostics::run("recovery preparation", || {
         let mut input = open_recovery(&args)
             .map_err(|error| UpdateFailure::before_write("recovery precheck", error))?;
-        engine::recover_identified(
+        let facet = input
+            .backend
+            .recovery()
+            .context(crate::user_error::IssueCode::UnsupportedDrive)
+            .map_err(|e| UpdateFailure::before_write("recovery capability checks", e))?;
+        if args.bypass_family_check && !facet.supports_family_override() {
+            return Err(UpdateFailure::before_write(
+                "recovery capability checks",
+                crate::backend::UnsupportedFamilyOverride.into(),
+            ));
+        }
+        let update = facet
+            .prepare(
+                &mut ReadDevice::for_backend(input.dev.as_mut(), input.backend),
+                &input.receiver,
+                input.current.as_deref(),
+                &input.target,
+                args.bypass_family_check,
+            )
+            .map_err(|e| {
+                UpdateFailure::before_write(
+                    "recovery preparation",
+                    crate::user_error::explain(e, crate::user_error::IssueCode::FirmwareInvalid),
+                )
+            })?;
+        let identity = input.backend.identity(&mut ReadDevice::for_backend(
             input.dev.as_mut(),
             input.backend,
-            Some(input.receiver),
-            input.current.as_deref(),
-            &input.target,
-            engine::RecoveryExecution {
-                execute: args.execute,
-                acknowledged_risk: args.acknowledged_risk,
-                bypass_family_check: args.bypass_family_check,
+        ));
+        Ok(PreparedRecovery(Arc::new(std::sync::Mutex::new(Some(
+            RecoverySession {
+                selector: input.selector,
+                backend: input.backend,
+                identity,
+                update,
             },
-        )
-        .inspect(|outcome| {
-            crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
-        })
+        )))))
+    })
+}
+
+/// Consume a prepared session after consent, using only lightweight identity reads.
+pub fn execute_recovery(
+    prepared: PreparedRecovery,
+    acknowledged_risk: bool,
+) -> Result<UpdateOutcome> {
+    crate::diagnostics::run("recovery execution", || {
+        if !acknowledged_risk {
+            return Err(UpdateFailure::before_write(
+                "risk acknowledgement",
+                crate::user_error::IssueCode::Acknowledgement.into(),
+            ));
+        }
+        let session = prepared.take()?;
+        let mut dev = platform::open(&session.selector, true).map_err(|e| {
+            UpdateFailure::before_write(
+                "receiver revalidation",
+                e.context(crate::user_error::IssueCode::Connection),
+            )
+        })?;
+        execute_recovery_on(dev.as_mut(), session)
+    })
+}
+
+fn execute_recovery_on(
+    dev: &mut dyn platform::ScsiDevice,
+    session: RecoverySession,
+) -> Result<UpdateOutcome> {
+    let observed = session
+        .backend
+        .identity(&mut ReadDevice::for_backend(dev, session.backend));
+    if observed.vendor.is_empty()
+        || observed.product.is_empty()
+        || observed.vendor != session.identity.vendor
+        || observed.product != session.identity.product
+        || observed.revision != session.identity.revision
+        || observed.banner != session.identity.banner
+    {
+        return Err(UpdateFailure::before_write(
+            "receiver revalidation",
+            crate::user_error::IssueCode::DriveChanged.into(),
+        ));
+    }
+    engine::execute_prepared_recovery(dev, session.update.as_ref()).inspect(|outcome| {
+        crate::diagnostics::record(format!("UPDATE OUTCOME: {outcome:?}"));
     })
 }
 
 struct RecoveryInput {
+    selector: String,
     dev: Box<dyn platform::ScsiDevice>,
     backend: &'static dyn Backend,
     receiver: crate::backend::RecoveryTarget,
@@ -846,7 +1170,7 @@ struct RecoveryInput {
 
 fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
     if args.execute && !args.acknowledged_risk {
-        bail!("refusing recovery without acknowledging the risk");
+        return Err(crate::user_error::IssueCode::Acknowledgement.into());
     }
     crate::diagnostics::record(format!("recovery options: {args:?}"));
     let input = read_capped(&args.input)?;
@@ -861,6 +1185,11 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
         }
         CurrentFirmware::ReadFromDrive | CurrentFirmware::NotRequired => None,
     };
+    if !args.bypass_family_check {
+        if let Some(current) = &supplied {
+            check_supplied_family(current, &target)?;
+        }
+    }
     let candidates: Vec<_> = match supplied.as_deref() {
         Some(current) => vec![current_recovery_backend(current)?],
         None => registry::backends().collect(),
@@ -880,10 +1209,14 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
             supplied.as_deref(),
         )? {
             if facet.requires_current() && matches!(args.current, CurrentFirmware::NotRequired) {
-                bail!("this recovery backend requires --current or --read-from-drive");
+                return Err(anyhow::anyhow!(
+                    "this recovery backend requires --current or --read-from-drive"
+                )
+                .context(crate::user_error::IssueCode::CommandOptions));
             }
             registry::update_input_format(backend, &args.input, &input)?;
             return Ok(RecoveryInput {
+                selector,
                 dev,
                 backend,
                 receiver,
@@ -893,25 +1226,37 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
         }
         refusal.get_or_insert(facet.unidentified());
     }
-    bail!(refusal.unwrap_or("no protocol backend offers recovery for this drive"))
+    Err(
+        anyhow::anyhow!(refusal.unwrap_or("no protocol backend offers recovery for this drive"))
+            .context(crate::user_error::IssueCode::UnsupportedDrive),
+    )
 }
 
 /// Select exactly one member from a package with independent recovery images.
 pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
-    crate::package::recovery_target(input, member)
+    crate::package::recovery_target(input, member).map_err(|error| {
+        crate::user_error::explain(error, crate::user_error::IssueCode::FirmwareInvalid)
+    })
 }
 
 /// Resolve a Current reference without ever treating the target as installed.
 pub fn current_firmware_image(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
     if input.get(257..262) == Some(b"ustar") {
-        recovery_target(input, member)
+        crate::package::recovery_target(input, member)
             .context("selecting Current firmware: use --current-member for a paired TAR")
+            .map_err(|error| {
+                crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+            })
     } else {
-        anyhow::ensure!(
-            member.is_none(),
-            "--current-member requires a Current TAR package"
-        );
-        recovery_target(input, None)
+        if member.is_some() {
+            return Err(
+                anyhow::anyhow!("--current-member requires a Current TAR package")
+                    .context(crate::user_error::IssueCode::CommandOptions),
+            );
+        }
+        crate::package::recovery_target(input, None).map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::CurrentInvalid)
+        })
     }
 }
 
@@ -946,8 +1291,15 @@ pub fn recovery_supports_family_override(profile: &DriveProfile) -> bool {
 
 /// Package a standalone firmware image without opening a drive or overwriting output.
 pub fn package_image(input: &Path, output: &Path) -> Result<()> {
+    crate::user_error::read_only(crate::diagnostics::run("package", || {
+        package_image_inner(input, output)
+    }))
+}
+
+fn package_image_inner(input: &Path, output: &Path) -> Result<()> {
     use std::io::Write;
-    let bytes = crate::package::wrap_image(read_capped(input)?)?;
+    let bytes = crate::package::wrap_image(read_capped(input)?)
+        .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

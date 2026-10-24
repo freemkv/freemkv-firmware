@@ -12,7 +12,7 @@
 
 use std::any::Any;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
@@ -91,8 +91,11 @@ impl FileFormat {
     pub fn ensure_update_input(&self) -> Result<()> {
         anyhow::ensure!(
             self.update_input,
-            "{} is inspection-only; use a TAR package for Pioneer updates",
-            self.label
+            anyhow::anyhow!(
+                "{} is inspection-only; use a TAR package for Pioneer updates",
+                self.label
+            )
+            .context(crate::user_error::IssueCode::UnsupportedFirmware)
         );
         Ok(())
     }
@@ -171,19 +174,13 @@ pub(crate) fn decode_identity(data: &[u8]) -> Result<Identity> {
 
 /// Read standard INQUIRY identity. Vendor ROM reads belong to a matched
 /// protocol backend, never to the common identity path. A failed INQUIRY still
-/// yields an empty identity (callers keep classifying), but is reported loudly
-/// so a permission/transport fault is not mistaken for an unsupported drive.
+/// yields an empty identity for legacy metadata callers and records the cause.
+/// Use `try_read_identity` when identification is required for the operation.
 pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
     match try_read_identity(dev) {
         Ok(id) => id,
         Err(error) => {
-            eprintln!(
-                "{}",
-                crate::style::amber(&format!(
-                    "warning: could not read the drive identity ({error:#}); check device \
-                     permissions/connection — the drive may be reported as unsupported"
-                ))
-            );
+            crate::diagnostics::record(format!("could not read drive identity: {error:#}"));
             Identity::default()
         }
     }
@@ -352,6 +349,7 @@ pub fn unsupported_family_error(family: &str) -> anyhow::Error {
          Identification probes may have been sent; no firmware write or backup file was produced. \
          Run `freemkv-flash info DEVICE` to record the identity before adding a backend."
     )
+    .context(crate::user_error::IssueCode::UnsupportedDrive)
 }
 
 // ---- The trait and its facets -----------------------------------------------
@@ -374,7 +372,17 @@ pub trait Backend: Sync + 'static {
 
     /// INQUIRY identity plus any backend banner, for `info` and backup naming.
     fn identity(&self, dev: &mut ReadDevice<'_>) -> Identity {
-        read_identity(dev)
+        self.try_identity(dev).unwrap_or_else(|error| {
+            crate::diagnostics::record(format!("could not read backend identity: {error:#}"));
+            Identity::default()
+        })
+    }
+
+    /// Required identity, preserving a failed read instead of declaring the drive unsupported.
+    fn try_identity(&self, dev: &mut ReadDevice<'_>) -> Result<Identity> {
+        try_read_identity(dev).map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::Connection)
+        })
     }
 
     /// The data-out commands this backend's read-only operations may send
@@ -438,6 +446,11 @@ pub struct Recognized {
 
 /// File recognition and description.
 pub trait FileFacet {
+    /// Offline family evidence for an early refusal when Current is supplied.
+    /// Missing evidence leaves the complete admission checks mandatory.
+    fn family_evidence(&self, _bytes: &[u8]) -> Option<(String, String)> {
+        None
+    }
     /// This backend's claim on `bytes`, if any. The registry resolves claims
     /// once for flash input, `check`, `info <file>` and inspection.
     fn recognize(&self, bytes: &[u8]) -> Option<Recognized>;
@@ -528,6 +541,9 @@ pub enum PlanLine {
     Block(String),
     /// A line set off from the previous one by a blank line.
     Spaced(Box<PlanLine>),
+    /// Optional technical presentation; terminal output is unchanged.
+    /// Nested warnings must remain visible in every front-end.
+    Detail(Box<PlanLine>),
 }
 
 /// A pre-backup flash plan: what to show, plus backend-private state that only
@@ -574,6 +590,8 @@ pub struct AuthorizedPlan {
     /// What the user confirms; `None` needs no further confirmation.
     pub confirmation: Option<String>,
     backup: String,
+    saved_backup: Option<PathBuf>,
+    backup_waived: bool,
     state: Box<dyn Any + Send>,
 }
 
@@ -585,6 +603,8 @@ impl AuthorizedPlan {
             warnings: Vec::new(),
             confirmation: None,
             backup: String::new(),
+            saved_backup: None,
+            backup_waived: false,
             state: Box::new(state),
         }
     }
@@ -597,6 +617,21 @@ impl AuthorizedPlan {
 
     pub(crate) fn set_backup(&mut self, summary: &str) {
         self.backup = summary.to_string();
+    }
+
+    /// Actual saved artifact evidence, populated only by the engine.
+    pub fn saved_backup(&self) -> Option<&Path> {
+        self.saved_backup.as_deref()
+    }
+
+    /// Whether the engine obtained explicit consent to proceed without rollback.
+    pub fn backup_waived(&self) -> bool {
+        self.backup_waived
+    }
+
+    pub(crate) fn set_backup_evidence(&mut self, saved: Option<&SavedBackup>) {
+        self.saved_backup = saved.map(|backup| backup.path().to_path_buf());
+        self.backup_waived = saved.is_none();
     }
 
     /// The backend state, when this authorization was made by that backend.
@@ -851,6 +886,10 @@ pub struct FlashPreview {
 
 /// Firmware update in two read-only stages, then the write.
 pub trait FlashFacet {
+    /// A backend must explicitly support execution without installed rollback evidence.
+    fn can_proceed_without_backup(&self) -> bool {
+        false
+    }
     /// Whether Flash accepts a separate installed-firmware receiver reference.
     fn accepts_current(&self) -> bool {
         false
@@ -924,8 +963,19 @@ impl std::fmt::Display for UnsupportedFamilyOverride {
 }
 impl std::error::Error for UnsupportedFamilyOverride {}
 
-/// Recovery without automatic backups or installed-versus-target policy.
+/// Recovery without automatic backups or Flash-only tray gates. Each backend
+/// owns its recovery admission policy and declares any explicit family override.
 pub trait RecoveryFacet {
+    /// Prepare once; the returned object owns every loaded firmware byte.
+    fn prepare(
+        &self,
+        dev: &mut ReadDevice<'_>,
+        receiver: &RecoveryTarget,
+        current: Option<&[u8]>,
+        target: &[u8],
+        bypass_family_check: bool,
+    ) -> Result<Box<dyn PreparedRecoveryUpdate>>;
+
     /// A classified drive may need a Current file before its receiver can be identified.
     fn accepts_current_for_identification(&self) -> bool {
         false
@@ -976,6 +1026,12 @@ pub trait RecoveryFacet {
         current: Option<&[u8]>,
         target: &[u8],
     ) -> Result<UpdateOutcome>;
+}
+
+/// Backend-owned recovery state retained from preparation through confirmation.
+pub trait PreparedRecoveryUpdate: Send {
+    /// Execute the exact prepared bytes, then verify the written firmware.
+    fn execute(&self, dev: &mut WriteDevice<'_>) -> Result<UpdateOutcome>;
 }
 
 /// Firmware inspection.

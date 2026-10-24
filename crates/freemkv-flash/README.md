@@ -98,10 +98,11 @@ reports gaps and is not automatically a flashable update image.
 ## Recovery
 
 Flash and Recovery share backend-owned input rules: MediaTek accepts standalone
-BIN images and TAR packages; Pioneer accepts TAR packages. Bare Pioneer envelopes
-remain available for inspection. For a paired MediaTek TAR, Recovery requires
-`--member` to select exactly one image; `--current-member` selects the installed
-image independently when Current is also a paired TAR.
+BIN images and TAR packages; Pioneer accepts TAR packages. Pioneer Inspect and
+Compare require TAR packages containing the firmware components. For a paired
+MediaTek TAR, Recovery requires `--member` to select exactly one image;
+`--current-member` selects the installed image independently when Current is also
+a paired TAR.
 
 
 ```sh
@@ -113,8 +114,13 @@ freemkv-flash recover E: --read-from-drive -i target.tar --execute --i-understan
 
 For Pioneer, choose exactly one Current source. Unsupported drives are rejected before firmware reads or update commands. Both packages must contain Pioneer Kernel and
 Normal. A supplied Current file avoids firmware memory reads; identity/status
-queries still run. Recovery makes no backups or firmware readback verification and bypasses
-installed-versus-target compatibility policy. It derives receiver credentials from
+queries still run. Recovery creates no automatic backup and verifies the target
+independently after writing. Known supplied-Current family mismatches are refused,
+and Pioneer retains its installed-family gate by default. The explicit Pioneer-only
+`--bypass-family-check` option can bypass that family gate during Recovery; it does
+not bypass receiver binding, chip checks, integrity or target verification. The GUI
+offers it only after a proven mismatch and requires a fresh typed risk confirmation.
+MediaTek does not support this override. Recovery derives receiver credentials from
 Current, skips update entry if already in kernel mode, and sends both target
 components. Required integrity, target authentication and write-error checks remain.
 An unsigned backup can be a Current reference, but not an authenticated target.

@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use objc2::{DefinedClass, MainThreadOnly};
+use objc2::{DefinedClass, MainThreadOnly, Message};
 use objc2_app_kit::{
     NSApplication, NSBitmapFormat, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSMenu,
     NSView, NSWindow,
@@ -41,6 +41,7 @@ pub(super) fn run(c: &Controller, dir: &Path) {
         }),
     );
 
+    registration_checks(c, &mut g);
     language_checks(c, dir, &content, &mut g);
     analysis_header_languages(c, &mut g);
 
@@ -76,17 +77,42 @@ pub(super) fn run(c: &Controller, dir: &Path) {
         );
     }
 
+    firmware_pickers(c, &mut g);
     c.send(Input::SelectTask(Task::Flash));
-    escape_closes_only_the_picker(c, &mut g);
     let first = sheet(c, dir, true, &mut g);
     let reopened = sheet(c, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     backup_question(c, dir, &mut g);
+    report_prompt(c, dir, &mut g);
     c.with_app(|a| g.no_drive_io("end", a));
     std::process::exit(g.finish(dir));
 }
 
 /// Select languages through AppKit's real menu and read the controls that previously stayed English.
+fn registration_checks(c: &Controller, g: &mut Gate) {
+    c.send(Input::SelectTask(Task::Flash));
+    c.send(Input::SelectTask(Task::Info));
+    let counts = || {
+        (
+            c.ivars().actions.borrow().len(),
+            c.ivars().checks.borrow().len(),
+        )
+    };
+    let before = counts();
+    for _ in 0..32 {
+        c.send(Input::SelectTask(Task::Flash));
+        c.send(Input::SelectTask(Task::Info));
+    }
+    g.check(
+        "control-registrations-bounded",
+        counts() == before,
+        format!(
+            "removed panels release tags: before={before:?}, after={:?}",
+            counts()
+        ),
+    );
+}
+
 fn language_checks(c: &Controller, dir: &Path, content: &NSView, g: &mut Gate) {
     use crate::localization::{Language, Preferences};
     let original = c.with_app(|app| {
@@ -192,6 +218,7 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     run.opened = main
         .attachedSheet()
         .is_some_and(|s| std::ptr::eq(&*s, &*sheet_window));
+    disclosure(c, dir, g);
     let ack = c.ivars().alert_ack.borrow().clone();
     let confirm = c.ivars().alert_confirm.borrow().clone();
     run.unticked = ack.as_ref().map(|b| b.state() == 0);
@@ -203,8 +230,10 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             let acked = c.view().confirm.is_some_and(|v| v.ack_checked);
             run.ticked = Some((acked, confirm.as_ref().map(|b| b.isEnabled())));
             run.box_reads_ticked = Some(ack.state() == 1);
+            disclosure(c, dir, g);
         }
     }
+    sheet_language_checks(c, g);
     let name = if tick { "sheet" } else { "sheet-reopened" };
     g.save(
         dir,
@@ -220,8 +249,21 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
         .buttons()
         .iter()
         .find(|b| b.title().to_string() == cancel_text);
-    if let Some(b) = cancel {
-        unsafe { b.performClick(None) };
+    if tick {
+        if let Some(b) = cancel {
+            unsafe { b.performClick(None) };
+        }
+    } else {
+        let enter = ns("\r");
+        let key = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+            NSEventType::KeyDown, NSPoint::new(0.0, 0.0), NSEventModifierFlags::empty(),
+            0.0, sheet_window.windowNumber(), None, &enter, &enter, false, 36,
+        );
+        g.check(
+            "confirmation-return-cancels",
+            key.is_some_and(|key| sheet_window.performKeyEquivalent(&key)),
+            "Return activates Cancel after disclosure relayout",
+        );
     }
     let until = Instant::now() + Duration::from_secs(3);
     while Instant::now() < until && !closed(c, &main) {
@@ -231,14 +273,185 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
     run
 }
 
+/// The disclosure is native-local state: even opening long Unicode technical text
+/// cannot acknowledge risk, remove a warning or change any model input.
+fn sheet_language_checks(c: &Controller, g: &mut Gate) {
+    let alert = c.ivars().alert.borrow().clone().unwrap();
+    let old_ack = c.view().confirm.unwrap().ack_checked;
+    let disclosure = c.ivars().alert_details.borrow().clone().unwrap().0;
+    unsafe { disclosure.performClick(None) };
+    c.send(Input::SetLanguage(crate::localization::Language::Fr));
+    let expected = c.view().confirm.unwrap();
+    let actual = c.ivars().alert.borrow().clone().unwrap();
+    let accessory = actual.accessoryView().unwrap();
+    let danger = accessory.subviews().iter().any(|view| {
+        view.downcast_ref::<super::NSTextField>()
+            .is_some_and(|label| label.stringValue().to_string() == expected.danger)
+    });
+    let ack = c.ivars().alert_ack.borrow().clone().unwrap();
+    let details = c.ivars().alert_details.borrow().clone().unwrap();
+    g.check(
+        "confirmation-language-refresh",
+        std::ptr::eq(&*actual, &*alert)
+            && actual.messageText().to_string() == expected.title
+            && actual.informativeText().to_string() == expected.details.join("\n")
+            && actual.buttons().objectAtIndex(0).title().to_string() == expected.confirm.text
+            && actual.buttons().objectAtIndex(1).title().to_string() == expected.cancel.text
+            && danger
+            && ack.title().to_string() == expected.ack_text
+            && (ack.state() != 0) == old_ack
+            && expected.ack_checked == old_ack
+            && !details.1.isHidden()
+            && details.0.title().to_string() == expected.hide_details_label
+            && actual
+                .buttons()
+                .objectAtIndex(0)
+                .keyEquivalent()
+                .to_string()
+                .is_empty()
+            && actual
+                .buttons()
+                .objectAtIndex(1)
+                .keyEquivalent()
+                .to_string()
+                == "\r",
+        "same open sheet follows language while preserving consent, disclosure and Cancel default",
+    );
+    c.send(Input::SetLanguage(crate::localization::Language::En));
+    let disclosure = c.ivars().alert_details.borrow().clone().unwrap().0;
+    unsafe { disclosure.performClick(None) };
+}
+
+fn disclosure(c: &Controller, dir: &Path, g: &mut Gate) {
+    let details = c.ivars().alert_details.borrow().clone();
+    let alert = c.ivars().alert.borrow().clone().unwrap();
+    g.check(
+        "confirmation-details-control",
+        details.is_some(),
+        "technical plan has a Details control",
+    );
+    let Some((button, scroll)) = details else {
+        return;
+    };
+    let before = c.view();
+    let confirm = before.confirm.as_ref().unwrap();
+    g.check(
+        "confirmation-details-start-collapsed",
+        scroll.isHidden() && button.title().to_string() == confirm.details_label,
+        "a new sheet starts collapsed",
+    );
+    let height = alert.window().frame().size.height;
+    for expanded in [true, false] {
+        unsafe { button.performClick(None) };
+        settle(c, SETTLE);
+        let warnings_visible = alert.accessoryView().is_some_and(|accessory| {
+            confirm.warnings.iter().all(|warning| {
+                accessory.subviews().iter().any(|view| {
+                    view.downcast_ref::<super::NSTextField>()
+                        .is_some_and(|label| {
+                            !label.isHidden() && label.stringValue().to_string() == *warning
+                        })
+                })
+            })
+        });
+        let content = scroll.documentView().is_some_and(|document| {
+            document.subviews().iter().any(|view| {
+                view.downcast_ref::<super::NSTextField>()
+                    .is_some_and(|text| {
+                        text.stringValue().to_string() == confirm.technical_details.join("\n\n")
+                            && !text.isEditable()
+                    })
+            })
+        });
+        let iv = c.ivars();
+        let ack_unchanged = iv
+            .alert_ack
+            .borrow()
+            .as_ref()
+            .is_some_and(|ack| (ack.state() != 0) == confirm.ack_checked);
+        let write_unchanged = iv.alert_confirm.borrow().as_ref().is_some_and(|write| {
+            write.isEnabled() == confirm.confirm.enabled
+                && write.keyEquivalent().to_string().is_empty()
+        });
+        g.check(
+            if expanded {
+                "confirmation-details-expanded"
+            } else {
+                "confirmation-details-collapsed"
+            },
+            scroll.isHidden() != expanded
+                && content
+                && warnings_visible
+                && ack_unchanged
+                && write_unchanged
+                && c.view() == before
+                && button.title().to_string().as_str()
+                    == if expanded {
+                        &confirm.hide_details_label
+                    } else {
+                        &confirm.details_label
+                    },
+            "exact details, warnings, acknowledgement and write gate preserved",
+        );
+        g.check(
+            "confirmation-details-resizes",
+            if expanded {
+                alert.window().frame().size.height > height
+            } else {
+                (alert.window().frame().size.height - height).abs() < 1.0
+            },
+            "expanded text is scrollable; collapse restores the compact sheet",
+        );
+        if expanded {
+            g.check(
+                "confirmation-details-start-at-top",
+                scroll.contentView().bounds().origin.y.abs() < 1.0,
+                format!(
+                    "the first technical detail is immediately visible; clip {:?}",
+                    scroll.contentView().bounds()
+                ),
+            );
+        }
+        if expanded {
+            alert.window().display();
+            g.save(
+                dir,
+                "confirmation-details",
+                alert
+                    .window()
+                    .contentView()
+                    .and_then(|v| capture(&v))
+                    .as_ref(),
+            );
+        }
+    }
+}
+
 /// Open the flash file picker and cancel it through the panel's own `cancel:`: the picker
 /// must close and the main window must stay up (Escape once closed the window and quit the
 /// app). Then press Escape in the main window itself.
-fn escape_closes_only_the_picker(c: &Controller, g: &mut Gate) {
+fn firmware_pickers(c: &Controller, g: &mut Gate) {
+    let original = c.with_app(|app| app.profile.clone());
+    for (_, extensions) in gui_gate::PICKER_PROFILES {
+        c.with_app(|app| {
+            if let crate::ui::ProfileState::Ready(profile) = &mut app.profile {
+                profile.firmware_picker =
+                    crate::ui::FirmwarePickerFormats::prefer(extensions.to_vec());
+            }
+        });
+        for pick in gui_gate::FIRMWARE_PICKS {
+            escape_closes_only_the_picker(c, pick, g);
+            c.with_app(|app| g.no_drive_io(&format!("picker {pick:?}"), app));
+        }
+    }
+    c.with_app(|app| app.profile = original);
+}
+
+fn escape_closes_only_the_picker(c: &Controller, pick: Pick, g: &mut Gate) {
     let Some(main) = c.ivars().window.borrow().clone() else {
         return;
     };
-    c.send(Input::Choose(Pick::FlashFirmware));
+    c.send(Input::Choose(pick));
     settle(c, SETTLE);
     let picker = main.attachedSheet();
     g.check(
@@ -538,4 +751,122 @@ fn analysis_header_languages(c: &Controller, g: &mut Gate) {
         );
     }
     c.render_analysis(&c.view());
+}
+
+/// Exercise AppKit's actual multiline editor and sheet completion, with an inert
+/// model: Send consumes the draft but cannot start a browser or network worker.
+fn report_prompt(c: &Controller, dir: &Path, g: &mut Gate) {
+    use crate::localization::{get, Language};
+    let main = c.ivars().window.borrow().clone().unwrap();
+    let mut previous = String::new();
+    for (action, description) in [
+        ("cancel", "  日本語 🦀\nsecond line\n  "),
+        ("send", "Résumé\n描述 🦀\n"),
+        ("close", "closing\n保留 🦀"),
+        ("send-blank", ""),
+    ] {
+        c.send(Input::SubmitReport);
+        settle(c, SETTLE);
+        let alert = c.ivars().report_alert.borrow().clone();
+        g.check(
+            "report-prompt-opens",
+            alert.is_some() && main.attachedSheet().is_some(),
+            "report action opens a native sheet",
+        );
+        let Some(alert) = alert else {
+            return;
+        };
+        let editor = alert.accessoryView().and_then(|v| report_editor(&v));
+        g.check(
+            "report-multiline-editor",
+            editor.is_some(),
+            "native NSTextView in report accessory",
+        );
+        let Some(editor) = editor else {
+            return;
+        };
+        g.check(
+            "report-draft-restored",
+            editor.string().to_string() == previous,
+            action,
+        );
+        g.check(
+            "report-optional-description-label",
+            alert.accessoryView().is_some_and(|accessory| {
+                accessory.subviews().iter().any(|child| {
+                    child
+                        .downcast_ref::<super::NSTextField>()
+                        .is_some_and(|label| {
+                            label.stringValue().to_string() == "Description (optional)"
+                        })
+                })
+            }),
+            "exact English label on the actual accessory control",
+        );
+        if action == "cancel" {
+            g.save(
+                dir,
+                "report-prompt",
+                alert
+                    .window()
+                    .contentView()
+                    .and_then(|v| capture(&v))
+                    .as_ref(),
+            );
+        }
+        let buttons = alert.buttons();
+        g.check(
+            "report-controls-localized",
+            alert.messageText().to_string() == get(Language::En, "report.prompt_title")
+                && buttons.objectAtIndex(0).title().to_string() == get(Language::En, "report.send")
+                && buttons.objectAtIndex(1).title().to_string() == get(Language::En, "ui.cancel")
+                && buttons
+                    .objectAtIndex(0)
+                    .keyEquivalent()
+                    .to_string()
+                    .is_empty(),
+            "Send requires an explicit click; Return belongs to the multiline editor",
+        );
+        editor.setString(&ns(description));
+        // Pump while editing to exercise timer/render reentrancy without resetting text.
+        settle(c, SETTLE);
+        g.check(
+            "report-editor-keeps-unicode",
+            editor.string().to_string() == description,
+            action,
+        );
+        match action {
+            "close" => main.endSheet_returnCode(&alert.window(), 0),
+            "cancel" => unsafe { buttons.objectAtIndex(1).performClick(None) },
+            _ => unsafe { buttons.objectAtIndex(0).performClick(None) },
+        }
+        let until = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < until && main.attachedSheet().is_some() {
+            settle(c, Duration::from_millis(100));
+        }
+        settle(c, SETTLE);
+        let (draft, open) = c.with_app(|app| {
+            let (draft, open) = app.report_prompt_state();
+            (draft.to_owned(), open)
+        });
+        g.check(
+            &format!("report-{action}-retains-description"),
+            draft == description
+                && !open
+                && main.attachedSheet().is_none()
+                && c.ivars().report_alert.borrow().is_none(),
+            format!("draft={draft:?}; prompt open={open}"),
+        );
+        c.with_app(|app| g.no_drive_io(action, app));
+        previous = description.to_owned();
+    }
+}
+
+fn report_editor(view: &NSView) -> Option<objc2::rc::Retained<super::NSTextView>> {
+    if let Some(editor) = view.downcast_ref::<super::NSTextView>() {
+        return Some(editor.retain());
+    }
+    view.subviews()
+        .iter()
+        .find_map(|child| report_editor(&child))
 }

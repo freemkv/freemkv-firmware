@@ -62,7 +62,11 @@ pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
 
 /// Print the Pioneer bundle report for `image`, or `None` when it is not one.
 pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
-    let bundle = super::bundle::Bundle::from_tar_bytes(image).ok()?;
+    let bundle = super::bundle::Bundle::from_backup_tar_bytes(image).ok()?;
+    let kernel_only = bundle
+        .components
+        .iter()
+        .all(|component| component.role == super::bundle::Role::Kernel);
     {
         println!("{}", style::kv("family", "Pioneer"));
         if !bundle.source_name.is_empty() {
@@ -88,6 +92,12 @@ pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
             "{}",
             style::kv("components", &bundle.components.len().to_string())
         );
+        if kernel_only {
+            println!(
+                "{}",
+                style::kv("backup", "partial: Kernel only; Normal was not captured")
+            );
+        }
         let provenance = super::backup::package_provenance(image);
         println!(
             "{}",
@@ -120,7 +130,11 @@ pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
             "{}",
             style::kv(
                 "flash",
-                "live OEM write (gated: --execute --i-understand-risk, backup-first)",
+                if kernel_only {
+                    "not flashable: Normal component missing"
+                } else {
+                    "live OEM write (gated: --execute --i-understand-risk, backup-first)"
+                },
             )
         );
     }

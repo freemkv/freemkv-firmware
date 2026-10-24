@@ -17,11 +17,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use freemkv_flash::report::{self, Group};
-pub use freemkv_flash::workflow::FileOrigin;
 use freemkv_flash::workflow::{
     self, AuthorizedPlan, Control, CurrentFirmware, DriveChoice, Event, FlashOptions, FlashSheet,
     RecoveryOptions, Source, UpdateImpact,
 };
+pub use freemkv_flash::workflow::{FileOrigin, FirmwarePickerFormats};
 
 use crate::ops::{self, Job, Request, ResultView};
 use crate::support::Journal;
@@ -29,16 +29,16 @@ use crate::support::Journal;
 /// Shown wherever Recovery is offered or confirmed. Wording is part of the safety contract.
 pub const FORCE_WARNING: &str = "ui.recovery_skips_automatic_backups_and_some_compatib";
 /// The confirmation sheet's danger line.
-pub const FLASH_DANGER: &str = "ui.flashing_can_permanently_disable_the_drive_keep_it";
+pub const FLASH_DANGER: &str = "confirm.risk";
 /// The acknowledgement that must be ticked, fresh, before Flash or Recover is enabled.
-pub const RISK_ACK: &str = "ui.i_understand_and_want_to_update_this_drive";
+pub const RISK_ACK: &str = "confirm.ack";
 /// Under the progress bar while a job runs.
 pub const KEEP_CONNECTED: &str = "ui.keep_the_drive_connected_and_powered_until_this_fi";
 /// On the flash sheet: the backup is already saved, and cancelling is safe.
-pub const BACKUP_KEPT: &str = "ui.the_pre_flash_backup_is_saved_cancel_keeps_it_and_";
+pub const BACKUP_KEPT: &str = "confirm.cancel_saved";
 const CANCELLED: &str = "ui.cancelled_no_firmware_was_written";
-const WORKER_PANIC: &str = "ui.operation_worker_failed_unexpectedly_if_flashing_w";
-const WORKER_GONE: &str = "ui.the_worker_stopped_before_reporting_a_result_if_a_";
+#[cfg(test)]
+const WORKER_PANIC: &str = "errors.unexpected";
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
 const DIAGNOSTIC_REFRESH: Duration = Duration::from_millis(500);
 
@@ -100,7 +100,7 @@ pub(crate) struct Profile {
     pub(crate) backup_name: Option<String>,
     pub(crate) dump_name: Option<String>,
     /// File endings a flash to this drive accepts.
-    pub(crate) flash_extensions: Vec<&'static str>,
+    pub(crate) firmware_picker: FirmwarePickerFormats,
     /// Lines for the activity log, e.g. why Recovery is not offered.
     pub(crate) notes: Vec<String>,
 }
@@ -142,6 +142,18 @@ pub struct FileFilter {
     pub extensions: Vec<&'static str>,
 }
 
+impl FileFilter {
+    /// An invalid name or a list without literal suffixes means an unfiltered chooser.
+    pub fn validated(mut self) -> Option<Self> {
+        if self.name.trim().is_empty() || self.name.contains('\0') {
+            return None;
+        }
+        self.extensions
+            .retain(|suffix| FirmwarePickerFormats::valid_suffix(suffix));
+        (!self.extensions.is_empty()).then_some(self)
+    }
+}
+
 /// Work only a shell can do; the shell performs it and reports back through `Input`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Effect {
@@ -154,6 +166,10 @@ pub enum Effect {
     SaveFile {
         pick: Pick,
         file_name: String,
+    },
+    ReportPrompt {
+        summary: String,
+        description: String,
     },
     CopyText(String),
     /// Open an automatically saved diagnostic in the system text viewer.
@@ -181,6 +197,16 @@ pub enum Side {
     B,
 }
 
+/// A desktop action whose failure must be reported by the neutral model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShellFailure {
+    OpenLog,
+    #[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
+    Copy,
+    #[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
+    Confirmation,
+}
+
 /// Every user action a shell can forward.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Input {
@@ -190,6 +216,9 @@ pub enum Input {
     SelectTask(Task),
     Choose(Pick),
     Chosen(Pick, PathBuf),
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    DialogFailed(Pick, String),
+    ShellFailed(ShellFailure, String),
     SetCheck(CheckId, bool),
     ReadInfo,
     FlashNow,
@@ -208,6 +237,8 @@ pub enum Input {
     OpenDiagnostics,
     ViewLog,
     SubmitReport,
+    SendReport(String),
+    DismissReport(String),
     CancelReport,
     CloseDiagnostics,
     CopyDiagnostics,
@@ -447,7 +478,12 @@ pub const CLOSE_BLOCKED: &str = "ui.an_operation_is_still_running_keep_the_drive
 #[derive(Clone, Debug, PartialEq)]
 pub struct Confirm {
     pub title: String,
+    /// Decision facts and all unclassified requirements, always visible.
     pub details: Vec<String>,
+    /// Optional technical facts; disclosure never changes consent.
+    pub technical_details: Vec<String>,
+    pub details_label: String,
+    pub hide_details_label: String,
     pub danger: String,
     /// Cautions: a flash's authorization warnings, or the Recovery warning.
     pub warnings: Vec<String>,
@@ -656,6 +692,12 @@ fn translate_view(view: &mut View) {
             .details
             .iter_mut()
             .for_each(|text| translate(language, text));
+        translate(language, &mut confirm.details_label);
+        translate(language, &mut confirm.hide_details_label);
+        confirm
+            .technical_details
+            .iter_mut()
+            .for_each(|text| translate(language, text));
         translate(language, &mut confirm.danger);
         confirm
             .warnings
@@ -683,16 +725,6 @@ fn translate_view(view: &mut View) {
         }
     }
     if let Some(analysis) = &mut view.analysis {
-        let mut tree = (*analysis.tree).clone();
-        translate(language, &mut tree.title);
-        translate(language, &mut tree.heading);
-        tree.actions
-            .iter_mut()
-            .for_each(|button| translate_button(language, button));
-        tree.nodes
-            .iter_mut()
-            .for_each(|node| translate_node(language, node));
-        analysis.tree = Arc::new(tree);
         if let Some(notice) = &mut analysis.notice {
             translate(language, notice);
         }
@@ -703,12 +735,13 @@ fn translate_view(view: &mut View) {
 
 /// Messages from the worker thread.
 pub(crate) enum Msg {
+    PreparedRecovery(workflow::PreparedRecovery),
+    UserIssue(workflow::UserError),
     Event(Event),
     DriveAfter(String),
     FailureEvidence(workflow::UpdateFailure),
     RecoveryFamilyMismatch,
     AnalysisCancelled,
-    UserGuidance(String),
     PreviewCompatibilityPending(bool),
     Analysis(ResultView),
     /// A flash passed every gate after its backup; the worker waits for the
@@ -716,6 +749,7 @@ pub(crate) enum Msg {
     Authorized(FlashSheet, Sender<bool>),
     /// Backup capture failed; wait for an explicit human Yes or No.
     BackupUnavailable(String, Sender<bool>),
+    CapturedArtifact(Result<crate::support::ReportArtifact, String>),
     Done(Result<Option<workflow::UpdateOutcome>, String>),
 }
 
@@ -761,8 +795,15 @@ pub(crate) struct Pending {
 /// Called from the worker after each event so an event-driven shell repaints.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
+/// Report progress is distinct from its authoritative terminal result.
+enum ReportMsg {
+    Progress(String),
+    Diagnostic(String),
+    Finished(Result<String, String>),
+}
+
 /// Async file-origin result, tied to the chooser and path that requested it.
-type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
+type OriginReply = (Pick, PathBuf, Result<workflow::SelectedFileInfo, String>);
 
 /// The whole application state. The shells hold none of their own.
 pub struct App {
@@ -774,12 +815,22 @@ pub struct App {
     failure_evidence: Option<workflow::UpdateFailure>,
     analysis_cancelled: bool,
     preview_compatibility_pending: Option<bool>,
-    report_rx: Option<Receiver<Result<String, String>>>,
+    report_rx: Option<Receiver<ReportMsg>>,
+    report_prompt: Option<crate::support::BundleSource>,
+    report_description: String,
+    submitted_description: Option<String>,
     report_control: Option<crate::support::Submission>,
     artifact_in_progress: Option<crate::support::ReportArtifact>,
     report_artifact: Option<crate::support::ReportArtifact>,
     recovery_planning: Option<(Target, RecoveryOptions)>,
-    origin_rx: Vec<(Pick, PathBuf, Receiver<OriginReply>)>,
+    prepared_recovery: Option<workflow::PreparedRecovery>,
+    user_issue: Option<workflow::UserError>,
+    structured_progress: bool,
+    operation_may_write: bool,
+    origin_rx: Vec<(u64, Pick, PathBuf, Receiver<OriginReply>)>,
+    origin_pending: Vec<(u64, Pick, PathBuf)>,
+    origin_versions: [u64; 4],
+    origin_next: u64,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
     pub(crate) profile: ProfileState,
@@ -844,6 +895,8 @@ pub struct App {
     #[cfg(test)]
     pub(crate) dry_run: Option<Vec<(String, String, Job)>>,
     #[cfg(test)]
+    report_endpoint: Option<String>,
+    #[cfg(test)]
     pub(crate) worker: Option<Sender<Msg>>,
     #[cfg(test)]
     pub(crate) profile_worker: Option<Sender<Result<Profile, String>>>,
@@ -899,11 +952,21 @@ impl App {
             analysis_cancelled: false,
             preview_compatibility_pending: None,
             report_rx: None,
+            report_prompt: None,
+            report_description: String::new(),
+            submitted_description: None,
             report_control: None,
             artifact_in_progress: None,
             report_artifact: None,
             recovery_planning: None,
+            prepared_recovery: None,
+            user_issue: None,
+            structured_progress: false,
+            operation_may_write: false,
             origin_rx: Vec::new(),
+            origin_pending: Vec::new(),
+            origin_versions: [0; 4],
+            origin_next: 0,
             flash_origin: None,
             recovery_origin: None,
             profile: ProfileState::NoDrive,
@@ -959,6 +1022,8 @@ impl App {
             #[cfg(test)]
             dry_run: None,
             #[cfg(test)]
+            report_endpoint: None,
+            #[cfg(test)]
             worker: None,
             #[cfg(test)]
             profile_worker: None,
@@ -1010,8 +1075,8 @@ impl App {
                 )
             });
             let _ = tx.send(match profile {
-                Ok(result) => result.map_err(|e| format!("{e:#}")),
-                Err(_) => Err(WORKER_PANIC.into()),
+                Ok(result) => result.map_err(|e| workflow::user_error(&e).encoded()),
+                Err(_) => Err(worker_panic_issue(&Job::Info).encoded()),
             });
             if let Some(wake) = waker {
                 wake();
@@ -1037,6 +1102,7 @@ impl App {
             Err(error) => {
                 self.log
                     .push(format!("Could not read the drive's profile: {error}"));
+                self.failure = Some(error);
                 ProfileState::Failed
             }
         };
@@ -1053,8 +1119,39 @@ impl App {
         self.rx.is_some()
     }
 
+    /// A native event-loop failure retains any active operation's write evidence.
+    #[cfg(any(target_os = "windows", test))]
+    pub(crate) fn runtime_issue(&self) -> workflow::UserError {
+        if self.running() {
+            self.interrupted_operation_issue()
+        } else {
+            workflow::UserError {
+                id: "errors.unexpected",
+                arguments: Vec::new(),
+                consequence: None,
+            }
+        }
+    }
+
+    fn interrupted_operation_issue(&self) -> workflow::UserError {
+        let issue = interrupted_issue(self.operation_may_write, self.failure_evidence.as_ref());
+        if self.result_task == Task::Backup {
+            issue.with_backup_guidance()
+        } else {
+            issue
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub(crate) fn report_prompt_state(&self) -> (&str, bool) {
+        (&self.report_description, self.report_prompt.is_some())
+    }
+
     fn busy(&self) -> bool {
-        self.running() || self.pending.is_some() || self.profile_rx.is_some()
+        self.running()
+            || self.pending.is_some()
+            || self.report_prompt.is_some()
+            || self.profile_rx.is_some()
     }
 
     fn discover(&mut self) {
@@ -1090,12 +1187,25 @@ impl App {
     }
 
     pub(crate) fn refresh(&mut self, drives: Vec<DriveChoice>) {
+        if self
+            .drives
+            .iter()
+            .find(|d| d.path == self.device)
+            .map(DriveChoice::display)
+            != drives
+                .iter()
+                .find(|d| d.path == self.device)
+                .map(DriveChoice::display)
+        {
+            self.report_artifact = None;
+        }
         if !drives.iter().any(|d| d.path == self.device) {
             self.device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
             self.recovery_bypass_family = false;
             self.risk_ack = false;
             self.pending = None;
             self.recovery_family_mismatch = false;
+            self.prepared_recovery = None;
         }
         self.drives = drives;
         self.record_event(
@@ -1107,11 +1217,18 @@ impl App {
     }
 
     fn record_event(&mut self, kind: &str, mut data: serde_json::Value) {
+        let issue = data
+            .as_object_mut()
+            .and_then(|object| object.remove("issue"));
+        let mut data = crate::localization::english_json(data);
+        if let Some(issue) = issue {
+            data["issue"] = issue;
+        }
         if let Some(id) = &self.operation_id {
             data["operation_id"] = id.clone().into();
         }
         if let Some(journal) = &mut self.journal {
-            if let Err(error) = journal.record(kind, crate::localization::english_json(data)) {
+            if let Err(error) = journal.record(kind, data) {
                 self.log
                     .push(format!("Could not save session history: {error:#}"));
                 self.logging_warning
@@ -1134,10 +1251,16 @@ impl App {
 
     /// Apply one user action; returns the work only the shell can do.
     pub fn dispatch(&mut self, input: Input) -> Vec<Effect> {
+        if self.report_prompt.is_some()
+            && !matches!(&input, Input::SendReport(_) | Input::DismissReport(_))
+        {
+            return Vec::new();
+        }
         match input {
             Input::SetLanguage(language) => {
                 if self.language != language {
                     self.language = language;
+                    self.rebuild_analysis_tree();
                     if let Err(error) = self.preferences.save(language) {
                         self.log.push(format!(
                             "Language changed for this session but could not be saved: {error}"
@@ -1148,11 +1271,13 @@ impl App {
             Input::SelectDrive(i) => {
                 if let Some(path) = self.drives.get(i).map(|d| d.path.clone()) {
                     if !self.busy() && path != self.device {
+                        self.report_artifact = None;
                         self.device = path;
                         self.flash_read = true;
                         self.recovery_read = true;
                         self.recovery_bypass_family = false;
                         self.recovery_family_mismatch = false;
+                        self.clear_flash_result();
                         self.risk_ack = false;
                         self.rows.clear();
                         self.status = "status.ready".into();
@@ -1172,6 +1297,56 @@ impl App {
                 self.task = task;
             }
             Input::Choose(pick) => return self.choose(pick),
+            Input::DialogFailed(pick, detail) => {
+                self.log
+                    .push(format!("File dialog failed for {pick:?}: {detail}"));
+                let exporting = matches!(
+                    pick,
+                    Pick::DiagnosticLog | Pick::ReportText | Pick::ReportJson
+                );
+                let issue = workflow::UserError {
+                    id: "errors.file_dialog",
+                    arguments: Vec::new(),
+                    consequence: (!exporting).then_some("errors.no_firmware_write"),
+                };
+                self.record_event("file_dialog_failed", serde_json::json!({"pick": format!("{pick:?}"), "detail": detail, "issue": issue}));
+                if exporting {
+                    self.diagnostic_notice = Some(issue.encoded());
+                } else {
+                    self.result_task = self.task;
+                    self.status = issue.encoded();
+                    self.failure = Some(issue.encoded());
+                    self.user_issue = Some(issue);
+                }
+            }
+            Input::ShellFailed(kind, detail) => {
+                self.log
+                    .push(format!("Desktop action failed ({kind:?}): {detail}"));
+                self.record_event(
+                    "desktop_action_failed",
+                    serde_json::json!({"action": format!("{kind:?}"), "detail": detail}),
+                );
+                match kind {
+                    ShellFailure::OpenLog => {
+                        self.diagnostics_open = true;
+                        self.refresh_diagnostic_view();
+                        self.diagnostic_notice = Some("errors.open_log".into());
+                    }
+                    ShellFailure::Copy => {
+                        self.diagnostic_notice = Some("errors.clipboard".into());
+                        self.analysis_notice = Some("errors.clipboard".into());
+                    }
+                    ShellFailure::Confirmation if self.pending.is_some() => {
+                        self.dispatch(Input::CancelConfirm);
+                        self.diagnostic_notice = Some("errors.confirmation_dialog".into());
+                        if !self.running() {
+                            self.result_task = self.task;
+                            self.status = "errors.confirmation_dialog".into();
+                        }
+                    }
+                    ShellFailure::Confirmation => {}
+                }
+            }
             Input::Chosen(pick, path) => return self.chosen(pick, path),
             Input::SetCheck(CheckId::FlashReadFromDrive, on) if !self.busy() && self.can_read() => {
                 if self.flash_read != on {
@@ -1300,6 +1475,7 @@ impl App {
                 }
             }
             Input::Recover if !self.busy() && self.recovery_ready() => {
+                self.prepared_recovery = None;
                 let current = if self.recovery_read {
                     CurrentFirmware::ReadFromDrive
                 } else if let Some(current) = self.recovery_current.clone() {
@@ -1338,6 +1514,7 @@ impl App {
             }
             Input::Confirm => return self.confirm(),
             Input::CancelConfirm => {
+                self.prepared_recovery = None;
                 if let Some(Pending {
                     sheet: Sheet::Flash { reply, .. } | Sheet::WithoutBackup { reply, .. },
                     ..
@@ -1365,13 +1542,7 @@ impl App {
                 self.diagnostics_open = true;
                 self.refresh_diagnostic_view();
             }
-            Input::SubmitReport if self.report_rx.is_none() => {
-                self.record_event(
-                    "report_requested",
-                    serde_json::json!({
-                        "artifact": self.report_artifact.as_ref().map(|a| a.kind),
-                    }),
-                );
+            Input::SubmitReport if self.report_rx.is_none() && !self.busy() => {
                 let Some(journal) = &self.journal else {
                     self.diagnostic_notice = Some("ui.report_history_is_unavailable".into());
                     return Vec::new();
@@ -1380,20 +1551,77 @@ impl App {
                 if let Some(artifact) = &self.report_artifact {
                     source = source.with_artifact(artifact.clone());
                 }
+                let summary = source.summary();
+                self.report_prompt = Some(source);
+                return vec![Effect::ReportPrompt {
+                    summary,
+                    description: self.report_description.clone(),
+                }];
+            }
+            Input::DismissReport(description) => {
+                if self.report_prompt.take().is_some() {
+                    self.report_description = description;
+                }
+            }
+            Input::SendReport(description) if self.report_rx.is_none() => {
+                let Some(source) = self.report_prompt.take() else {
+                    return Vec::new();
+                };
+                self.report_description = description;
+                if self.report_description.len() > crate::support::DESCRIPTION_LIMIT {
+                    let summary = crate::localization::message(
+                        "report.description_too_long",
+                        &[("summary", source.summary())],
+                    );
+                    self.report_prompt = Some(source);
+                    return vec![Effect::ReportPrompt {
+                        summary,
+                        description: self.report_description.clone(),
+                    }];
+                }
+                #[cfg(debug_assertions)]
+                if self.inert {
+                    return Vec::new();
+                }
+                let source = source.with_description(self.report_description.clone());
+                self.submitted_description = Some(self.report_description.clone());
+                self.record_event(
+                    "report_requested",
+                    serde_json::json!({"artifact": source.artifact_kind()}),
+                );
                 let (tx, rx) = mpsc::channel();
                 let control = crate::support::Submission::new();
                 self.report_control = Some(control.clone());
                 self.report_rx = Some(rx);
                 self.diagnostic_notice = Some("ui.opening_report_approval_in_your_browser".into());
                 let waker = self.waker.clone();
+                #[cfg(test)]
+                let endpoint = self.report_endpoint.clone();
                 std::thread::spawn(move || {
-                    let result = crate::support::submit(source, control, |message| {
-                        let _ = tx.send(Ok(message));
+                    let progress = |message| {
+                        let _ = tx.send(ReportMsg::Progress(message));
                         if let Some(wake) = &waker {
                             wake();
                         }
-                    });
-                    let _ = tx.send(result.map_err(|error| format!("{error:#}")));
+                    };
+                    #[cfg(test)]
+                    let result = if let Some(endpoint) = endpoint {
+                        crate::support::submit_test(source, &control, &endpoint, progress)
+                    } else {
+                        crate::support::submit(source, control, progress)
+                    };
+                    #[cfg(not(test))]
+                    let result = crate::support::submit(source, control, progress);
+                    let _ = tx.send(ReportMsg::Finished(result.map_err(|error| {
+                        if error.is::<crate::support::AttachmentChanged>() {
+                            let _ = tx.send(ReportMsg::Diagnostic(format!(
+                                "Report attachment failed: {error:#}"
+                            )));
+                            "report.attachment_changed".into()
+                        } else {
+                            format!("{error:#}")
+                        }
+                    })));
                     if let Some(wake) = &waker {
                         wake();
                     }
@@ -1452,14 +1680,20 @@ impl App {
             | Pick::RecoveryCurrent => {
                 self.recovery_family_mismatch = false;
                 self.recovery_bypass_family = false;
-                let extensions = self
+                let formats = self
                     .ready_profile()
-                    .map_or_else(workflow::update_file_extensions, |p| {
-                        p.flash_extensions.clone()
-                    });
-                open(Some(FileFilter {
+                    .map(|profile| profile.firmware_picker.clone())
+                    .unwrap_or_default();
+                let extensions = formats.extensions();
+                self.record_event(
+                    "file_dialog_requested",
+                    serde_json::json!({
+                        "pick": format!("{pick:?}"), "extensions": extensions,
+                    }),
+                );
+                open(extensions.map(|extensions| FileFilter {
                     name: crate::localization::get(self.language, "filter.firmware_backup"),
-                    extensions,
+                    extensions: extensions.to_vec(),
                 }))
             }
             Pick::AnalysisFile(_) => open(Some(FileFilter {
@@ -1488,6 +1722,7 @@ impl App {
 
     /// A previous flash result describes its original selection, not the new one.
     fn clear_flash_result(&mut self) {
+        self.prepared_recovery = None;
         if self.result_task == self.task && matches!(self.task, Task::Flash | Task::Recovery) {
             self.status = "status.ready".into();
             self.failure = None;
@@ -1553,25 +1788,25 @@ impl App {
                 self.recovery_bypass_family = false;
                 self.clear_flash_result();
                 self.recovery_read = false;
-                self.recovery_current_members =
-                    workflow::recovery_members(&path).unwrap_or_default();
+                self.recovery_current_members.clear();
                 self.recovery_current_member = None;
-                self.recovery_current = Some(path);
-                return self.refresh_current_profile();
+                self.recovery_current = Some(path.clone());
+                return self.read_origin(pick, path);
             }
             Pick::FlashCurrent => {
                 self.clear_flash_result();
                 self.flash_read = false;
-                self.flash_current_members = workflow::recovery_members(&path).unwrap_or_default();
+                self.flash_current_members.clear();
                 self.flash_current_member = None;
-                self.flash_current = Some(path);
+                self.flash_current = Some(path.clone());
+                return self.read_origin(pick, path);
             }
             Pick::RecoveryInput => {
                 self.recovery_family_mismatch = false;
                 self.recovery_bypass_family = false;
                 self.clear_flash_result();
                 self.recovery_member = None;
-                self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
+                self.recovery_members.clear();
                 self.recovery_input = Some(path.clone());
                 return self.read_origin(pick, path);
             }
@@ -1627,9 +1862,24 @@ impl App {
     }
 
     fn set_analysis(&mut self, result: Option<ResultView>) {
-        self.analysis_tree = result.as_ref().map(|r| Arc::new(analysis_tree(r)));
         self.analysis = result;
+        self.rebuild_analysis_tree();
         self.analysis_notice = None;
+    }
+
+    fn rebuild_analysis_tree(&mut self) {
+        self.analysis_tree = self.analysis.as_ref().map(|result| {
+            let mut tree = analysis_tree(result);
+            translate(self.language, &mut tree.title);
+            translate(self.language, &mut tree.heading);
+            tree.actions
+                .iter_mut()
+                .for_each(|button| translate_button(self.language, button));
+            tree.nodes
+                .iter_mut()
+                .for_each(|node| translate_node(self.language, node));
+            Arc::new(tree)
+        });
     }
 
     fn refresh_current_profile(&mut self) -> Vec<Effect> {
@@ -1649,8 +1899,20 @@ impl App {
                 .is_some_and(|p| p.recovery_family_override)
     }
 
+    fn file_inspection_pending(&self, pick: Pick) -> bool {
+        self.origin_rx
+            .iter()
+            .any(|(_, active, _, _)| *active == pick)
+            || self
+                .origin_pending
+                .iter()
+                .any(|(_, queued, _)| *queued == pick)
+    }
+
     fn recovery_ready(&self) -> bool {
-        self.selected()
+        !self.file_inspection_pending(Pick::RecoveryInput)
+            && (self.recovery_read || !self.file_inspection_pending(Pick::RecoveryCurrent))
+            && self.selected()
             && self.recovery_input.is_some()
             && (self.recovery_members.len() < 2 || self.recovery_member.is_some())
             && (self.recovery_read
@@ -1679,7 +1941,9 @@ impl App {
     }
 
     fn flash_ready(&self) -> bool {
-        self.selected()
+        !self.file_inspection_pending(Pick::FlashFirmware)
+            && (self.flash_read || !self.file_inspection_pending(Pick::FlashCurrent))
+            && self.selected()
             && self.flash_input.is_some()
             && (!self.flash_current_supported()
                 || self.flash_read
@@ -1789,11 +2053,12 @@ impl App {
             }
             Some(Pending {
                 target,
-                sheet: Sheet::Recovery { mut options, .. },
+                sheet: Sheet::Recovery { .. },
             }) if !self.running() => {
-                options.execute = true;
-                options.acknowledged_risk = true;
-                let job = Job::Recovery(options);
+                let Some(prepared) = self.prepared_recovery.take() else {
+                    return Vec::new();
+                };
+                let job = Job::ExecuteRecovery(prepared);
                 self.start_job("task.recovery", target.device, job)
             }
             other => {
@@ -1848,17 +2113,24 @@ impl App {
             return Vec::new();
         }
         self.artifact_in_progress = match &job {
-            Job::Backup { out, .. } => Some(crate::support::ReportArtifact {
-                path: out.clone(),
-                kind: "backup",
-            }),
-            Job::Dump { out, .. } => Some(crate::support::ReportArtifact {
-                path: out.clone(),
-                kind: "dump",
-            }),
+            Job::Backup { out, .. } => Some(crate::support::ReportArtifact::pending(
+                out.clone(),
+                "backup",
+            )),
+            Job::Dump { out, .. } => {
+                Some(crate::support::ReportArtifact::pending(out.clone(), "dump"))
+            }
             _ => None,
         };
-        self.report_artifact = None;
+        if job_may_write(&job)
+            || self.artifact_in_progress.as_ref().is_some_and(|next| {
+                self.report_artifact
+                    .as_ref()
+                    .is_some_and(|old| old.path == next.path)
+            })
+        {
+            self.report_artifact = None;
+        }
         self.result_task = self.task;
         self.action = label.to_string();
         self.status = crate::localization::message(
@@ -1870,6 +2142,9 @@ impl App {
         if matches!(&job, Job::Recovery(_)) {
             self.recovery_family_mismatch = false;
         }
+        self.user_issue = None;
+        self.structured_progress = false;
+        self.operation_may_write = job_may_write(&job);
         self.analysis_cancelled = false;
         self.backup_waived = false;
         self.preview_compatibility_pending = None;
@@ -1914,7 +2189,8 @@ impl App {
             .operation_id
             .clone()
             .expect("started operation has an id");
-        std::thread::spawn(move || run_job(&device, job, tx, waker, operation_id));
+        let drive_label = self.device_label();
+        std::thread::spawn(move || run_job(&device, job, tx, waker, operation_id, &drive_label));
         vec![Effect::StartTicking]
     }
 
@@ -1924,8 +2200,18 @@ impl App {
         if let Some(rx) = self.report_rx.take() {
             loop {
                 match rx.try_recv() {
-                    Ok(Ok(message)) => self.diagnostic_notice = Some(message),
-                    Ok(Err(error)) => {
+                    Ok(ReportMsg::Progress(message)) => self.diagnostic_notice = Some(message),
+                    Ok(ReportMsg::Diagnostic(detail)) => self.log.push(detail),
+                    Ok(ReportMsg::Finished(Ok(receipt))) => {
+                        if self.submitted_description.as_ref() == Some(&self.report_description) {
+                            self.report_description.clear();
+                        }
+                        self.submitted_description = None;
+                        self.diagnostic_notice = Some(receipt);
+                        report_done = true;
+                        break;
+                    }
+                    Ok(ReportMsg::Finished(Err(error))) => {
                         self.log.push(format!("Could not submit report: {error}"));
                         self.diagnostic_notice = Some(
                             if self
@@ -1934,6 +2220,8 @@ impl App {
                                 .is_some_and(|control| control.cancelled())
                             {
                                 "report.cancelled"
+                            } else if error == "report.attachment_changed" {
+                                "report.attachment_changed"
                             } else {
                                 "errors.submit_report"
                             }
@@ -1968,6 +2256,11 @@ impl App {
         if let Some(rx) = self.rx.take() {
             loop {
                 match rx.try_recv() {
+                    Ok(Msg::PreparedRecovery(prepared)) => self.prepared_recovery = Some(prepared),
+                    Ok(Msg::UserIssue(issue)) => {
+                        self.failure = Some(issue.encoded());
+                        self.user_issue = Some(issue);
+                    }
                     Ok(Msg::Event(event)) => self.event(event),
                     Ok(Msg::FailureEvidence(evidence)) => self.failure_evidence = Some(evidence),
                     Ok(Msg::RecoveryFamilyMismatch) => {
@@ -1976,7 +2269,6 @@ impl App {
                         }
                     }
                     Ok(Msg::AnalysisCancelled) => self.analysis_cancelled = true,
-                    Ok(Msg::UserGuidance(message)) => self.failure = Some(message),
                     Ok(Msg::PreviewCompatibilityPending(pending)) => {
                         self.preview_compatibility_pending = Some(pending);
                     }
@@ -1999,13 +2291,32 @@ impl App {
                             let _ = reply.send(false);
                         }
                     },
+                    Ok(Msg::CapturedArtifact(result)) => match result {
+                        Ok(artifact)
+                            if self.artifact_in_progress.as_ref().is_some_and(|pending| {
+                                pending.path == artifact.path && pending.kind == artifact.kind
+                            }) && artifact.evidence.as_ref().is_some_and(|e| {
+                                Some(&e.operation) == self.operation_id.as_ref()
+                                    && e.device == self.device
+                            }) =>
+                        {
+                            self.artifact_in_progress = Some(artifact);
+                        }
+                        Ok(_) => {}
+                        Err(detail) => {
+                            self.log.push(format!(
+                                "Capture saved but attachment unavailable: {detail}"
+                            ));
+                            self.diagnostic_notice = Some("report.attachment_unavailable".into());
+                        }
+                    },
                     Ok(Msg::Done(result)) => {
-                        self.report_artifact = if result.is_ok() {
-                            self.artifact_in_progress.take()
-                        } else {
-                            self.artifact_in_progress = None;
-                            None
-                        };
+                        if let Some(artifact) = self.artifact_in_progress.take() {
+                            if result.is_ok() {
+                                self.report_artifact =
+                                    artifact.evidence.is_some().then_some(artifact);
+                            }
+                        }
                         recovery_planned = self.recovery_planning.take().filter(|_| {
                             matches!(result, Ok(Some(workflow::UpdateOutcome::Planned)))
                         });
@@ -2046,38 +2357,14 @@ impl App {
                                 self.failure = None;
                             }
                             Err(_) => {
-                                let consequence = self.failure_evidence.as_ref().map(|evidence| {
-                                    match evidence.impact() {
-                                        UpdateImpact::Blocked => "errors.update_blocked",
-                                        UpdateImpact::EntryUncertain => "errors.update_not_started",
-                                        UpdateImpact::PayloadUncertain => "errors.partial_firmware",
-                                        UpdateImpact::TemporaryFirmware => {
-                                            "errors.temporary_firmware"
-                                        }
-                                        UpdateImpact::Unknown => "errors.update_uncertain",
-                                    }
-                                });
-                                let blocked = self
-                                    .failure_evidence
-                                    .as_ref()
-                                    .is_some_and(|e| e.impact() == UpdateImpact::Blocked);
-                                let message = if blocked {
-                                    "errors.update_blocked"
-                                } else {
-                                    "errors.operation_failed"
-                                }
-                                .to_string();
-                                let consequence = if blocked { None } else { consequence };
-                                let message = consequence.map_or(message.clone(), |key| {
-                                    crate::localization::message(
-                                        "ui.join",
-                                        &[("first", message.clone()), ("second", key.into())],
-                                    )
-                                });
+                                let issue = self
+                                    .user_issue
+                                    .clone()
+                                    .unwrap_or_else(|| self.interrupted_operation_issue());
+                                let message = issue.encoded();
                                 self.status = message.clone();
-                                // Keep the summary localized; precheck guidance names the
-                                // stopped stage and actionable reason without technical hashes.
-                                self.failure = Some(self.failure.take().unwrap_or(message));
+                                self.failure = Some(message);
+                                self.user_issue = Some(issue);
                             }
                         }
                         let update_evidence = result
@@ -2132,6 +2419,7 @@ impl App {
                             "result": result_kind,
                             "summary": self.status,
                             "error": self.failure,
+                            "issue": self.user_issue,
                             "failure": self.failure.as_ref().map(|_| failure_json(self.failure_evidence.as_ref())),
                             "update": update_evidence,
                             "compatibility_pending": self.preview_compatibility_pending,
@@ -2144,9 +2432,12 @@ impl App {
                     Err(TryRecvError::Disconnected) => {
                         self.planning = None;
                         self.recovery_planning = None;
+                        self.prepared_recovery = None;
                         self.end_flash();
-                        self.status = "ui.operation_interrupted".into();
-                        self.failure = Some(WORKER_GONE.into());
+                        let issue = self.interrupted_operation_issue();
+                        self.status = issue.encoded();
+                        self.failure = Some(issue.encoded());
+                        self.user_issue = Some(issue);
                         self.log
                             .push("ui.worker_disconnected_before_reporting_completion_op".into());
                         self.record_event(
@@ -2154,6 +2445,7 @@ impl App {
                             serde_json::json!({
                                 "operation": self.action, "result": "interrupted",
                                 "summary": self.status, "error": self.failure,
+                                "issue": self.user_issue,
                                 "failure": failure_json(self.failure_evidence.as_ref()),
                             }),
                         );
@@ -2189,6 +2481,7 @@ impl App {
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
+            && self.origin_pending.is_empty()
             && self.report_rx.is_none()
         {
             vec![Effect::StopTicking]
@@ -2197,17 +2490,44 @@ impl App {
         }
     }
 
+    fn origin_index(pick: Pick) -> Option<usize> {
+        match pick {
+            Pick::FlashFirmware => Some(0),
+            Pick::RecoveryInput => Some(1),
+            Pick::FlashCurrent => Some(2),
+            Pick::RecoveryCurrent => Some(3),
+            _ => None,
+        }
+    }
+
     fn read_origin(&mut self, pick: Pick, path: PathBuf) -> Vec<Effect> {
+        let Some(index) = Self::origin_index(pick) else {
+            return Vec::new();
+        };
         match pick {
             Pick::FlashFirmware => self.flash_origin = None,
             Pick::RecoveryInput => self.recovery_origin = None,
-            _ => return Vec::new(),
+            _ => {}
         }
+        self.origin_next = self.origin_next.wrapping_add(1);
+        let version = self.origin_next;
+        self.origin_versions[index] = version;
+        self.origin_pending.retain(|(_, queued, _)| *queued != pick);
+        self.origin_pending.push((version, pick, path));
+        self.start_origin();
+        vec![Effect::StartTicking]
+    }
+
+    fn start_origin(&mut self) {
+        if !self.origin_rx.is_empty() || self.origin_pending.is_empty() {
+            return;
+        }
+        let (version, pick, path) = self.origin_pending.remove(0);
         let (tx, rx) = mpsc::channel();
-        self.origin_rx.push((pick, path.clone(), rx));
+        self.origin_rx.push((version, pick, path.clone(), rx));
         let waker = self.waker.clone();
         std::thread::spawn(move || {
-            let result = std::panic::catch_unwind(|| workflow::selected_file_origin(&path))
+            let result = std::panic::catch_unwind(|| workflow::selected_file_info(&path))
                 .map_err(|_| "ui.file_origin_inspection_stopped_unexpectedly".to_string())
                 .and_then(|r| r.map_err(|e| format!("{e:#}")));
             let _ = tx.send((pick, path, result));
@@ -2215,16 +2535,16 @@ impl App {
                 wake();
             }
         });
-        vec![Effect::StartTicking]
     }
 
     fn poll_origin(&mut self) -> bool {
         let mut done = false;
-        for (requested_pick, requested_path, rx) in std::mem::take(&mut self.origin_rx) {
+        for (version, requested_pick, requested_path, rx) in std::mem::take(&mut self.origin_rx) {
             let reply = match rx.try_recv() {
                 Ok(reply) => reply,
                 Err(TryRecvError::Empty) => {
-                    self.origin_rx.push((requested_pick, requested_path, rx));
+                    self.origin_rx
+                        .push((version, requested_pick, requested_path, rx));
                     continue;
                 }
                 Err(TryRecvError::Disconnected) => {
@@ -2239,34 +2559,51 @@ impl App {
                     )
                 }
             };
+            done = true;
             let (pick, path, result) = reply;
-            let selected = (pick == Pick::FlashFirmware
-                && self.flash_input.as_ref() == Some(&path))
-                || (pick == Pick::RecoveryInput && self.recovery_input.as_ref() == Some(&path));
-            if selected {
-                if let Err(error) = &result {
-                    let detail = crate::localization::english(error);
-                    self.log
-                        .push(format!("File origin inspection failed: {detail}"));
-                    self.record_event(
-                        "file_origin_failed",
-                        serde_json::json!({"file": path.display().to_string(), "error": detail}),
-                    );
-                    self.diagnostic_log = None;
-                    self.diagnostic_checked = None;
-                }
+            let current_path = match pick {
+                Pick::FlashFirmware => &self.flash_input,
+                Pick::RecoveryInput => &self.recovery_input,
+                Pick::FlashCurrent => &self.flash_current,
+                Pick::RecoveryCurrent => &self.recovery_current,
+                _ => continue,
+            };
+            let selected = current_path.as_ref() == Some(&path)
+                && Self::origin_index(pick)
+                    .is_some_and(|index| self.origin_versions[index] == version);
+            if !selected {
+                continue;
             }
+            if let Err(error) = &result {
+                let detail = crate::localization::english(error);
+                self.log
+                    .push(format!("File origin inspection failed: {detail}"));
+                self.record_event(
+                    "file_origin_failed",
+                    serde_json::json!({"file": path.display().to_string(), "error": detail}),
+                );
+                self.diagnostic_log = None;
+                self.diagnostic_checked = None;
+            }
+            let members = result
+                .as_ref()
+                .map(|info| info.members.clone())
+                .unwrap_or_default();
             match pick {
-                Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
-                    self.flash_origin = Some(result)
+                Pick::FlashFirmware => self.flash_origin = Some(result.map(|info| info.origin)),
+                Pick::RecoveryInput => {
+                    self.recovery_members = members;
+                    self.recovery_origin = Some(result.map(|info| info.origin));
                 }
-                Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
-                    self.recovery_origin = Some(result)
+                Pick::FlashCurrent => self.flash_current_members = members,
+                Pick::RecoveryCurrent => {
+                    self.recovery_current_members = members;
+                    self.refresh_current_profile();
                 }
                 _ => {}
             }
-            done = true;
         }
+        self.start_origin();
         done
     }
 
@@ -2317,7 +2654,7 @@ impl App {
         let result = match rx.try_recv() {
             Ok(result) => result,
             Err(TryRecvError::Empty) => return false,
-            Err(TryRecvError::Disconnected) => Err(WORKER_GONE.into()),
+            Err(TryRecvError::Disconnected) => Err(worker_panic_issue(&Job::Info).encoded()),
         };
         self.profile_rx = None;
         self.set_profile(result);
@@ -2326,8 +2663,43 @@ impl App {
 
     pub(crate) fn event(&mut self, event: Event) {
         match event {
+            Event::Phase {
+                phase,
+                component,
+                done,
+                total,
+            } => {
+                self.structured_progress = true;
+                self.record_event(
+                    "operation_progress",
+                    serde_json::json!({
+                        "phase": phase, "component": component, "done": done, "total": total,
+                    }),
+                );
+                let key = match phase {
+                    "reading" => "phase.reading",
+                    "preparing" => "phase.preparing",
+                    "saving" => "phase.saving",
+                    "writing" => "phase.writing",
+                    "restarting" => "phase.restarting",
+                    "verifying" => "phase.verifying",
+                    _ => "ui.working",
+                };
+                let label = crate::localization::message(key, &[("component", component.into())]);
+                if self
+                    .progress
+                    .as_ref()
+                    .is_none_or(|(previous, _, _)| previous != &label)
+                {
+                    self.log.push(crate::localization::english(&label));
+                }
+                self.progress = Some((label, done.unwrap_or(0), total.unwrap_or(0)));
+            }
             Event::Message(line) => self.log.push(line),
             Event::Progress { label, done, total } => {
+                if self.structured_progress {
+                    return;
+                }
                 // Large regions report only through the bar; log each phase once so the
                 // activity log names it ("  reading normal...") like the small ones.
                 if self.progress.as_ref().is_none_or(|(l, _, _)| *l != label) {
@@ -2809,7 +3181,7 @@ impl App {
                     } else {
                         String::new()
                     },
-                    fraction: Some(*done as f32 / (*total).max(1) as f32),
+                    fraction: (*total > 0).then(|| (*done as f32 / *total as f32).clamp(0.0, 1.0)),
                 },
                 None => Progress {
                     label: String::new(),
@@ -2870,7 +3242,7 @@ impl App {
                         _ => "action.submit_report",
                     },
                     Input::SubmitReport,
-                    self.journal.is_some(),
+                    self.journal.is_some() && !self.busy(),
                 )
             },
         }
@@ -2883,15 +3255,33 @@ impl App {
                 &[("drive", pending.target.label.clone())],
             ),
             crate::localization::message(
-                "confirm.image",
-                &[("path", pending.target.options.input.display().to_string())],
+                "confirm.firmware",
+                &[(
+                    "filename",
+                    pending
+                        .target
+                        .options
+                        .input
+                        .file_name()
+                        .unwrap_or(pending.target.options.input.as_os_str())
+                        .to_string_lossy()
+                        .into_owned(),
+                )],
             ),
         ];
+        let mut technical_details = vec![crate::localization::message(
+            "confirm.image",
+            &[("path", pending.target.options.input.display().to_string())],
+        )];
+        let mut saved_backup = false;
         let (recovery, warnings, prompt) = match &pending.sheet {
             Sheet::FamilyOverride { code, entered } => {
                 return Confirm {
                     title: "recovery.bypass_family_title".into(),
                     details: vec![details.remove(0)],
+                    technical_details: Vec::new(),
+                    details_label: "confirm.details".into(),
+                    hide_details_label: "confirm.hide_details".into(),
                     danger: "recovery.bypass_family_warning".into(),
                     warnings: Vec::new(),
                     prompt: Some(crate::localization::message(
@@ -2914,6 +3304,9 @@ impl App {
                 return Confirm {
                     title: "backup.unavailable".into(),
                     details,
+                    technical_details,
+                    details_label: "confirm.details".into(),
+                    hide_details_label: "confirm.hide_details".into(),
                     danger: String::new(),
                     warnings: vec![reason.clone()],
                     prompt: Some("backup.proceed".into()),
@@ -2926,8 +3319,11 @@ impl App {
                 };
             }
             Sheet::Recovery { options, plan } => {
+                if options.bypass_family_check {
+                    details.push("recovery.override_family".into());
+                }
                 details.extend(plan.iter().cloned());
-                details.push(match &options.current {
+                technical_details.push(match &options.current {
                     CurrentFirmware::NotRequired => {
                         "ui.receiver_detected_directly_no_current_firmware_req".into()
                     }
@@ -2938,7 +3334,7 @@ impl App {
                     CurrentFirmware::ReadFromDrive => "ui.current_read_from_drive".into(),
                 });
                 if let Some(member) = &options.current_member {
-                    details.push(crate::localization::message(
+                    technical_details.push(crate::localization::message(
                         "ui.current_member_receiver_reference_member",
                         &[("member", member.to_string())],
                     ));
@@ -2956,8 +3352,19 @@ impl App {
                 (true, warnings, None)
             }
             Sheet::Flash { sheet, .. } => {
-                details.extend(sheet.plan.iter().cloned());
-                details.push(match &pending.target.options.current {
+                details.extend(sheet.notices.iter().cloned());
+                technical_details.extend(sheet.technical_details.iter().cloned());
+                if let Some(path) = &sheet.saved_backup {
+                    saved_backup = true;
+                    details.insert(
+                        2,
+                        crate::localization::message(
+                            "confirm.backup_saved",
+                            &[("path", path.display().to_string())],
+                        ),
+                    );
+                }
+                technical_details.push(match &pending.target.options.current {
                     Some(path) => crate::localization::message(
                         "ui.current_arg0",
                         &[("arg0", format!("{}", path.display()))],
@@ -2965,12 +3372,16 @@ impl App {
                     None => "ui.current_read_from_drive".into(),
                 });
                 if let Some(member) = &pending.target.options.current_member {
-                    details.push(crate::localization::message(
+                    technical_details.push(crate::localization::message(
                         "ui.current_member_receiver_reference_member",
                         &[("member", member.to_string())],
                     ));
                 }
-                (false, sheet.warnings.clone(), sheet.confirmation.clone())
+                let mut warnings = sheet.warnings.clone();
+                if sheet.backup_waived {
+                    warnings.push("confirm.no_backup".into());
+                }
+                (false, warnings, sheet.confirmation.clone())
             }
         };
         let origin = if recovery {
@@ -2983,25 +3394,36 @@ impl App {
             .and_then(|r| r.as_ref().ok())
             .copied()
             .unwrap_or(workflow::FileOrigin::Unknown);
-        details.push(crate::localization::message(
+        technical_details.push(crate::localization::message(
             "ui.file_origin_arg0_arg1",
             &[
                 ("arg0", origin.label_id().to_string()),
                 ("arg1", origin.explanation_id().to_string()),
             ],
         ));
+        details.push(if origin == workflow::FileOrigin::Unknown {
+            "confirm.origin_unknown".into()
+        } else {
+            crate::localization::message(
+                "confirm.origin",
+                &[("origin", origin.label_id().to_owned())],
+            )
+        });
         Confirm {
+            technical_details,
+            details_label: "confirm.details".into(),
+            hide_details_label: "confirm.hide_details".into(),
             title: if recovery {
                 "ui.confirm_recovery"
             } else {
-                "ui.confirm_flash"
+                "confirm.update_title"
             }
             .into(),
             details,
             danger: FLASH_DANGER.into(),
             warnings,
             prompt,
-            note: (!recovery && !self.backup_waived).then(|| BACKUP_KEPT.to_owned()),
+            note: (!recovery).then(|| if saved_backup { BACKUP_KEPT } else { "confirm.cancel_unchanged" }.to_owned()),
             ack_text: if matches!(&pending.sheet, Sheet::Recovery { options, .. } if options.bypass_family_check) {
                 "recovery.bypass_family_ack"
             } else { RISK_ACK }.into(),
@@ -3011,7 +3433,7 @@ impl App {
                 if recovery {
                     "ui.recover"
                 } else {
-                    "ui.flash_now"
+                    "confirm.update"
                 },
                 Input::Confirm,
                 self.risk_ack,
@@ -3095,8 +3517,15 @@ fn post_update_snapshot(
 }
 
 /// The worker: one job, every event forwarded, a panic reported as a failure.
-fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operation_id: String) {
-    let check_after = matches!(job, Job::Flash(_) | Job::Recovery(_));
+fn run_job(
+    device: &str,
+    job: Job,
+    tx: Sender<Msg>,
+    waker: Option<Waker>,
+    operation_id: String,
+    drive_label: &str,
+) {
+    let check_after = matches!(job, Job::Flash(_) | Job::ExecuteRecovery(_));
     let wake = {
         let waker = waker.clone();
         move || {
@@ -3125,6 +3554,10 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                             Ok(None)
                         }
                         ops::JobResult::Update(outcome) => Ok(Some(outcome)),
+                        ops::JobResult::PreparedRecovery(prepared) => {
+                            let _ = tx.send(Msg::PreparedRecovery(prepared));
+                            Ok(Some(workflow::UpdateOutcome::Planned))
+                        }
                         ops::JobResult::Preview(preview) => {
                             let _ = tx.send(Msg::PreviewCompatibilityPending(
                                 preview.compatibility_pending,
@@ -3166,8 +3599,9 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                 && workflow::is_hardware_mismatch(&e) {
                 let _ = tx.send(Msg::RecoveryFamilyMismatch);
             }
-            let message = workflow::user_error(&e).encoded();
-            let _ = tx.send(Msg::UserGuidance(message.clone()));
+            let issue = workflow::user_error(&e);
+            let message = issue.encoded();
+            let _ = tx.send(Msg::UserIssue(issue));
             message
         }),
         Err(payload) => {
@@ -3177,7 +3611,10 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                 .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
                 .unwrap_or("non-string panic payload");
             let _ = tx.send(Msg::Event(Event::Message(worker_panic_detail(&job, detail))));
-            Err(WORKER_PANIC.into())
+            let issue = worker_panic_issue(&job);
+            let message = issue.encoded();
+            let _ = tx.send(Msg::UserIssue(issue));
+            Err(message)
         }
     };
     if check_after {
@@ -3193,20 +3630,74 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
             let _ = tx.send(Msg::DriveAfter(after));
         }
     }
+    if result.is_ok() {
+        let artifact = match &job {
+            Job::Dump { out, .. } => {
+                Some(crate::support::ReportArtifact::pending(out.clone(), "dump"))
+            }
+            Job::Backup { out, .. } => Some(crate::support::ReportArtifact::pending(
+                out.clone(),
+                "backup",
+            )),
+            _ => None,
+        };
+        if let Some(artifact) = artifact {
+            let _ = tx.send(Msg::CapturedArtifact(
+                artifact
+                    .capture(device, drive_label, &operation_id)
+                    .map_err(|e| format!("{e:#}")),
+            ));
+        }
+    }
     let _ = tx.send(Msg::Done(result));
     wake();
 }
 
 fn worker_panic_detail(job: &Job, detail: &str) -> String {
-    let update_possible = match job {
-        Job::Flash(options) => options.execute,
-        Job::Recovery(options) => options.execute,
-        _ => false,
-    };
-    if update_possible {
+    if job_may_write(job) {
         format!("Worker panic; update state unknown: {detail}")
     } else {
         format!("Worker panic; operation outcome unknown: {detail}")
+    }
+}
+
+fn job_may_write(job: &Job) -> bool {
+    match job {
+        Job::Flash(options) => options.execute,
+        Job::Recovery(options) => options.execute,
+        Job::ExecuteRecovery(_) => true,
+        _ => false,
+    }
+}
+
+fn worker_panic_issue(job: &Job) -> workflow::UserError {
+    let issue = interrupted_issue(job_may_write(job), None);
+    if matches!(job, Job::Backup { .. }) {
+        issue.with_backup_guidance()
+    } else {
+        issue
+    }
+}
+
+fn interrupted_issue(
+    may_write: bool,
+    evidence: Option<&workflow::UpdateFailure>,
+) -> workflow::UserError {
+    if let Some(evidence) = evidence {
+        return workflow::user_error(&anyhow::Error::new(evidence.clone()));
+    }
+    if may_write {
+        workflow::UserError {
+            id: "errors.update_uncertain",
+            arguments: Vec::new(),
+            consequence: None,
+        }
+    } else {
+        workflow::UserError {
+            id: "errors.unexpected",
+            arguments: Vec::new(),
+            consequence: Some("errors.no_firmware_write"),
+        }
     }
 }
 

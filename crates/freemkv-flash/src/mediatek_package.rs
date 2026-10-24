@@ -284,10 +284,12 @@ mod tests {
         let p = package();
         let bytes = p.encode().unwrap();
         let select = crate::workflow::recovery_target;
-        assert!(select(&bytes, None)
-            .unwrap_err()
-            .to_string()
-            .contains("--member"));
+        let error = select(&bytes, None).unwrap_err();
+        assert!(format!("{error:#}").contains("--member"));
+        assert_eq!(
+            crate::workflow::user_error(&error).id,
+            "errors.command_options"
+        );
         assert_eq!(
             select(&bytes, Some("intm.bin")).unwrap(),
             p.intermediate().unwrap()

@@ -28,7 +28,7 @@ fn entry_failure_translations_say_no_firmware_payload_was_sent() {
         (Language::Da, "ingen firmwaredata"),
         (Language::De, "keine Firmware-Daten"),
         (Language::El, "δεν στάλθηκαν δεδομένα"),
-        (Language::En, "no firmware payload was sent"),
+        (Language::En, "no firmware data was sent"),
         (Language::Es, "no se enviaron datos"),
         (Language::Es419, "no se enviaron datos"),
         (Language::Fi, "ei lähetetty"),
@@ -59,6 +59,30 @@ fn entry_failure_translations_say_no_firmware_payload_was_sent() {
         assert!(message.contains(phrase), "{}: {message}", language.code());
         if language != Language::En {
             assert_ne!(message, get(Language::En, "errors.update_not_started"));
+        }
+    }
+}
+
+#[test]
+fn operation_contract_keys_exist_independently_of_catalog_parity() {
+    for language in Language::ALL {
+        for key in [
+            "phase.reading",
+            "phase.saving",
+            "phase.preparing",
+            "phase.writing",
+            "phase.restarting",
+            "phase.verifying",
+            "errors.update_blocked",
+            "errors.no_firmware_write",
+            "errors.hardware_mismatch",
+            "errors.temporary_firmware",
+            "errors.update_not_started",
+            "errors.update_uncertain",
+            "errors.verification_details",
+            "errors.file_dialog",
+        ] {
+            assert!(!get(language, key).trim().is_empty(), "{language:?}: {key}");
         }
     }
 }

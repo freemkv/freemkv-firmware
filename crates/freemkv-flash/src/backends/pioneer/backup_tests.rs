@@ -49,6 +49,11 @@ fn kernel_only_partial_backup_validates_and_is_reported_partial() {
     let roles = component_roles(&tar);
     assert_eq!(roles.len(), 1);
     assert_eq!(roles[0].0, "kernel");
+    let files = crate::backend::FileFacet::recognize(&super::super::Pioneer, &tar)
+        .expect("a partial capture remains a recognized Pioneer package");
+    crate::backend::FileFacet::describe(&super::super::Pioneer, &tar, &files)
+        .expect("check must report a recognized Kernel-only backup")
+        .expect("reporting a partial backup must succeed without treating it as a flash target");
 }
 
 #[test]
@@ -858,6 +863,10 @@ fn corpus_kernel_dispatcher_selects_recorded_wrapper_when_configured() {
     for path in &unrecognized {
         eprintln!("unrecognized: {path}");
     }
+    assert!(
+        unrecognized.is_empty(),
+        "decoded front/derived Kernels lost recognition: {unrecognized:#?}"
+    );
 }
 
 /// Replay the production capture with a declared identity and real decoded

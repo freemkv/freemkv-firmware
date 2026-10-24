@@ -84,7 +84,8 @@ pub fn cdb_wb_flash_finish() -> [u8; 10] {
 
 #[cfg(test)]
 fn installed_receiver(backup: Option<&[u8]>) -> Result<Receiver> {
-    let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")?;
+    let backup = backup.context("installed firmware backup is required to recover the receiver control key; refusing update entry")
+        .map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?;
     let (kernel, normal) = classify_flash_input(backup)?;
     receiver_from_components(kernel.as_deref(), normal.as_deref())
 }
@@ -434,7 +435,7 @@ pub(crate) struct ExecutePlan {
 /// header chain, envelope tail and bundle self-consistency.
 pub(crate) fn execute_plan(input: &[u8]) -> Result<ExecutePlan> {
     use crate::backends::pioneer::flash_plan::{
-        ensure_no_unrecovered_tail, validate_bundle, validate_component_headers,
+        ensure_no_unrecovered_tail, validate_component_headers,
     };
     let (kernel, normal) = classify_flash_input(input)?;
     let selection = decide_flash(kernel.is_some(), normal.is_some())?;
@@ -442,7 +443,6 @@ pub(crate) fn execute_plan(input: &[u8]) -> Result<ExecutePlan> {
     check_normal_size(&normal)?;
     validate_component_headers(kernel.as_deref(), Some(&normal)).map_err(anyhow::Error::msg)?;
     ensure_no_unrecovered_tail(kernel.as_deref(), Some(&normal))?;
-    validate_bundle(kernel.as_deref(), Some(&normal)).map_err(|e| anyhow!("{e}"))?;
     Ok(ExecutePlan {
         kernel,
         normal,
@@ -501,13 +501,14 @@ pub(crate) fn authorize_installed(
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
     let (installed_kernel, installed_normal) = classify_flash_input(installed.context(
         "installed firmware backup is required to recover the receiver control key; refusing update entry"
-    )?)?;
-    if kernel.is_none() {
-        flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
-            .map_err(anyhow::Error::msg)?;
-    }
+    ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
     let receiver =
         receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
+    if kernel.is_none() {
+        flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
+            .map_err(anyhow::Error::msg)
+            .context(crate::user_error::IssueCode::InstalledFirmwareMismatch)?;
+    }
     let (prepared, target_facts, receiver_check) = match p.selection {
         FlashSelection::KernelAndNormal => {
             let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
@@ -794,6 +795,23 @@ fn ram_logging_switch(cdb: &[u8], data: &[u8]) -> bool {
 }
 
 impl FileFacet for Pioneer {
+    fn family_evidence(&self, bytes: &[u8]) -> Option<(String, String)> {
+        let (kernel, normal) = classify_flash_input(bytes).ok()?;
+        let kernel = kernel
+            .as_deref()
+            .map(pioneer_optical::envelope::Envelope::load)
+            .transpose()
+            .ok()?;
+        let normal_bytes = normal.as_deref()?;
+        let normal = match kernel {
+            Some(ref kernel) => {
+                pioneer_optical::envelope::Envelope::load_with_kernel(normal_bytes, kernel)
+            }
+            None => pioneer_optical::envelope::Envelope::load(normal_bytes),
+        }
+        .ok()?;
+        Some((normal.family()?.to_string(), normal.info().model.clone()))
+    }
     /// A parsed package or envelope header establishes the protocol. A TAR
     /// header alone is shared with MediaTek and cannot identify Pioneer.
     fn recognize(&self, bytes: &[u8]) -> Option<Recognized> {
@@ -1025,6 +1043,81 @@ impl RecoveryFacet for Pioneer {
         true
     }
 
+    fn prepare(
+        &self,
+        dev: &mut ReadDevice<'_>,
+        receiver: &RecoveryTarget,
+        current: Option<&[u8]>,
+        target: &[u8],
+        bypass_family_check: bool,
+    ) -> Result<Box<dyn crate::backend::PreparedRecoveryUpdate>> {
+        let evidence = receiver
+            .state::<Option<recovery::Current>>()
+            .map_err(|error| {
+                crate::backend::UpdateFailure::before_write("recovery preparation", error)
+            })?;
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "preparing",
+            component: "filter.firmware",
+            done: None,
+            total: None,
+        });
+        let target = recovery::Target::load(target).map_err(|error| {
+            crate::backend::UpdateFailure::before_write("recovery preparation", error)
+        })?;
+        let captured;
+        let evidence = match evidence {
+            Some(evidence) => evidence,
+            None => {
+                // Validate the captured pair here: a Kernel-only partial backup
+                // is a capture failure, not an invalid target firmware file.
+                captured = match current {
+                    Some(bytes) => recovery::Current::load(bytes),
+                    None => recovery::captured_current(
+                        crate::backends::pioneer::backup::capture_signed_candidate(dev),
+                    ),
+                }
+                .map_err(|error| {
+                    crate::backend::UpdateFailure::before_write("current firmware capture", error)
+                })?;
+                &captured
+            }
+        };
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "preparing",
+            component: "filter.firmware",
+            done: None,
+            total: None,
+        });
+        let plan = target
+            .bind(evidence, bypass_family_check)
+            .map_err(|error| {
+                crate::backend::UpdateFailure::before_write("recovery preparation", error)
+            })?;
+        crate::output::field(
+            "Recovery",
+            if bypass_family_check {
+                "recovery.override_family"
+            } else {
+                "recovery.family_retained"
+            },
+        );
+        if plan.was_reencoded() {
+            crate::output::field(
+                "Recovery",
+                "Normal transfer encoding or local signature prepared for the receiving Kernel \
+                 (experimental, offline-proven, hardware-unproven)",
+            );
+        }
+        if plan.requires_restoration() {
+            crate::output::field(
+                "Recovery plan",
+                "Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel",
+            );
+        }
+        Ok(Box::new(plan))
+    }
+
     fn recover(
         &self,
         dev: DeviceAccess<'_, '_>,
@@ -1043,54 +1136,13 @@ impl RecoveryFacet for Pioneer {
         target: &[u8],
         bypass_family_check: bool,
     ) -> Result<UpdateOutcome> {
-        let evidence = receiver
-            .state::<Option<recovery::Current>>()
-            .map_err(|error| {
-                crate::backend::UpdateFailure::before_write("recovery preparation", error)
-            })?;
-        let captured;
-        let evidence = match evidence {
-            Some(evidence) => evidence,
-            None => {
-                // Validate the captured pair here: a Kernel-only partial backup
-                // is a capture failure, not an invalid target firmware file.
-                captured = match current {
-                    Some(bytes) => recovery::Current::load(bytes),
-                    None => recovery::captured_current(
-                        crate::backends::pioneer::backup::capture_signed_candidate(dev.scsi()),
-                    ),
-                }
-                .map_err(|error| {
-                    crate::backend::UpdateFailure::before_write("current firmware capture", error)
-                })?;
-                &captured
-            }
-        };
-        let plan = recovery::Plan::with_family_override(evidence, target, bypass_family_check)
-            .map_err(|error| {
-                crate::backend::UpdateFailure::before_write("recovery preparation", error)
-            })?;
-        crate::output::field(
-            "Recovery",
-            if bypass_family_check {
-                "recovery.family_bypassed"
-            } else {
-                "recovery.family_enforced"
-            },
-        );
-        if plan.was_reencoded() {
-            crate::output::field(
-                "Recovery",
-                "Normal transfer encoding or local signature prepared for the receiving Kernel \
-                 (experimental, offline-proven, hardware-unproven)",
-            );
-        }
-        if plan.requires_restoration() {
-            crate::output::field(
-                "Recovery plan",
-                "Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel",
-            );
-        }
+        let plan = self.prepare(
+            &mut ReadDevice::for_backend(dev.scsi(), self),
+            receiver,
+            current,
+            target,
+            bypass_family_check,
+        )?;
         match dev.writer() {
             Some(writer) => plan.execute(writer),
             None => {

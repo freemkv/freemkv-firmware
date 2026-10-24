@@ -444,7 +444,12 @@ fn parse_u32_accepts_both_hex_prefixes_and_plain_decimal() {
 #[test]
 fn parse_u32_rejects_garbage_instead_of_defaulting() {
     for bad in ["", "0x", "0xzz", "-1", "12g", "0x1_0000"] {
-        let err = parse_u32(bad).unwrap_err().to_string();
+        let error = parse_u32(bad).unwrap_err();
+        assert_eq!(
+            freemkv_flash::workflow::user_error(&error).id,
+            "errors.command_options"
+        );
+        let err = format!("{error:#}");
         assert!(
             err.contains("invalid number"),
             "a rejected number must be refused with a clear error (got {err:?} \
@@ -818,18 +823,24 @@ fn cmd_info_requires_the_output_and_length_arguments_before_touching_a_device() 
     // arguments whose absence would otherwise produce a discarded or
     // wrongly-addressed drive dump.
     let dev = Path::new("/dev/freemkv-fw-no-such-device");
-    let err = cmd_info(dev, None, None, true, None)
-        .unwrap_err()
-        .to_string();
+    let error = cmd_info(dev, None, None, true, None).unwrap_err();
+    assert_eq!(
+        freemkv_flash::workflow::user_error(&error).id,
+        "errors.command_options"
+    );
+    let err = format!("{error:#}");
     assert!(
         err.contains("--full requires --out"),
         "`--full` with nowhere to write must refuse, not silently discard a \
          whole-drive capture: {err}"
     );
 
-    let err = cmd_info(dev, Some("0x1000"), None, false, None)
-        .unwrap_err()
-        .to_string();
+    let error = cmd_info(dev, Some("0x1000"), None, false, None).unwrap_err();
+    assert_eq!(
+        freemkv_flash::workflow::user_error(&error).id,
+        "errors.command_options"
+    );
+    let err = format!("{error:#}");
     assert!(
         err.contains("--dump requires --len"),
         "`--dump` with no length must refuse rather than dump nothing: {err}"

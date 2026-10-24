@@ -25,6 +25,40 @@ pub(crate) struct Current {
     normal: Envelope,
 }
 
+/// Validated target bytes retained while Current is acquired.
+pub(crate) struct Target {
+    update: Update,
+    reencoded: bool,
+}
+
+impl Target {
+    pub(crate) fn load(bytes: &[u8]) -> Result<Self> {
+        let (kernel, normal) = classify_flash_input(bytes)
+            .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
+        let kernel = kernel.context(crate::user_error::IssueCode::FirmwareInvalid)?;
+        let normal = normal.context(crate::user_error::IssueCode::FirmwareInvalid)?;
+        let update = super::normal_prepare::pair(&kernel, &normal)?;
+        let reencoded = update.normal_transfer() != normal;
+        Ok(Self { update, reencoded })
+    }
+
+    pub(crate) fn bind(self, current: &Current, bypass_family_check: bool) -> Result<Plan> {
+        Plan::assemble_policy(
+            &current.kernel,
+            &current.normal,
+            self.update,
+            self.reencoded,
+            bypass_family_check,
+        )
+    }
+}
+
+impl crate::backend::PreparedRecoveryUpdate for Plan {
+    fn execute(&self, dev: &mut WriteDevice<'_>) -> Result<UpdateOutcome> {
+        Plan::execute(self, dev)
+    }
+}
+
 /// A failed or partial live capture asks for a supplied Current file.
 pub(super) fn captured_current(capture: Result<Vec<u8>>) -> Result<Current> {
     capture
@@ -34,14 +68,17 @@ pub(super) fn captured_current(capture: Result<Vec<u8>>) -> Result<Current> {
 
 impl Current {
     pub(crate) fn load(bytes: &[u8]) -> Result<Self> {
-        let (kernel, normal) = classify_flash_input(bytes)?;
+        let (kernel, normal) = classify_flash_input(bytes)
+            .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
         let kernel =
-            Envelope::load(&kernel.context("Current firmware must include Kernel and Normal")?)
+            Envelope::load(&kernel.context(crate::user_error::IssueCode::CurrentIncomplete)?)
+                .map_err(super::flash::preparation_error)
                 .context("decoding Current Kernel")?;
         let normal = Envelope::load_with_kernel(
-            &normal.context("Current firmware must include Kernel and Normal")?,
+            &normal.context(crate::user_error::IssueCode::CurrentIncomplete)?,
             &kernel,
         )
+        .map_err(super::flash::preparation_error)
         .context("decoding Current Normal")?;
         ensure!(
             kernel.info().kind == pioneer_optical::ComponentKind::Kernel
@@ -52,9 +89,11 @@ impl Current {
             kernel.update_dialect().is_some(),
             "Current Kernel update protocol is unsupported; no firmware written"
         );
-        Receiver::detect_with_kernel(&normal, &kernel).context(
-            "Current firmware receiver requirements are unsupported; no firmware written",
-        )?;
+        Receiver::detect_with_kernel(&normal, &kernel)
+            .map_err(super::flash::preparation_error)
+            .context(
+                "Current firmware receiver requirements are unsupported; no firmware written",
+            )?;
         ensure!(
             kernel.info().vendor == normal.info().vendor,
             "Current Kernel and Normal vendors disagree; no firmware written"
@@ -65,27 +104,30 @@ impl Current {
 
 impl Plan {
     #[cfg(test)]
+    pub(crate) fn with_family_override(
+        current: &Current,
+        target: &[u8],
+        bypass: bool,
+    ) -> Result<Self> {
+        Self::with_current_policy(current, target, bypass)
+    }
+    #[cfg(test)]
     pub(crate) fn prepare(current: &[u8], target: &[u8]) -> Result<Self> {
-        Self::with_family_override(&Current::load(current)?, target, false)
+        Self::with_current(&Current::load(current)?, target)
     }
 
-    pub(crate) fn with_family_override(
+    #[cfg(test)]
+    pub(crate) fn with_current(current: &Current, target: &[u8]) -> Result<Self> {
+        Self::with_current_policy(current, target, false)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_current_policy(
         current: &Current,
         target: &[u8],
         bypass_family_check: bool,
     ) -> Result<Self> {
-        let (kernel, normal) = classify_flash_input(target)?;
-        let kernel = kernel.context("Firmware to flash must include Kernel and Normal")?;
-        let normal = normal.context("Firmware to flash must include Kernel and Normal")?;
-        let target = super::normal_prepare::pair(&kernel, &normal)?;
-        let reencoded = target.normal_transfer() != normal;
-        Self::assemble(
-            &current.kernel,
-            &current.normal,
-            target,
-            reencoded,
-            bypass_family_check,
-        )
+        Target::load(target)?.bind(current, bypass_family_check)
     }
 
     #[cfg(test)]
@@ -98,10 +140,20 @@ impl Plan {
         } else {
             target
         };
-        Self::assemble(current.kernel(), current.normal(), target, changed, false)
+        Self::assemble(current.kernel(), current.normal(), target, changed)
     }
 
+    #[cfg(test)]
     fn assemble(
+        kernel: &Envelope,
+        normal: &Envelope,
+        target: Update,
+        reencoded: bool,
+    ) -> Result<Self> {
+        Self::assemble_policy(kernel, normal, target, reencoded, false)
+    }
+
+    fn assemble_policy(
         kernel: &Envelope,
         normal: &Envelope,
         target: Update,

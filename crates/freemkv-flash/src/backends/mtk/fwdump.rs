@@ -110,6 +110,12 @@ pub(crate) fn capture_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> 
         }
         off += len;
         progress.set(off);
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "reading",
+            component: "filter.firmware",
+            done: Some(off),
+            total: Some(IMAGE_SIZE),
+        });
     }
     Ok((image, readable, gaps))
 }
@@ -192,5 +198,113 @@ mod tests {
         assert_eq!(read, image, "DumpAll must return the flash byte-for-byte");
         assert_eq!(readable, IMAGE_SIZE);
         assert!(gaps.is_empty(), "{gaps:#x?}");
+    }
+}
+
+#[cfg(test)]
+mod raw_dump_regression_tests {
+    use super::*;
+    use crate::backend::{DeviceAccess, DumpFacet, ReadDevice};
+
+    struct Drive {
+        freemkv: bool,
+        short_at: Option<usize>,
+        identity_reads: usize,
+        dump_reads: usize,
+        oem_reads: usize,
+    }
+    impl ScsiDevice for Drive {
+        fn command_in(&mut self, cdb: &[u8], alloc: usize) -> Result<Vec<u8>> {
+            if cdb == identity_cdb(IDENTITY_ALLOC) {
+                self.identity_reads += 1;
+                return Ok(if self.freemkv {
+                    b"freemkv 0.15.0".to_vec()
+                } else {
+                    vec![]
+                });
+            }
+            if cdb.get(..5) == Some(&[OPCODE, KNOCK_MODE, KNOCK[0], KNOCK[1], VERB_DUMPALL]) {
+                self.dump_reads += 1;
+                let off = u32::from_be_bytes(cdb[5..9].try_into().unwrap()) as usize;
+                return Ok(vec![
+                    0x29;
+                    if self.short_at == Some(off) {
+                        alloc - 1
+                    } else {
+                        alloc
+                    }
+                ]);
+            }
+            if cdb.get(..3) == Some(&[0x3c, 6, 0]) {
+                self.oem_reads += 1;
+                return Ok(vec![0x73; alloc]);
+            }
+            anyhow::bail!("unexpected read {cdb:x?}")
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            panic!("raw dump must never write")
+        }
+        fn describe(&self) -> String {
+            "raw-dump-regression".into()
+        }
+    }
+    fn drive(freemkv: bool) -> Drive {
+        Drive {
+            freemkv,
+            short_at: None,
+            identity_reads: 0,
+            dump_reads: 0,
+            oem_reads: 0,
+        }
+    }
+    #[test]
+    fn known_mtk_raw_dump_uses_injected_full_image_reader() {
+        let mut dev = drive(true);
+        let image = crate::backends::mtk::Mtk
+            .capture(DeviceAccess::Read(&mut ReadDevice::without_unlocks(
+                &mut dev,
+            )))
+            .unwrap();
+        assert!(
+            image == vec![0x29; IMAGE_SIZE],
+            "raw dump must use injected bytes"
+        );
+        assert_eq!(dev.identity_reads, 1);
+        assert_eq!(dev.dump_reads, IMAGE_SIZE / MEMREAD_LEN);
+        assert_eq!(dev.oem_reads, 0);
+    }
+    #[test]
+    fn known_mtk_raw_dump_keeps_partial_injected_capture() {
+        let mut dev = drive(true);
+        dev.short_at = Some(0x3000);
+        let image = crate::backends::mtk::Mtk
+            .capture(DeviceAccess::Read(&mut ReadDevice::without_unlocks(
+                &mut dev,
+            )))
+            .unwrap();
+        let mut expected = vec![0x29; IMAGE_SIZE];
+        expected[0x3000..0x3000 + MEMREAD_LEN].fill(0xff);
+        assert!(
+            image == expected,
+            "partial injected bytes and FF gap must be retained"
+        );
+        assert_eq!(dev.dump_reads, IMAGE_SIZE / MEMREAD_LEN);
+        assert_eq!(dev.oem_reads, 0);
+    }
+    #[test]
+    fn known_mtk_raw_dump_preserves_stock_reader() {
+        let mut dev = drive(false);
+        let image = crate::backends::mtk::Mtk
+            .capture(DeviceAccess::Read(&mut ReadDevice::without_unlocks(
+                &mut dev,
+            )))
+            .unwrap();
+        assert!(
+            image == vec![0x73; IMAGE_SIZE],
+            "stock raw bytes must be retained"
+        );
+        assert_eq!(dev.identity_reads, 1);
+        assert_eq!(dev.dump_reads, 0);
+        assert_eq!(dev.oem_reads, IMAGE_SIZE / 0x1000);
     }
 }

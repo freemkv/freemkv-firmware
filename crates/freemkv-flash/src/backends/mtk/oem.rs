@@ -52,7 +52,6 @@ pub fn catalog() -> &'static Catalog {
         parse(MTK_OEM).unwrap_or_else(|e| {
             let msg = format!("embedded MediaTek OEM catalog failed to load: {e}");
             crate::diagnostics::record(msg.clone());
-            eprintln!("warning: {msg}");
             Catalog::default()
         })
     })

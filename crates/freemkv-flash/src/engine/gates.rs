@@ -86,7 +86,10 @@ pub(in crate::engine) fn recovery(
         bail!("refusing to write firmware on a recovery dry run");
     }
     if !acknowledged_risk {
-        bail!("refusing recovery without acknowledging the risk");
+        return Err(
+            anyhow::anyhow!("refusing recovery without acknowledging the risk")
+                .context(crate::user_error::IssueCode::Acknowledgement),
+        );
     }
     Ok(grant(dev, None))
 }

@@ -173,7 +173,11 @@ fn explicit_unsupported_features_and_legacy_modified_images_are_refused() {
     let error = api::modify_with_defaults(&legacy.image, &settings(&["hrl=off"]))
         .err()
         .unwrap();
-    assert!(error.to_string().contains("original OEM image"));
+    assert_eq!(
+        freemkv_flash::workflow::user_error(&error).id,
+        "errors.already_modified"
+    );
+    assert!(format!("{error:#}").contains("original OEM image"));
 }
 
 #[test]

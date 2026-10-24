@@ -23,15 +23,27 @@ enum Task {
 type BootPreview = Result<(BootSettings, BootSupport), (String, String)>;
 
 fn user_guidance(error: &anyhow::Error) -> String {
+    let mut issue = freemkv_flash::workflow::user_error(error);
     match error.downcast_ref::<ops::VerificationFailure>() {
         Some(ops::VerificationFailure::ExistingImage) => {
-            "domain.firmware_integrity_verification_failed_see_region_results".into()
+            issue.id = "domain.firmware_integrity_verification_failed_see_region_results";
         }
         Some(ops::VerificationFailure::GeneratedImage) => {
-            "domain.generated_firmware_failed_integrity_verification".into()
+            issue.id = "domain.generated_firmware_failed_integrity_verification";
         }
-        None => freemkv_flash::workflow::user_error(error).encoded(),
+        None => {}
     }
+    issue.consequence = Some("errors.no_firmware_write");
+    issue.encoded()
+}
+
+fn read_only_problem(id: &'static str) -> String {
+    freemkv_flash::workflow::UserError {
+        id,
+        arguments: Vec::new(),
+        consequence: Some("errors.no_firmware_write"),
+    }
+    .encoded()
 }
 
 pub struct FwApp {
@@ -249,7 +261,7 @@ impl FwApp {
                     let _ = tx.send(Msg::Event(freemkv_flash::output::Event::Message(format!(
                         "Worker panic; operation outcome unknown: {detail}"
                     ))));
-                    Err("errors.worker".into())
+                    Err(read_only_problem("errors.worker"))
                 }
             };
             let _ = tx.send(Msg::Done(result));
@@ -263,7 +275,8 @@ impl FwApp {
             loop {
                 match rx.try_recv() {
                     Ok(Msg::Event(event)) => match event {
-                        freemkv_flash::output::Event::DeviceSettings(_) => {}
+                        freemkv_flash::output::Event::DeviceSettings(_)
+                        | freemkv_flash::output::Event::Phase { .. } => {}
                         freemkv_flash::output::Event::Message(line) => self.log.push(line),
                         freemkv_flash::output::Event::Progress { label, done, total } => {
                             self.progress = Some((label, done, total))
@@ -303,7 +316,7 @@ impl FwApp {
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.status = "status.interrupted".into();
-                        self.failure = Some("errors.worker".into());
+                        self.failure = Some(read_only_problem("errors.worker"));
                         self.log.push("✗ worker disconnected before reporting completion; operation outcome is unknown.".into());
                         finished = true;
                         break;
@@ -337,18 +350,11 @@ impl FwApp {
                     })
                     .map_err(|_| {
                         (
-                            "errors.analysis".to_string(),
+                            read_only_problem("errors.analysis"),
                             "Firmware analysis worker stopped unexpectedly".to_string(),
                         )
                     })
-                    .and_then(|result| {
-                        result.map_err(|e| {
-                            (
-                                freemkv_flash::workflow::user_error(&e).encoded(),
-                                format!("{e:#}"),
-                            )
-                        })
-                    });
+                    .and_then(|result| result.map_err(|e| (user_guidance(&e), format!("{e:#}"))));
                     let _ = tx.send(result);
                     ctx.request_repaint();
                 });
@@ -376,7 +382,7 @@ impl FwApp {
                 }
                 Err(TryRecvError::Disconnected) => {
                     self.boot_rx = None;
-                    self.boot_error = Some("errors.worker".into());
+                    self.boot_error = Some(read_only_problem("errors.worker"));
                     self.log.push(
                         "Firmware analysis worker disconnected before reporting completion; analysis outcome unknown."
                             .into(),

@@ -952,9 +952,10 @@ FIELD    Saved to = <TMP>/mtk-backup/dump_mt1959.bak
 MSG      wrote <TMP>/mtk-backup/dump_mt1959.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
 MSG      RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- scsi transcript (514) ---
+--- scsi transcript (515) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -2422,9 +2423,10 @@ FIELD    Saved to = <TMP>/mtk-backup/dump_mt1939.bak
 MSG      wrote <TMP>/mtk-backup/dump_mt1939.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
 MSG      RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- scsi transcript (514) ---
+--- scsi transcript (515) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -3882,9 +3884,10 @@ FIELD    Saved to = <TMP>/mtk-backup/dump_unknown_boot.bak
 MSG      wrote <TMP>/mtk-backup/dump_unknown_boot.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
 MSG      RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- scsi transcript (514) ---
+--- scsi transcript (515) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096
@@ -4400,7 +4403,7 @@ IN   cdb=3c06001ff00000100000 alloc=4096 -> ok 4096
 saved file: 2097152 bytes sha256=e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 
 === MTK backup: firmware read fails at 0x100000 ===
-result: ERR backup needs every firmware byte, but read 2096640 of 2097152; unreadable ranges [
+result: ERR errors.backup_failed: backup needs every firmware byte, but read 2096640 of 2097152; unreadable ranges [
     (
         0x100000,
         0x100200,
@@ -5140,7 +5143,7 @@ saved file: <not created>
 
 === MTK dump: firmware read fails at 0x100000 ===
 result: OK
---- text (111) ---
+--- text (106) ---
 Backing up BD-RE BU40N → <TMP>/mtk-backup/dump_read_fail.bak
 reading drive memory: 0%
 reading drive memory: 1%
@@ -5243,16 +5246,11 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-Unreadable ranges filled with FF: [
-    (
-        0x100000,
-        0x100200,
-    ),
-]
+errors.backup_partial
 backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- events (115) ---
+--- events (110) ---
 MSG      Backing up BD-RE BU40N → <TMP>/mtk-backup/dump_read_fail.bak
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
@@ -5362,20 +5360,16 @@ FIELD    Dump gaps = Unreadable ranges filled with FF: [
         0x100200,
     ),
 ]
-MSG      Unreadable ranges filled with FF: [
-MSG          (
-MSG              0x100000,
-MSG              0x100200,
-MSG          ),
-MSG      ]
+MSG      errors.backup_partial
 MSG      backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 FIELD    Saved to = <TMP>/mtk-backup/dump_read_fail.bak
 MSG      wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
 MSG      RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- scsi transcript (522) ---
+--- scsi transcript (523) ---
 IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 IN   cdb=3c060000000000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000100000100000 alloc=4096 -> ok 4096
 IN   cdb=3c060000200000100000 alloc=4096 -> ok 4096

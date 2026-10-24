@@ -25,6 +25,18 @@ impl InspectFacet for Mtk {
         bytes: &[u8],
         control: &Control,
     ) -> Option<Result<Inspection>> {
+        if let Ok(package) = crate::mediatek_package::Package::parse(bytes) {
+            return Some((|| {
+                let mut inspection = inspect_file(source, package.firmware(), control)
+                    .context("the packaged firmware names no MediaTek MT19xx chip")??;
+                inspection.sha256 = format!("{:x}", Sha256::digest(bytes));
+                inspection.components[0].fields.insert(
+                    0,
+                    Field::new("Container", "MediaTek release package (final firmware)"),
+                );
+                Ok(inspection)
+            })());
+        }
         if super::is_legacy_archive(bytes) {
             return Some(inspect_legacy(source, bytes, control));
         }

@@ -11,6 +11,7 @@ use zip::write::SimpleFileOptions;
 
 const JOURNAL_LIMIT: u64 = 8 * 1024 * 1024;
 const BUNDLE_LIMIT: u64 = 50 * 1024 * 1024;
+pub(crate) const DESCRIPTION_LIMIT: usize = 16 * 1024;
 const MAX_LOGS: usize = 200;
 const EVENT_BYTES: usize = 8 * 1024 * 1024;
 const SCAN_BYTES: usize = 32 * 1024 * 1024;
@@ -51,6 +52,28 @@ fn private_file(path: &Path, append: bool) -> io::Result<File> {
         .create(true)
         .append(append)
         .truncate(!append);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
+/// Own only a report created exclusively by this attempt; errors leave no partial ZIP.
+struct PartialReport(Option<PathBuf>);
+
+impl Drop for PartialReport {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0 {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn new_report_file(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
@@ -156,6 +179,7 @@ impl Journal {
             session_id: self.session_id.clone(),
             unsaved: self.unsaved.clone(),
             artifact: None,
+            description: String::new(),
         }
     }
 }
@@ -166,15 +190,109 @@ pub struct BundleSource {
     session_id: String,
     unsaved: Vec<Value>,
     artifact: Option<ReportArtifact>,
+    description: String,
 }
 
 #[derive(Clone)]
 pub struct ReportArtifact {
     pub path: PathBuf,
     pub kind: &'static str,
+    pub evidence: Option<ArtifactEvidence>,
+}
+
+#[derive(Clone)]
+pub struct ArtifactEvidence {
+    pub bytes: u64,
+    pub sha256: String,
+    pub device: String,
+    pub drive: String,
+    pub operation: String,
+}
+
+#[derive(Debug)]
+pub(crate) struct AttachmentChanged;
+impl std::fmt::Display for AttachmentChanged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("selected capture is unavailable or changed")
+    }
+}
+impl std::error::Error for AttachmentChanged {}
+
+impl ReportArtifact {
+    pub fn pending(path: PathBuf, kind: &'static str) -> Self {
+        Self {
+            path,
+            kind,
+            evidence: None,
+        }
+    }
+    /// Called only by the completed capture worker, never on the UI thread.
+    pub fn capture(mut self, device: &str, drive: &str, operation: &str) -> Result<Self> {
+        use sha2::{Digest, Sha256};
+        anyhow::ensure!(
+            fs::symlink_metadata(&self.path)?.file_type().is_file(),
+            "Capture is not a regular file"
+        );
+        let file = File::open(&self.path)?;
+        anyhow::ensure!(
+            file.metadata()?.len() <= BUNDLE_LIMIT,
+            "Capture exceeds the 50 MiB report limit"
+        );
+        let mut source = file.take(BUNDLE_LIMIT + 1);
+        let mut bytes = 0;
+        let mut hash = Sha256::new();
+        let mut buffer = [0u8; 32 * 1024];
+        loop {
+            let n = source.read(&mut buffer)?;
+            if n == 0 {
+                break;
+            }
+            bytes += n as u64;
+            anyhow::ensure!(
+                bytes <= BUNDLE_LIMIT,
+                "Capture exceeds the 50 MiB report limit"
+            );
+            hash.update(&buffer[..n]);
+        }
+        self.evidence = Some(ArtifactEvidence {
+            bytes,
+            sha256: format!("{:x}", hash.finalize()),
+            device: device.into(),
+            drive: drive.into(),
+            operation: operation.into(),
+        });
+        Ok(self)
+    }
 }
 
 impl BundleSource {
+    pub fn with_description(mut self, description: String) -> Self {
+        self.description = description;
+        self
+    }
+    pub fn artifact_kind(&self) -> Option<&'static str> {
+        self.artifact.as_ref().map(|a| a.kind)
+    }
+    pub fn summary(&self) -> String {
+        match self.artifact.as_ref() {
+            Some(a) => crate::localization::message(
+                if a.kind == "dump" {
+                    "report.summary_dump"
+                } else {
+                    "report.summary_backup"
+                },
+                &[(
+                    "filename",
+                    a.path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned(),
+                )],
+            ),
+            None => "report.summary_logs".into(),
+        }
+    }
     pub fn with_artifact(mut self, artifact: ReportArtifact) -> Self {
         self.artifact = Some(artifact);
         self
@@ -182,11 +300,25 @@ impl BundleSource {
     #[cfg(test)]
     pub fn bundle(&self, scope: Scope) -> Result<PathBuf> {
         self.bundle_with_control(scope, None)
+            .map(|built| built.path)
     }
 
-    fn bundle_with_control(&self, scope: Scope, control: Option<&Submission>) -> Result<PathBuf> {
+    fn bundle_with_control(
+        &self,
+        scope: Scope,
+        control: Option<&Submission>,
+    ) -> Result<BuiltBundle> {
         let check = || control.map_or(Ok(()), Submission::check);
+        self.bundle_checked(scope, check)
+    }
+
+    fn bundle_checked(&self, scope: Scope, check: impl Fn() -> Result<()>) -> Result<BuiltBundle> {
         check()?;
+        anyhow::ensure!(
+            self.description.len() <= DESCRIPTION_LIMIT,
+            "Description exceeds 16 KiB"
+        );
+        let description_bytes = serde_json::to_vec(&self.description)?.len() as u64;
         let mut events = Vec::new();
         let mut event_bytes = 0usize;
         for event in &self.unsaved {
@@ -263,17 +395,28 @@ impl BundleSource {
                 matches!(artifact.kind, "dump" | "backup"),
                 "Invalid report artifact type"
             );
-            anyhow::ensure!(
-                fs::symlink_metadata(&artifact.path)?.file_type().is_file(),
-                "The selected firmware artifact is no longer a regular file."
-            );
-            fs::metadata(&artifact.path)?.len()
+            if !fs::symlink_metadata(&artifact.path)
+                .context(AttachmentChanged)?
+                .file_type()
+                .is_file()
+            {
+                return Err(AttachmentChanged.into());
+            }
+            let evidence = artifact.evidence.as_ref().context(AttachmentChanged)?;
+            let size = fs::metadata(&artifact.path)
+                .context(AttachmentChanged)?
+                .len();
+            if size != evidence.bytes {
+                return Err(AttachmentChanged.into());
+            }
+            size
         } else {
             0
         };
         if size
             .saturating_add(artifact_size)
             .saturating_add(event_bytes as u64)
+            .saturating_add(description_bytes)
             > BUNDLE_LIMIT
         {
             bail!("The selected artifact, logs, and history exceed 50 MiB. Choose this session or submit a smaller artifact.");
@@ -283,9 +426,15 @@ impl BundleSource {
             reports = std::env::temp_dir().join("freemkv-reports");
             fs::create_dir_all(&reports)?;
         }
-        let name = format!("freemkv-report-{}-{}.zip", stamp(), self.session_id);
+        let name = format!(
+            "freemkv-report-{}-{}-{}.zip",
+            stamp(),
+            self.session_id,
+            random_id()?
+        );
         let path = reports.join(name);
-        let file = private_file(&path, false)?;
+        let file = new_report_file(&path)?;
+        let mut partial = PartialReport(Some(path.clone()));
         let mut zip = zip::ZipWriter::new(file);
         let opts =
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
@@ -331,13 +480,13 @@ impl BundleSource {
             use sha2::{Digest, Sha256};
             let archive_path = format!("artifacts/{}.bin", artifact.kind);
             zip.start_file(&archive_path, opts)?;
-            let mut source = File::open(&artifact.path)?;
+            let mut source = File::open(&artifact.path).context(AttachmentChanged)?;
             let mut hash = Sha256::new();
             let mut bytes = 0u64;
             let mut buffer = [0u8; 32 * 1024];
             loop {
                 check()?;
-                let n = source.read(&mut buffer)?;
+                let n = source.read(&mut buffer).context(AttachmentChanged)?;
                 if n == 0 {
                     break;
                 }
@@ -345,18 +494,27 @@ impl BundleSource {
                 anyhow::ensure!(
                     size.saturating_add(bytes)
                         .saturating_add(event_bytes as u64)
+                        .saturating_add(description_bytes)
                         <= BUNDLE_LIMIT,
                     "The selected artifact grew beyond the 50 MiB report limit."
                 );
                 hash.update(&buffer[..n]);
                 zip.write_all(&buffer[..n])?;
             }
+            let checksum = format!("{:x}", hash.finalize());
+            let evidence = artifact.evidence.as_ref().context(AttachmentChanged)?;
+            if bytes != evidence.bytes || checksum != evidence.sha256 {
+                return Err(AttachmentChanged.into());
+            }
             Some(json!({
                 "kind": artifact.kind,
                 "path": archive_path,
                 "filename": artifact.path.file_name().and_then(|n| n.to_str()),
                 "bytes": bytes,
-                "sha256": format!("{:x}", hash.finalize()),
+                "sha256": checksum,
+                "device": evidence.device,
+                "drive": evidence.drive,
+                "operation_id": evidence.operation,
             }))
         } else {
             None
@@ -374,11 +532,24 @@ impl BundleSource {
                 "logs": included,
                 "missing_logs": missing,
                 "artifact": artifact_manifest,
+                "description": self.description,
             }),
         )?;
         zip.finish().context("Could not finish report ZIP")?;
-        Ok(path)
+        check()?;
+        partial.0 = None;
+        let receipt_key = match artifact_manifest.as_ref().and_then(|a| a["kind"].as_str()) {
+            Some("dump") => "report.sent_dump",
+            Some("backup") => "report.sent_backup",
+            _ => "report.sent_logs",
+        };
+        Ok(BuiltBundle { path, receipt_key })
     }
+}
+
+struct BuiltBundle {
+    path: PathBuf,
+    receipt_key: &'static str,
 }
 
 fn retain_event(event: Value, events: &mut Vec<Value>, bytes: &mut usize) -> Result<()> {
@@ -430,10 +601,11 @@ mod tests {
             .unwrap();
         let dump = dir.join("drive-dump.bin");
         fs::write(&dump, b"firmware bytes").unwrap();
-        let source = journal.source().with_artifact(ReportArtifact {
-            path: dump,
-            kind: "dump",
-        });
+        let source = journal.source().with_artifact(
+            ReportArtifact::pending(dump, "dump")
+                .capture("device", "Drive", "operation")
+                .unwrap(),
+        );
         let path = source.bundle(Scope::Session).unwrap();
         let mut zip = zip::ZipArchive::new(File::open(path).unwrap()).unwrap();
         let mut bytes = Vec::new();
@@ -457,6 +629,58 @@ mod tests {
         assert_eq!(manifest["artifact"]["kind"], "dump");
         assert_eq!(manifest["artifact"]["bytes"], 14);
         drop(zip);
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn failed_attachment_copy_does_not_leave_a_partial_zip() {
+        let dir =
+            std::env::temp_dir().join(format!("freemkv-support-partial-{}", random_id().unwrap()));
+        let journal = Journal::open_at(dir.clone()).unwrap();
+        let dump = dir.join("dump.bin");
+        fs::write(&dump, b"original").unwrap();
+        let artifact = ReportArtifact::pending(dump.clone(), "dump")
+            .capture("device", "Drive", "operation")
+            .unwrap();
+        let source = journal.source().with_artifact(artifact);
+        fs::write(&dump, b"modified").unwrap();
+        assert!(source.bundle(Scope::Session).is_err());
+        assert_eq!(
+            fs::read_dir(dir.join("reports")).unwrap().count(),
+            0,
+            "failed artifact verification must remove its incomplete report ZIP"
+        );
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn cancellation_during_zip_creation_removes_only_the_partial_report() {
+        let dir =
+            std::env::temp_dir().join(format!("freemkv-support-cancel-{}", random_id().unwrap()));
+        let journal = Journal::open_at(dir.clone()).unwrap();
+        let reports = dir.join("reports");
+        fs::create_dir_all(&reports).unwrap();
+        let completed = reports.join("completed.zip");
+        fs::write(&completed, b"completed report").unwrap();
+        assert!(new_report_file(&completed).is_err());
+        assert_eq!(fs::read(&completed).unwrap(), b"completed report");
+        let source = journal.source();
+        let control = Submission::new();
+        let result = source.bundle_checked(Scope::Session, || {
+            if fs::read_dir(&reports).unwrap().count() > 1 {
+                control.cancel();
+            }
+            control.check()
+        });
+        assert!(result.is_err());
+        assert!(
+            control.cancelled(),
+            "test must cancel after the new ZIP actually exists"
+        );
+        assert_eq!(fs::read_dir(&reports).unwrap().count(), 1);
+        assert_eq!(fs::read(&completed).unwrap(), b"completed report");
         drop(journal);
         fs::remove_dir_all(dir).unwrap();
     }
@@ -613,5 +837,87 @@ mod budget_tests {
         assert!(error.to_string().contains("32 MiB scan limit"));
         drop(journal);
         fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+pub(crate) use submission::submit_test;
+
+#[cfg(test)]
+mod retained_capture_tests {
+    use super::*;
+
+    #[test]
+    fn retained_capture_cannot_be_replaced_deleted_or_truncated() {
+        for mutation in ["overwrite", "delete", "truncate", "symlink"] {
+            let dir =
+                std::env::temp_dir().join(format!("retained-capture-{}", random_id().unwrap()));
+            fs::create_dir_all(&dir).unwrap();
+            let path = dir.join("dump.bin");
+            fs::write(&path, b"original bytes").unwrap();
+            let artifact = ReportArtifact::pending(path.clone(), "dump")
+                .capture("drive", "Drive model", "op-1")
+                .unwrap();
+            let source = Journal::memory_at(dir.clone())
+                .source()
+                .with_artifact(artifact);
+            match mutation {
+                "overwrite" => fs::write(&path, b"modified bytes").unwrap(),
+                "delete" => fs::remove_file(&path).unwrap(),
+                "truncate" => fs::write(&path, b"short").unwrap(),
+                _ => {
+                    fs::remove_file(&path).unwrap();
+                    #[cfg(unix)]
+                    {
+                        let other = dir.join("other.bin");
+                        fs::write(&other, b"original bytes").unwrap();
+                        std::os::unix::fs::symlink(other, &path).unwrap();
+                    }
+                }
+            }
+            let error = source.bundle(Scope::Session).unwrap_err();
+            assert!(error.is::<AttachmentChanged>(), "{mutation}: {error:#}");
+            fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn blank_and_unicode_descriptions_round_trip_and_receipts_match_manifest() {
+        for kind in [None, Some("dump"), Some("backup")] {
+            for description in ["", "\n日本語 🐈\nsecond line"] {
+                let dir = std::env::temp_dir()
+                    .join(format!("bundle-description-{}", random_id().unwrap()));
+                fs::create_dir_all(&dir).unwrap();
+                let mut source = Journal::memory_at(dir.clone())
+                    .source()
+                    .with_description(description.into());
+                if let Some(kind) = kind {
+                    let path = dir.join("capture.bin");
+                    fs::write(&path, b"captured").unwrap();
+                    source = source.with_artifact(
+                        ReportArtifact::pending(path, kind)
+                            .capture("drive", "Drive", "op")
+                            .unwrap(),
+                    );
+                }
+                let built = source.bundle_with_control(Scope::Session, None).unwrap();
+                assert_eq!(
+                    built.receipt_key,
+                    match kind {
+                        Some("dump") => "report.sent_dump",
+                        Some("backup") => "report.sent_backup",
+                        _ => "report.sent_logs",
+                    }
+                );
+                let mut zip = zip::ZipArchive::new(File::open(built.path).unwrap()).unwrap();
+                let manifest: Value =
+                    serde_json::from_reader(zip.by_name("manifest.json").unwrap()).unwrap();
+                assert_eq!(manifest["description"], description);
+                assert_eq!(manifest["logs"], json!([]));
+                assert_eq!(manifest["artifact"]["kind"].as_str(), kind);
+                drop(zip);
+                fs::remove_dir_all(dir).unwrap();
+            }
+        }
     }
 }

@@ -6,7 +6,7 @@ on:
   # candidate — it runs these too, plus the expensive suite in qa.yml. `main`
   # only moves at release time, to a commit already green on qa.
   push:
-    branches: [main, dev, qa]
+    branches: [dev]
   pull_request:
 
 # Rapid dev pushes supersede their own in-progress runs instead of stacking.
@@ -144,46 +144,6 @@ jobs:
         with:
           command: check advisories bans licenses sources
           manifest-path: freemkv-firmware/Cargo.toml
-
-  # The crate ships on macOS and Windows through libfreemkv's SCSI transport, so
-  # it has to compile there. Build the tests (not just `cargo check`) to force
-  # codegen on the cfg-gated platform halves. These run only on the
-  # main branch; QA covers debug codegen in its native GUI gate and release
-  # codegen in its all-targets test matrix. Dev is the fast lane. `if` SKIPS the job (it
-  # does not queue), so a release gate is never blocked by a never-scheduled job.
-  check-macos:
-    needs: resolve-msrv
-    if: github.ref_name == 'main'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          path: freemkv-firmware
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ needs.resolve-msrv.outputs.v }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: freemkv-firmware
-      - run: cargo build --all-targets --all-features
-        working-directory: freemkv-firmware
-
-  check-windows:
-    needs: resolve-msrv
-    if: github.ref_name == 'main'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          path: freemkv-firmware
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ needs.resolve-msrv.outputs.v }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: freemkv-firmware
-      - run: cargo build --all-targets --all-features
-        working-directory: freemkv-firmware
 
   # ── Coverage (non-required, additive) ───────────────────────────────────────
   #

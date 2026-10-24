@@ -7,6 +7,59 @@ use super::*;
 use crate::manifest::FlashMode;
 use crate::platform::MockScsiDevice;
 
+#[test]
+fn pre_backup_target_validation_checks_each_body_once() {
+    let pair = super::prepared_tests::pair(false, 1);
+    let mut archive = tar::Builder::new(Vec::new());
+    for (name, bytes) in [
+        ("kernel.enc", pair.kernel_transfer()),
+        ("normal.enc", pair.normal_transfer()),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive.append_data(&mut header, name, bytes).unwrap();
+    }
+    let package = archive.into_inner().unwrap();
+    for input in [package.as_slice(), pair.normal_transfer()] {
+        super::flash_plan::TAIL_CHECKS.with(|count| count.set(0));
+        super::execute_plan(input).expect("valid target still prepares");
+        let checks = super::flash_plan::TAIL_CHECKS.with(|count| count.replace(0));
+        assert_eq!(checks, 1, "one tail-validation pass per immutable target");
+    }
+    for malformed in [
+        b"invalid target".as_slice(),
+        &pair.normal_transfer()[..0x100],
+    ] {
+        assert!(super::execute_plan(malformed).is_err());
+    }
+    let mut mismatched = package;
+    let field = b"Kernel Version : GENERAL";
+    let at = mismatched
+        .windows(field.len())
+        .rposition(|bytes| bytes == field)
+        .expect("Normal header declares its required Kernel")
+        + field.len()
+        - b"GENERAL".len();
+    mismatched[at..at + 8].copy_from_slice(b"ID72    ");
+    let error = super::execute_plan(&mismatched)
+        .err()
+        .expect("header pairing remains mandatory");
+    assert!(format!("{error:#}").contains("required-Kernel tag"));
+}
+
+#[test]
+fn pre_backup_validation_retains_real_unrecovered_tail_refusal_when_configured() {
+    let Some(path) = std::env::var_os("FREEMKV_TD05_BAD_TARGET") else {
+        return;
+    };
+    let error = super::execute_plan(&std::fs::read(path).unwrap())
+        .err()
+        .expect("the original incomplete TD05 image must still be refused");
+    assert!(format!("{error:#}").contains("unrecoverable tail"));
+}
+
 fn pioneer_corpus_root() -> std::path::PathBuf {
     std::env::var_os("FWEXT_HOARD")
         .map(std::path::PathBuf::from)
@@ -903,10 +956,12 @@ fn generic_pair_accepts_non_ud04_corpus_and_rejects_damage() {
 
 #[test]
 fn installed_receiver_requires_a_backup() {
-    assert!(installed_receiver(None)
-        .unwrap_err()
-        .to_string()
-        .contains("backup is required"));
+    let error = installed_receiver(None).unwrap_err();
+    assert_eq!(
+        crate::user_error::UserError::of(&error).id,
+        "errors.backup_required"
+    );
+    assert!(format!("{error:#}").contains("backup is required"));
 }
 
 #[test]
