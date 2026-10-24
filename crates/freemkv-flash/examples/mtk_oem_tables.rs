@@ -169,6 +169,24 @@ fn without_de_byte(image: &[u8]) -> Vec<u8> {
     out
 }
 
+fn normalized_key(image: &[u8]) -> [u8; 32] {
+    oem::sha256(&without_de_byte(image))
+}
+
+/// Digest matches select candidates; bytes still decide DE-copy equality.
+fn exact_original<'a>(
+    image: &[u8],
+    candidates: &'a [(String, PathBuf)],
+) -> Result<Option<&'a str>> {
+    let normalized = without_de_byte(image);
+    for (sha, path) in candidates {
+        if without_de_byte(&std::fs::read(path)?) == normalized {
+            return Ok(Some(sha));
+        }
+    }
+    Ok(None)
+}
+
 struct Candidate {
     path: PathBuf,
     sha: String,
@@ -214,39 +232,38 @@ fn source_index(path: Option<&String>) -> Result<HashMap<String, Vec<String>>> {
     Ok(out)
 }
 
-fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    if !(3..=4).contains(&args.len()) {
-        bail!("usage: mtk_oem_tables <images-dir> <output.bin> [hoard sources.json]");
-    }
-    let index = source_index(args.get(3))?;
-    let mut paths = Vec::new();
-    files(Path::new(&args[1]), &mut paths)?;
-    paths.sort();
-
+fn scan_candidates(
+    paths: Vec<PathBuf>,
+    index: &HashMap<String, Vec<String>>,
+    excluded: &mut BTreeMap<String, (String, String)>,
+    reads: &mut usize,
+    unnamed: &mut usize,
+) -> Result<Vec<Candidate>> {
     let mut admitted: Vec<Candidate> = Vec::new();
-    let mut excluded: BTreeMap<String, (String, String)> = BTreeMap::new();
-    let (mut reads, mut unnamed) = (0, 0);
     let mut seen = BTreeSet::new();
     for path in paths {
         let image = std::fs::read(&path)?;
         let sha = hex(&oem::sha256(&image));
-        if !seen.insert(sha.clone()) {
+        if seen.contains(&sha) {
             continue;
         }
         if is_drive_read(&image) {
-            reads += 1;
+            seen.insert(sha);
+            *reads += 1;
             continue;
         }
         let Ok(info) = detect_chip(&image) else {
-            unnamed += 1;
+            seen.insert(sha);
+            *unnamed += 1;
             continue;
         };
         let label = format!("{} {}", info.model, info.rev);
-        if let Some(why) = exclusion(&image, &provenance(&path, &index)?) {
+        if let Some(why) = exclusion(&image, &provenance(&path, index)?) {
             excluded.insert(sha, (label, why));
             continue;
         }
+        seen.insert(sha.clone());
+        excluded.remove(&sha);
         let hw = hardware(&image).expect("checked by exclusion");
         admitted.push(Candidate {
             path,
@@ -260,27 +277,50 @@ fn main() -> Result<()> {
         });
     }
 
+    Ok(admitted)
+}
+
+fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if !(3..=4).contains(&args.len()) {
+        bail!("usage: mtk_oem_tables <images-dir> <output.bin> [hoard sources.json]");
+    }
+    let index = source_index(args.get(3))?;
+    let mut paths = Vec::new();
+    files(Path::new(&args[1]), &mut paths)?;
+    paths.sort();
+
+    let mut excluded = BTreeMap::new();
+    let (mut reads, mut unnamed) = (0, 0);
+    let admitted = scan_candidates(paths, &index, &mut excluded, &mut reads, &mut unnamed)?;
+
     // A build equal to another admitted one except for a 0xDE downgrade byte
     // is that build DE-patched.
-    let mut originals: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
+    let mut originals: HashMap<[u8; 32], Vec<(String, PathBuf)>> = HashMap::new();
     for c in &admitted {
         let image = std::fs::read(&c.path)?;
         if image[DE_BYTE] != 0xDE {
             originals
-                .entry(without_de_byte(&image))
+                .entry(normalized_key(&image))
                 .or_default()
-                .push(c.sha.clone());
+                .push((c.sha.clone(), c.path.clone()));
         }
     }
     let mut kept = Vec::new();
     for c in admitted {
         let image = std::fs::read(&c.path)?;
-        let original = (image[DE_BYTE] == 0xDE)
-            .then(|| originals.get(&without_de_byte(&image)))
-            .flatten();
+        let original = if image[DE_BYTE] == 0xDE {
+            originals
+                .get(&normalized_key(&image))
+                .map(|candidates| exact_original(&image, candidates))
+                .transpose()?
+                .flatten()
+        } else {
+            None
+        };
         match original {
             Some(of) => {
-                let why = format!("DE-patched copy of {}", &of[0][..16]);
+                let why = format!("DE-patched copy of {}", &of[..16]);
                 excluded.insert(c.sha.clone(), (format!("{} {}", c.model, c.revision), why));
             }
             None => kept.push(c),
@@ -433,4 +473,113 @@ fn main() -> Result<()> {
         bytes.len()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_dir() -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "freemkv-oem-catalog-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn eligible_duplicate_is_admitted_independent_of_path_order() {
+        let image = include_bytes!("../tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+        let eligible = Provenance {
+            from_updater: true,
+            ..Provenance::default()
+        };
+        assert_eq!(exclusion(image, &eligible), None);
+        for eligible_first in [false, true] {
+            let dir = test_dir();
+            let missing = dir.join(if eligible_first { "z.bin" } else { "a.bin" });
+            let eligible = dir.join(if eligible_first { "a.bin" } else { "z.bin" });
+            std::fs::write(&missing, image).unwrap();
+            std::fs::write(&eligible, image).unwrap();
+            std::fs::write(
+                format!("{}.json", eligible.display()),
+                br#"{"sources":[{"candidate":"vendor.exe::firmware.bin"}]}"#,
+            )
+            .unwrap();
+            let mut paths = vec![missing, eligible.clone()];
+            paths.sort();
+            let mut excluded = BTreeMap::new();
+            let (mut reads, mut unnamed) = (0, 0);
+            let result = scan_candidates(
+                paths,
+                &HashMap::new(),
+                &mut excluded,
+                &mut reads,
+                &mut unnamed,
+            )
+            .unwrap();
+            std::fs::remove_dir_all(dir).unwrap();
+            assert_eq!(
+                result.len(),
+                1,
+                "eligible source must survive either duplicate ordering"
+            );
+            assert_eq!(result[0].path, eligible);
+            assert!(
+                excluded.is_empty(),
+                "an admitted image must not remain reported as excluded"
+            );
+        }
+    }
+
+    #[test]
+    fn normalized_keys_retain_only_a_digest_per_full_image() {
+        let image = vec![0x5a; layout::IMAGE_SIZE];
+        let key = normalized_key(&image);
+        assert_eq!(
+            key.len(),
+            32,
+            "normalized keys must not retain full firmware images"
+        );
+        let mut changed = image.clone();
+        changed[DE_BYTE] = 0xde;
+        changed[..layout::BOOT_PAGE.len].fill(0x22);
+        for range in layout::DRIVE_WRITTEN {
+            changed[range.start..range.end()].fill(0x33);
+        }
+        assert_eq!(normalized_key(&changed), key);
+        changed[layout::BOOT_MIRROR.start + 128] ^= 1;
+        assert_ne!(
+            normalized_key(&changed),
+            key,
+            "written program bytes remain significant"
+        );
+    }
+    #[test]
+    fn digest_candidates_still_require_exact_normalized_bytes() {
+        let dir = test_dir();
+        let original_path = dir.join("original.bin");
+        let different_path = dir.join("different.bin");
+        let original = vec![0x5a; layout::IMAGE_SIZE];
+        let mut different = original.clone();
+        different[layout::BOOT_MIRROR.start + 128] ^= 1;
+        std::fs::write(&original_path, &original).unwrap();
+        std::fs::write(&different_path, different).unwrap();
+        let mut de_copy = original.clone();
+        de_copy[DE_BYTE] = 0xde;
+        let wrong_candidates = vec![("wrong".into(), different_path.clone())];
+        assert_eq!(exact_original(&de_copy, &wrong_candidates).unwrap(), None);
+        let candidates = vec![
+            ("wrong".into(), different_path),
+            ("right".into(), original_path),
+        ];
+        assert_eq!(
+            exact_original(&de_copy, &candidates).unwrap(),
+            Some("right")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
