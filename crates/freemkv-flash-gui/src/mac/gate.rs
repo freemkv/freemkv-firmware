@@ -76,8 +76,8 @@ pub(super) fn run(c: &Controller, dir: &Path) {
         );
     }
 
+    firmware_pickers(c, &mut g);
     c.send(Input::SelectTask(Task::Flash));
-    escape_closes_only_the_picker(c, &mut g);
     let first = sheet(c, dir, true, &mut g);
     let reopened = sheet(c, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
@@ -234,11 +234,28 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
 /// Open the flash file picker and cancel it through the panel's own `cancel:`: the picker
 /// must close and the main window must stay up (Escape once closed the window and quit the
 /// app). Then press Escape in the main window itself.
-fn escape_closes_only_the_picker(c: &Controller, g: &mut Gate) {
+fn firmware_pickers(c: &Controller, g: &mut Gate) {
+    let original = c.with_app(|app| app.profile.clone());
+    for (_, extensions) in gui_gate::PICKER_PROFILES {
+        c.with_app(|app| {
+            if let crate::ui::ProfileState::Ready(profile) = &mut app.profile {
+                profile.firmware_picker =
+                    crate::ui::FirmwarePickerFormats::prefer(extensions.to_vec());
+            }
+        });
+        for pick in gui_gate::FIRMWARE_PICKS {
+            escape_closes_only_the_picker(c, pick, g);
+            c.with_app(|app| g.no_drive_io(&format!("picker {pick:?}"), app));
+        }
+    }
+    c.with_app(|app| app.profile = original);
+}
+
+fn escape_closes_only_the_picker(c: &Controller, pick: Pick, g: &mut Gate) {
     let Some(main) = c.ivars().window.borrow().clone() else {
         return;
     };
-    c.send(Input::Choose(Pick::FlashFirmware));
+    c.send(Input::Choose(pick));
     settle(c, SETTLE);
     let picker = main.attachedSheet();
     g.check(

@@ -50,7 +50,7 @@ fn diagnostic(visible: bool, text: &str) {
 fn native_error(error: &libfreemkv::error::Error, detail: String) -> anyhow::Error {
     match error.scsi_sense() {
         Some(s) => ScsiSenseError::new(s.sense_key, s.asc, s.ascq, detail).into(),
-        None => anyhow!(detail),
+        None => anyhow!(detail).context(crate::user_error::IssueCode::Connection),
     }
 }
 
@@ -59,7 +59,7 @@ fn status_error(status: u8, sense: &[u8], detail: String) -> anyhow::Error {
         (CHECK_CONDITION, Some((key, asc, ascq))) => {
             ScsiSenseError::new(key, asc, ascq, detail).into()
         }
-        _ => anyhow!(detail),
+        _ => anyhow!(detail).context(crate::user_error::IssueCode::Connection),
     }
 }
 
@@ -69,25 +69,33 @@ pub struct TransportDevice {
     path: String,
 }
 
-/// Turn a raw libfreemkv open error (e.g. `E1005: ioreg:… 0xe00002c5`) into a
-/// friendly, actionable message, keeping the raw text dimmed for debugging.
-fn friendly_open_error(path: &str, raw: &str) -> anyhow::Error {
-    let low = raw.to_ascii_lowercase();
-    let hint = if raw.starts_with("E1006:") {
-        "macOS could not initialize the drive interface; the diagnostic log includes native open steps and available Apple plug-in errors"
-    } else if raw.contains("0xe00002c5") || low.contains("exclusive") {
-        "the drive is already open by another process — close other freemkv commands or disc/eject utilities and retry"
-    } else if raw.contains("0xe00002bc") || low.contains("not found") || low.contains("no such") {
-        "no drive matches that selector — run `freemkv-flash list` to see connected drives"
-    } else if raw.contains("0xe00002c1")
-        || low.contains("not permitted")
-        || low.contains("permission")
+/// Preserve typed OS causes; diagnostic text never selects customer guidance.
+fn friendly_open_error(path: &str, error: libfreemkv::error::Error) -> anyhow::Error {
+    use crate::user_error::IssueCode;
+    use libfreemkv::error::Error;
+    let permission = matches!(
+        &error,
+        Error::DevicePermission { .. }
+            | Error::DeviceLocked { kr: 0xe00002c1, .. }
+            | Error::IoKitPluginFailed { kr: 0xe00002c1, .. }
+    ) || matches!(&error, Error::IoError { source } if source.kind() == std::io::ErrorKind::PermissionDenied);
+    if permission {
+        return anyhow::Error::new(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            error,
+        ))
+        .context(format!("SCSI open: {path}"));
+    }
+    let code = if matches!(&error, Error::DeviceNotFound { .. })
+        || matches!(&error, Error::IoError { source } if source.kind() == std::io::ErrorKind::NotFound)
     {
-        "permission denied opening the drive — grant the terminal/app disk access and retry"
+        IssueCode::NoDrive
     } else {
-        return anyhow!("could not open drive {path}: {raw}");
+        IssueCode::Connection
     };
-    anyhow!("could not open drive {path}: {hint} ({raw})")
+    anyhow::Error::new(error)
+        .context(format!("SCSI open: {path}"))
+        .context(code)
 }
 
 impl TransportDevice {
@@ -100,7 +108,7 @@ impl TransportDevice {
             crate::diagnostics::record(format!("SCSI open failed: {e}"));
             #[cfg(target_os = "macos")]
             crate::diagnostics::macos_open_failure();
-            friendly_open_error(path, &e.to_string())
+            friendly_open_error(path, e)
         })?;
         crate::diagnostics::record(format!(
             "SCSI opened: max_transfer_bytes={}",

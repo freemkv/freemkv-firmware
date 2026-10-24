@@ -1,6 +1,92 @@
 //! Unit tests for [`super`] (the generic engine: flash flow + safety gate).
 
 use super::*;
+
+#[test]
+fn required_info_identity_failure_is_not_presented_as_an_unsupported_drive() {
+    let mut dev =
+        MockScsiDevice::new().on_fail(|c| c.first() == Some(&0x12), "private INQUIRY failure");
+    let error = crate::user_error::read_only(super::info(&mut dev, None)).unwrap_err();
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.connection");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    assert!(format!("{error:#}").contains("private INQUIRY failure"));
+    assert_eq!(
+        dev.reads.len(),
+        1,
+        "stop before presenting guessed identity/capability rows"
+    );
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn backup_failure_question_retains_localized_cause_and_no_write_evidence() {
+    struct Decline(bool);
+    impl Confirm for Decline {
+        fn confirm(&mut self, _: &crate::backend::AuthorizedPlan) -> Result<bool> {
+            panic!("no final write consent")
+        }
+        fn proceed_without_backup(&mut self, reason: &str) -> Result<bool> {
+            self.0 = true;
+            assert!(
+                reason.starts_with('\u{1e}'),
+                "retain stable message IDs through the confirmation boundary"
+            );
+            for language in crate::localization::Language::ALL {
+                let text = crate::localization::render(language, reason);
+                assert!(text.contains(crate::localization::get(language, "errors.backup_failed")));
+                assert!(text.contains(crate::localization::get(
+                    language,
+                    "errors.no_firmware_write"
+                )));
+                assert!(!text.contains("private status 0x1234"));
+            }
+            Ok(false)
+        }
+    }
+    let mut confirmation = Decline(false);
+    let error = offer_flash_without_backup(
+        &mut confirmation,
+        true,
+        anyhow::anyhow!("private status 0x1234")
+            .context(crate::user_error::IssueCode::BackupFailed),
+    )
+    .err()
+    .expect("declining must refuse the update");
+    assert!(
+        confirmation.0,
+        "the localized backup question must actually be asked"
+    );
+    assert_eq!(
+        crate::workflow::user_error(&error).id,
+        "errors.backup_failed"
+    );
+}
+
+#[test]
+fn a_backend_requiring_backup_never_offers_an_unusable_bypass() {
+    struct NoBypass;
+    impl Confirm for NoBypass {
+        fn confirm(&mut self, _: &crate::backend::AuthorizedPlan) -> Result<bool> {
+            panic!("no write consent");
+        }
+        fn proceed_without_backup(&mut self, _: &str) -> Result<bool> {
+            panic!("must not offer an impossible bypass");
+        }
+    }
+    assert!(!Pioneer::new().flash().unwrap().can_proceed_without_backup());
+    assert!(Mtk.flash().unwrap().can_proceed_without_backup());
+    let error = offer_flash_without_backup(
+        &mut NoBypass,
+        false,
+        anyhow::anyhow!("private capture error"),
+    )
+    .err()
+    .expect("a required backup cannot be waived");
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.backup_required");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+}
 use crate::backend::{BackupFacet, DumpFacet, FileFacet};
 use crate::backends::mtk::crossflash::{decide_model, ensure_image_matches_drive};
 use crate::backends::mtk::file_info::{classify_file, CmacSummary};
@@ -911,8 +997,23 @@ fn execute_refuses_unsaved_or_existing_backup_before_write() {
     std::fs::write(&out, b"existing backup").unwrap();
     req.predump_out = Some(out.clone());
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    assert!(format!("{:#}", flash(&mut dev, &Mtk, &req).unwrap_err())
-        .contains("existing backups are never overwritten"));
+    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.file_exists");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
+    assert!(format!("{error:#}").contains("existing backups are never overwritten"));
+    assert!(
+        dev.reads.is_empty(),
+        "refuse before slow capture or planning"
+    );
+    assert!(dev.writes.is_empty());
+    assert_eq!(std::fs::read(&out).unwrap(), b"existing backup");
+    let mut dev = MockScsiDevice::new();
+    let error = crate::user_error::read_only(backup(&mut dev, &Mtk, &out, false)).unwrap_err();
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.file_exists");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    assert!(dev.reads.is_empty());
     assert!(dev.writes.is_empty());
     assert_eq!(std::fs::read(&out).unwrap(), b"existing backup");
     std::fs::remove_file(out).unwrap();
@@ -1231,7 +1332,14 @@ fn chip_gate_refuses_cross_generation_images() {
     let img = crate::cmac::resign(&img).unwrap();
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let gate = ensure_same_chip(&mut dev, &img).unwrap_err();
-    assert!(gate.to_string().contains("cannot be overridden"), "{gate}");
+    assert!(
+        format!("{gate:#}").contains("cannot be overridden"),
+        "{gate:#}"
+    );
+    assert_eq!(
+        crate::workflow::user_error(&gate).id,
+        "errors.incompatible_firmware"
+    );
     let normal = Mtk
         .validate_image(
             &mut ReadDevice::without_unlocks(&mut dev),

@@ -3,43 +3,43 @@
 result: OK
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
+Proceeding with the consent already supplied to this command.
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
+MSG      Proceeding with the consent already supplied to this command.
 
 === Pioneer prompt: TTY answers y ===
 result: OK
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N]
+Proceed? [Yes/No]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N]
+MSG      Proceed? [Yes/No]
 
 === Pioneer prompt: TTY answers yes ===
 result: OK
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N]
+Proceed? [Yes/No]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N]
+MSG      Proceed? [Yes/No]
 
 === Pioneer prompt: TTY answers n ===
-result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): flash aborted at confirmation prompt
+result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): ui.cancelled_no_firmware_was_written: flash aborted at confirmation prompt
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N]
+Proceed? [Yes/No]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N]
+MSG      Proceed? [Yes/No]
 
 === Pioneer prompt: TTY input ends ===
-result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): flash aborted at confirmation prompt
+result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): ui.cancelled_no_firmware_was_written: flash aborted at confirmation prompt
 --- text (2) ---
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-Proceed? [y/N]
+Proceed? [Yes/No]
 --- events (2) ---
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.00)
-MSG      Proceed? [y/N]
+MSG      Proceed? [Yes/No]

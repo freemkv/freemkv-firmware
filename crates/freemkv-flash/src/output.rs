@@ -9,6 +9,17 @@ use std::io::{self, Write};
 /// Presentation-independent updates from an operation.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
+    /// Protocol-neutral work or waiting; absent counts mean no measurable percentage.
+    Phase {
+        /// Stable phase name used by every backend and session report.
+        phase: &'static str,
+        /// Localizable region label, independent of protocol details.
+        component: &'static str,
+        /// Completed bytes, when measurable.
+        done: Option<usize>,
+        /// Total bytes, when measurable.
+        total: Option<usize>,
+    },
     /// Normalized settings from the selected Pioneer protocol codec.
     DeviceSettings(device_settings::Settings),
     /// Diagnostic text for optional details.
@@ -30,6 +41,7 @@ pub enum Event {
 type Sink = Box<dyn FnMut(Event)>;
 thread_local! {
     static SINK: RefCell<Option<Sink>> = RefCell::new(None);
+    static TERMINAL_PHASE: RefCell<Option<(String, Option<usize>)>> = const { RefCell::new(None) };
 }
 
 /// Deliver this thread's operation output to a GUI instead of process file descriptors.
@@ -37,6 +49,12 @@ thread_local! {
 pub fn capture<R>(mut sink: impl FnMut(String) + 'static, operation: impl FnOnce() -> R) -> R {
     capture_events(
         move |event| match event {
+            Event::Phase {
+                phase,
+                component,
+                done,
+                total,
+            } => sink(format!("{phase} {component}: {done:?}/{total:?}")),
             Event::Message(text) => sink(text),
             Event::Progress { label, done, total } => sink(format!(
                 "{label}: {}%",
@@ -73,9 +91,69 @@ pub fn publish(event: Event) -> bool {
             sink(event);
             true
         } else {
+            if let Event::Phase {
+                phase,
+                component,
+                done,
+                total,
+            } = event
+            {
+                terminal_phase(phase, component, done, total);
+            }
             false
         }
     })
+}
+
+fn terminal_phase(phase: &str, component: &str, done: Option<usize>, total: Option<usize>) {
+    let percent = done
+        .zip(total)
+        .filter(|(_, total)| *total > 0)
+        .map(|(done, total)| {
+            done.saturating_mul(100)
+                .checked_div(total)
+                .unwrap_or(0)
+                .min(100)
+        });
+    let key = format!("{phase}:{component}");
+    let changed = TERMINAL_PHASE.with(|state| {
+        let mut state = state.borrow_mut();
+        let bucket = percent.map(|p| p / 5);
+        if state
+            .as_ref()
+            .is_some_and(|old| old.0 == key && old.1 == bucket)
+        {
+            return false;
+        }
+        *state = Some((key, bucket));
+        true
+    });
+    if changed {
+        let language = crate::localization::Preferences::user().load();
+        let label = crate::localization::message(
+            &format!("phase.{phase}"),
+            &[("component", component.to_owned())],
+        );
+        let label = crate::localization::render(language, &label);
+        let mut stderr = io::stderr().lock();
+        if let Some(percent) = percent {
+            let _ = writeln!(stderr, "{label}: {percent}%");
+        } else {
+            let _ = writeln!(stderr, "{label}");
+        }
+    }
+}
+
+/// Present a catalog warning without exposing its technical diagnostic cause.
+pub fn guidance(id: &'static str) {
+    if !publish(Event::Message(id.into())) {
+        let language = crate::localization::Preferences::user().load();
+        let _ = writeln!(
+            io::stderr().lock(),
+            "{}",
+            crate::localization::render(language, id)
+        );
+    }
 }
 
 // Resolve presentation messages for logs without changing what reaches the GUI.
@@ -95,7 +173,7 @@ fn diagnostic_event(event: &Event) -> String {
                 }
             }
         }
-        Event::DeviceSettings(_) => {}
+        Event::DeviceSettings(_) | Event::Phase { .. } => {}
     }
     format!("{diagnostic:?}")
 }
@@ -183,53 +261,93 @@ impl crate::backend::Confirm for TerminalConfirm {
 
     fn proceed_without_backup(&mut self, reason: &str) -> anyhow::Result<bool> {
         use std::io::IsTerminal;
-        println!("{}", crate::style::amber(reason));
-        // No backup is a bigger decision than the normal flash confirmation, so
-        // it needs an explicit human yes: never auto-proceed on a non-terminal.
-        if !std::io::stdin().is_terminal() {
-            println!(
-                "{}",
-                crate::style::dim(
-                    "stdin is not a TTY; cannot ask whether to flash without a backup — aborting."
-                )
-            );
-            return Ok(false);
-        }
-        proceed_without_backup_with(&mut std::io::stdin().lock())
+        confirm_backup_with(
+            reason,
+            std::io::stdin().is_terminal(),
+            &mut std::io::stdin().lock(),
+            crate::localization::Preferences::user().load(),
+        )
     }
 }
 
-/// The `proceed_without_backup` prompt with its input injected (TTY path).
-pub(crate) fn proceed_without_backup_with(reader: &mut impl io::BufRead) -> anyhow::Result<bool> {
-    print!("Flash without a backup? [y/N] ");
+/// Render the backup refusal at the terminal boundary, preserving explicit consent.
+pub(crate) fn confirm_backup_with(
+    reason: &str,
+    is_tty: bool,
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
+    println!(
+        "{}",
+        crate::style::amber(&crate::localization::render(language, reason))
+    );
+    // Without an interactive answer, never auto-proceed without the backup.
+    if !is_tty {
+        return Err(
+            anyhow::Error::new(crate::user_error::IssueCode::BackupConfirmationRequired)
+                .context(crate::user_error::NoFirmwareWrite),
+        );
+    }
+    proceed_without_backup_with(reader, language)
+}
+
+/// The backup question with its input and language supplied by the caller.
+pub(crate) fn proceed_without_backup_with(
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
+    print!("{} ", consent_prompt(language, "backup.proceed"));
     let _ = io::stdout().flush();
+    read_consent(reader, language)
+}
+
+fn read_consent(
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
-    Ok(matches!(
-        line.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
+    let answer = line.trim().to_lowercase();
+    Ok(matches!(answer.as_str(), "y" | "yes")
+        || answer == crate::localization::get(language, "action.yes").to_lowercase())
+}
+
+fn consent_prompt(language: crate::localization::Language, key: &str) -> String {
+    format!(
+        "{} [{}/{}]",
+        crate::localization::get(language, key),
+        crate::localization::get(language, "action.yes"),
+        crate::localization::get(language, "action.no")
+    )
 }
 
 /// [`TerminalConfirm`] with the terminal check and input injected.
 pub(crate) fn confirm_with(is_tty: bool, reader: &mut impl io::BufRead) -> anyhow::Result<bool> {
+    confirm_in_language(
+        is_tty,
+        reader,
+        crate::localization::Preferences::user().load(),
+    )
+}
+
+fn confirm_in_language(
+    is_tty: bool,
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
     if !is_tty {
         println!(
             "{}",
-            crate::style::dim(
-                "stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent."
-            )
+            crate::style::dim(crate::localization::get(
+                language,
+                "confirm.non_interactive"
+            ))
         );
         return Ok(true);
     }
-    print!("Proceed? [y/N] ");
+    print!("{} ", consent_prompt(language, "confirm.proceed"));
     let _ = io::stdout().flush();
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    Ok(matches!(
-        line.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
+    read_consent(reader, language)
 }
 
 #[cfg(test)]

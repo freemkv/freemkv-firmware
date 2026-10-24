@@ -28,7 +28,7 @@ impl Profile {
             inspect: true,
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
-            flash_extensions: vec!["bin", "tar"],
+            firmware_picker: workflow::FirmwarePickerFormats::prefer(vec!["bin", "tar"]),
             recovery_without_live_protocol: false,
             notes: Vec::new(),
         }
@@ -703,6 +703,153 @@ fn backup_and_dump_names_come_from_the_profile() {
 // ── flash: acknowledgement and confirmation ───────────────────────────────
 
 #[test]
+fn native_filter_boundaries_never_export_null_names_or_empty_or_injected_patterns() {
+    for name in ["", " ", "Firmware\0hidden"] {
+        assert!(FileFilter {
+            name,
+            extensions: vec!["bin"]
+        }
+        .validated()
+        .is_none());
+    }
+    for suffix in [
+        "",
+        ".",
+        "bin\0exe",
+        "bin;*.exe",
+        "*.bin",
+        "../bin",
+        "a\\bin",
+        "bin/other",
+    ] {
+        assert!(
+            FileFilter {
+                name: "Firmware",
+                extensions: vec![suffix]
+            }
+            .validated()
+            .is_none(),
+            "{suffix:?}"
+        );
+        assert_eq!(
+            workflow::FirmwarePickerFormats::prefer(vec![suffix]).extensions(),
+            workflow::FirmwarePickerFormats::default().extensions()
+        );
+    }
+    let clean = FileFilter {
+        name: "Firmware",
+        extensions: vec!["", "bin", "firmware.tar", "x;*.exe"],
+    }
+    .validated()
+    .unwrap();
+    assert_eq!(clean.extensions, ["bin", "firmware.tar"]);
+}
+
+#[test]
+fn file_dialog_failure_stays_localized_read_only_and_diagnostic() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.dispatch(Input::DialogFailed(
+        Pick::RecoveryInput,
+        "private HRESULT 0x80004005".into(),
+    ));
+    assert!(!app.running() && app.worker.is_none());
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.file_dialog");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    for language in crate::localization::Language::ALL {
+        app.language = language;
+        let text = app.view().results.unwrap().failure.unwrap().text;
+        assert!(text.contains(crate::localization::get(language, "errors.file_dialog")));
+        assert!(text.contains(crate::localization::get(
+            language,
+            "errors.no_firmware_write"
+        )));
+        assert!(!text.contains("HRESULT"));
+    }
+    assert!(app.log.iter().any(|line| line.contains("private HRESULT")));
+    assert!(app.pending.is_none() && app.recovery_planning.is_none());
+}
+
+#[test]
+fn export_dialog_failure_does_not_replace_an_active_update_result() {
+    let mut app = one_drive();
+    app.start_job(
+        "task.recovery",
+        "drive-a".into(),
+        Job::ExecuteRecovery(workflow::PreparedRecovery::default()),
+    );
+    let status = app.status.clone();
+    app.dispatch(Input::DialogFailed(
+        Pick::DiagnosticLog,
+        "private HRESULT".into(),
+    ));
+    assert!(app.running());
+    assert_eq!(app.status, status);
+    assert!(app.failure.is_none() && app.user_issue.is_none());
+    let notice = app.diagnostic_notice.as_ref().unwrap();
+    let text = crate::localization::render(crate::localization::Language::En, notice);
+    assert!(text.contains(crate::localization::get(
+        crate::localization::Language::En,
+        "errors.file_dialog"
+    )));
+    assert!(!text.contains("did not write firmware"));
+}
+
+#[test]
+fn firmware_pickers_never_emit_empty_filters_for_unrecognized_or_changing_profiles() {
+    for extensions in [
+        vec![],
+        vec!["bin", "tar"],
+        vec!["firmware.tar", "installer.tar", "tar"],
+    ] {
+        let mut app = one_drive();
+        app.profile = ProfileState::Ready(Profile {
+            firmware_picker: workflow::FirmwarePickerFormats::prefer(extensions.clone()),
+            ..Profile::default()
+        });
+        for pick in [
+            Pick::FlashFirmware,
+            Pick::FlashCurrent,
+            Pick::RecoveryInput,
+            Pick::RecoveryCurrent,
+        ] {
+            let effects = app.dispatch(Input::Choose(pick));
+            let [Effect::OpenFile {
+                filter: Some(filter),
+                ..
+            }] = effects.as_slice()
+            else {
+                panic!("missing firmware filter: {effects:?}");
+            };
+            let expected = if extensions.is_empty() {
+                workflow::update_file_extensions()
+            } else {
+                extensions.clone()
+            };
+            assert_eq!(filter.extensions, expected, "{pick:?}");
+            assert!(
+                !filter.extensions.is_empty(),
+                "never pass an empty pattern to the OS"
+            );
+            assert!(app.worker.is_none());
+        }
+        for state in [
+            ProfileState::NoDrive,
+            ProfileState::Probing,
+            ProfileState::Failed,
+        ] {
+            app.profile = state;
+            let effects = app.dispatch(Input::Choose(Pick::RecoveryCurrent));
+            assert!(
+                matches!(effects.as_slice(), [Effect::OpenFile { filter: Some(filter), .. }] if !filter.extensions.is_empty())
+            );
+            assert!(app.worker.is_none());
+        }
+    }
+}
+
+#[test]
 fn flash_starts_with_a_firmware_chooser() {
     let mut app = one_drive();
     app.dispatch(Input::SelectTask(Task::Flash));
@@ -801,6 +948,9 @@ impl BackupFacet for SheetBackend {
 }
 
 impl FlashFacet for SheetBackend {
+    fn can_proceed_without_backup(&self) -> bool {
+        true // This synthetic receiver does not require installed backup bytes.
+    }
     fn plan(&self, _: &mut ReadDevice<'_>, _: &FlashRequest) -> anyhow::Result<FlashPlan> {
         let mut plan = FlashPlan::new(());
         plan.after_backup = vec![
@@ -911,7 +1061,10 @@ fn flash_until_sheet_with_backup(
                 freemkv_flash::engine::flash(&mut dev, &*engine_backend, &request, &mut sheet)
             },
         )
-        .map_err(|e| format!("{e:#}"));
+        .map_err(|e| {
+            let _ = worker.send(Msg::UserIssue(workflow::user_error(&e)));
+            format!("{e:#}")
+        });
         let _ = worker.send(Msg::Done(result.clone().map(Some)));
         let _ = done_tx.send(result.map(drop));
     });
@@ -1109,15 +1262,11 @@ fn a_failed_plan_shows_no_sheet() {
     );
     assert!(app.view().confirm.is_none() && app.pending.is_none());
     assert_eq!(
-        app.failure
-            .as_ref()
-            .map(|value| crate::localization::english(value))
-            .as_deref(),
-        Some(
-            crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
-                .as_str()
-        )
+        app.user_issue.as_ref().unwrap().consequence,
+        Some("errors.no_firmware_write")
     );
+    assert!(crate::localization::english(app.failure.as_ref().unwrap())
+        .contains("did not write firmware"));
     assert!(!app.running());
     assert!(app.dispatch(Input::Confirm).is_empty());
     assert_eq!(
@@ -1293,9 +1442,8 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.recovery_input = Some("new.tar".into());
     app.recovery_read = true;
     app.dispatch(Input::Recover);
-    if app.recovery_planning.is_some() {
-        recovery_plan_passes(&mut app);
-    }
+    assert!(app.recovery_planning.is_some());
+    let prepared = recovery_plan_passes(&mut app);
     let confirm = app.view().confirm.unwrap();
     assert_eq!(confirm.title, "Confirm recovery");
     assert_eq!(
@@ -1312,12 +1460,17 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.dispatch(Input::Confirm);
     let (label, device, job) = last_job(&app);
     assert_eq!((label.as_str(), device.as_str()), ("Recovery", "drive-a"));
-    let Job::Recovery(options) = job else {
-        panic!("expected a recovery job")
+    let Job::ExecuteRecovery(actual) = job else {
+        panic!("expected execution of the prepared recovery");
     };
-    assert!(options.execute && options.acknowledged_risk);
-    assert!(matches!(options.current, CurrentFirmware::ReadFromDrive));
-    assert_eq!(options.input, PathBuf::from("new.tar"));
+    assert_eq!(
+        actual, &prepared,
+        "confirmation must carry the exact prepared session"
+    );
+    assert!(
+        app.prepared_recovery.is_none(),
+        "execution consumes the stored handle"
+    );
 }
 
 // ── job lifecycle and events ──────────────────────────────────────────────
@@ -1337,6 +1490,12 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
     assert!(button(&app.view(), "Recover").enabled);
     app.dispatch(Input::Recover);
+    let (_, _, prepare) = last_job(&app);
+    let Job::Recovery(options) = prepare else {
+        panic!("expected recovery preparation");
+    };
+    assert_eq!(options.current_member.as_deref(), Some("intermediate.bin"));
+    assert_eq!(options.member.as_deref(), Some("firmware.bin"));
     if app.recovery_planning.is_some() {
         recovery_plan_passes(&mut app);
     }
@@ -1352,14 +1511,7 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
     let (_, _, job) = last_job(&app);
-    let Job::Recovery(options) = job else {
-        panic!("Recovery job required")
-    };
-    assert!(
-        matches!(&options.current, CurrentFirmware::File(path) if path==&PathBuf::from("1.V9.tar"))
-    );
-    assert_eq!(options.current_member.as_deref(), Some("intermediate.bin"));
-    assert_eq!(options.member.as_deref(), Some("firmware.bin"));
+    assert!(matches!(job, Job::ExecuteRecovery(_)));
 }
 
 #[test]
@@ -1419,22 +1571,64 @@ fn job_lifecycle_reports_progress_then_completion() {
 }
 
 #[test]
+fn restart_is_indeterminate_and_legacy_updates_cannot_overwrite_structured_status() {
+    let mut app = one_drive();
+    app.start_job(
+        "task.recovery",
+        "drive-a".into(),
+        Job::ExecuteRecovery(workflow::PreparedRecovery::default()),
+    );
+    app.event(Event::Phase {
+        phase: "writing",
+        component: "domain.normal",
+        done: Some(100),
+        total: Some(100),
+    });
+    assert_eq!(
+        app.view().status.unwrap().progress.unwrap().fraction,
+        Some(1.0)
+    );
+    app.event(Event::Phase {
+        phase: "restarting",
+        component: "filter.firmware",
+        done: None,
+        total: None,
+    });
+    let status = app.view().status.unwrap();
+    assert!(status.text.contains("restart"));
+    assert_eq!(status.progress.unwrap().fraction, None);
+    app.event(Event::Progress {
+        label: "old transfer".into(),
+        done: 100,
+        total: 100,
+    });
+    assert!(app.view().status.unwrap().text.contains("restart"));
+    app.event(Event::Phase {
+        phase: "verifying",
+        component: "domain.normal",
+        done: Some(50),
+        total: Some(100),
+    });
+    let status = app.view().status.unwrap();
+    assert!(status.text.contains("Verifying Normal"));
+    assert_eq!(status.progress.unwrap().fraction, Some(0.5));
+}
+
+#[test]
 fn failed_job_offers_log_export_next_to_the_error() {
     let mut app = one_drive();
     app.dispatch(Input::ReadInfo);
     finish(&mut app, Err("Backup failed".into()));
     let results = app.view().results.unwrap();
     let failure = results.failure.unwrap();
-    assert_eq!(
-        failure.text,
-        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    assert!(
+        failure.text.contains("No firmware was written")
+            || failure.text.contains("did not write firmware")
     );
+    assert!(failure.text.contains("Save a diagnostic report"));
     assert_eq!(failure.save_log.text, "Save Log…");
     assert_eq!(results.view_log.text, "View Log");
-    assert_eq!(
-        crate::localization::english(&app.status),
-        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
-    );
+    assert_eq!(crate::localization::english(&app.status), failure.text);
     assert!(app.log.iter().any(|line| line.contains("Backup failed")));
 }
 
@@ -1442,11 +1636,38 @@ fn failed_job_offers_log_export_next_to_the_error() {
 fn disconnected_worker_releases_controls_and_reports_failure() {
     let mut app = one_drive();
     app.dispatch(Input::ReadInfo);
+    assert_eq!(
+        app.runtime_issue().consequence,
+        Some("errors.no_firmware_write")
+    );
     drop(app.worker.take());
     assert_eq!(app.poll(), [Effect::StopTicking]);
     assert!(!app.running(), "a dead worker must not leave the app busy");
     assert!(app.log.iter().any(|l| l.contains("worker")));
-    assert_eq!(app.failure.as_deref(), Some(WORKER_GONE));
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.unexpected");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+}
+
+#[test]
+fn lost_update_worker_reports_uncertain_writes_and_discards_preparation() {
+    let mut app = one_drive();
+    app.prepared_recovery = Some(workflow::PreparedRecovery::default());
+    app.start_job(
+        "task.recovery",
+        app.device.clone(),
+        Job::ExecuteRecovery(workflow::PreparedRecovery::default()),
+    );
+    assert_eq!(app.runtime_issue().id, "errors.update_uncertain");
+    drop(app.worker.take());
+    app.poll();
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.update_uncertain");
+    assert!(issue.consequence.is_none());
+    assert!(app.prepared_recovery.is_none());
+    let status = crate::localization::english(&app.status);
+    assert!(status.contains("may have been written"));
+    assert!(!status.contains("No firmware was written"));
 }
 
 #[test]
@@ -1459,6 +1680,10 @@ fn completion_is_not_misreported_as_worker_disconnection() {
     app.poll();
     assert!(!app.running());
     assert_eq!(app.log.last().unwrap(), "✓ done.");
+    assert!(
+        app.runtime_issue().consequence.is_none(),
+        "a desktop fault after completion must not contradict the completed result"
+    );
 }
 
 #[test]
@@ -1512,9 +1737,13 @@ fn non_info_results_are_plain_fields() {
 fn refresh_removes_disconnected_selection_and_its_consent() {
     let mut app = dry(vec![drive("ioreg:old", "ioreg:old", "Drive")]);
     app.risk_ack = true;
+    app.recovery_bypass_family = true;
+    app.prepared_recovery = Some(workflow::PreparedRecovery::default());
     app.refresh(vec![drive("ioreg:new", "ioreg:new", "Reconnected drive")]);
     assert_eq!(app.device, "ioreg:new");
     assert!(!app.risk_ack);
+    assert!(!app.recovery_bypass_family);
+    assert!(app.prepared_recovery.is_none());
     app.refresh(Vec::new());
     assert!(app.device.is_empty());
     assert!(app.view().drives.items.is_empty());
@@ -1525,9 +1754,11 @@ fn selecting_another_drive_clears_its_results() {
     let mut app = ready(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
     app.rows = vec![row("Model", "A", Group::General)];
     app.failure = Some("old".into());
+    app.recovery_bypass_family = true;
     app.dispatch(Input::SelectDrive(1));
     assert_eq!(app.device, "b");
     assert!(app.rows.is_empty() && app.failure.is_none());
+    assert!(!app.recovery_bypass_family);
     app.answer_profile(Ok(Profile::every_task()));
     app.dispatch(Input::SelectDrive(7));
     assert_eq!(app.device, "b", "an out-of-range index is ignored");
@@ -1549,12 +1780,9 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
         app.poll();
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
-    assert!(
-        crate::localization::english(&app.status).starts_with(&crate::localization::text(
-            crate::localization::Language::En,
-            "errors.operation_failed"
-        ))
-    );
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.no_drive");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
     assert!(app.view().controls_enabled);
 }
 
@@ -1724,7 +1952,7 @@ fn worker_identifies_typed_inspection_cancellation_before_any_file_access() {
         .any(|message| matches!(message, Msg::Done(Err(_)))));
     assert!(!messages
         .iter()
-        .any(|message| matches!(message, Msg::UserGuidance(_))));
+        .any(|message| matches!(message, Msg::UserIssue(_))));
 }
 
 #[test]
@@ -1744,6 +1972,12 @@ fn panic_diagnostic_only_names_unknown_update_state_for_executing_updates() {
         worker_panic_detail(&Job::Flash(options), detail),
         "Worker panic; update state unknown: synthetic panic"
     );
+    let read_only = worker_panic_issue(&Job::Info);
+    assert_eq!(read_only.id, "errors.unexpected");
+    assert_eq!(read_only.consequence, Some("errors.no_firmware_write"));
+    let writing = worker_panic_issue(&Job::ExecuteRecovery(workflow::PreparedRecovery::default()));
+    assert_eq!(writing.id, "errors.update_uncertain");
+    assert!(writing.consequence.is_none());
 }
 
 #[test]
@@ -2196,8 +2430,8 @@ fn logging_failure_retains_operation_and_terminal_interrupted_event() {
     drop(tx);
     app.poll();
     assert_eq!(
-        crate::localization::english(&app.status),
-        "Operation interrupted"
+        app.user_issue.as_ref().unwrap().consequence,
+        Some("errors.no_firmware_write")
     );
     let path = app
         .journal
@@ -2251,13 +2485,9 @@ fn typed_failure_keeps_phase_and_completed_stages_in_report() {
     app.poll();
     assert_eq!(
         crate::localization::english(&app.status),
-        format!(
-            "{} {}",
-            crate::localization::text(crate::localization::Language::En, "errors.operation_failed"),
-            crate::localization::text(
-                crate::localization::Language::En,
-                "errors.temporary_firmware"
-            )
+        crate::localization::text(
+            crate::localization::Language::En,
+            "errors.temporary_firmware"
         )
     );
     assert!(!app.status.contains("write_started"));
@@ -2313,10 +2543,14 @@ fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
     assert_eq!(app.recovery_current, Some("other.tar".into()));
 }
 
-fn recovery_plan_passes(app: &mut App) {
+fn recovery_plan_passes(app: &mut App) -> workflow::PreparedRecovery {
     let (_, _, job) = last_job(app);
     assert!(matches!(job, Job::Recovery(o) if !o.execute && !o.acknowledged_risk));
     let worker = app.worker.take().unwrap();
+    let prepared = workflow::PreparedRecovery::default();
+    worker
+        .send(Msg::PreparedRecovery(prepared.clone()))
+        .unwrap();
     worker
         .send(Msg::Event(field_event(
             "Recovery plan",
@@ -2327,6 +2561,7 @@ fn recovery_plan_passes(app: &mut App) {
         .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
         .unwrap();
     app.poll();
+    prepared
 }
 
 #[test]
@@ -2347,6 +2582,11 @@ fn recovery_prepares_before_consent_and_shows_required_restoration() {
         .any(|line| line.contains("Two passes") && line.contains("pristine restoration")));
     assert!(!confirm.ack_checked && !confirm.confirm.enabled);
     app.dispatch(Input::CancelConfirm);
+    assert!(
+        app.prepared_recovery.is_none(),
+        "cancelling must release retained firmware"
+    );
+    assert!(app.pending.is_none());
     assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
 }
 
@@ -2362,9 +2602,17 @@ fn failed_recovery_preparation_never_opens_a_confirmation_or_write_job() {
     assert!(app.recovery_planning.is_none());
     assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
     assert_eq!(
-        app.view().results.unwrap().failure.unwrap().text,
-        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+        app.user_issue.as_ref().unwrap().consequence,
+        Some("errors.no_firmware_write")
     );
+    assert!(app
+        .view()
+        .results
+        .unwrap()
+        .failure
+        .unwrap()
+        .text
+        .contains("did not write firmware"));
     assert!(app
         .log
         .iter()
@@ -2532,15 +2780,23 @@ fn blocked_update_shows_actionable_reason_and_records_no_write() {
     }))
     .unwrap();
     let reason = "The underlying hardware for these firmwares is not compatible. Installed firmware: PP100. Target firmware: BDX-PR1MLA.";
-    tx.send(Msg::UserGuidance(reason.into())).unwrap();
+    tx.send(Msg::UserIssue(workflow::UserError {
+        id: "errors.hardware_mismatch",
+        arguments: vec![
+            ("installed", "PP100".into()),
+            ("selected", "BDX-PR1MLA".into()),
+        ],
+        consequence: Some("errors.update_blocked"),
+    }))
+    .unwrap();
     tx.send(Msg::Done(Err(reason.into()))).unwrap();
     app.poll();
-    assert_eq!(
-        crate::localization::english(&app.status),
-        "Update blocked. No firmware was written."
-    );
+    let status = crate::localization::english(&app.status);
+    assert!(status.starts_with("Update blocked. No firmware was written."));
+    assert!(status.contains("PP100") && status.contains("BDX-PR1MLA"));
     let failure = app.failure.as_ref().unwrap();
-    assert!(failure.contains(reason));
+    let failure = crate::localization::english(failure);
+    assert!(failure.contains("PP100") && failure.contains("BDX-PR1MLA"));
     assert!(!failure.contains("Stopped during compatibility checks."));
     assert!(!failure.contains("cf3183a51bc41e42"));
     let path = app
@@ -2584,13 +2840,17 @@ fn prepare_failure_does_not_claim_partial_firmware_in_gui() {
         completed_stages: Vec::new(),
     }))
     .unwrap();
-    tx.send(Msg::UserGuidance("errors.update_not_started".into()))
-        .unwrap();
+    tx.send(Msg::UserIssue(workflow::UserError {
+        id: "errors.update_not_started",
+        arguments: Vec::new(),
+        consequence: None,
+    }))
+    .unwrap();
     tx.send(Msg::Done(Err("errors.update_not_started".into())))
         .unwrap();
     app.poll();
     let status = crate::localization::english(&app.status);
-    assert!(status.contains("no firmware payload was sent"));
+    assert!(status.contains("no firmware data was sent"));
     assert!(!status.contains("firmware may be incomplete"));
     assert_eq!(
         failure_json(app.failure_evidence.as_ref())["payload_bytes_accepted"],
@@ -2619,9 +2879,7 @@ fn worker_input_failure_has_precheck_evidence_without_opening_a_drive() {
         .iter()
         .any(|msg| matches!(msg, Msg::FailureEvidence(e)
         if e.phase == "input and drive checks" && !e.write_started && !e.temporary_firmware)));
-    assert!(messages
-        .iter()
-        .any(|msg| matches!(msg, Msg::UserGuidance(_))));
+    assert!(messages.iter().any(|msg| matches!(msg, Msg::UserIssue(_))));
     assert!(messages.iter().any(|msg| matches!(msg, Msg::Done(Err(_)))));
     assert!(!messages
         .iter()
@@ -2820,8 +3078,10 @@ fn recovery_family_override_requires_fresh_explicit_confirmation() {
     assert!(app.dispatch(Input::Confirm).is_empty());
     app.dispatch(Input::SetCheck(CheckId::RiskAck, true));
     app.dispatch(Input::Confirm);
+    assert!(matches!(&last_job(&app).2, Job::ExecuteRecovery(_)));
     assert!(
-        matches!(&last_job(&app).2, Job::Recovery(o) if o.execute && o.acknowledged_risk && o.bypass_family_check)
+        !app.recovery_bypass_family,
+        "the override is consumed by one preparation"
     );
 }
 

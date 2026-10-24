@@ -242,7 +242,10 @@ pub fn modify_with_defaults(
         report.image = output;
         return Ok((report, support));
     }
-    anyhow::ensure!(!engine::core::is_freemkv_patched(image), "This firmware predates editable boot settings. Select its original OEM image to create firmware with boot settings.");
+    if engine::core::is_freemkv_patched(image) {
+        return Err(anyhow::anyhow!("This firmware predates editable boot settings. Select its original OEM image to create firmware with boot settings.")
+            .context(freemkv_flash::user_error::IssueCode::AlreadyModified));
+    }
     let mut report = eng.modify_with_defaults(image, defaults)?;
     let support = crate::boot::BootSupport::from_modify(&report);
     defaults.validate(&support)?;

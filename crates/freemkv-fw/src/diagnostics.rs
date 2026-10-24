@@ -9,7 +9,11 @@ pub use freemkv_flash::output::{capture_events, Event};
 
 /// Run an authoring operation with an automatic log, reusing an outer operation.
 pub fn run<T>(operation: &str, work: impl FnOnce() -> Result<T>) -> Result<T> {
-    freemkv_flash::diagnostics::run_named("freemkv-fw", operation, work)
+    freemkv_flash::user_error::read_only(freemkv_flash::diagnostics::run_named(
+        "freemkv-fw",
+        operation,
+        work,
+    ))
 }
 
 /// Record the size and complete SHA-256 digest without logging firmware payloads.

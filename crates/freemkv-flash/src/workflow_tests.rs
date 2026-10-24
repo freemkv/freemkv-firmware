@@ -1,6 +1,146 @@
 use super::*;
 
 #[test]
+fn desktop_faults_localize_without_exposing_native_details_or_guessing_write_effects() {
+    for read_only in [true, false] {
+        let issue = application_failure("private native status 0x1234", read_only);
+        assert_eq!(issue.id, "errors.unexpected");
+        assert_eq!(
+            issue.consequence,
+            read_only.then_some("errors.no_firmware_write")
+        );
+        for language in crate::localization::Language::ALL {
+            assert!(!issue.render(language).contains("0x1234"));
+        }
+    }
+}
+
+#[test]
+fn packaging_errors_keep_file_causes_and_prove_no_firmware_write() {
+    let dir = std::env::temp_dir().join(format!("freemkv-package-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("invalid.bin");
+    let output = dir.join("result.tar");
+    let missing = package_image(&input, &output).unwrap_err();
+    let issue = user_error(&missing);
+    assert_eq!(issue.id, "errors.file_missing");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    std::fs::write(&input, b"not a firmware image").unwrap();
+    let invalid = package_image(&input, &output).unwrap_err();
+    let issue = user_error(&invalid);
+    assert_eq!(issue.id, "errors.firmware_invalid");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    assert!(!output.exists());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+mod prepared_recovery {
+    use super::*;
+    use crate::backend::{Descriptor, Identity, PreparedRecoveryUpdate, WriteDevice};
+    use crate::platform::MockScsiDevice;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct BindingBackend;
+    static BACKEND: BindingBackend = BindingBackend;
+    static DESCRIPTOR: Descriptor = Descriptor {
+        id: BackendId("prepared-test"),
+        display_name: "Test protocol",
+        flash_summary: None,
+        formats: &[],
+    };
+    impl Backend for BindingBackend {
+        fn descriptor(&self) -> &'static Descriptor {
+            &DESCRIPTOR
+        }
+        fn probe(&self, _: &mut ReadDevice<'_>, _: &Identity) -> Result<Option<Match>> {
+            Ok(None)
+        }
+    }
+    struct LoadedUpdate(Arc<AtomicUsize>);
+    impl PreparedRecoveryUpdate for LoadedUpdate {
+        fn execute(&self, _: &mut WriteDevice<'_>) -> Result<UpdateOutcome> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(UpdateOutcome::Planned)
+        }
+    }
+    fn session(calls: Arc<AtomicUsize>) -> PreparedRecovery {
+        PreparedRecovery(Arc::new(std::sync::Mutex::new(Some(RecoverySession {
+            selector: "synthetic".into(),
+            backend: &BACKEND,
+            identity: Identity {
+                vendor: "TEST".into(),
+                product: "Original".into(),
+                revision: "1.00".into(),
+                banner: None,
+            },
+            update: Box::new(LoadedUpdate(calls)),
+        }))))
+    }
+    fn device(product: &str) -> MockScsiDevice {
+        device_identity("TEST", product, "1.00")
+    }
+    fn device_identity(vendor: &str, product: &str, revision: &str) -> MockScsiDevice {
+        let mut inquiry = vec![b' '; 96];
+        inquiry[..8].fill(0);
+        inquiry[4] = 91;
+        inquiry[8..8 + vendor.len()].copy_from_slice(vendor.as_bytes());
+        inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
+        inquiry[32..32 + revision.len()].copy_from_slice(revision.as_bytes());
+        MockScsiDevice::new().on(|c| c.first() == Some(&0x12), inquiry)
+    }
+    #[test]
+    fn confirmation_consumes_loaded_state_with_only_one_identity_read() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let prepared = session(calls.clone());
+        let duplicate = prepared.clone();
+        let mut dev = device("Original");
+        execute_recovery_on(&mut dev, prepared.take().unwrap()).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            dev.reads.len(),
+            1,
+            "confirmation must not acquire firmware again"
+        );
+        assert!(dev.writes.is_empty());
+        let error = match duplicate.take() {
+            Err(error) => error,
+            Ok(_) => panic!("plan reused"),
+        };
+        assert!(error.is::<crate::user_error::IssueCode>());
+        assert!(error_message(&error).contains("No firmware was written"));
+    }
+    #[test]
+    fn drive_replacement_cannot_execute_the_retained_envelope() {
+        for (case, vendor, product, revision) in [
+            ("vendor", "OTHER", "Original", "1.00"),
+            ("product", "TEST", "Replacement", "1.00"),
+            ("revision", "TEST", "Original", "2.00"),
+            ("missing vendor", "", "Original", "1.00"),
+            ("missing product", "TEST", "", "1.00"),
+            ("banner", "TEST", "Original", "1.00"),
+        ] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let mut bound = session(calls.clone()).take().unwrap();
+            if case == "missing vendor" {
+                bound.identity.vendor.clear();
+            }
+            if case == "missing product" {
+                bound.identity.product.clear();
+            }
+            if case == "banner" {
+                bound.identity.banner = Some("original boot label".into());
+            }
+            let mut dev = device_identity(vendor, product, revision);
+            let error = execute_recovery_on(&mut dev, bound).unwrap_err();
+            assert_eq!(calls.load(Ordering::SeqCst), 0, "{case}");
+            assert!(dev.writes.is_empty(), "{case}");
+            assert_eq!(user_error(&error).id, "errors.drive_changed", "{case}");
+            assert!(error_message(&error).contains("No firmware was written"));
+        }
+    }
+}
+
+#[test]
 fn recovery_requires_tar_for_standalone_pioneer_components() {
     let package = crate::backends::pioneer::test_oem_recovery_package("PIONEER");
     assert_eq!(recovery_target(&package, None).unwrap(), package);
@@ -64,6 +204,30 @@ fn family_override_requires_typed_hardware_mismatch_evidence() {
 }
 
 #[test]
+fn supplied_current_family_mismatch_precedes_even_device_resolution() {
+    use crate::backends::mtk::fixture;
+    let current = fixture::image(&fixture::BU3, "BU40N", 1);
+    let target = fixture::image(&fixture::JB7, "BH16NS40", 1);
+    let dir = std::env::temp_dir().join(format!("freemkv-early-family-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let current_path = dir.join("current.bin");
+    let target_path = dir.join("target.bin");
+    std::fs::write(&current_path, current).unwrap();
+    std::fs::write(&target_path, target).unwrap();
+    let error = match open_flash(&FlashOptions {
+        current: Some(current_path),
+        input: target_path,
+        device: Some("nonexistent-device-must-never-be-opened".into()),
+        ..Default::default()
+    }) {
+        Err(error) => error,
+        Ok(_) => panic!("incompatible Current was accepted"),
+    };
+    assert!(error.is::<HardwareMismatch>(), "{error:#}");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn precheck_evidence_never_overwrites_an_execution_failure() {
     let evidence = UpdateFailure {
         phase: "target upload".into(),
@@ -91,7 +255,7 @@ fn current_detection_error_keeps_transport_diagnostics_out_of_user_guidance() {
     assert!(!error_message(&error).contains("E4000"));
     assert!(format!("{error:#}").contains("SCSI invalid field in CDB at 0x98000 [E4000]"));
     let other = anyhow::anyhow!("original cause").context("operation failed");
-    assert!(error_message(&other).contains("could not finish"));
+    assert!(error_message(&other).contains("Save a diagnostic report"));
     assert!(format!("{other:#}").contains("original cause"));
 }
 
@@ -150,7 +314,8 @@ fn oversized_input_is_rejected_before_opening_a_drive() {
     drop(file);
     let error = read_capped(&path).unwrap_err();
     std::fs::remove_file(path).unwrap();
-    assert!(error.to_string().contains("exceeds"));
+    assert!(format!("{error:#}").contains("exceeds"));
+    assert_eq!(user_error(&error).id, "errors.firmware_invalid");
 }
 
 fn drive(path: &str, name: &str) -> DriveChoice {
@@ -189,7 +354,9 @@ fn omitted_selector_picks_the_only_drive() {
 #[test]
 fn several_drives_require_a_name_or_id_and_list_both() {
     let drives = [drive(r"\\.\CdRom0", "D:"), drive("ioreg:42", "ioreg:42")];
-    let error = resolve_from(None, &drives).unwrap_err().to_string();
+    let error = resolve_from(None, &drives).unwrap_err();
+    assert_eq!(user_error(&error).id, "errors.choose_drive");
+    let error = format!("{error:#}");
     assert!(error.contains("pass a drive name or id"), "{error}");
     assert!(
         error.contains(r"  D:  HL-DT-ST BD-RE BU40N (rev 1.04)  \\.\CdRom0"),

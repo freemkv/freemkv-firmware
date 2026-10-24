@@ -147,7 +147,7 @@ impl Shell {
             match effect {
                 Effect::OpenFile { pick, filter } => {
                     let mut dialog = rfd::FileDialog::new();
-                    if let Some(f) = filter {
+                    if let Some(f) = filter.and_then(crate::ui::FileFilter::validated) {
                         dialog = dialog.add_filter(f.name, &f.extensions);
                     }
                     if let Some(path) = dialog.pick_file() {

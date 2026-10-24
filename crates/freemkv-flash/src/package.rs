@@ -1,10 +1,14 @@
 //! Package member selection for recovery front ends.
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 /// Select exactly one MediaTek member; other backend packages remain intact.
 pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
     if input.get(257..262) != Some(b"ustar") {
-        anyhow::ensure!(member.is_none(), "--member requires a TAR package");
+        anyhow::ensure!(
+            member.is_none(),
+            anyhow::anyhow!("--member requires a TAR package")
+                .context(crate::user_error::IssueCode::CommandOptions)
+        );
         let (_, recognized) = crate::backend::registry::recognize(input)?
             .context("unrecognized update input; select a MediaTek BIN or firmware TAR package")?;
         recognized.format.ensure_update_input()?;
@@ -31,16 +35,22 @@ pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
             Some(path) => components
                 .iter()
                 .position(|c| c.path == path)
-                .ok_or_else(|| anyhow::anyhow!("unknown recovery member {path}"))?,
+                .ok_or_else(|| {
+                    anyhow::anyhow!("unknown recovery member {path}")
+                        .context(crate::user_error::IssueCode::CommandOptions)
+                })?,
             None if components.len() == 1 => 0,
-            None => bail!(
-                "choose exactly one recovery member with --member: {}",
-                components
-                    .iter()
-                    .map(|c| c.path.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+            None => {
+                return Err(anyhow::anyhow!(
+                    "choose exactly one recovery member with --member: {}",
+                    components
+                        .iter()
+                        .map(|c| c.path.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+                .context(crate::user_error::IssueCode::CommandOptions))
+            }
         };
         return Ok(
             if components[selected].role == crate::mediatek_package::Role::Intermediate {
@@ -52,7 +62,10 @@ pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
         );
     }
     if member.is_some() {
-        bail!("--member is only supported for MediaTek release packages");
+        return Err(
+            anyhow::anyhow!("--member is only supported for MediaTek release packages")
+                .context(crate::user_error::IssueCode::CommandOptions),
+        );
     }
     Ok(input.to_vec())
 }

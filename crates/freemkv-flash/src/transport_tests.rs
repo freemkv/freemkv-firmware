@@ -23,9 +23,16 @@ fn empty_update_command_is_distinct_from_a_read_probe() {
     let _ =
         mediatek_optical::drive::Transport::exec(&mut transport, &[0x3c], MtkData::In(&mut probe));
     assert!(!transport.empty_write_attempted());
+    assert!(!transport.payload_write_attempted());
     assert!(
         mediatek_optical::drive::Transport::exec(&mut transport, &[0x3b], MtkData::Out(&[]))
             .is_err()
     );
     assert!(transport.empty_write_attempted());
+    assert!(!transport.payload_write_attempted());
+    assert!(
+        mediatek_optical::drive::Transport::exec(&mut transport, &[0x3b], MtkData::Out(&[1]))
+            .is_err()
+    );
+    assert!(transport.payload_write_attempted());
 }

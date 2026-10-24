@@ -570,9 +570,9 @@ fn senseless_transport_error_is_not_classified() {
         path: "test".into(),
     };
     let error = dev.command_in(&[0x3c], 1).unwrap_err();
-    assert!(error.to_string().starts_with(
-        "SCSI command failed on test: no reply from the drive (transport/link failure)"
-    ));
+    assert!(format!("{error:#}")
+        .contains("SCSI command failed on test: no reply from the drive (transport/link failure)"));
+    assert_eq!(crate::workflow::user_error(&error).id, "errors.connection");
     assert_eq!(super::super::sense_triplet(&error), None);
 }
 
@@ -637,11 +637,62 @@ fn medium_status_disc_present_when_spinning_up() {
 
 #[test]
 fn plugin_failure_is_not_misreported_as_an_exclusive_lock() {
-    let message =
-        super::friendly_open_error("ioreg:123", "E1006: ioreg:123 0xe00002be").to_string();
-    assert!(message.contains("could not initialize the drive interface"));
-    assert!(message.contains("E1006: ioreg:123 0xe00002be"));
-    assert!(!message.contains("already open by another process"));
+    let error = super::friendly_open_error(
+        "ioreg:123",
+        FError::IoKitPluginFailed {
+            path: "ioreg:123".into(),
+            kr: 0xe00002be,
+        },
+    );
+    assert_eq!(crate::workflow::user_error(&error).id, "errors.connection");
+    assert!(format!("{error:#}").contains("E1006: ioreg:123 0xe00002be"));
+}
+
+#[test]
+fn native_open_causes_survive_the_open_boundary_without_reading_diagnostic_words() {
+    for (native, expected) in [
+        (
+            FError::DevicePermission {
+                path: "permission-free-name".into(),
+            },
+            "errors.permission_denied",
+        ),
+        (
+            FError::DeviceNotFound {
+                path: "permission denied".into(),
+            },
+            "errors.no_drive",
+        ),
+        (
+            FError::DeviceLocked {
+                path: "not found".into(),
+                kr: 0xe00002c1,
+            },
+            "errors.permission_denied",
+        ),
+        (
+            FError::DeviceLocked {
+                path: "permission denied".into(),
+                kr: 0xe00002c5,
+            },
+            "errors.connection",
+        ),
+        (
+            FError::IoError {
+                source: std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "unrelated words",
+                ),
+            },
+            "errors.permission_denied",
+        ),
+    ] {
+        let error = crate::user_error::explain(
+            friendly_open_error("test-selector", native),
+            crate::user_error::IssueCode::Connection,
+        );
+        assert_eq!(crate::workflow::user_error(&error).id, expected);
+    }
 }
 
 #[test]
@@ -808,15 +859,17 @@ fn protocol_detection_survives_opposite_native_probe_rejection() {
                     }),
                     path: "test".into(),
                 };
-                let result = detection::detect(&mut dev);
-                if accepted {
-                    match result.unwrap().conclusion {
-                        Conclusion::Detected(Evidence::Pioneer(_)) => assert!(pioneer),
-                        Conclusion::Detected(Evidence::Mediatek(_)) => assert!(!pioneer),
-                        other => panic!("wrong detection: {other:?}"),
-                    }
-                } else {
-                    assert!(result.unwrap_err().is::<detection::Unavailable>());
+                let result = detection::detect(&mut dev).unwrap();
+                match result.conclusion {
+                    Conclusion::Detected(Evidence::Pioneer(_)) => assert!(pioneer),
+                    Conclusion::Detected(Evidence::Mediatek(_)) => assert!(!pioneer),
+                    other => panic!("wrong detection: {other:?}"),
+                }
+                if !accepted {
+                    assert!(result
+                        .observations
+                        .iter()
+                        .any(|note| note.contains("unavailable")));
                 }
             }
         }

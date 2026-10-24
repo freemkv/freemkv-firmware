@@ -1,0 +1,49 @@
+{
+  "version": "0.15.0",
+  "status": "candidate-under-validation",
+  "release_gate": "Hosted QA green; main merge and stable publication require Matthew's explicit approval.",
+  "user_issues": {
+    "selection": "Typed application causes and optical IssueKind values; diagnostic prose never selects guidance.",
+    "presentation": "Localized plain-language cause and next action, with evidence-backed firmware consequences.",
+    "before_write": "A blocked update states that no firmware was written, including after a backup was saved.",
+    "after_entry": "Distinguish attempted update entry from firmware payload transfer; never claim no change after uncertain writes.",
+    "read_only": "Read-only capabilities explicitly establish that the operation did not write firmware.",
+    "unknown": "Unexpected faults retain diagnostics and ask for a diagnostic report; no guessed cause or retry advice.",
+    "reports": "Keep the stable issue ID, arguments and consequences alongside the full technical chain."
+  },
+  "firmware_lifecycle": {
+    "provided_current": "Reject known incompatible families offline before opening a drive; missing evidence cannot establish compatibility.",
+    "live_current": "Finish acquisition, publish and read back the required normal-flash backup, then perform family admission.",
+    "acquisition": "Acquire once; a second full read is permitted only for intentional stability verification.",
+    "consent": "Keep the actual owned prepared recovery update through confirmation. Confirmation does not reopen input files or reacquire the installed firmware.",
+    "execution": "Consume the prepared session once; lightweight receiver revalidation precedes the engine-owned write grant and library execution checks.",
+    "verification": "Postwrite target identity and independent component readback remain mandatory.",
+    "recovery": "No automatic backup. Known supplied-file family mismatches are refused unless an explicit override is supported and requested. Pioneer retains its installed-family gate by default. MediaTek receivers without installed-family evidence retain the library's recovery admission policy. Receiver, integrity and chip checks still apply."
+  },
+  "progress": {
+    "phases": ["reading", "saving", "preparing", "writing", "restarting", "verifying"],
+    "measured": "Show observed completed bytes against known total bytes.",
+    "waiting": "Show indeterminate restart/wait status without inventing percentages.",
+    "expected_responses": "Restart-related transport responses remain diagnostic evidence, with completion decided by independent verification."
+  },
+  "architecture": {
+    "application": "CLI, GUI and workflow consume generic prepared updates, structured user issues and phase events.",
+    "adapters": "Translate optical library types to generic application contracts.",
+    "optical_libraries": "Own protocol sequencing, receiver preparation, execution and verification; mirror operation enums, progress structure and CodedError::kind across both packages.",
+    "candidate_dependencies": "Exact 1.1.0 versions and immutable 40-character git revisions; no machine-local paths."
+  },
+  "required_validation": [
+    "All 29 catalogs contain every user-issue and phase key",
+    "Known mock update failures cannot fall through to the unexpected-error message",
+    "Packaging and offline command failures prove no firmware write; known verification and option refusals retain their cause",
+    "A lost worker or native event loop preserves active write uncertainty, while read-only tasks prove no firmware write",
+    "Unsafe write evidence overrides every file or compatibility cause",
+    "Supplied cross-family Current rejects before opening an invalid device selector",
+    "Prepared recovery executes once without repeating acquisition and rejects a changed receiver",
+    "GUI confirmation carries the prepared handle and cancellation drops it",
+    "Both optical libraries exercise measured writes, restart waits and independent verification",
+    "Both optical libraries pass their feature matrix, MSRV, documentation, packaging and no-std gates",
+    "Application workspace tests, lint, release tests, native GUI gates and release packaging pass on hosted QA"
+  ],
+  "hardware": "No new hardware writes are authorized by this goal. Hosted QA cannot prove physical-drive behavior."
+}
