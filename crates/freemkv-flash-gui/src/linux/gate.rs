@@ -79,7 +79,7 @@ fn run(shell: &Rc<Shell>, dir: &Path) {
     std::process::exit(g.finish(dir));
 }
 
-/// CI has no desktop portal; exercise GTK's real fallback chooser and its Cancel response.
+/// CI has no desktop portal; exercise GTK's real fallback chooser and dismiss it.
 fn firmware_pickers(shell: &Rc<Shell>, g: &mut Gate) {
     let original = shell.app.borrow().profile.clone();
     for (name, extensions) in gui_gate::PICKER_PROFILES {
@@ -96,9 +96,14 @@ fn firmware_pickers(shell: &Rc<Shell>, g: &mut Gate) {
                     .into_iter()
                     .find_map(|widget| {
                         widget
-                            .downcast::<gtk::FileChooserDialog>()
+                            .downcast::<gtk::Window>()
                             .ok()
-                            .filter(|dialog| dialog.is_visible())
+                            .filter(|dialog| {
+                                // FileDialog owns this fallback internally. Inspect its
+                                // native type without using the deprecated construction API.
+                                dialog.type_().name() == "GtkFileChooserDialog"
+                                    && dialog.is_visible()
+                            })
                     });
             }
             g.check(
@@ -107,7 +112,7 @@ fn firmware_pickers(shell: &Rc<Shell>, g: &mut Gate) {
                 format!("{name} {pick:?}"),
             );
             if let Some(dialog) = picker {
-                dialog.response(gtk::ResponseType::Cancel);
+                dialog.close();
                 settle(SETTLE);
                 g.check(
                     "firmware-picker-cancels",
