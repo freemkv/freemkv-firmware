@@ -493,6 +493,13 @@ fn tab_names_suit_file_names() {
 #[test]
 fn the_gate_source_calls_no_workflow() {
     let src = include_str!("gui_gate.rs");
+    assert!(src.contains(
+        "#[cfg(target_os = \"windows\")]\npub(crate) fn worker_message(text: &str) -> crate::ui::Msg {"
+    ));
+    assert_gate_source_calls_no_workflow(src);
+}
+
+fn assert_gate_source_calls_no_workflow(src: &str) {
     for (n, line) in src.lines().enumerate() {
         let code = line.trim_start();
         if code.starts_with("//") {
@@ -500,14 +507,21 @@ fn the_gate_source_calls_no_workflow() {
         }
         assert!(!code.contains("ops::"), "gui_gate.rs:{}: {line}", n + 1);
         if code.contains("workflow") {
-            assert_eq!(
-                code,
-                "use freemkv_flash::workflow::{DriveChoice, FlashOptions, FlashSheet};",
-                "gui_gate.rs:{}",
+            assert!(
+                code == "use freemkv_flash::workflow::{DriveChoice, FlashOptions, FlashSheet};"
+                    || code
+                        == "crate::ui::Msg::Event(freemkv_flash::workflow::Event::Message(text.into()))",
+                "unexpected workflow use at line {}: {line}",
                 n + 1
             );
         }
     }
+}
+
+#[test]
+#[should_panic(expected = "unexpected workflow use")]
+fn the_gate_source_guard_rejects_workflow_calls() {
+    assert_gate_source_calls_no_workflow("freemkv_flash::workflow::info(device);");
 }
 
 #[test]

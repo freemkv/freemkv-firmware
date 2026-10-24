@@ -30,11 +30,6 @@ const PW_RENDERFULLCONTENT: u32 = 2;
 /// How long a step lets the window lay out and paint before it looks.
 const SETTLE_MS: u64 = 400;
 
-/// Synthetic worker event for the native close-warning polling probe.
-fn worker_message(text: &str) -> Msg {
-    Msg::Event(freemkv_flash::workflow::Event::Message(text.into()))
-}
-
 #[link(name = "user32")]
 unsafe extern "system" {
     fn PrintWindow(hwnd: *mut c_void, hdc_blt: *mut c_void, flags: u32) -> i32;
@@ -489,7 +484,7 @@ fn probe_close_warning(me: &Shell) {
             p.opened = true;
         }
     });
-    let sent = sender.send(worker_message(CLOSE_MARKER));
+    let sent = sender.send(gui_gate::worker_message(CLOSE_MARKER));
     // This is the shell's actual registered polling callback, reached with MessageBox
     // still on the stack. Unfixed code panics here on the App's retained Ref borrow.
     eprintln!("GATE TRACE close-warning: entering production WM_TIMER");

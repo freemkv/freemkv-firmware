@@ -169,6 +169,12 @@ pub fn open_flash_sheet(app: &mut App) {
     });
 }
 
+/// Synthetic worker event for the Windows gate's close-warning polling probe.
+#[cfg(target_os = "windows")]
+pub(crate) fn worker_message(text: &str) -> crate::ui::Msg {
+    crate::ui::Msg::Event(freemkv_flash::workflow::Event::Message(text.into()))
+}
+
 /// The model is still the gate's: inert, its profile answered, and no worker or profile
 /// read running.
 pub fn inert(app: &App) -> bool {
