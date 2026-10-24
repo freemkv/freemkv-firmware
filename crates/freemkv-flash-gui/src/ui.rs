@@ -776,6 +776,12 @@ pub(crate) struct Pending {
 /// Called from the worker after each event so an event-driven shell repaints.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
+/// Report progress is distinct from its authoritative terminal result.
+enum ReportMsg {
+    Progress(String),
+    Finished(Result<String, String>),
+}
+
 /// Async file-origin result, tied to the chooser and path that requested it.
 type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
 
@@ -789,7 +795,7 @@ pub struct App {
     failure_evidence: Option<workflow::UpdateFailure>,
     analysis_cancelled: bool,
     preview_compatibility_pending: Option<bool>,
-    report_rx: Option<Receiver<Result<String, String>>>,
+    report_rx: Option<Receiver<ReportMsg>>,
     report_control: Option<crate::support::Submission>,
     artifact_in_progress: Option<crate::support::ReportArtifact>,
     report_artifact: Option<crate::support::ReportArtifact>,
@@ -1459,12 +1465,14 @@ impl App {
                 let waker = self.waker.clone();
                 std::thread::spawn(move || {
                     let result = crate::support::submit(source, control, |message| {
-                        let _ = tx.send(Ok(message));
+                        let _ = tx.send(ReportMsg::Progress(message));
                         if let Some(wake) = &waker {
                             wake();
                         }
                     });
-                    let _ = tx.send(result.map_err(|error| format!("{error:#}")));
+                    let _ = tx.send(ReportMsg::Finished(
+                        result.map_err(|error| format!("{error:#}")),
+                    ));
                     if let Some(wake) = &waker {
                         wake();
                     }
@@ -2006,8 +2014,13 @@ impl App {
         if let Some(rx) = self.report_rx.take() {
             loop {
                 match rx.try_recv() {
-                    Ok(Ok(message)) => self.diagnostic_notice = Some(message),
-                    Ok(Err(error)) => {
+                    Ok(ReportMsg::Progress(message)) => self.diagnostic_notice = Some(message),
+                    Ok(ReportMsg::Finished(Ok(receipt))) => {
+                        self.diagnostic_notice = Some(receipt);
+                        report_done = true;
+                        break;
+                    }
+                    Ok(ReportMsg::Finished(Err(error))) => {
                         self.log.push(format!("Could not submit report: {error}"));
                         self.diagnostic_notice = Some(
                             if self
