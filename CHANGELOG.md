@@ -7,7 +7,7 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Flash
 
-- Recovery can explicitly bypass the Pioneer firmware family check. The option appears only after a proven family mismatch. Selecting it opens a translated risk warning and requires typing a fresh five-digit code; wrong submissions close the popup, and consent is consumed by one attempt; normal Flash remains family-checked, and Recovery still requires its final write confirmation and verifies the firmware afterward. Changing the selected drive or firmware clears the override. CLI Recovery exposes `--bypass-family-check` with the existing mandatory write-risk acknowledgment.
+- Recovery can explicitly bypass the Pioneer firmware family check. The option appears only after a proven family mismatch. Selecting it opens a translated risk warning and requires typing a fresh five-digit code; wrong submissions close the popup, and consent is consumed by one attempt. Recovery skips Flash-only tray checks on its update and restoration passes; normal Flash remains family-checked and refuses a loaded disc. Recovery still requires its final write confirmation and verifies the firmware afterward. Changing the selected drive or firmware clears the override. CLI Recovery exposes `--bypass-family-check` with the existing mandatory write-risk acknowledgment.
 
 - Identify Pioneer and MediaTek drives from validated protocol responses, independent
   of vendor/model branding. ASUS SBC-06D2X-U and other OEM-branded Pioneer drives
