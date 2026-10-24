@@ -247,6 +247,8 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             !disclosure.is_expanded(),
             "fresh confirmation",
         );
+        let mut details_preserved = false;
+        let mut prominent_content_preserved = false;
         for expanded in [true, false] {
             WidgetExt::activate(&disclosure);
             settle(SETTLE);
@@ -274,21 +276,38 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
                 disclosure.label().as_deref() == Some(expected.as_str()),
                 expected,
             );
+            let labels: Vec<String> = descendants(&root)
+                .iter()
+                .filter_map(|widget| {
+                    widget
+                        .downcast_ref::<gtk::Label>()
+                        .map(|label| label.text().to_string())
+                })
+                .collect();
+            if expanded {
+                details_preserved = c
+                    .technical_details
+                    .iter()
+                    .all(|detail| labels.iter().any(|label| label.contains(detail)));
+            } else {
+                let visible_copy = std::iter::once(&c.danger)
+                    .chain(c.warnings.iter())
+                    .chain(c.prompt.iter())
+                    .chain(c.note.iter())
+                    .chain(std::iter::once(&c.ack_text));
+                prominent_content_preserved =
+                    visible_copy.all(|text| labels.iter().any(|label| label.contains(text)));
+            }
         }
-        let labels: Vec<String> = descendants(disclosure.upcast_ref())
-            .iter()
-            .filter_map(|widget| {
-                widget
-                    .downcast_ref::<gtk::Label>()
-                    .map(|label| label.text().to_string())
-            })
-            .collect();
         g.check(
             "confirmation-details-preserve-content",
-            c.technical_details
-                .iter()
-                .all(|detail| labels.contains(detail)),
-            "all technical rows retained",
+            details_preserved,
+            "all technical rows retained while expanded",
+        );
+        g.check(
+            "confirmation-visible-copy-preserved",
+            prominent_content_preserved,
+            "risk, warnings and acknowledgement remain after collapse",
         );
     }
     g.check(
