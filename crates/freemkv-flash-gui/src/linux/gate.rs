@@ -278,6 +278,7 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             );
             let labels: Vec<String> = descendants(&root)
                 .iter()
+                .filter(|widget| widget.is_mapped())
                 .filter_map(|widget| {
                     widget
                         .downcast_ref::<gtk::Label>()
@@ -290,7 +291,7 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
                     .iter()
                     .all(|detail| labels.iter().any(|label| label.contains(detail)));
             } else {
-                let visible_copy = std::iter::once(&c.danger)
+                let mut visible_copy = std::iter::once(&c.danger)
                     .chain(c.warnings.iter())
                     .chain(c.prompt.iter())
                     .chain(c.note.iter())
@@ -305,9 +306,9 @@ fn sheet(shell: &Rc<Shell>, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             "all technical rows retained while expanded",
         );
         g.check(
-            "confirmation-visible-copy-preserved",
+            "confirmation-collapse-preserves-copy",
             prominent_content_preserved,
-            "risk, warnings and acknowledgement remain after collapse",
+            "risk, warnings and acknowledgement remain rendered after collapse",
         );
     }
     g.check(
