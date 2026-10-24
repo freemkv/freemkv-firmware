@@ -15,7 +15,7 @@ use gtk4::prelude::*;
 
 use super::Shell;
 use crate::gui_gate::{self, Capture, Gate, Order, Region, SheetRun, TabRun};
-use crate::ui::{Input, Task};
+use crate::ui::{Input, ProfileState, Task};
 
 /// How long a step lets GTK lay out and draw before it looks.
 const SETTLE: Duration = Duration::from_millis(500);
@@ -70,12 +70,61 @@ fn run(shell: &Rc<Shell>, dir: &Path) {
         );
     }
 
+    firmware_pickers(shell, &mut g);
     shell.send(Input::SelectTask(Task::Flash));
     let first = sheet(shell, dir, true, &mut g);
     let reopened = sheet(shell, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     g.no_drive_io("end", &shell.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+/// CI has no desktop portal; exercise GTK's real fallback chooser and dismiss it.
+fn firmware_pickers(shell: &Rc<Shell>, g: &mut Gate) {
+    let original = shell.app.borrow().profile.clone();
+    for (name, extensions) in gui_gate::PICKER_PROFILES {
+        if let ProfileState::Ready(profile) = &mut shell.app.borrow_mut().profile {
+            profile.firmware_picker = crate::ui::FirmwarePickerFormats::prefer(extensions.to_vec());
+        }
+        for pick in gui_gate::FIRMWARE_PICKS {
+            shell.send(Input::Choose(pick));
+            let until = Instant::now() + Duration::from_secs(5);
+            let mut picker = None;
+            while Instant::now() < until && picker.is_none() {
+                settle(Duration::from_millis(100));
+                picker = gtk::Window::list_toplevels()
+                    .into_iter()
+                    .find_map(|widget| {
+                        widget.downcast::<gtk::Window>().ok().filter(|dialog| {
+                            // FileDialog owns this fallback internally. Inspect its
+                            // native type without using the deprecated construction API.
+                            dialog.type_().name() == "GtkFileChooserDialog" && dialog.is_visible()
+                        })
+                    });
+            }
+            g.check(
+                "firmware-picker-opens",
+                picker.is_some(),
+                format!("{name} {pick:?}"),
+            );
+            if let Some(dialog) = picker {
+                dialog.close();
+                settle(SETTLE);
+                g.check(
+                    "firmware-picker-cancels",
+                    !dialog.is_visible() && shell.app.borrow().failure.is_none(),
+                    format!("{name} {pick:?}"),
+                );
+            }
+            g.check(
+                "firmware-picker-keeps-main-window",
+                shell.window.is_visible(),
+                format!("{name} {pick:?}"),
+            );
+            g.no_drive_io(&format!("picker {name} {pick:?}"), &shell.app.borrow());
+        }
+    }
+    shell.app.borrow_mut().profile = original;
 }
 
 /// Open the confirmation over the synthetic plan, read it, tick its box when `tick`, and

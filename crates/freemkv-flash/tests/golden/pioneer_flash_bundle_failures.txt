@@ -1,20 +1,20 @@
 
 === Pioneer execute: installed backup is Kernel-only ===
-result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): pre-flash backup failed and flashing without one was declined; aborting flash: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
+result: ERR update failed during backup (write started: false; temporary firmware: false; completed stages: []): errors.backup_required: operation has no firmware write capability: backup saved to <TMP>/pioneer-failures/backup_0.tar, but it is not a usable rollback for this update: pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
 --- text (6) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
   reading kernel...
   verifying kernel...
-  Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
+errors.backup_partial
 --- events (6) ---
 MSG      Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 MSG      Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
 MSG      Pioneer firmware read probe: attempt=1/3 address=0x400000 requested=4 returned=4
 MSG        reading kernel...
 MSG        verifying kernel...
-MSG        Normal region not recovered (reading firmware at 0x410000: unrecovered read error); saving Kernel only
+MSG      errors.backup_partial
 --- scsi transcript (16) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
@@ -35,7 +35,7 @@ IN   cdb=120000006000 alloc=96 -> ok 96
 saved pre-flash backup: 71680 bytes sha256=262d81dcf0bbe4661d5a92cbd3018fcdf8a833a03c02ee4311016ea47d661aeb
 
 === Pioneer execute: target is a header-only bundle ===
-result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
+result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 --- text (6) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware

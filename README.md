@@ -293,7 +293,11 @@ encrypted transfer from its code. If application code reads are restricted, supp
 the exact firmware currently running with `--current`. Its validated image provides
 receiver instructions; live INQUIRY, boot banner and build metadata must match, and
 are rechecked before entry. This does not prove every installed byte matches the file.
-Recovery creates no backup. Model/family comparison against installed firmware is bypassed.
+Recovery creates no automatic backup. A known family mismatch between a supplied
+Current reference and the target is refused before opening the drive. MediaTek
+Recovery does not support `--bypass-family-check`. When installed-family evidence
+is unavailable, the MediaTek library's recovery admission policy still applies;
+receiver, chip and integrity validation remain required.
 
 Explicit Recovery reports a PREPARE error and continues once with the selected
 image. It does not retry PREPARE or ignore firmware-data failures. Normal Flash

@@ -41,10 +41,7 @@ const TICK_MS: u64 = 200;
 /// not start.
 pub fn run() -> i32 {
     if let Err(e) = adw::init() {
-        eprintln!(
-            "freemkv-flash-gui: cannot start the desktop app ({e}); the GTK4/libadwaita \
-             runtime is unavailable. Run with --egui for the fallback interface."
-        );
+        crate::application_failure(&format!("GTK/libadwaita initialization failed: {e}"), true);
         return 1;
     }
     let app = adw::Application::builder().application_id(APP_ID).build();
@@ -372,7 +369,7 @@ impl Shell {
         save_as: Option<String>,
     ) {
         let dlg = gtk::FileDialog::builder().modal(true).build();
-        if let Some(f) = filter {
+        if let Some(f) = filter.and_then(ui::FileFilter::validated) {
             let ff = gtk::FileFilter::new();
             ff.set_name(Some(f.name));
             for e in &f.extensions {
@@ -384,10 +381,19 @@ impl Shell {
             dlg.set_default_filter(Some(&ff));
         }
         let me = self.clone();
-        let done = move |r: Result<gio::File, glib::Error>| {
-            if let Some(path) = r.ok().and_then(|f| f.path()) {
-                me.send(Input::Chosen(pick, path));
-            }
+        let done = move |r: Result<gio::File, glib::Error>| match r {
+            Ok(file) => match file.path() {
+                Some(path) => me.send(Input::Chosen(pick, path)),
+                None => me.send(Input::DialogFailed(
+                    pick,
+                    "File dialog returned no local path".into(),
+                )),
+            },
+            Err(error)
+                if error.matches(gtk::DialogError::Dismissed)
+                    || error.matches(gtk::DialogError::Cancelled)
+                    || error.matches(gio::IOErrorEnum::Cancelled) => {}
+            Err(error) => me.send(Input::DialogFailed(pick, error.to_string())),
         };
         match save_as {
             Some(name) => {

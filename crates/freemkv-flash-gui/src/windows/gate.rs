@@ -16,7 +16,7 @@ use winsafe::{self as w, co, msg, prelude::*};
 
 use super::{send_raw, Shell, TDM_CLICK_BUTTON, TD_CANCEL};
 use crate::gui_gate::{self, Capture, Gate, Order, Region, SheetRun, TabRun};
-use crate::ui::{Input, Task};
+use crate::ui::{Input, ProfileState, Task};
 
 /// One shot: start the gate once the window is shown and painted.
 const TIMER_GATE: usize = 9;
@@ -119,12 +119,94 @@ fn run(me: &Shell, dir: &Path) {
         );
     }
 
+    firmware_pickers(me, &mut g);
     me.send(Input::SelectTask(Task::Flash));
     let first = sheet(me, dir, true, &mut g);
     let reopened = sheet(me, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     g.no_drive_io("end", &me.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+fn close_next_picker(thread_id: u32) -> std::thread::JoinHandle<bool> {
+    std::thread::spawn(move || {
+        let until = Instant::now() + Duration::from_secs(10);
+        let mut opened = false;
+        while Instant::now() < until && !opened {
+            let _ = w::EnumThreadWindows(thread_id, |hwnd| {
+                if hwnd.GetClassName().ok().as_deref() == Some("#32770") && hwnd.IsWindowVisible() {
+                    opened = true;
+                    unsafe {
+                        let _ = hwnd.PostMessage(msg::WmClose {});
+                    }
+                }
+                true
+            });
+            if !opened {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+        opened
+    })
+}
+
+/// Open the actual common dialog for each filter shape and cancel it on its UI thread.
+fn firmware_pickers(me: &Shell, g: &mut Gate) {
+    let original = me.app.borrow().profile.clone();
+    let (thread_id, _) = me.wnd.hwnd().GetWindowThreadProcessId();
+    for (name, extensions) in gui_gate::PICKER_PROFILES {
+        if let ProfileState::Ready(profile) = &mut me.app.borrow_mut().profile {
+            profile.firmware_picker = crate::ui::FirmwarePickerFormats::prefer(extensions.to_vec());
+        }
+        for pick in gui_gate::FIRMWARE_PICKS {
+            let closer = close_next_picker(thread_id);
+            me.send(Input::Choose(pick));
+            let opened = closer.join().unwrap_or(false);
+            let app = me.app.borrow();
+            g.check(
+                "firmware-picker-opens-and-cancels",
+                opened && app.failure.is_none(),
+                format!("{name} {pick:?}"),
+            );
+            g.check(
+                "firmware-picker-keeps-main-window",
+                me.wnd.hwnd().IsWindowVisible(),
+                format!("{name} {pick:?}"),
+            );
+            g.no_drive_io(&format!("picker {name} {pick:?}"), &app);
+        }
+    }
+    // Bypass the model policy to exercise the native boundary independently.
+    for filter in [
+        crate::ui::FileFilter {
+            name: "Firmware",
+            extensions: vec![],
+        },
+        crate::ui::FileFilter {
+            name: "",
+            extensions: vec!["bin"],
+        },
+        crate::ui::FileFilter {
+            name: "Firmware\0",
+            extensions: vec!["bin"],
+        },
+        crate::ui::FileFilter {
+            name: "Firmware",
+            extensions: vec!["", "bin;*", "\0"],
+        },
+    ] {
+        let description = format!("{filter:?}");
+        let closer = close_next_picker(thread_id);
+        let result = me.open_dialog(Some(filter));
+        let opened = closer.join().unwrap_or(false);
+        g.check(
+            "invalid-filter-opens-unfiltered-and-cancels",
+            opened && matches!(result, Ok(None)),
+            description,
+        );
+        g.no_drive_io("invalid filter boundary", &me.app.borrow());
+    }
+    me.app.borrow_mut().profile = original;
 }
 
 /// Ask the confirmation over the synthetic plan and let the shell open its dialog as it

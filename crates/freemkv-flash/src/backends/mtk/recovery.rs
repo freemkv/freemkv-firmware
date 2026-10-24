@@ -5,7 +5,7 @@ use crate::backend::{
     WriteDevice,
 };
 use crate::transport::{ScsiTransport, SharedDevice};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use mediatek_optical::{recovery, update::FlashTransport};
 
 struct RecoveryReceiver {
@@ -39,7 +39,10 @@ impl RecoveryFacet for Mtk {
         let mut reads = ScsiTransport::reads(&shared);
         let result = match current {
             Some(current) => {
-                let envelope = mediatek_optical::envelope::Envelope::load(current)?;
+                let envelope =
+                    mediatek_optical::envelope::Envelope::load(current).map_err(|e| {
+                        anyhow::Error::new(e).context(crate::user_error::IssueCode::FirmwareInvalid)
+                    })?;
                 recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
             }
             None => recovery::Receiver::identify(&mut reads),
@@ -66,39 +69,59 @@ impl RecoveryFacet for Mtk {
                 }
                 .into())
             }
-            result => result.map_err(anyhow::Error::new).map(|receiver| {
-                receiver.map(|receiver| {
-                    RecoveryTarget::new(
-                        format!(
-                            "{} {:?} ({:?})",
-                            receiver.chip(),
-                            receiver.mode(),
-                            receiver.encoding()
-                        ),
-                        RecoveryReceiver { receiver },
-                    )
+            result => result
+                .map_err(|error| {
+                    use mediatek_optical::CodedError;
+                    let issue = crate::user_error::IssueCode::from(error.kind());
+                    anyhow::Error::new(error).context(issue)
                 })
-            }),
+                .map(|receiver| {
+                    receiver.map(|receiver| {
+                        RecoveryTarget::new(
+                            format!(
+                                "{} {:?} ({:?})",
+                                receiver.chip(),
+                                receiver.mode(),
+                                receiver.encoding()
+                            ),
+                            RecoveryReceiver { receiver },
+                        )
+                    })
+                }),
         }
     }
 
     fn unidentified(&self) -> &'static str {
         "no recognized MediaTek recovery receiver; readable chip banner and receiver signature required"
     }
-    fn recover(
+    fn prepare(
         &self,
-        mut dev: DeviceAccess<'_, '_>,
+        _dev: &mut ReadDevice<'_>,
         receiver: &RecoveryTarget,
         _current: Option<&[u8]>,
         target: &[u8],
-    ) -> Result<UpdateOutcome> {
+        bypass_family_check: bool,
+    ) -> Result<Box<dyn crate::backend::PreparedRecoveryUpdate>> {
+        if bypass_family_check {
+            return Err(crate::backend::UnsupportedFamilyOverride.into());
+        }
         let bound = receiver
             .state::<RecoveryReceiver>()
             .map_err(|error| UpdateFailure::before_write("recovery preparation", error))?;
-        let plan = bound
-            .receiver
-            .prepare(target)
-            .map_err(|e| UpdateFailure::before_write("recovery preparation", anyhow!("{e}")))?;
+        crate::output::publish(crate::output::Event::Phase {
+            phase: "preparing",
+            component: "filter.firmware",
+            done: None,
+            total: None,
+        });
+        let plan = bound.receiver.prepare(target).map_err(|e| {
+            use mediatek_optical::CodedError;
+            let issue = crate::user_error::IssueCode::from(e.kind());
+            UpdateFailure::before_write(
+                "recovery preparation",
+                anyhow::Error::new(e).context(issue),
+            )
+        })?;
         crate::output::field(
             "Receiver code source",
             if plan.plan().receiver().provenance()
@@ -122,6 +145,23 @@ impl RecoveryFacet for Mtk {
                 plan.plan().encoding().body
             ),
         );
+        Ok(Box::new(Prepared(plan)))
+    }
+
+    fn recover(
+        &self,
+        mut dev: DeviceAccess<'_, '_>,
+        receiver: &RecoveryTarget,
+        current: Option<&[u8]>,
+        target: &[u8],
+    ) -> Result<UpdateOutcome> {
+        let plan = self.prepare(
+            &mut ReadDevice::for_backend(dev.scsi(), self),
+            receiver,
+            current,
+            target,
+            false,
+        )?;
         let Some(writer) = dev.writer() else {
             crate::output::field(
                 "Recovery",
@@ -129,7 +169,15 @@ impl RecoveryFacet for Mtk {
             );
             return Ok(UpdateOutcome::Planned);
         };
-        execute(writer, &plan)
+        plan.execute(writer)
+    }
+}
+
+struct Prepared(recovery::PreparedRecovery);
+
+impl crate::backend::PreparedRecoveryUpdate for Prepared {
+    fn execute(&self, dev: &mut WriteDevice<'_>) -> Result<UpdateOutcome> {
+        execute(dev, &self.0)
     }
 }
 
@@ -138,7 +186,7 @@ fn execute(
     plan: &recovery::PreparedRecovery,
 ) -> Result<UpdateOutcome> {
     super::flash::log_transfer(plan.plan());
-    let (result, accepted_bytes, upload_complete, entry_attempted) = {
+    let (result, accepted_bytes, upload_complete, entry_attempted, payload_attempted) = {
         let shared = SharedDevice::new(&mut *writer);
         let (mut reads, mut writes) =
             (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
@@ -155,6 +203,7 @@ fn execute(
             runtime.payload_bytes_accepted(),
             runtime.upload_complete(),
             writes.empty_write_attempted(),
+            writes.payload_write_attempted(),
         )
     };
     let completion = result.map_err(|error| {
@@ -166,8 +215,11 @@ fn execute(
         }
         let (phase, write_started) = match &error {
             recovery::Error::Flash(error) => super::flash::failure_phase(error),
-            recovery::Error::Startup => ("target startup confirmation", true),
-            _ => ("recovery receiver preflight", false),
+            recovery::Error::Startup(_) => ("target startup confirmation", true),
+            _ => (
+                "recovery receiver checks",
+                entry_attempted || payload_attempted,
+            ),
         };
         let progress =
             match &error {
@@ -185,7 +237,7 @@ fn execute(
                 recovery::Error::Flash(mediatek_optical::update::FlashError::Transfer {
                     ..
                 }) => crate::backend::UpdateProgress::PayloadAccepted,
-                recovery::Error::Startup => crate::backend::UpdateProgress::UploadComplete,
+                recovery::Error::Startup(_) => crate::backend::UpdateProgress::UploadComplete,
                 recovery::Error::Flash(_) if upload_complete => {
                     crate::backend::UpdateProgress::UploadComplete
                 }
@@ -193,6 +245,10 @@ fn execute(
                     crate::backend::UpdateProgress::PayloadAccepted
                 }
                 recovery::Error::Flash(_) => crate::backend::UpdateProgress::PayloadAttempted,
+                _ if upload_complete => crate::backend::UpdateProgress::UploadComplete,
+                _ if accepted_bytes > 0 => crate::backend::UpdateProgress::PayloadAccepted,
+                _ if payload_attempted => crate::backend::UpdateProgress::PayloadAttempted,
+                _ if entry_attempted => crate::backend::UpdateProgress::EntryAttempted,
                 _ => crate::backend::UpdateProgress::Preflight,
             };
         let source = match error {

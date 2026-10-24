@@ -1708,7 +1708,6 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
         .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
         .unwrap_err();
     assert!(format!("{error:#}").contains("readback differs"));
-
     let plan = crate::backend::FlashPlan::new(
         super::super::execute_plan(&archive(&target, false)).unwrap(),
     );

@@ -5,20 +5,141 @@ use crate::backend::{
 };
 use crate::localization::{self, Language};
 
+macro_rules! define_issue_codes {
+    ($( $(#[$meta:meta])* $variant:ident => $id:literal, )*) => {
+        /// Stable application causes attached where an operation can explain its failure.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum IssueCode { $( $(#[$meta])* $variant, )* }
+        impl IssueCode {
+            /// Every declared cause, generated with its message mapping.
+            pub const ALL: &'static [Self] = &[$(Self::$variant),*];
+            /// Localized cause and next action, independent of diagnostic wording.
+            pub fn message_id(self) -> &'static str {
+                match self { $(Self::$variant => $id,)* }
+            }
+        }
+    };
+}
+
+define_issue_codes! {
+    /// A selected installed-firmware reference lacks required components.
+    CurrentIncomplete => "errors.current_incomplete",
+    /// The selected Current reference could not be decoded or validated.
+    CurrentInvalid => "errors.current_invalid",
+    /// A selected target cannot be decoded or validated.
+    FirmwareInvalid => "errors.firmware_invalid",
+    /// Installed-firmware evidence does not describe the connected drive.
+    CurrentMismatch => "errors.current_mismatch",
+    /// The drive changed or could not be bound to the prepared session.
+    DriveChanged => "errors.drive_changed",
+    /// No live connection could be established.
+    Connection => "errors.connection",
+    /// A prepared session cannot be reused or was lost.
+    PreparationExpired => "errors.preparation_expired",
+    /// A backup destination must be chosen.
+    BackupDestination => "errors.backup_destination",
+    /// Backup contents do not match the drive.
+    BackupMismatch => "errors.backup_mismatch",
+    /// Backup acquisition or verification failed.
+    BackupFailed => "errors.backup_failed",
+    /// The update implementation requires a complete installed-firmware backup.
+    BackupRequired => "errors.backup_required",
+    /// The user has not acknowledged the update risk.
+    Acknowledgement => "errors.acknowledgement",
+    /// The existing firmware cannot be modified again.
+    AlreadyModified => "errors.already_modified",
+    /// This application cannot prepare the requested update from this firmware.
+    UnsupportedFirmware => "errors.unsupported_firmware",
+    /// The firmware's hardware differs; no display identity was available.
+    IncompatibleFirmware => "errors.incompatible_firmware",
+    /// Device completion or verification needs attention.
+    UpdateUncertain => "errors.update_uncertain",
+    /// Command options were rejected before any device operation.
+    CommandOptions => "errors.command_options",
+    /// No supported classification could explain an unexpected application fault.
+    Unexpected => "errors.unexpected",
+    /// No optical drive was available for the operation.
+    NoDrive => "errors.no_drive",
+    /// Automatic drive selection found more than one candidate.
+    ChooseDrive => "errors.choose_drive",
+    /// The drive's tray must be closed before updating.
+    TrayOpen => "errors.tray_open",
+    /// A loaded disc must be removed before updating.
+    DiscPresent => "errors.disc_present",
+    /// The requested operation is unavailable for the selected drive.
+    UnsupportedDrive => "errors.unsupported_drive",
+    /// The operator declined before the update began.
+    Cancelled => "ui.cancelled_no_firmware_was_written",
+    /// The live drive did not confirm that freemkv firmware is installed.
+    FirmwareNotDetected => "errors.drive_firmware_unconfirmed",
+    /// Backup bypass needs an interactive answer before an update can start.
+    BackupConfirmationRequired => "errors.backup_confirmation_required",
+}
+
+impl std::fmt::Display for IssueCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.message_id())
+    }
+}
+
+impl std::error::Error for IssueCode {}
+
+/// Give an unclassified internal cause its domain boundary's explicit meaning.
+/// Existing typed causes and transport/file evidence always retain their guidance.
+pub fn explain(error: anyhow::Error, code: IssueCode) -> anyhow::Error {
+    if !error.is::<IssueCode>() && UserError::of(&error).id == "errors.unexpected" {
+        error.context(code)
+    } else {
+        error
+    }
+}
+
+/// Evidence attached only by workflows whose capabilities cannot write firmware.
+#[derive(Debug)]
+pub struct NoFirmwareWrite;
+
+impl std::fmt::Display for NoFirmwareWrite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("operation has no firmware write capability")
+    }
+}
+impl std::error::Error for NoFirmwareWrite {}
+
+/// Preserve diagnostic causes while recording a read-only operation's effect.
+pub fn read_only<T>(result: anyhow::Result<T>) -> anyhow::Result<T> {
+    result.map_err(|error| error.context(NoFirmwareWrite))
+}
+
 /// A stable UI message with data arguments; no diagnostic error text is exposed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct UserError {
     /// Catalog message id.
     pub id: &'static str,
     /// Data such as installed and selected model names.
     pub arguments: Vec<(&'static str, String)>,
+    /// Evidence-backed consequences are kept with the reason through every sink.
+    pub consequence: Option<&'static str>,
 }
 
 impl UserError {
     /// Classify structured evidence first. Unknown failures receive conservative guidance.
     pub fn of(error: &anyhow::Error) -> Self {
         let mut arguments = Vec::new();
-        let id = if let Some(mismatch) = error.downcast_ref::<HardwareMismatch>() {
+        let failure = error.downcast_ref::<UpdateFailure>();
+        let consequence = match failure {
+            Some(f) if f.impact() == UpdateImpact::Blocked => Some("errors.update_blocked"),
+            Some(_) => None,
+            None if error.is::<NoFirmwareWrite>() => Some("errors.no_firmware_write"),
+            None => None,
+        };
+        let id = if let Some(failure) = failure.filter(|f| f.impact() != UpdateImpact::Blocked) {
+            match failure.impact() {
+                UpdateImpact::Blocked => unreachable!("filtered above"),
+                UpdateImpact::EntryUncertain => "errors.update_not_started",
+                UpdateImpact::PayloadUncertain | UpdateImpact::Unknown => "errors.update_uncertain",
+                UpdateImpact::TemporaryFirmware => "errors.temporary_firmware",
+            }
+        } else if let Some(mismatch) = error.downcast_ref::<HardwareMismatch>() {
             arguments.push((
                 "installed",
                 crate::style::printable(crate::style::ident_or_unknown(&mismatch.installed_model))
@@ -32,10 +153,17 @@ impl UserError {
             "errors.hardware_mismatch"
         } else if error.is::<crate::backend::UnsupportedFamilyOverride>() {
             "recovery.family_override_unsupported"
+        } else if matches!(
+            error.downcast_ref::<IssueCode>(),
+            Some(IssueCode::BackupRequired)
+        ) {
+            "errors.backup_required"
         } else if error.is::<CurrentFirmwareRequired>() {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
             "errors.backup_restricted"
+        } else if let Some(code) = error.downcast_ref::<IssueCode>() {
+            code.message_id()
         } else if let Some(unverified) = error.downcast_ref::<UnverifiedUpdateOutcome>() {
             match &unverified.0 {
                 crate::backend::UpdateOutcome::Completed(e) if e.temporary_firmware => {
@@ -47,10 +175,8 @@ impl UserError {
         {
             use crate::inspection::InspectionError;
             match inspection {
-                InspectionError::UnsupportedFormat(_) => "modify.not_supported",
-                InspectionError::UnrecognizedFormat => {
-                    "domain.this_firmware_format_was_not_recognized"
-                }
+                InspectionError::UnsupportedFormat(_) => "errors.unsupported_firmware",
+                InspectionError::UnrecognizedFormat => "errors.firmware_invalid",
                 InspectionError::UnsupportedPair => {
                     "domain.these_firmware_formats_cannot_currently_be_compared"
                 }
@@ -64,17 +190,6 @@ impl UserError {
                 InspectionError::TwoDrives => {
                     "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive"
                 }
-            }
-        } else if let Some(failure) = error
-            .downcast_ref::<UpdateFailure>()
-            .filter(|failure| failure.impact() != UpdateImpact::Blocked)
-        {
-            match failure.impact() {
-                UpdateImpact::Blocked => unreachable!("filtered above"),
-                UpdateImpact::EntryUncertain => "errors.update_not_started",
-                UpdateImpact::PayloadUncertain => "errors.update_uncertain",
-                UpdateImpact::TemporaryFirmware => "errors.temporary_firmware",
-                UpdateImpact::Unknown => "errors.update_uncertain",
             }
         } else if let Some(io) = error
             .chain()
@@ -90,48 +205,12 @@ impl UserError {
                 std::io::ErrorKind::TimedOut => "errors.connection",
                 _ => "errors.file_access",
             }
+        } else if error.is::<crate::platform::ScsiSenseError>()
+            || error.is::<crate::backend::detection::Unavailable>()
+        {
+            "errors.connection"
         } else {
-            let detail = format!("{error:#}").to_ascii_lowercase();
-            if error
-                .downcast_ref::<UpdateFailure>()
-                .is_some_and(|failure| failure.phase == "risk acknowledgement")
-            {
-                "errors.acknowledgement"
-            } else if detail.contains("no preflash backup path") {
-                "errors.backup_destination"
-            } else if detail.contains("does not match the target drive") {
-                "errors.backup_mismatch"
-            } else if detail.contains("already modified")
-                || detail.contains("already patched")
-                || detail.contains("already contains freemkv firmware")
-                || detail.contains("predates editable boot settings")
-            {
-                "errors.already_modified"
-            } else if detail.contains("current")
-                && (detail.contains("does not match") || detail.contains("mismatch"))
-            {
-                "errors.current_mismatch"
-            } else if detail.contains("scsi")
-                || detail.contains("transport error")
-                || detail.contains("device disconnected")
-            {
-                "errors.connection"
-            } else if detail.contains("signature")
-                || detail.contains("cmac")
-                || detail.contains("integrity")
-                || detail.contains("archive")
-                || detail.contains(".tar")
-                || detail.contains("firmware image")
-            {
-                "errors.firmware_invalid"
-            } else if error
-                .downcast_ref::<UpdateFailure>()
-                .is_some_and(|failure| failure.phase == "backup")
-            {
-                "errors.backup_failed"
-            } else {
-                "errors.cannot_finish"
-            }
+            "errors.unexpected"
         };
         if let Some(evidence) = error.downcast_ref::<crate::backend::UpdateVerification>() {
             use crate::backend::ComponentVerification as V;
@@ -148,6 +227,7 @@ impl UserError {
             let guidance = localization::message(id, &arguments);
             return Self {
                 id: "errors.verification_details",
+                consequence,
                 arguments: vec![
                     ("guidance", guidance),
                     ("selected_label", "ui.firmware_to_flash".into()),
@@ -180,12 +260,23 @@ impl UserError {
                 ],
             };
         }
-        Self { id, arguments }
+        Self {
+            id,
+            arguments,
+            consequence,
+        }
     }
 
     /// Keep the message unresolved until the UI renders it in the chosen language.
     pub fn encoded(&self) -> String {
-        localization::message(self.id, &self.arguments)
+        let cause = localization::message(self.id, &self.arguments);
+        match self.consequence {
+            Some(consequence) => localization::message(
+                "ui.join",
+                &[("first", consequence.into()), ("second", cause)],
+            ),
+            None => cause,
+        }
     }
 
     /// Render guidance without changing the stored diagnostic evidence.
@@ -197,6 +288,130 @@ impl UserError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_live_capture_does_not_claim_a_selected_current_file_is_incomplete() {
+        let error = UpdateFailure::before_write(
+            "current firmware capture",
+            anyhow::Error::new(CurrentFirmwareRequired {
+                source: anyhow::anyhow!("captured Kernel only")
+                    .context(IssueCode::CurrentIncomplete),
+            }),
+        );
+        let issue = UserError::of(&error);
+        assert_eq!(issue.id, "errors.current_required");
+        assert_eq!(issue.consequence, Some("errors.update_blocked"));
+        for language in Language::ALL {
+            assert!(issue
+                .render(language)
+                .contains(localization::get(language, "errors.current_required")));
+        }
+    }
+
+    #[test]
+    fn an_explicit_unexpected_cause_is_never_guessed_by_a_later_boundary() {
+        for boundary in [
+            IssueCode::FirmwareInvalid,
+            IssueCode::Connection,
+            IssueCode::UnsupportedFirmware,
+            IssueCode::BackupFailed,
+        ] {
+            let cause = anyhow::anyhow!("private library failure")
+                .context(IssueCode::Unexpected)
+                .context("preparation wrapper");
+            let error = explain(cause, boundary);
+            assert_eq!(UserError::of(&error).id, "errors.unexpected");
+            assert!(format!("{error:#}").contains("private library failure"));
+        }
+        let error = explain(
+            anyhow::anyhow!("untyped boundary failure"),
+            IssueCode::FirmwareInvalid,
+        );
+        assert_eq!(UserError::of(&error).id, "errors.firmware_invalid");
+    }
+
+    #[test]
+    fn every_application_issue_has_guidance_in_every_catalog() {
+        for &code in IssueCode::ALL {
+            for language in Language::ALL {
+                let text = localization::get(language, code.message_id());
+                assert!(!text.trim().is_empty());
+                assert_ne!(text, code.message_id(), "{language:?}: {code:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn incomplete_current_has_one_localized_cause_action_and_no_write_consequence() {
+        let error = UpdateFailure::before_write(
+            "recovery precheck",
+            anyhow::anyhow!(
+                "Current firmware must include Kernel and Normal; private offset 0x98000"
+            )
+            .context(IssueCode::CurrentIncomplete),
+        );
+        let guidance = UserError::of(&error);
+        assert_eq!(guidance.id, "errors.current_incomplete");
+        assert_eq!(guidance.consequence, Some("errors.update_blocked"));
+        for language in Language::ALL {
+            let rendered = guidance.render(language);
+            assert!(rendered.contains(localization::get(language, "errors.update_blocked")));
+            assert!(rendered.contains(localization::get(language, "errors.current_incomplete")));
+            assert!(!rendered.contains("0x98000") && !rendered.contains("{component}"));
+        }
+        let rendered = guidance.render(Language::En);
+        assert!(rendered.contains("No firmware was written."));
+        assert!(rendered.contains("Read from drive"));
+        assert!(format!("{error:#}").contains("0x98000"));
+    }
+
+    #[test]
+    fn write_evidence_overrides_even_a_typed_file_or_hardware_reason() {
+        for cause in [
+            anyhow::Error::new(IssueCode::FirmwareInvalid),
+            anyhow::Error::new(IssueCode::CurrentIncomplete),
+            anyhow::Error::new(HardwareMismatch {
+                installed_model: "installed model".into(),
+                target_model: "selected model".into(),
+                source: anyhow::anyhow!("private compatibility details"),
+            }),
+            anyhow::Error::new(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "private file error",
+            )),
+        ] {
+            let error = cause.context(UpdateFailure {
+                phase: "transfer".into(),
+                write_started: true,
+                progress: crate::backend::UpdateProgress::PayloadAttempted,
+                payload_bytes_accepted: Some(0),
+                temporary_firmware: false,
+                completed_stages: Vec::new(),
+            });
+            let guidance = UserError::of(&error);
+            assert_eq!(guidance.id, "errors.update_uncertain");
+            assert_eq!(guidance.consequence, None);
+            assert!(!guidance
+                .render(Language::En)
+                .contains("No firmware was written"));
+        }
+    }
+
+    #[test]
+    fn english_diagnostic_words_cannot_change_error_classification() {
+        for detail in [
+            "SCSI",
+            "CMAC signature",
+            "current mismatch",
+            "already patched",
+            "archive.tar",
+        ] {
+            assert_eq!(
+                UserError::of(&anyhow::anyhow!(detail)).id,
+                "errors.unexpected"
+            );
+        }
+    }
 
     #[test]
     fn verification_failure_preserves_independent_results_in_every_language() {
@@ -238,11 +453,11 @@ mod tests {
         for (error, expected) in [
             (
                 InspectionError::UnsupportedFormat("Pioneer".into()),
-                "modify.not_supported",
+                "errors.unsupported_firmware",
             ),
             (
                 InspectionError::UnrecognizedFormat,
-                "domain.this_firmware_format_was_not_recognized",
+                "errors.firmware_invalid",
             ),
             (
                 InspectionError::UnsupportedPair,
@@ -257,15 +472,15 @@ mod tests {
                 "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive",
             ),
         ] {
-            let error = anyhow::Error::new(error);
+            let error = anyhow::Error::new(error).context(NoFirmwareWrite);
             let guidance = UserError::of(&error);
             assert_eq!(guidance.id, expected);
             for language in Language::ALL {
                 let message = guidance.render(language);
                 assert!(!message.is_empty());
                 assert_ne!(message, expected);
+                assert!(message.contains(localization::get(language, "errors.no_firmware_write")));
             }
-            assert!(!guidance.render(Language::En).contains("try again"));
         }
     }
 
@@ -421,11 +636,11 @@ mod legacy_guidance_tests {
             "image already contains freemkv firmware; creating a new build requires a clean, unmodified OEM image",
             "This firmware predates editable boot settings. Select its original OEM image to create firmware with boot settings.",
         ] {
-            let error = anyhow::anyhow!(detail);
+            let error = anyhow::anyhow!(detail).context(IssueCode::AlreadyModified);
             let guidance = UserError::of(&error);
             assert_eq!(guidance.id, "errors.already_modified");
             assert!(guidance.render(Language::En).contains("Choose an original OEM firmware file"));
-            assert_eq!(format!("{error:#}"), detail);
+            assert!(format!("{error:#}").contains(detail));
         }
     }
 }

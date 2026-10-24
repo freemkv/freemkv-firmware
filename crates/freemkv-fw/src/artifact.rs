@@ -11,7 +11,12 @@ impl Artifact {
     /// Identify a TAR by its header, and validate its manifest before editing.
     pub fn parse(bytes: Vec<u8>) -> Result<Self> {
         if bytes.get(257..262) == Some(b"ustar") {
-            let package = Package::parse(&bytes)?;
+            let package = Package::parse(&bytes).map_err(|error| {
+                freemkv_flash::user_error::explain(
+                    error,
+                    freemkv_flash::user_error::IssueCode::FirmwareInvalid,
+                )
+            })?;
             Ok(Self {
                 image: package.firmware().to_vec(),
                 package: Some(package),

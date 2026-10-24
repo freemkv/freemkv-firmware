@@ -75,7 +75,9 @@ pub fn resolve(dev: &mut dyn ScsiDevice) -> Result<Option<Resolved>> {
     resolve_detection(super::detection::detect(dev)?)
 }
 
-fn resolve_detection(detection: super::detection::Detection) -> Result<Option<Resolved>> {
+pub(crate) fn resolve_detection(
+    detection: super::detection::Detection,
+) -> Result<Option<Resolved>> {
     use super::detection::{Conclusion, Evidence};
     let (backend, evidence): (&'static dyn Backend, &'static str) = match detection.conclusion {
         Conclusion::Detected(Evidence::Mediatek(m)) => {

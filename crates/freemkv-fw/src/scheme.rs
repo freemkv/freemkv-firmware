@@ -93,7 +93,9 @@ impl IntegrityScheme for MtkCmac {
     }
 
     fn verify(&self, image: &[u8]) -> Result<Vec<RegionVerdict>> {
-        let verdicts = cmac::verify_detailed(image).map_err(|e| anyhow!(e))?;
+        let verdicts = cmac::verify_detailed(image).map_err(|e| {
+            anyhow!(e).context(freemkv_flash::user_error::IssueCode::FirmwareInvalid)
+        })?;
         Ok(verdicts
             .into_iter()
             .map(|v| RegionVerdict {
@@ -109,7 +111,9 @@ impl IntegrityScheme for MtkCmac {
 
     fn sign(&self, image: &[u8]) -> Result<(Vec<u8>, Vec<RegionChange>)> {
         // Snapshot the active entries before signing so we can diff digests.
-        let before = cmac::parse_table(image).map_err(|e| anyhow!(e))?;
+        let before = cmac::parse_table(image).map_err(|e| {
+            anyhow!(e).context(freemkv_flash::user_error::IssueCode::FirmwareInvalid)
+        })?;
         let signed = cmac::resign(image).map_err(|e| anyhow!(e))?;
         let after = cmac::parse_table(&signed).map_err(|e| anyhow!(e))?;
 
@@ -165,9 +169,10 @@ pub fn select_scheme(image: &[u8], forced: Option<Family>) -> Result<Box<dyn Int
             return Ok(scheme);
         }
     }
-    Err(anyhow!(
-        "no integrity scheme recognizes this image (only MediaTek MT19xx supported today)"
-    ))
+    Err(
+        anyhow!("no integrity scheme recognizes this image (only MediaTek MT19xx supported today)")
+            .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware),
+    )
 }
 
 #[cfg(test)]

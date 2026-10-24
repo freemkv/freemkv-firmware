@@ -28,7 +28,19 @@ fn load_icon() -> Option<egui::IconData> {
     })
 }
 
-fn main() -> eframe::Result<()> {
+fn main() -> std::process::ExitCode {
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            let issue = freemkv_flash::workflow::application_failure(&error.to_string(), true);
+            let language = freemkv_flash::localization::Preferences::user().load();
+            eprintln!("{}", issue.render(language));
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(freemkv_flash::localization::get(
             freemkv_flash::localization::Preferences::user().load(),

@@ -1,7 +1,7 @@
 //! Explicit file-derived receiver evidence; transport always reads the drive.
 #[cfg(test)]
 use anyhow::ensure;
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 #[cfg(test)]
 use mediatek_optical::drive::Transport;
 #[cfg(test)]
@@ -12,11 +12,25 @@ pub(super) fn detect(
     dev: &mut crate::backend::ReadDevice<'_>,
     input: &[u8],
 ) -> Result<receiver::Receiver> {
-    let envelope = Envelope::load(input).context("invalid Current MediaTek image")?;
+    let envelope = Envelope::load(input).map_err(|error| {
+        anyhow::Error::new(error)
+            .context("invalid Current MediaTek image")
+            .context(crate::user_error::IssueCode::CurrentInvalid)
+    })?;
     let shared = crate::transport::SharedDevice::new(dev);
     let mut live = crate::transport::ScsiTransport::reads(&shared);
-    let receiver = receiver::reference::detect(&mut live, &envelope)
-        .map_err(|e| anyhow!("Current image receiver analysis failed: {e}"))?;
+    let receiver = receiver::reference::detect(&mut live, &envelope).map_err(|error| {
+        use mediatek_optical::CodedError;
+        let issue = match error.kind() {
+            mediatek_optical::operation::IssueKind::InvalidFirmware => {
+                crate::user_error::IssueCode::CurrentInvalid
+            }
+            kind => crate::user_error::IssueCode::from(kind),
+        };
+        anyhow::Error::new(error)
+            .context("Current image receiver analysis failed")
+            .context(issue)
+    })?;
     crate::diagnostics::record(format!(
         "MediaTek receiver source: explicit Current image sha256={}; live identity and build metadata match; receiver code is file-derived",
         crate::mediatek_package::digest(envelope.image())
@@ -141,7 +155,28 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("changed"));
-        assert!(detect_device(&mut live, &image).is_err());
+        let error = detect_device(&mut live, &image).unwrap_err();
+        let error =
+            crate::user_error::explain(error, crate::user_error::IssueCode::FirmwareInvalid);
+        assert_eq!(
+            crate::workflow::user_error(&error).id,
+            "errors.current_mismatch"
+        );
+        assert_eq!(live.writes, 0);
+    }
+    #[test]
+    fn invalid_current_keeps_its_source_when_the_flash_boundary_explains_errors() {
+        let mut live = Restricted {
+            image: image(),
+            writes: 0,
+        };
+        let error = detect_device(&mut live, b"invalid Current").unwrap_err();
+        let error =
+            crate::user_error::explain(error, crate::user_error::IssueCode::FirmwareInvalid);
+        assert_eq!(
+            crate::workflow::user_error(&error).id,
+            "errors.current_invalid"
+        );
         assert_eq!(live.writes, 0);
     }
     #[test]

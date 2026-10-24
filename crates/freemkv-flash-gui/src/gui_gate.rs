@@ -33,6 +33,19 @@ pub const DEADLINE: Duration = Duration::from_secs(90);
 /// The synthetic drive's id; no platform backend knows it.
 pub const DRIVE: &str = "freemkv-flash-gate:synthetic";
 
+/// Filter shapes of an unsupported/dump-only profile and the two update families.
+pub const PICKER_PROFILES: [(&str, &[&str]); 3] = [
+    ("unsupported", &[]),
+    ("image-package", &["bin", "tar"]),
+    ("package", &["firmware.tar", "installer.tar", "tar"]),
+];
+pub const FIRMWARE_PICKS: [Pick; 4] = [
+    Pick::FlashFirmware,
+    Pick::FlashCurrent,
+    Pick::RecoveryInput,
+    Pick::RecoveryCurrent,
+];
+
 /// The gate's directory, when the gate is on.
 pub fn dir() -> Option<PathBuf> {
     std::env::var_os(ENV)
@@ -98,7 +111,7 @@ pub fn fixture() -> App {
         inspect: true,
         backup_name: Some("GATE_1.00.backup.bin".into()),
         dump_name: Some("GATE_1.00.dump.bin".into()),
-        flash_extensions: vec!["bin"],
+        firmware_picker: crate::ui::FirmwarePickerFormats::prefer(vec!["bin"]),
         recovery_without_live_protocol: false,
         notes: Vec::new(),
     });

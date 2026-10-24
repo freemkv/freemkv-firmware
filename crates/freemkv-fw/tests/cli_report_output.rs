@@ -118,6 +118,14 @@ fn verify_of_a_corrupted_image_exits_non_zero() {
         stdout.contains("MISMATCH"),
         "the failing region must be named in the table: {stdout}"
     );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let language = freemkv_flash::localization::Preferences::user().load();
+    for key in ["errors.firmware_invalid", "errors.no_firmware_write"] {
+        assert!(
+            stderr.contains(freemkv_flash::localization::get(language, key)),
+            "{stderr}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -134,8 +142,69 @@ fn verify_of_a_missing_path_exits_non_zero_and_explains_itself_on_stderr() {
         "a path that could not even be read must not exit 0"
     );
     assert!(
-        stderr.contains("error:") && stderr.contains("reading"),
+        stderr.contains(freemkv_flash::localization::get(
+            freemkv_flash::localization::Preferences::user().load(),
+            "errors.file_missing"
+        )) && stderr.contains(freemkv_flash::localization::get(
+            freemkv_flash::localization::Preferences::user().load(),
+            "errors.no_firmware_write"
+        )),
         "the failure must be reported on stderr, naming what went wrong: {stderr}"
+    );
+}
+
+#[test]
+fn unsupported_and_malformed_files_have_specific_safe_guidance() {
+    let dir = scratch_dir("unsupported-input");
+    let image = dir.join("unrecognized.bin");
+    std::fs::write(&image, b"not a firmware image").unwrap();
+    let image_arg = path_str(&image);
+    for (args, expected) in [
+        (
+            vec!["verify", image_arg.as_str()],
+            "errors.unsupported_firmware",
+        ),
+        (
+            vec!["verify", image_arg.as_str(), "--family", "mtk"],
+            "errors.firmware_invalid",
+        ),
+        (
+            vec!["create", image_arg.as_str(), "--dry-run"],
+            "errors.unsupported_firmware",
+        ),
+    ] {
+        let out = run(&args);
+        assert!(!out.status.success());
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let language = freemkv_flash::localization::Preferences::user().load();
+        for key in [expected, "errors.no_firmware_write"] {
+            assert!(
+                stderr.contains(freemkv_flash::localization::get(language, key)),
+                "{args:?}: {stderr}"
+            );
+        }
+        assert!(!stderr.contains("no integrity scheme recognizes"));
+    }
+    assert_eq!(std::fs::read(&image).unwrap(), b"not a firmware image");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn invalid_options_explain_the_problem_and_no_firmware_write_in_the_selected_language() {
+    let out = run(&["verify"]);
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let language = freemkv_flash::localization::Preferences::user().load();
+    for key in ["errors.command_options", "errors.no_firmware_write"] {
+        assert!(
+            stderr.contains(freemkv_flash::localization::get(language, key)),
+            "{stderr}"
+        );
+    }
+    assert!(
+        !stderr.contains("Usage:"),
+        "parser diagnostics must stay in the saved log: {stderr}"
     );
 }
 
@@ -319,6 +388,15 @@ fn legacy_modified_image_requires_original_oem_and_writes_nothing() {
     ]);
     assert!(!out.status.success());
     assert!(!output.exists());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("original OEM image"));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let language = freemkv_flash::localization::Preferences::user().load();
+    assert!(stderr.contains(freemkv_flash::localization::get(
+        language,
+        "errors.already_modified"
+    )));
+    assert!(stderr.contains(freemkv_flash::localization::get(
+        language,
+        "errors.no_firmware_write"
+    )));
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -865,16 +865,16 @@ impl Shell {
     fn perform(&self, effects: Vec<Effect>) {
         for e in effects {
             match e {
-                Effect::OpenFile { pick, filter } => {
-                    if let Some(path) = self.open_dialog(filter) {
-                        self.send(Input::Chosen(pick, path.into()));
-                    }
-                }
-                Effect::SaveFile { pick, file_name } => {
-                    if let Some(path) = self.save_dialog(&file_name) {
-                        self.send(Input::Chosen(pick, path.into()));
-                    }
-                }
+                Effect::OpenFile { pick, filter } => match self.open_dialog(filter) {
+                    Ok(Some(path)) => self.send(Input::Chosen(pick, path.into())),
+                    Ok(None) => {}
+                    Err(error) => self.send(Input::DialogFailed(pick, format!("{error:?}"))),
+                },
+                Effect::SaveFile { pick, file_name } => match self.save_dialog(&file_name) {
+                    Ok(Some(path)) => self.send(Input::Chosen(pick, path.into())),
+                    Ok(None) => {}
+                    Err(error) => self.send(Input::DialogFailed(pick, format!("{error:?}"))),
+                },
                 Effect::CopyText(text) => self.copy(&text),
                 Effect::OpenPath(path) => {
                     let _ = crate::external::open_path(&path);
@@ -897,54 +897,65 @@ impl Shell {
     }
 
     /// The OS open dialog (`IFileOpenDialog`), owned by and modal to the main window.
-    fn open_dialog(&self, filter: Option<ui::FileFilter>) -> Option<String> {
+    fn open_dialog(&self, filter: Option<ui::FileFilter>) -> w::HrResult<Option<String>> {
         let dlg = w::CoCreateInstance::<w::IFileOpenDialog>(
             &co::CLSID::FileOpenDialog,
             None::<&w::IUnknown>,
             co::CLSCTX::INPROC_SERVER,
-        )
-        .ok()?;
-        let opts = dlg.GetOptions().ok()? | co::FOS::FORCEFILESYSTEM | co::FOS::FILEMUSTEXIST;
-        dlg.SetOptions(opts).ok()?;
-        if let Some(f) = filter {
+        )?;
+        let opts = dlg.GetOptions()? | co::FOS::FORCEFILESYSTEM | co::FOS::FILEMUSTEXIST;
+        dlg.SetOptions(opts)?;
+        if let Some(f) = filter.and_then(ui::FileFilter::validated) {
             let spec = f
                 .extensions
                 .iter()
                 .map(|e| format!("*.{e}"))
                 .collect::<Vec<_>>()
                 .join(";");
-            let _ = dlg.SetFileTypes(&[(f.name, spec.as_str())]);
+            dlg.SetFileTypes(&[(f.name, spec.as_str())])?;
         }
-        if !dlg.Show(self.wnd.hwnd()).ok()? {
-            return None;
+        if !dlg.Show(self.wnd.hwnd())? {
+            return Ok(None);
         }
-        dlg.GetResult()
-            .ok()?
+        dlg.GetResult()?
             .GetDisplayName(co::SIGDN::FILESYSPATH)
-            .ok()
+            .and_then(|path| {
+                if path.is_empty() || path.contains('\0') {
+                    Err(co::HRESULT::E_INVALIDARG)
+                } else {
+                    Ok(Some(path))
+                }
+            })
     }
 
     /// The OS save dialog; it asks before replacing a file, which the model relies on.
-    fn save_dialog(&self, file_name: &str) -> Option<String> {
+    fn save_dialog(&self, file_name: &str) -> w::HrResult<Option<String>> {
+        if file_name.is_empty() || file_name.contains('\0') {
+            return Err(co::HRESULT::E_INVALIDARG);
+        }
         let dlg = w::CoCreateInstance::<w::IFileSaveDialog>(
             &co::CLSID::FileSaveDialog,
             None::<&w::IUnknown>,
             co::CLSCTX::INPROC_SERVER,
-        )
-        .ok()?;
-        let opts = dlg.GetOptions().ok()?
+        )?;
+        let opts = dlg.GetOptions()?
             | co::FOS::FORCEFILESYSTEM
             | co::FOS::OVERWRITEPROMPT
             | co::FOS::NOREADONLYRETURN;
-        dlg.SetOptions(opts).ok()?;
-        let _ = dlg.SetFileName(file_name);
-        if !dlg.Show(self.wnd.hwnd()).ok()? {
-            return None;
+        dlg.SetOptions(opts)?;
+        dlg.SetFileName(file_name)?;
+        if !dlg.Show(self.wnd.hwnd())? {
+            return Ok(None);
         }
-        dlg.GetResult()
-            .ok()?
+        dlg.GetResult()?
             .GetDisplayName(co::SIGDN::FILESYSPATH)
-            .ok()
+            .and_then(|path| {
+                if path.is_empty() || path.contains('\0') {
+                    Err(co::HRESULT::E_INVALIDARG)
+                } else {
+                    Ok(Some(path))
+                }
+            })
     }
 
     fn copy(&self, text: &str) {
@@ -2112,7 +2123,7 @@ fn add_children(parent: &gui::TreeViewItem<()>, kids: &[Node]) {
 }
 
 /// Run the Win32 shell until the window closes.
-pub fn run() {
+pub fn run() -> i32 {
     // The file dialogs are COM objects: the apartment lives as long as the app.
     let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
     #[cfg(debug_assertions)]
@@ -2126,6 +2137,11 @@ pub fn run() {
         gate::install(&shell, dir);
     }
     if let Err(e) = shell.wnd.run_main(None) {
-        let _ = w::HWND::NULL.MessageBox(&e.to_string(), "freemkv", co::MB::ICONERROR);
+        crate::application_failure(&format!("Win32 event loop failed: {e}"), false);
+        let app = shell.app.borrow();
+        let message = app.runtime_issue().render(app.language);
+        let _ = w::HWND::NULL.MessageBox(&message, "freemkv", co::MB::ICONERROR);
+        return 1;
     }
+    0
 }
