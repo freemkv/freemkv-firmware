@@ -96,7 +96,7 @@ fn the_synthetic_sheet_gates_confirm_on_a_fresh_tick() {
     open_flash_sheet(&mut app);
     let view = app.view();
     let c = confirm(&view);
-    assert_eq!(c.title, "Confirm flash");
+    assert_eq!(c.title, "Update this drive?");
     assert!(!c.ack_checked && !c.confirm.enabled);
     assert!(c.details.iter().any(|d| d.contains("synthetic plan")));
     assert!(!view.controls_enabled, "the sheet locks the window");

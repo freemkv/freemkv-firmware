@@ -115,10 +115,12 @@ pub fn fixture() -> App {
         recovery_without_live_protocol: false,
         notes: Vec::new(),
     });
+    // Keep the inert native-shell fixture local and deterministic. The real picker
+    // asynchronously inspects firmware files, which this synthetic gate must not start.
+    app.flash_input = Some("gate-firmware.bin".into());
+    app.recovery_current = Some("gate-current.bin".into());
+    app.recovery_input = Some("gate-recovery.bin".into());
     for (pick, file) in [
-        (Pick::FlashFirmware, "gate-firmware.bin"),
-        (Pick::RecoveryCurrent, "gate-current.bin"),
-        (Pick::RecoveryInput, "gate-recovery.bin"),
         (Pick::AnalysisFile(0), "gate-a.bin"),
         (Pick::AnalysisFile(1), "gate-b.bin"),
     ] {
@@ -165,13 +167,6 @@ pub fn open_flash_sheet(app: &mut App) {
             reply,
         },
     });
-}
-
-/// A synthetic worker event for the Windows gate's real polling-handler probe. Keep core
-/// event construction here with the other fixtures, outside the native shell.
-#[cfg(target_os = "windows")]
-pub(crate) fn worker_message(text: &str) -> crate::ui::Msg {
-    crate::ui::Msg::Event(freemkv_flash::workflow::Event::Message(text.into()))
 }
 
 /// The model is still the gate's: inert, its profile answered, and no worker or profile
