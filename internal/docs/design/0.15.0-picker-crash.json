@@ -51,9 +51,12 @@
     "limitation": "Brand strings are presentation only; this does not claim every LiteOn or Plextor model implements MT19 or Pioneer protocols."
   },
   "dependency_integration": {
-    "mediatek_dev_base": "850198abf5e856fc46ec8b68358107c6efab4129",
-    "pioneer_dev_base": "d6a297cda8f7e563a4f5d616b4b8e6cf72e3a93d",
-    "policy": "Retain all dev audit fixes and mirror 1.1.0 host progress/error contracts. Re-fetch dev before final QA to incorporate late changes."
+    "mediatek_dev_base": "7a4b1746d265330e95ce76d24151035b511afd01",
+    "pioneer_dev_base": "3753f39cafa9100fcb039ce2407abdd0dca60bbe",
+    "mediatek_dev_tree": "23189f9e7656a835c391e29a24c63c07f07de22d",
+    "pioneer_dev_tree": "26627951c5da58358592c2a599e13ed3a7c89b2c",
+    "qa_equivalence": "The latest dev performance changes were replayed on the QA candidates; both QA candidate trees exactly match these dev trees, preserving all existing QA fixes and APIs.",
+    "policy": "The app pins these exact reviewed dev commits. Re-fetch dev before final QA to incorporate any later changes."
   },
   "audit_findings": {
     "M1": "Explicit Unexpected survives boundary classification; regression covers all fallback contexts.",
@@ -77,5 +80,5 @@
     "L12": "Unsafe-evidence regression includes concrete hardware mismatch and permission-denied causes.",
     "L13": "Backup-question localization test proves the callback actually ran."
   },
-  "validation_status": "1,153 local workspace tests pass, Clippy passes, and the macOS native gate passes 186 checks. Latest MediaTek dev including register-reuse follow-up passes the full app suite and 137-window corpus replay. Hosted QA pending."
+  "validation_status": "The latest dependency pins are MediaTek dev 7a4b1746d265330e95ce76d24151035b511afd01 and Pioneer dev 3753f39cafa9100fcb039ce2407abdd0dca60bbe; both passed standalone CI. The ignored MediaTek protocol_corpus::every_complete_hoard_mt19_boot_window_is_recognized test ran on QA candidate source 6878bde394f31da7e50c31af2a496c4fffac65e0 (tree-identical to dev 7a4b174) and passed: 137 recognized, 0 rejected, 1 without the MT19 prefix. The 1,153 local workspace tests, Clippy run, 186-check macOS native gate, and 137-window replay previously recorded against older pins remain historical evidence for that earlier candidate. The current app hosted CI and release QA are the authoritative full validation for the updated pin pair. No separate local application corpus replay was run against these newer commits."
 }
