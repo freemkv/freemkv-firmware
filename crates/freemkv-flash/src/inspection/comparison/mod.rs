@@ -13,6 +13,7 @@ use std::ops::Range;
 #[derive(Clone, Debug)]
 pub(crate) struct Identity {
     pub component: String,
+    pub metadata: crate::firmware_comparison::ComponentIdentity,
     pub sha256: String,
     pub family: Option<String>,
     pub family_scheme: String,

@@ -3,6 +3,36 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.14.5] - 2026-10-23
+
+### freemkv Flash
+
+- Recovery can explicitly bypass the Pioneer firmware family check. The option appears only after a proven family mismatch. Selecting it opens a translated risk warning and requires typing a fresh five-digit code; wrong submissions close the popup, and consent is consumed by one attempt. Recovery skips Flash-only tray checks on its update and restoration passes; normal Flash remains family-checked and refuses a loaded disc. Recovery still requires its final write confirmation and verifies the firmware afterward. Changing the selected drive or firmware clears the override. CLI Recovery exposes `--bypass-family-check` with the existing mandatory write-risk acknowledgment.
+
+- During explicit Pioneer Recovery, unsupported inserted media (`02/30/00`) now advances from readiness polling to the existing target identity, exact Kernel readback, and Normal readback checks. This status alone never counts as verification; normal Flash and other readiness failures remain unchanged. A hardware trial on one UD02 unit with unreadable UHD media inserted confirmed the target and matched both Kernel and Normal readbacks.
+
+- Identify Pioneer and MediaTek drives from validated protocol responses, independent
+  of vendor/model branding. ASUS SBC-06D2X-U and other OEM-branded Pioneer drives
+  now reach the same backend; conflicting signatures are refused.
+- Preserve native SCSI sense codes during read-only protocol probes so unsupported
+  commands remain distinguishable from transport failures.
+- Share read-only discovery across normal and recovery flows. Preserve transport
+  errors and Current-assisted recovery for loaders with incomplete identity.
+- Use matching protocol-evidence APIs in pioneer-optical 1.0.4 and mediatek-optical
+  1.0.1, keeping recognition separate from receiver and family checks.
+- Suggest supplying Current firmware when a Pioneer current-firmware capture fails.
+
+- Verify Pioneer updates by exact firmware readback and startup instead of requiring
+  package branding to match the device name. Use pioneer-optical 1.0.4 for the shared
+  Flash, Recovery, Normal-only and Kernel-restoration verification paths.
+- Retain separate Kernel, Normal and startup results in failure messages, alongside
+  the selected package and observed device identity.
+- Share hardware-family comparisons across inspection and admission checks. Different
+  fingerprint schemes are not comparable; missing identifiers never count as equal.
+- Report exact contents, naming differences and version direction separately in
+  comparison results. Only order numeric revisions within the same firmware edition;
+  retain unknown and incomparable results for unrelated or opaque revision labels.
+
 ## [0.14.4] - 2026-10-23
 
 ### freemkv Flash

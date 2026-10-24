@@ -108,3 +108,23 @@ fn recovery_allows_no_current_but_rejects_conflicting_sources() {
     ]))
     .is_err());
 }
+
+#[test]
+fn family_override_is_only_a_recovery_cli_option() {
+    assert!(Cli::try_parse_from([
+        "freemkv-flash",
+        "recover",
+        "-i",
+        "target.tar",
+        "--bypass-family-check"
+    ])
+    .is_ok());
+    assert!(Cli::try_parse_from([
+        "freemkv-flash",
+        "flash",
+        "-i",
+        "target.tar",
+        "--bypass-family-check"
+    ])
+    .is_err());
+}

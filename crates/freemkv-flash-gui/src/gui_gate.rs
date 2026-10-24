@@ -92,6 +92,7 @@ pub fn fixture() -> App {
     app.profile = ProfileState::Ready(Profile {
         can_read: Some(true),
         flash_current: true,
+        recovery_family_override: true,
         chips: vec!["Synthetic".into()],
         tasks: vec![Task::Backup, Task::Dump, Task::Flash, Task::Recovery],
         inspect: true,

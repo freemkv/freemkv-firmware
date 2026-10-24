@@ -1,5 +1,9 @@
 # Intended behaviour changes since v0.11.2
 
+F-OVERRIDE: Recovery accurately reports family enforcement by default using a localizable message. An explicitly acknowledged override is separate from normal Flash. No default write behavior changes.
+
+PROTO: brand-independent read-only protocol evidence replaces name/standard-feature gates. INQUIRY optical type, structured F1 and boot-banner reads establish a unique protocol; conflicting signatures are refused. Recovery retains Current-assisted blank-loader binding. No update-transfer or receiver-compatibility checks are relaxed. Exact changed transcripts are recorded below.
+
 P6 (0.13.1): clearer pre-write errors and provenance-only backup messages; no device-command or safety-gate changes.
 
 `tests/golden/v0.11.2/` holds the golden scenarios recorded with the same
@@ -16,6 +20,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 | FMT | Snapshot normalization removes trailing display padding, including empty structured `MSG` rows and terminal prompts. Commands, payload bytes, message content and assertions are unchanged; the historical v0.11.2 snapshots remain untouched. |
 | P10 | Pioneer 0.13.4: the shared optical executor derives the dialect from decoded firmware, binds the live receiver before entry and again after startup migration, and checks target identity plus Kernel and available Normal readback after each pass. OEM vendor identity binds to the loaded firmware ID, and revisions compare the defined four-byte INQUIRY field (including the projected `0.05e` release). Recovery with a supplied Current envelope uses its decoded Kernel signatures, dialect and exact identity to establish an OEM receiver; unsupported probing without Current remains refused. Golden devices now install the transferred Normal, report its tag and revision, and expose programmed bytes for verification. Typed failures retain the underlying transport cause. The corpus also refreshes the earlier optical 0.15.1 receiver-derived `FrontKeyTwoRegion` framing (`6c8c2be`, `9100f74`, `5847fe4`): a 0x1200 Kernel header/key transfer followed by two 0x8000 body transfers at offsets 0x1200 and 0x9200. Flash already used this before the current audit; Recovery now shares that plan. Contiguous Kernel bytes, Normal transfers and control payloads are preserved. |
 | P11 | Pioneer corpus refresh of the prior 0.13.1 Normal preparation fixes (`a20047a`, `3b2a421`, October 19): preserve a valid OEM representation or prepare Normal for its actual receiving Kernel, proving decoded-body equality and receiver-required authentication. The corpus snapshots were last refreshed on October 11 (`9ee1a1d`); valid Normal-only scenarios now reach execution. Authentication gates remain in force, and incompatible Kernel-version or corrupt-body cases still refuse. The 34 newly exercised locally signed Normal transfers use recorded valid authentication blocks in tests, keyed by receiver authentication policy and every byte outside the 0x170..0x1c0 signature/public-key block. Fresh and recorded signatures are both verified; full emitted wire digests remain asserted. Production signing remains random. |
+| RECOVERY_TRAY | 0.14.5: Pioneer Recovery skips the Flash-only medium guard before its initial and restoration passes; ordinary Flash still rejects a loaded disc. The recorded Recovery execution transcripts omit those two medium-status checks. No write command, payload, ordering, family check or verification is relaxed. |
 | M-LIFECYCLE | MediaTek 0.13.4: immutable receiver plans own authorization, encoding, execution and exact target startup verification. Plan messages describe the receiver-bound sequence; cached evidence is revalidated before entry. Successful mocks now expose the actual programmed descriptor and matching INQUIRY, and synthetic descriptors have a valid vendor and revision. Completion distinguishes verified readback from unavailable readback; structured errors preserve the failed phase and transport cause. |
 | P9 | Pioneer 0.13.4: the UD04 golden mock now returns its real `GENERAL` Kernel tag from vendor identity so the firmware-derived entry preflight can match the captured installed Kernel. Only post-flash identity text in these mock transcripts changes; firmware write commands and payloads do not. |
 | P8 | Pioneer 0.13.3: read the live A0 startup word 0x9F before firmware transfer, write and verify only when it differs from the target value, then continue. The added read and preflight commands in these mock transcripts reflect this migration; neutral FFFF already matches and sends no A0 write. |
@@ -423,8 +428,99 @@ reason: P4
 
 ## classify_and_unknown_info.txt
 
+### classify MediaTek firmware-image mock
+reason: PROTO
+```diff
+-classify: Unknown
+-resolve_backend: no match
+-classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
++classify: Mtk
++resolve_backend: Mtk backend=mtk19xx
++classify_gated: Mtk
+-MSG      classify: Unknown
+-MSG      resolve_backend: no match
+-MSG      classify_gated: error No executable flash path or confirmed restorable backup is available for Unknown. Identification probes may have been sent; no firmware write or backup file was produced. Run `freemkv-flash info DEVICE` to record the identity before adding a backend.
+---- scsi transcript (6) ---
++MSG      classify: Mtk
++MSG      resolve_backend: Mtk backend=mtk19xx
++MSG      classify_gated: Mtk
++--- scsi transcript (9) ---
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+```
+
+### classify MockScsiDevice::mtk
+reason: PROTO
+```diff
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 28
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 28
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 28
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+```
+
+### classify MockScsiDevice::pioneer
+reason: PROTO
+```diff
+---- scsi transcript (6) ---
++--- scsi transcript (9) ---
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+```
+
+### classify MockScsiDevice::renesas
+reason: PROTO
+```diff
+---- scsi transcript (6) ---
++--- scsi transcript (3) ---
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+```
+
+### classify ambiguous: MediaTek and Pioneer both match
+reason: PROTO
+```diff
+-classify: Pioneer
+-resolve_backend: Pioneer backend=pioneer-oem
+-classify_gated: Pioneer
++classify: Unknown
++resolve_backend: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
++classify_gated: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
+-MSG      classify: Pioneer
+-MSG      resolve_backend: Pioneer backend=pioneer-oem
+-MSG      classify_gated: Pioneer
+---- scsi transcript (6) ---
++MSG      classify: Unknown
++MSG      resolve_backend: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
++MSG      classify_gated: error ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written
++--- scsi transcript (9) ---
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+```
+
+### classify blank mock (matches no backend)
+reason: PROTO
+```diff
+---- scsi transcript (6) ---
++--- scsi transcript (3) ---
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+-IN   cdb=4602010c000000002000 alloc=32 -> ok 32
+```
+
 ### info with the Unknown handler on MediaTek firmware-image mock
-reason: M-ENC, HUMAN_ERRORS, CLI_INFO
+reason: M-ENC, HUMAN_ERRORS, CLI_INFO, PROTO
 ```diff
 ---- text (30) ---
 -device: mock://in-memory
@@ -580,7 +676,7 @@ reason: M-ENC, HUMAN_ERRORS, CLI_INFO
 ```
 
 ### info with the Unknown handler on MockScsiDevice::mtk
-reason: FMT, HUMAN_ERRORS, CLI_INFO
+reason: FMT, HUMAN_ERRORS, CLI_INFO, PROTO
 ```diff
 ---- text (30) ---
 -device: mock://in-memory
@@ -739,7 +835,7 @@ reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```
 
 ### info with the Unknown handler on MockScsiDevice::pioneer
-reason: FMT, HUMAN_ERRORS, CLI_INFO
+reason: FMT, HUMAN_ERRORS, CLI_INFO, PROTO
 ```diff
 ---- text (30) ---
 -device: mock://in-memory
@@ -894,7 +990,7 @@ reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```
 
 ### info with the Unknown handler on MockScsiDevice::renesas
-reason: FMT, HUMAN_ERRORS, CLI_INFO
+reason: FMT, HUMAN_ERRORS, CLI_INFO, PROTO
 ```diff
 ---- text (30) ---
 -device: mock://in-memory
@@ -1051,7 +1147,7 @@ reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```
 
 ### info with the Unknown handler on ambiguous: MediaTek and Pioneer both match
-reason: FMT, HUMAN_ERRORS, CLI_INFO
+reason: FMT, HUMAN_ERRORS, CLI_INFO, PROTO
 ```diff
 ---- text (30) ---
 -device: mock://in-memory
@@ -1206,7 +1302,7 @@ reason: FMT, HUMAN_ERRORS, CLI_INFO
 ```
 
 ### info with the Unknown handler on blank mock (matches no backend)
-reason: FMT, HUMAN_ERRORS, CLI_INFO
+reason: FMT, HUMAN_ERRORS, CLI_INFO, PROTO
 ```diff
 ---- text (30) ---
 -device: mock://in-memory
@@ -32383,7 +32479,7 @@ reason: P6
 ## pioneer_recover.txt
 
 ### Pioneer recover dry run: garbage Current
-reason: P10, PRECHECK
+reason: P10, PRECHECK, PROTO
 ```diff
 -result: ERR flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
 +result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): cannot establish Current receiver evidence; no firmware written: flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
@@ -32394,39 +32490,78 @@ reason: P10, PRECHECK
 ```
 
 ### Pioneer recover dry run: no Current, unrecognized drive
-reason: P10, PRECHECK
+reason: P10, PRECHECK, PROTO
 ```diff
 -result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
 +result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): Recovery requires a supported Pioneer-protocol optical drive; supply its Current firmware to identify an OEM receiver, or use Flash for supported MediaTek firmware. No firmware written
+-IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=120000006000 alloc=96 -> ok 96
+```
+
+### Pioneer recover dry run: receiver in kernel mode
+reason: PROTO, F-OVERRIDE
+```diff
+-FIELD    Recovery = No automatic backup; compatibility policy bypassed
++FIELD    Recovery = recovery.family_enforced
+---- scsi transcript (2) ---
+-IN   cdb=120000002400 alloc=36 -> ok 36
++--- scsi transcript (3) ---
++IN   cdb=120000006000 alloc=96 -> ok 96
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+```
+
+### Pioneer recover dry run: receiver in normal mode
+reason: PROTO, F-OVERRIDE
+```diff
+-FIELD    Recovery = No automatic backup; compatibility policy bypassed
++FIELD    Recovery = recovery.family_enforced
+---- scsi transcript (2) ---
+-IN   cdb=120000002400 alloc=36 -> ok 36
++--- scsi transcript (3) ---
++IN   cdb=120000006000 alloc=96 -> ok 96
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
+```
+
+### Pioneer recover dry run: unsigned Current backup
+reason: PROTO, F-OVERRIDE
+```diff
+-FIELD    Recovery = No automatic backup; compatibility policy bypassed
++FIELD    Recovery = recovery.family_enforced
+---- scsi transcript (2) ---
+-IN   cdb=120000002400 alloc=36 -> ok 36
++--- scsi transcript (3) ---
++IN   cdb=120000006000 alloc=96 -> ok 96
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 ```
 
 ### Pioneer recover execute: receiver in kernel mode
-reason: P4, P7, P10
+reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 ```diff
 ---- text (0) ---
 ---- events (3) ---
+-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+-FIELD    Recovery mode = Already in update mode; entry skipped
+-FIELD    Recovery = Firmware transferred; normal mode reported (revision 1.00). No firmware readback performed.
+---- scsi transcript (15) ---
 +--- text (4) ---
 +
 +EXECUTING flash — do not power off or disconnect the drive...
 +  update mode entered
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
 +--- events (6) ---
--FIELD    Recovery mode = Already in update mode; entry skipped
--FIELD    Recovery = Firmware transferred; normal mode reported (revision 1.00). No firmware readback performed.
----- scsi transcript (15) ---
++FIELD    Recovery = recovery.family_enforced
 +FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
-+--- scsi transcript (24) ---
-+MEDIUM -> ClosedEmpty
++--- scsi transcript (23) ---
++IN   cdb=120000006000 alloc=96 -> ok 96
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
-+MEDIUM -> ClosedEmpty
-+IN   cdb=120000002400 alloc=36 -> ok 36
-+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
@@ -32438,34 +32573,35 @@ reason: P4, P7, P10
 ```
 
 ### Pioneer recover execute: receiver in normal mode
-reason: P4, P7, P8, P10
+reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 ```diff
 ---- text (0) ---
 ---- events (3) ---
+-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+-FIELD    Recovery mode = Entering update mode
+-FIELD    Recovery = Firmware transferred; normal mode reported (revision 1.00). No firmware readback performed.
+---- scsi transcript (16) ---
 +--- text (4) ---
 +
 +EXECUTING flash — do not power off or disconnect the drive...
 +  update mode entered
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
 +--- events (6) ---
--FIELD    Recovery mode = Entering update mode
--FIELD    Recovery = Firmware transferred; normal mode reported (revision 1.00). No firmware readback performed.
----- scsi transcript (16) ---
++FIELD    Recovery = recovery.family_enforced
 +FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
-+--- scsi transcript (35) ---
-+MEDIUM -> ClosedEmpty
++--- scsi transcript (34) ---
++IN   cdb=120000006000 alloc=96 -> ok 96
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
-+MEDIUM -> ClosedEmpty
-+IN   cdb=120000002400 alloc=36 -> ok 36
-+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
@@ -32485,37 +32621,40 @@ reason: P4, P7, P8, P10
 ```
 
 ### Pioneer recover execute: unrecognized drive
-reason: P10, PRECHECK
+reason: P10, PRECHECK, PROTO
 ```diff
 -result: ERR Recovery currently supports Pioneer optical drives only; use Flash for supported MediaTek firmware. No firmware written
 +result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): Recovery requires a supported Pioneer-protocol optical drive; supply its Current firmware to identify an OEM receiver, or use Flash for supported MediaTek firmware. No firmware written
+-IN   cdb=120000002400 alloc=36 -> ok 36
++IN   cdb=120000006000 alloc=96 -> ok 96
 ```
 
 ### Pioneer recover execute: write fails on the 2nd command
-reason: P4, P10, PRECHECK
+reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY
 ```diff
 -result: ERR Kernel write failed at 0x8000; firmware may be partial; write was not retried: injected write failure
 ---- text (0) ---
 ---- events (2) ---
-+result: ERR update failed during firmware transfer (progress: PayloadAttempted; payload bytes accepted in stage: None; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
+-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+-FIELD    Recovery mode = Already in update mode; entry skipped
+---- scsi transcript (6) ---
++result: ERR Kernel: NotChecked; Normal: NotChecked; startup confirmed: false; selected package: BDR-TEST 1.00; drive reports: not observed after transfer: update failed during firmware transfer (progress: PayloadAttempted; payload bytes accepted in stage: None; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
 +--- text (3) ---
 +
 +EXECUTING flash — do not power off or disconnect the drive...
 +  update mode entered
 +--- events (5) ---
--FIELD    Recovery mode = Already in update mode; entry skipped
----- scsi transcript (6) ---
++FIELD    Recovery = recovery.family_enforced
 +FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
-+--- scsi transcript (10) ---
-+MEDIUM -> ClosedEmpty
++--- scsi transcript (9) ---
++IN   cdb=120000006000 alloc=96 -> ok 96
++IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
++IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> err
-+MEDIUM -> ClosedEmpty
-+IN   cdb=120000002400 alloc=36 -> ok 36
-+IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> err
 ```

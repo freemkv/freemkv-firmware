@@ -179,7 +179,21 @@ impl Prefilter {
     /// same-model image (the image model contains the drive's) skips the family
     /// gate, so it stays a candidate.
     fn may_admit(&self, target: &Prefilter) -> bool {
-        let same_family = self.family.is_some() && self.family == target.family;
+        use crate::firmware_comparison::FamilyRelationship;
+        // Both fingerprints came from current backend analyzers in this process.
+        let namespace = |platform| match platform {
+            Platform::Pioneer => "current-pioneer",
+            Platform::Mediatek => "current-mediatek",
+        };
+        let same_family = FamilyRelationship::compare(
+            self.family
+                .as_deref()
+                .map(|id| (namespace(self.platform), id)),
+            target
+                .family
+                .as_deref()
+                .map(|id| (namespace(target.platform), id)),
+        ) == FamilyRelationship::Same;
         match (self.platform, &self.model, &target.model) {
             (Platform::Pioneer, _, _) if target.normal_only => {
                 self.model.is_some() && self.model == target.model

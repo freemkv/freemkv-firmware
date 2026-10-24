@@ -8,9 +8,7 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
-use super::{
-    read_identity, Backend, Confidence, FileFormat, Identity, Match, ReadDevice, Recognized,
-};
+use super::{Backend, Confidence, FileFormat, Identity, Match, Recognized};
 use crate::backends::{mtk, pioneer};
 use crate::platform::ScsiDevice;
 
@@ -74,39 +72,57 @@ pub struct Resolved {
 /// Probe OEM protocols first, then raw capture if none matches. Ambiguous OEM
 /// matches fail closed rather than allowing registry order to select a writer.
 pub fn resolve(dev: &mut dyn ScsiDevice) -> Result<Option<Resolved>> {
-    let identity = read_identity(&mut ReadDevice::without_unlocks(dev));
-    let mut found: Option<(&'static dyn Backend, Match)> = None;
-    for backend in BACKENDS {
-        let mut probe_dev = ReadDevice::for_backend(dev, backend);
-        if let Some(matched) = backend.probe(&mut probe_dev, &identity)? {
-            if matched.backend != backend.descriptor().id {
-                bail!("backend probe returned an inconsistent backend id");
+    resolve_detection(super::detection::detect(dev)?)
+}
+
+fn resolve_detection(detection: super::detection::Detection) -> Result<Option<Resolved>> {
+    use super::detection::{Conclusion, Evidence};
+    let (backend, evidence): (&'static dyn Backend, &'static str) = match detection.conclusion {
+        Conclusion::Detected(Evidence::Mediatek(m)) => {
+            // BOOT is recognized protocol evidence, but only Recovery can bind
+            // its loader. Do not offer normal Flash/Backup merely from a banner.
+            if m.identity().revision() == "BOOT" {
+                return Ok(None);
             }
-            if let Some((_, prior)) = &found {
-                bail!(
-                    "ambiguous firmware protocol: {} ({}) and {} ({}) both matched",
-                    prior.backend,
-                    prior.evidence,
-                    matched.backend,
-                    matched.evidence
-                );
-            }
-            found = Some((backend, matched));
+            (&MTK, "validated MT19 boot protocol signature")
         }
-    }
-    // A dump-only fallback cannot compete with an OEM protocol match or
-    // broaden that protocol's backup/update capabilities.
-    if found.is_none() {
-        let mut probe_dev = ReadDevice::for_backend(dev, &PIONEER_DUMP);
-        found = PIONEER_DUMP
-            .probe(&mut probe_dev, &identity)?
-            .map(|matched| (&PIONEER_DUMP as &dyn Backend, matched));
-    }
-    Ok(found.map(|(backend, matched)| Resolved {
-        identity,
+        Conclusion::Detected(Evidence::Pioneer(p)) => {
+            let platform = p.identity().platform();
+            if ["SAT ", "ATA ", "SCSI"]
+                .iter()
+                .any(|prefix| platform.starts_with(prefix))
+            {
+                (&PIONEER, "validated Pioneer F1 identity structure")
+            } else {
+                (
+                    &PIONEER_DUMP,
+                    "validated Pioneer F1 identity; update dialect unsupported",
+                )
+            }
+        }
+        Conclusion::Unknown => return Ok(None),
+        Conclusion::Ambiguous => bail!(
+            "ambiguous firmware protocol: Pioneer and MediaTek both matched; no firmware written"
+        ),
+    };
+    Ok(Some(Resolved {
+        identity: detection.identity,
         backend,
-        matched,
+        matched: Match {
+            backend: backend.descriptor().id,
+            evidence,
+        },
     }))
+}
+
+/// Compatibility adapter for backend callers; classification has one implementation.
+pub(crate) fn probe_backend(
+    dev: &mut dyn ScsiDevice,
+    id: super::BackendId,
+) -> Result<Option<Match>> {
+    Ok(resolve(dev)?
+        .filter(|r| r.matched.backend == id)
+        .map(|r| r.matched))
 }
 
 /// The one recognizer: which backend's format `bytes` are. A structural claim

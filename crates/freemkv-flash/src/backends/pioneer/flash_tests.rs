@@ -80,11 +80,19 @@ fn execute_flash(
     let class = DriveClass::Bd;
     let mut port = ScsiTransport::flash(&shared);
     let mut runtime = Runtime {
+        mode: ExecutionMode::Flash,
         device: &shared,
         sleep: &mut |_| {},
         start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
         completed_passes: 0,
+        verification: UpdateVerification {
+            kernel: ComponentVerification::NotChecked,
+            normal: ComponentVerification::NotChecked,
+            startup_confirmed: false,
+            observed_identity: None,
+            selected_identity: "test target".into(),
+        },
         kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
         normal: style::Progress::new("flashing normal", normal.len()),
     };
@@ -364,6 +372,45 @@ fn disc_inserted_at_confirmation_is_refused_before_update_entry() {
         dev.writes.is_empty(),
         "the entry command is already a write"
     );
+}
+
+#[test]
+fn loaded_disc_guard_applies_to_flash_but_not_recovery_passes() {
+    for mode in [ExecutionMode::Flash, ExecutionMode::Recovery] {
+        for pass in [FlashPass::Initial, FlashPass::Restoration] {
+            let mut dev = crate::platform::MockScsiDevice::pioneer().with_medium_loaded();
+            let shared = SharedDevice::new(&mut dev);
+            let mut sleep = |_| {};
+            let mut runtime = Runtime {
+                mode,
+                device: &shared,
+                sleep: &mut sleep,
+                start: crate::runtime_clock::Clock::new(),
+                waited: Duration::ZERO,
+                completed_passes: 0,
+                verification: UpdateVerification {
+                    kernel: ComponentVerification::NotChecked,
+                    normal: ComponentVerification::NotChecked,
+                    startup_confirmed: false,
+                    observed_identity: None,
+                    selected_identity: "test target".into(),
+                },
+                kernel: style::Progress::new("flashing kernel", 0),
+                normal: style::Progress::new("flashing normal", 0),
+            };
+            let result = runtime.check_pass(pass);
+            match mode {
+                ExecutionMode::Flash => assert!(
+                    result.unwrap_err().to_string().contains("disc"),
+                    "Flash must reject loaded media for {pass:?}"
+                ),
+                ExecutionMode::Recovery => assert!(
+                    result.is_ok(),
+                    "Recovery must not apply the Flash-only tray check for {pass:?}"
+                ),
+            }
+        }
+    }
 }
 
 #[test]

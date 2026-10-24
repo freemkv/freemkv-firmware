@@ -19,6 +19,16 @@
     "task.dump": "Vedostus",
     "task.flash": "Päivitä laiteohjelmisto",
     "task.recovery": "Palautus",
+    "recovery.bypass_family_check": "Ohita laiteohjelmistoperheen tarkistus (erittäin riskialtista)",
+    "recovery.bypass_family_title": "Ohita laitteistoperheen tarkistus",
+    "recovery.bypass_family_warning": "Olet pyytänyt ohittamaan laiteohjelmiston laitteistoperheen tarkistuksen. Tarkistus auttaa estämään toiselle laitteistolle tarkoitetun laiteohjelmiston kirjoittamisen asemaan. Ohittaminen voi tehdä asemasta pysyvästi käyttökelvottoman, eikä palautus tai aiemman laiteohjelmiston palauttaminen välttämättä onnistu.",
+    "recovery.bypass_family_code": "Vahvista riskin hyväksyminen kirjoittamalla {code} ja jatka.",
+    "recovery.bypass_family_continue": "Ota ohitus käyttöön",
+    "recovery.bypass_family_code_failed": "Vahvistuskoodin luominen epäonnistui. Laiteohjelmistoperheen tarkistus pysyy käytössä.",
+    "recovery.bypass_family_ack": "Ymmärrän, että laiteohjelmistoperheen tarkistuksen ohittaminen voi tehdä tästä asemasta pysyvästi käyttökelvottoman ja että palautus voi olla mahdotonta.",
+    "recovery.family_enforced": "Ei automaattista varmuuskopiota; laiteohjelmistoperheen tarkistus pakollinen",
+    "recovery.family_bypassed": "Ei automaattista varmuuskopiota; laiteohjelmistoperheen tarkistus ohitetaan nimenomaisesti (erittäin riskialtista)",
+    "recovery.family_override_unsupported": "Tämä palautuksen taustaosa ei tue laiteohjelmistoperheen tarkistuksen ohittamista.",
     "action.read_info": "Lue aseman tiedot",
     "action.check_file": "Tarkista tiedosto…",
     "info.connect_drive": "Yhdistä optinen asema ja valitse Päivitä.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (aktiivinen ja pelastettu)",
     "legacy.backup_saved": "Backup: pelastettu {path} ({bytes} ja bytejä)",
     "legacy.backup_missing": "varmuuskopiointi: NONE - flashing ilman rollback varmuuskopiointi (tämä optinen ohjaus ei voi rullata takaisin)",
-    "ui.backup_dump_review": "Jos varmuuskopiota ei voi tallentaa, tallenna raaka muistivedos ja lähetä se diagnostiikkalokien kanssa, jotta voimme selvittää varmuuskopioinnin tuen."
+    "ui.backup_dump_review": "Jos varmuuskopiota ei voi tallentaa, tallenna raaka muistivedos ja lähetä se diagnostiikkalokien kanssa, jotta voimme selvittää varmuuskopioinnin tuen.",
+    "verification.startup": "Käynnistys",
+    "verification.not_checked": "Ei tarkistettu",
+    "verification.not_requested": "Ei pyydetty",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

@@ -394,3 +394,32 @@ fn firmware_switches_use_enabled_states_and_keep_english_diagnostics() {
         }
     }
 }
+
+#[test]
+fn recovery_override_warning_and_code_are_translated_in_every_language() {
+    let keys = [
+        "recovery.bypass_family_check",
+        "recovery.bypass_family_title",
+        "recovery.bypass_family_warning",
+        "recovery.bypass_family_code",
+        "recovery.bypass_family_continue",
+        "recovery.bypass_family_code_failed",
+        "recovery.bypass_family_ack",
+        "recovery.family_enforced",
+        "recovery.family_bypassed",
+        "recovery.family_override_unsupported",
+    ];
+    for language in Language::ALL {
+        for key in keys {
+            let translated = get(language, key);
+            assert!(!translated.is_empty() && translated != key);
+            if language != Language::En {
+                assert_ne!(translated, get(Language::En, key), "{language:?}: {key}");
+            }
+        }
+        let prompt = message("recovery.bypass_family_code", &[("code", "12345".into())]);
+        let rendered = render(language, &prompt);
+        assert!(rendered.contains("12345"));
+        assert!(!rendered.contains("{code}"));
+    }
+}
