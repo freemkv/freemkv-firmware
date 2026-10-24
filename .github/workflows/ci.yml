@@ -8,6 +8,12 @@ on:
   push:
     branches: [dev]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      coverage_only:
+        description: Run optional instrumented library coverage separately from release gates
+        type: boolean
+        default: false
 
 # Rapid dev pushes supersede their own in-progress runs instead of stacking.
 concurrency:
@@ -30,8 +36,26 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       v: ${{ steps.msrv.outputs.v }}
+      code_changed: ${{ steps.scope.outputs.code_changed }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: scope
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          import json, os, subprocess
+          event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+          base = event.get('pull_request', {}).get('base', {}).get('sha') or event.get('before', '')
+          changed = True
+          if base and set(base) != {'0'}:
+              result = subprocess.run(['git', 'diff', '--name-only', base, 'HEAD'], capture_output=True, text=True)
+              if result.returncode == 0:
+                  changed = any(not path.startswith('.github/') for path in result.stdout.splitlines())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('code_changed=' + str(changed).lower() + '\n')
+          PYCODE
       - id: msrv
         shell: bash
         run: echo "v=$(grep -m1 -E '^[[:space:]]*rust-version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')" >> "$GITHUB_OUTPUT"
@@ -88,27 +112,41 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
-      - uses: dtolnay/rust-toolchain@stable
+      - if: needs.resolve-msrv.outputs.code_changed == 'true'
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: dtolnay/rust-toolchain@master
+      - if: needs.resolve-msrv.outputs.code_changed == 'true'
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.resolve-msrv.outputs.v }}
           components: rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - if: needs.resolve-msrv.outputs.code_changed == 'true'
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
       # The flash GUI's native Linux shell (gtk4/libadwaita) probes pkg-config at build time.
-      - name: Install GTK4 + libadwaita development headers
+      - if: needs.resolve-msrv.outputs.code_changed == 'true'
+        name: Install GTK4 + libadwaita development headers
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
-      - run: cargo fmt --all --check
+      - if: needs.resolve-msrv.outputs.code_changed == 'true'
+        run: cargo fmt --all --check
         working-directory: freemkv-firmware
-      - run: cargo +stable clippy --all-targets --all-features -- -D warnings
+      - name: Validate workflow and promotion logic
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -shellcheck=''
+          python3 .github/scripts/test_promote_qa.py
+        working-directory: freemkv-firmware
+      - if: needs.resolve-msrv.outputs.code_changed == 'true' && !inputs.coverage_only
+        run: cargo +stable clippy --all-targets --all-features -- -D warnings
         working-directory: freemkv-firmware
 
   test:
+    if: needs.resolve-msrv.outputs.code_changed == 'true' && !inputs.coverage_only
     needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
@@ -121,6 +159,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
       # The flash GUI's native Linux shell (gtk4/libadwaita) probes pkg-config at build time.
       - name: Install GTK4 + libadwaita development headers
         run: |
@@ -154,7 +193,7 @@ jobs:
   coverage:
     # Keep coverage on release candidates; avoid a second instrumented test
     # suite on every dev push and on promotion PRs.
-    if: github.event_name == 'push' && (github.ref_name == 'qa' || github.ref_name == 'main')
+    if: github.event_name == 'workflow_dispatch' && inputs.coverage_only
     needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
@@ -168,6 +207,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
       - uses: taiki-e/install-action@cargo-llvm-cov
       # Cover the library crates only. The egui/wgpu GUI bins carry no meaningful
       # unit coverage and building them under instrumentation is slow and brittle.

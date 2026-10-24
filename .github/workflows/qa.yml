@@ -18,7 +18,18 @@ name: qa
 on:
   push:
     branches: [qa]
+    paths-ignore: ['.github/**']
   workflow_dispatch:
+    inputs:
+      native_only:
+        description: Run a focused native diagnostic; cannot qualify a release
+        type: boolean
+        default: false
+      native_platform:
+        description: Native platform for the focused diagnostic
+        type: choice
+        options: [windows, linux, macos]
+        default: windows
 
 # A re-push to qa supersedes its own in-progress run.
 concurrency:
@@ -29,6 +40,7 @@ jobs:
   # Every candidate builds and smoke-tests every shipped architecture/package.
   # A source-only change must not bypass release packaging validation.
   release-packages:
+    if: ${{ !inputs.native_only }}
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml
@@ -53,6 +65,7 @@ jobs:
   # gates — a red candidate needs a name more than a green one does. Only reads
   # Cargo.toml + tags.
   rc-tag:
+    if: ${{ !inputs.native_only }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -77,6 +90,7 @@ jobs:
   # out, inlining changes what the optimiser proves. A test that only passes in
   # debug never guarded the binary anyone ships.
   release-tests:
+    if: ${{ !inputs.native_only }}
     needs: resolve-msrv
     strategy:
       fail-fast: false
@@ -113,6 +127,7 @@ jobs:
   # rejects reaches a push. clippy runs on stable (matches ci.yml's lint job);
   # build/test stay on the MSRV pin.
   cross-lint:
+    if: ${{ !inputs.native_only }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -152,6 +167,7 @@ jobs:
   #   FREEMKV_FW_CORPUS=/path/to/hoard/organized,/path/to/hoard/incoming \
   #     cargo +1.94 test -p freemkv-fw --test corpus_create_verify -- --nocapture
   forge-corpus:
+    if: ${{ !inputs.native_only }}
     needs: resolve-msrv
     runs-on: ubuntu-latest
     defaults:
@@ -184,16 +200,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: linux
-            runner: ubuntu-24.04
-            bin: freemkv-flash-gui
-          - os: windows
-            runner: windows-latest
-            bin: freemkv-flash-gui.exe
-          - os: macos
-            runner: macos-latest
-            bin: freemkv-flash-gui
+        include: ${{ fromJSON(!inputs.native_only && '[{"os":"linux","runner":"ubuntu-24.04","bin":"freemkv-flash-gui"},{"os":"windows","runner":"windows-latest","bin":"freemkv-flash-gui.exe"},{"os":"macos","runner":"macos-latest","bin":"freemkv-flash-gui"}]' || inputs.native_platform == 'windows' && '[{"os":"windows","runner":"windows-latest","bin":"freemkv-flash-gui.exe"}]' || inputs.native_platform == 'linux' && '[{"os":"linux","runner":"ubuntu-24.04","bin":"freemkv-flash-gui"}]' || '[{"os":"macos","runner":"macos-latest","bin":"freemkv-flash-gui"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     defaults:

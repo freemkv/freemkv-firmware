@@ -47,6 +47,8 @@ name: release
 # resolve from the committed Cargo.lock.
 
 on:
+  push:
+    tags: ['v*', '!v*-rc*']
   pull_request:
     paths:
       - '.github/workflows/release.yml'
@@ -87,13 +89,31 @@ jobs:
           fi
           echo "Version match: $cargo_ver"
 
+  promote-qa:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Promote the source-matched, fully validated QA packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/promote_qa.py "$RELEASE_TAG" --repo "$RELEASE_REPO"
+
   # Single source of truth for the MSRV: `rust-version` in Cargo.toml, so the
   # shipped binary is built with the same compiler CI gates on and the pin
   # cannot drift from the manifest.
   resolve-msrv:
     # QA owns packaging for promotions. Avoid building the same candidate on
     # its promotion PR as well; feature PRs and forks still need a dry run.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(fromJSON('["dev","qa","main"]'), github.head_ref)
+    if: ${{ !startsWith(github.ref, 'refs/tags/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(fromJSON('["dev","qa","main"]'), github.head_ref)) }}
     runs-on: ubuntu-latest
     outputs:
       v: ${{ steps.msrv.outputs.v }}
@@ -191,6 +211,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
+          cache-workspace-crates: true
           # shared-key replaces key in rust-cache; put the target and build
           # environment here to prevent host build-script cache collisions.
           shared-key: freemkv-firmware-release-v2-${{ matrix.target }}-${{ matrix.cross_image && 'cross' || 'native' }}
@@ -391,6 +413,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
+          cache-workspace-crates: true
           shared-key: freemkv-firmware-release-v2-${{ matrix.target }}-gui
       - name: Install GTK4 + libadwaita development headers
         working-directory: .
@@ -744,8 +768,8 @@ jobs:
   # workflow_dispatch publishes no Release to point the tap at. Same auth and
   # flow as the freemkv app's update-homebrew-tap job.
   update-homebrew-tap:
-    needs: [build]
-    if: always() && needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/')
+    needs: [promote-qa]
+    if: always() && needs.promote-qa.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Update the tap to this release
@@ -788,6 +812,7 @@ jobs:
   # daily run. A failure here never turns the release red.
   # Signed .rpm and pacman packages from this release's .debs (freemkv.org/rpm, /arch).
   linux-repos:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     needs: [linux-packages, linux-cli-armhf]
     permissions:
       contents: write
@@ -797,8 +822,8 @@ jobs:
     secrets: inherit
 
   apt:
-    needs: [linux-packages, linux-cli-armhf]
-    if: always() && startsWith(github.ref, 'refs/tags/') && (needs.linux-packages.result == 'success' || needs.linux-cli-armhf.result == 'success')
+    needs: [promote-qa]
+    if: always() && needs.promote-qa.result == 'success'
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
