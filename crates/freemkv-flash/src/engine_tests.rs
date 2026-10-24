@@ -3,13 +3,31 @@
 use super::*;
 
 #[test]
+fn required_info_identity_failure_is_not_presented_as_an_unsupported_drive() {
+    let mut dev =
+        MockScsiDevice::new().on_fail(|c| c.first() == Some(&0x12), "private INQUIRY failure");
+    let error = crate::user_error::read_only(super::info(&mut dev, None)).unwrap_err();
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.connection");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    assert!(format!("{error:#}").contains("private INQUIRY failure"));
+    assert_eq!(
+        dev.reads.len(),
+        1,
+        "stop before presenting guessed identity/capability rows"
+    );
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
 fn backup_failure_question_retains_localized_cause_and_no_write_evidence() {
-    struct Decline;
+    struct Decline(bool);
     impl Confirm for Decline {
         fn confirm(&mut self, _: &crate::backend::AuthorizedPlan) -> Result<bool> {
             panic!("no final write consent")
         }
         fn proceed_without_backup(&mut self, reason: &str) -> Result<bool> {
+            self.0 = true;
             assert!(
                 reason.starts_with('\u{1e}'),
                 "retain stable message IDs through the confirmation boundary"
@@ -26,17 +44,48 @@ fn backup_failure_question_retains_localized_cause_and_no_write_evidence() {
             Ok(false)
         }
     }
+    let mut confirmation = Decline(false);
     let error = offer_flash_without_backup(
-        &mut Decline,
+        &mut confirmation,
+        true,
         anyhow::anyhow!("private status 0x1234")
             .context(crate::user_error::IssueCode::BackupFailed),
     )
     .err()
     .expect("declining must refuse the update");
+    assert!(
+        confirmation.0,
+        "the localized backup question must actually be asked"
+    );
     assert_eq!(
         crate::workflow::user_error(&error).id,
         "errors.backup_failed"
     );
+}
+
+#[test]
+fn a_backend_requiring_backup_never_offers_an_unusable_bypass() {
+    struct NoBypass;
+    impl Confirm for NoBypass {
+        fn confirm(&mut self, _: &crate::backend::AuthorizedPlan) -> Result<bool> {
+            panic!("no write consent");
+        }
+        fn proceed_without_backup(&mut self, _: &str) -> Result<bool> {
+            panic!("must not offer an impossible bypass");
+        }
+    }
+    assert!(!Pioneer::new().flash().unwrap().can_proceed_without_backup());
+    assert!(Mtk.flash().unwrap().can_proceed_without_backup());
+    let error = offer_flash_without_backup(
+        &mut NoBypass,
+        false,
+        anyhow::anyhow!("private capture error"),
+    )
+    .err()
+    .expect("a required backup cannot be waived");
+    let issue = crate::workflow::user_error(&error);
+    assert_eq!(issue.id, "errors.backup_required");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
 }
 use crate::backend::{BackupFacet, DumpFacet, FileFacet};
 use crate::backends::mtk::crossflash::{decide_model, ensure_image_matches_drive};

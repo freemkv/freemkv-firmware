@@ -21,7 +21,7 @@ Verifying Backup: 100%
 backup: saved <TMP>/tty-yes/backup.tar (146432 bytes)
 Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-Proceed? [y/N]
+Proceed? [Yes/No]
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 Writing Kernel: 46%
@@ -119,7 +119,7 @@ Verifying Backup: 100%
 backup: saved <TMP>/tty-no/backup.tar (146432 bytes)
 Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-Proceed? [y/N]
+Proceed? [Yes/No]
 --- scsi transcript (22) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
@@ -167,7 +167,7 @@ Verifying Backup: 100%
 backup: saved <TMP>/tty-disc/backup.tar (146432 bytes)
 Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-Proceed? [y/N]
+Proceed? [Yes/No]
 --- scsi transcript (23) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36

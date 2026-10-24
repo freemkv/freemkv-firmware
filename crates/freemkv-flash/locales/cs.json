@@ -1,6 +1,11 @@
 {
   "language_name": "Čeština",
   "messages": {
+    "errors.backup_required": "Tato aktualizace vyžaduje úplnou zálohu nainstalovaného firmwaru. Uložte diagnostickou zprávu a požádejte o pomoc.",
+    "confirm.proceed": "Pokračovat?",
+    "confirm.non_interactive": "Pokračuje se se souhlasem, který již byl tomuto příkazu udělen.",
+    "errors.current_invalid": "Vybraný soubor aktuálního firmwaru se nepodařilo ověřit. Vyberte úplný soubor odpovídající firmwaru nainstalovanému v této jednotce.",
+    "errors.file_dialog": "Okno pro výběr souboru nemohlo dokončit akci. Zkuste to znovu nebo uložte diagnostickou zprávu pro získání pomoci.",
     "errors.backup_confirmation_required": "Pro pokračování aktualizace bez zálohy je nutná vaše odpověď. Spusťte příkaz v okně terminálu, kde můžete odpovědět na otázku.",
     "errors.drive_firmware_unconfirmed": "Mechanika nepotvrdila, že používá firmware freemkv. Zkontrolujte, zda jste vybrali správnou mechaniku. Pokud ano, uložte diagnostickou zprávu pro získání pomoci.",
     "errors.backup_partial": "Podařilo se přečíst jen část firmwaru. Výsledný soubor je neúplný: nepoužívejte jej k obnově mechaniky. Nebyl zapsán žádný firmware. Zkontrolujte připojení a vytvořte novou úplnou zálohu.",

@@ -296,38 +296,58 @@ pub(crate) fn proceed_without_backup_with(
     reader: &mut impl io::BufRead,
     language: crate::localization::Language,
 ) -> anyhow::Result<bool> {
-    print!(
-        "{} [y/N] ",
-        crate::localization::get(language, "backup.proceed")
-    );
+    print!("{} ", consent_prompt(language, "backup.proceed"));
     let _ = io::stdout().flush();
+    read_consent(reader, language)
+}
+
+fn read_consent(
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
-    Ok(matches!(
-        line.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
+    let answer = line.trim().to_lowercase();
+    Ok(matches!(answer.as_str(), "y" | "yes")
+        || answer == crate::localization::get(language, "action.yes").to_lowercase())
+}
+
+fn consent_prompt(language: crate::localization::Language, key: &str) -> String {
+    format!(
+        "{} [{}/{}]",
+        crate::localization::get(language, key),
+        crate::localization::get(language, "action.yes"),
+        crate::localization::get(language, "action.no")
+    )
 }
 
 /// [`TerminalConfirm`] with the terminal check and input injected.
 pub(crate) fn confirm_with(is_tty: bool, reader: &mut impl io::BufRead) -> anyhow::Result<bool> {
+    confirm_in_language(
+        is_tty,
+        reader,
+        crate::localization::Preferences::user().load(),
+    )
+}
+
+fn confirm_in_language(
+    is_tty: bool,
+    reader: &mut impl io::BufRead,
+    language: crate::localization::Language,
+) -> anyhow::Result<bool> {
     if !is_tty {
         println!(
             "{}",
-            crate::style::dim(
-                "stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent."
-            )
+            crate::style::dim(crate::localization::get(
+                language,
+                "confirm.non_interactive"
+            ))
         );
         return Ok(true);
     }
-    print!("Proceed? [y/N] ");
+    print!("{} ", consent_prompt(language, "confirm.proceed"));
     let _ = io::stdout().flush();
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    Ok(matches!(
-        line.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
+    read_consent(reader, language)
 }
 
 #[cfg(test)]

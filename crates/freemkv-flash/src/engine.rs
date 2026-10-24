@@ -14,9 +14,8 @@ use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
 use crate::backend::{
-    read_identity, Backend, BackupNotice, Capabilities, Confirm, DeviceAccess, FlashFacet,
-    FlashPlan, FlashRequest, InfoSoFar, PlanLine, ReadDevice, RecoveryTarget, SavedBackup,
-    UNKNOWN_FAMILY,
+    Backend, BackupNotice, Capabilities, Confirm, DeviceAccess, FlashFacet, FlashPlan,
+    FlashRequest, InfoSoFar, PlanLine, ReadDevice, RecoveryTarget, SavedBackup, UNKNOWN_FAMILY,
 };
 use crate::platform::{MediumStatus, ScsiDevice};
 use crate::report::{Group, Report, Row, Slot, Span, Tone, Value};
@@ -32,7 +31,7 @@ use backup::save_backup;
 /// Run the `info` command: identify + classify (read-only). `drive` is the
 /// matched backend, or `None` for a drive no backend recognizes.
 pub fn info(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Result<()> {
-    let info = info_report(dev, drive);
+    let info = info_report(dev, drive)?;
     let (before, after) = info.report.rows.split_at(info.settings_at);
     crate::output::show(&Report {
         rows: drive_info_cli_rows(before),
@@ -59,7 +58,7 @@ pub struct InfoReport {
 /// Build the `info` report (read-only): the identity header, the standard
 /// snapshot, and the backend's rows at their slots, issuing today's reads in
 /// today's order.
-pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> InfoReport {
+pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Result<InfoReport> {
     let describe = dev.describe();
     let mut dev = match drive {
         Some(d) => ReadDevice::for_backend(dev, d),
@@ -67,8 +66,9 @@ pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Inf
     };
     let dev = &mut dev;
     let id = match drive {
-        Some(drive) => drive.identity(dev),
-        None => read_identity(dev),
+        Some(drive) => drive.try_identity(dev)?,
+        None => crate::backend::try_read_identity(dev)
+            .map_err(|error| explain(error, IssueCode::Connection))?,
     };
     let family = drive.map_or(UNKNOWN_FAMILY, |d| d.descriptor().display_name);
     let caps = drive.map_or(Capabilities::NONE, Capabilities::of);
@@ -115,11 +115,11 @@ pub fn info_report(dev: &mut dyn ScsiDevice, drive: Option<&dyn Backend>) -> Inf
     if let Some(Ok(Some(r))) = details.map(|d| d.post_flash_identity(dev)) {
         rows.extend(firmware_rows(&r));
     }
-    InfoReport {
+    Ok(InfoReport {
         report: Report { rows },
         settings: settings.and_then(Result::ok),
         settings_at,
-    }
+    })
 }
 
 /// Keep GUI facts intact while formatting the CLI from those same rows.
@@ -405,8 +405,8 @@ pub fn backup_with_replace(
     Ok(())
 }
 
-/// Run a backend's recovery: read-only on a dry run, through the recovery
-/// write grant (execute + acknowledgement; no tray check, no backup) otherwise.
+/// Execute an already prepared recovery after the caller has obtained consent.
+/// This always takes a recovery write grant; it does not plan or perform a dry run.
 pub(crate) fn execute_prepared_recovery(
     dev: &mut dyn ScsiDevice,
     plan: &dyn crate::backend::PreparedRecoveryUpdate,
@@ -784,7 +784,9 @@ fn capture_required_backup(
     // hard-aborts.
     let bytes = match backup.capture(&mut ReadDevice::for_backend(dev, drive)) {
         Ok(bytes) => bytes,
-        Err(error) => return offer_flash_without_backup(confirm, error),
+        Err(error) => {
+            return offer_flash_without_backup(confirm, flash.can_proceed_without_backup(), error)
+        }
     };
     let target_model = drive
         .identity(&mut ReadDevice::for_backend(dev, drive))
@@ -798,7 +800,7 @@ fn capture_required_backup(
             "backup saved to {}, but it is not a usable rollback for this update",
             out.display()
         ));
-        return offer_flash_without_backup(confirm, error);
+        return offer_flash_without_backup(confirm, flash.can_proceed_without_backup(), error);
     }
     Ok(Some(SavedBackup::new(out, bytes, saved_len)))
 }
@@ -807,11 +809,15 @@ fn capture_required_backup(
 /// yes (proceed, no backup); the original `error` on no.
 fn offer_flash_without_backup(
     confirm: &mut dyn Confirm,
+    allowed: bool,
     error: anyhow::Error,
 ) -> Result<Option<SavedBackup>> {
     crate::diagnostics::record(format!("Backup unavailable: {error:#}"));
     // Backup capture has only read capabilities, before the update write grant.
     let error = error.context(crate::user_error::NoFirmwareWrite);
+    if !allowed {
+        return Err(error.context(IssueCode::BackupRequired));
+    }
     let reason = crate::workflow::user_error(&error).encoded();
     if confirm.proceed_without_backup(&reason)? {
         crate::diagnostics::record("Proceeding without a rollback backup at the operator's request; other safety checks remain enforced.");

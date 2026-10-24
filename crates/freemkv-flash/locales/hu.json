@@ -1,6 +1,11 @@
 {
   "language_name": "Magyar",
   "messages": {
+    "errors.backup_required": "Ehhez a frissítéshez a telepített firmware teljes biztonsági másolata szükséges. Mentsen diagnosztikai jelentést a segítségkéréshez.",
+    "confirm.proceed": "Folytatja?",
+    "confirm.non_interactive": "A folytatás a parancshoz már megadott beleegyezéssel történik.",
+    "errors.current_invalid": "A kiválasztott jelenlegi firmware-fájl nem érvényesíthető. Válasszon teljes fájlt, amely megfelel a meghajtóra telepített firmware-nek.",
+    "errors.file_dialog": "A fájlválasztó ablak nem tudta befejezni a műveletet. Próbálja újra, vagy mentsen diagnosztikai jelentést a segítségkéréshez.",
     "errors.backup_confirmation_required": "A frissítés biztonsági mentés nélküli folytatásához az Ön válasza szükséges. Futtassa a parancsot olyan terminálablakban, ahol válaszolhat a kérdésre.",
     "errors.drive_firmware_unconfirmed": "A meghajtó nem erősítette meg, hogy freemkv firmware-t használ. Ellenőrizze, hogy a megfelelő meghajtót választotta-e. Ha igen, mentsen diagnosztikai jelentést segítségkéréshez.",
     "errors.backup_partial": "Csak a firmware egy részét sikerült kiolvasni. A mentett fájl hiányos: ne használja a meghajtó visszaállítására. Nem történt firmware-írás. Ellenőrizze a kapcsolatot, és készítsen új, teljes biztonsági mentést.",

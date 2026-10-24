@@ -68,6 +68,9 @@ impl Authorized {
 }
 
 impl FlashFacet for Mtk {
+    fn can_proceed_without_backup(&self) -> bool {
+        true
+    }
     fn accepts_current(&self) -> bool {
         true
     }
@@ -285,14 +288,10 @@ fn execute_stage(
                     ("receiver revalidation", false)
                 }
                 mediatek_optical::receiver::ExecuteError::Flash(error) => failure_phase(error),
+                // Future library failures retain conservative write evidence.
+                _ => ("firmware update", true),
             };
-            let firmware_payload_started = !matches!(
-                &error,
-                mediatek_optical::receiver::ExecuteError::Receiver(_)
-                    | mediatek_optical::receiver::ExecuteError::Flash(
-                        mediatek_optical::update::FlashError::Entry(_)
-                    )
-            );
+            let firmware_payload_started = writes.payload_write_attempted();
             let operation_already_wrote = !completed_stages.is_empty();
             let progress = if operation_already_wrote {
                 crate::backend::UpdateProgress::UploadComplete
@@ -321,7 +320,13 @@ fn execute_stage(
                     _ if runtime.payload_bytes_accepted > 0 => {
                         crate::backend::UpdateProgress::PayloadAccepted
                     }
-                    _ => crate::backend::UpdateProgress::PayloadAttempted,
+                    _ if writes.payload_write_attempted() => {
+                        crate::backend::UpdateProgress::PayloadAttempted
+                    }
+                    _ if writes.empty_write_attempted() => {
+                        crate::backend::UpdateProgress::EntryAttempted
+                    }
+                    _ => crate::backend::UpdateProgress::Preflight,
                 }
             };
             let source = match error {

@@ -91,8 +91,11 @@ impl FileFormat {
     pub fn ensure_update_input(&self) -> Result<()> {
         anyhow::ensure!(
             self.update_input,
-            "{} is inspection-only; use a TAR package for Pioneer updates",
-            self.label
+            anyhow::anyhow!(
+                "{} is inspection-only; use a TAR package for Pioneer updates",
+                self.label
+            )
+            .context(crate::user_error::IssueCode::UnsupportedFirmware)
         );
         Ok(())
     }
@@ -171,8 +174,8 @@ pub(crate) fn decode_identity(data: &[u8]) -> Result<Identity> {
 
 /// Read standard INQUIRY identity. Vendor ROM reads belong to a matched
 /// protocol backend, never to the common identity path. A failed INQUIRY still
-/// yields an empty identity (callers keep classifying), but is reported loudly
-/// so a permission/transport fault is not mistaken for an unsupported drive.
+/// yields an empty identity for legacy metadata callers and records the cause.
+/// Use `try_read_identity` when identification is required for the operation.
 pub fn read_identity(dev: &mut dyn ScsiDevice) -> Identity {
     match try_read_identity(dev) {
         Ok(id) => id,
@@ -369,7 +372,17 @@ pub trait Backend: Sync + 'static {
 
     /// INQUIRY identity plus any backend banner, for `info` and backup naming.
     fn identity(&self, dev: &mut ReadDevice<'_>) -> Identity {
-        read_identity(dev)
+        self.try_identity(dev).unwrap_or_else(|error| {
+            crate::diagnostics::record(format!("could not read backend identity: {error:#}"));
+            Identity::default()
+        })
+    }
+
+    /// Required identity, preserving a failed read instead of declaring the drive unsupported.
+    fn try_identity(&self, dev: &mut ReadDevice<'_>) -> Result<Identity> {
+        try_read_identity(dev).map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::Connection)
+        })
     }
 
     /// The data-out commands this backend's read-only operations may send
@@ -851,6 +864,10 @@ pub struct FlashPreview {
 
 /// Firmware update in two read-only stages, then the write.
 pub trait FlashFacet {
+    /// A backend must explicitly support execution without installed rollback evidence.
+    fn can_proceed_without_backup(&self) -> bool {
+        false
+    }
     /// Whether Flash accepts a separate installed-firmware receiver reference.
     fn accepts_current(&self) -> bool {
         false

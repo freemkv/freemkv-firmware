@@ -269,8 +269,15 @@ fn publisher_drive_identity_still_requires_pioneer_hardware_response() {
                     |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
                     response.clone(),
                 );
-            let result = resolve(&mut dev).unwrap();
-            assert_eq!(result.is_some(), response == f1_sat());
+            let result = resolve(&mut dev);
+            if response.len() < 44 {
+                assert!(result
+                    .err()
+                    .unwrap()
+                    .is::<crate::backend::detection::Unavailable>());
+            } else {
+                assert_eq!(result.unwrap().is_some(), response == f1_sat());
+            }
             assert!(dev.reads.iter().any(|cdb| cdb.first() == Some(&0x3C)));
             assert!(dev.writes.is_empty());
         }
@@ -306,7 +313,10 @@ fn old_pioneer_hardware_is_classified_but_malformed_f1_is_not() {
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
             vec![0xA5; 8],
         );
-    assert!(resolve(&mut dev).unwrap().is_none());
+    assert!(resolve(&mut dev)
+        .err()
+        .unwrap()
+        .is::<crate::backend::detection::Unavailable>());
     assert!(dev.writes.is_empty());
 }
 
@@ -507,7 +517,7 @@ fn protocol_transport_failure_is_not_an_unsupported_drive() {
         .err()
         .expect("transport error must survive");
     assert!(error.is::<crate::backend::detection::Unavailable>());
-    assert!(!dev
+    assert!(dev
         .reads
         .iter()
         .any(|c| c.get(..6) == Some(&[0x3c, 6, 0, 0, 0x30, 0])));
@@ -524,6 +534,67 @@ fn rejected_other_protocol_probe_does_not_hide_a_valid_signature() {
     );
     assert_eq!(dev.reads.len(), 3);
     assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn failed_foreign_probe_does_not_hide_either_native_protocol() {
+    let devices = [
+        (
+            MockScsiDevice::mtk().on_fail(
+                |c| c.get(..3) == Some(&[0x3c, 2, 0xf1]),
+                "bridge rejected foreign CDB",
+            ),
+            "mtk19xx",
+        ),
+        (
+            MockScsiDevice::pioneer().on_fail(
+                |c| c.get(..6) == Some(&[0x3c, 6, 0, 0, 0x30, 0]),
+                "bridge rejected foreign CDB",
+            ),
+            "pioneer-oem",
+        ),
+    ];
+    for (mut dev, expected) in devices {
+        assert_eq!(
+            resolve(&mut dev).unwrap().unwrap().matched.backend.0,
+            expected
+        );
+        assert_eq!(dev.reads.len(), 3);
+        assert!(dev.writes.is_empty());
+    }
+}
+
+#[test]
+fn real_boot_code_windows_restore_oem_profiles_and_picker_formats() {
+    // Exact boot windows from BH14NS40 1.02 and BH16NS40 NS50 1.05.
+    // Their executable bytes after the NUL were rejected by 0.14.5 discovery.
+    for window in [
+        b"MT1939 Boot Code\0\0\0\xea\x7e\x15\0\xea\x28\0\x8f\xe2\0\x0c\x90\xe8",
+        b"MT1959 Boot JB8 \0\0\0\xea\xa9\x15\0\xea\x28\0\x8f\xe2\0\x0c\x90\xe8",
+    ] {
+        let bytes = window.to_vec();
+        for vendor in ["HL-DT-ST", "ASUS", "LITE-ON", "PLEXTOR", "OEM"] {
+            let mut inquiry = vec![b' '; 96];
+            inquiry[..8].fill(0);
+            inquiry[0] = 5;
+            inquiry[8..8 + vendor.len()].copy_from_slice(vendor.as_bytes());
+            let mut dev = MockScsiDevice::new()
+                .on(|c| c.first() == Some(&0x12), inquiry)
+                .on(
+                    |c| c.get(..6) == Some(&[0x3c, 6, 0, 0, 0x30, 0]),
+                    bytes.clone(),
+                );
+            let profile = crate::workflow::profile_on(&mut dev).unwrap();
+            assert_eq!(profile.backend.as_ref().unwrap().1.backend.0, "mtk19xx");
+            assert!(!profile.flash_formats.is_empty());
+            assert!(profile
+                .firmware_picker_formats()
+                .extensions()
+                .unwrap()
+                .contains(&"bin"));
+            assert!(dev.writes.is_empty());
+        }
+    }
 }
 
 #[test]
@@ -554,6 +625,9 @@ fn incomplete_signature_cannot_authorize_normal_backend() {
             |c| c.get(..3) == Some(&[0x3c, 2, 0xf1]),
             f1_sat()[..24].to_vec(),
         );
-    assert!(resolve(&mut dev).unwrap().is_none());
+    let error = resolve(&mut dev)
+        .err()
+        .expect("incomplete identification is inconclusive");
+    assert!(error.is::<crate::backend::detection::Unavailable>());
     assert!(dev.writes.is_empty());
 }

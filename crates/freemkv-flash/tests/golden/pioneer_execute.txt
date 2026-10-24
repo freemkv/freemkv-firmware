@@ -400,7 +400,7 @@ Verifying Backup: 100%
 backup: saved <TMP>/pioneer-cli-non-tty/backup.tar (146432 bytes)
 Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-stdin is not a TTY; proceeding on the --execute / --i-understand-risk consent.
+Proceeding with the consent already supplied to this command.
 
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered

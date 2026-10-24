@@ -17,11 +17,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use freemkv_flash::report::{self, Group};
-pub use freemkv_flash::workflow::FileOrigin;
 use freemkv_flash::workflow::{
     self, AuthorizedPlan, Control, CurrentFirmware, DriveChoice, Event, FlashOptions, FlashSheet,
     RecoveryOptions, Source, UpdateImpact,
 };
+pub use freemkv_flash::workflow::{FileOrigin, FirmwarePickerFormats};
 
 use crate::ops::{self, Job, Request, ResultView};
 use crate::support::Journal;
@@ -100,7 +100,7 @@ pub(crate) struct Profile {
     pub(crate) backup_name: Option<String>,
     pub(crate) dump_name: Option<String>,
     /// File endings a flash to this drive accepts.
-    pub(crate) flash_extensions: Vec<&'static str>,
+    pub(crate) firmware_picker: FirmwarePickerFormats,
     /// Lines for the activity log, e.g. why Recovery is not offered.
     pub(crate) notes: Vec<String>,
 }
@@ -140,6 +140,18 @@ pub enum Pick {
 pub struct FileFilter {
     pub name: &'static str,
     pub extensions: Vec<&'static str>,
+}
+
+impl FileFilter {
+    /// An invalid name or a list without literal suffixes means an unfiltered chooser.
+    pub fn validated(mut self) -> Option<Self> {
+        if self.name.trim().is_empty() || self.name.contains('\0') {
+            return None;
+        }
+        self.extensions
+            .retain(|suffix| FirmwarePickerFormats::valid_suffix(suffix));
+        (!self.extensions.is_empty()).then_some(self)
+    }
 }
 
 /// Work only a shell can do; the shell performs it and reports back through `Input`.
@@ -190,6 +202,8 @@ pub enum Input {
     SelectTask(Task),
     Choose(Pick),
     Chosen(Pick, PathBuf),
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    DialogFailed(Pick, String),
     SetCheck(CheckId, bool),
     ReadInfo,
     FlashNow,
@@ -1205,6 +1219,28 @@ impl App {
                 self.task = task;
             }
             Input::Choose(pick) => return self.choose(pick),
+            Input::DialogFailed(pick, detail) => {
+                self.log
+                    .push(format!("File dialog failed for {pick:?}: {detail}"));
+                let exporting = matches!(
+                    pick,
+                    Pick::DiagnosticLog | Pick::ReportText | Pick::ReportJson
+                );
+                let issue = workflow::UserError {
+                    id: "errors.file_dialog",
+                    arguments: Vec::new(),
+                    consequence: (!exporting).then_some("errors.no_firmware_write"),
+                };
+                self.record_event("file_dialog_failed", serde_json::json!({"pick": format!("{pick:?}"), "detail": detail, "issue": issue}));
+                if exporting {
+                    self.diagnostic_notice = Some(issue.encoded());
+                } else {
+                    self.result_task = self.task;
+                    self.status = issue.encoded();
+                    self.failure = Some(issue.encoded());
+                    self.user_issue = Some(issue);
+                }
+            }
             Input::Chosen(pick, path) => return self.chosen(pick, path),
             Input::SetCheck(CheckId::FlashReadFromDrive, on) if !self.busy() && self.can_read() => {
                 if self.flash_read != on {
@@ -1487,14 +1523,20 @@ impl App {
             | Pick::RecoveryCurrent => {
                 self.recovery_family_mismatch = false;
                 self.recovery_bypass_family = false;
-                let extensions = self
+                let formats = self
                     .ready_profile()
-                    .map_or_else(workflow::update_file_extensions, |p| {
-                        p.flash_extensions.clone()
-                    });
-                open(Some(FileFilter {
+                    .map(|profile| profile.firmware_picker.clone())
+                    .unwrap_or_default();
+                let extensions = formats.extensions();
+                self.record_event(
+                    "file_dialog_requested",
+                    serde_json::json!({
+                        "pick": format!("{pick:?}"), "extensions": extensions,
+                    }),
+                );
+                open(extensions.map(|extensions| FileFilter {
                     name: crate::localization::get(self.language, "filter.firmware_backup"),
-                    extensions,
+                    extensions: extensions.to_vec(),
                 }))
             }
             Pick::AnalysisFile(_) => open(Some(FileFilter {

@@ -28,7 +28,7 @@ impl Profile {
             inspect: true,
             backup_name: Some("DRIVE_1.00.backup.bin".into()),
             dump_name: Some("DRIVE_1.00.dump.bin".into()),
-            flash_extensions: vec!["bin", "tar"],
+            firmware_picker: workflow::FirmwarePickerFormats::prefer(vec!["bin", "tar"]),
             recovery_without_live_protocol: false,
             notes: Vec::new(),
         }
@@ -703,6 +703,153 @@ fn backup_and_dump_names_come_from_the_profile() {
 // ── flash: acknowledgement and confirmation ───────────────────────────────
 
 #[test]
+fn native_filter_boundaries_never_export_null_names_or_empty_or_injected_patterns() {
+    for name in ["", " ", "Firmware\0hidden"] {
+        assert!(FileFilter {
+            name,
+            extensions: vec!["bin"]
+        }
+        .validated()
+        .is_none());
+    }
+    for suffix in [
+        "",
+        ".",
+        "bin\0exe",
+        "bin;*.exe",
+        "*.bin",
+        "../bin",
+        "a\\bin",
+        "bin/other",
+    ] {
+        assert!(
+            FileFilter {
+                name: "Firmware",
+                extensions: vec![suffix]
+            }
+            .validated()
+            .is_none(),
+            "{suffix:?}"
+        );
+        assert_eq!(
+            workflow::FirmwarePickerFormats::prefer(vec![suffix]).extensions(),
+            workflow::FirmwarePickerFormats::default().extensions()
+        );
+    }
+    let clean = FileFilter {
+        name: "Firmware",
+        extensions: vec!["", "bin", "firmware.tar", "x;*.exe"],
+    }
+    .validated()
+    .unwrap();
+    assert_eq!(clean.extensions, ["bin", "firmware.tar"]);
+}
+
+#[test]
+fn file_dialog_failure_stays_localized_read_only_and_diagnostic() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.dispatch(Input::DialogFailed(
+        Pick::RecoveryInput,
+        "private HRESULT 0x80004005".into(),
+    ));
+    assert!(!app.running() && app.worker.is_none());
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.file_dialog");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    for language in crate::localization::Language::ALL {
+        app.language = language;
+        let text = app.view().results.unwrap().failure.unwrap().text;
+        assert!(text.contains(crate::localization::get(language, "errors.file_dialog")));
+        assert!(text.contains(crate::localization::get(
+            language,
+            "errors.no_firmware_write"
+        )));
+        assert!(!text.contains("HRESULT"));
+    }
+    assert!(app.log.iter().any(|line| line.contains("private HRESULT")));
+    assert!(app.pending.is_none() && app.recovery_planning.is_none());
+}
+
+#[test]
+fn export_dialog_failure_does_not_replace_an_active_update_result() {
+    let mut app = one_drive();
+    app.start_job(
+        "task.recovery",
+        "drive-a".into(),
+        Job::ExecuteRecovery(workflow::PreparedRecovery::default()),
+    );
+    let status = app.status.clone();
+    app.dispatch(Input::DialogFailed(
+        Pick::DiagnosticLog,
+        "private HRESULT".into(),
+    ));
+    assert!(app.running());
+    assert_eq!(app.status, status);
+    assert!(app.failure.is_none() && app.user_issue.is_none());
+    let notice = app.diagnostic_notice.as_ref().unwrap();
+    let text = crate::localization::render(crate::localization::Language::En, notice);
+    assert!(text.contains(crate::localization::get(
+        crate::localization::Language::En,
+        "errors.file_dialog"
+    )));
+    assert!(!text.contains("did not write firmware"));
+}
+
+#[test]
+fn firmware_pickers_never_emit_empty_filters_for_unrecognized_or_changing_profiles() {
+    for extensions in [
+        vec![],
+        vec!["bin", "tar"],
+        vec!["firmware.tar", "installer.tar", "tar"],
+    ] {
+        let mut app = one_drive();
+        app.profile = ProfileState::Ready(Profile {
+            firmware_picker: workflow::FirmwarePickerFormats::prefer(extensions.clone()),
+            ..Profile::default()
+        });
+        for pick in [
+            Pick::FlashFirmware,
+            Pick::FlashCurrent,
+            Pick::RecoveryInput,
+            Pick::RecoveryCurrent,
+        ] {
+            let effects = app.dispatch(Input::Choose(pick));
+            let [Effect::OpenFile {
+                filter: Some(filter),
+                ..
+            }] = effects.as_slice()
+            else {
+                panic!("missing firmware filter: {effects:?}");
+            };
+            let expected = if extensions.is_empty() {
+                workflow::update_file_extensions()
+            } else {
+                extensions.clone()
+            };
+            assert_eq!(filter.extensions, expected, "{pick:?}");
+            assert!(
+                !filter.extensions.is_empty(),
+                "never pass an empty pattern to the OS"
+            );
+            assert!(app.worker.is_none());
+        }
+        for state in [
+            ProfileState::NoDrive,
+            ProfileState::Probing,
+            ProfileState::Failed,
+        ] {
+            app.profile = state;
+            let effects = app.dispatch(Input::Choose(Pick::RecoveryCurrent));
+            assert!(
+                matches!(effects.as_slice(), [Effect::OpenFile { filter: Some(filter), .. }] if !filter.extensions.is_empty())
+            );
+            assert!(app.worker.is_none());
+        }
+    }
+}
+
+#[test]
 fn flash_starts_with_a_firmware_chooser() {
     let mut app = one_drive();
     app.dispatch(Input::SelectTask(Task::Flash));
@@ -801,6 +948,9 @@ impl BackupFacet for SheetBackend {
 }
 
 impl FlashFacet for SheetBackend {
+    fn can_proceed_without_backup(&self) -> bool {
+        true // This synthetic receiver does not require installed backup bytes.
+    }
     fn plan(&self, _: &mut ReadDevice<'_>, _: &FlashRequest) -> anyhow::Result<FlashPlan> {
         let mut plan = FlashPlan::new(());
         plan.after_backup = vec![
@@ -911,7 +1061,10 @@ fn flash_until_sheet_with_backup(
                 freemkv_flash::engine::flash(&mut dev, &*engine_backend, &request, &mut sheet)
             },
         )
-        .map_err(|e| format!("{e:#}"));
+        .map_err(|e| {
+            let _ = worker.send(Msg::UserIssue(workflow::user_error(&e)));
+            format!("{e:#}")
+        });
         let _ = worker.send(Msg::Done(result.clone().map(Some)));
         let _ = done_tx.send(result.map(drop));
     });
@@ -1289,9 +1442,8 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.recovery_input = Some("new.tar".into());
     app.recovery_read = true;
     app.dispatch(Input::Recover);
-    if app.recovery_planning.is_some() {
-        recovery_plan_passes(&mut app);
-    }
+    assert!(app.recovery_planning.is_some());
+    let prepared = recovery_plan_passes(&mut app);
     let confirm = app.view().confirm.unwrap();
     assert_eq!(confirm.title, "Confirm recovery");
     assert_eq!(
@@ -1308,7 +1460,17 @@ fn recovery_confirms_with_the_force_warning_then_runs_acknowledged() {
     app.dispatch(Input::Confirm);
     let (label, device, job) = last_job(&app);
     assert_eq!((label.as_str(), device.as_str()), ("Recovery", "drive-a"));
-    assert!(matches!(job, Job::ExecuteRecovery(_)));
+    let Job::ExecuteRecovery(actual) = job else {
+        panic!("expected execution of the prepared recovery");
+    };
+    assert_eq!(
+        actual, &prepared,
+        "confirmation must carry the exact prepared session"
+    );
+    assert!(
+        app.prepared_recovery.is_none(),
+        "execution consumes the stored handle"
+    );
 }
 
 // ── job lifecycle and events ──────────────────────────────────────────────
@@ -1328,6 +1490,12 @@ fn mediatek_recovery_honors_current_file_and_separate_tar_member() {
     app.dispatch(Input::RecoveryCurrentMember("intermediate.bin".into()));
     assert!(button(&app.view(), "Recover").enabled);
     app.dispatch(Input::Recover);
+    let (_, _, prepare) = last_job(&app);
+    let Job::Recovery(options) = prepare else {
+        panic!("expected recovery preparation");
+    };
+    assert_eq!(options.current_member.as_deref(), Some("intermediate.bin"));
+    assert_eq!(options.member.as_deref(), Some("firmware.bin"));
     if app.recovery_planning.is_some() {
         recovery_plan_passes(&mut app);
     }
@@ -1613,7 +1781,7 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
     let issue = app.user_issue.as_ref().unwrap();
-    assert_eq!(issue.id, "errors.connection");
+    assert_eq!(issue.id, "errors.no_drive");
     assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
     assert!(app.view().controls_enabled);
 }
@@ -2375,12 +2543,13 @@ fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
     assert_eq!(app.recovery_current, Some("other.tar".into()));
 }
 
-fn recovery_plan_passes(app: &mut App) {
+fn recovery_plan_passes(app: &mut App) -> workflow::PreparedRecovery {
     let (_, _, job) = last_job(app);
     assert!(matches!(job, Job::Recovery(o) if !o.execute && !o.acknowledged_risk));
     let worker = app.worker.take().unwrap();
+    let prepared = workflow::PreparedRecovery::default();
     worker
-        .send(Msg::PreparedRecovery(workflow::PreparedRecovery::default()))
+        .send(Msg::PreparedRecovery(prepared.clone()))
         .unwrap();
     worker
         .send(Msg::Event(field_event(
@@ -2392,6 +2561,7 @@ fn recovery_plan_passes(app: &mut App) {
         .send(Msg::Done(Ok(Some(workflow::UpdateOutcome::Planned))))
         .unwrap();
     app.poll();
+    prepared
 }
 
 #[test]
@@ -2412,6 +2582,11 @@ fn recovery_prepares_before_consent_and_shows_required_restoration() {
         .any(|line| line.contains("Two passes") && line.contains("pristine restoration")));
     assert!(!confirm.ack_checked && !confirm.confirm.enabled);
     app.dispatch(Input::CancelConfirm);
+    assert!(
+        app.prepared_recovery.is_none(),
+        "cancelling must release retained firmware"
+    );
+    assert!(app.pending.is_none());
     assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
 }
 

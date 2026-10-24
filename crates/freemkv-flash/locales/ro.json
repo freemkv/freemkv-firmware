@@ -1,6 +1,11 @@
 {
   "language_name": "Română",
   "messages": {
+    "errors.backup_required": "Această actualizare necesită o copie de siguranță completă a firmware-ului instalat. Salvați un raport de diagnostic pentru a solicita ajutor.",
+    "confirm.proceed": "Continuați?",
+    "confirm.non_interactive": "Se continuă cu acordul deja oferit pentru această comandă.",
+    "errors.current_invalid": "Fișierul firmware-ului curent selectat nu a putut fi validat. Alegeți un fișier complet care corespunde firmware-ului instalat pe această unitate.",
+    "errors.file_dialog": "Fereastra de selectare a fișierelor nu a putut finaliza acțiunea. Încercați din nou sau salvați un raport de diagnostic pentru a solicita ajutor.",
     "errors.backup_confirmation_required": "Această actualizare are nevoie de răspunsul dumneavoastră înainte de a continua fără copie de siguranță. Rulați comanda într-o fereastră de terminal în care puteți răspunde la întrebare.",
     "errors.drive_firmware_unconfirmed": "Unitatea nu a confirmat că folosește firmware freemkv. Verificați dacă ați selectat unitatea dorită. Dacă este corectă, salvați un raport de diagnosticare pentru ajutor.",
     "errors.backup_partial": "A putut fi citită doar o parte din firmware. Fișierul salvat este incomplet: nu îl folosiți pentru restaurarea unității. Nu s-a scris firmware. Verificați conexiunea și creați o nouă copie de siguranță completă.",

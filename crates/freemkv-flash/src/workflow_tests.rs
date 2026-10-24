@@ -77,12 +77,15 @@ mod prepared_recovery {
         }))))
     }
     fn device(product: &str) -> MockScsiDevice {
+        device_identity("TEST", product, "1.00")
+    }
+    fn device_identity(vendor: &str, product: &str, revision: &str) -> MockScsiDevice {
         let mut inquiry = vec![b' '; 96];
         inquiry[..8].fill(0);
         inquiry[4] = 91;
-        inquiry[8..12].copy_from_slice(b"TEST");
+        inquiry[8..8 + vendor.len()].copy_from_slice(vendor.as_bytes());
         inquiry[16..16 + product.len()].copy_from_slice(product.as_bytes());
-        inquiry[32..36].copy_from_slice(b"1.00");
+        inquiry[32..32 + revision.len()].copy_from_slice(revision.as_bytes());
         MockScsiDevice::new().on(|c| c.first() == Some(&0x12), inquiry)
     }
     #[test]
@@ -108,14 +111,32 @@ mod prepared_recovery {
     }
     #[test]
     fn drive_replacement_cannot_execute_the_retained_envelope() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let mut dev = device("Replacement");
-        let error =
-            execute_recovery_on(&mut dev, session(calls.clone()).take().unwrap()).unwrap_err();
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
-        assert!(dev.writes.is_empty());
-        assert_eq!(user_error(&error).id, "errors.drive_changed");
-        assert!(error_message(&error).contains("No firmware was written"));
+        for (case, vendor, product, revision) in [
+            ("vendor", "OTHER", "Original", "1.00"),
+            ("product", "TEST", "Replacement", "1.00"),
+            ("revision", "TEST", "Original", "2.00"),
+            ("missing vendor", "", "Original", "1.00"),
+            ("missing product", "TEST", "", "1.00"),
+            ("banner", "TEST", "Original", "1.00"),
+        ] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let mut bound = session(calls.clone()).take().unwrap();
+            if case == "missing vendor" {
+                bound.identity.vendor.clear();
+            }
+            if case == "missing product" {
+                bound.identity.product.clear();
+            }
+            if case == "banner" {
+                bound.identity.banner = Some("original boot label".into());
+            }
+            let mut dev = device_identity(vendor, product, revision);
+            let error = execute_recovery_on(&mut dev, bound).unwrap_err();
+            assert_eq!(calls.load(Ordering::SeqCst), 0, "{case}");
+            assert!(dev.writes.is_empty(), "{case}");
+            assert_eq!(user_error(&error).id, "errors.drive_changed", "{case}");
+            assert!(error_message(&error).contains("No firmware was written"));
+        }
     }
 }
 
@@ -293,7 +314,8 @@ fn oversized_input_is_rejected_before_opening_a_drive() {
     drop(file);
     let error = read_capped(&path).unwrap_err();
     std::fs::remove_file(path).unwrap();
-    assert!(error.to_string().contains("exceeds"));
+    assert!(format!("{error:#}").contains("exceeds"));
+    assert_eq!(user_error(&error).id, "errors.firmware_invalid");
 }
 
 fn drive(path: &str, name: &str) -> DriveChoice {

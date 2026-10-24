@@ -7,6 +7,13 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Flash
 
+- Recognize genuine MediaTek boot responses that include machine code after the
+  identity label, restoring supported non-Pioneer drive profiles. A failed foreign
+  vendor probe no longer hides a valid native protocol response.
+- Keep firmware file pickers usable for unrecognized and dump-only drives. Never
+  pass an empty filter to the operating system, and show localized guidance when
+  a native file dialog cannot complete. Native QA now opens and cancels all four
+  firmware pickers with both supported-format profiles and an unsupported profile.
 - Keep prepared recovery firmware in memory through confirmation, avoiding another
   complete drive read when recovery starts. Check the connected drive again before
   writing and retain independent verification after the update.
@@ -23,6 +30,9 @@ Versions are independent of the freemkv ripping applications.
 - Keep backup refusals and confirmation prompts in the selected language.
   Distinguish a failed drive read from an incomplete selected Current firmware
   file, and use the same risk guidance in Flash and Recovery.
+- Require a usable Pioneer backup without offering an impossible bypass. Preserve
+  permission, connection and Current-file causes, and keep log-failure details in
+  fallback diagnostics. Confirmation answers also support the selected language.
 - Give specific guidance for unsupported or malformed firmware files and existing
   backup destinations, with clear next steps for inspection and recovery refusals.
 

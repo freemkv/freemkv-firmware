@@ -1,6 +1,11 @@
 {
   "language_name": "繁體中文",
   "messages": {
+    "errors.backup_required": "此更新需要已安裝韌體的完整備份。請儲存診斷報告以尋求協助。",
+    "confirm.proceed": "繼續嗎？",
+    "confirm.non_interactive": "依照先前已為此命令提供的同意繼續。",
+    "errors.current_invalid": "無法驗證所選的目前韌體檔案。請選擇與此光碟機已安裝韌體相符的完整檔案。",
+    "errors.file_dialog": "檔案選擇視窗未能完成操作。請重試，或儲存診斷報告以尋求協助。",
     "errors.backup_confirmation_required": "您需要先回答問題，才能在沒有備份的情況下繼續更新。請在可以回答問題的終端機視窗中執行此命令。",
     "errors.drive_firmware_unconfirmed": "無法確認光碟機是否正在執行 freemkv 韌體。請檢查是否選擇了預期的光碟機。如果選擇正確，請儲存診斷報告以尋求協助。",
     "errors.backup_partial": "只能讀取部分韌體。儲存的檔案不完整，不得用於還原光碟機。未寫入任何韌體。請檢查連接並重新建立完整備份。",

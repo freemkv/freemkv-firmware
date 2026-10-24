@@ -1,6 +1,11 @@
 {
   "language_name": "Français",
   "messages": {
+    "errors.backup_required": "Cette mise à jour nécessite une sauvegarde complète du micrologiciel installé. Enregistrez un rapport de diagnostic pour obtenir de l’aide.",
+    "confirm.proceed": "Continuer ?",
+    "confirm.non_interactive": "L’opération continue avec le consentement déjà fourni à cette commande.",
+    "errors.current_invalid": "Le fichier du micrologiciel actuel sélectionné n’a pas pu être validé. Choisissez un fichier complet correspondant au micrologiciel installé dans ce lecteur.",
+    "errors.file_dialog": "La fenêtre de sélection de fichiers n’a pas pu terminer l’action. Réessayez ou enregistrez un rapport de diagnostic pour obtenir de l’aide.",
     "errors.backup_confirmation_required": "Cette mise à jour nécessite votre réponse avant de continuer sans sauvegarde. Exécutez la commande dans une fenêtre de terminal où vous pouvez répondre à la question.",
     "errors.drive_firmware_unconfirmed": "Le lecteur n’a pas confirmé qu’il utilise le micrologiciel freemkv. Vérifiez que vous avez sélectionné le bon lecteur. Si c’est le cas, enregistrez un rapport de diagnostic pour obtenir de l’aide.",
     "errors.backup_partial": "Seule une partie du micrologiciel a pu être lue. Le fichier enregistré est incomplet : ne l’utilisez pas pour restaurer le lecteur. Aucun micrologiciel n’a été écrit. Vérifiez la connexion et créez une nouvelle sauvegarde complète.",

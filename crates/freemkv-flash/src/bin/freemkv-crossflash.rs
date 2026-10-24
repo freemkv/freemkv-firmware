@@ -29,6 +29,10 @@ fn main() -> std::process::ExitCode {
 
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
+        println!("Usage: freemkv-crossflash <package directory>\n       freemkv-crossflash --why [--json] <installed> <target>");
+        return Ok(());
+    }
     if let [flag, json, installed, target] = args.as_slice() {
         if flag == "--why" && json == "--json" {
             let installed = std::fs::read(installed)?;

@@ -1,6 +1,11 @@
 {
   "language_name": "Bahasa Indonesia",
   "messages": {
+    "errors.backup_required": "Pembaruan ini memerlukan cadangan lengkap firmware yang terpasang. Simpan laporan diagnostik untuk mendapatkan bantuan.",
+    "confirm.proceed": "Lanjutkan?",
+    "confirm.non_interactive": "Melanjutkan dengan persetujuan yang telah diberikan untuk perintah ini.",
+    "errors.current_invalid": "Berkas firmware saat ini yang dipilih tidak dapat divalidasi. Pilih berkas lengkap yang cocok dengan firmware yang terpasang pada drive ini.",
+    "errors.file_dialog": "Jendela pemilihan berkas tidak dapat menyelesaikan tindakan. Coba lagi atau simpan laporan diagnostik untuk mendapatkan bantuan.",
     "errors.backup_confirmation_required": "Pembaruan ini memerlukan jawaban Anda sebelum melanjutkan tanpa cadangan. Jalankan perintah di jendela terminal tempat Anda dapat menjawab pertanyaan.",
     "errors.drive_firmware_unconfirmed": "Drive tidak mengonfirmasi bahwa firmware freemkv sedang digunakan. Pastikan Anda memilih drive yang benar. Jika sudah benar, simpan laporan diagnostik untuk meminta bantuan.",
     "errors.backup_partial": "Hanya sebagian firmware yang dapat dibaca. File yang disimpan tidak lengkap: jangan gunakan untuk memulihkan drive. Tidak ada firmware yang ditulis. Periksa koneksi dan buat cadangan lengkap yang baru.",

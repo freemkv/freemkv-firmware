@@ -718,7 +718,7 @@ impl Controller {
                     panel.setCanChooseFiles(true);
                     panel.setCanChooseDirectories(false);
                     panel.setAllowsMultipleSelection(false);
-                    if let Some(f) = filter {
+                    if let Some(f) = filter.and_then(ui::FileFilter::validated) {
                         panel.setMessage(Some(&ns(f.name)));
                         let types: Vec<_> = f.extensions.iter().map(|e| ns(e)).collect();
                         // `allowedContentTypes` needs UTType; the deprecated call still filters.
@@ -765,6 +765,11 @@ impl Controller {
             }
             if let Some(path) = held.URL().and_then(|u| u.path()) {
                 me.send(Input::Chosen(pick, path.to_string().into()));
+            } else {
+                me.send(Input::DialogFailed(
+                    pick,
+                    "Accepted file panel returned no local path".into(),
+                ));
             }
         });
         panel.beginSheetModalForWindow_completionHandler(&window, &handler);

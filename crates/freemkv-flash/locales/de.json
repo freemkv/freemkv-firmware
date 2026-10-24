@@ -1,6 +1,11 @@
 {
   "language_name": "Deutsch",
   "messages": {
+    "errors.backup_required": "Dieses Update erfordert eine vollständige Sicherung der installierten Firmware. Speichern Sie einen Diagnosebericht, um Hilfe zu erhalten.",
+    "confirm.proceed": "Fortfahren?",
+    "confirm.non_interactive": "Der Vorgang wird mit der bereits für diesen Befehl erteilten Zustimmung fortgesetzt.",
+    "errors.current_invalid": "Die ausgewählte Datei der aktuellen Firmware konnte nicht validiert werden. Wählen Sie eine vollständige Datei, die der installierten Firmware dieses Laufwerks entspricht.",
+    "errors.file_dialog": "Das Dateiauswahlfenster konnte den Vorgang nicht abschließen. Versuchen Sie es erneut oder speichern Sie einen Diagnosebericht, um Hilfe zu erhalten.",
     "errors.backup_confirmation_required": "Die Aktualisierung benötigt Ihre Antwort, bevor sie ohne Sicherung fortfahren kann. Führen Sie den Befehl in einem Terminalfenster aus, in dem Sie die Frage beantworten können.",
     "errors.drive_firmware_unconfirmed": "Das Laufwerk hat nicht bestätigt, dass es freemkv-Firmware verwendet. Prüfen Sie, ob das richtige Laufwerk ausgewählt ist. Falls ja, speichern Sie einen Diagnosebericht, um Hilfe zu erhalten.",
     "errors.backup_partial": "Nur ein Teil der Firmware konnte gelesen werden. Die gespeicherte Datei ist unvollständig: Verwenden Sie sie nicht zur Wiederherstellung des Laufwerks. Es wurde keine Firmware geschrieben. Prüfen Sie die Verbindung und erstellen Sie eine neue vollständige Sicherung.",

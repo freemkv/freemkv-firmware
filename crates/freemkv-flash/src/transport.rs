@@ -49,6 +49,7 @@ pub struct ScsiTransport<'a, 'd> {
     read_counts: [usize; 3],
     last_read_problem: Option<String>,
     empty_write_attempted: bool,
+    payload_write_attempted: bool,
 }
 
 impl<'a, 'd> ScsiTransport<'a, 'd> {
@@ -62,6 +63,7 @@ impl<'a, 'd> ScsiTransport<'a, 'd> {
             read_counts: [0; 3],
             last_read_problem: None,
             empty_write_attempted: false,
+            payload_write_attempted: false,
         }
     }
 
@@ -74,6 +76,7 @@ impl<'a, 'd> ScsiTransport<'a, 'd> {
             read_counts: [0; 3],
             last_read_problem: None,
             empty_write_attempted: false,
+            payload_write_attempted: false,
         }
     }
 
@@ -94,6 +97,11 @@ impl<'a, 'd> ScsiTransport<'a, 'd> {
     /// Whether a strict, zero-payload command reached the transport.
     pub(crate) fn empty_write_attempted(&self) -> bool {
         self.empty_write_attempted
+    }
+
+    /// Whether a strict nonempty write was attempted, including a failed send.
+    pub(crate) fn payload_write_attempted(&self) -> bool {
+        self.payload_write_attempted
     }
 }
 
@@ -121,6 +129,9 @@ impl Transport for ScsiTransport<'_, '_> {
                 };
                 if strict && payload.is_empty() {
                     self.empty_write_attempted = true;
+                }
+                if strict && !payload.is_empty() {
+                    self.payload_write_attempted = true;
                 }
                 let sent = if strict {
                     d.command_out_strict(cdb, payload)
@@ -184,6 +195,9 @@ impl mediatek_optical::drive::Transport for ScsiTransport<'_, '_> {
             MtkData::Out(bytes) => {
                 if strict && bytes.is_empty() {
                     self.empty_write_attempted = true;
+                }
+                if strict && !bytes.is_empty() {
+                    self.payload_write_attempted = true;
                 }
                 if strict {
                     d.command_out_directed(cdb, bytes)?;

@@ -69,9 +69,7 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
         inspect: caps.inspect,
         backup_name: caps.backup.then(|| name(false)).flatten(),
         dump_name: caps.dump.then(|| name(true)).flatten(),
-        flash_extensions: workflow::update_extensions(
-            p.recovery.map_or(p.flash_formats, |d| d.formats),
-        ),
+        firmware_picker: p.firmware_picker_formats(),
         notes: p
             .recovery_errors
             .iter()

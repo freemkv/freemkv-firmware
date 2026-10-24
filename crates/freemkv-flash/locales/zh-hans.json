@@ -1,6 +1,11 @@
 {
   "language_name": "简体中文",
   "messages": {
+    "errors.backup_required": "此更新需要已安装固件的完整备份。请保存诊断报告以寻求帮助。",
+    "confirm.proceed": "继续吗？",
+    "confirm.non_interactive": "按照此前已为此命令提供的同意继续。",
+    "errors.current_invalid": "无法验证所选的当前固件文件。请选择与此驱动器已安装固件匹配的完整文件。",
+    "errors.file_dialog": "文件选择窗口未能完成操作。请重试，或保存诊断报告以寻求帮助。",
     "errors.backup_confirmation_required": "您需要先回答问题，才能在没有备份的情况下继续更新。请在可以回答问题的终端窗口中运行此命令。",
     "errors.drive_firmware_unconfirmed": "无法确认光驱是否正在运行 freemkv 固件。请检查是否选择了预期的光驱。如果选择正确，请保存诊断报告以寻求帮助。",
     "errors.backup_partial": "只能读取部分固件。保存的文件不完整，不得用于恢复光驱。未写入任何固件。请检查连接并重新创建完整备份。",

@@ -1571,7 +1571,7 @@ fn golden_flash_execute() {
         let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, family.as_ref(), &req));
         let expected_refusal = match title {
             "Pioneer execute: no risk acknowledgement" => "SAFETY GATE",
-            "Pioneer execute: pre-flash backup cannot be read" => "pre-flash backup failed",
+            "Pioneer execute: pre-flash backup cannot be read" => "errors.backup_required",
             "Pioneer execute: disc loaded" => "a disc is loaded",
             "MTK execute: Pioneer bundle sent to an MTK drive" => {
                 "a Pioneer firmware bundle cannot be flashed to this mtk19xx drive"

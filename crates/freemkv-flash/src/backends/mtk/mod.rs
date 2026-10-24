@@ -47,9 +47,9 @@ pub(crate) mod inspect;
 pub mod oem;
 
 use crate::backend::{
-    read_identity, Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, Descriptor,
-    DetailsFacet, DeviceAccess, DumpFacet, FileFacet, FileFormat, FirmwareReport, FlashFacet,
-    FormatRole, Identity, Match, ReadDevice,
+    Backend, BackendId, BackupFacet, BackupFormat, BackupNotice, Descriptor, DetailsFacet,
+    DeviceAccess, DumpFacet, FileFacet, FileFormat, FirmwareReport, FlashFacet, FormatRole,
+    Identity, Match, ReadDevice,
 };
 use crate::platform::ScsiDevice;
 use mediatek_optical::update::{Direction, Step};
@@ -869,10 +869,12 @@ impl Backend for Mtk {
         crate::backend::registry::probe_backend(dev, DESCRIPTOR.id)
     }
 
-    fn identity(&self, dev: &mut ReadDevice<'_>) -> Identity {
-        let mut identity = read_identity(dev);
+    fn try_identity(&self, dev: &mut ReadDevice<'_>) -> Result<Identity> {
+        let mut identity = crate::backend::try_read_identity(dev).map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::Connection)
+        })?;
         identity.banner = read_mt19_banner(dev);
-        identity
+        Ok(identity)
     }
 
     fn recovery(&self) -> Option<&dyn crate::backend::RecoveryFacet> {

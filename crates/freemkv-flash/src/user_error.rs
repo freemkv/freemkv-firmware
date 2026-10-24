@@ -5,89 +5,75 @@ use crate::backend::{
 };
 use crate::localization::{self, Language};
 
-/// Stable application causes attached where an operation can explain its failure.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IssueCode {
-    /// A selected installed-firmware reference lacks required components.
-    CurrentIncomplete,
-    /// A selected target cannot be decoded or validated.
-    FirmwareInvalid,
-    /// Installed-firmware evidence does not describe the connected drive.
-    CurrentMismatch,
-    /// The drive changed or could not be bound to the prepared session.
-    DriveChanged,
-    /// No live connection could be established.
-    Connection,
-    /// A prepared session cannot be reused or was lost.
-    PreparationExpired,
-    /// A backup destination must be chosen.
-    BackupDestination,
-    /// Backup contents do not match the drive.
-    BackupMismatch,
-    /// Backup acquisition or verification failed.
-    BackupFailed,
-    /// The user has not acknowledged the update risk.
-    Acknowledgement,
-    /// The existing firmware cannot be modified again.
-    AlreadyModified,
-    /// This application cannot prepare the requested update from this firmware.
-    UnsupportedFirmware,
-    /// The firmware's hardware differs; no display identity was available.
-    IncompatibleFirmware,
-    /// Device completion or verification needs attention.
-    UpdateUncertain,
-    /// Command options were rejected before any device operation.
-    CommandOptions,
-    /// No supported classification could explain an unexpected application fault.
-    Unexpected,
-    /// No optical drive was available for the operation.
-    NoDrive,
-    /// Automatic drive selection found more than one candidate.
-    ChooseDrive,
-    /// The drive's tray must be closed before updating.
-    TrayOpen,
-    /// A loaded disc must be removed before updating.
-    DiscPresent,
-    /// The requested operation is unavailable for the selected drive.
-    UnsupportedDrive,
-    /// The operator declined before the update began.
-    Cancelled,
-    /// The live drive did not confirm that freemkv firmware is installed.
-    FirmwareNotDetected,
-    /// Backup bypass needs an interactive answer before an update can start.
-    BackupConfirmationRequired,
+macro_rules! define_issue_codes {
+    ($( $(#[$meta:meta])* $variant:ident => $id:literal, )*) => {
+        /// Stable application causes attached where an operation can explain its failure.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum IssueCode { $( $(#[$meta])* $variant, )* }
+        impl IssueCode {
+            /// Every declared cause, generated with its message mapping.
+            pub const ALL: &'static [Self] = &[$(Self::$variant),*];
+            /// Localized cause and next action, independent of diagnostic wording.
+            pub fn message_id(self) -> &'static str {
+                match self { $(Self::$variant => $id,)* }
+            }
+        }
+    };
 }
 
-impl IssueCode {
-    /// Localized cause and next action, independent of diagnostic wording.
-    pub fn message_id(self) -> &'static str {
-        match self {
-            Self::CurrentIncomplete => "errors.current_incomplete",
-            Self::FirmwareInvalid => "errors.firmware_invalid",
-            Self::CurrentMismatch => "errors.current_mismatch",
-            Self::DriveChanged => "errors.drive_changed",
-            Self::Connection => "errors.connection",
-            Self::PreparationExpired => "errors.preparation_expired",
-            Self::BackupDestination => "errors.backup_destination",
-            Self::BackupMismatch => "errors.backup_mismatch",
-            Self::BackupFailed => "errors.backup_failed",
-            Self::Acknowledgement => "errors.acknowledgement",
-            Self::AlreadyModified => "errors.already_modified",
-            Self::UnsupportedFirmware => "errors.unsupported_firmware",
-            Self::IncompatibleFirmware => "errors.incompatible_firmware",
-            Self::UpdateUncertain => "errors.update_uncertain",
-            Self::CommandOptions => "errors.command_options",
-            Self::Unexpected => "errors.unexpected",
-            Self::NoDrive => "errors.no_drive",
-            Self::ChooseDrive => "errors.choose_drive",
-            Self::TrayOpen => "errors.tray_open",
-            Self::DiscPresent => "errors.disc_present",
-            Self::UnsupportedDrive => "errors.unsupported_drive",
-            Self::Cancelled => "ui.cancelled_no_firmware_was_written",
-            Self::FirmwareNotDetected => "errors.drive_firmware_unconfirmed",
-            Self::BackupConfirmationRequired => "errors.backup_confirmation_required",
-        }
-    }
+define_issue_codes! {
+    /// A selected installed-firmware reference lacks required components.
+    CurrentIncomplete => "errors.current_incomplete",
+    /// The selected Current reference could not be decoded or validated.
+    CurrentInvalid => "errors.current_invalid",
+    /// A selected target cannot be decoded or validated.
+    FirmwareInvalid => "errors.firmware_invalid",
+    /// Installed-firmware evidence does not describe the connected drive.
+    CurrentMismatch => "errors.current_mismatch",
+    /// The drive changed or could not be bound to the prepared session.
+    DriveChanged => "errors.drive_changed",
+    /// No live connection could be established.
+    Connection => "errors.connection",
+    /// A prepared session cannot be reused or was lost.
+    PreparationExpired => "errors.preparation_expired",
+    /// A backup destination must be chosen.
+    BackupDestination => "errors.backup_destination",
+    /// Backup contents do not match the drive.
+    BackupMismatch => "errors.backup_mismatch",
+    /// Backup acquisition or verification failed.
+    BackupFailed => "errors.backup_failed",
+    /// The update implementation requires a complete installed-firmware backup.
+    BackupRequired => "errors.backup_required",
+    /// The user has not acknowledged the update risk.
+    Acknowledgement => "errors.acknowledgement",
+    /// The existing firmware cannot be modified again.
+    AlreadyModified => "errors.already_modified",
+    /// This application cannot prepare the requested update from this firmware.
+    UnsupportedFirmware => "errors.unsupported_firmware",
+    /// The firmware's hardware differs; no display identity was available.
+    IncompatibleFirmware => "errors.incompatible_firmware",
+    /// Device completion or verification needs attention.
+    UpdateUncertain => "errors.update_uncertain",
+    /// Command options were rejected before any device operation.
+    CommandOptions => "errors.command_options",
+    /// No supported classification could explain an unexpected application fault.
+    Unexpected => "errors.unexpected",
+    /// No optical drive was available for the operation.
+    NoDrive => "errors.no_drive",
+    /// Automatic drive selection found more than one candidate.
+    ChooseDrive => "errors.choose_drive",
+    /// The drive's tray must be closed before updating.
+    TrayOpen => "errors.tray_open",
+    /// A loaded disc must be removed before updating.
+    DiscPresent => "errors.disc_present",
+    /// The requested operation is unavailable for the selected drive.
+    UnsupportedDrive => "errors.unsupported_drive",
+    /// The operator declined before the update began.
+    Cancelled => "ui.cancelled_no_firmware_was_written",
+    /// The live drive did not confirm that freemkv firmware is installed.
+    FirmwareNotDetected => "errors.drive_firmware_unconfirmed",
+    /// Backup bypass needs an interactive answer before an update can start.
+    BackupConfirmationRequired => "errors.backup_confirmation_required",
 }
 
 impl std::fmt::Display for IssueCode {
@@ -101,7 +87,7 @@ impl std::error::Error for IssueCode {}
 /// Give an unclassified internal cause its domain boundary's explicit meaning.
 /// Existing typed causes and transport/file evidence always retain their guidance.
 pub fn explain(error: anyhow::Error, code: IssueCode) -> anyhow::Error {
-    if UserError::of(&error).id == "errors.unexpected" {
+    if !error.is::<IssueCode>() && UserError::of(&error).id == "errors.unexpected" {
         error.context(code)
     } else {
         error
@@ -167,6 +153,11 @@ impl UserError {
             "errors.hardware_mismatch"
         } else if error.is::<crate::backend::UnsupportedFamilyOverride>() {
             "recovery.family_override_unsupported"
+        } else if matches!(
+            error.downcast_ref::<IssueCode>(),
+            Some(IssueCode::BackupRequired)
+        ) {
+            "errors.backup_required"
         } else if error.is::<CurrentFirmwareRequired>() {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
@@ -214,7 +205,9 @@ impl UserError {
                 std::io::ErrorKind::TimedOut => "errors.connection",
                 _ => "errors.file_access",
             }
-        } else if error.is::<crate::platform::ScsiSenseError>() {
+        } else if error.is::<crate::platform::ScsiSenseError>()
+            || error.is::<crate::backend::detection::Unavailable>()
+        {
             "errors.connection"
         } else {
             "errors.unexpected"
@@ -316,34 +309,30 @@ mod tests {
     }
 
     #[test]
-    fn every_application_issue_has_guidance_in_every_catalog() {
-        use IssueCode::*;
-        for code in [
-            CurrentIncomplete,
-            FirmwareInvalid,
-            CurrentMismatch,
-            DriveChanged,
-            Connection,
-            PreparationExpired,
-            BackupDestination,
-            BackupMismatch,
-            BackupFailed,
-            Acknowledgement,
-            AlreadyModified,
-            UnsupportedFirmware,
-            IncompatibleFirmware,
-            UpdateUncertain,
-            CommandOptions,
-            Unexpected,
-            NoDrive,
-            ChooseDrive,
-            TrayOpen,
-            DiscPresent,
-            UnsupportedDrive,
-            Cancelled,
-            FirmwareNotDetected,
-            BackupConfirmationRequired,
+    fn an_explicit_unexpected_cause_is_never_guessed_by_a_later_boundary() {
+        for boundary in [
+            IssueCode::FirmwareInvalid,
+            IssueCode::Connection,
+            IssueCode::UnsupportedFirmware,
+            IssueCode::BackupFailed,
         ] {
+            let cause = anyhow::anyhow!("private library failure")
+                .context(IssueCode::Unexpected)
+                .context("preparation wrapper");
+            let error = explain(cause, boundary);
+            assert_eq!(UserError::of(&error).id, "errors.unexpected");
+            assert!(format!("{error:#}").contains("private library failure"));
+        }
+        let error = explain(
+            anyhow::anyhow!("untyped boundary failure"),
+            IssueCode::FirmwareInvalid,
+        );
+        assert_eq!(UserError::of(&error).id, "errors.firmware_invalid");
+    }
+
+    #[test]
+    fn every_application_issue_has_guidance_in_every_catalog() {
+        for &code in IssueCode::ALL {
             for language in Language::ALL {
                 let text = localization::get(language, code.message_id());
                 assert!(!text.trim().is_empty());
@@ -378,8 +367,20 @@ mod tests {
 
     #[test]
     fn write_evidence_overrides_even_a_typed_file_or_hardware_reason() {
-        for cause in [IssueCode::FirmwareInvalid, IssueCode::CurrentIncomplete] {
-            let error = anyhow::Error::new(cause).context(UpdateFailure {
+        for cause in [
+            anyhow::Error::new(IssueCode::FirmwareInvalid),
+            anyhow::Error::new(IssueCode::CurrentIncomplete),
+            anyhow::Error::new(HardwareMismatch {
+                installed_model: "installed model".into(),
+                target_model: "selected model".into(),
+                source: anyhow::anyhow!("private compatibility details"),
+            }),
+            anyhow::Error::new(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "private file error",
+            )),
+        ] {
+            let error = cause.context(UpdateFailure {
                 phase: "transfer".into(),
                 write_started: true,
                 progress: crate::backend::UpdateProgress::PayloadAttempted,

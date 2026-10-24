@@ -186,7 +186,7 @@ fn execute(
     plan: &recovery::PreparedRecovery,
 ) -> Result<UpdateOutcome> {
     super::flash::log_transfer(plan.plan());
-    let (result, accepted_bytes, upload_complete, entry_attempted) = {
+    let (result, accepted_bytes, upload_complete, entry_attempted, payload_attempted) = {
         let shared = SharedDevice::new(&mut *writer);
         let (mut reads, mut writes) =
             (ScsiTransport::reads(&shared), ScsiTransport::flash(&shared));
@@ -203,6 +203,7 @@ fn execute(
             runtime.payload_bytes_accepted(),
             runtime.upload_complete(),
             writes.empty_write_attempted(),
+            writes.payload_write_attempted(),
         )
     };
     let completion = result.map_err(|error| {
@@ -214,8 +215,11 @@ fn execute(
         }
         let (phase, write_started) = match &error {
             recovery::Error::Flash(error) => super::flash::failure_phase(error),
-            recovery::Error::Startup => ("target startup confirmation", true),
-            _ => ("recovery receiver preflight", false),
+            recovery::Error::Startup(_) => ("target startup confirmation", true),
+            _ => (
+                "recovery receiver checks",
+                entry_attempted || payload_attempted,
+            ),
         };
         let progress =
             match &error {
@@ -233,7 +237,7 @@ fn execute(
                 recovery::Error::Flash(mediatek_optical::update::FlashError::Transfer {
                     ..
                 }) => crate::backend::UpdateProgress::PayloadAccepted,
-                recovery::Error::Startup => crate::backend::UpdateProgress::UploadComplete,
+                recovery::Error::Startup(_) => crate::backend::UpdateProgress::UploadComplete,
                 recovery::Error::Flash(_) if upload_complete => {
                     crate::backend::UpdateProgress::UploadComplete
                 }
@@ -241,6 +245,10 @@ fn execute(
                     crate::backend::UpdateProgress::PayloadAccepted
                 }
                 recovery::Error::Flash(_) => crate::backend::UpdateProgress::PayloadAttempted,
+                _ if upload_complete => crate::backend::UpdateProgress::UploadComplete,
+                _ if accepted_bytes > 0 => crate::backend::UpdateProgress::PayloadAccepted,
+                _ if payload_attempted => crate::backend::UpdateProgress::PayloadAttempted,
+                _ if entry_attempted => crate::backend::UpdateProgress::EntryAttempted,
                 _ => crate::backend::UpdateProgress::Preflight,
             };
         let source = match error {

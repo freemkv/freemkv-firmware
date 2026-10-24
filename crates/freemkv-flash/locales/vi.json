@@ -1,6 +1,11 @@
 {
   "language_name": "Tiếng Việt",
   "messages": {
+    "errors.backup_required": "Bản cập nhật này yêu cầu bản sao lưu đầy đủ của firmware đã cài đặt. Hãy lưu báo cáo chẩn đoán để được trợ giúp.",
+    "confirm.proceed": "Tiếp tục?",
+    "confirm.non_interactive": "Tiếp tục với sự đồng ý đã được cung cấp cho lệnh này.",
+    "errors.current_invalid": "Không thể xác thực tệp firmware hiện tại đã chọn. Hãy chọn tệp đầy đủ khớp với firmware được cài trên ổ đĩa này.",
+    "errors.file_dialog": "Cửa sổ chọn tệp không thể hoàn tất thao tác. Hãy thử lại hoặc lưu báo cáo chẩn đoán để được trợ giúp.",
     "errors.backup_confirmation_required": "Bản cập nhật này cần câu trả lời của bạn trước khi tiếp tục mà không có bản sao lưu. Hãy chạy lệnh trong cửa sổ dòng lệnh nơi bạn có thể trả lời câu hỏi.",
     "errors.drive_firmware_unconfirmed": "Ổ đĩa không xác nhận rằng đang chạy phần mềm điều khiển freemkv. Hãy kiểm tra xem bạn đã chọn đúng ổ đĩa chưa. Nếu đã chọn đúng, hãy lưu báo cáo chẩn đoán để được trợ giúp.",
     "errors.backup_partial": "Chỉ đọc được một phần phần mềm điều khiển. Tệp đã lưu không đầy đủ: không dùng tệp này để khôi phục ổ đĩa. Không có phần mềm điều khiển nào được ghi. Hãy kiểm tra kết nối và tạo bản sao lưu đầy đủ mới.",
