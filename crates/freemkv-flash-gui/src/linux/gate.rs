@@ -95,15 +95,11 @@ fn firmware_pickers(shell: &Rc<Shell>, g: &mut Gate) {
                 picker = gtk::Window::list_toplevels()
                     .into_iter()
                     .find_map(|widget| {
-                        widget
-                            .downcast::<gtk::Window>()
-                            .ok()
-                            .filter(|dialog| {
-                                // FileDialog owns this fallback internally. Inspect its
-                                // native type without using the deprecated construction API.
-                                dialog.type_().name() == "GtkFileChooserDialog"
-                                    && dialog.is_visible()
-                            })
+                        widget.downcast::<gtk::Window>().ok().filter(|dialog| {
+                            // FileDialog owns this fallback internally. Inspect its
+                            // native type without using the deprecated construction API.
+                            dialog.type_().name() == "GtkFileChooserDialog" && dialog.is_visible()
+                        })
                     });
             }
             g.check(
