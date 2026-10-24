@@ -13,7 +13,6 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
-use freemkv_flash::workflow::Event;
 use winsafe::{self as w, co, msg, prelude::*};
 
 use super::{send_raw, Shell, TDM_CLICK_BUTTON, TD_CANCEL};
@@ -25,7 +24,6 @@ const TIMER_GATE: usize = 9;
 /// Probe the blocked-close warning from its nested native message loop.
 const TIMER_CLOSE_PROBE: usize = 10;
 const CLOSE_MARKER: &str = "GUI gate: worker polled while the close warning was visible";
-const BM_CLICK: u32 = 0x00F5;
 const TDM_CLICK_VERIFICATION: u32 = 0x0400 + 113;
 /// `PrintWindow`: draw the full content, DirectComposition included.
 const PW_RENDERFULLCONTENT: u32 = 2;
@@ -207,7 +205,7 @@ fn close_warning(me: &Shell, g: &mut Gate) {
         probe.as_ref().is_some_and(|p| {
             p.dismissal_posted && !p.timed_out && close_dialog(me, Some(&p.expected)).is_none()
         }),
-        "native OK button clicked and warning gone before WM_CLOSE returned",
+        "native close posted and warning gone before WM_CLOSE returned without timeout",
     );
     g.check(
         "close-warning-keeps-job-and-window",
@@ -291,25 +289,18 @@ fn probe_close_warning(me: &Shell) {
             p.opened = true;
         }
     });
-    let sent = sender.send(Msg::Event(Event::Message(CLOSE_MARKER.into())));
+    let sent = sender.send(gui_gate::worker_message(CLOSE_MARKER));
     // This is the shell's actual registered polling callback, reached with MessageBox
     // still on the stack. Unfixed code panics here on the App's retained Ref borrow.
     eprintln!("GATE TRACE close-warning: entering production WM_TIMER");
     send_raw(me.wnd.hwnd(), co::WM::TIMER.raw(), super::TIMER_TICK, 0);
     let polled = sent.is_ok() && me.app.borrow().log.iter().any(|s| s == CLOSE_MARKER);
     eprintln!("GATE TRACE close-warning: production WM_TIMER returned; marker {polled}");
-    // Use the actual native button so it supplies its HWND in BN_CLICKED. Queue the click
-    // for MessageBox's loop after this nested timer returns, rather than synthesizing a
-    // menu-form WM_COMMAND with no control HWND.
-    let _ = dialog.SetActiveWindow();
-    let posted = dialog.GetDlgItem(1).and_then(|button| unsafe {
-        button.PostMessage(msg::Wm {
-            msg_id: co::WM::from_raw(BM_CLICK),
-            wparam: 0,
-            lparam: 0,
-        })
-    });
-    eprintln!("GATE TRACE close-warning: native OK click queued {posted:?}");
+    // Dismiss through the warning's native close action. Do not assume the OS uses an
+    // IDOK child control: the hosted Windows warning does not expose that control ID.
+    // Posting lets MessageBox process the close after this nested timer returns.
+    let posted = unsafe { dialog.PostMessage(msg::WmClose {}) };
+    eprintln!("GATE TRACE close-warning: native warning close queued {posted:?}");
     CLOSE_PROBE.with(|p| {
         if let Some(p) = p.borrow_mut().as_mut() {
             p.polled = polled;

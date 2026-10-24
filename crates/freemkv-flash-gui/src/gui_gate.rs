@@ -161,6 +161,13 @@ pub fn open_flash_sheet(app: &mut App) {
     });
 }
 
+/// A synthetic worker event for the Windows gate's real polling-handler probe. Keep core
+/// event construction here with the other fixtures, outside the native shell.
+#[cfg(target_os = "windows")]
+pub(crate) fn worker_message(text: &str) -> crate::ui::Msg {
+    crate::ui::Msg::Event(freemkv_flash::workflow::Event::Message(text.into()))
+}
+
 /// The model is still the gate's: inert, its profile answered, and no worker or profile
 /// read running.
 pub fn inert(app: &App) -> bool {
