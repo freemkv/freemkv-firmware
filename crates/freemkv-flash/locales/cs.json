@@ -1,6 +1,8 @@
 {
   "language_name": "Čeština",
   "messages": {
+    "errors.startup_setting_restored": "Původní nastavení spouštění jednotky bylo obnoveno a ověřeno. Před dalším pokusem uložte diagnostickou zprávu a požádejte o pomoc.",
+    "errors.startup_setting_uncertain": "Původní nastavení spouštění jednotky se nepodařilo obnovit nebo ověřit. Uložte diagnostickou zprávu a před dalším pokusem nechte jednotku zkontrolovat.",
     "errors.backup_required": "Tato aktualizace vyžaduje úplnou zálohu nainstalovaného firmwaru. Uložte diagnostickou zprávu a požádejte o pomoc.",
     "confirm.proceed": "Pokračovat?",
     "confirm.non_interactive": "Pokračuje se se souhlasem, který již byl tomuto příkazu udělen.",

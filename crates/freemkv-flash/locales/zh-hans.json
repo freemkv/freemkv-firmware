@@ -1,6 +1,8 @@
 {
   "language_name": "简体中文",
   "messages": {
+    "errors.startup_setting_restored": "已恢复并验证光驱原来的启动设置。请保存诊断报告并寻求帮助，然后再重试。",
+    "errors.startup_setting_uncertain": "无法恢复或验证光驱原来的启动设置。请保存诊断报告，并请专业人员检查光驱后再重试。",
     "errors.backup_required": "此更新需要已安装固件的完整备份。请保存诊断报告以寻求帮助。",
     "confirm.proceed": "继续吗？",
     "confirm.non_interactive": "按照此前已为此命令提供的同意继续。",

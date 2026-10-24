@@ -1,6 +1,8 @@
 {
   "language_name": "Bahasa Indonesia",
   "messages": {
+    "errors.startup_setting_restored": "Pengaturan awal mulai drive telah dipulihkan dan diverifikasi. Simpan laporan diagnostik untuk mendapatkan bantuan sebelum mencoba lagi.",
+    "errors.startup_setting_uncertain": "Pengaturan awal mulai drive tidak dapat dipulihkan atau diverifikasi. Simpan laporan diagnostik dan mintalah pemeriksaan drive sebelum mencoba lagi.",
     "errors.backup_required": "Pembaruan ini memerlukan cadangan lengkap firmware yang terpasang. Simpan laporan diagnostik untuk mendapatkan bantuan.",
     "confirm.proceed": "Lanjutkan?",
     "confirm.non_interactive": "Melanjutkan dengan persetujuan yang telah diberikan untuk perintah ini.",

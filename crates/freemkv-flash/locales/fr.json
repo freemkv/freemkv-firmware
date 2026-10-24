@@ -1,6 +1,8 @@
 {
   "language_name": "Français",
   "messages": {
+    "errors.startup_setting_restored": "Le réglage de démarrage initial du lecteur a été restauré et vérifié. Enregistrez un rapport de diagnostic pour obtenir de l’aide avant de réessayer.",
+    "errors.startup_setting_uncertain": "Le réglage de démarrage initial du lecteur n’a pas pu être restauré ou vérifié. Enregistrez un rapport de diagnostic et faites vérifier le lecteur avant de réessayer.",
     "errors.backup_required": "Cette mise à jour nécessite une sauvegarde complète du micrologiciel installé. Enregistrez un rapport de diagnostic pour obtenir de l’aide.",
     "confirm.proceed": "Continuer ?",
     "confirm.non_interactive": "L’opération continue avec le consentement déjà fourni à cette commande.",

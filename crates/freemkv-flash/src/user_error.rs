@@ -52,6 +52,10 @@ define_issue_codes! {
     UnsupportedFirmware => "errors.unsupported_firmware",
     /// The firmware's hardware differs; no display identity was available.
     IncompatibleFirmware => "errors.incompatible_firmware",
+    /// A failed update preparation restored and verified the original startup setting.
+    StartupSettingRestored => "errors.startup_setting_restored",
+    /// The original startup setting could not be restored or verified.
+    StartupSettingUncertain => "errors.startup_setting_uncertain",
     /// Device completion or verification needs attention.
     UpdateUncertain => "errors.update_uncertain",
     /// Command options were rejected before any device operation.

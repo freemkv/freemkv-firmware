@@ -1,6 +1,8 @@
 {
   "language_name": "한국어",
   "messages": {
+    "errors.startup_setting_restored": "드라이브의 원래 시작 설정이 복원되고 확인되었습니다. 다시 시도하기 전에 진단 보고서를 저장하고 도움을 받으세요.",
+    "errors.startup_setting_uncertain": "드라이브의 원래 시작 설정을 복원하거나 확인할 수 없었습니다. 진단 보고서를 저장하고 다시 시도하기 전에 드라이브 점검을 받으세요.",
     "errors.backup_required": "이 업데이트에는 설치된 펌웨어의 전체 백업이 필요합니다. 진단 보고서를 저장하여 도움을 요청하세요.",
     "confirm.proceed": "계속하시겠습니까?",
     "confirm.non_interactive": "이 명령에 이미 제공된 동의에 따라 계속합니다.",

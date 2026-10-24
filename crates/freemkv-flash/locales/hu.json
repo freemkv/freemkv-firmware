@@ -1,6 +1,8 @@
 {
   "language_name": "Magyar",
   "messages": {
+    "errors.startup_setting_restored": "A meghajtó eredeti indítási beállítása vissza lett állítva és ellenőrizve lett. Újabb próbálkozás előtt mentse el a diagnosztikai jelentést, és kérjen segítséget.",
+    "errors.startup_setting_uncertain": "A meghajtó eredeti indítási beállítását nem sikerült visszaállítani vagy ellenőrizni. Mentse el a diagnosztikai jelentést, és újabb próbálkozás előtt ellenőriztesse a meghajtót.",
     "errors.backup_required": "Ehhez a frissítéshez a telepített firmware teljes biztonsági másolata szükséges. Mentsen diagnosztikai jelentést a segítségkéréshez.",
     "confirm.proceed": "Folytatja?",
     "confirm.non_interactive": "A folytatás a parancshoz már megadott beleegyezéssel történik.",

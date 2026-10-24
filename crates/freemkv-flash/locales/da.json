@@ -1,6 +1,8 @@
 {
   "language_name": "Dansk",
   "messages": {
+    "errors.startup_setting_restored": "Drevets oprindelige opstartsindstilling blev gendannet og bekræftet. Gem en diagnoserapport for at få hjælp, før du prøver igen.",
+    "errors.startup_setting_uncertain": "Drevets oprindelige opstartsindstilling kunne ikke gendannes eller bekræftes. Gem en diagnoserapport, og få drevet kontrolleret, før du prøver igen.",
     "errors.backup_required": "Denne opdatering kræver en komplet sikkerhedskopi af den installerede firmware. Gem en diagnosticeringsrapport for at få hjælp.",
     "confirm.proceed": "Fortsæt?",
     "confirm.non_interactive": "Fortsætter med det samtykke, der allerede er givet til denne kommando.",

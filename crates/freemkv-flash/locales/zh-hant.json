@@ -1,6 +1,8 @@
 {
   "language_name": "繁體中文",
   "messages": {
+    "errors.startup_setting_restored": "已還原並驗證光碟機原本的啟動設定。請儲存診斷報告並尋求協助，然後再重試。",
+    "errors.startup_setting_uncertain": "無法還原或驗證光碟機原本的啟動設定。請儲存診斷報告，並請專業人員檢查光碟機後再重試。",
     "errors.backup_required": "此更新需要已安裝韌體的完整備份。請儲存診斷報告以尋求協助。",
     "confirm.proceed": "繼續嗎？",
     "confirm.non_interactive": "依照先前已為此命令提供的同意繼續。",

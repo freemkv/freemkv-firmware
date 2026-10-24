@@ -1,6 +1,8 @@
 {
   "language_name": "Português",
   "messages": {
+    "errors.startup_setting_restored": "A definição original de arranque da unidade foi restaurada e verificada. Guarde um relatório de diagnóstico para obter ajuda antes de tentar novamente.",
+    "errors.startup_setting_uncertain": "Não foi possível restaurar ou verificar a definição original de arranque da unidade. Guarde um relatório de diagnóstico e solicite uma verificação da unidade antes de tentar novamente.",
     "errors.backup_required": "Esta atualização requer uma cópia de segurança completa do firmware instalado. Guarde um relatório de diagnóstico para obter ajuda.",
     "confirm.proceed": "Continuar?",
     "confirm.non_interactive": "A continuar com o consentimento já fornecido para este comando.",

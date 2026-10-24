@@ -1,6 +1,8 @@
 {
   "language_name": "Português (Brasil)",
   "messages": {
+    "errors.startup_setting_restored": "A configuração original de inicialização da unidade foi restaurada e verificada. Salve um relatório de diagnóstico para obter ajuda antes de tentar novamente.",
+    "errors.startup_setting_uncertain": "Não foi possível restaurar ou verificar a configuração original de inicialização da unidade. Salve um relatório de diagnóstico e solicite uma verificação da unidade antes de tentar novamente.",
     "errors.backup_required": "Esta atualização requer um backup completo do firmware instalado. Salve um relatório de diagnóstico para obter ajuda.",
     "confirm.proceed": "Continuar?",
     "confirm.non_interactive": "Continuando com o consentimento já fornecido para este comando.",

@@ -1,6 +1,8 @@
 {
   "language_name": "Tiếng Việt",
   "messages": {
+    "errors.startup_setting_restored": "Cài đặt khởi động ban đầu của ổ đĩa đã được khôi phục và xác minh. Hãy lưu báo cáo chẩn đoán để được trợ giúp trước khi thử lại.",
+    "errors.startup_setting_uncertain": "Không thể khôi phục hoặc xác minh cài đặt khởi động ban đầu của ổ đĩa. Hãy lưu báo cáo chẩn đoán và nhờ kiểm tra ổ đĩa trước khi thử lại.",
     "errors.backup_required": "Bản cập nhật này yêu cầu bản sao lưu đầy đủ của firmware đã cài đặt. Hãy lưu báo cáo chẩn đoán để được trợ giúp.",
     "confirm.proceed": "Tiếp tục?",
     "confirm.non_interactive": "Tiếp tục với sự đồng ý đã được cung cấp cho lệnh này.",

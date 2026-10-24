@@ -1,6 +1,8 @@
 {
   "language_name": "Suomi",
   "messages": {
+    "errors.startup_setting_restored": "Aseman alkuperäinen käynnistysasetus palautettiin ja vahvistettiin. Tallenna diagnostiikkaraportti saadaksesi apua ennen uutta yritystä.",
+    "errors.startup_setting_uncertain": "Aseman alkuperäistä käynnistysasetusta ei voitu palauttaa tai vahvistaa. Tallenna diagnostiikkaraportti ja tarkistuta asema ennen uutta yritystä.",
     "errors.backup_required": "Tämä päivitys edellyttää täydellistä varmuuskopiota asennetusta laiteohjelmistosta. Tallenna diagnostiikkaraportti avun saamista varten.",
     "confirm.proceed": "Jatketaanko?",
     "confirm.non_interactive": "Jatketaan tälle komennolle jo annetulla suostumuksella.",

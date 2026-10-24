@@ -1,6 +1,8 @@
 {
   "language_name": "Norsk",
   "messages": {
+    "errors.startup_setting_restored": "Stasjonens opprinnelige oppstartsinnstilling ble gjenopprettet og bekreftet. Lagre en diagnoserapport for å få hjelp før du prøver igjen.",
+    "errors.startup_setting_uncertain": "Stasjonens opprinnelige oppstartsinnstilling kunne ikke gjenopprettes eller bekreftes. Lagre en diagnoserapport, og få stasjonen kontrollert før du prøver igjen.",
     "errors.backup_required": "Denne oppdateringen krever en fullstendig sikkerhetskopi av den installerte fastvaren. Lagre en diagnostikkrapport for å få hjelp.",
     "confirm.proceed": "Fortsette?",
     "confirm.non_interactive": "Fortsetter med samtykket som allerede er gitt til denne kommandoen.",

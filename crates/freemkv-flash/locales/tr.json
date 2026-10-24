@@ -1,6 +1,8 @@
 {
   "language_name": "Türkçe",
   "messages": {
+    "errors.startup_setting_restored": "Sürücünün özgün başlangıç ayarı geri yüklendi ve doğrulandı. Yeniden denemeden önce yardım almak için bir tanılama raporu kaydedin.",
+    "errors.startup_setting_uncertain": "Sürücünün özgün başlangıç ayarı geri yüklenemedi veya doğrulanamadı. Bir tanılama raporu kaydedin ve yeniden denemeden önce sürücüyü kontrol ettirin.",
     "errors.backup_required": "Bu güncelleme, yüklü ürün yazılımının tam yedeğini gerektirir. Yardım almak için bir tanılama raporu kaydedin.",
     "confirm.proceed": "Devam edilsin mi?",
     "confirm.non_interactive": "Bu komut için önceden verilen onayla devam ediliyor.",

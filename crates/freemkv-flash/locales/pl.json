@@ -1,6 +1,8 @@
 {
   "language_name": "Polski",
   "messages": {
+    "errors.startup_setting_restored": "Oryginalne ustawienie uruchamiania napędu zostało przywrócone i zweryfikowane. Zapisz raport diagnostyczny, aby uzyskać pomoc przed ponowną próbą.",
+    "errors.startup_setting_uncertain": "Nie udało się przywrócić lub zweryfikować oryginalnego ustawienia uruchamiania napędu. Zapisz raport diagnostyczny i zleć sprawdzenie napędu przed ponowną próbą.",
     "errors.backup_required": "Ta aktualizacja wymaga kompletnej kopii zapasowej zainstalowanego oprogramowania układowego. Zapisz raport diagnostyczny, aby uzyskać pomoc.",
     "confirm.proceed": "Kontynuować?",
     "confirm.non_interactive": "Kontynuowanie za zgodą już udzieloną dla tego polecenia.",

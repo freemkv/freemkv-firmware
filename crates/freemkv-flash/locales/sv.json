@@ -1,6 +1,8 @@
 {
   "language_name": "Svenska",
   "messages": {
+    "errors.startup_setting_restored": "Enhetens ursprungliga startinställning återställdes och verifierades. Spara en diagnostikrapport för att få hjälp innan du försöker igen.",
+    "errors.startup_setting_uncertain": "Enhetens ursprungliga startinställning kunde inte återställas eller verifieras. Spara en diagnostikrapport och få enheten kontrollerad innan du försöker igen.",
     "errors.backup_required": "Denna uppdatering kräver en fullständig säkerhetskopia av den installerade firmwaren. Spara en diagnostikrapport för att få hjälp.",
     "confirm.proceed": "Fortsätta?",
     "confirm.non_interactive": "Fortsätter med det samtycke som redan getts för detta kommando.",

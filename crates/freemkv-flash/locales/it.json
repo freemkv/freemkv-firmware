@@ -1,6 +1,8 @@
 {
   "language_name": "Italiano",
   "messages": {
+    "errors.startup_setting_restored": "L’impostazione di avvio originale dell’unità è stata ripristinata e verificata. Salva un rapporto diagnostico per ricevere assistenza prima di riprovare.",
+    "errors.startup_setting_uncertain": "Non è stato possibile ripristinare o verificare l’impostazione di avvio originale dell’unità. Salva un rapporto diagnostico e fai controllare l’unità prima di riprovare.",
     "errors.backup_required": "Questo aggiornamento richiede un backup completo del firmware installato. Salva un rapporto diagnostico per ricevere assistenza.",
     "confirm.proceed": "Continuare?",
     "confirm.non_interactive": "L’operazione continua con il consenso già fornito a questo comando.",

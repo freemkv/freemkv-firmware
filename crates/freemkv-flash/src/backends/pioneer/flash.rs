@@ -180,6 +180,32 @@ fn execution_error(
     completed_passes: usize,
 ) -> anyhow::Error {
     let code = error.code();
+    // Startup parameter writes are device mutations, but do not enter UPDATE.
+    // Only expose rollback guidance before any update command or completed pass.
+    let startup_issue = if completed_passes == 0 && !error.firmware_write_started() {
+        use pioneer_optical::startup::migration::{Error, Rollback};
+        match &error {
+            pioneer_optical::receiver::ExecutionError::Startup(migration) => {
+                match migration.as_ref() {
+                    Error::Change { rollback, .. } | Error::Flash { rollback, .. } => {
+                        match rollback {
+                            Rollback::Restored => {
+                                Some(crate::user_error::IssueCode::StartupSettingRestored)
+                            }
+                            Rollback::Failed(_) => {
+                                Some(crate::user_error::IssueCode::StartupSettingUncertain)
+                            }
+                            Rollback::Unchanged | Rollback::UnsafeAfterFirmwareWrite => None,
+                        }
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
     let failure = crate::backend::UpdateFailure {
         phase: error.phase().to_string(),
         write_started: error.write_started(),
@@ -187,8 +213,6 @@ fn execution_error(
             crate::backend::UpdateProgress::UploadComplete
         } else if error.firmware_write_started() {
             crate::backend::UpdateProgress::PayloadAttempted
-        } else if error.write_started() {
-            crate::backend::UpdateProgress::EntryAttempted
         } else {
             crate::backend::UpdateProgress::Preflight
         },
@@ -199,6 +223,10 @@ fn execution_error(
             .collect(),
     };
     let error = anyhow::Error::new(error).context(format!("Pioneer update [{code}]; completion was not verified. Keep the pre-flash backup and diagnostic log"));
+    let error = match startup_issue {
+        Some(issue) => error.context(issue),
+        None => error,
+    };
     if failure.temporary_firmware {
         error.context("pristine Kernel restoration did not complete; the temporary Kernel may remain installed").context(failure)
     } else {

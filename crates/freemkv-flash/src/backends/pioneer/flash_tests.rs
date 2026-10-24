@@ -796,3 +796,230 @@ fn rejected_tray_never_announces_execution() {
     assert!(dev.writes.is_empty());
     assert!(!messages.borrow().iter().any(|m| m.contains("EXECUTING")));
 }
+
+#[test]
+fn startup_only_failures_report_blocked_with_truthful_rollback_guidance() {
+    use crate::{
+        backend::{UpdateFailure, UpdateImpact, UpdateProgress},
+        localization::Language,
+        user_error::UserError,
+    };
+    use pioneer_optical::{
+        receiver::ExecutionError,
+        startup::migration::{Error, Rollback},
+    };
+    let cause = || pioneer_optical::drive::Error::Transport(anyhow!("A0 failed"));
+    for (migration, expected) in [
+        (
+            Error::Change {
+                original: 0xffff,
+                source: cause(),
+                rollback: Rollback::Failed(cause()),
+            },
+            "errors.startup_setting_uncertain",
+        ),
+        (
+            Error::Change {
+                original: 0xffff,
+                source: cause(),
+                rollback: Rollback::Restored,
+            },
+            "errors.startup_setting_restored",
+        ),
+        (
+            Error::Flash {
+                original: 0xffff,
+                target: 0xfe24,
+                source: ExecutionError::Plan("preflight refused"),
+                rollback: Rollback::Restored,
+            },
+            "errors.startup_setting_restored",
+        ),
+        (
+            Error::Flash {
+                original: 0xffff,
+                target: 0xfe24,
+                source: ExecutionError::Plan("preflight refused"),
+                rollback: Rollback::Failed(cause()),
+            },
+            "errors.startup_setting_uncertain",
+        ),
+        (
+            Error::Flash {
+                original: 0xffff,
+                target: 0xffff,
+                source: ExecutionError::Plan("preflight refused"),
+                rollback: Rollback::Unchanged,
+            },
+            "errors.unexpected",
+        ),
+    ] {
+        let diagnostic = migration.to_string();
+        let expected_mutation = expected != "errors.unexpected";
+        let error = execution_error(ExecutionError::Startup(Box::new(migration)), true, 0);
+        assert!(format!("{error:#}").contains(&diagnostic));
+        let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+        assert_eq!(failure.progress, UpdateProgress::Preflight);
+        assert_eq!(failure.impact(), UpdateImpact::Blocked);
+        assert!(!failure.temporary_firmware);
+        assert_eq!(failure.write_started, expected_mutation);
+        assert!(matches!(
+            error.downcast_ref::<ExecutionError<anyhow::Error>>(),
+            Some(ExecutionError::Startup(_))
+        ));
+        let guidance = UserError::of(&error);
+        assert_eq!(guidance.id, expected);
+        assert_eq!(guidance.consequence, Some("errors.update_blocked"));
+        for language in [Language::En, Language::De] {
+            let rendered = guidance.render(language);
+            assert!(!rendered.contains("A0"));
+            assert!(!rendered.contains("preflight refused"));
+            assert!(!rendered.contains("errors."));
+            if language == Language::En {
+                assert!(rendered.contains("No firmware was written"));
+                assert!(!rendered.contains("waiting for an update"));
+                assert!(!rendered.contains("Temporary firmware"));
+            }
+            if expected == "errors.startup_setting_restored" {
+                assert!(rendered.contains(if language == Language::En {
+                    "restored"
+                } else {
+                    "wiederhergestellt"
+                }));
+            }
+            if expected == "errors.startup_setting_uncertain" {
+                assert!(rendered.contains(if language == Language::En {
+                    "could not"
+                } else {
+                    "konnte"
+                }));
+            }
+        }
+    }
+}
+
+#[test]
+fn failed_a0_change_and_restore_never_attempt_update_commands() {
+    use pioneer_optical::{
+        drive::{Data, Transport},
+        receiver::ExecutionError,
+        startup::migration,
+    };
+    struct FailedA0 {
+        writes: Vec<Vec<u8>>,
+    }
+    impl Transport for FailedA0 {
+        type Error = anyhow::Error;
+        fn exec(&mut self, cdb: &[u8], data: Data<'_>) -> Result<usize> {
+            match data {
+                Data::In(bytes) => {
+                    assert_eq!(
+                        cdb,
+                        pioneer_optical::cdb::read_parameter_word(0x9f).unwrap()
+                    );
+                    bytes.copy_from_slice(&0xffffu16.to_be_bytes());
+                    Ok(2)
+                }
+                Data::Out(_) => {
+                    self.writes.push(cdb.to_vec());
+                    Err(anyhow!("A0 write failed"))
+                }
+                _ => panic!("unexpected command"),
+            }
+        }
+        fn sense(&self) -> Option<(u8, u8, u8)> {
+            None
+        }
+    }
+    let mut transport = FailedA0 { writes: vec![] };
+    let migration = migration::execute(
+        &mut transport,
+        0x9f,
+        0xfe24,
+        |_| -> Result<(), ExecutionError<anyhow::Error>> {
+            panic!("flash callback must never run after failed A0 change")
+        },
+    )
+    .unwrap_err();
+    assert_eq!(transport.writes.len(), 2);
+    assert!(transport
+        .writes
+        .iter()
+        .all(|cdb| cdb == &pioneer_optical::cdb::write_parameter_word(0x9f).unwrap()));
+    let error = execution_error(ExecutionError::Startup(Box::new(migration)), false, 0);
+    assert_eq!(
+        error
+            .downcast_ref::<crate::backend::UpdateFailure>()
+            .unwrap()
+            .progress,
+        crate::backend::UpdateProgress::Preflight
+    );
+    assert_eq!(
+        crate::user_error::UserError::of(&error).id,
+        "errors.startup_setting_uncertain"
+    );
+}
+
+#[test]
+fn startup_wrapper_never_hides_firmware_or_completed_pass_consequences() {
+    use pioneer_optical::{
+        receiver::ExecutionError,
+        startup::migration::{Error, Rollback},
+    };
+    for (source, passes) in [
+        (
+            ExecutionError::Flash(FlashError::Update {
+                pass: FlashPass::Initial,
+                source: UpdateError::Entry(pioneer_optical::drive::Error::Transport(anyhow!(
+                    "entry failed"
+                ))),
+            }),
+            0,
+        ),
+        (
+            ExecutionError::Flash(FlashError::Update {
+                pass: FlashPass::Initial,
+                source: UpdateError::Transfer {
+                    role: Role::Normal,
+                    offset: 0,
+                    length: 256,
+                    source: pioneer_optical::drive::Error::Transport(anyhow!("transfer failed")),
+                },
+            }),
+            0,
+        ),
+        (
+            ExecutionError::NormalMismatch {
+                pass: FlashPass::Initial,
+                address: 0,
+            },
+            0,
+        ),
+        (ExecutionError::Plan("restoration refused"), 1),
+    ] {
+        let error = execution_error(
+            ExecutionError::Startup(Box::new(Error::Flash {
+                original: 0xffff,
+                target: 0xfe24,
+                source,
+                rollback: Rollback::UnsafeAfterFirmwareWrite,
+            })),
+            true,
+            passes,
+        );
+        assert_ne!(
+            error
+                .downcast_ref::<crate::backend::UpdateFailure>()
+                .unwrap()
+                .impact(),
+            crate::backend::UpdateImpact::Blocked
+        );
+        assert!(error
+            .downcast_ref::<crate::user_error::IssueCode>()
+            .is_none());
+        assert_ne!(
+            crate::user_error::UserError::of(&error).consequence,
+            Some("errors.update_blocked")
+        );
+    }
+}

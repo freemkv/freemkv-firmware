@@ -1,6 +1,8 @@
 {
   "language_name": "Español (Latinoamérica)",
   "messages": {
+    "errors.startup_setting_restored": "Se restauró y verificó la configuración original de arranque de la unidad. Guarda un informe de diagnóstico para obtener ayuda antes de volver a intentarlo.",
+    "errors.startup_setting_uncertain": "No se pudo restaurar o verificar la configuración original de arranque de la unidad. Guarda un informe de diagnóstico y solicita una revisión de la unidad antes de volver a intentarlo.",
     "errors.backup_required": "Esta actualización requiere una copia de seguridad completa del firmware instalado. Guarda un informe de diagnóstico para obtener ayuda.",
     "confirm.proceed": "¿Continuar?",
     "confirm.non_interactive": "Se continúa con el consentimiento ya otorgado a este comando.",

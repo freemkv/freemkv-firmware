@@ -1,6 +1,8 @@
 {
   "language_name": "Català",
   "messages": {
+    "errors.startup_setting_restored": "La configuració original d’inici de la unitat s’ha restaurat i verificat. Deseu un informe de diagnòstic per obtenir ajuda abans de tornar-ho a provar.",
+    "errors.startup_setting_uncertain": "No s’ha pogut restaurar o verificar la configuració original d’inici de la unitat. Deseu un informe de diagnòstic i feu revisar la unitat abans de tornar-ho a provar.",
     "errors.backup_required": "Aquesta actualització requereix una còpia de seguretat completa del microprogramari instal·lat. Desa un informe de diagnòstic per obtenir ajuda.",
     "confirm.proceed": "Vols continuar?",
     "confirm.non_interactive": "Es continua amb el consentiment que ja has donat a aquesta ordre.",
