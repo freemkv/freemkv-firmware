@@ -79,6 +79,7 @@
     "errors.already_modified": "Tento firmware je už upravený. vyberte originálny OEM firmware súbor.",
     "errors.current_mismatch": "Informácie o aktuálnom firmvéri nezodpovedajú tejto mechanike. Vyberte správnu mechaniku a znova prečítajte jej firmvér alebo zvoľte zodpovedajúci súbor aktuálneho firmvéru.",
     "errors.firmware_invalid": "Tento súbor firmvéru nemohol byť čítaný alebo validovaný. Vyberte kompatibilný súbor OEM a skúste znova.",
+    "errors.backup_dump_guidance": "Zálohu sa nepodarilo dokončiť. {cause} Uložte surový výpis a pomocou možnosti „{submit_dump}“ v aplikácii nám ho odošlite, aby sme mohli problém preskúmať.",
     "errors.backup_failed": "Kompletná zálohovanie sa nedalo vytvoriť. skontrolujte optické pripojenie a skúste znova.",
     "errors.current_incomplete": "Súbor súčasného firmvéru nie je úplný. Vyberte úplnú kópiu nainštalovaného firmvéru alebo Čítať z jednotky.",
     "errors.no_drive": "Nenašla sa žiadna optická mechanika. Pripojte ju a obnovte zoznam.",

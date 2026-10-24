@@ -591,10 +591,18 @@ pub fn backup_with_replace(
     replace: bool,
 ) -> Result<()> {
     crate::user_error::read_only(crate::diagnostics::run("backup/dump", || {
-        backup_with_replace_inner(device, out, dump, replace).map_err(|error| {
-            crate::user_error::explain(error, crate::user_error::IssueCode::BackupFailed)
-        })
+        backup_with_replace_inner(device, out, dump, replace)
+            .map_err(|error| backup_error(error, dump))
     }))
+}
+
+fn backup_error(error: anyhow::Error, dump: bool) -> anyhow::Error {
+    let error = crate::user_error::explain(error, crate::user_error::IssueCode::BackupFailed);
+    if dump {
+        error
+    } else {
+        error.context(crate::user_error::BackupAttempt)
+    }
 }
 
 fn backup_with_replace_inner(

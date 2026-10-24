@@ -3361,3 +3361,60 @@ fn family_override_consent_is_revoked_when_selected_firmware_changes() {
     app.dispatch(Input::Chosen(Pick::RecoveryInput, "another.tar".into()));
     assert!(!app.recovery_bypass_family);
 }
+
+#[test]
+fn backup_worker_failure_guides_dump_submission_even_after_tab_change() {
+    let backup = Job::Backup {
+        out: "unused.tar".into(),
+        replace: false,
+    };
+    assert_eq!(
+        worker_panic_issue(&backup).id,
+        "errors.backup_dump_guidance"
+    );
+    let mut app = one_drive();
+    app.task = Task::Backup;
+    app.start_job("task.backup", app.device.clone(), backup);
+    app.task = Task::Inspect;
+    assert_eq!(app.runtime_issue().id, "errors.backup_dump_guidance");
+    drop(app.worker.take());
+    app.poll();
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.backup_dump_guidance");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    for language in crate::localization::Language::ALL {
+        assert!(issue
+            .render(language)
+            .contains(crate::localization::get(language, "action.submit_dump")));
+    }
+}
+
+#[test]
+fn backup_done_fallback_requests_dump_but_dump_failure_does_not() {
+    for (task, job, expected) in [
+        (
+            Task::Backup,
+            Job::Backup {
+                out: "unused.tar".into(),
+                replace: false,
+            },
+            "errors.backup_dump_guidance",
+        ),
+        (
+            Task::Dump,
+            Job::Dump {
+                out: "unused.bin".into(),
+                replace: false,
+            },
+            "errors.unexpected",
+        ),
+    ] {
+        let mut app = one_drive();
+        app.task = task;
+        app.start_job("task.backup", app.device.clone(), job);
+        finish(&mut app, Err("private failure".into()));
+        let issue = app.user_issue.as_ref().unwrap();
+        assert_eq!(issue.id, expected);
+        assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    }
+}

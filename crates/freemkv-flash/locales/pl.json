@@ -79,6 +79,7 @@
     "errors.already_modified": "Ten firmware jest już zmieniony. Wybierz oryginalny plik firmware OEM.",
     "errors.current_mismatch": "Informacje o obecnym oprogramowaniu napędu nie pasują do tego napędu. Wybierz właściwy napęd, a następnie ponownie odczytaj jego oprogramowanie lub wybierz pasujący plik obecnego oprogramowania.",
     "errors.firmware_invalid": "Ten plik firmware nie może być odczytany lub zatwierdzony. Wybierz kompatybilny plik OEM i spróbuj ponownie.",
+    "errors.backup_dump_guidance": "Nie udało się ukończyć kopii zapasowej. {cause} Zapisz surowy zrzut, a następnie użyj opcji „{submit_dump}” w aplikacji, aby nam go przesłać i umożliwić zbadanie problemu.",
     "errors.backup_failed": "Pełna kopia zapasów nie może być utworzona. sprawdź połączenie optycznego dysku i spróbuj ponownie.",
     "errors.current_incomplete": "Plik obecnego oprogramowania jest niekompletny. Wybierz pełną kopię zainstalowanego oprogramowania lub Odczytaj z napędu.",
     "errors.no_drive": "Nie znaleziono napędu optycznego. Podłącz napęd i odśwież listę.",

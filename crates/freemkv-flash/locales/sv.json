@@ -79,6 +79,7 @@
     "errors.already_modified": "Denna firmware är redan modifierad. Välj en original OEM firmware fil.",
     "errors.current_mismatch": "Uppgifterna om den aktuella firmwaren stämmer inte med den här enheten. Välj rätt enhet och läs firmwaren igen eller välj den tillhörande aktuella firmwarefilen.",
     "errors.firmware_invalid": "Denna firmware-fil kan inte läsas eller valideras. Välj en kompatibel OEM-fil och försök igen.",
+    "errors.backup_dump_guidance": "Säkerhetskopieringen kunde inte slutföras. {cause} Spara en rå dump och använd sedan ”{submit_dump}” i appen för att skicka den till oss så att vi kan undersöka problemet.",
     "errors.backup_failed": "En fullständig säkerhetskopiering kunde inte skapas. kontrollera den optiska drivrutinen och försök igen.",
     "errors.current_incomplete": "Filen med installerad firmware är ofullständig. Välj en fullständig kopia eller Läs från enheten.",
     "errors.no_drive": "Ingen optisk enhet hittades. Anslut enheten och uppdatera listan.",

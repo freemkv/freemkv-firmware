@@ -1087,13 +1087,22 @@ impl App {
     #[cfg(any(target_os = "windows", test))]
     pub(crate) fn runtime_issue(&self) -> workflow::UserError {
         if self.running() {
-            interrupted_issue(self.operation_may_write, self.failure_evidence.as_ref())
+            self.interrupted_operation_issue()
         } else {
             workflow::UserError {
                 id: "errors.unexpected",
                 arguments: Vec::new(),
                 consequence: None,
             }
+        }
+    }
+
+    fn interrupted_operation_issue(&self) -> workflow::UserError {
+        let issue = interrupted_issue(self.operation_may_write, self.failure_evidence.as_ref());
+        if self.result_task == Task::Backup {
+            issue.with_backup_guidance()
+        } else {
+            issue
         }
     }
 
@@ -2145,12 +2154,10 @@ impl App {
                                 self.failure = None;
                             }
                             Err(_) => {
-                                let issue = self.user_issue.clone().unwrap_or_else(|| {
-                                    interrupted_issue(
-                                        self.operation_may_write,
-                                        self.failure_evidence.as_ref(),
-                                    )
-                                });
+                                let issue = self
+                                    .user_issue
+                                    .clone()
+                                    .unwrap_or_else(|| self.interrupted_operation_issue());
                                 let message = issue.encoded();
                                 self.status = message.clone();
                                 self.failure = Some(message);
@@ -2224,10 +2231,7 @@ impl App {
                         self.recovery_planning = None;
                         self.prepared_recovery = None;
                         self.end_flash();
-                        let issue = interrupted_issue(
-                            self.operation_may_write,
-                            self.failure_evidence.as_ref(),
-                        );
+                        let issue = self.interrupted_operation_issue();
                         self.status = issue.encoded();
                         self.failure = Some(issue.encoded());
                         self.user_issue = Some(issue);
@@ -3346,7 +3350,12 @@ fn job_may_write(job: &Job) -> bool {
 }
 
 fn worker_panic_issue(job: &Job) -> workflow::UserError {
-    interrupted_issue(job_may_write(job), None)
+    let issue = interrupted_issue(job_may_write(job), None);
+    if matches!(job, Job::Backup { .. }) {
+        issue.with_backup_guidance()
+    } else {
+        issue
+    }
 }
 
 fn interrupted_issue(

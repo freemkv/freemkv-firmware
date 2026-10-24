@@ -79,6 +79,7 @@
     "errors.already_modified": "Bu firmware zaten değiştirilmiştir. OEM firmware dosyasını seçin.",
     "errors.current_mismatch": "Mevcut aygıt yazılımı bilgileri bu sürücüyle eşleşmiyor. Amaçladığınız sürücüyü seçin, ardından aygıt yazılımını yeniden okuyun veya eşleşen mevcut aygıt yazılımı dosyasını seçin.",
     "errors.firmware_invalid": "Bu firmware dosyası okunamaz veya doğrulanamaz. uyumlu bir OEM dosyasını seçin ve tekrar deneyin.",
+    "errors.backup_dump_guidance": "Yedekleme tamamlanamadı. {cause} Ham bir döküm kaydedin, ardından sorunu inceleyebilmemiz için uygulamadaki “{submit_dump}” seçeneğiyle bize gönderin.",
     "errors.backup_failed": "Tam bir yedekleme oluşturulamaz. optik sürücü bağlantısını kontrol edin ve tekrar deneyin.",
     "errors.current_incomplete": "Mevcut ürün yazılımı dosyası eksik. Kurulu ürün yazılımının tam kopyasını veya Sürücüden oku seçeneğini seçin.",
     "errors.no_drive": "Optik sürücü bulunamadı. Sürücüyü bağlayıp listeyi yenileyin.",

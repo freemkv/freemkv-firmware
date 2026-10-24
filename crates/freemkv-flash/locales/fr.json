@@ -79,6 +79,7 @@
     "errors.already_modified": "Ce firmware est déjà modifié. Choisissez un fichier firmware OEM original.",
     "errors.current_mismatch": "Les informations du micrologiciel actuel ne correspondent pas à ce lecteur. Sélectionnez le bon lecteur, puis relisez son micrologiciel ou choisissez le fichier actuel correspondant.",
     "errors.firmware_invalid": "Ce fichier de firmware ne peut pas être lu ou validé. Choisissez un fichier OEM compatible et essayez à nouveau.",
+    "errors.backup_dump_guidance": "La sauvegarde n’a pas pu être terminée. {cause} Enregistrez un dump brut, puis utilisez « {submit_dump} » dans l’application pour nous l’envoyer afin que nous puissions examiner le problème.",
     "errors.backup_failed": "Une sauvegarde complète ne pouvait pas être créée. vérifier la connexion optique et essayer à nouveau.",
     "errors.current_incomplete": "Le fichier du micrologiciel actuel est incomplet. Choisissez une copie complète du micrologiciel installé ou Lecture depuis le lecteur.",
     "errors.no_drive": "Aucun lecteur optique n’a été trouvé. Branchez le lecteur et actualisez la liste.",

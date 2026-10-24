@@ -79,6 +79,7 @@
     "errors.already_modified": "Ez a firmware már módosult. Válasszon egy eredeti OEM firmware fájlt.",
     "errors.current_mismatch": "A jelenlegi firmware adatai nem egyeznek ezzel a meghajtóval. Válassza ki a megfelelő meghajtót, majd olvassa ki újra a firmware-t, vagy válassza ki a hozzá tartozó jelenlegi firmware-fájlt.",
     "errors.firmware_invalid": "Ez a firmware fájl nem olvasható vagy validálható. Válasszon egy kompatibilis OEM fájlt, és próbálja meg újra.",
+    "errors.backup_dump_guidance": "A biztonsági mentést nem sikerült befejezni. {cause} Mentsen egy nyers memóriaképet, majd az alkalmazás „{submit_dump}” lehetőségével küldje el nekünk, hogy kivizsgálhassuk a problémát.",
     "errors.backup_failed": "A teljes biztonsági mentés nem hozható létre. Ellenőrizze az optikai diszkont, és próbálja meg újra.",
     "errors.current_incomplete": "A jelenlegi firmware fájlja hiányos. Válassza a telepített firmware teljes másolatát vagy az Olvasás a meghajtóról lehetőséget.",
     "errors.no_drive": "Nem található optikai meghajtó. Csatlakoztassa a meghajtót, és frissítse a listát.",
