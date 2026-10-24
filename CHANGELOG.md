@@ -12,6 +12,8 @@ Versions are independent of the freemkv ripping applications.
 - Identify Pioneer and MediaTek drives from validated protocol responses, independent
   of vendor/model branding. ASUS SBC-06D2X-U and other OEM-branded Pioneer drives
   now reach the same backend; conflicting signatures are refused.
+- Preserve native SCSI sense codes during read-only protocol probes so unsupported
+  commands remain distinguishable from transport failures.
 - Share read-only discovery across normal and recovery flows. Preserve transport
   errors and Current-assisted recovery for loaders with incomplete identity.
 - Use matching protocol-evidence APIs in pioneer-optical 1.0.3 and mediatek-optical
