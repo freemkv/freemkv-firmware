@@ -2645,6 +2645,139 @@ fn failed_update_without_saved_log_keeps_cause_and_recovery_advice_accessible() 
 }
 
 #[test]
+fn report_success_receipt_survives_worker_exit() {
+    let mut app = App::with_drives(Vec::new());
+    let (tx, rx) = mpsc::channel();
+    app.report_rx = Some(rx);
+    app.report_control = Some(crate::support::Submission::new());
+    tx.send(ReportMsg::Progress("Uploading report".into()))
+        .unwrap();
+    tx.send(ReportMsg::Finished(Ok(
+        "Report received: receipt-123".into()
+    )))
+    .unwrap();
+    drop(tx);
+
+    assert_eq!(app.poll(), [Effect::StopTicking]);
+    assert_eq!(
+        app.diagnostic_notice.as_deref(),
+        Some("Report received: receipt-123")
+    );
+    assert!(app.report_rx.is_none());
+    assert!(app.report_control.is_none());
+    assert!(!app.log.iter().any(|line| line.contains("outcome unknown")));
+}
+
+#[test]
+fn report_success_finishes_before_worker_exit_even_after_cancellation() {
+    for cancel in [false, true] {
+        let mut app = App::with_drives(Vec::new());
+        let (tx, rx) = mpsc::channel();
+        app.report_rx = Some(rx);
+        app.report_control = Some(crate::support::Submission::new());
+        tx.send(ReportMsg::Progress("Uploading report".into()))
+            .unwrap();
+        assert!(app.poll().is_empty());
+        assert_eq!(app.diagnostic_notice.as_deref(), Some("Uploading report"));
+        assert!(app.report_rx.is_some());
+        assert!(app.report_control.is_some());
+        // An empty queue with the worker alive is still in progress.
+        assert!(app.poll().is_empty());
+        assert!(app.report_rx.is_some());
+        if cancel {
+            app.dispatch(Input::CancelReport);
+            assert!(app.report_control.as_ref().unwrap().cancelled());
+        }
+        tx.send(ReportMsg::Finished(Ok(
+            "Report received: receipt-123".into()
+        )))
+        .unwrap();
+        assert_eq!(app.poll(), [Effect::StopTicking]);
+        assert_eq!(
+            app.diagnostic_notice.as_deref(),
+            Some("Report received: receipt-123")
+        );
+        assert!(app.report_rx.is_none());
+        assert!(app.report_control.is_none());
+        drop(tx);
+        assert!(app.poll().is_empty());
+        assert_eq!(
+            app.diagnostic_notice.as_deref(),
+            Some("Report received: receipt-123")
+        );
+        assert!(!app.log.iter().any(|line| line.contains("outcome unknown")));
+    }
+}
+
+#[test]
+fn report_failure_keeps_detailed_error_and_finishes_before_worker_exit() {
+    let mut app = App::with_drives(Vec::new());
+    let (tx, rx) = mpsc::channel();
+    app.report_rx = Some(rx);
+    app.report_control = Some(crate::support::Submission::new());
+    tx.send(ReportMsg::Finished(Err("Upload failed: HTTP 503".into())))
+        .unwrap();
+    assert_eq!(app.poll(), [Effect::StopTicking]);
+    assert_eq!(
+        app.diagnostic_notice.as_deref(),
+        Some("errors.submit_report")
+    );
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line == "Could not submit report: Upload failed: HTTP 503"));
+    assert!(app.report_rx.is_none());
+    assert!(app.report_control.is_none());
+    drop(tx);
+    assert!(app.poll().is_empty());
+    assert_eq!(
+        app.diagnostic_notice.as_deref(),
+        Some("errors.submit_report")
+    );
+}
+
+#[test]
+fn report_progress_without_completion_is_unknown_even_after_cancellation() {
+    for cancel in [false, true] {
+        let mut app = App::with_drives(Vec::new());
+        let (tx, rx) = mpsc::channel();
+        app.report_rx = Some(rx);
+        app.report_control = Some(crate::support::Submission::new());
+        tx.send(ReportMsg::Progress("Uploading report".into()))
+            .unwrap();
+        if cancel {
+            app.dispatch(Input::CancelReport);
+        }
+        drop(tx);
+        assert_eq!(app.poll(), [Effect::StopTicking]);
+        assert_eq!(app.diagnostic_notice.as_deref(), Some("errors.worker"));
+        assert!(app
+            .log
+            .iter()
+            .any(|line| line.contains("submission outcome unknown")));
+        assert!(app.report_rx.is_none());
+        assert!(app.report_control.is_none());
+    }
+}
+
+#[test]
+fn report_completion_keeps_ticking_for_other_active_workers() {
+    let mut app = App::with_drives(Vec::new());
+    let (_profile_tx, profile_rx) = mpsc::channel();
+    app.profile_rx = Some(profile_rx);
+    let (tx, rx) = mpsc::channel();
+    app.report_rx = Some(rx);
+    app.report_control = Some(crate::support::Submission::new());
+    tx.send(ReportMsg::Finished(Ok("Report received".into())))
+        .unwrap();
+    assert!(app.poll().is_empty());
+    assert_eq!(app.diagnostic_notice.as_deref(), Some("Report received"));
+    assert!(app.report_rx.is_none());
+    assert!(app.report_control.is_none());
+    assert!(app.profile_rx.is_some());
+}
+
+#[test]
 fn report_cancellation_is_available_and_completion_restores_submit() {
     let mut app = one_drive();
     let control = crate::support::Submission::new();
@@ -2656,8 +2789,16 @@ fn report_cancellation_is_available_and_completion_restores_submit() {
     assert!(button.enabled);
     app.dispatch(Input::CancelReport);
     assert!(control.cancelled());
-    tx.send(Err("Report submission cancelled".into())).unwrap();
-    app.poll();
+    tx.send(ReportMsg::Finished(Err(
+        "Report submission cancelled".into()
+    )))
+    .unwrap();
+    assert_eq!(app.poll(), [Effect::StopTicking]);
+    assert_eq!(app.diagnostic_notice.as_deref(), Some("report.cancelled"));
+    assert!(app
+        .log
+        .iter()
+        .any(|line| line.contains("Report submission cancelled")));
     assert!(app.report_rx.is_none());
     assert!(app.report_control.is_none());
     assert_eq!(
