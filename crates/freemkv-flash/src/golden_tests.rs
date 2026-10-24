@@ -2850,8 +2850,19 @@ const PIONEER_REASONS: &[&str] = &[
     "P9",
     "P10",
     "P11",
+    "RECOVERY_TRAY",
     "FMT",
 ];
+
+fn recovery_tray_scenario(file: &str, title: &str) -> bool {
+    file == "pioneer_recover.txt"
+        && matches!(
+            title,
+            "Pioneer recover execute: receiver in kernel mode"
+                | "Pioneer recover execute: receiver in normal mode"
+                | "Pioneer recover execute: write fails on the 2nd command"
+        )
+}
 
 /// The `--recover` hint 954f51d dropped from the not-BD-or-DVR refusal.
 /// v0.11.2 could not reach that flash mode either: its CLI and GUI always
@@ -3048,6 +3059,13 @@ fn golden_parity_with_0_11_2() {
                 {
                     problems.push(format!(
                         "{kind} {file} :: {title}: reason must be from {reasons_allowed:?}, got {reasons:?}"
+                    ));
+                }
+                if reasons.iter().any(|r| r == "RECOVERY_TRAY")
+                    && !recovery_tray_scenario(file, title)
+                {
+                    problems.push(format!(
+                        "RECOVERY_TRAY is only valid for Pioneer Recovery execution goldens, got {file} :: {title}"
                     ));
                 }
                 if reasons.iter().any(|r| r == "P3")
