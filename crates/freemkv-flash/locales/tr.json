@@ -1,6 +1,7 @@
 {
   "language_name": "Türkçe",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Sürücü freemkv aygıt yazılımını kullandığını doğrulamadı. Amaçladığınız sürücüyü seçtiğinizi kontrol edin. Seçim doğruysa yardım almak için tanılama raporu kaydedin.",
     "errors.backup_partial": "Aygıt yazılımının yalnızca bir kısmı okunabildi. Kaydedilen dosya eksiktir: sürücüyü geri yüklemek için kullanmayın. Aygıt yazılımı yazılmadı. Bağlantıyı kontrol edin ve yeni bir tam yedek oluşturun.",
     "settings.language": "Dil",
     "errors.operation_failed": "İşlem başarısız oldu.",

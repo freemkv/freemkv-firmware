@@ -18,7 +18,7 @@
     "consent": "Keep the actual owned prepared recovery update through confirmation. Confirmation does not reopen input files or reacquire the installed firmware.",
     "execution": "Consume the prepared session once; lightweight receiver revalidation precedes the engine-owned write grant and library execution checks.",
     "verification": "Postwrite target identity and independent component readback remain mandatory.",
-    "recovery": "No automatic backup. Family checks remain enabled unless the operator explicitly requests the Recovery-only override. Integrity, receiver and chip checks still apply."
+    "recovery": "No automatic backup. Known supplied-file family mismatches are refused unless an explicit override is supported and requested. Pioneer retains its installed-family gate by default. MediaTek receivers without installed-family evidence retain the library's recovery admission policy. Receiver, integrity and chip checks still apply."
   },
   "progress": {
     "phases": ["reading", "saving", "preparing", "writing", "restarting", "verifying"],
@@ -35,6 +35,8 @@
   "required_validation": [
     "All 29 catalogs contain every user-issue and phase key",
     "Known mock update failures cannot fall through to the unexpected-error message",
+    "Packaging and offline command failures prove no firmware write; known verification and option refusals retain their cause",
+    "A lost worker or native event loop preserves active write uncertainty, while read-only tasks prove no firmware write",
     "Unsafe write evidence overrides every file or compatibility cause",
     "Supplied cross-family Current rejects before opening an invalid device selector",
     "Prepared recovery executes once without repeating acquisition and rejects a changed receiver",

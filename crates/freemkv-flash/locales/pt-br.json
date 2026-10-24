@@ -1,6 +1,7 @@
 {
   "language_name": "Português (Brasil)",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "A unidade não confirmou que está usando o firmware freemkv. Confira se selecionou a unidade correta. Se estiver correta, salve um relatório de diagnóstico para obter ajuda.",
     "errors.backup_partial": "Só foi possível ler parte do firmware. O arquivo salvo está incompleto: não o use para restaurar a unidade. Nenhum firmware foi gravado. Verifique a conexão e crie um novo backup completo.",
     "settings.language": "Idioma",
     "errors.operation_failed": "A operação falhou.",

@@ -1109,15 +1109,11 @@ fn a_failed_plan_shows_no_sheet() {
     );
     assert!(app.view().confirm.is_none() && app.pending.is_none());
     assert_eq!(
-        app.failure
-            .as_ref()
-            .map(|value| crate::localization::english(value))
-            .as_deref(),
-        Some(
-            crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
-                .as_str()
-        )
+        app.user_issue.as_ref().unwrap().consequence,
+        Some("errors.no_firmware_write")
     );
+    assert!(crate::localization::english(app.failure.as_ref().unwrap())
+        .contains("did not write firmware"));
     assert!(!app.running());
     assert!(app.dispatch(Input::Confirm).is_empty());
     assert_eq!(
@@ -1457,16 +1453,14 @@ fn failed_job_offers_log_export_next_to_the_error() {
     finish(&mut app, Err("Backup failed".into()));
     let results = app.view().results.unwrap();
     let failure = results.failure.unwrap();
-    assert_eq!(
-        failure.text,
-        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+    assert!(
+        failure.text.contains("No firmware was written")
+            || failure.text.contains("did not write firmware")
     );
+    assert!(failure.text.contains("Save a diagnostic report"));
     assert_eq!(failure.save_log.text, "Save Log…");
     assert_eq!(results.view_log.text, "View Log");
-    assert_eq!(
-        crate::localization::english(&app.status),
-        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
-    );
+    assert_eq!(crate::localization::english(&app.status), failure.text);
     assert!(app.log.iter().any(|line| line.contains("Backup failed")));
 }
 
@@ -1474,11 +1468,38 @@ fn failed_job_offers_log_export_next_to_the_error() {
 fn disconnected_worker_releases_controls_and_reports_failure() {
     let mut app = one_drive();
     app.dispatch(Input::ReadInfo);
+    assert_eq!(
+        app.runtime_issue().consequence,
+        Some("errors.no_firmware_write")
+    );
     drop(app.worker.take());
     assert_eq!(app.poll(), [Effect::StopTicking]);
     assert!(!app.running(), "a dead worker must not leave the app busy");
     assert!(app.log.iter().any(|l| l.contains("worker")));
-    assert_eq!(app.failure.as_deref(), Some(WORKER_GONE));
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.unexpected");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+}
+
+#[test]
+fn lost_update_worker_reports_uncertain_writes_and_discards_preparation() {
+    let mut app = one_drive();
+    app.prepared_recovery = Some(workflow::PreparedRecovery::default());
+    app.start_job(
+        "task.recovery",
+        app.device.clone(),
+        Job::ExecuteRecovery(workflow::PreparedRecovery::default()),
+    );
+    assert_eq!(app.runtime_issue().id, "errors.update_uncertain");
+    drop(app.worker.take());
+    app.poll();
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.update_uncertain");
+    assert!(issue.consequence.is_none());
+    assert!(app.prepared_recovery.is_none());
+    let status = crate::localization::english(&app.status);
+    assert!(status.contains("may have been written"));
+    assert!(!status.contains("No firmware was written"));
 }
 
 #[test]
@@ -1491,6 +1512,10 @@ fn completion_is_not_misreported_as_worker_disconnection() {
     app.poll();
     assert!(!app.running());
     assert_eq!(app.log.last().unwrap(), "✓ done.");
+    assert!(
+        app.runtime_issue().consequence.is_none(),
+        "a desktop fault after completion must not contradict the completed result"
+    );
 }
 
 #[test]
@@ -1587,12 +1612,9 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
         app.poll();
     }
     assert!(app.failure.is_some(), "{:?}", app.log);
-    assert!(
-        crate::localization::english(&app.status).starts_with(&crate::localization::text(
-            crate::localization::Language::En,
-            "errors.operation_failed"
-        ))
-    );
+    let issue = app.user_issue.as_ref().unwrap();
+    assert_eq!(issue.id, "errors.connection");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
     assert!(app.view().controls_enabled);
 }
 
@@ -1762,7 +1784,7 @@ fn worker_identifies_typed_inspection_cancellation_before_any_file_access() {
         .any(|message| matches!(message, Msg::Done(Err(_)))));
     assert!(!messages
         .iter()
-        .any(|message| matches!(message, Msg::UserGuidance(_))));
+        .any(|message| matches!(message, Msg::UserIssue(_))));
 }
 
 #[test]
@@ -2240,8 +2262,8 @@ fn logging_failure_retains_operation_and_terminal_interrupted_event() {
     drop(tx);
     app.poll();
     assert_eq!(
-        crate::localization::english(&app.status),
-        "Operation interrupted"
+        app.user_issue.as_ref().unwrap().consequence,
+        Some("errors.no_firmware_write")
     );
     let path = app
         .journal
@@ -2295,13 +2317,9 @@ fn typed_failure_keeps_phase_and_completed_stages_in_report() {
     app.poll();
     assert_eq!(
         crate::localization::english(&app.status),
-        format!(
-            "{} {}",
-            crate::localization::text(crate::localization::Language::En, "errors.operation_failed"),
-            crate::localization::text(
-                crate::localization::Language::En,
-                "errors.temporary_firmware"
-            )
+        crate::localization::text(
+            crate::localization::Language::En,
+            "errors.temporary_firmware"
         )
     );
     assert!(!app.status.contains("write_started"));
@@ -2409,9 +2427,17 @@ fn failed_recovery_preparation_never_opens_a_confirmation_or_write_job() {
     assert!(app.recovery_planning.is_none());
     assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.execute));
     assert_eq!(
-        app.view().results.unwrap().failure.unwrap().text,
-        crate::localization::text(crate::localization::Language::En, "errors.operation_failed")
+        app.user_issue.as_ref().unwrap().consequence,
+        Some("errors.no_firmware_write")
     );
+    assert!(app
+        .view()
+        .results
+        .unwrap()
+        .failure
+        .unwrap()
+        .text
+        .contains("did not write firmware"));
     assert!(app
         .log
         .iter()
@@ -2579,15 +2605,23 @@ fn blocked_update_shows_actionable_reason_and_records_no_write() {
     }))
     .unwrap();
     let reason = "The underlying hardware for these firmwares is not compatible. Installed firmware: PP100. Target firmware: BDX-PR1MLA.";
-    tx.send(Msg::UserGuidance(reason.into())).unwrap();
+    tx.send(Msg::UserIssue(workflow::UserError {
+        id: "errors.hardware_mismatch",
+        arguments: vec![
+            ("installed", "PP100".into()),
+            ("selected", "BDX-PR1MLA".into()),
+        ],
+        consequence: Some("errors.update_blocked"),
+    }))
+    .unwrap();
     tx.send(Msg::Done(Err(reason.into()))).unwrap();
     app.poll();
-    assert_eq!(
-        crate::localization::english(&app.status),
-        "Update blocked. No firmware was written."
-    );
+    let status = crate::localization::english(&app.status);
+    assert!(status.starts_with("Update blocked. No firmware was written."));
+    assert!(status.contains("PP100") && status.contains("BDX-PR1MLA"));
     let failure = app.failure.as_ref().unwrap();
-    assert!(failure.contains(reason));
+    let failure = crate::localization::english(failure);
+    assert!(failure.contains("PP100") && failure.contains("BDX-PR1MLA"));
     assert!(!failure.contains("Stopped during compatibility checks."));
     assert!(!failure.contains("cf3183a51bc41e42"));
     let path = app
@@ -2631,8 +2665,12 @@ fn prepare_failure_does_not_claim_partial_firmware_in_gui() {
         completed_stages: Vec::new(),
     }))
     .unwrap();
-    tx.send(Msg::UserGuidance("errors.update_not_started".into()))
-        .unwrap();
+    tx.send(Msg::UserIssue(workflow::UserError {
+        id: "errors.update_not_started",
+        arguments: Vec::new(),
+        consequence: None,
+    }))
+    .unwrap();
     tx.send(Msg::Done(Err("errors.update_not_started".into())))
         .unwrap();
     app.poll();

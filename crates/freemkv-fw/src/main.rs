@@ -153,6 +153,12 @@ fn main() -> ExitCode {
         Command::Info { .. } => "info",
         Command::Sign { .. } => "sign",
     };
+    let verification_refusal = match &cli.command {
+        Command::Verify { path, .. } if classify_verify_target(path) == VerifyTarget::File => {
+            freemkv_flash::user_error::IssueCode::FirmwareInvalid
+        }
+        _ => freemkv_flash::user_error::IssueCode::FirmwareNotDetected,
+    };
     let result = diagnostics::run(operation, || {
         let code = match cli.command {
             Command::Create {
@@ -164,17 +170,19 @@ fn main() -> ExitCode {
                 audit,
                 defaults,
                 dry_run,
-            } => BootSettings::parse(&defaults).and_then(|defaults| {
-                cmd_create_configured(
-                    &input,
-                    output,
-                    in_place,
-                    json,
-                    base,
-                    audit,
-                    &CreateSettings { defaults, dry_run },
-                )
-            }),
+            } => BootSettings::parse(&defaults)
+                .map_err(|e| e.context(freemkv_flash::user_error::IssueCode::CommandOptions))
+                .and_then(|defaults| {
+                    cmd_create_configured(
+                        &input,
+                        output,
+                        in_place,
+                        json,
+                        base,
+                        audit,
+                        &CreateSettings { defaults, dry_run },
+                    )
+                }),
             Command::Verify { path, family } => cmd_verify(&path, family),
             Command::Info {
                 device,
@@ -198,7 +206,10 @@ fn main() -> ExitCode {
         }?;
         diagnostics::record(format!("CLI exit: {code:?}"));
         if code != ExitCode::SUCCESS {
-            anyhow::bail!("{operation} reported failure; see diagnostic details");
+            return Err(
+                anyhow::anyhow!("{operation} reported failure; see diagnostic details")
+                    .context(verification_refusal),
+            );
         }
         Ok(code)
     });
@@ -387,7 +398,8 @@ fn parse_u32(s: &str) -> Result<u32> {
         .or_else(|| t.strip_prefix("0X"))
         .map(|h| u32::from_str_radix(h, 16))
         .unwrap_or_else(|| t.parse::<u32>())
-        .with_context(|| format!("invalid number: {s}"))?;
+        .with_context(|| format!("invalid number: {s}"))
+        .context(freemkv_flash::user_error::IssueCode::CommandOptions)?;
     Ok(v)
 }
 
@@ -450,7 +462,9 @@ fn cmd_info(
     let path_str = device.to_string_lossy();
 
     if full {
-        let prefix = out.ok_or_else(|| anyhow::anyhow!("--full requires --out <prefix>"))?;
+        let prefix = out
+            .ok_or_else(|| anyhow::anyhow!("--full requires --out <prefix>"))
+            .context(freemkv_flash::user_error::IssueCode::CommandOptions)?;
         let mut dev =
             platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
         for &(start, cap) in FULL_REGIONS {
@@ -491,8 +505,10 @@ fn cmd_info(
 
     if let Some(d) = dump {
         let start = parse_u32(d)?;
-        let length =
-            parse_u32(len.ok_or_else(|| anyhow::anyhow!("--dump requires --len"))?)? as u64;
+        let length = parse_u32(
+            len.ok_or_else(|| anyhow::anyhow!("--dump requires --len"))
+                .context(freemkv_flash::user_error::IssueCode::CommandOptions)?,
+        )? as u64;
         let mut dev =
             platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
         let data = mem_read(dev.as_mut(), start, length, false);
@@ -599,16 +615,18 @@ fn cmd_sign(
     // Resolve the output path before doing work so we fail fast on conflicts.
     let out_path = if in_place {
         if out.is_some() {
-            bail!("--in-place conflicts with -o/--out");
+            return Err(anyhow::anyhow!("--in-place conflicts with -o/--out")
+                .context(freemkv_flash::user_error::IssueCode::CommandOptions));
         }
         path.to_path_buf()
     } else {
         let dest = out.unwrap_or_else(|| default_signed_path(path));
         if dest == path {
-            bail!(
+            return Err(anyhow::anyhow!(
                 "refusing to overwrite the input ({}); pass --in-place or a different -o",
                 path.display()
-            );
+            )
+            .context(freemkv_flash::user_error::IssueCode::CommandOptions));
         }
         dest
     };
@@ -714,16 +732,20 @@ fn cmd_create_configured(
     // Resolve the output path up front so we fail fast on conflicts.
     let out_path = if in_place {
         if out.is_some() {
-            bail!("--in-place conflicts with an explicit output path");
+            return Err(
+                anyhow::anyhow!("--in-place conflicts with an explicit output path")
+                    .context(freemkv_flash::user_error::IssueCode::CommandOptions),
+            );
         }
         path.to_path_buf()
     } else {
         let dest = out.unwrap_or_else(|| default_created_path(path));
         if dest == path {
-            bail!(
+            return Err(anyhow::anyhow!(
                 "refusing to overwrite the input ({}); pass --in-place or a different output path",
                 path.display()
-            );
+            )
+            .context(freemkv_flash::user_error::IssueCode::CommandOptions));
         }
         dest
     };

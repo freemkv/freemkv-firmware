@@ -18,6 +18,8 @@ Versions are independent of the freemkv ripping applications.
 - Check incompatible supplied Current and target files before reading the drive.
   When Current comes from the drive, keep the existing backup-first checks.
 - Use the selected language for command-option errors in both command-line tools.
+- Keep the same clear error and write-status guidance in packaging, offline
+  analysis, verification refusals and interrupted desktop operations.
 
 ## [0.14.5] - 2026-10-23
 

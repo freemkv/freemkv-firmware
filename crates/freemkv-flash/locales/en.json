@@ -1,6 +1,7 @@
 {
   "language_name": "English",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "The drive did not confirm that it is running freemkv firmware. Check that you selected the intended drive. If it is correct, save a diagnostic report for help.",
     "settings.language": "Language",
     "errors.operation_failed": "The operation failed.",
     "errors.update_not_started": "The drive was asked to start an update, but no firmware data was sent. It may still be waiting for an update. Keep it connected and save a diagnostic report before trying again.",

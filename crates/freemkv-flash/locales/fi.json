@@ -1,6 +1,7 @@
 {
   "language_name": "Suomi",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Asema ei vahvistanut käyttävänsä freemkv-laiteohjelmistoa. Tarkista, että valitsit oikean aseman. Jos valinta on oikein, tallenna diagnostiikkaraportti avun saamiseksi.",
     "errors.backup_partial": "Vain osa laiteohjelmistosta voitiin lukea. Tallennettu tiedosto on puutteellinen: älä käytä sitä aseman palauttamiseen. Laiteohjelmistoa ei kirjoitettu. Tarkista yhteys ja tee uusi täydellinen varmuuskopio.",
     "settings.language": "Kieli",
     "errors.operation_failed": "Toiminto epäonnistui.",

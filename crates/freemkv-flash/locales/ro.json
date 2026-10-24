@@ -1,6 +1,7 @@
 {
   "language_name": "Română",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Unitatea nu a confirmat că folosește firmware freemkv. Verificați dacă ați selectat unitatea dorită. Dacă este corectă, salvați un raport de diagnosticare pentru ajutor.",
     "errors.backup_partial": "A putut fi citită doar o parte din firmware. Fișierul salvat este incomplet: nu îl folosiți pentru restaurarea unității. Nu s-a scris firmware. Verificați conexiunea și creați o nouă copie de siguranță completă.",
     "settings.language": "Limbă",
     "errors.operation_failed": "Operația a eșuat.",

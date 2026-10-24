@@ -1,6 +1,7 @@
 {
   "language_name": "Magyar",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "A meghajtó nem erősítette meg, hogy freemkv firmware-t használ. Ellenőrizze, hogy a megfelelő meghajtót választotta-e. Ha igen, mentsen diagnosztikai jelentést segítségkéréshez.",
     "errors.backup_partial": "Csak a firmware egy részét sikerült kiolvasni. A mentett fájl hiányos: ne használja a meghajtó visszaállítására. Nem történt firmware-írás. Ellenőrizze a kapcsolatot, és készítsen új, teljes biztonsági mentést.",
     "settings.language": "Nyelv",
     "errors.operation_failed": "A művelet nem sikerült.",

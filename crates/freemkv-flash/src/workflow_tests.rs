@@ -1,5 +1,39 @@
 use super::*;
 
+#[test]
+fn desktop_faults_localize_without_exposing_native_details_or_guessing_write_effects() {
+    for read_only in [true, false] {
+        let issue = application_failure("private native status 0x1234", read_only);
+        assert_eq!(issue.id, "errors.unexpected");
+        assert_eq!(
+            issue.consequence,
+            read_only.then_some("errors.no_firmware_write")
+        );
+        for language in crate::localization::Language::ALL {
+            assert!(!issue.render(language).contains("0x1234"));
+        }
+    }
+}
+
+#[test]
+fn packaging_errors_keep_file_causes_and_prove_no_firmware_write() {
+    let dir = std::env::temp_dir().join(format!("freemkv-package-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("invalid.bin");
+    let output = dir.join("result.tar");
+    let missing = package_image(&input, &output).unwrap_err();
+    let issue = user_error(&missing);
+    assert_eq!(issue.id, "errors.file_missing");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    std::fs::write(&input, b"not a firmware image").unwrap();
+    let invalid = package_image(&input, &output).unwrap_err();
+    let issue = user_error(&invalid);
+    assert_eq!(issue.id, "errors.firmware_invalid");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    assert!(!output.exists());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 mod prepared_recovery {
     use super::*;
     use crate::backend::{Descriptor, Identity, PreparedRecoveryUpdate, WriteDevice};

@@ -1,6 +1,7 @@
 {
   "language_name": "Tiếng Việt",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Ổ đĩa không xác nhận rằng đang chạy phần mềm điều khiển freemkv. Hãy kiểm tra xem bạn đã chọn đúng ổ đĩa chưa. Nếu đã chọn đúng, hãy lưu báo cáo chẩn đoán để được trợ giúp.",
     "errors.backup_partial": "Chỉ đọc được một phần phần mềm điều khiển. Tệp đã lưu không đầy đủ: không dùng tệp này để khôi phục ổ đĩa. Không có phần mềm điều khiển nào được ghi. Hãy kiểm tra kết nối và tạo bản sao lưu đầy đủ mới.",
     "settings.language": "Ngôn ngữ",
     "errors.operation_failed": "Thao tác không thành công.",

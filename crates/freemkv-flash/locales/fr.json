@@ -1,6 +1,7 @@
 {
   "language_name": "Français",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Le lecteur n’a pas confirmé qu’il utilise le micrologiciel freemkv. Vérifiez que vous avez sélectionné le bon lecteur. Si c’est le cas, enregistrez un rapport de diagnostic pour obtenir de l’aide.",
     "errors.backup_partial": "Seule une partie du micrologiciel a pu être lue. Le fichier enregistré est incomplet : ne l’utilisez pas pour restaurer le lecteur. Aucun micrologiciel n’a été écrit. Vérifiez la connexion et créez une nouvelle sauvegarde complète.",
     "settings.language": "Langue",
     "errors.operation_failed": "L’opération a échoué.",

@@ -1,6 +1,7 @@
 {
   "language_name": "Bahasa Indonesia",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Drive tidak mengonfirmasi bahwa firmware freemkv sedang digunakan. Pastikan Anda memilih drive yang benar. Jika sudah benar, simpan laporan diagnostik untuk meminta bantuan.",
     "errors.backup_partial": "Hanya sebagian firmware yang dapat dibaca. File yang disimpan tidak lengkap: jangan gunakan untuk memulihkan drive. Tidak ada firmware yang ditulis. Periksa koneksi dan buat cadangan lengkap yang baru.",
     "settings.language": "Bahasa",
     "errors.operation_failed": "Operasi gagal.",

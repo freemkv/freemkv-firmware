@@ -118,6 +118,14 @@ fn verify_of_a_corrupted_image_exits_non_zero() {
         stdout.contains("MISMATCH"),
         "the failing region must be named in the table: {stdout}"
     );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let language = freemkv_flash::localization::Preferences::user().load();
+    for key in ["errors.firmware_invalid", "errors.no_firmware_write"] {
+        assert!(
+            stderr.contains(freemkv_flash::localization::get(language, key)),
+            "{stderr}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

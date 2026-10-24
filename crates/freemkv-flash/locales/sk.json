@@ -1,6 +1,7 @@
 {
   "language_name": "Slovenčina",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Mechanika nepotvrdila, že používa firmvér freemkv. Skontrolujte, či ste vybrali správnu mechaniku. Ak áno, uložte diagnostickú správu pre získanie pomoci.",
     "errors.backup_partial": "Podarilo sa prečítať iba časť firmvéru. Uložený súbor je neúplný: nepoužívajte ho na obnovu mechaniky. Nebol zapísaný žiadny firmvér. Skontrolujte pripojenie a vytvorte novú úplnú zálohu.",
     "settings.language": "Jazyk",
     "errors.operation_failed": "Operácia zlyhala.",

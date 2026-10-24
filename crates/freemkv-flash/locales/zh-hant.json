@@ -1,6 +1,7 @@
 {
   "language_name": "繁體中文",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "無法確認光碟機是否正在執行 freemkv 韌體。請檢查是否選擇了預期的光碟機。如果選擇正確，請儲存診斷報告以尋求協助。",
     "errors.backup_partial": "只能讀取部分韌體。儲存的檔案不完整，不得用於還原光碟機。未寫入任何韌體。請檢查連接並重新建立完整備份。",
     "settings.language": "語言",
     "errors.operation_failed": "操作失敗。",

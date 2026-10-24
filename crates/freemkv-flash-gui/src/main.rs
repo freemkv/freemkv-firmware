@@ -32,7 +32,24 @@ mod win_layout;
 #[cfg(all(feature = "native", target_os = "windows"))]
 mod windows;
 
-fn main() -> eframe::Result<()> {
+fn main() -> std::process::ExitCode {
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            application_failure(&error.to_string(), false);
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+fn application_failure(detail: &str, read_only: bool) -> String {
+    let issue = freemkv_flash::workflow::application_failure(detail, read_only);
+    let message = issue.render(localization::load_preference());
+    eprintln!("{message}");
+    message
+}
+
+fn run() -> eframe::Result<()> {
     #[cfg(all(feature = "native", target_os = "macos"))]
     if !std::env::args().any(|a| a == "--egui") {
         mac::run();
@@ -40,7 +57,10 @@ fn main() -> eframe::Result<()> {
     }
     #[cfg(all(feature = "native", target_os = "windows"))]
     if !std::env::args().any(|a| a == "--egui") {
-        windows::run();
+        let code = windows::run();
+        if code != 0 {
+            std::process::exit(code);
+        }
         return Ok(());
     }
     // GTK's status is the process's: a failed GTK/libadwaita start must not exit 0.

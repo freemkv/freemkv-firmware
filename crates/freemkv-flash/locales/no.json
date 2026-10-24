@@ -1,6 +1,7 @@
 {
   "language_name": "Norsk",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Stasjonen bekreftet ikke at den bruker freemkv-fastvare. Kontroller at du valgte riktig stasjon. Hvis det er riktig, lagre en diagnoserapport for å få hjelp.",
     "errors.backup_partial": "Bare en del av fastvaren kunne leses. Den lagrede filen er ufullstendig: ikke bruk den til å gjenopprette stasjonen. Ingen fastvare ble skrevet. Kontroller tilkoblingen og lag en ny fullstendig sikkerhetskopi.",
     "settings.language": "Språk",
     "errors.operation_failed": "Operasjonen mislyktes.",

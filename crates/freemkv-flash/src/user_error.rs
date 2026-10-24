@@ -52,6 +52,8 @@ pub enum IssueCode {
     UnsupportedDrive,
     /// The operator declined before the update began.
     Cancelled,
+    /// The live drive did not confirm that freemkv firmware is installed.
+    FirmwareNotDetected,
 }
 
 impl IssueCode {
@@ -80,6 +82,7 @@ impl IssueCode {
             Self::DiscPresent => "errors.disc_present",
             Self::UnsupportedDrive => "errors.unsupported_drive",
             Self::Cancelled => "ui.cancelled_no_firmware_was_written",
+            Self::FirmwareNotDetected => "errors.drive_firmware_unconfirmed",
         }
     }
 }
@@ -318,6 +321,7 @@ mod tests {
             DiscPresent,
             UnsupportedDrive,
             Cancelled,
+            FirmwareNotDetected,
         ] {
             for language in Language::ALL {
                 let text = localization::get(language, code.message_id());

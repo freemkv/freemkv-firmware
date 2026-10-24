@@ -1,6 +1,7 @@
 {
   "language_name": "Polski",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Napęd nie potwierdził, że używa oprogramowania freemkv. Sprawdź, czy wybrano właściwy napęd. Jeśli tak, zapisz raport diagnostyczny, aby uzyskać pomoc.",
     "errors.backup_partial": "Udało się odczytać tylko część oprogramowania napędu. Zapisany plik jest niepełny: nie używaj go do przywracania napędu. Nie zapisano oprogramowania w napędzie. Sprawdź połączenie i utwórz nową pełną kopię zapasową.",
     "settings.language": "Język",
     "errors.operation_failed": "Operacja nie powiodła się.",

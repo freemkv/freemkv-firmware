@@ -39,7 +39,6 @@ pub const BACKUP_KEPT: &str = "ui.the_pre_flash_backup_is_saved_cancel_keeps_it_
 const CANCELLED: &str = "ui.cancelled_no_firmware_was_written";
 #[cfg(test)]
 const WORKER_PANIC: &str = "errors.unexpected";
-const WORKER_GONE: &str = "ui.the_worker_stopped_before_reporting_a_result_if_a_";
 const DIAGNOSTIC_FIELD: &str = "Diagnostic log";
 const DIAGNOSTIC_REFRESH: Duration = Duration::from_millis(500);
 
@@ -711,8 +710,6 @@ pub(crate) enum Msg {
     FailureEvidence(workflow::UpdateFailure),
     RecoveryFamilyMismatch,
     AnalysisCancelled,
-    #[cfg(test)]
-    UserGuidance(String),
     PreviewCompatibilityPending(bool),
     Analysis(ResultView),
     /// A flash passed every gate after its backup; the worker waits for the
@@ -786,6 +783,7 @@ pub struct App {
     prepared_recovery: Option<workflow::PreparedRecovery>,
     user_issue: Option<workflow::UserError>,
     structured_progress: bool,
+    operation_may_write: bool,
     origin_rx: Vec<(Pick, PathBuf, Receiver<OriginReply>)>,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -913,6 +911,7 @@ impl App {
             prepared_recovery: None,
             user_issue: None,
             structured_progress: false,
+            operation_may_write: false,
             origin_rx: Vec::new(),
             flash_origin: None,
             recovery_origin: None,
@@ -1062,6 +1061,20 @@ impl App {
 
     pub fn running(&self) -> bool {
         self.rx.is_some()
+    }
+
+    /// A native event-loop failure retains any active operation's write evidence.
+    #[cfg(any(target_os = "windows", test))]
+    pub(crate) fn runtime_issue(&self) -> workflow::UserError {
+        if self.running() {
+            interrupted_issue(self.operation_may_write, self.failure_evidence.as_ref())
+        } else {
+            workflow::UserError {
+                id: "errors.unexpected",
+                arguments: Vec::new(),
+                consequence: None,
+            }
+        }
     }
 
     fn busy(&self) -> bool {
@@ -1896,6 +1909,7 @@ impl App {
         }
         self.user_issue = None;
         self.structured_progress = false;
+        self.operation_may_write = job_may_write(&job);
         self.analysis_cancelled = false;
         self.backup_waived = false;
         self.preview_compatibility_pending = None;
@@ -2007,8 +2021,6 @@ impl App {
                         }
                     }
                     Ok(Msg::AnalysisCancelled) => self.analysis_cancelled = true,
-                    #[cfg(test)]
-                    Ok(Msg::UserGuidance(message)) => self.failure = Some(message),
                     Ok(Msg::PreviewCompatibilityPending(pending)) => {
                         self.preview_compatibility_pending = Some(pending);
                     }
@@ -2078,38 +2090,16 @@ impl App {
                                 self.failure = None;
                             }
                             Err(_) => {
-                                let consequence = self.failure_evidence.as_ref().map(|evidence| {
-                                    match evidence.impact() {
-                                        UpdateImpact::Blocked => "errors.update_blocked",
-                                        UpdateImpact::EntryUncertain => "errors.update_not_started",
-                                        UpdateImpact::PayloadUncertain => "errors.partial_firmware",
-                                        UpdateImpact::TemporaryFirmware => {
-                                            "errors.temporary_firmware"
-                                        }
-                                        UpdateImpact::Unknown => "errors.update_uncertain",
-                                    }
-                                });
-                                let blocked = self
-                                    .failure_evidence
-                                    .as_ref()
-                                    .is_some_and(|e| e.impact() == UpdateImpact::Blocked);
-                                let message = if blocked {
-                                    "errors.update_blocked"
-                                } else {
-                                    "errors.operation_failed"
-                                }
-                                .to_string();
-                                let consequence = if blocked { None } else { consequence };
-                                let message = consequence.map_or(message.clone(), |key| {
-                                    crate::localization::message(
-                                        "ui.join",
-                                        &[("first", message.clone()), ("second", key.into())],
+                                let issue = self.user_issue.clone().unwrap_or_else(|| {
+                                    interrupted_issue(
+                                        self.operation_may_write,
+                                        self.failure_evidence.as_ref(),
                                     )
                                 });
+                                let message = issue.encoded();
                                 self.status = message.clone();
-                                // Keep the summary localized; precheck guidance names the
-                                // stopped stage and actionable reason without technical hashes.
-                                self.failure = Some(self.failure.take().unwrap_or(message));
+                                self.failure = Some(message);
+                                self.user_issue = Some(issue);
                             }
                         }
                         let update_evidence = result
@@ -2177,9 +2167,15 @@ impl App {
                     Err(TryRecvError::Disconnected) => {
                         self.planning = None;
                         self.recovery_planning = None;
+                        self.prepared_recovery = None;
                         self.end_flash();
-                        self.status = "ui.operation_interrupted".into();
-                        self.failure = Some(WORKER_GONE.into());
+                        let issue = interrupted_issue(
+                            self.operation_may_write,
+                            self.failure_evidence.as_ref(),
+                        );
+                        self.status = issue.encoded();
+                        self.failure = Some(issue.encoded());
+                        self.user_issue = Some(issue);
                         self.log
                             .push("ui.worker_disconnected_before_reporting_completion_op".into());
                         self.record_event(
@@ -2187,6 +2183,7 @@ impl App {
                             serde_json::json!({
                                 "operation": self.action, "result": "interrupted",
                                 "summary": self.status, "error": self.failure,
+                                "issue": self.user_issue,
                                 "failure": failure_json(self.failure_evidence.as_ref()),
                             }),
                         );
@@ -2350,7 +2347,7 @@ impl App {
         let result = match rx.try_recv() {
             Ok(result) => result,
             Err(TryRecvError::Empty) => return false,
-            Err(TryRecvError::Disconnected) => Err(WORKER_GONE.into()),
+            Err(TryRecvError::Disconnected) => Err(worker_panic_issue(&Job::Info).encoded()),
         };
         self.profile_rx = None;
         self.set_profile(result);
@@ -3294,7 +3291,17 @@ fn job_may_write(job: &Job) -> bool {
 }
 
 fn worker_panic_issue(job: &Job) -> workflow::UserError {
-    if job_may_write(job) {
+    interrupted_issue(job_may_write(job), None)
+}
+
+fn interrupted_issue(
+    may_write: bool,
+    evidence: Option<&workflow::UpdateFailure>,
+) -> workflow::UserError {
+    if let Some(evidence) = evidence {
+        return workflow::user_error(&anyhow::Error::new(evidence.clone()));
+    }
+    if may_write {
         workflow::UserError {
             id: "errors.update_uncertain",
             arguments: Vec::new(),

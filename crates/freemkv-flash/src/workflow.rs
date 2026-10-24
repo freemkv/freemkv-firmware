@@ -176,6 +176,20 @@ pub fn user_error(error: &anyhow::Error) -> crate::user_error::UserError {
     crate::user_error::UserError::of(error)
 }
 
+/// Retain desktop/runtime faults in diagnostics and expose only localized guidance.
+/// `read_only` is true only when this entry point cannot have written firmware.
+pub fn application_failure(detail: &str, read_only: bool) -> UserError {
+    let result: Result<()> = crate::diagnostics::run("application runtime", || {
+        let error = anyhow::anyhow!("{detail}").context(crate::user_error::IssueCode::Unexpected);
+        Err(if read_only {
+            error.context(crate::user_error::NoFirmwareWrite)
+        } else {
+            error
+        })
+    });
+    user_error(&result.expect_err("application failure returns its diagnostic cause"))
+}
+
 /// Inspect a local firmware file without drive discovery or transport access.
 pub fn check_file(path: &Path) -> Result<()> {
     crate::user_error::read_only(crate::diagnostics::run("check-file", || {
@@ -843,7 +857,8 @@ pub struct RecoveryOptions {
     pub bypass_family_check: bool,
 }
 
-/// Recover without automatic backups or installed-versus-target policy gates.
+/// Prepare once and recover without automatic backups. Backend recovery admission
+/// checks and the declared family-override capability remain in force.
 pub fn recover(args: RecoveryOptions) -> Result<UpdateOutcome> {
     crate::diagnostics::run("recovery", || {
         let execute = args.execute;
@@ -1103,8 +1118,15 @@ pub fn recovery_supports_family_override(profile: &DriveProfile) -> bool {
 
 /// Package a standalone firmware image without opening a drive or overwriting output.
 pub fn package_image(input: &Path, output: &Path) -> Result<()> {
+    crate::user_error::read_only(crate::diagnostics::run("package", || {
+        package_image_inner(input, output)
+    }))
+}
+
+fn package_image_inner(input: &Path, output: &Path) -> Result<()> {
     use std::io::Write;
-    let bytes = crate::package::wrap_image(read_capped(input)?)?;
+    let bytes = crate::package::wrap_image(read_capped(input)?)
+        .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

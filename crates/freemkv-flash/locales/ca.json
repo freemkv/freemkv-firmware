@@ -1,6 +1,7 @@
 {
   "language_name": "Català",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "La unitat no ha confirmat que executi el microprogramari freemkv. Comproveu que heu seleccionat la unitat correcta. Si és correcta, deseu un informe de diagnòstic per obtenir ajuda.",
     "errors.backup_partial": "Només s’ha pogut llegir una part del microprogramari. El fitxer resultant és incomplet: no l’utilitzeu per restaurar la unitat. No s’ha escrit cap microprogramari. Comproveu la connexió i feu una còpia de seguretat completa nova.",
     "settings.language": "Idioma",
     "errors.operation_failed": "L’operació ha fallat.",

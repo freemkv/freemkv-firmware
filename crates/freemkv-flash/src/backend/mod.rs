@@ -924,7 +924,8 @@ impl std::fmt::Display for UnsupportedFamilyOverride {
 }
 impl std::error::Error for UnsupportedFamilyOverride {}
 
-/// Recovery without automatic backups or installed-versus-target policy.
+/// Recovery without automatic backups or Flash-only tray gates. Each backend
+/// owns its recovery admission policy and declares any explicit family override.
 pub trait RecoveryFacet {
     /// Prepare once; the returned object owns every loaded firmware byte.
     fn prepare(

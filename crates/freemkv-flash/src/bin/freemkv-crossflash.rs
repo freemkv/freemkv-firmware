@@ -9,12 +9,25 @@
 //! `freemkv-crossflash --why <installed> <target>` prints the flasher's verdict
 //! for one pair (refusal reason, or "admitted").
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use freemkv_flash::crossflash::{admits, classified_links, decide, CompatibilityStatus, Platform};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-fn main() -> Result<()> {
+fn main() -> std::process::ExitCode {
+    match freemkv_flash::user_error::read_only(freemkv_flash::diagnostics::run(
+        "crossflash analysis",
+        run,
+    )) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            freemkv_flash::cli::print_error(&error);
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let [flag, json, installed, target] = args.as_slice() {
         if flag == "--why" && json == "--json" {
@@ -34,10 +47,11 @@ fn main() -> Result<()> {
         }
     }
     let [root] = args.as_slice() else {
-        bail!(
+        return Err(anyhow::anyhow!(
             "usage: freemkv-crossflash <package directory>\n       \
              freemkv-crossflash --why [--json] <installed> <target>"
-        );
+        )
+        .context(freemkv_flash::user_error::IssueCode::CommandOptions));
     };
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut future: BTreeMap<String, Vec<String>> = BTreeMap::new();

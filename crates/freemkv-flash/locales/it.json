@@ -1,6 +1,7 @@
 {
   "language_name": "Italiano",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "L’unità non ha confermato di usare il firmware freemkv. Controlla di aver selezionato l’unità corretta. Se è corretta, salva un rapporto diagnostico per ricevere assistenza.",
     "errors.backup_partial": "È stato possibile leggere solo parte del firmware. Il file salvato è incompleto: non usarlo per ripristinare l’unità. Nessun firmware è stato scritto. Controlla il collegamento e crea un nuovo backup completo.",
     "settings.language": "Lingua",
     "errors.operation_failed": "L’operazione non è riuscita.",

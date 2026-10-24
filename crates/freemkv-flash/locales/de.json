@@ -1,6 +1,7 @@
 {
   "language_name": "Deutsch",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Das Laufwerk hat nicht bestätigt, dass es freemkv-Firmware verwendet. Prüfen Sie, ob das richtige Laufwerk ausgewählt ist. Falls ja, speichern Sie einen Diagnosebericht, um Hilfe zu erhalten.",
     "errors.backup_partial": "Nur ein Teil der Firmware konnte gelesen werden. Die gespeicherte Datei ist unvollständig: Verwenden Sie sie nicht zur Wiederherstellung des Laufwerks. Es wurde keine Firmware geschrieben. Prüfen Sie die Verbindung und erstellen Sie eine neue vollständige Sicherung.",
     "settings.language": "Sprache",
     "errors.operation_failed": "Der Vorgang ist fehlgeschlagen.",

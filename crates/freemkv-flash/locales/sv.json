@@ -1,6 +1,7 @@
 {
   "language_name": "Svenska",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Enheten bekräftade inte att den använder freemkv-firmware. Kontrollera att du har valt rätt enhet. Om det stämmer, spara en diagnostikrapport för att få hjälp.",
     "errors.backup_partial": "Bara en del av firmwaren kunde läsas. Den sparade filen är ofullständig: använd den inte för att återställa enheten. Ingen firmware skrevs. Kontrollera anslutningen och skapa en ny fullständig säkerhetskopia.",
     "settings.language": "Språk",
     "errors.operation_failed": "Åtgärden misslyckades.",

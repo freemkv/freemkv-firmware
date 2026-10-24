@@ -1,6 +1,7 @@
 {
   "language_name": "Nederlands",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Het station heeft niet bevestigd dat het freemkv-firmware gebruikt. Controleer of u het juiste station hebt geselecteerd. Als dat klopt, sla dan een diagnoserapport op om hulp te krijgen.",
     "errors.backup_partial": "Slechts een deel van de firmware kon worden gelezen. Het opgeslagen bestand is onvolledig: gebruik het niet om het station te herstellen. Er is geen firmware geschreven. Controleer de verbinding en maak een nieuwe volledige back-up.",
     "settings.language": "Taal",
     "errors.operation_failed": "De bewerking is mislukt.",

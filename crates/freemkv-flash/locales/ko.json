@@ -1,6 +1,7 @@
 {
   "language_name": "한국어",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "드라이브에서 freemkv 펌웨어가 실행 중인지 확인하지 못했습니다. 의도한 드라이브를 선택했는지 확인하세요. 올바르게 선택했다면 진단 보고서를 저장하여 도움을 요청하세요.",
     "errors.backup_partial": "펌웨어의 일부만 읽을 수 있었습니다. 저장되는 파일은 불완전하므로 드라이브 복원에 사용하지 마세요. 펌웨어는 기록되지 않았습니다. 연결을 확인하고 새로 완전한 백업을 만드세요.",
     "settings.language": "언어",
     "errors.operation_failed": "작업에 실패했습니다.",

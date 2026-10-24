@@ -41,10 +41,7 @@ const TICK_MS: u64 = 200;
 /// not start.
 pub fn run() -> i32 {
     if let Err(e) = adw::init() {
-        eprintln!(
-            "freemkv-flash-gui: cannot start the desktop app ({e}); the GTK4/libadwaita \
-             runtime is unavailable. Run with --egui for the fallback interface."
-        );
+        crate::application_failure(&format!("GTK/libadwaita initialization failed: {e}"), true);
         return 1;
     }
     let app = adw::Application::builder().application_id(APP_ID).build();

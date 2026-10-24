@@ -1,6 +1,7 @@
 {
   "language_name": "Dansk",
   "messages": {
+    "errors.drive_firmware_unconfirmed": "Drevet bekræftede ikke, at det bruger freemkv-firmware. Kontrollér, at du har valgt det rigtige drev. Hvis det er korrekt, så gem en diagnoserapport for at få hjælp.",
     "errors.backup_partial": "Kun en del af firmwaren kunne læses. Den gemte fil er ufuldstændig: brug den ikke til at gendanne drevet. Ingen firmware blev skrevet. Kontrollér forbindelsen, og lav en ny komplet sikkerhedskopi.",
     "settings.language": "Sprog",
     "errors.operation_failed": "Handlingen mislykkedes.",
