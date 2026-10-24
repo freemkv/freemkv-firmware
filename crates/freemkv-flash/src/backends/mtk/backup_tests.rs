@@ -200,19 +200,62 @@ fn legacy_backups_accept_the_old_tag_label_as_an_alias() {
 }
 
 #[test]
-fn a_drive_that_hides_its_flash_is_told_so_not_asked_for_every_byte() {
+fn a_missing_banner_keeps_the_incomplete_read_cause_neutral() {
     // The reported WH16NS58: only the calibration area (0x1F0000..) answered.
     let error = super::incomplete_read(0x1_0000, &[(0, 0x1F_0000)]);
-    assert!(crate::workflow::error_message(&error).contains("normal for many MediaTek drives"));
+    assert!(!crate::workflow::error_message(&error).contains("normal for many MediaTek drives"));
     let err = format!("{error:#}");
-    assert!(err.contains("does not expose its flash"), "{err}");
-    assert!(!err.contains("needs every firmware byte"), "{err}");
+    assert!(!err.contains("does not expose its flash"), "{err}");
+    assert!(err.contains("needs every firmware byte"), "{err}");
 }
 
 #[test]
 fn a_few_unreadable_spans_keep_the_partial_read_message() {
     // Banner readable; a span elsewhere failed: a genuine partial read.
-    let err = super::incomplete_read(0x20_0000 - 0x1000, &[(0x80_000, 0x81_000)]).to_string();
+    let err = super::incomplete_read(0x20_0000 - 0x1000, &[(0x80_000, 0x81_000)])
+        .chain()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ");
     assert!(err.contains("needs every firmware byte"), "{err}");
     assert!(!err.contains("does not expose its flash"), "{err}");
+}
+
+#[test]
+fn known_mtk_missing_banner_does_not_prove_permanent_read_restriction() {
+    let error = super::incomplete_read(0x10000, &[(0, 0x1f0000)]);
+    let message = crate::workflow::error_message(&error);
+    assert!(
+        !message.contains("normal for many MediaTek drives"),
+        "{message}"
+    );
+    assert!(!error.is::<crate::backend::BackupReadRestricted>());
+    assert!(format!("{error:#}").contains("65536"));
+}
+
+#[test]
+fn known_mtk_backup_connection_failure_does_not_claim_firmware_restriction() {
+    struct Disconnected;
+    impl crate::platform::ScsiDevice for Disconnected {
+        fn command_in(&mut self, _: &[u8], _: usize) -> anyhow::Result<Vec<u8>> {
+            Err(std::io::Error::new(std::io::ErrorKind::NotConnected, "connection lost").into())
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> anyhow::Result<()> {
+            panic!("backup acquisition must not write")
+        }
+        fn describe(&self) -> String {
+            "disconnected-backup-regression".into()
+        }
+    }
+    let error = capture(&mut crate::backend::ReadDevice::without_unlocks(
+        &mut Disconnected,
+    ))
+    .unwrap_err();
+    let cause = crate::user_error::UserError::of(&error);
+    assert_eq!(cause.id, "errors.backup_failed");
+    assert!(!cause
+        .render(crate::localization::Language::En)
+        .contains("normal for many MediaTek drives"));
+    assert!(!error.is::<crate::backend::BackupReadRestricted>());
+    assert!(format!("{error:#}").contains("read 0 of"));
 }

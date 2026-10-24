@@ -926,10 +926,12 @@ impl FileFacet for Mtk {
                 confidence: Confidence::Structural,
             });
         }
-        file_info::classify_file(bytes).chip.map(|_| Recognized {
-            format: &IMAGE,
-            confidence: Confidence::Heuristic,
-        })
+        freemkv_chipset::detect_chip(bytes)
+            .ok()
+            .map(|_| Recognized {
+                format: &IMAGE,
+                confidence: Confidence::Heuristic,
+            })
     }
 
     fn describe(&self, image: &[u8], _: &crate::backend::Recognized) -> Option<Result<()>> {
@@ -1027,9 +1029,20 @@ impl BackupFacet for Mtk {
     }
 }
 
+/// Capture raw bytes through the read path the installed firmware exposes.
+fn capture_raw(dev: &mut dyn ScsiDevice) -> Result<crate::probe::FullImage> {
+    if fwdump::is_freemkv(dev) {
+        crate::diagnostics::record("MTK capture: drive runs freemkv firmware; reading via DumpAll");
+        fwdump::capture_full_image(dev)
+            .context("reading the drive's firmware via the freemkv dump command")
+    } else {
+        crate::probe::read_full_image(dev).context("reading the drive's firmware")
+    }
+}
+
 impl DumpFacet for Mtk {
     fn capture(&self, mut dev: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
-        let (image, readable, gaps) = crate::probe::read_full_image(dev.scsi())?;
+        let (image, readable, gaps) = capture_raw(dev.scsi())?;
         if readable == 0 {
             bail!("no MediaTek memory was readable; no dump saved");
         }

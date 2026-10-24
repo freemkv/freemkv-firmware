@@ -41,7 +41,7 @@ impl RecoveryFacet for Mtk {
             Some(current) => {
                 let envelope =
                     mediatek_optical::envelope::Envelope::load(current).map_err(|e| {
-                        anyhow::Error::new(e).context(crate::user_error::IssueCode::FirmwareInvalid)
+                        anyhow::Error::new(e).context(crate::user_error::IssueCode::CurrentInvalid)
                     })?;
                 recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
             }
