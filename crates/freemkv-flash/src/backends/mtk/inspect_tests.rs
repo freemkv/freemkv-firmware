@@ -309,3 +309,89 @@ fn text_omits_the_family_line_mediatek_does_not_derive() {
         .text()
         .starts_with("Hardware family: Unknown\nSource: stock.bin\n"));
 }
+
+#[test]
+fn known_mtk_inspect_release_package_uses_final_firmware_and_archive_digest() {
+    use crate::backend::InspectFacet;
+    use crate::mediatek_package::{digest, Component, Manifest, Package, Role, FORMAT};
+    let image = stock();
+    for paired in [false, true] {
+        let mut members = std::collections::BTreeMap::from([("final.bin".into(), image.clone())]);
+        let mut components = Vec::new();
+        if paired {
+            let mut intermediate = image.clone();
+            intermediate[0x1ec018..0x1ec01c].copy_from_slice(b"INTM");
+            components.push(Component {
+                path: "intm.bin".into(),
+                sha256: digest(&intermediate),
+                role: Role::Intermediate,
+            });
+            members.insert("intm.bin".into(), intermediate);
+        }
+        components.push(Component {
+            path: "final.bin".into(),
+            sha256: digest(&image),
+            role: Role::Firmware,
+        });
+        let pairing = paired.then(|| serde_json::json!({
+            "basis": "vpd-declared-target-and-stage-layout", "source": {"sha256": "a".repeat(64)},
+            "container_sha256": "b".repeat(64), "intermediate_sha256": components[0].sha256,
+            "final_sha256": digest(&image)
+        }));
+        let package = Package::from_parts(
+            Manifest {
+                format: FORMAT.into(),
+                version: 1,
+                components,
+                pairing,
+                metadata: Default::default(),
+            },
+            members,
+        )
+        .unwrap()
+        .encode()
+        .unwrap();
+        let inspection = crate::backends::mtk::Mtk
+            .inspect("release.tar".into(), &package, &Control::default())
+            .expect("supported release package must be inspectable")
+            .unwrap();
+        assert_eq!(inspection.sha256, digest(&package));
+        assert_eq!(inspection.analyses[0].identity.sha256, digest(&image));
+        assert_eq!(
+            field(&component(&inspection).fields, "Model"),
+            "BD-RE BU40N"
+        );
+        assert_eq!(field(&component(&inspection).fields, "Revision"), "1.02");
+        assert_eq!(
+            field(&component(&inspection).fields, "Container"),
+            "MediaTek release package (final firmware)"
+        );
+    }
+}
+
+#[test]
+fn known_mtk_recognition_routes_corrupt_images_without_verifying_them() {
+    use crate::backend::FileFacet;
+    let mut image = stock();
+    image[0x11000] ^= 1;
+    assert!(matches!(
+        super::super::file_info::classify_file(&image).cmac,
+        super::super::file_info::CmacSummary::Invalid { .. }
+    ));
+    let started = std::time::Instant::now();
+    for _ in 0..32 {
+        let recognized = crate::backends::mtk::Mtk
+            .recognize(std::hint::black_box(&image))
+            .unwrap();
+        assert_eq!(recognized.format.id, super::super::IMAGE.id);
+        assert_eq!(recognized.confidence, crate::backend::Confidence::Heuristic);
+    }
+    eprintln!(
+        "MTK recognition32 elapsed_us={}",
+        started.elapsed().as_micros()
+    );
+    assert!(matches!(
+        super::super::file_info::classify_file(&image).cmac,
+        super::super::file_info::CmacSummary::Invalid { .. }
+    ));
+}

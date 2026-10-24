@@ -1054,3 +1054,55 @@ fn confirmation_cleanup_real_crossflash_plan_keeps_identity_and_rollback_warning
     }
     assert!(dev.writes.is_empty());
 }
+
+#[test]
+fn known_mtk_invalid_current_reference_has_current_guidance() {
+    use crate::backend::RecoveryFacet;
+    let installed = image(b"1.00", 1);
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(installed);
+    let error = Mtk
+        .identify_with_current(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            Some(b"bad current"),
+        )
+        .err()
+        .expect("invalid Current must be rejected");
+    assert_eq!(
+        crate::user_error::UserError::of(&error).id,
+        "errors.current_invalid"
+    );
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn known_mtk_preflight_keeps_original_transport_cause() {
+    struct Failure;
+    impl ScsiDevice for Failure {
+        fn command_in(&mut self, _: &[u8], _: usize) -> Result<Vec<u8>> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "preflight-access-denied",
+            )
+            .into())
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            panic!("preflight must not write")
+        }
+        fn describe(&self) -> String {
+            "preflight-failure".into()
+        }
+    }
+    let error = Mtk
+        .preflight(
+            &mut ReadDevice::without_unlocks(&mut Failure),
+            &FlashPlan::new(()),
+        )
+        .expect_err("transport failure must propagate");
+    assert_eq!(
+        error
+            .downcast_ref::<std::io::Error>()
+            .map(std::io::Error::kind),
+        Some(std::io::ErrorKind::PermissionDenied)
+    );
+    assert!(format!("{error:#}").contains("read-only preflight failed"));
+}

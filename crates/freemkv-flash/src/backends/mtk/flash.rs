@@ -172,9 +172,7 @@ impl FlashFacet for Mtk {
     }
 
     fn preflight(&self, dev: &mut ReadDevice<'_>, _plan: &FlashPlan) -> Result<Vec<PlanLine>> {
-        if let Err(e) = self.readiness(dev) {
-            bail!("read-only preflight failed: {e}");
-        }
+        self.readiness(dev).context("read-only preflight failed")?;
         Ok(vec![
             PlanLine::Ok(
                 "preflight",
