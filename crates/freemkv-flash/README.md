@@ -98,10 +98,11 @@ reports gaps and is not automatically a flashable update image.
 ## Recovery
 
 Flash and Recovery share backend-owned input rules: MediaTek accepts standalone
-BIN images and TAR packages; Pioneer accepts TAR packages. Bare Pioneer envelopes
-remain available for inspection. For a paired MediaTek TAR, Recovery requires
-`--member` to select exactly one image; `--current-member` selects the installed
-image independently when Current is also a paired TAR.
+BIN images and TAR packages; Pioneer accepts TAR packages. Pioneer Inspect and
+Compare require TAR packages containing the firmware components. For a paired
+MediaTek TAR, Recovery requires `--member` to select exactly one image;
+`--current-member` selects the installed image independently when Current is also
+a paired TAR.
 
 
 ```sh

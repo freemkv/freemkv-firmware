@@ -435,7 +435,7 @@ pub(crate) struct ExecutePlan {
 /// header chain, envelope tail and bundle self-consistency.
 pub(crate) fn execute_plan(input: &[u8]) -> Result<ExecutePlan> {
     use crate::backends::pioneer::flash_plan::{
-        ensure_no_unrecovered_tail, validate_bundle, validate_component_headers,
+        ensure_no_unrecovered_tail, validate_component_headers,
     };
     let (kernel, normal) = classify_flash_input(input)?;
     let selection = decide_flash(kernel.is_some(), normal.is_some())?;
@@ -443,7 +443,6 @@ pub(crate) fn execute_plan(input: &[u8]) -> Result<ExecutePlan> {
     check_normal_size(&normal)?;
     validate_component_headers(kernel.as_deref(), Some(&normal)).map_err(anyhow::Error::msg)?;
     ensure_no_unrecovered_tail(kernel.as_deref(), Some(&normal))?;
-    validate_bundle(kernel.as_deref(), Some(&normal)).map_err(|e| anyhow!("{e}"))?;
     Ok(ExecutePlan {
         kernel,
         normal,

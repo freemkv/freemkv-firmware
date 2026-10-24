@@ -19,6 +19,11 @@
 
 use anyhow::{anyhow, Context, Result};
 
+#[cfg(test)]
+thread_local! {
+    pub(super) static TAIL_CHECKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Generation class derived from a decoded Kernel body offset `0xFE`
 /// (runtime `0x4000FE`). The marker is a coarse generation indicator, not a
 /// version (whitepaper §15.1).
@@ -431,6 +436,8 @@ pub fn family_gate(
 /// spliced envelope does not carry and decoding could not prove). Such an image
 /// must never be flashed.
 pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Result<()> {
+    #[cfg(test)]
+    TAIL_CHECKS.with(|count| count.set(count.get() + 1));
     for (label, bytes) in [("Kernel", kernel), ("Normal", normal)] {
         let Some(bytes) = bytes else { continue };
         if let Some(tail) =
