@@ -717,18 +717,22 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
     let before = state();
     let height = || dialog.GetWindowRect().ok().map(|r| r.bottom - r.top);
     let collapsed_height = height();
-    let Some(point) = expando_point(dialog, c) else {
-        return false;
-    };
     EXPANSIONS.with(|events| events.borrow_mut().clear());
-    click_expando(&point.0, point.1);
+    let expanded_click = click_expando(dialog, &c.details_label);
     pump(200);
     let expanded_height = height();
-    let expanded = EXPANSIONS.with(|events| events.borrow().as_slice() == [true]);
+    let expanded_events = EXPANSIONS.with(|events| events.borrow().clone());
+    let expanded = expanded_click && expanded_events.as_slice() == [true];
     let unchanged_expanded = before.is_some() && state() == before;
-    click_expando(&point.0, point.1);
+    let collapsed_click = click_expando(dialog, &c.hide_details_label);
     pump(200);
-    let collapsed = EXPANSIONS.with(|events| events.borrow().as_slice() == [true, false]);
+    let collapsed_events = EXPANSIONS.with(|events| events.borrow().clone());
+    let collapsed = collapsed_click && collapsed_events.as_slice() == [true, false];
+    eprintln!(
+        "GATE TRACE expando: first_send={expanded_click} events={expanded_events:?} heights={collapsed_height:?}->{expanded_height:?} state={before:?}->{:?}; second_send={collapsed_click} events={collapsed_events:?} final_height={:?}",
+        state(),
+        height(),
+    );
     expanded
         && collapsed
         && unchanged_expanded
@@ -739,49 +743,71 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
         && height() == collapsed_height
 }
 
-/// The TaskDialog expando is rendered by its DirectUI surface rather than an enumerable
-/// Button HWND. In this synthetic fixture it shares a row with the standard response
-/// buttons, so hit the disclosure at the left edge of that row with real mouse messages.
-fn expando_point(dialog: &w::HWND, c: &crate::ui::Confirm) -> Option<(w::HWND, isize)> {
-    let cancel = button(dialog, &c.cancel.text)?;
-    let dialog_rect = dialog.GetWindowRect().ok()?;
-    let cancel_rect = cancel.GetWindowRect().ok()?;
-    let direct_ui = direct_ui_child(dialog)?;
-    let dpi = dialog.GetDpiForWindow().max(96);
-    let screen_point = w::POINT::with(
-        dialog_rect.left + (48 * dpi / 96) as i32,
-        (cancel_rect.top + cancel_rect.bottom) / 2,
-    );
-    let point = direct_ui.ScreenToClient(screen_point).ok()?;
-    let bounds = direct_ui.GetClientRect().ok()?;
-    if point.x < bounds.left
-        || point.x >= bounds.right
-        || point.y < bounds.top
-        || point.y >= bounds.bottom
-    {
-        return None;
-    }
-    let packed = ((point.y as u32 & 0xffff) << 16 | (point.x as u32 & 0xffff)) as isize;
-    Some((direct_ui, packed))
+/// Use the Windows accessibility provider: DirectUI has no child HWND for its expando.
+/// Pump the dialog while the provider invokes it, and bound the helper's lifetime.
+fn click_expando(dialog: &w::HWND, caption: &str) -> bool {
+    const SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]::new([long]$env:FREEMKV_GATE_DIALOG))
+$items = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+foreach ($item in $items) {
+    if ($item.Current.Name.Replace('&', '') -ne $env:FREEMKV_GATE_CAPTION) { continue }
+    try {
+        $pattern = $item.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+        if ($pattern.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Collapsed) { $pattern.Expand() } else { $pattern.Collapse() }
+        Write-Output ('Expanded/collapsed: ' + $item.Current.Name)
+        exit 0
+    } catch {}
+    try {
+        $pattern = $item.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+        $pattern.Invoke()
+        Write-Output ('Invoked: ' + $env:FREEMKV_GATE_CAPTION)
+        exit 0
+    } catch {}
 }
-
-fn direct_ui_child(dialog: &w::HWND) -> Option<w::HWND> {
-    let mut found = None;
-    dialog.EnumChildWindows(|h: w::HWND| {
-        if h.GetClassName().is_ok_and(|name| name == "DirectUIHWND") {
-            found = Some(h);
-            return false;
+throw ('No actionable disclosure control: ' + $env:FREEMKV_GATE_CAPTION)
+"#;
+    let child = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-STA",
+            "-Command",
+            SCRIPT,
+        ])
+        .env("FREEMKV_GATE_DIALOG", (dialog.ptr() as isize).to_string())
+        .env("FREEMKV_GATE_CAPTION", caption)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn();
+    let Ok(mut child) = child else { return false };
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => pump(25),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                eprintln!("GATE disclosure accessibility helper timed out");
+                return false;
+            }
         }
-        true
-    });
-    found
-}
-
-fn click_expando(direct_ui: &w::HWND, point: isize) {
-    // The TaskDialog notifies TDN_EXPANDO_BUTTON_CLICKED only after the real control is
-    // activated; BM_CLICK cannot reach this owner-drawn DirectUI child.
-    send_raw(direct_ui, 0x0201, 1, point); // WM_LBUTTONDOWN, MK_LBUTTON
-    send_raw(direct_ui, 0x0202, 0, point); // WM_LBUTTONUP
+    }
+    match child.wait_with_output() {
+        Ok(output) => {
+            eprintln!(
+                "GATE disclosure: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output.status.success()
+        }
+        Err(_) => false,
+    }
 }
 
 /// The dialog's button (or checkbox) window whose caption is `text`.

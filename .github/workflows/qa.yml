@@ -96,6 +96,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
       # The flash GUI's native Linux shell (gtk4/libadwaita) probes pkg-config at build time.
       - name: Install GTK4 + libadwaita development headers
         if: runner.os == 'Linux'
@@ -126,6 +127,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
       - name: Install GTK4 + libadwaita development headers
         working-directory: .
         run: |
@@ -165,6 +167,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: freemkv-firmware
+          cache-on-failure: true
       - name: Prove freemkv-fw modifies 100% of the fixture corpus
         run: |
           set -euo pipefail
@@ -217,11 +220,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: freemkv-firmware
-          key: gui-gate
+          cache-on-failure: true
+          shared-key: native-gui-gate-v2
+          cache-workspace-crates: true
       # Own debug codegen for every native platform here, sharing the build
       # that starts the GUI instead of separate macOS/Windows CI build jobs.
-      - name: Build all debug targets and the GUI gate hook
-        run: cargo build --locked --workspace --all-targets --all-features
+      - name: Build the native GUI gate
+        run: cargo build --locked -p freemkv-flash-gui
       - name: GUI gate
         timeout-minutes: 5
         run: |
