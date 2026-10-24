@@ -25,6 +25,7 @@ const TIMER_GATE: usize = 9;
 /// Probe the blocked-close warning from its nested native message loop.
 const TIMER_CLOSE_PROBE: usize = 10;
 const CLOSE_MARKER: &str = "GUI gate: worker polled while the close warning was visible";
+const BM_CLICK: u32 = 0x00F5;
 const TDM_CLICK_VERIFICATION: u32 = 0x0400 + 113;
 /// `PrintWindow`: draw the full content, DirectComposition included.
 const PW_RENDERFULLCONTENT: u32 = 2;
@@ -53,6 +54,8 @@ struct CloseProbe {
     opened: bool,
     polled: bool,
     visible_after_poll: bool,
+    dismissal_posted: bool,
+    timed_out: bool,
 }
 
 thread_local! {
@@ -170,6 +173,8 @@ fn close_warning(me: &Shell, g: &mut Gate) {
             opened: false,
             polled: false,
             visible_after_poll: false,
+            dismissal_posted: false,
+            timed_out: false,
         });
     });
     // Install through the shell's normal effect and keep its real polling timer active.
@@ -179,7 +184,9 @@ fn close_warning(me: &Shell, g: &mut Gate) {
     if armed {
         me.perform(vec![Effect::StartTicking]);
         // No App or probe borrow may span this call: WM_CLOSE opens a modal message loop.
+        eprintln!("GATE TRACE close-warning: entering production WM_CLOSE");
         send_raw(me.wnd.hwnd(), co::WM::CLOSE.raw(), 0, 0);
+        eprintln!("GATE TRACE close-warning: production WM_CLOSE returned");
     }
     let probe = CLOSE_PROBE.with(|p| p.borrow_mut().take());
     let app = me.app.borrow();
@@ -194,6 +201,13 @@ fn close_warning(me: &Shell, g: &mut Gate) {
             .as_ref()
             .is_some_and(|p| p.polled && p.visible_after_poll),
         "unique marker consumed by production WM_TIMER while warning remained visible",
+    );
+    g.check(
+        "close-warning-dismissed",
+        probe.as_ref().is_some_and(|p| {
+            p.dismissal_posted && !p.timed_out && close_dialog(me, Some(&p.expected)).is_none()
+        }),
+        "native OK button clicked and warning gone before WM_CLOSE returned",
     );
     g.check(
         "close-warning-keeps-job-and-window",
@@ -237,45 +251,72 @@ fn close_dialog(me: &Shell, expected: Option<&str>) -> Option<w::HWND> {
 /// Runs inside MessageBox's native loop. Never retain a test borrow across SendMessage.
 fn probe_close_warning(me: &Shell) {
     let pending = CLOSE_PROBE.with(|p| {
-        p.borrow().as_ref().filter(|p| !p.done).map(|p| {
+        p.borrow().as_ref().map(|p| {
             (
                 p.expected.clone(),
                 p.started.elapsed() >= Duration::from_secs(10),
                 p.sender.clone(),
+                p.done,
             )
         })
     });
-    let Some((expected, timed_out, sender)) = pending else {
+    let Some((expected, timed_out, sender, done)) = pending else {
         return;
     };
-    let dialog = close_dialog(me, Some(&expected));
-    if dialog.is_none() && !timed_out {
+    if timed_out {
+        let _ = me.wnd.hwnd().KillTimer(TIMER_CLOSE_PROBE);
+        CLOSE_PROBE.with(|p| {
+            if let Some(p) = p.borrow_mut().as_mut() {
+                p.timed_out = true;
+            }
+        });
+        eprintln!("GATE TRACE close-warning: 10 s deadline; posting fallback WM_CLOSE");
+        if let Some(dialog) = close_dialog(me, None) {
+            unsafe {
+                let posted = dialog.PostMessage(msg::WmClose {});
+                eprintln!("GATE TRACE close-warning: fallback post {posted:?}");
+            }
+        }
         return;
     }
-    let _ = me.wnd.hwnd().KillTimer(TIMER_CLOSE_PROBE);
+    if done {
+        return;
+    }
+    let dialog = close_dialog(me, Some(&expected));
+    let Some(dialog) = dialog else { return };
+    eprintln!("GATE TRACE close-warning: owned warning found");
     CLOSE_PROBE.with(|p| {
         if let Some(p) = p.borrow_mut().as_mut() {
             p.done = true;
-            p.opened = dialog.is_some();
+            p.opened = true;
         }
     });
-    if let Some(dialog) = dialog {
-        let sent = sender.send(Msg::Event(Event::Message(CLOSE_MARKER.into())));
-        // This is the shell's actual registered polling callback, reached with MessageBox
-        // still on the stack. Unfixed code panics here on the App's retained Ref borrow.
-        send_raw(me.wnd.hwnd(), co::WM::TIMER.raw(), super::TIMER_TICK, 0);
-        let polled = sent.is_ok() && me.app.borrow().log.iter().any(|s| s == CLOSE_MARKER);
-        CLOSE_PROBE.with(|p| {
-            if let Some(p) = p.borrow_mut().as_mut() {
-                p.polled = polled;
-                p.visible_after_poll = dialog.IsWindowVisible();
-            }
-        });
-        send_raw(&dialog, co::WM::COMMAND.raw(), 1, 0); // IDOK
-    } else if let Some(dialog) = close_dialog(me, None) {
-        // A changed caption must fail the check without leaving its modal window hung.
-        send_raw(&dialog, co::WM::CLOSE.raw(), 0, 0);
-    }
+    let sent = sender.send(Msg::Event(Event::Message(CLOSE_MARKER.into())));
+    // This is the shell's actual registered polling callback, reached with MessageBox
+    // still on the stack. Unfixed code panics here on the App's retained Ref borrow.
+    eprintln!("GATE TRACE close-warning: entering production WM_TIMER");
+    send_raw(me.wnd.hwnd(), co::WM::TIMER.raw(), super::TIMER_TICK, 0);
+    let polled = sent.is_ok() && me.app.borrow().log.iter().any(|s| s == CLOSE_MARKER);
+    eprintln!("GATE TRACE close-warning: production WM_TIMER returned; marker {polled}");
+    // Use the actual native button so it supplies its HWND in BN_CLICKED. Queue the click
+    // for MessageBox's loop after this nested timer returns, rather than synthesizing a
+    // menu-form WM_COMMAND with no control HWND.
+    let _ = dialog.SetActiveWindow();
+    let posted = dialog.GetDlgItem(1).and_then(|button| unsafe {
+        button.PostMessage(msg::Wm {
+            msg_id: co::WM::from_raw(BM_CLICK),
+            wparam: 0,
+            lparam: 0,
+        })
+    });
+    eprintln!("GATE TRACE close-warning: native OK click queued {posted:?}");
+    CLOSE_PROBE.with(|p| {
+        if let Some(p) = p.borrow_mut().as_mut() {
+            p.polled = polled;
+            p.visible_after_poll = dialog.IsWindowVisible();
+            p.dismissal_posted = posted.is_ok();
+        }
+    });
     // gui_gate::arm's process watchdog also bounds a modal loop that stops servicing timers.
 }
 
