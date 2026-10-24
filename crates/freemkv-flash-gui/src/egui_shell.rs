@@ -125,6 +125,7 @@ pub(crate) fn configure_style(ctx: &egui::Context) {
 /// The shell: the model plus nothing it could disagree with.
 pub struct Shell {
     pub(crate) app: crate::ui::App,
+    report_prompt: Option<(String, String)>,
 }
 
 impl Shell {
@@ -132,7 +133,10 @@ impl Shell {
         let waker = ctx.clone();
         app.set_waker(Arc::new(move || waker.request_repaint()));
         let effects = app.start();
-        let mut shell = Self { app };
+        let mut shell = Self {
+            app,
+            report_prompt: None,
+        };
         shell.perform(ctx, effects);
         shell
     }
@@ -159,6 +163,12 @@ impl Shell {
                     {
                         self.send(ctx, Input::Chosen(pick, path));
                     }
+                }
+                Effect::ReportPrompt {
+                    summary,
+                    description,
+                } => {
+                    self.report_prompt = Some((summary, description));
                 }
                 Effect::CopyText(text) => ctx.copy_text(text),
                 Effect::OpenPath(path) => {
@@ -192,6 +202,46 @@ impl Shell {
         }
         if let Some(window) = &view.analysis {
             analysis_window(&ctx, &window.tree, window.notice.as_deref(), &mut out);
+        }
+        if let Some((summary, description)) = &mut self.report_prompt {
+            let language = view.language;
+            let text = |key| crate::localization::text(language, key);
+            let mut answer = None;
+            let modal = egui::Modal::new(egui::Id::new("report-description")).show(&ctx, |ui| {
+                ui.set_width(480.0);
+                ui.heading(text("report.prompt_title"));
+                ui.label(crate::localization::render(language, summary));
+                ui.label(text("report.description_label"));
+                egui::ScrollArea::vertical()
+                    .max_height(220.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(description)
+                                .desired_rows(6)
+                                .desired_width(f32::INFINITY),
+                        );
+                    });
+                ui.horizontal(|ui| {
+                    if ui.button(text("ui.cancel")).clicked() {
+                        answer = Some(false);
+                    }
+                    if ui.button(text("report.send")).clicked() {
+                        answer = Some(true);
+                    }
+                });
+            });
+            if answer.is_none() && modal.should_close() {
+                answer = Some(false);
+            }
+            if let Some(send) = answer {
+                let description = description.clone();
+                self.report_prompt = None;
+                out.push(if send {
+                    Input::SendReport(description)
+                } else {
+                    Input::DismissReport(description)
+                });
+            }
         }
         for input in out {
             self.send(&ctx, input);

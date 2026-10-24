@@ -167,6 +167,10 @@ pub enum Effect {
         pick: Pick,
         file_name: String,
     },
+    ReportPrompt {
+        summary: String,
+        description: String,
+    },
     CopyText(String),
     /// Open an automatically saved diagnostic in the system text viewer.
     OpenPath(PathBuf),
@@ -222,6 +226,8 @@ pub enum Input {
     OpenDiagnostics,
     ViewLog,
     SubmitReport,
+    SendReport(String),
+    DismissReport(String),
     CancelReport,
     CloseDiagnostics,
     CopyDiagnostics,
@@ -731,6 +737,7 @@ pub(crate) enum Msg {
     Authorized(FlashSheet, Sender<bool>),
     /// Backup capture failed; wait for an explicit human Yes or No.
     BackupUnavailable(String, Sender<bool>),
+    CapturedArtifact(Result<crate::support::ReportArtifact, String>),
     Done(Result<Option<workflow::UpdateOutcome>, String>),
 }
 
@@ -779,6 +786,7 @@ pub type Waker = Arc<dyn Fn() + Send + Sync>;
 /// Report progress is distinct from its authoritative terminal result.
 enum ReportMsg {
     Progress(String),
+    Diagnostic(String),
     Finished(Result<String, String>),
 }
 
@@ -796,6 +804,9 @@ pub struct App {
     analysis_cancelled: bool,
     preview_compatibility_pending: Option<bool>,
     report_rx: Option<Receiver<ReportMsg>>,
+    report_prompt: Option<crate::support::BundleSource>,
+    report_description: String,
+    submitted_description: Option<String>,
     report_control: Option<crate::support::Submission>,
     artifact_in_progress: Option<crate::support::ReportArtifact>,
     report_artifact: Option<crate::support::ReportArtifact>,
@@ -869,6 +880,8 @@ pub struct App {
     #[cfg(test)]
     pub(crate) dry_run: Option<Vec<(String, String, Job)>>,
     #[cfg(test)]
+    report_endpoint: Option<String>,
+    #[cfg(test)]
     pub(crate) worker: Option<Sender<Msg>>,
     #[cfg(test)]
     pub(crate) profile_worker: Option<Sender<Result<Profile, String>>>,
@@ -924,6 +937,9 @@ impl App {
             analysis_cancelled: false,
             preview_compatibility_pending: None,
             report_rx: None,
+            report_prompt: None,
+            report_description: String::new(),
+            submitted_description: None,
             report_control: None,
             artifact_in_progress: None,
             report_artifact: None,
@@ -987,6 +1003,8 @@ impl App {
             inert: false,
             #[cfg(test)]
             dry_run: None,
+            #[cfg(test)]
+            report_endpoint: None,
             #[cfg(test)]
             worker: None,
             #[cfg(test)]
@@ -1106,8 +1124,16 @@ impl App {
         }
     }
 
+    #[cfg(debug_assertions)]
+    pub(crate) fn report_prompt_state(&self) -> (&str, bool) {
+        (&self.report_description, self.report_prompt.is_some())
+    }
+
     fn busy(&self) -> bool {
-        self.running() || self.pending.is_some() || self.profile_rx.is_some()
+        self.running()
+            || self.pending.is_some()
+            || self.report_prompt.is_some()
+            || self.profile_rx.is_some()
     }
 
     fn discover(&mut self) {
@@ -1143,6 +1169,18 @@ impl App {
     }
 
     pub(crate) fn refresh(&mut self, drives: Vec<DriveChoice>) {
+        if self
+            .drives
+            .iter()
+            .find(|d| d.path == self.device)
+            .map(DriveChoice::display)
+            != drives
+                .iter()
+                .find(|d| d.path == self.device)
+                .map(DriveChoice::display)
+        {
+            self.report_artifact = None;
+        }
         if !drives.iter().any(|d| d.path == self.device) {
             self.device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
             self.recovery_bypass_family = false;
@@ -1195,6 +1233,11 @@ impl App {
 
     /// Apply one user action; returns the work only the shell can do.
     pub fn dispatch(&mut self, input: Input) -> Vec<Effect> {
+        if self.report_prompt.is_some()
+            && !matches!(&input, Input::SendReport(_) | Input::DismissReport(_))
+        {
+            return Vec::new();
+        }
         match input {
             Input::SetLanguage(language) => {
                 if self.language != language {
@@ -1209,6 +1252,7 @@ impl App {
             Input::SelectDrive(i) => {
                 if let Some(path) = self.drives.get(i).map(|d| d.path.clone()) {
                     if !self.busy() && path != self.device {
+                        self.report_artifact = None;
                         self.device = path;
                         self.flash_read = true;
                         self.recovery_read = true;
@@ -1451,13 +1495,7 @@ impl App {
                 self.diagnostics_open = true;
                 self.refresh_diagnostic_view();
             }
-            Input::SubmitReport if self.report_rx.is_none() => {
-                self.record_event(
-                    "report_requested",
-                    serde_json::json!({
-                        "artifact": self.report_artifact.as_ref().map(|a| a.kind),
-                    }),
-                );
+            Input::SubmitReport if self.report_rx.is_none() && !self.busy() => {
                 let Some(journal) = &self.journal else {
                     self.diagnostic_notice = Some("ui.report_history_is_unavailable".into());
                     return Vec::new();
@@ -1466,22 +1504,77 @@ impl App {
                 if let Some(artifact) = &self.report_artifact {
                     source = source.with_artifact(artifact.clone());
                 }
+                let summary = source.summary();
+                self.report_prompt = Some(source);
+                return vec![Effect::ReportPrompt {
+                    summary,
+                    description: self.report_description.clone(),
+                }];
+            }
+            Input::DismissReport(description) => {
+                if self.report_prompt.take().is_some() {
+                    self.report_description = description;
+                }
+            }
+            Input::SendReport(description) if self.report_rx.is_none() => {
+                let Some(source) = self.report_prompt.take() else {
+                    return Vec::new();
+                };
+                self.report_description = description;
+                if self.report_description.len() > crate::support::DESCRIPTION_LIMIT {
+                    let summary = crate::localization::message(
+                        "report.description_too_long",
+                        &[("summary", source.summary())],
+                    );
+                    self.report_prompt = Some(source);
+                    return vec![Effect::ReportPrompt {
+                        summary,
+                        description: self.report_description.clone(),
+                    }];
+                }
+                #[cfg(debug_assertions)]
+                if self.inert {
+                    return Vec::new();
+                }
+                let source = source.with_description(self.report_description.clone());
+                self.submitted_description = Some(self.report_description.clone());
+                self.record_event(
+                    "report_requested",
+                    serde_json::json!({"artifact": source.artifact_kind()}),
+                );
                 let (tx, rx) = mpsc::channel();
                 let control = crate::support::Submission::new();
                 self.report_control = Some(control.clone());
                 self.report_rx = Some(rx);
                 self.diagnostic_notice = Some("ui.opening_report_approval_in_your_browser".into());
                 let waker = self.waker.clone();
+                #[cfg(test)]
+                let endpoint = self.report_endpoint.clone();
                 std::thread::spawn(move || {
-                    let result = crate::support::submit(source, control, |message| {
+                    let progress = |message| {
                         let _ = tx.send(ReportMsg::Progress(message));
                         if let Some(wake) = &waker {
                             wake();
                         }
-                    });
-                    let _ = tx.send(ReportMsg::Finished(
-                        result.map_err(|error| format!("{error:#}")),
-                    ));
+                    };
+                    #[cfg(test)]
+                    let result = if let Some(endpoint) = endpoint {
+                        crate::support::submit_test(source, &control, &endpoint, progress)
+                    } else {
+                        crate::support::submit(source, control, progress)
+                    };
+                    #[cfg(not(test))]
+                    let result = crate::support::submit(source, control, progress);
+                    let _ = tx.send(ReportMsg::Finished(result.map_err(|error| {
+                        if error.is::<crate::support::AttachmentChanged>() {
+                            let _ = tx.send(ReportMsg::Diagnostic(format!(
+                                "Report attachment failed: {error:#}"
+                            )));
+                            "report.attachment_changed".into()
+                        } else {
+                            format!("{error:#}")
+                        }
+                    })));
                     if let Some(wake) = &waker {
                         wake();
                     }
@@ -1944,17 +2037,24 @@ impl App {
             return Vec::new();
         }
         self.artifact_in_progress = match &job {
-            Job::Backup { out, .. } => Some(crate::support::ReportArtifact {
-                path: out.clone(),
-                kind: "backup",
-            }),
-            Job::Dump { out, .. } => Some(crate::support::ReportArtifact {
-                path: out.clone(),
-                kind: "dump",
-            }),
+            Job::Backup { out, .. } => Some(crate::support::ReportArtifact::pending(
+                out.clone(),
+                "backup",
+            )),
+            Job::Dump { out, .. } => {
+                Some(crate::support::ReportArtifact::pending(out.clone(), "dump"))
+            }
             _ => None,
         };
-        self.report_artifact = None;
+        if job_may_write(&job)
+            || self.artifact_in_progress.as_ref().is_some_and(|next| {
+                self.report_artifact
+                    .as_ref()
+                    .is_some_and(|old| old.path == next.path)
+            })
+        {
+            self.report_artifact = None;
+        }
         self.result_task = self.task;
         self.action = label.to_string();
         self.status = crate::localization::message(
@@ -2013,7 +2113,8 @@ impl App {
             .operation_id
             .clone()
             .expect("started operation has an id");
-        std::thread::spawn(move || run_job(&device, job, tx, waker, operation_id));
+        let drive_label = self.device_label();
+        std::thread::spawn(move || run_job(&device, job, tx, waker, operation_id, &drive_label));
         vec![Effect::StartTicking]
     }
 
@@ -2024,7 +2125,12 @@ impl App {
             loop {
                 match rx.try_recv() {
                     Ok(ReportMsg::Progress(message)) => self.diagnostic_notice = Some(message),
+                    Ok(ReportMsg::Diagnostic(detail)) => self.log.push(detail),
                     Ok(ReportMsg::Finished(Ok(receipt))) => {
+                        if self.submitted_description.as_ref() == Some(&self.report_description) {
+                            self.report_description.clear();
+                        }
+                        self.submitted_description = None;
                         self.diagnostic_notice = Some(receipt);
                         report_done = true;
                         break;
@@ -2038,6 +2144,8 @@ impl App {
                                 .is_some_and(|control| control.cancelled())
                             {
                                 "report.cancelled"
+                            } else if error == "report.attachment_changed" {
+                                "report.attachment_changed"
                             } else {
                                 "errors.submit_report"
                             }
@@ -2107,13 +2215,32 @@ impl App {
                             let _ = reply.send(false);
                         }
                     },
+                    Ok(Msg::CapturedArtifact(result)) => match result {
+                        Ok(artifact)
+                            if self.artifact_in_progress.as_ref().is_some_and(|pending| {
+                                pending.path == artifact.path && pending.kind == artifact.kind
+                            }) && artifact.evidence.as_ref().is_some_and(|e| {
+                                Some(&e.operation) == self.operation_id.as_ref()
+                                    && e.device == self.device
+                            }) =>
+                        {
+                            self.artifact_in_progress = Some(artifact);
+                        }
+                        Ok(_) => {}
+                        Err(detail) => {
+                            self.log.push(format!(
+                                "Capture saved but attachment unavailable: {detail}"
+                            ));
+                            self.diagnostic_notice = Some("report.attachment_unavailable".into());
+                        }
+                    },
                     Ok(Msg::Done(result)) => {
-                        self.report_artifact = if result.is_ok() {
-                            self.artifact_in_progress.take()
-                        } else {
-                            self.artifact_in_progress = None;
-                            None
-                        };
+                        if let Some(artifact) = self.artifact_in_progress.take() {
+                            if result.is_ok() {
+                                self.report_artifact =
+                                    artifact.evidence.is_some().then_some(artifact);
+                            }
+                        }
                         recovery_planned = self.recovery_planning.take().filter(|_| {
                             matches!(result, Ok(Some(workflow::UpdateOutcome::Planned)))
                         });
@@ -2994,7 +3121,7 @@ impl App {
                         _ => "action.submit_report",
                     },
                     Input::SubmitReport,
-                    self.journal.is_some(),
+                    self.journal.is_some() && !self.busy(),
                 )
             },
         }
@@ -3222,7 +3349,14 @@ fn post_update_snapshot(
 }
 
 /// The worker: one job, every event forwarded, a panic reported as a failure.
-fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operation_id: String) {
+fn run_job(
+    device: &str,
+    job: Job,
+    tx: Sender<Msg>,
+    waker: Option<Waker>,
+    operation_id: String,
+    drive_label: &str,
+) {
     let check_after = matches!(job, Job::Flash(_) | Job::ExecuteRecovery(_));
     let wake = {
         let waker = waker.clone();
@@ -3326,6 +3460,25 @@ fn run_job(device: &str, job: Job, tx: Sender<Msg>, waker: Option<Waker>, operat
                 )
         }) {
             let _ = tx.send(Msg::DriveAfter(after));
+        }
+    }
+    if result.is_ok() {
+        let artifact = match &job {
+            Job::Dump { out, .. } => {
+                Some(crate::support::ReportArtifact::pending(out.clone(), "dump"))
+            }
+            Job::Backup { out, .. } => Some(crate::support::ReportArtifact::pending(
+                out.clone(),
+                "backup",
+            )),
+            _ => None,
+        };
+        if let Some(artifact) = artifact {
+            let _ = tx.send(Msg::CapturedArtifact(
+                artifact
+                    .capture(device, drive_label, &operation_id)
+                    .map_err(|e| format!("{e:#}")),
+            ));
         }
     }
     let _ = tx.send(Msg::Done(result));

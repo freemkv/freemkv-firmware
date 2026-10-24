@@ -82,6 +82,20 @@ pub fn submit(
     )
 }
 
+#[cfg(test)]
+pub(crate) fn submit_test(
+    source: BundleSource,
+    control: &Submission,
+    base: &str,
+    progress: impl FnMut(String),
+) -> Result<String> {
+    let control = Submission {
+        interval: Duration::from_millis(1),
+        ..control.clone()
+    };
+    submit_at(source, &control, base, |_| Ok(()), progress)
+}
+
 fn submit_at(
     source: BundleSource,
     control: &Submission,
@@ -150,8 +164,9 @@ fn submit_at(
         .as_str()
         .context("Missing upload token")?;
     control.check()?;
-    progress(format!("Creating {} report ZIP…", scope.label()));
-    let path = source.bundle_with_control(scope, Some(control))?;
+    progress("report.preparing".into());
+    let built = source.bundle_with_control(scope, Some(control))?;
+    let path = built.path;
     control.check()?;
     let data = std::fs::read(&path)?;
     if data.len() as u64 > BUNDLE_LIMIT {
@@ -183,9 +198,10 @@ fn submit_at(
                 let receipt: Value = response.body_mut().read_json()?;
                 let id = receipt["report_id"]
                     .as_str()
+                    .filter(|id| !id.trim().is_empty())
                     .context("Missing report receipt")?;
                 return Ok(crate::localization::message(
-                    "report.received",
+                    built.receipt_key,
                     &[("receipt", id.into()), ("path", path.display().to_string())],
                 ));
             }

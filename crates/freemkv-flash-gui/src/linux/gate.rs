@@ -75,8 +75,94 @@ fn run(shell: &Rc<Shell>, dir: &Path) {
     let first = sheet(shell, dir, true, &mut g);
     let reopened = sheet(shell, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
+    report_prompt(shell, &mut g);
     g.no_drive_io("end", &shell.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+/// Exercise the real multiline editor and response callbacks; the fixture's inert
+/// model consumes Send without starting a report worker or contacting HTTP.
+fn report_prompt(shell: &Rc<Shell>, g: &mut Gate) {
+    let description = "First line\n日本語 café 🦀\n  trailing spaces  ";
+    for response in ["cancel", "close", "send"] {
+        shell.send(Input::SubmitReport);
+        settle(SETTLE);
+        let dialog = shell.report_prompt.borrow().clone();
+        let Some(dialog) = dialog else {
+            g.check("report-prompt-opens", false, response);
+            return;
+        };
+        let root: gtk::Widget = dialog.clone().upcast();
+        let editor = descendants(&root)
+            .into_iter()
+            .find_map(|w| w.downcast::<gtk::TextView>().ok());
+        let Some(editor) = editor else {
+            g.check("report-prompt-editor", false, response);
+            return;
+        };
+        let buffer = editor.buffer();
+        if response != "cancel" {
+            g.check(
+                "report-draft-retained",
+                buffer
+                    .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                    .as_str()
+                    == description,
+                response,
+            );
+        }
+        let edited = if response == "send" {
+            "Sent draft\n日本語 café 🦀\n  "
+        } else {
+            description
+        };
+        buffer.set_text(edited);
+        shell.render();
+        g.check(
+            "report-editor-keeps-newlines-unicode",
+            buffer
+                .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                .as_str()
+                == edited,
+            response,
+        );
+        if response == "close" {
+            dialog.close();
+        } else {
+            let key = if response == "send" {
+                "report.send"
+            } else {
+                "ui.cancel"
+            };
+            let label = crate::localization::text(shell.view().language, key);
+            let control = button(&root, &label);
+            g.check("report-response-button", control.is_some(), response);
+            if let Some(control) = control {
+                control.emit_clicked();
+            }
+        }
+        settle(SETTLE);
+        g.check(
+            "report-prompt-closes",
+            shell.report_prompt.borrow().is_none(),
+            response,
+        );
+        let app = shell.app.borrow();
+        let (draft, open) = app.report_prompt_state();
+        g.check(
+            "report-response-reaches-model",
+            !open && draft == edited,
+            response,
+        );
+        g.no_drive_io(&format!("report {response}"), &app);
+    }
+    // The inert Send callback must have consumed the prompt and preserved the exact
+    // edited draft. Inspect a fresh effect, then dismiss it without presenting it.
+    let effects = shell.app.borrow_mut().dispatch(Input::SubmitReport);
+    g.check("report-send-received-description", effects.iter().any(|effect| {
+        matches!(effect, crate::ui::Effect::ReportPrompt { description: value, .. } if value == "Sent draft\n日本語 café 🦀\n  ")
+    }), "inert Send preserves the full edited text");
+    shell.send(Input::DismissReport(description.into()));
 }
 
 /// CI has no desktop portal; exercise GTK's real fallback chooser and dismiss it.

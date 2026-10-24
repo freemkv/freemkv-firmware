@@ -482,6 +482,26 @@ fn field_event(label: &str, value: &str) -> Event {
 }
 
 fn finish(app: &mut App, result: Result<(), String>) -> Vec<Effect> {
+    if result.is_ok() {
+        if let Some(artifact) = app
+            .artifact_in_progress
+            .clone()
+            .filter(|a| a.path.is_file())
+        {
+            let captured = artifact
+                .capture(
+                    &app.device,
+                    &app.device_label(),
+                    app.operation_id.as_deref().unwrap(),
+                )
+                .map_err(|e| e.to_string());
+            app.worker
+                .as_ref()
+                .unwrap()
+                .send(Msg::CapturedArtifact(captured))
+                .unwrap();
+        }
+    }
     app.worker
         .take()
         .unwrap()
@@ -1938,6 +1958,7 @@ fn worker_identifies_typed_inspection_cancellation_before_any_file_access() {
         tx,
         None,
         "cancelled-inspection".into(),
+        "",
     );
     let messages: Vec<_> = rx.try_iter().collect();
     assert!(messages.iter().any(|message| matches!(message,
@@ -2817,6 +2838,7 @@ fn completed_capture_offers_its_file_and_failed_capture_offers_report_only() {
         app.dispatch(Input::SelectTask(task));
         let path = std::env::temp_dir().join(format!("capture-{task:?}.bin"));
         app.dispatch(Input::Chosen(pick, path.clone()));
+        std::fs::write(&path, b"completed capture").unwrap();
         finish(&mut app, Ok(()));
         assert_eq!(app.report_artifact.as_ref().unwrap().path, path);
         assert_eq!(app.view().results.unwrap().submit_report.text, label);
@@ -2855,7 +2877,10 @@ fn unavailable_or_failed_backup_offers_dump_and_keeps_its_submission_identity() 
                 ..
             }]
         ));
-        app.dispatch(Input::Chosen(Pick::Dump, "review-dump.bin".into()));
+        let dump =
+            std::env::temp_dir().join(format!("review-dump-{}.bin", workflow::new_operation_id()));
+        app.dispatch(Input::Chosen(Pick::Dump, dump.clone()));
+        std::fs::write(&dump, b"completed dump").unwrap();
         assert!(matches!(last_job(&app).2, Job::Dump { .. }));
         assert_eq!(app.task, Task::Dump);
         finish(&mut app, Ok(()));
@@ -3014,6 +3039,7 @@ fn worker_input_failure_has_precheck_evidence_without_opening_a_drive() {
         tx,
         None,
         "input-check".into(),
+        "",
     );
     let messages: Vec<_> = rx.try_iter().collect();
     assert!(messages
@@ -3417,4 +3443,295 @@ fn backup_done_fallback_requests_dump_but_dump_failure_does_not() {
         assert_eq!(issue.id, expected);
         assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
     }
+}
+
+#[test]
+fn completed_dump_survives_later_failed_backup_for_submission() {
+    let mut app = one_drive();
+    let dir = std::env::temp_dir().join(format!("dump-retention-{}", workflow::new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dump = dir.join("drive.dump.bin");
+    std::fs::write(&dump, b"completed dump bytes").unwrap();
+    app.dispatch(Input::SelectTask(Task::Dump));
+    app.dispatch(Input::Chosen(Pick::Dump, dump.clone()));
+    finish(&mut app, Ok(()));
+    app.dispatch(Input::SelectTask(Task::Backup));
+    app.dispatch(Input::Chosen(Pick::Backup, dir.join("backup.tar")));
+    finish(&mut app, Err("unsupported backup".into()));
+    assert_eq!(app.report_artifact.as_ref().map(|a| &a.path), Some(&dump));
+    assert_eq!(
+        app.view().results.unwrap().submit_report.text,
+        "Submit Dump"
+    );
+}
+
+#[test]
+fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
+    use std::io::{BufRead, Read, Write};
+    use std::net::TcpListener;
+    let mut app = one_drive();
+    let dir = std::env::temp_dir().join(format!("joined-report-{}", workflow::new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    app.journal = Some(Journal::memory_at(dir.clone()));
+    let dump = dir.join("L08SH.dump.bin");
+    let expected = b"real captured fixture bytes\0\xff";
+    app.dispatch(Input::SelectTask(Task::Dump));
+    app.dispatch(Input::Chosen(Pick::Dump, dump.clone()));
+    std::fs::write(&dump, expected).unwrap();
+    finish(&mut app, Ok(()));
+    app.dispatch(Input::SelectTask(Task::Backup));
+    app.dispatch(Input::Chosen(Pick::Backup, dir.join("backup.tar")));
+    finish(&mut app, Err("backup unsupported".into()));
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    app.report_endpoint = Some(format!("http://{}", listener.local_addr().unwrap()));
+    let requests = Arc::new(AtomicUsize::new(0));
+    let observed = requests.clone();
+    let description = "Backup failed.\n日本語 — description 🐈";
+    let server = std::thread::spawn(move || {
+        for index in 0..3 {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((s, _)) => break s,
+                    Err(e)
+                        if e.kind() == std::io::ErrorKind::WouldBlock
+                            && Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(1))
+                    }
+                    Err(e) => panic!("expected request {index}: {e}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
+            let mut length = 0usize;
+            let mut headers = String::new();
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = v.trim().parse().unwrap();
+                }
+                headers.push_str(&line);
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            observed.fetch_add(1, Ordering::SeqCst);
+            if index == 2 {
+                assert!(headers.starts_with("PUT "));
+                let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&body)).unwrap();
+                let manifest: serde_json::Value =
+                    serde_json::from_reader(zip.by_name("manifest.json").unwrap()).unwrap();
+                assert_eq!(manifest["description"], description);
+                assert_eq!(manifest["artifact"]["kind"], "dump");
+                assert_eq!(manifest["artifact"]["filename"], "L08SH.dump.bin");
+                assert_eq!(manifest["artifact"]["drive"], "drive-a  Drive A");
+                assert!(manifest["artifact"]["operation_id"]
+                    .as_str()
+                    .is_some_and(|s| !s.is_empty()));
+                let mut received = Vec::new();
+                zip.by_name("artifacts/dump.bin")
+                    .unwrap()
+                    .read_to_end(&mut received)
+                    .unwrap();
+                assert_eq!(received, expected);
+                use sha2::Digest;
+                assert!(headers.to_ascii_lowercase().contains(&format!(
+                    "x-content-sha256: {:x}",
+                    sha2::Sha256::digest(&body)
+                )));
+            }
+            let body = match index {
+                0 => {
+                    r#"{"id":"joined","poll_token":"poll","approval_url":"http://localhost/approval"}"#
+                }
+                1 => r#"{"scope":"session","upload_token":"upload"}"#,
+                _ => r#"{"report_id":"joined-receipt"}"#,
+            };
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        }
+    });
+    assert!(matches!(
+        app.dispatch(Input::SubmitReport).as_slice(),
+        [Effect::ReportPrompt { .. }]
+    ));
+    assert!(app.report_rx.is_none());
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+    app.dispatch(Input::DismissReport(description.into()));
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+    assert!(
+        matches!(app.dispatch(Input::SubmitReport).as_slice(), [Effect::ReportPrompt { description: text, .. }] if text == description)
+    );
+    app.dispatch(Input::SendReport(description.into()));
+    assert!(app
+        .dispatch(Input::SendReport("stale callback".into()))
+        .is_empty());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.report_rx.is_some() && Instant::now() < deadline {
+        app.poll();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    server.join().unwrap();
+    assert!(app.report_rx.is_none());
+    let receipt = crate::localization::english(app.diagnostic_notice.as_deref().unwrap());
+    assert!(
+        receipt.contains("Diagnostic report and dump sent"),
+        "{receipt}"
+    );
+    assert!(receipt.contains("joined-receipt"));
+    assert!(app.report_description.is_empty());
+    app.poll();
+    assert_eq!(
+        crate::localization::english(app.diagnostic_notice.as_deref().unwrap()),
+        receipt
+    );
+    assert_eq!(requests.load(Ordering::SeqCst), 3);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn report_prompt_bounds_preserve_draft_and_exclude_other_modals() {
+    let mut app = one_drive();
+    app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+    assert!(matches!(
+        app.dispatch(Input::SubmitReport).as_slice(),
+        [Effect::ReportPrompt { .. }]
+    ));
+    assert!(app.dispatch(Input::Choose(Pick::Backup)).is_empty());
+    assert!(app.dispatch(Input::SubmitReport).is_empty());
+    let description = "🐈".repeat(crate::support::DESCRIPTION_LIMIT / 4 + 1);
+    assert!(matches!(
+        app.dispatch(Input::SendReport(description.clone()))
+            .as_slice(),
+        [Effect::ReportPrompt { .. }]
+    ));
+    assert!(app.report_rx.is_none());
+    assert_eq!(app.report_description, description);
+    app.dispatch(Input::DismissReport("edited draft".into()));
+    assert!(app.report_prompt.is_none());
+    assert_eq!(app.report_description, "edited draft");
+    app.dispatch(Input::SendReport("stale".into()));
+    assert!(app.report_rx.is_none());
+    assert_eq!(app.report_description, "edited draft");
+}
+
+#[test]
+fn retained_dump_survives_info_but_not_drive_change_or_write_attempt() {
+    let mut app = one_drive();
+    let dir = std::env::temp_dir().join(format!("retained-ui-{}", workflow::new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("capture.bin");
+    std::fs::write(&path, b"captured bytes").unwrap();
+    let capture = crate::support::ReportArtifact::pending(path, "dump")
+        .capture("drive-a", "Drive A", "op")
+        .unwrap();
+    app.report_artifact = Some(capture.clone());
+    app.dispatch(Input::ReadInfo);
+    finish(&mut app, Ok(()));
+    assert!(app.report_artifact.is_some());
+    app.refresh(vec![drive("drive-a", "drive-a", "Different drive")]);
+    assert!(app.report_artifact.is_none());
+    app.report_artifact = Some(capture.clone());
+    app.refresh(Vec::new());
+    assert!(app.report_artifact.is_none());
+    app = one_drive();
+    app.report_artifact = Some(capture);
+    app.start_job(
+        "ui.flash",
+        "drive-a".into(),
+        Job::Flash(FlashOptions {
+            execute: true,
+            ..FlashOptions::default()
+        }),
+    );
+    assert!(app.report_artifact.is_none());
+    finish(&mut app, Err("write blocked".into()));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn failed_submission_keeps_description_for_next_prompt() {
+    let mut app = one_drive();
+    app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+    app.report_description = "My dump did not arrive.\n再試行".into();
+    app.submitted_description = Some(app.report_description.clone());
+    let (tx, rx) = mpsc::channel();
+    app.report_rx = Some(rx);
+    tx.send(ReportMsg::Finished(Err("server response lost".into())))
+        .unwrap();
+    drop(tx);
+    app.poll();
+    assert_eq!(
+        app.diagnostic_notice.as_deref(),
+        Some("errors.submit_report")
+    );
+    assert!(
+        matches!(app.dispatch(Input::SubmitReport).as_slice(), [Effect::ReportPrompt { description, .. }] if description == "My dump did not arrive.\n再試行")
+    );
+    assert!(app.report_rx.is_none());
+}
+
+#[test]
+fn report_prompt_waits_until_workers_and_their_confirmations_finish() {
+    for without_backup in [false, true] {
+        let mut app = one_drive();
+        app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+        app.flash_input = Some("firmware.tar".into());
+        app.dispatch(Input::FlashNow);
+        assert!(app.running());
+        assert!(
+            app.dispatch(Input::SubmitReport).is_empty(),
+            "report prompt must not overlap flash planning"
+        );
+        assert!(!app.results_view().submit_report.enabled);
+        plan_passes(&mut app);
+        assert!(
+            app.dispatch(Input::SubmitReport).is_empty(),
+            "report prompt must not overlap backup/capture"
+        );
+        let (reply, answer) = mpsc::channel();
+        let message = if without_backup {
+            Msg::BackupUnavailable("backup unavailable".into(), reply)
+        } else {
+            Msg::Authorized(FlashSheet::default(), reply)
+        };
+        app.worker.as_ref().unwrap().send(message).unwrap();
+        app.poll();
+        assert!(app.pending.is_some());
+        assert!(app.report_prompt.is_none());
+        assert!(app.dispatch(Input::SubmitReport).is_empty());
+        app.dispatch(Input::CancelConfirm);
+        assert!(!answer.recv().unwrap());
+        assert!(app.pending.is_none());
+    }
+    let mut app = one_drive();
+    app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+    app.task = Task::Recovery;
+    app.dispatch(Input::Chosen(Pick::RecoveryInput, "firmware.tar".into()));
+    app.dispatch(Input::Recover);
+    assert!(app.recovery_planning.is_some());
+    assert!(
+        app.dispatch(Input::SubmitReport).is_empty(),
+        "report prompt must not overlap recovery planning"
+    );
+    assert!(!app.results_view().submit_report.enabled);
+    recovery_plan_passes(&mut app);
+    assert!(app.pending.is_some());
+    assert!(app.dispatch(Input::SubmitReport).is_empty());
+    app.dispatch(Input::CancelConfirm);
+    assert!(app.pending.is_none());
+    app.dispatch(Input::Refresh);
+    assert!(app.profile_rx.is_some());
+    assert!(
+        app.dispatch(Input::SubmitReport).is_empty(),
+        "profile worker owns busy state"
+    );
 }

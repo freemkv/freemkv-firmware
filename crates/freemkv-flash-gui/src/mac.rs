@@ -514,6 +514,7 @@ struct Ivars {
     checks: RefCell<HashMap<isize, CheckId>>,
     next_tag: Cell<isize>,
     alert: RefCell<Option<Retained<NSAlert>>>,
+    report_alert: RefCell<Option<Retained<NSAlert>>>,
     alert_ack: RefCell<Option<Retained<NSButton>>>,
     alert_confirm: RefCell<Option<Retained<NSButton>>>,
     diag_win: RefCell<Option<Retained<NSWindow>>>,
@@ -713,6 +714,12 @@ impl Controller {
         let mtm = self.mtm();
         for e in effects {
             match e {
+                Effect::ReportPrompt {
+                    summary,
+                    description,
+                } => {
+                    self.present_report(&summary, &description);
+                }
                 Effect::OpenFile { pick, filter } => {
                     let panel = NSOpenPanel::openPanel(mtm);
                     panel.setCanChooseFiles(true);
@@ -773,6 +780,72 @@ impl Controller {
             }
         });
         panel.beginSheetModalForWindow_completionHandler(&window, &handler);
+    }
+
+    /// A separate report sheet; the model and language are snapshotted before AppKit
+    /// can process events. Its completion reads the editor once, without trimming.
+    fn present_report(&self, summary: &str, description: &str) {
+        let mtm = self.mtm();
+        let language = self.view().language;
+        let Some(window) = self.ivars().window.borrow().clone() else {
+            self.send(Input::DismissReport(description.to_owned()));
+            return;
+        };
+        let text = |id| crate::localization::get(language, id);
+        let alert = NSAlert::new(mtm);
+        alert.setMessageText(&ns(text("report.prompt_title")));
+        alert.setInformativeText(&ns(&crate::localization::render(language, summary)));
+        let send = alert.addButtonWithTitle(&ns(text("report.send")));
+        send.setKeyEquivalent(&ns(""));
+        alert
+            .addButtonWithTitle(&ns(text("ui.cancel")))
+            .setKeyEquivalent(&ns("\u{1b}"));
+        let accessory = stack(mtm, true, 8.0);
+        accessory.addArrangedSubview(&label(mtm, text("report.description_label")));
+        let scroll = NSTextView::scrollableTextView(mtm);
+        let editor = scroll
+            .documentView()
+            .and_then(|v| v.downcast::<NSTextView>().ok())
+            .expect("scrollableTextView holds a text view");
+        editor.setRichText(false);
+        editor.setEditable(true);
+        editor.setFont(Some(&NSFont::systemFontOfSize(NSFont::systemFontSize())));
+        editor.setAutomaticQuoteSubstitutionEnabled(false);
+        editor.setAutomaticDashSubstitutionEnabled(false);
+        editor.setAutomaticTextReplacementEnabled(false);
+        editor.setAutomaticSpellingCorrectionEnabled(false);
+        editor.setString(&ns(description));
+        scroll.setHasVerticalScroller(true);
+        scroll
+            .widthAnchor()
+            .constraintEqualToConstant(420.0)
+            .setActive(true);
+        scroll
+            .heightAnchor()
+            .constraintEqualToConstant(180.0)
+            .setActive(true);
+        accessory.addArrangedSubview(&scroll);
+        accessory.layoutSubtreeIfNeeded();
+        accessory.setFrame(rect(0.0, 0.0, 420.0, accessory.fittingSize().height));
+        alert.setAccessoryView(Some(&accessory));
+        *self.ivars().report_alert.borrow_mut() = Some(alert.clone());
+        let me = self.retain();
+        let input_editor = editor.clone();
+        let handler = RcBlock::new(move |response: isize| {
+            if me.ivars().report_alert.borrow_mut().take().is_none() {
+                return;
+            }
+            let description = input_editor.string().to_string();
+            me.send(if response == NS_ALERT_FIRST {
+                Input::SendReport(description)
+            } else {
+                Input::DismissReport(description)
+            });
+        });
+        alert.beginSheetModalForWindow_completionHandler(&window, Some(&handler));
+        alert.window().setDefaultButtonCell(None);
+        send.setKeyEquivalent(&ns(""));
+        alert.window().makeFirstResponder(Some(&editor));
     }
 
     fn start_tick(&self) {
