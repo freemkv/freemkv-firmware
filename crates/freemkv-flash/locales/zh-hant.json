@@ -94,6 +94,7 @@
     "errors.command_options": "部分命令選項缺少或無效。請使用 --help 查看說明，修正選項後重試。",
     "errors.no_firmware_write": "此操作未向光碟機寫入韌體。",
     "errors.unsupported_firmware": "此應用程式不支援將此韌體用於所要求的操作。請選擇支援的韌體檔案，或儲存診斷報告以尋求協助。",
+    "errors.installed_firmware_mismatch": "所選更新與此光碟機目前安裝的韌體不符。請選擇相容的更新套件。",
     "errors.incompatible_firmware": "所選韌體適用於不同的硬體。請選擇與此光碟機相容的韌體。",
     "errors.drive_changed": "光碟機與已準備的還原不再相符。請選擇正確的光碟機並重新準備還原。",
     "errors.preparation_expired": "已準備的還原無法使用。請重新準備還原後再繼續。",

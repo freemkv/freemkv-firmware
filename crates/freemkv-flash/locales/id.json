@@ -94,6 +94,7 @@
     "errors.command_options": "Beberapa opsi perintah tidak ada atau tidak valid. Jalankan perintah dengan --help, perbaiki opsi, lalu coba lagi.",
     "errors.no_firmware_write": "Operasi ini tidak menulis firmware ke drive.",
     "errors.unsupported_firmware": "Aplikasi ini tidak mendukung firmware ini untuk operasi yang diminta. Pilih file yang didukung atau simpan laporan diagnostik untuk meminta bantuan.",
+    "errors.installed_firmware_mismatch": "Pembaruan yang dipilih tidak cocok dengan firmware yang saat ini terpasang pada drive ini. Pilih paket pembaruan yang kompatibel.",
     "errors.incompatible_firmware": "Firmware yang dipilih untuk perangkat keras lain. Pilih firmware yang kompatibel dengan drive ini.",
     "errors.drive_changed": "Drive tidak lagi cocok dengan pemulihan yang disiapkan. Pilih drive yang benar dan siapkan pemulihan lagi.",
     "errors.preparation_expired": "Pemulihan yang disiapkan tidak lagi tersedia. Siapkan pemulihan lagi sebelum melanjutkan.",

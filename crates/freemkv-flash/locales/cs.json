@@ -94,6 +94,7 @@
     "errors.command_options": "Některé volby příkazu chybí nebo nejsou platné. Spusťte příkaz s --help, opravte volby a zkuste to znovu.",
     "errors.no_firmware_write": "Tato operace nezapsala do jednotky žádný firmware.",
     "errors.unsupported_firmware": "Tato aplikace nepodporuje tento firmware pro požadovanou operaci. Vyberte podporovaný soubor nebo uložte diagnostickou zprávu pro získání pomoci.",
+    "errors.installed_firmware_mismatch": "Vybraná aktualizace neodpovídá firmwaru, který je nyní nainstalován v této jednotce. Vyberte kompatibilní aktualizační balíček.",
     "errors.incompatible_firmware": "Vybraný firmware je určen pro jiný hardware. Vyberte firmware kompatibilní s touto jednotkou.",
     "errors.drive_changed": "Jednotka již neodpovídá připravené obnově. Vyberte správnou jednotku a připravte obnovu znovu.",
     "errors.preparation_expired": "Připravená obnova již není k dispozici. Před pokračováním ji připravte znovu.",

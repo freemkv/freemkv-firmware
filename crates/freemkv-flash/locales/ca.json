@@ -94,6 +94,7 @@
     "errors.command_options": "Falten opcions de l’ordre o no són vàlides. Executeu l’ordre amb --help, corregiu les opcions i torneu-ho a provar.",
     "errors.no_firmware_write": "Aquesta operació no ha escrit microprogramari a la unitat.",
     "errors.unsupported_firmware": "Aquesta aplicació no admet aquest microprogramari per a l’operació sol·licitada. Trieu un fitxer compatible o deseu un informe de diagnòstic per obtenir ajuda.",
+    "errors.installed_firmware_mismatch": "L’actualització seleccionada no coincideix amb el microprogramari instal·lat actualment en aquesta unitat. Trieu un paquet d’actualització compatible.",
     "errors.incompatible_firmware": "El microprogramari seleccionat és per a un maquinari diferent. Trieu-ne un de compatible amb aquesta unitat.",
     "errors.drive_changed": "La unitat ja no coincideix amb la recuperació preparada. Seleccioneu la unitat correcta i prepareu la recuperació de nou.",
     "errors.preparation_expired": "La recuperació preparada ja no està disponible. Prepareu-la de nou abans de continuar.",

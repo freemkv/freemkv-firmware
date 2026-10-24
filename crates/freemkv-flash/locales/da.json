@@ -94,6 +94,7 @@
     "errors.command_options": "Nogle kommandoindstillinger mangler eller er ugyldige. Kør kommandoen med --help, ret indstillingerne, og prøv igen.",
     "errors.no_firmware_write": "Denne handling skrev ikke firmware til drevet.",
     "errors.unsupported_firmware": "Denne app understøtter ikke denne firmware til den ønskede handling. Vælg en understøttet fil, eller gem en diagnoserapport for at få hjælp.",
+    "errors.installed_firmware_mismatch": "Den valgte opdatering passer ikke til den firmware, der er installeret på dette drev. Vælg en kompatibel opdateringspakke.",
     "errors.incompatible_firmware": "Den valgte firmware er til anden hardware. Vælg firmware, der passer til drevet.",
     "errors.drive_changed": "Drevet svarer ikke længere til den forberedte gendannelse. Vælg det rigtige drev, og forbered gendannelsen igen.",
     "errors.preparation_expired": "Den forberedte gendannelse er ikke længere tilgængelig. Forbered den igen, før du fortsætter.",

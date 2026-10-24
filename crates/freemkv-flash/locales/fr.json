@@ -94,6 +94,7 @@
     "errors.command_options": "Certaines options de la commande sont absentes ou invalides. Exécutez la commande avec --help, corrigez les options et réessayez.",
     "errors.no_firmware_write": "Cette opération n’a écrit aucun micrologiciel sur le lecteur.",
     "errors.unsupported_firmware": "Cette application ne prend pas en charge ce micrologiciel pour l’opération demandée. Choisissez un fichier pris en charge ou enregistrez un rapport de diagnostic pour obtenir de l’aide.",
+    "errors.installed_firmware_mismatch": "La mise à jour sélectionnée ne correspond pas au micrologiciel actuellement installé sur ce lecteur. Choisissez un paquet de mise à jour compatible.",
     "errors.incompatible_firmware": "Le micrologiciel sélectionné est destiné à un matériel différent. Choisissez un micrologiciel compatible avec ce lecteur.",
     "errors.drive_changed": "Le lecteur ne correspond plus à la récupération préparée. Sélectionnez le lecteur prévu et préparez à nouveau la récupération.",
     "errors.preparation_expired": "La récupération préparée n’est plus disponible. Préparez à nouveau la récupération avant de continuer.",

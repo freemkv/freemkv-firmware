@@ -94,6 +94,7 @@
     "errors.command_options": "Joitakin komentovalintoja puuttuu tai ne ovat virheellisiä. Suorita komento valinnalla --help, korjaa valinnat ja yritä uudelleen.",
     "errors.no_firmware_write": "Tämä toiminto ei kirjoittanut laiteohjelmistoa asemaan.",
     "errors.unsupported_firmware": "Tämä sovellus ei tue tätä laiteohjelmistoa pyydettyyn toimintoon. Valitse tuettu tiedosto tai tallenna diagnostiikkaraportti avun saamiseksi.",
+    "errors.installed_firmware_mismatch": "Valittu päivitys ei vastaa asemaan tällä hetkellä asennettua laiteohjelmistoa. Valitse yhteensopiva päivityspaketti.",
     "errors.incompatible_firmware": "Valittu laiteohjelmisto on tarkoitettu eri laitteistolle. Valitse tämän aseman kanssa yhteensopiva laiteohjelmisto.",
     "errors.drive_changed": "Asema ei enää vastaa valmisteltua palautusta. Valitse oikea asema ja valmistele palautus uudelleen.",
     "errors.preparation_expired": "Valmisteltu palautus ei ole enää käytettävissä. Valmistele se uudelleen ennen jatkamista.",

@@ -94,6 +94,7 @@
     "errors.command_options": "Unele opțiuni ale comenzii lipsesc sau nu sunt valide. Rulați comanda cu --help, corectați opțiunile și încercați din nou.",
     "errors.no_firmware_write": "Această operație nu a scris firmware pe unitate.",
     "errors.unsupported_firmware": "Această aplicație nu acceptă acest firmware pentru operația solicitată. Alegeți un fișier acceptat sau salvați un raport de diagnosticare pentru ajutor.",
+    "errors.installed_firmware_mismatch": "Actualizarea selectată nu corespunde firmware-ului instalat în prezent pe această unitate. Alegeți un pachet de actualizare compatibil.",
     "errors.incompatible_firmware": "Firmware-ul selectat este destinat altui hardware. Alegeți firmware compatibil cu această unitate.",
     "errors.drive_changed": "Unitatea nu mai corespunde recuperării pregătite. Selectați unitatea corectă și pregătiți recuperarea din nou.",
     "errors.preparation_expired": "Recuperarea pregătită nu mai este disponibilă. Pregătiți recuperarea din nou înainte de a continua.",

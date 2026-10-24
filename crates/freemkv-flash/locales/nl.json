@@ -94,6 +94,7 @@
     "errors.command_options": "Sommige opdrachtopties ontbreken of zijn ongeldig. Voer de opdracht uit met --help, corrigeer de opties en probeer het opnieuw.",
     "errors.no_firmware_write": "Bij deze bewerking is geen firmware naar het station geschreven.",
     "errors.unsupported_firmware": "Deze toepassing ondersteunt deze firmware niet voor de gevraagde bewerking. Kies een ondersteund bestand of sla een diagnoserapport op om hulp te krijgen.",
+    "errors.installed_firmware_mismatch": "De geselecteerde update past niet bij de firmware die momenteel op dit station is geïnstalleerd. Kies een compatibel updatepakket.",
     "errors.incompatible_firmware": "De geselecteerde firmware is voor andere hardware. Kies firmware die geschikt is voor dit station.",
     "errors.drive_changed": "Het station komt niet meer overeen met het voorbereide herstel. Selecteer het juiste station en bereid het herstel opnieuw voor.",
     "errors.preparation_expired": "Het voorbereide herstel is niet meer beschikbaar. Bereid het herstel opnieuw voor voordat u doorgaat.",
