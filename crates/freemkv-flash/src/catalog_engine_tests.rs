@@ -243,12 +243,14 @@ fn assert_cross_family_refused(drive: &[u8], image: &[u8], tag: &str) {
     assert_flash_refused(drive, image, tag);
 }
 
-/// A flash is refused at the dry run and writes nothing, whatever the reason
-/// (a different chip refuses before the family gate).
+/// Both preview and requested execution refuse the image and write nothing.
 fn assert_flash_refused(drive: &[u8], image: &[u8], tag: &str) {
     let product = Build::of_image(drive).unwrap().product;
     assert!(preview(drive, &product, image).is_err(), "{tag}: admitted");
-    let (outcome, dev) = flash_onto(drive, &product, image, None);
+    let dir = scratch(&format!("refused-{tag}"));
+    let backup = dir.join("rollback.bin");
+    let (outcome, dev) = flash_onto(drive, &product, image, Some(backup.clone()));
+    assert!(!backup.exists(), "{tag}: refusal precedes backup capture");
     assert_ne!(outcome.result, "OK", "{tag}: {:#?}", outcome.text);
     assert!(streamed(&dev).is_empty(), "{tag}: wrote despite refusal");
 }
@@ -266,25 +268,11 @@ fn a_same_family_crossflash_runs_through_the_engine() {
     let wh16ns60 = find("BD-RE  WH16NS60", "1.01");
     let wh16ns58 = find("BD-RE  WH16NS58", "1.V1");
     let bw16d1ht = find("BW-16D1HT", "3.10");
-    let bu40n = find("BD-RE BU40N", "1.02");
-    // A JB7 build: a classic MT1939 (banner "MT1939 Boot Code"), a different
-    // chip from the JB8 WH16NS58 (now MT1959 by its "MT1959 Boot" banner).
-    let jb7 = builds
-        .iter()
-        .find(|(b, _)| b.family == "11e7527216405467" && b.model != "BD-RE  WH16NS58")
-        .map(|(_, image)| image.clone())
-        .unwrap();
     let dir = scratch("crossflash-engine");
 
     assert_crossflash(&wh16ns60, &wh16ns58, &dir, "ns60-ns58");
     assert_crossflash(&wh16ns58, &wh16ns60, &dir, "ns58-ns60");
     assert_crossflash(&bw16d1ht, &wh16ns58, &dir, "d1ht-ns58");
-
-    // A same-chip (MT1959), different-family image (BU40N) is refused with the
-    // family message; a different-chip image (the classic MT1939 JB7) is refused
-    // before the family gate. Neither writes.
-    assert_cross_family_refused(&bu40n, &wh16ns58, "bu40n-ns58");
-    assert_flash_refused(&jb7, &wh16ns58, "jb7-ns58");
 
     // The drive keeps its old identity: the flash fails.
     let old = wh16ns60[0x1E_C000..0x1E_C100].to_vec();
@@ -310,6 +298,33 @@ fn a_same_family_crossflash_runs_through_the_engine() {
         outcome.result
     );
     assert!(outcome.result.contains("progress: "), "{}", outcome.result);
+}
+
+#[test]
+fn requested_execution_refuses_cross_family_catalog_images() {
+    let builds = stand_ins();
+    let find = |model: &str, revision: &str| {
+        builds
+            .iter()
+            .find(|(build, _)| build.model == model && build.revision == revision)
+            .unwrap()
+            .1
+            .clone()
+    };
+    let wh16ns58 = find("BD-RE  WH16NS58", "1.V1");
+    let bu40n = find("BD-RE BU40N", "1.02");
+    // A JB7 build: a classic MT1939 (banner "MT1939 Boot Code"), a different
+    // chip from the JB8 WH16NS58 (now MT1959 by its "MT1959 Boot" banner).
+    let jb7 = builds
+        .iter()
+        .find(|(b, _)| b.family == "11e7527216405467" && b.model != "BD-RE  WH16NS58")
+        .map(|(_, image)| image.clone())
+        .unwrap();
+    // A same-chip (MT1959), different-family image (BU40N) is refused with the
+    // family message; a different-chip image (the classic MT1939 JB7) is refused
+    // before the family gate. Neither writes.
+    assert_cross_family_refused(&bu40n, &wh16ns58, "bu40n-ns58");
+    assert_flash_refused(&jb7, &wh16ns58, "jb7-ns58");
 }
 
 /// Every 2 MiB MediaTek image under `FREEMKV_MTK_IMAGES` with an identity

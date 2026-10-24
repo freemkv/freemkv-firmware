@@ -5,9 +5,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use freemkv_flash::workflow::{
-    self, ComparisonReport, Confirm, Control, DriveChoice, DriveProfile, FlashOptions, Inspection,
+    ComparisonReport, Confirm, Control, DriveChoice, DriveProfile, FlashOptions, Inspection,
     RecoveryOptions, Source,
 };
+
+#[cfg(not(test))]
+use freemkv_flash::workflow;
+#[cfg(test)]
+#[path = "ops_workflow_tests.rs"]
+mod workflow;
 
 use crate::ui::{Profile, Task};
 

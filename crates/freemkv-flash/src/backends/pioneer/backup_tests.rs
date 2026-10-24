@@ -863,6 +863,10 @@ fn corpus_kernel_dispatcher_selects_recorded_wrapper_when_configured() {
     for path in &unrecognized {
         eprintln!("unrecognized: {path}");
     }
+    assert!(
+        unrecognized.is_empty(),
+        "decoded front/derived Kernels lost recognition: {unrecognized:#?}"
+    );
 }
 
 /// Replay the production capture with a declared identity and real decoded
