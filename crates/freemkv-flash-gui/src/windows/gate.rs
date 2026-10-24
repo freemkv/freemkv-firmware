@@ -666,11 +666,12 @@ pub(super) fn probe(me: &Shell, dialog: &w::HWND) -> bool {
     let details_control = button(dialog, &c.details_label);
     let initial_expansions = EXPANSIONS.with(|events| events.borrow().clone());
     eprintln!(
-        "GATE TRACE details start: expanded_by_default={} control_visible={} class={:?} text={:?} events={initial_expansions:?}",
+        "GATE TRACE details start: expanded_by_default={} control_visible={} class={:?} text={:?} events={initial_expansions:?} controls={:?}",
         super::confirm_flags().has(co::TDF::EXPANDED_BY_DEFAULT),
         details_control.as_ref().is_some_and(|b| b.IsWindowVisible()),
         details_control.as_ref().and_then(|b| b.GetClassName().ok()),
         details_control.as_ref().and_then(|b| b.GetWindowText().ok()),
+        dialog_controls(dialog),
     );
     disclosure.push((
         "confirmation-details-start-collapsed",
@@ -732,11 +733,12 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
         return false;
     };
     eprintln!(
-        "GATE TRACE details toggle before: class={:?} text={:?} visible={} bounds={:?} height={collapsed_height:?} state={before:?}",
+        "GATE TRACE details toggle before: class={:?} text={:?} visible={} bounds={:?} height={collapsed_height:?} state={before:?} controls={:?}",
         expand.GetClassName().ok(),
         expand.GetWindowText().ok(),
         expand.IsWindowVisible(),
         expand.GetWindowRect().ok().map(|r| (r.left, r.top, r.right, r.bottom)),
+        dialog_controls(dialog),
     );
     EXPANSIONS.with(|events| events.borrow_mut().clear());
     send_raw(&expand, 0x00f5, 0, 0); // BM_CLICK on the real expando control
@@ -754,9 +756,10 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
     };
     let expanded_events = EXPANSIONS.with(|events| events.borrow().clone());
     eprintln!(
-        "GATE TRACE details toggle expanded: notification={expanded} events={expanded_events:?} height={expanded_height:?} state={:?} collapse_visible={}",
+        "GATE TRACE details toggle expanded: notification={expanded} events={expanded_events:?} height={expanded_height:?} state={:?} collapse_visible={} controls={:?}",
         state(),
         collapse.IsWindowVisible(),
+        dialog_controls(dialog),
     );
     send_raw(&collapse, 0x00f5, 0, 0);
     pump(200);
@@ -770,6 +773,22 @@ fn toggle_details(me: &Shell, dialog: &w::HWND, c: &crate::ui::Confirm) -> bool 
             .is_some_and(|(expanded, collapsed)| expanded > collapsed)
         && height() == collapsed_height
         && button(dialog, &c.details_label).is_some_and(|b| b.IsWindowVisible())
+}
+
+fn dialog_controls(dialog: &w::HWND) -> Vec<String> {
+    let mut controls = Vec::new();
+    dialog.EnumChildWindows(|h: w::HWND| {
+        controls.push(format!(
+            "id={:?} class={:?} text={:?} visible={} enabled={}",
+            h.GetDlgCtrlID().ok(),
+            h.GetClassName().ok(),
+            h.GetWindowText().ok(),
+            h.IsWindowVisible(),
+            h.IsWindowEnabled(),
+        ));
+        true
+    });
+    controls
 }
 
 /// The dialog's button (or checkbox) window whose caption is `text`.
