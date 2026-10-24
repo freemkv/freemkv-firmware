@@ -714,16 +714,6 @@ fn translate_view(view: &mut View) {
         }
     }
     if let Some(analysis) = &mut view.analysis {
-        let mut tree = (*analysis.tree).clone();
-        translate(language, &mut tree.title);
-        translate(language, &mut tree.heading);
-        tree.actions
-            .iter_mut()
-            .for_each(|button| translate_button(language, button));
-        tree.nodes
-            .iter_mut()
-            .for_each(|node| translate_node(language, node));
-        analysis.tree = Arc::new(tree);
         if let Some(notice) = &mut analysis.notice {
             translate(language, notice);
         }
@@ -802,7 +792,7 @@ enum ReportMsg {
 }
 
 /// Async file-origin result, tied to the chooser and path that requested it.
-type OriginReply = (Pick, PathBuf, Result<workflow::FileOrigin, String>);
+type OriginReply = (Pick, PathBuf, Result<workflow::SelectedFileInfo, String>);
 
 /// The whole application state. The shells hold none of their own.
 pub struct App {
@@ -826,7 +816,10 @@ pub struct App {
     user_issue: Option<workflow::UserError>,
     structured_progress: bool,
     operation_may_write: bool,
-    origin_rx: Vec<(Pick, PathBuf, Receiver<OriginReply>)>,
+    origin_rx: Vec<(u64, Pick, PathBuf, Receiver<OriginReply>)>,
+    origin_pending: Vec<(u64, Pick, PathBuf)>,
+    origin_versions: [u64; 4],
+    origin_next: u64,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
     pub(crate) profile: ProfileState,
@@ -960,6 +953,9 @@ impl App {
             structured_progress: false,
             operation_may_write: false,
             origin_rx: Vec::new(),
+            origin_pending: Vec::new(),
+            origin_versions: [0; 4],
+            origin_next: 0,
             flash_origin: None,
             recovery_origin: None,
             profile: ProfileState::NoDrive,
@@ -1253,6 +1249,7 @@ impl App {
             Input::SetLanguage(language) => {
                 if self.language != language {
                     self.language = language;
+                    self.rebuild_analysis_tree();
                     if let Err(error) = self.preferences.save(language) {
                         self.log.push(format!(
                             "Language changed for this session but could not be saved: {error}"
@@ -1752,25 +1749,25 @@ impl App {
                 self.recovery_bypass_family = false;
                 self.clear_flash_result();
                 self.recovery_read = false;
-                self.recovery_current_members =
-                    workflow::recovery_members(&path).unwrap_or_default();
+                self.recovery_current_members.clear();
                 self.recovery_current_member = None;
-                self.recovery_current = Some(path);
-                return self.refresh_current_profile();
+                self.recovery_current = Some(path.clone());
+                return self.read_origin(pick, path);
             }
             Pick::FlashCurrent => {
                 self.clear_flash_result();
                 self.flash_read = false;
-                self.flash_current_members = workflow::recovery_members(&path).unwrap_or_default();
+                self.flash_current_members.clear();
                 self.flash_current_member = None;
-                self.flash_current = Some(path);
+                self.flash_current = Some(path.clone());
+                return self.read_origin(pick, path);
             }
             Pick::RecoveryInput => {
                 self.recovery_family_mismatch = false;
                 self.recovery_bypass_family = false;
                 self.clear_flash_result();
                 self.recovery_member = None;
-                self.recovery_members = workflow::recovery_members(&path).unwrap_or_default();
+                self.recovery_members.clear();
                 self.recovery_input = Some(path.clone());
                 return self.read_origin(pick, path);
             }
@@ -1826,9 +1823,24 @@ impl App {
     }
 
     fn set_analysis(&mut self, result: Option<ResultView>) {
-        self.analysis_tree = result.as_ref().map(|r| Arc::new(analysis_tree(r)));
         self.analysis = result;
+        self.rebuild_analysis_tree();
         self.analysis_notice = None;
+    }
+
+    fn rebuild_analysis_tree(&mut self) {
+        self.analysis_tree = self.analysis.as_ref().map(|result| {
+            let mut tree = analysis_tree(result);
+            translate(self.language, &mut tree.title);
+            translate(self.language, &mut tree.heading);
+            tree.actions
+                .iter_mut()
+                .for_each(|button| translate_button(self.language, button));
+            tree.nodes
+                .iter_mut()
+                .for_each(|node| translate_node(self.language, node));
+            Arc::new(tree)
+        });
     }
 
     fn refresh_current_profile(&mut self) -> Vec<Effect> {
@@ -1848,8 +1860,20 @@ impl App {
                 .is_some_and(|p| p.recovery_family_override)
     }
 
+    fn file_inspection_pending(&self, pick: Pick) -> bool {
+        self.origin_rx
+            .iter()
+            .any(|(_, active, _, _)| *active == pick)
+            || self
+                .origin_pending
+                .iter()
+                .any(|(_, queued, _)| *queued == pick)
+    }
+
     fn recovery_ready(&self) -> bool {
-        self.selected()
+        !self.file_inspection_pending(Pick::RecoveryInput)
+            && (self.recovery_read || !self.file_inspection_pending(Pick::RecoveryCurrent))
+            && self.selected()
             && self.recovery_input.is_some()
             && (self.recovery_members.len() < 2 || self.recovery_member.is_some())
             && (self.recovery_read
@@ -1878,7 +1902,9 @@ impl App {
     }
 
     fn flash_ready(&self) -> bool {
-        self.selected()
+        !self.file_inspection_pending(Pick::FlashFirmware)
+            && (self.flash_read || !self.file_inspection_pending(Pick::FlashCurrent))
+            && self.selected()
             && self.flash_input.is_some()
             && (!self.flash_current_supported()
                 || self.flash_read
@@ -2416,6 +2442,7 @@ impl App {
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
+            && self.origin_pending.is_empty()
             && self.report_rx.is_none()
         {
             vec![Effect::StopTicking]
@@ -2424,17 +2451,44 @@ impl App {
         }
     }
 
+    fn origin_index(pick: Pick) -> Option<usize> {
+        match pick {
+            Pick::FlashFirmware => Some(0),
+            Pick::RecoveryInput => Some(1),
+            Pick::FlashCurrent => Some(2),
+            Pick::RecoveryCurrent => Some(3),
+            _ => None,
+        }
+    }
+
     fn read_origin(&mut self, pick: Pick, path: PathBuf) -> Vec<Effect> {
+        let Some(index) = Self::origin_index(pick) else {
+            return Vec::new();
+        };
         match pick {
             Pick::FlashFirmware => self.flash_origin = None,
             Pick::RecoveryInput => self.recovery_origin = None,
-            _ => return Vec::new(),
+            _ => {}
         }
+        self.origin_next = self.origin_next.wrapping_add(1);
+        let version = self.origin_next;
+        self.origin_versions[index] = version;
+        self.origin_pending.retain(|(_, queued, _)| *queued != pick);
+        self.origin_pending.push((version, pick, path));
+        self.start_origin();
+        vec![Effect::StartTicking]
+    }
+
+    fn start_origin(&mut self) {
+        if !self.origin_rx.is_empty() || self.origin_pending.is_empty() {
+            return;
+        }
+        let (version, pick, path) = self.origin_pending.remove(0);
         let (tx, rx) = mpsc::channel();
-        self.origin_rx.push((pick, path.clone(), rx));
+        self.origin_rx.push((version, pick, path.clone(), rx));
         let waker = self.waker.clone();
         std::thread::spawn(move || {
-            let result = std::panic::catch_unwind(|| workflow::selected_file_origin(&path))
+            let result = std::panic::catch_unwind(|| workflow::selected_file_info(&path))
                 .map_err(|_| "ui.file_origin_inspection_stopped_unexpectedly".to_string())
                 .and_then(|r| r.map_err(|e| format!("{e:#}")));
             let _ = tx.send((pick, path, result));
@@ -2442,16 +2496,16 @@ impl App {
                 wake();
             }
         });
-        vec![Effect::StartTicking]
     }
 
     fn poll_origin(&mut self) -> bool {
         let mut done = false;
-        for (requested_pick, requested_path, rx) in std::mem::take(&mut self.origin_rx) {
+        for (version, requested_pick, requested_path, rx) in std::mem::take(&mut self.origin_rx) {
             let reply = match rx.try_recv() {
                 Ok(reply) => reply,
                 Err(TryRecvError::Empty) => {
-                    self.origin_rx.push((requested_pick, requested_path, rx));
+                    self.origin_rx
+                        .push((version, requested_pick, requested_path, rx));
                     continue;
                 }
                 Err(TryRecvError::Disconnected) => {
@@ -2466,34 +2520,51 @@ impl App {
                     )
                 }
             };
+            done = true;
             let (pick, path, result) = reply;
-            let selected = (pick == Pick::FlashFirmware
-                && self.flash_input.as_ref() == Some(&path))
-                || (pick == Pick::RecoveryInput && self.recovery_input.as_ref() == Some(&path));
-            if selected {
-                if let Err(error) = &result {
-                    let detail = crate::localization::english(error);
-                    self.log
-                        .push(format!("File origin inspection failed: {detail}"));
-                    self.record_event(
-                        "file_origin_failed",
-                        serde_json::json!({"file": path.display().to_string(), "error": detail}),
-                    );
-                    self.diagnostic_log = None;
-                    self.diagnostic_checked = None;
-                }
+            let current_path = match pick {
+                Pick::FlashFirmware => &self.flash_input,
+                Pick::RecoveryInput => &self.recovery_input,
+                Pick::FlashCurrent => &self.flash_current,
+                Pick::RecoveryCurrent => &self.recovery_current,
+                _ => continue,
+            };
+            let selected = current_path.as_ref() == Some(&path)
+                && Self::origin_index(pick)
+                    .is_some_and(|index| self.origin_versions[index] == version);
+            if !selected {
+                continue;
             }
+            if let Err(error) = &result {
+                let detail = crate::localization::english(error);
+                self.log
+                    .push(format!("File origin inspection failed: {detail}"));
+                self.record_event(
+                    "file_origin_failed",
+                    serde_json::json!({"file": path.display().to_string(), "error": detail}),
+                );
+                self.diagnostic_log = None;
+                self.diagnostic_checked = None;
+            }
+            let members = result
+                .as_ref()
+                .map(|info| info.members.clone())
+                .unwrap_or_default();
             match pick {
-                Pick::FlashFirmware if self.flash_input.as_ref() == Some(&path) => {
-                    self.flash_origin = Some(result)
+                Pick::FlashFirmware => self.flash_origin = Some(result.map(|info| info.origin)),
+                Pick::RecoveryInput => {
+                    self.recovery_members = members;
+                    self.recovery_origin = Some(result.map(|info| info.origin));
                 }
-                Pick::RecoveryInput if self.recovery_input.as_ref() == Some(&path) => {
-                    self.recovery_origin = Some(result)
+                Pick::FlashCurrent => self.flash_current_members = members,
+                Pick::RecoveryCurrent => {
+                    self.recovery_current_members = members;
+                    self.refresh_current_profile();
                 }
                 _ => {}
             }
-            done = true;
         }
+        self.start_origin();
         done
     }
 

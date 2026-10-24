@@ -514,6 +514,7 @@ struct Ivars {
     checks: RefCell<HashMap<isize, CheckId>>,
     next_tag: Cell<isize>,
     alert: RefCell<Option<Retained<NSAlert>>>,
+    alert_language: Cell<Option<crate::localization::Language>>,
     report_alert: RefCell<Option<Retained<NSAlert>>>,
     alert_details: RefCell<Option<(Retained<NSButton>, Retained<NSScrollView>)>>,
     alert_ack: RefCell<Option<Retained<NSButton>>>,
@@ -903,6 +904,21 @@ impl Controller {
         tag
     }
 
+    fn remove_view_tags(&self, view: &NSView) {
+        if let Some(button) = view.downcast_ref::<NSButton>() {
+            self.ivars().actions.borrow_mut().remove(&button.tag());
+            self.ivars().checks.borrow_mut().remove(&button.tag());
+        }
+        for child in view.subviews().iter() {
+            self.remove_view_tags(&child);
+        }
+    }
+
+    fn clear_controls(&self, stack: &Stack) {
+        self.remove_view_tags(stack);
+        clear(stack);
+    }
+
     fn button(&self, b: &Button) -> Retained<NSButton> {
         let mtm = self.mtm();
         let btn = unsafe {
@@ -1267,7 +1283,7 @@ impl Controller {
         let panel_key = (v.task, v.panel.clone());
         if iv.panel_shown.borrow().as_ref() != Some(&panel_key) {
             if let Some(panel) = iv.panel.borrow().as_ref() {
-                clear(panel);
+                self.clear_controls(panel);
                 for item in &v.panel {
                     self.panel_item(panel, item);
                 }
@@ -1277,7 +1293,7 @@ impl Controller {
         self.render_status(v.status.as_ref());
         if iv.results_shown.borrow().as_ref() != Some(&v.results) {
             if let Some(results) = iv.results.borrow().as_ref() {
-                clear(results);
+                self.clear_controls(results);
                 if let Some(r) = &v.results {
                     self.fill_results(results, r);
                 }
@@ -1401,7 +1417,26 @@ impl Controller {
         let iv = self.ivars();
         let showing = iv.alert.borrow().clone();
         match (confirm, showing) {
-            (Some(c), Some(_)) => {
+            (Some(c), Some(alert)) => {
+                let language = self.view().language;
+                if iv.alert_language.replace(Some(language)) != Some(language) {
+                    let expanded = iv
+                        .alert_details
+                        .borrow()
+                        .as_ref()
+                        .is_some_and(|(_, scroll)| !scroll.isHidden());
+                    alert.setMessageText(&ns(&c.title));
+                    alert.setInformativeText(&ns(&c.details.join("\n")));
+                    alert
+                        .buttons()
+                        .objectAtIndex(0)
+                        .setTitle(&ns(&c.confirm.text));
+                    alert
+                        .buttons()
+                        .objectAtIndex(1)
+                        .setTitle(&ns(&c.cancel.text));
+                    self.refresh_confirm_accessory(&alert, c, expanded);
+                }
                 if let Some(ack) = iv.alert_ack.borrow().as_ref() {
                     ack.setState(isize::from(c.ack_checked));
                 }
@@ -1413,6 +1448,9 @@ impl Controller {
             (None, Some(alert)) => {
                 // The model withdrew the request; drop the sheet without answering it.
                 *iv.alert.borrow_mut() = None;
+                if let Some(accessory) = alert.accessoryView() {
+                    self.remove_view_tags(&accessory);
+                }
                 *iv.alert_details.borrow_mut() = None;
                 if let Some(w) = iv.window.borrow().as_ref() {
                     w.endSheet(&alert.window());
@@ -1438,6 +1476,44 @@ impl Controller {
         let cancel = alert.addButtonWithTitle(&ns(&c.cancel.text));
         cancel.setKeyEquivalent(&ns("\r"));
 
+        let iv = self.ivars();
+        *iv.alert.borrow_mut() = Some(alert.clone());
+        *iv.alert_confirm.borrow_mut() = Some(confirm);
+        iv.alert_language.set(Some(self.view().language));
+        self.refresh_confirm_accessory(&alert, c, false);
+        let me = self.retain();
+        let handler = RcBlock::new(move |response: isize| {
+            // Answer only a sheet the model still wants answered.
+            let Some(closed) = me.ivars().alert.borrow_mut().take() else {
+                return;
+            };
+            if let Some(accessory) = closed.accessoryView() {
+                me.remove_view_tags(&accessory);
+            }
+            *me.ivars().alert_details.borrow_mut() = None;
+            *me.ivars().alert_ack.borrow_mut() = None;
+            *me.ivars().alert_confirm.borrow_mut() = None;
+            me.send(if response == NS_ALERT_FIRST {
+                Input::Confirm
+            } else {
+                Input::CancelConfirm
+            });
+        });
+        alert.beginSheetModalForWindow_completionHandler(&window, Some(&handler));
+        // AppKit assigns a default while presenting. Clear that assignment after
+        // presentation so Return always selects the safe response.
+        alert.window().setDefaultButtonCell(None);
+        let buttons = alert.buttons();
+        buttons.objectAtIndex(0).setKeyEquivalent(&ns(""));
+        buttons.objectAtIndex(1).setKeyEquivalent(&ns("\r"));
+    }
+
+    fn refresh_confirm_accessory(&self, alert: &NSAlert, c: &Confirm, expanded: bool) {
+        let mtm = self.mtm();
+        if let Some(old) = alert.accessoryView() {
+            self.remove_view_tags(&old);
+        }
+        *self.ivars().alert_details.borrow_mut() = None;
         let width = 380.0;
         let acc = stack(mtm, true, 10.0);
         let danger = wrapping(mtm, &c.danger, width);
@@ -1474,13 +1550,21 @@ impl Controller {
         if !c.technical_details.is_empty() {
             let disclosure = unsafe {
                 NSButton::buttonWithTitle_target_action(
-                    &ns(&c.details_label),
+                    &ns(if expanded {
+                        &c.hide_details_label
+                    } else {
+                        &c.details_label
+                    }),
                     Some(self),
                     Some(sel!(onDetails:)),
                     mtm,
                 )
             };
-            disclosure.setAlternateTitle(&ns(&c.hide_details_label));
+            disclosure.setAlternateTitle(&ns(if expanded {
+                &c.details_label
+            } else {
+                &c.hide_details_label
+            }));
             let text = wrapping(mtm, &c.technical_details.join("\n\n"), width - 16.0);
             text.setFont(Some(&mono_font()));
             text.setSelectable(true);
@@ -1493,7 +1577,7 @@ impl Controller {
                 .heightAnchor()
                 .constraintEqualToConstant(160.0)
                 .setActive(true);
-            scroll.setHidden(true);
+            scroll.setHidden(!expanded);
             acc.addArrangedSubview(&disclosure);
             acc.addArrangedSubview(&scroll);
             *self.ivars().alert_details.borrow_mut() = Some((disclosure, scroll));
@@ -1509,28 +1593,8 @@ impl Controller {
         acc.setFrame(rect(0.0, 0.0, width, size.height));
         alert.setAccessoryView(Some(&acc));
 
-        let iv = self.ivars();
-        *iv.alert.borrow_mut() = Some(alert.clone());
-        *iv.alert_ack.borrow_mut() = Some(ack);
-        *iv.alert_confirm.borrow_mut() = Some(confirm);
-        let me = self.retain();
-        let handler = RcBlock::new(move |response: isize| {
-            // Answer only a sheet the model still wants answered.
-            if me.ivars().alert.borrow_mut().take().is_none() {
-                return;
-            }
-            *me.ivars().alert_details.borrow_mut() = None;
-            *me.ivars().alert_ack.borrow_mut() = None;
-            *me.ivars().alert_confirm.borrow_mut() = None;
-            me.send(if response == NS_ALERT_FIRST {
-                Input::Confirm
-            } else {
-                Input::CancelConfirm
-            });
-        });
-        alert.beginSheetModalForWindow_completionHandler(&window, Some(&handler));
-        // AppKit assigns a default while presenting. Clear that assignment after
-        // presentation so Return always selects the safe response.
+        *self.ivars().alert_ack.borrow_mut() = Some(ack);
+        alert.layout();
         alert.window().setDefaultButtonCell(None);
         let buttons = alert.buttons();
         buttons.objectAtIndex(0).setKeyEquivalent(&ns(""));
@@ -1562,7 +1626,7 @@ impl Controller {
                 .filter_map(|v| v.downcast_ref::<NSButton>().map(|b| b.title().to_string()))
                 .collect();
             if labels != d.buttons.iter().map(|b| b.text.clone()).collect::<Vec<_>>() {
-                clear(buttons);
+                self.clear_controls(buttons);
                 for button in &d.buttons {
                     buttons.addArrangedSubview(&self.button(button));
                 }
@@ -1674,7 +1738,7 @@ impl Controller {
             return;
         };
         let extra = src.load(&a.tree.nodes);
-        clear(&actions);
+        self.clear_controls(&actions);
         for b in a.tree.actions.iter().chain(&extra) {
             actions.addArrangedSubview(&self.button(b));
         }

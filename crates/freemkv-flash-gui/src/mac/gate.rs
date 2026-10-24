@@ -41,6 +41,7 @@ pub(super) fn run(c: &Controller, dir: &Path) {
         }),
     );
 
+    registration_checks(c, &mut g);
     language_checks(c, dir, &content, &mut g);
     analysis_header_languages(c, &mut g);
 
@@ -88,6 +89,30 @@ pub(super) fn run(c: &Controller, dir: &Path) {
 }
 
 /// Select languages through AppKit's real menu and read the controls that previously stayed English.
+fn registration_checks(c: &Controller, g: &mut Gate) {
+    c.send(Input::SelectTask(Task::Flash));
+    c.send(Input::SelectTask(Task::Info));
+    let counts = || {
+        (
+            c.ivars().actions.borrow().len(),
+            c.ivars().checks.borrow().len(),
+        )
+    };
+    let before = counts();
+    for _ in 0..32 {
+        c.send(Input::SelectTask(Task::Flash));
+        c.send(Input::SelectTask(Task::Info));
+    }
+    g.check(
+        "control-registrations-bounded",
+        counts() == before,
+        format!(
+            "removed panels release tags: before={before:?}, after={:?}",
+            counts()
+        ),
+    );
+}
+
 fn language_checks(c: &Controller, dir: &Path, content: &NSView, g: &mut Gate) {
     use crate::localization::{Language, Preferences};
     let original = c.with_app(|app| {
@@ -208,6 +233,7 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
             disclosure(c, dir, g);
         }
     }
+    sheet_language_checks(c, g);
     let name = if tick { "sheet" } else { "sheet-reopened" };
     g.save(
         dir,
@@ -249,6 +275,53 @@ fn sheet(c: &Controller, dir: &Path, tick: bool, g: &mut Gate) -> SheetRun {
 
 /// The disclosure is native-local state: even opening long Unicode technical text
 /// cannot acknowledge risk, remove a warning or change any model input.
+fn sheet_language_checks(c: &Controller, g: &mut Gate) {
+    let alert = c.ivars().alert.borrow().clone().unwrap();
+    let old_ack = c.view().confirm.unwrap().ack_checked;
+    let disclosure = c.ivars().alert_details.borrow().clone().unwrap().0;
+    unsafe { disclosure.performClick(None) };
+    c.send(Input::SetLanguage(crate::localization::Language::Fr));
+    let expected = c.view().confirm.unwrap();
+    let actual = c.ivars().alert.borrow().clone().unwrap();
+    let accessory = actual.accessoryView().unwrap();
+    let danger = accessory.subviews().iter().any(|view| {
+        view.downcast_ref::<super::NSTextField>()
+            .is_some_and(|label| label.stringValue().to_string() == expected.danger)
+    });
+    let ack = c.ivars().alert_ack.borrow().clone().unwrap();
+    let details = c.ivars().alert_details.borrow().clone().unwrap();
+    g.check(
+        "confirmation-language-refresh",
+        std::ptr::eq(&*actual, &*alert)
+            && actual.messageText().to_string() == expected.title
+            && actual.informativeText().to_string() == expected.details.join("\n")
+            && actual.buttons().objectAtIndex(0).title().to_string() == expected.confirm.text
+            && actual.buttons().objectAtIndex(1).title().to_string() == expected.cancel.text
+            && danger
+            && ack.title().to_string() == expected.ack_text
+            && (ack.state() != 0) == old_ack
+            && expected.ack_checked == old_ack
+            && !details.1.isHidden()
+            && details.0.title().to_string() == expected.hide_details_label
+            && actual
+                .buttons()
+                .objectAtIndex(0)
+                .keyEquivalent()
+                .to_string()
+                .is_empty()
+            && actual
+                .buttons()
+                .objectAtIndex(1)
+                .keyEquivalent()
+                .to_string()
+                == "\r",
+        "same open sheet follows language while preserving consent, disclosure and Cancel default",
+    );
+    c.send(Input::SetLanguage(crate::localization::Language::En));
+    let disclosure = c.ivars().alert_details.borrow().clone().unwrap().0;
+    unsafe { disclosure.performClick(None) };
+}
+
 fn disclosure(c: &Controller, dir: &Path, g: &mut Gate) {
     let details = c.ivars().alert_details.borrow().clone();
     let alert = c.ivars().alert.borrow().clone().unwrap();
