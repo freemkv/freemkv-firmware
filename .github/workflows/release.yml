@@ -2,7 +2,7 @@ name: release
 
 # Build the freemkv-flash / freemkv-fw CLIs and their desktop GUIs for every
 # shipping platform and attach them to a GitHub Release when a version tag is
-# pushed. Each tool ships freemkv's distribution set (minus the store
+# promoted from QA. Each tool ships freemkv's distribution set (minus the store
 # packages, Flatpak and Snap), and every GUI download also carries its CLI.
 #
 # ── What a release ships, per tool (<t> = freemkv-flash | freemkv-fw) ───────
@@ -47,14 +47,6 @@ name: release
 # resolve from the committed Cargo.lock.
 
 on:
-  push:
-    tags:
-      # Release only on real version tags. Release candidates (v<ver>-rc<N>,
-      # stamped on every push to `qa`) match `v*` too, so they are excluded —
-      # otherwise every candidate, including the red ones, would publish a
-      # GitHub Release.
-      - 'v*'
-      - '!v*-rc*'
   pull_request:
     paths:
       - '.github/workflows/release.yml'
