@@ -51,7 +51,7 @@
     "limitation": "Brand strings are presentation only; this does not claim every LiteOn or Plextor model implements MT19 or Pioneer protocols."
   },
   "dependency_integration": {
-    "mediatek_dev_base": "1e30f422a483f1de1bb0945c8d1ca99c8486b068",
+    "mediatek_dev_base": "850198abf5e856fc46ec8b68358107c6efab4129",
     "pioneer_dev_base": "d6a297cda8f7e563a4f5d616b4b8e6cf72e3a93d",
     "policy": "Retain all dev audit fixes and mirror 1.1.0 host progress/error contracts. Re-fetch dev before final QA to incorporate late changes."
   },
@@ -77,5 +77,5 @@
     "L12": "Unsafe-evidence regression includes concrete hardware mismatch and permission-denied causes.",
     "L13": "Backup-question localization test proves the callback actually ran."
   },
-  "validation_status": "Local workspace tests and Clippy pass; integrated optical corpus recognizes 137/137 exact-prefix windows. Final native and hosted QA pending."
+  "validation_status": "1,153 local workspace tests pass, Clippy passes, and the macOS native gate passes 186 checks. Latest MediaTek dev including register-reuse follow-up passes the full app suite and 137-window corpus replay. Hosted QA pending."
 }
