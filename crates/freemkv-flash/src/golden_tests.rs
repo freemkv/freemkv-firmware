@@ -973,6 +973,8 @@ impl ScsiDevice for RecoveryDrive {
             };
             let offset = address.checked_sub(base).expect("firmware address");
             return Ok(image[offset..offset + len].to_vec());
+        } else if command == mediatek_optical::cdb::read_memory(0x3000, 32) {
+            return Ok(vec![0; 32]);
         } else if command != pioneer_optical::cdb::get_event_status()
             && command != pioneer_optical::cdb::request_sense(18)
         {
@@ -1839,10 +1841,13 @@ fn golden_pioneer_recover() {
 
 fn ambiguous_drive() -> MockScsiDevice {
     let mut inq = vec![0u8; 96];
+    inq[0] = 5;
     inq[8..16].copy_from_slice(b"PIONEER ");
     inq[16..24].copy_from_slice(b"BDR-UD04");
     let mut f1 = vec![0u8; 48];
     f1[16..24].copy_from_slice(b"SAT 8A10");
+    f1[24..28].copy_from_slice(b"ID40");
+    f1[32..36].copy_from_slice(b"ID40");
     MockScsiDevice::mtk()
         .on(
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
@@ -2800,6 +2805,8 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
+    "F-OVERRIDE",
+    "PROTO",
     "CLI_INFO",
     "HUMAN_ERRORS",
     "PRECHECK",
@@ -2827,6 +2834,8 @@ const ALLOWED_REASONS: &[&str] = &[
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
+    "F-OVERRIDE",
+    "PROTO",
     "CLI_INFO",
     "HUMAN_ERRORS",
     "PRECHECK",

@@ -415,9 +415,23 @@ pub fn recover(
         None,
         current,
         target,
-        execute,
-        acknowledged_risk,
+        RecoveryExecution {
+            execute,
+            acknowledged_risk,
+            bypass_family_check: false,
+        },
     )
+}
+
+/// Recovery execution policy, supplied explicitly by the caller.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RecoveryExecution {
+    /// Write firmware rather than preparing a read-only plan.
+    pub execute: bool,
+    /// Fresh acknowledgment required before any writes.
+    pub acknowledged_risk: bool,
+    /// Deliberately waive only the firmware family check.
+    pub bypass_family_check: bool,
 }
 
 /// [`recover`] for a receiver already identified (`receiver`), or identified
@@ -428,15 +442,25 @@ pub fn recover_identified(
     receiver: Option<RecoveryTarget>,
     current: Option<&[u8]>,
     target: &[u8],
-    execute: bool,
-    acknowledged_risk: bool,
+    options: RecoveryExecution,
 ) -> Result<crate::backend::UpdateOutcome> {
+    let RecoveryExecution {
+        execute,
+        acknowledged_risk,
+        bypass_family_check,
+    } = options;
     let facet = drive
         .recovery()
         .with_context(|| format!("{} offers no recovery", drive.descriptor().id))
         .map_err(|error| {
             crate::backend::UpdateFailure::before_write("recovery capability checks", error)
         })?;
+    if bypass_family_check && !facet.supports_family_override() {
+        return Err(crate::backend::UpdateFailure::before_write(
+            "recovery capability checks",
+            crate::backend::UnsupportedFamilyOverride.into(),
+        ));
+    }
     let identify = |dev: &mut dyn ScsiDevice| -> Result<RecoveryTarget> {
         match receiver {
             Some(receiver) => Ok(receiver),
@@ -452,14 +476,26 @@ pub fn recover_identified(
         let receiver = identify(&mut writer).map_err(|error| {
             crate::backend::UpdateFailure::before_write("recovery receiver checks", error)
         })?;
-        facet.recover(DeviceAccess::Write(&mut writer), &receiver, current, target)
+        facet.recover_with_family_override(
+            DeviceAccess::Write(&mut writer),
+            &receiver,
+            current,
+            target,
+            bypass_family_check,
+        )
     } else {
         let receiver = identify(dev).map_err(|error| {
             crate::backend::UpdateFailure::before_write("recovery receiver checks", error)
         })?;
         let mut reader = ReadDevice::for_backend(dev, drive);
         facet
-            .recover(DeviceAccess::Read(&mut reader), &receiver, current, target)
+            .recover_with_family_override(
+                DeviceAccess::Read(&mut reader),
+                &receiver,
+                current,
+                target,
+                bypass_family_check,
+            )
             .map_err(|error| {
                 crate::backend::UpdateFailure::before_write("recovery preparation", error)
             })

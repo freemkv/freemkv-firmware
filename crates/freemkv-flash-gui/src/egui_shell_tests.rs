@@ -351,3 +351,21 @@ fn all_catalog_characters_have_real_glyphs_with_the_unicode_fallback() {
         })
     });
 }
+
+#[test]
+fn family_override_popup_displays_the_risk_and_code_before_enabling() {
+    let mut s = shell(vec![drive("test", "Optical drive")]);
+    s.app.dispatch(Input::SelectTask(Task::Recovery));
+    s.app.recovery_family_mismatch = true;
+    s.app.dispatch(Input::SetCheck(
+        crate::ui::CheckId::RecoveryBypassFamily,
+        true,
+    ));
+    let confirmation = s.app.view().confirm.unwrap();
+    assert_eq!(confirmation.code_entry.as_deref(), Some(""));
+    assert!(!confirmation.confirm.enabled);
+    let text = rendered_text(&mut s);
+    assert!(shows(&text, &confirmation.title));
+    assert!(shows(&text, &confirmation.danger));
+    assert!(shows(&text, confirmation.prompt.as_ref().unwrap()));
+}

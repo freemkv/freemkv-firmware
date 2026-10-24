@@ -3,31 +3,34 @@
 result: OK
 --- text (0) ---
 --- events (2) ---
-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+FIELD    Recovery = recovery.family_enforced
 FIELD    Recovery = Prepared Kernel + Normal; dry run, no firmware written
---- scsi transcript (2) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+--- scsi transcript (3) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === Pioneer recover dry run: receiver in normal mode ===
 result: OK
 --- text (0) ---
 --- events (2) ---
-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+FIELD    Recovery = recovery.family_enforced
 FIELD    Recovery = Prepared Kernel + Normal; dry run, no firmware written
---- scsi transcript (2) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+--- scsi transcript (3) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === Pioneer recover dry run: unsigned Current backup ===
 result: OK
 --- text (0) ---
 --- events (2) ---
-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+FIELD    Recovery = recovery.family_enforced
 FIELD    Recovery = Prepared Kernel + Normal; dry run, no firmware written
---- scsi transcript (2) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+--- scsi transcript (3) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 
 === Pioneer recover dry run: garbage Current ===
 result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): cannot establish Current receiver evidence; no firmware written: flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
@@ -43,15 +46,16 @@ EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
 --- events (6) ---
-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+FIELD    Recovery = recovery.family_enforced
 FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
 MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
 MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
---- scsi transcript (24) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+--- scsi transcript (25) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -83,15 +87,16 @@ EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
 --- events (6) ---
-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+FIELD    Recovery = recovery.family_enforced
 FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
 MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
 MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
---- scsi transcript (35) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+--- scsi transcript (36) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -127,20 +132,21 @@ IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 
 === Pioneer recover execute: write fails on the 2nd command ===
-result: ERR update failed during firmware transfer (progress: PayloadAttempted; payload bytes accepted in stage: None; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
+result: ERR Kernel: NotChecked; Normal: NotChecked; startup confirmed: false; selected package: BDR-TEST 1.00; drive reports: not observed after transfer: update failed during firmware transfer (progress: PayloadAttempted; payload bytes accepted in stage: None; temporary firmware: false; completed stages: []): Pioneer update [pioneer.flash.update]; completion was not verified. Keep the pre-flash backup and diagnostic log: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Initial update: Kernel write at 0x8000, length 32768: transport error: injected write failure: Kernel write at 0x8000, length 32768: transport error: injected write failure: transport error: injected write failure
 --- text (3) ---
 
 EXECUTING flash — do not power off or disconnect the drive...
   update mode entered
 --- events (5) ---
-FIELD    Recovery = No automatic backup; compatibility policy bypassed
+FIELD    Recovery = recovery.family_enforced
 FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
 MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
---- scsi transcript (10) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+--- scsi transcript (11) ---
+IN   cdb=120000006000 alloc=96 -> ok 96
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
+IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 MEDIUM -> ClosedEmpty
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -155,11 +161,11 @@ result: ERR update failed during recovery receiver checks (write started: false;
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=120000006000 alloc=96 -> ok 96
 
 === Pioneer recover dry run: no Current, unrecognized drive ===
 result: ERR update failed during recovery receiver checks (write started: false; temporary firmware: false; completed stages: []): Recovery requires a supported Pioneer-protocol optical drive; supply its Current firmware to identify an OEM receiver, or use Flash for supported MediaTek firmware. No firmware written
 --- text (0) ---
 --- events (0) ---
 --- scsi transcript (1) ---
-IN   cdb=120000002400 alloc=36 -> ok 36
+IN   cdb=120000006000 alloc=96 -> ok 96

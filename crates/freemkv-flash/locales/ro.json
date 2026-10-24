@@ -19,6 +19,16 @@
     "task.dump": "Descărcare",
     "task.flash": "Flash",
     "task.recovery": "Recuperare",
+    "recovery.bypass_family_check": "Ocolește verificarea familiei firmware-ului (foarte riscant)",
+    "recovery.bypass_family_title": "Ocolirea verificării familiei hardware",
+    "recovery.bypass_family_warning": "Ai solicitat ocolirea verificării familiei hardware a firmware-ului. Această verificare ajută la prevenirea scrierii pe unitate a unui firmware destinat altui hardware. Ocolirea poate dezactiva permanent unitatea, iar recuperarea sau revenirea la firmware-ul anterior poate fi imposibilă.",
+    "recovery.bypass_family_code": "Pentru a confirma că accepți acest risc, introdu {code} pentru a continua.",
+    "recovery.bypass_family_continue": "Activează ocolirea",
+    "recovery.bypass_family_code_failed": "Codul de confirmare nu a putut fi generat. Verificarea familiei firmware-ului rămâne activată.",
+    "recovery.bypass_family_ack": "Înțeleg că ocolirea verificării familiei firmware-ului poate dezactiva permanent această unitate și că recuperarea poate fi imposibilă.",
+    "recovery.family_enforced": "Fără copie de siguranță automată; verificarea familiei firmware-ului este aplicată",
+    "recovery.family_bypassed": "Fără copie de siguranță automată; verificarea familiei firmware-ului este ocolită explicit (foarte riscant)",
+    "recovery.family_override_unsupported": "Acest modul de recuperare nu permite ocolirea verificării familiei firmware-ului.",
     "action.read_info": "Citește informațiile unității",
     "action.check_file": "Verifică fișierul…",
     "info.connect_drive": "Conectați o unitate optică, apoi selectați Reîmprospătare.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Activ și salvat)",
     "legacy.backup_saved": "Cuvânt cheie: salvat {path} ({bytes} în byte)",
     "legacy.backup_missing": "backup: NONE – flashing fără backup de rulare (acest disc optic nu poate fi rulat înapoi)",
-    "ui.backup_dump_review": "Dacă nu se poate salva o copie de siguranță, salvați un dump brut și trimiteți-l împreună cu jurnalele de diagnostic, pentru a putea analiza suportul pentru copii de siguranță."
+    "ui.backup_dump_review": "Dacă nu se poate salva o copie de siguranță, salvați un dump brut și trimiteți-l împreună cu jurnalele de diagnostic, pentru a putea analiza suportul pentru copii de siguranță.",
+    "verification.startup": "Pornire",
+    "verification.not_checked": "Neverificat",
+    "verification.not_requested": "Nesolicitat",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

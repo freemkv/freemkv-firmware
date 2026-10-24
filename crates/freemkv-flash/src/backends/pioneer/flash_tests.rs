@@ -85,6 +85,13 @@ fn execute_flash(
         start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
         completed_passes: 0,
+        verification: UpdateVerification {
+            kernel: ComponentVerification::NotChecked,
+            normal: ComponentVerification::NotChecked,
+            startup_confirmed: false,
+            observed_identity: None,
+            selected_identity: "test target".into(),
+        },
         kernel: style::Progress::new("flashing kernel", kernel.map_or(0, <[u8]>::len)),
         normal: style::Progress::new("flashing normal", normal.len()),
     };

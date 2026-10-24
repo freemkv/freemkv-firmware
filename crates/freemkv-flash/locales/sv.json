@@ -19,6 +19,16 @@
     "task.dump": "Dump",
     "task.flash": "Flashning",
     "task.recovery": "Återställning",
+    "recovery.bypass_family_check": "Kringgå kontrollen av firmwarefamilj (mycket riskabelt)",
+    "recovery.bypass_family_title": "Kringgå kontrollen av maskinvarufamilj",
+    "recovery.bypass_family_warning": "Du har begärt att kontrollen av firmwarets maskinvarufamilj ska kringgås. Kontrollen hjälper till att förhindra att firmware avsedd för annan maskinvara skrivs till enheten. Att kringgå den kan göra enheten permanent obrukbar, och återställning eller återflashning kan vara omöjlig.",
+    "recovery.bypass_family_code": "Ange {code} för att bekräfta att du godtar risken och fortsätta.",
+    "recovery.bypass_family_continue": "Aktivera kringgående",
+    "recovery.bypass_family_code_failed": "Det gick inte att skapa bekräftelsekoden. Kontroll av firmwarefamilj är fortfarande aktiverad.",
+    "recovery.bypass_family_ack": "Jag förstår att kringgående av kontrollen av firmwarefamilj kan göra enheten permanent obrukbar och att återställning kan vara omöjlig.",
+    "recovery.family_enforced": "Ingen automatisk säkerhetskopia; kontroll av firmwarefamilj tillämpas",
+    "recovery.family_bypassed": "Ingen automatisk säkerhetskopia; kontroll av firmwarefamilj kringgås uttryckligen (mycket riskabelt)",
+    "recovery.family_override_unsupported": "Den här återställningsmodulen stöder inte kringgående av kontrollen av firmwarefamilj.",
     "action.read_info": "Läs enhetsinformation",
     "action.check_file": "Kontrollera fil…",
     "info.connect_drive": "Anslut en optisk enhet och välj Uppdatera.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Aktiv och sparat)",
     "legacy.backup_saved": "Backup: sparas {path} ({bytes} bytes )",
     "legacy.backup_missing": "Backup: NONE – flashing utan en rollback backup (detta optiska skivan kan inte rullas tillbaka)",
-    "ui.backup_dump_review": "Om en säkerhetskopia inte kan sparas, spara en rå dump och skicka den med diagnostikloggarna så att vi kan undersöka stödet för säkerhetskopiering."
+    "ui.backup_dump_review": "Om en säkerhetskopia inte kan sparas, spara en rå dump och skicka den med diagnostikloggarna så att vi kan undersöka stödet för säkerhetskopiering.",
+    "verification.startup": "Start",
+    "verification.not_checked": "Inte kontrollerat",
+    "verification.not_requested": "Inte begärt",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

@@ -299,6 +299,23 @@ fn analyze(source: String, image: &[u8], chip: &ChipInfo, control: &Control) -> 
         analyses: vec![FirmwareAnalysis {
             identity: comparison::Identity {
                 component: COMPONENT.into(),
+                metadata: crate::firmware_comparison::ComponentIdentity {
+                    name: sanitize_ascii(&chip.model),
+                    revision: sanitize_ascii(&chip.rev),
+                    lineage: (!chip.vendor.is_empty()
+                        && !chip.model.is_empty()
+                        && !chip.vendor_specific.is_empty())
+                    .then(|| {
+                        serde_json::json!([
+                            "mediatek",
+                            chip.family.label(),
+                            chip.vendor,
+                            chip.model,
+                            chip.vendor_specific
+                        ])
+                        .to_string()
+                    }),
+                },
                 sha256,
                 family: None,
                 family_scheme: "mtk".into(),

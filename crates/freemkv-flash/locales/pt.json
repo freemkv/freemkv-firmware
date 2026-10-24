@@ -19,6 +19,16 @@
     "task.dump": "Despejo",
     "task.flash": "Gravar firmware",
     "task.recovery": "Recuperação",
+    "recovery.bypass_family_check": "Ignorar a verificação da família do firmware (muito arriscado)",
+    "recovery.bypass_family_title": "Ignorar a verificação da família do hardware",
+    "recovery.bypass_family_warning": "Pediu para ignorar a verificação da família de hardware do firmware. Esta verificação ajuda a impedir que seja escrito na unidade firmware destinado a outro hardware. Ignorá-la pode inutilizar a unidade permanentemente, e pode ser impossível recuperá-la ou reinstalar o firmware anterior.",
+    "recovery.bypass_family_code": "Para confirmar que aceita este risco, introduza {code} para continuar.",
+    "recovery.bypass_family_continue": "Ativar a exceção",
+    "recovery.bypass_family_code_failed": "Não foi possível gerar o código de confirmação. A verificação da família do firmware continua ativa.",
+    "recovery.bypass_family_ack": "Compreendo que ignorar a verificação da família do firmware pode inutilizar esta unidade permanentemente e que a recuperação pode ser impossível.",
+    "recovery.family_enforced": "Sem cópia de segurança automática; verificação da família do firmware aplicada",
+    "recovery.family_bypassed": "Sem cópia de segurança automática; verificação da família do firmware ignorada expressamente (muito arriscado)",
+    "recovery.family_override_unsupported": "Este mecanismo de recuperação não permite ignorar a verificação da família do firmware.",
     "action.read_info": "Ler informações da unidade",
     "action.check_file": "Verificar ficheiro…",
     "info.connect_drive": "Ligue uma unidade ótica e selecione Atualizar.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (Activo e salvo)",
     "legacy.backup_saved": "Backup: Salvação {path} ({bytes} bits)",
     "legacy.backup_missing": "backup: NÃO – flashing sem uma backup de rolagem (este disco óptico não pode ser rolado de volta)",
-    "ui.backup_dump_review": "Se não for possível guardar uma cópia de segurança, guarde um despejo em bruto e envie-o com os registos de diagnóstico para podermos analisar o suporte para cópias de segurança."
+    "ui.backup_dump_review": "Se não for possível guardar uma cópia de segurança, guarde um despejo em bruto e envie-o com os registos de diagnóstico para podermos analisar o suporte para cópias de segurança.",
+    "verification.startup": "Arranque",
+    "verification.not_checked": "Não verificado",
+    "verification.not_requested": "Não solicitado",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }

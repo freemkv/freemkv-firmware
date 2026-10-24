@@ -17,6 +17,7 @@ enum Outcome {
     Data(Vec<u8>),
     /// Fail the command with this message.
     Fail(String),
+    Sense(u8, u8, u8),
 }
 
 struct Rule {
@@ -50,6 +51,7 @@ pub struct MockScsiDevice {
     firmware_image: Option<Vec<u8>>,
     /// INQUIRY product reported alongside `firmware_image` (default `BD-RE BU40N`).
     product: Option<String>,
+    base_inquiry: Option<Vec<u8>>,
 }
 
 impl MockScsiDevice {
@@ -109,6 +111,19 @@ impl MockScsiDevice {
         self
     }
 
+    /// Return structured SCSI sense for a rejected identification command.
+    pub fn on_sense<F>(mut self, matcher: F, key: u8, asc: u8, ascq: u8) -> Self
+    where
+        F: Fn(&[u8]) -> bool + Send + Sync + 'static,
+    {
+        self.rules.push(Rule {
+            matcher: Box::new(matcher),
+            outcome: Outcome::Sense(key, asc, ascq),
+            after_stream: false,
+        });
+        self
+    }
+
     /// Respond only after the first firmware-stream WRITE BUFFER command.
     pub fn on_after_stream<F>(mut self, matcher: F, data: Vec<u8>) -> Self
     where
@@ -154,20 +169,25 @@ impl MockScsiDevice {
         boot_rom[0..15].copy_from_slice(b"MT1959 Boot BU5");
         // Reading `ROM_003000_OFFSET = 0x3000` with `MODE_6` and `BUFFER_ID = 0x00`:
         // CDB[0]=0x3C, CDB[1]=mode6, CDB[2]=0x00 buffer-id, CDB[3..6]=offset(0x003000).
-        Self::new()
-            .on(
-                |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
-                fd,
-            )
-            .on(
-                |cdb| {
-                    cdb.first() == Some(&0x3C)
-                        && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
-                        && cdb.get(2) == Some(&0x00)
-                        && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..])
-                },
-                boot_rom,
-            )
+        let mut inquiry = vec![0; 96];
+        inquiry[0] = 5;
+        Self {
+            base_inquiry: Some(inquiry),
+            ..Self::default()
+        }
+        .on(
+            |cdb| cdb.first() == Some(&0x46) && cdb.get(2..4) == Some(&[0x01, 0x0C][..]),
+            fd,
+        )
+        .on(
+            |cdb| {
+                cdb.first() == Some(&0x3C)
+                    && cdb.get(1).map(|m| m & 0x1f) == Some(0x06)
+                    && cdb.get(2) == Some(&0x00)
+                    && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..])
+            },
+            boot_rom,
+        )
     }
 
     /// Mark this mock as having a disc loaded, so [`ScsiDevice::medium_status`]
@@ -189,10 +209,13 @@ impl MockScsiDevice {
     ///
     pub fn pioneer() -> Self {
         let mut inq = vec![0u8; 96];
+        inq[0] = 5;
         inq[8..16].copy_from_slice(b"PIONEER ");
         inq[16..24].copy_from_slice(b"BDR-UD04");
         let mut f1 = vec![0u8; 48];
         f1[16..24].copy_from_slice(b"SAT 8A10");
+        f1[24..28].copy_from_slice(b"ID40");
+        f1[32..36].copy_from_slice(b"ID40");
         Self::new()
             .on(
                 |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
@@ -244,7 +267,17 @@ impl ScsiDevice for MockScsiDevice {
                 return match &rule.outcome {
                     Outcome::Data(d) => Ok(d.clone()),
                     Outcome::Fail(m) => bail!("{m}"),
+                    Outcome::Sense(k, a, q) => {
+                        return Err(
+                            super::ScsiSenseError::new(*k, *a, *q, "command rejected").into()
+                        )
+                    }
                 };
+            }
+        }
+        if cdb.first() == Some(&0x12) {
+            if let Some(inquiry) = &self.base_inquiry {
+                return Ok(inquiry.clone());
             }
         }
         if self.firmware_image.is_some() && cdb.first() == Some(&0x12) {

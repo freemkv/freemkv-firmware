@@ -30,7 +30,7 @@ use objc2_app_kit::{
     NSOpenPanel, NSOutlineView, NSOutlineViewDataSource, NSOutlineViewDelegate, NSPasteboard,
     NSPasteboardTypeString, NSPopUpButton, NSProgressIndicator, NSProgressIndicatorStyle,
     NSSavePanel, NSScrollView, NSSegmentSwitchTracking, NSSegmentedControl,
-    NSStackViewDistribution, NSTableColumn, NSTextField, NSTextView,
+    NSStackViewDistribution, NSTableColumn, NSTextField, NSTextFieldDelegate, NSTextView,
     NSUserInterfaceLayoutOrientation, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
     NSWindowTabbingMode,
 };
@@ -544,6 +544,16 @@ define_class!(
     struct Controller;
 
     unsafe impl NSObjectProtocol for Controller {}
+
+    unsafe impl NSControlTextEditingDelegate for Controller {
+        #[unsafe(method(controlTextDidChange:))]
+        fn code_changed(&self, notification: &NSNotification) {
+            if let Some(field) = notification.object().and_then(|o| o.downcast::<NSTextField>().ok()) {
+                self.send(Input::FamilyOverrideCode(field.stringValue().to_string()));
+            }
+        }
+    }
+    unsafe impl NSTextFieldDelegate for Controller {}
 
     unsafe impl NSApplicationDelegate for Controller {
         #[unsafe(method(applicationShouldTerminate:))]
@@ -1337,6 +1347,19 @@ impl Controller {
         }
         if let Some(n) = &c.note {
             acc.addArrangedSubview(&wrapping(mtm, n, width));
+        }
+        if let Some(value) = &c.code_entry {
+            let entry = NSTextField::new(mtm);
+            entry.setStringValue(&ns(value));
+            entry.setEditable(true);
+            entry.setSelectable(true);
+            // The controller outlives its alert and all accessory controls.
+            unsafe { entry.setDelegate(Some(ProtocolObject::from_ref(self))) };
+            entry
+                .widthAnchor()
+                .constraintEqualToConstant(width)
+                .setActive(true);
+            acc.addArrangedSubview(&entry);
         }
         let ack = self.checkbox(CheckId::RiskAck, &c.ack_text, c.ack_checked, true);
         ack.setHidden(c.ack_text.is_empty());

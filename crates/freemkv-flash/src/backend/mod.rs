@@ -21,6 +21,7 @@ use crate::manifest::FlashMode;
 use crate::platform::ScsiDevice;
 use crate::report::{Row, Slot};
 
+pub mod detection;
 pub mod device;
 pub mod registry;
 
@@ -143,24 +144,29 @@ fn inquiry_cdb(alloc: u8) -> [u8; 6] {
 /// Read standard INQUIRY identity, surfacing a failed INQUIRY (permission or
 /// transport fault) as an error instead of an empty identity.
 pub fn try_read_identity(dev: &mut dyn ScsiDevice) -> Result<Identity> {
-    let mut id = Identity::default();
     let data = dev
         .command_in(&inquiry_cdb(96), 96)
         .context("INQUIRY failed")?;
-    if data.len() < 36 {
-        anyhow::bail!(
-            "short INQUIRY identity: {} bytes returned, at least 36 required",
-            data.len()
-        );
-    }
-    id.vendor = sanitize_ascii(&trim_ascii(&data[8..16]));
-    id.product = sanitize_ascii(&trim_ascii(&data[16..32]));
-    id.revision = sanitize_ascii(&trim_ascii(&data[32..36]));
+    let id = decode_identity(&data)?;
     crate::diagnostics::record(format!(
         "drive identity: vendor={:?} product={:?} revision={:?}",
         id.vendor, id.product, id.revision
     ));
     Ok(id)
+}
+
+pub(crate) fn decode_identity(data: &[u8]) -> Result<Identity> {
+    anyhow::ensure!(
+        data.len() >= 36,
+        "short INQUIRY identity: {} bytes returned, at least 36 required",
+        data.len()
+    );
+    Ok(Identity {
+        vendor: sanitize_ascii(&trim_ascii(&data[8..16])),
+        product: sanitize_ascii(&trim_ascii(&data[16..32])),
+        revision: sanitize_ascii(&trim_ascii(&data[32..36])),
+        banner: None,
+    })
 }
 
 /// Read standard INQUIRY identity. Vendor ROM reads belong to a matched
@@ -641,6 +647,44 @@ pub enum UpdateOutcome {
     Completed(UpdateEvidence),
 }
 
+/// Readback evidence retained independently of the overall update outcome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentVerification {
+    /// All requested bytes matched.
+    Matched,
+    /// Readable bytes differed.
+    Mismatched,
+    /// Reads failed or were incomplete.
+    Unavailable,
+    /// The operation stopped before comparison.
+    NotChecked,
+    /// This component was not requested.
+    NotRequested,
+}
+
+/// Verification facts preserved when a later update stage fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateVerification {
+    /// Kernel readback state for the current pass.
+    pub kernel: ComponentVerification,
+    /// Normal readback state for the current pass.
+    pub normal: ComponentVerification,
+    /// Normal runtime and receiver continuity were confirmed.
+    pub startup_confirmed: bool,
+    /// Device branding observed after the transfer, if available.
+    pub observed_identity: Option<String>,
+    /// Advertised identity of the selected package.
+    pub selected_identity: String,
+}
+impl fmt::Display for UpdateVerification {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Kernel: {:?}; Normal: {:?}; startup confirmed: {}; selected package: {}; drive reports: {}",
+            self.kernel, self.normal, self.startup_confirmed, self.selected_identity,
+            self.observed_identity.as_deref().unwrap_or("not observed after transfer"))
+    }
+}
+impl std::error::Error for UpdateVerification {}
+
 /// Backend-owned facts about the requested target and every completed stage.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateEvidence {
@@ -870,6 +914,16 @@ impl RecoveryTarget {
     }
 }
 
+/// A family override was requested from a backend that does not offer it.
+#[derive(Debug)]
+pub struct UnsupportedFamilyOverride;
+impl std::fmt::Display for UnsupportedFamilyOverride {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("recovery.family_override_unsupported")
+    }
+}
+impl std::error::Error for UnsupportedFamilyOverride {}
+
 /// Recovery without automatic backups or installed-versus-target policy.
 pub trait RecoveryFacet {
     /// A classified drive may need a Current file before its receiver can be identified.
@@ -892,6 +946,24 @@ pub trait RecoveryFacet {
         _current: Option<&[u8]>,
     ) -> Result<Option<RecoveryTarget>> {
         self.identify(dev)
+    }
+    /// Whether this recovery backend can explicitly waive its firmware family check.
+    fn supports_family_override(&self) -> bool {
+        false
+    }
+    /// Recovery with an explicit family override; unsupported backends fail closed.
+    fn recover_with_family_override(
+        &self,
+        dev: DeviceAccess<'_, '_>,
+        receiver: &RecoveryTarget,
+        current: Option<&[u8]>,
+        target: &[u8],
+        bypass_family_check: bool,
+    ) -> Result<UpdateOutcome> {
+        if bypass_family_check {
+            return Err(UnsupportedFamilyOverride.into());
+        }
+        self.recover(dev, receiver, current, target)
     }
     /// The refusal when [`RecoveryFacet::identify`] finds no receiver.
     fn unidentified(&self) -> &'static str;

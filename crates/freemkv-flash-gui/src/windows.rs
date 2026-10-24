@@ -1579,6 +1579,10 @@ impl Shell {
             self.confirming.set(false);
             return;
         };
+        if c.code_entry.is_some() {
+            self.confirm_code(&c);
+            return;
+        }
         let mut content = format!("{}\n\n{}", c.details.join("\n"), c.danger);
         if let Some(prompt) = &c.prompt {
             content.push_str(&format!("\n\n{prompt}"));
@@ -1619,6 +1623,101 @@ impl Shell {
         };
         let chosen = matches!(answer, Ok((id, _, _)) if id.raw() == TD_CONFIRM);
         self.send(if chosen && c.confirm.enabled {
+            Input::Confirm
+        } else {
+            Input::CancelConfirm
+        });
+    }
+
+    /// Typed challenge uses a native edit control; policy remains in the shared model.
+    fn confirm_code(&self, c: &Confirm) {
+        let dialog = gui::WindowModal::new(gui::WindowModalOpts {
+            title: &c.title,
+            size: gui::dpi(600, 360),
+            ..Default::default()
+        });
+        let text = format!(
+            "{}\n\n{}\n\n{}",
+            c.details.join("\n"),
+            c.danger,
+            c.prompt.as_deref().unwrap_or_default()
+        );
+        let _message = gui::Label::new(
+            &dialog,
+            gui::LabelOpts {
+                text: &text,
+                position: gui::dpi(20, 20),
+                size: gui::dpi(560, 230),
+                control_style: co::SS::LEFT | co::SS::NOPREFIX,
+                ..Default::default()
+            },
+        );
+        let entry = gui::Edit::new(
+            &dialog,
+            gui::EditOpts {
+                text: c.code_entry.as_deref().unwrap_or_default(),
+                position: gui::dpi(20, 260),
+                width: gui::dpi_x(180),
+                control_style: co::ES::AUTOHSCROLL | co::ES::NUMBER,
+                ..Default::default()
+            },
+        );
+        let cancel = gui::Button::new(
+            &dialog,
+            gui::ButtonOpts {
+                text: &c.cancel.text,
+                position: gui::dpi(210, 310),
+                width: gui::dpi_x(170),
+                ..Default::default()
+            },
+        );
+        let proceed = gui::Button::new(
+            &dialog,
+            gui::ButtonOpts {
+                text: &c.confirm.text,
+                position: gui::dpi(390, 310),
+                width: gui::dpi_x(190),
+                ..Default::default()
+            },
+        );
+        let accepted = Rc::new(Cell::new(false));
+        let button = proceed.clone();
+        let field = entry.clone();
+        dialog.on().wm_create(move |_| {
+            field.limit_text(Some(5));
+            button.hwnd().EnableWindow(false);
+            Ok(0)
+        });
+        let me = self.clone();
+        let field = entry.clone();
+        let button = proceed.clone();
+        entry.on().en_change(move || {
+            me.app
+                .borrow_mut()
+                .dispatch(Input::FamilyOverrideCode(field.text().unwrap_or_default()));
+            button
+                .hwnd()
+                .EnableWindow(me.view().confirm.is_some_and(|c| c.confirm.enabled));
+            Ok(())
+        });
+        let popup = dialog.clone();
+        cancel.on().bn_clicked(move || {
+            popup.close();
+            Ok(())
+        });
+        let popup = dialog.clone();
+        let chosen = accepted.clone();
+        let me = self.clone();
+        proceed.on().bn_clicked(move || {
+            if me.view().confirm.is_some_and(|c| c.confirm.enabled) {
+                chosen.set(true);
+                popup.close();
+            }
+            Ok(())
+        });
+        let shown = dialog.show_modal(&self.wnd);
+        self.confirming.set(false);
+        self.send(if shown.is_ok() && accepted.get() {
             Input::Confirm
         } else {
             Input::CancelConfirm

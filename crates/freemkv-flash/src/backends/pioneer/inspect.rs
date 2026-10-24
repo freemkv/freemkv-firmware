@@ -203,7 +203,9 @@ fn analyze(
                 .map(|(i, _)| i)
                 .collect(),
         });
-        report.analyses.push(comparison_input(&analysis));
+        report
+            .analyses
+            .push(comparison_input(&analysis, envelope.info()));
     }
     report.missing_components = ["Kernel", "Normal"]
         .into_iter()
@@ -244,6 +246,7 @@ const SEMANTIC_COVERAGE: &str = "pioneer.analysis.semantic_coverage";
 
 fn comparison_input(
     analysis: &pioneer_optical::analysis::FirmwareAnalysis<'_>,
+    info: &pioneer_optical::envelope::EnvelopeInfo,
 ) -> crate::inspection::comparison::FirmwareAnalysis {
     use crate::inspection::comparison::{
         FirmwareAnalysis, Identity, Reference, Region, Representation, Table,
@@ -251,6 +254,26 @@ fn comparison_input(
     FirmwareAnalysis {
         identity: Identity {
             component: analysis.identity.component.clone(),
+            metadata: crate::firmware_comparison::ComponentIdentity {
+                name: analysis.identity.model.clone(),
+                revision: analysis.identity.revision.clone(),
+                // Revision direction is meaningful only inside this exact edition.
+                lineage: (!info.vendor.is_empty()
+                    && !info.model.is_empty()
+                    && !info.hardware_version.is_empty()
+                    && !info.kernel_version.is_empty())
+                .then(|| {
+                    serde_json::json!([
+                        "pioneer",
+                        info.vendor,
+                        info.model,
+                        analysis.identity.component,
+                        info.hardware_version,
+                        info.kernel_version
+                    ])
+                    .to_string()
+                }),
+            },
             sha256: analysis.identity.sha256.clone(),
             family: analysis.identity.family.clone(),
             family_scheme: analysis.identity.family_scheme.into(),

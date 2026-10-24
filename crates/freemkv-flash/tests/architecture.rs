@@ -329,7 +329,6 @@ fn force_and_skip_backup_paths_are_gone() {
         "validate_forced_image",
         "validate_forced_backup",
         "force_refusal",
-        "prepare_without_family_check",
         "prepare_normal_without_family_check",
         "decide_recover_plan",
         "classify_forced",
@@ -342,6 +341,24 @@ fn force_and_skip_backup_paths_are_gone() {
             }
         }
     }
+    // The only family-gate waiver is the explicit Recovery path, where the
+    // model requires fresh typed consent and the library retains its other
+    // receiver, marker, integrity, restoration and handoff checks.
+    let prepare_without_family_check: Vec<_> = sources
+        .iter()
+        .filter(|s| !word_hits(&s.code, "prepare_without_family_check").is_empty())
+        .map(|s| s.path.as_str())
+        .collect();
+    assert_eq!(
+        prepare_without_family_check,
+        ["src/backends/pioneer/recovery.rs"]
+    );
+    let recovery = source(&sources, "src/backends/pioneer/recovery.rs");
+    let recovery_code = tighten(&normalise(&recovery.code));
+    assert!(recovery_code.contains(
+        "let prepared=if bypass_family_check{receiver.prepare_without_family_check(target)}else{receiver.prepare(target)}"
+    ));
+
     // Neither request type carries a bypass, and no flash-path code names one.
     for (path, name) in [
         ("src/backend/mod.rs", "FlashRequest"),
@@ -1467,6 +1484,8 @@ fn recover_names_only_the_recovery_facet() {
                 in_facet || ["src/engine.rs", "src/workflow.rs"].contains(&s.path.as_str())
             } else if (before.ends_with('.') || before.ends_with("::")) && after.starts_with('(') {
                 ["src/main.rs", "src/workflow.rs", "src/engine.rs"].contains(&s.path.as_str())
+                    || (s.path == "src/backend/mod.rs"
+                        && within_function(&s.code, at, "recover_with_family_override"))
             } else {
                 // pioneer-optical's own `UpdateOptions::recover`, never requested.
                 s.path == "src/backends/pioneer/flash.rs"
@@ -1480,6 +1499,18 @@ fn recover_names_only_the_recovery_facet() {
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// Whether `at` is inside the body of a named function in lexed source.
+fn within_function(code: &str, at: usize, name: &str) -> bool {
+    let marker = format!("fn {name}");
+    let Some(start) = code[..at].rfind(&marker) else {
+        return false;
+    };
+    let Some(open) = code[start..].find('{').map(|offset| start + offset) else {
+        return false;
+    };
+    at < block_end(code, open)
 }
 
 // ---------------------------------------------------------------------------
@@ -1670,7 +1701,7 @@ fn vendor_scan_skips_comments_and_tests() {
 fn pioneer_optical_stays_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
     let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
-    for (name, version) in [("pioneer-optical", "1.0.2"), ("mediatek-optical", "1.0.0")] {
+    for (name, version) in [("pioneer-optical", "1.0.3"), ("mediatek-optical", "1.0.1")] {
         let line = manifest
             .lines()
             .find(|line| line.trim_start().starts_with(name))

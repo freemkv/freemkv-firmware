@@ -345,6 +345,8 @@ impl ScsiDevice for Drive {
             }
         } else if command == cdb::test_unit_ready() {
             return Err(crate::platform::ScsiSenseError::new(2, 0x3a, 0, "no medium").into());
+        } else if command == mediatek_optical::cdb::read_memory(0x3000, 32) {
+            return Ok(vec![0; 32]);
         } else if command != cdb::get_event_status() {
             panic!("unexpected recovery read: {command:02x?}");
         }
@@ -574,6 +576,14 @@ fn unknown_programmer_is_not_bypassed_by_recovery() {
         |kernel| {
             kernel[0xe000..0xe016].fill(0);
         },
+    );
+    let reference = Current::load(&archive(&current, false)).unwrap();
+    let target = archive(&fixture_pair(false, 1), false);
+    let forced_error = Plan::with_family_override(&reference, &target, true)
+        .err()
+        .unwrap();
+    assert!(
+        format!("{forced_error:#}").contains("installed Kernel programming handoff is unsupported")
     );
     let error = Plan::from_updates(current, fixture_pair(false, 1))
         .err()
@@ -1078,8 +1088,11 @@ impl ScsiDevice for UnsupportedDrive {
         "unsupported test drive".into()
     }
     fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
-        if command == cdb::inquiry(pioneer_optical::INQUIRY_LEN as u8) {
+        if command.first() == Some(&0x12) {
             return Ok(self.inquiry.clone());
+        }
+        if command == mediatek_optical::cdb::read_memory(0x3000, 32) {
+            return Ok(vec![0; 32]);
         }
         assert_eq!(command, cdb::vendor_identity());
         self.vendor_reads += 1;
@@ -1125,6 +1138,7 @@ fn wrong_drive_and_short_identity_fail_before_vendor_commands_or_writes() {
         assert_eq!(
             drive.vendor_reads,
             usize::from(drive.inquiry.len() >= pioneer_optical::INQUIRY_LEN)
+                + usize::from(drive.inquiry.first().is_some_and(|v| v & 0x1f == 5))
         );
         assert_eq!(drive.writes, 0);
     }
@@ -1664,6 +1678,37 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
     .unwrap();
     let target = Update::load(&encoded.kernel, &encoded.normal).unwrap();
     assert_ne!(installed.family(), target.family());
+    let current = Current::load(&archive(&installed, false)).unwrap();
+    let target_bytes = archive(&target, false);
+    let refusal = Plan::with_family_override(&current, &target_bytes, false)
+        .err()
+        .unwrap();
+    assert!(refusal.is::<crate::backend::HardwareMismatch>());
+    assert!(format!("{refusal:#}").contains("family mismatch"));
+    let overridden = Plan::with_family_override(&current, &target_bytes, true).unwrap();
+    assert_eq!(
+        overridden.prepared.normal_transfer(),
+        target.normal_transfer()
+    );
+    assert!(Plan::with_family_override(&current, b"invalid firmware", true).is_err());
+    let mut drive = loader_for_target(&overridden, &target);
+    let outcome = overridden
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+    let crate::backend::UpdateOutcome::Completed(evidence) = outcome else {
+        panic!("expected completed recovery")
+    };
+    assert!(evidence.target_started);
+    assert_eq!(evidence.verified_regions, ["Kernel"]);
+    // This synthetic Kernel has no Normal address map; that limitation remains explicit.
+    assert_eq!(evidence.unverified_regions, ["Normal"]);
+    let mut drive = loader_for_target(&overridden, &target);
+    drive.readback_images[0][0x400] ^= 1;
+    let error = overridden
+        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("readback differs"));
+
     let plan = crate::backend::FlashPlan::new(
         super::super::execute_plan(&archive(&target, false)).unwrap(),
     );
@@ -1814,7 +1859,7 @@ fn current_assisted_identity_requires_exact_receiver_evidence_before_firmware_io
     identity[16..24].copy_from_slice(b"SAT FFFE");
     identity[24..32].copy_from_slice(b"GENERAL ");
     identity[32..40].copy_from_slice(b"GENERAL ");
-    for (field, expected_reads) in [(8..16, 0), (16..32, 0), (0..1, 0), (32..36, 1)] {
+    for (field, expected_reads) in [(8..16, 1), (16..32, 1), (0..1, 0), (32..36, 1)] {
         let mut observed = inquiry.clone();
         observed[field.clone()].fill(b'X');
         // Revision mismatch is not a routing refusal: platform/tag still bind Current.
@@ -1864,7 +1909,7 @@ fn current_assisted_identity_requires_exact_receiver_evidence_before_firmware_io
 }
 
 #[test]
-fn oem_identity_without_decoded_current_protocol_evidence_never_probes_vendor() {
+fn invalid_current_is_refused_before_probe_and_missing_current_uses_read_only_detection() {
     let pioneer = crate::backends::pioneer::Pioneer::new();
     let package = oem_recovery_package("SONY");
     let unsupported = fixture_pair_class_with(
@@ -1895,7 +1940,27 @@ fn oem_identity_without_decoded_current_protocol_evidence_never_probes_vendor() 
         assert!(
             crate::engine::recover(&mut dev, &pioneer, current, &package, false, false).is_err()
         );
-        assert_eq!(dev.vendor_reads, 0);
+        assert_eq!(dev.vendor_reads, usize::from(current.is_none()));
         assert_eq!(dev.writes, 0);
+    }
+}
+
+#[test]
+fn failed_or_partial_current_capture_suggests_supplied_firmware() {
+    for capture in [
+        Err(anyhow::anyhow!(
+            "short firmware read at 0x5c0000: 17920/18176"
+        )),
+        Ok(Vec::new()),
+    ] {
+        let error = captured_current(capture).err().expect("capture must fail");
+        assert!(error.is::<crate::backend::CurrentFirmwareRequired>());
+        let wrapped =
+            crate::backend::UpdateFailure::before_write("current firmware capture", error);
+        let guidance = crate::user_error::UserError::of(&wrapped);
+        assert_eq!(guidance.id, "errors.current_required");
+        let text = guidance.render(crate::localization::Language::En);
+        assert!(text.contains("could not be read"));
+        assert!(text.contains("Current firmware"));
     }
 }

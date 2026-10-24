@@ -1,7 +1,7 @@
 //! Unit tests for [`super`] (protocol probes, input formats, drive identity).
 
 use super::*;
-use crate::backend::{sanitize_ascii, try_read_identity, FlashRequest};
+use crate::backend::{read_identity, sanitize_ascii, try_read_identity, FlashRequest, ReadDevice};
 use crate::platform::MockScsiDevice;
 
 /// The id of the uniquely matching backend, if any.
@@ -12,6 +12,8 @@ fn matched(dev: &mut dyn ScsiDevice) -> Option<&'static str> {
 fn f1_sat() -> Vec<u8> {
     let mut response = vec![0u8; 48];
     response[16..24].copy_from_slice(b"SAT 8A10");
+    response[24..28].copy_from_slice(b"ID40");
+    response[32..36].copy_from_slice(b"ID40");
     response
 }
 
@@ -26,22 +28,18 @@ fn classify_mtk_from_get_config_010c() {
 }
 
 #[test]
-fn pioneer_identity_prevents_mtk_vendor_probe_even_if_standard_feature_matches() {
-    let mut inq = vec![0u8; 96];
+fn conflicting_protocol_evidence_is_ambiguous_regardless_of_name() {
+    let mut inq = vec![0; 96];
+    inq[0] = 5;
     inq[8..16].copy_from_slice(b"PIONEER ");
-    inq[16..24].copy_from_slice(b"BDR-UD04");
     let mut dev = MockScsiDevice::mtk()
-        .on(
-            |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
-            f1_sat(),
-        )
-        .on(|cdb| cdb.first() == Some(&0x12), inq);
-    let matched = resolve(&mut dev).unwrap().unwrap();
-    assert_eq!(Some(matched.matched.backend.0), Some("pioneer-oem"));
-    assert!(!dev
-        .reads
-        .iter()
-        .any(|cdb| { cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0, 0x30, 0][..]) }));
+        .on(|c| c.first() == Some(&0x12), inq)
+        .on(|c| c.get(..3) == Some(&[0x3c, 2, 0xf1]), f1_sat());
+    assert!(resolve(&mut dev)
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("ambiguous"));
     assert!(dev.writes.is_empty());
 }
 
@@ -63,7 +61,10 @@ fn f1_with_failed_inquiry_does_not_select_pioneer() {
             |cdb| cdb.first() == Some(&0x3C) && cdb.get(2) == Some(&0xF1),
             f1_sat(),
         );
-    assert!(resolve(&mut dev).unwrap().is_none());
+    assert!(resolve(&mut dev)
+        .err()
+        .unwrap()
+        .is::<crate::backend::detection::Unavailable>());
     assert!(dev.writes.is_empty());
 }
 
@@ -148,6 +149,8 @@ fn pioneer_capture_device(hardware: &[u8]) -> MockScsiDevice {
     inquiry[32..36].copy_from_slice(b"1.00");
     let mut f1 = vec![b' '; 48];
     f1[16..24].copy_from_slice(hardware);
+    f1[24..28].copy_from_slice(b"ID40");
+    f1[32..36].copy_from_slice(b"ID40");
     MockScsiDevice::new()
         .on(|c| c.first() == Some(&0x12), inquiry)
         .on(|c| c.get(..3) == Some(&[0x3c, 2, 0xf1]), f1)
@@ -211,7 +214,7 @@ fn dump_fallback_does_not_accept_empty_or_nonprintable_hardware() {
 }
 
 #[test]
-fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
+fn real_pioneer_inquiry_product_tokens_do_not_select_the_protocol() {
     for product in [
         "BD-RW   BDR-UD04",
         "BD-ROM  BDC-S02",
@@ -244,10 +247,10 @@ fn real_pioneer_inquiry_product_tokens_classify_without_mtk_rom_read() {
                 && cdb.get(2) == Some(&0xF1)
                 && cdb.get(6..9) == Some(&[0, 0, 48][..])
         }));
-        assert!(!dev
+        assert!(dev
             .reads
             .iter()
-            .any(|cdb| { cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0, 0x30, 0][..]) }));
+            .any(|cdb| cdb.get(..6) == Some(&[0x3c, 6, 0, 0, 0x30, 0])));
         assert!(dev.writes.is_empty());
     }
 }
@@ -267,14 +270,8 @@ fn publisher_drive_identity_still_requires_pioneer_hardware_response() {
                     response.clone(),
                 );
             let result = resolve(&mut dev).unwrap();
-            assert_eq!(
-                result.is_some(),
-                vendor == b"PIONEER " && response == f1_sat()
-            );
-            assert_eq!(
-                dev.reads.iter().any(|cdb| cdb.first() == Some(&0x3C)),
-                vendor == b"PIONEER "
-            );
+            assert_eq!(result.is_some(), response == f1_sat());
+            assert!(dev.reads.iter().any(|cdb| cdb.first() == Some(&0x3C)));
             assert!(dev.writes.is_empty());
         }
     }
@@ -289,6 +286,8 @@ fn old_pioneer_hardware_is_classified_but_malformed_f1_is_not() {
     for hardware in [b"ATA 0009", b"SCSI0001"] {
         let mut f1 = vec![0u8; 48];
         f1[16..24].copy_from_slice(hardware);
+        f1[24..28].copy_from_slice(b"ID40");
+        f1[32..36].copy_from_slice(b"ID40");
         let mut dev = MockScsiDevice::new()
             .on(|cdb| cdb.first() == Some(&0x12), inq.clone())
             .on(
@@ -458,11 +457,103 @@ fn truncated_feature_header_is_not_protocol_evidence() {
     let mut reply = vec![0; 10];
     reply[8..10].copy_from_slice(&[1, 12]);
     let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x46), reply);
-    assert!(!mtk::get_config_is_mtk(&mut dev));
+    assert!(mtk::Acquire::GetConfig {
+        feature: mtk::FEATURE_FWDATE,
+        alloc: 32
+    }
+    .run(&mut dev)
+    .is_err());
 }
 
 #[test]
 fn truncated_boot_rom_is_not_protocol_evidence() {
-    let mut dev = MockScsiDevice::new().on(|cdb| cdb.first() == Some(&0x3c), b"MT1959".to_vec());
-    assert!(!mtk::has_mt19_banner(&mut dev));
+    let mut inquiry = [0; 36];
+    inquiry[0] = 5;
+    assert!(mediatek_optical::protocol::Evidence::parse(&inquiry, b"MT1959").is_err());
+}
+
+#[test]
+fn asus_report_8591_id22_resolves_without_branding() {
+    let mut inquiry = vec![b' '; 96];
+    inquiry[0] = 5;
+    inquiry[8..16].copy_from_slice(b"ASUS    ");
+    inquiry[16..32].copy_from_slice(b"SBC-06D2X-U     ");
+    inquiry[32..36].copy_from_slice(b"1.10");
+    let mut f1 = vec![b' '; 48];
+    f1[..12].copy_from_slice(b"LJDL050094WL");
+    f1[16..24].copy_from_slice(b"SAT 8591");
+    f1[24..28].copy_from_slice(b"ID22");
+    f1[32..36].copy_from_slice(b"ID22");
+    f1[40..44].copy_from_slice(b"0000");
+    let mut dev = MockScsiDevice::new()
+        .on(|c| c.first() == Some(&0x12), inquiry)
+        .on(|c| c.get(..3) == Some(&[0x3c, 2, 0xf1]), f1);
+    let result = resolve(&mut dev)
+        .unwrap()
+        .expect("ASUS report has Pioneer protocol evidence");
+    assert_eq!(result.matched.backend.0, "pioneer-oem");
+    assert_eq!(result.identity.vendor, "ASUS");
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn protocol_transport_failure_is_not_an_unsupported_drive() {
+    let mut inquiry = vec![0; 96];
+    inquiry[0] = 5;
+    let mut dev = MockScsiDevice::new()
+        .on(|c| c.first() == Some(&0x12), inquiry)
+        .on_fail(|c| c.get(..3) == Some(&[0x3c, 2, 0xf1]), "USB disconnected");
+    let error = resolve(&mut dev)
+        .err()
+        .expect("transport error must survive");
+    assert!(error.is::<crate::backend::detection::Unavailable>());
+    assert!(!dev
+        .reads
+        .iter()
+        .any(|c| c.get(..6) == Some(&[0x3c, 6, 0, 0, 0x30, 0])));
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn rejected_other_protocol_probe_does_not_hide_a_valid_signature() {
+    let mut dev =
+        MockScsiDevice::mtk().on_sense(|c| c.get(..3) == Some(&[0x3c, 2, 0xf1]), 5, 0x24, 0);
+    assert_eq!(
+        resolve(&mut dev).unwrap().unwrap().matched.backend.0,
+        "mtk19xx"
+    );
+    assert_eq!(dev.reads.len(), 3);
+    assert!(dev.writes.is_empty());
+}
+
+#[test]
+fn banner_identification_needs_no_firmware_date_feature_or_vendor_name() {
+    let mut inquiry = vec![0; 96];
+    inquiry[0] = 5;
+    inquiry[8..16].copy_from_slice(b"PIONEER ");
+    let mut dev = MockScsiDevice::mtk()
+        .on(|c| c.first() == Some(&0x12), inquiry)
+        .on_fail(
+            |c| c.first() == Some(&0x46),
+            "metadata should not be queried during discovery",
+        );
+    assert_eq!(
+        resolve(&mut dev).unwrap().unwrap().matched.backend.0,
+        "mtk19xx"
+    );
+    assert!(!dev.reads.iter().any(|c| c.first() == Some(&0x46)));
+}
+
+#[test]
+fn incomplete_signature_cannot_authorize_normal_backend() {
+    let mut inquiry = vec![0; 96];
+    inquiry[0] = 5;
+    let mut dev = MockScsiDevice::new()
+        .on(|c| c.first() == Some(&0x12), inquiry)
+        .on(
+            |c| c.get(..3) == Some(&[0x3c, 2, 0xf1]),
+            f1_sat()[..24].to_vec(),
+        );
+    assert!(resolve(&mut dev).unwrap().is_none());
+    assert!(dev.writes.is_empty());
 }

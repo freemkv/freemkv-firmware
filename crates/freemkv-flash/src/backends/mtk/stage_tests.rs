@@ -709,9 +709,8 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
         .err()
         .unwrap();
     assert!(error.is::<crate::backend::CurrentFirmwareRequired>());
-    assert!(
-        crate::workflow::error_message(&error).contains("Choose the firmware currently installed")
-    );
+    assert!(crate::workflow::error_message(&error)
+        .contains("Select a file matching the firmware currently installed"));
     assert!(!crate::workflow::error_message(&error).contains("0x98000"));
     assert!(format!("{error:#}").contains("restricted live code read 0x98000"));
     req.current = Some(current.clone());

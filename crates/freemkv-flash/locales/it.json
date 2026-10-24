@@ -19,6 +19,16 @@
     "task.dump": "Dump",
     "task.flash": "Flash",
     "task.recovery": "Ripristino",
+    "recovery.bypass_family_check": "Ignora il controllo della famiglia del firmware (molto rischioso)",
+    "recovery.bypass_family_title": "Ignora il controllo della famiglia hardware",
+    "recovery.bypass_family_warning": "Hai richiesto di ignorare il controllo della famiglia hardware del firmware. Questo controllo aiuta a impedire che sul drive venga scritto firmware destinato a hardware diverso. Ignorarlo può rendere il drive inutilizzabile in modo permanente e il ripristino o la reinstallazione del firmware precedente potrebbero essere impossibili.",
+    "recovery.bypass_family_code": "Per confermare che accetti questo rischio, inserisci {code} per continuare.",
+    "recovery.bypass_family_continue": "Abilita l'omissione",
+    "recovery.bypass_family_code_failed": "Impossibile generare il codice di conferma. Il controllo della famiglia del firmware resta attivo.",
+    "recovery.bypass_family_ack": "Comprendo che ignorare il controllo della famiglia del firmware può rendere questo drive inutilizzabile in modo permanente e che il ripristino potrebbe essere impossibile.",
+    "recovery.family_enforced": "Nessun backup automatico; controllo della famiglia del firmware applicato",
+    "recovery.family_bypassed": "Nessun backup automatico; controllo della famiglia del firmware esplicitamente ignorato (molto rischioso)",
+    "recovery.family_override_unsupported": "Questo backend di ripristino non supporta l'omissione del controllo della famiglia del firmware.",
     "action.read_info": "Leggi informazioni unità",
     "action.check_file": "Controlla file…",
     "info.connect_drive": "Collega un’unità ottica, quindi seleziona Aggiorna.",
@@ -558,6 +568,10 @@
     "legacy.arg0_active_and_saved": "{arg0} (attivato e salvato)",
     "legacy.backup_saved": "Backup: salvato {path} ({bytes} di BIT)",
     "legacy.backup_missing": "backup: NONE – flashing senza una backup rollback (questo disco ottico non può essere rollato indietro)",
-    "ui.backup_dump_review": "Se non è possibile salvare un backup, salva un dump grezzo e invialo con i log diagnostici per consentirci di valutare il supporto al backup."
+    "ui.backup_dump_review": "Se non è possibile salvare un backup, salva un dump grezzo e invialo con i log diagnostici per consentirci di valutare il supporto al backup.",
+    "verification.startup": "Avvio",
+    "verification.not_checked": "Non controllato",
+    "verification.not_requested": "Non richiesto",
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
   }
 }
