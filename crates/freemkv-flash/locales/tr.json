@@ -631,6 +631,9 @@
     "verification.startup": "Başlatma",
     "verification.not_checked": "Kontrol edilmedi",
     "verification.not_requested": "İstenmedi",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Günlük başka bir uygulamada açılamadı. Buradaki tanılama görüntüleyicisine bakın.",
+    "errors.clipboard": "Metin kopyalanamadı. Yeniden deneyin.",
+    "errors.confirmation_dialog": "Güncelleme onayı açılamadı. Güncelleme iptal edildi. Hiçbir aygıt yazılımı yazılmadı. Yeniden deneyin."
   }
 }

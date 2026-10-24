@@ -631,6 +631,9 @@
     "verification.startup": "Inicio",
     "verification.not_checked": "No comprobado",
     "verification.not_requested": "No solicitado",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "No se pudo abrir el registro en otra aplicación. Consulta el visor de diagnóstico aquí.",
+    "errors.clipboard": "No se pudo copiar el texto. Inténtalo de nuevo.",
+    "errors.confirmation_dialog": "No se pudo abrir la confirmación de la actualización. Se canceló la actualización. No se escribió ningún firmware. Inténtalo de nuevo."
   }
 }

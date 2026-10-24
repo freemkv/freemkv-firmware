@@ -631,6 +631,9 @@
     "verification.startup": "시작",
     "verification.not_checked": "확인하지 않음",
     "verification.not_requested": "요청하지 않음",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "다른 앱에서 로그를 열 수 없습니다. 여기에 있는 진단 뷰어를 확인하세요.",
+    "errors.clipboard": "텍스트를 복사할 수 없습니다. 다시 시도하세요.",
+    "errors.confirmation_dialog": "업데이트 확인 창을 열 수 없습니다. 업데이트가 취소되었습니다. 펌웨어는 기록되지 않았습니다. 다시 시도하세요."
   }
 }

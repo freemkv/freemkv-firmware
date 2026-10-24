@@ -341,7 +341,12 @@ impl Shell {
                 }
                 Effect::CopyText(text) => self.window.clipboard().set_text(&text),
                 Effect::OpenPath(path) => {
-                    let _ = crate::external::open_path(&path);
+                    if let Err(error) = crate::external::open_path(&path) {
+                        self.send(Input::ShellFailed(
+                            crate::ui::ShellFailure::OpenLog,
+                            format!("{error:#}"),
+                        ));
+                    }
                 }
                 Effect::StartTicking => self.start_tick(),
                 Effect::StopTicking => {

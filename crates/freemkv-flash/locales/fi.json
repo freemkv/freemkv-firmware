@@ -631,6 +631,9 @@
     "verification.startup": "Käynnistys",
     "verification.not_checked": "Ei tarkistettu",
     "verification.not_requested": "Ei pyydetty",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Lokia ei voitu avata toisessa sovelluksessa. Tarkista tässä näkyvä diagnostiikkanäkymä.",
+    "errors.clipboard": "Tekstiä ei voitu kopioida. Yritä uudelleen.",
+    "errors.confirmation_dialog": "Päivityksen vahvistusta ei voitu avata. Päivitys peruttiin. Laiteohjelmistoa ei kirjoitettu. Yritä uudelleen."
   }
 }

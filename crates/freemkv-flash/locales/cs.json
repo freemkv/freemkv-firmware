@@ -631,6 +631,9 @@
     "verification.startup": "Spuštění",
     "verification.not_checked": "Nezkontrolováno",
     "verification.not_requested": "Nepožadováno",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Protokol se nepodařilo otevřít v jiné aplikaci. Podívejte se do zdejšího diagnostického prohlížeče.",
+    "errors.clipboard": "Text se nepodařilo zkopírovat. Zkuste to znovu.",
+    "errors.confirmation_dialog": "Potvrzení aktualizace se nepodařilo otevřít. Aktualizace byla zrušena. Žádný firmware nebyl zapsán. Zkuste to znovu."
   }
 }

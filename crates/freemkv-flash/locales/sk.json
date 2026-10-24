@@ -631,6 +631,9 @@
     "verification.startup": "Spustenie",
     "verification.not_checked": "Neskontrolované",
     "verification.not_requested": "Nepožadované",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "Protokol sa nepodarilo otvoriť v inej aplikácii. Pozrite si tunajší diagnostický prehliadač.",
+    "errors.clipboard": "Text sa nepodarilo skopírovať. Skúste to znova.",
+    "errors.confirmation_dialog": "Potvrdenie aktualizácie sa nepodarilo otvoriť. Aktualizácia bola zrušená. Žiadny firmvér nebol zapísaný. Skúste to znova."
   }
 }

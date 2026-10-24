@@ -631,6 +631,9 @@
     "verification.startup": "Inici",
     "verification.not_checked": "No comprovat",
     "verification.not_requested": "No sol·licitat",
-    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}"
+    "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
+    "errors.open_log": "No s'ha pogut obrir el registre en una altra aplicació. Consulteu el visor de diagnòstic aquí.",
+    "errors.clipboard": "No s'ha pogut copiar el text. Torneu-ho a provar.",
+    "errors.confirmation_dialog": "No s'ha pogut obrir la confirmació de l'actualització. S'ha cancel·lat l'actualització. No s'ha escrit cap microprogramari. Torneu-ho a provar."
   }
 }
