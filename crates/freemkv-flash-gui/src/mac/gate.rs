@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use objc2::{DefinedClass, MainThreadOnly};
+use objc2::{DefinedClass, MainThreadOnly, Message};
 use objc2_app_kit::{
     NSApplication, NSBitmapFormat, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSMenu,
     NSView, NSWindow,
@@ -82,6 +82,7 @@ pub(super) fn run(c: &Controller, dir: &Path) {
     let reopened = sheet(c, dir, false, &mut g);
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     backup_question(c, dir, &mut g);
+    report_prompt(c, dir, &mut g);
     c.with_app(|a| g.no_drive_io("end", a));
     std::process::exit(g.finish(dir));
 }
@@ -555,4 +556,122 @@ fn analysis_header_languages(c: &Controller, g: &mut Gate) {
         );
     }
     c.render_analysis(&c.view());
+}
+
+/// Exercise AppKit's actual multiline editor and sheet completion, with an inert
+/// model: Send consumes the draft but cannot start a browser or network worker.
+fn report_prompt(c: &Controller, dir: &Path, g: &mut Gate) {
+    use crate::localization::{get, Language};
+    let main = c.ivars().window.borrow().clone().unwrap();
+    let mut previous = String::new();
+    for (action, description) in [
+        ("cancel", "  日本語 🦀\nsecond line\n  "),
+        ("send", "Résumé\n描述 🦀\n"),
+        ("close", "closing\n保留 🦀"),
+        ("send-blank", ""),
+    ] {
+        c.send(Input::SubmitReport);
+        settle(c, SETTLE);
+        let alert = c.ivars().report_alert.borrow().clone();
+        g.check(
+            "report-prompt-opens",
+            alert.is_some() && main.attachedSheet().is_some(),
+            "report action opens a native sheet",
+        );
+        let Some(alert) = alert else {
+            return;
+        };
+        let editor = alert.accessoryView().and_then(|v| report_editor(&v));
+        g.check(
+            "report-multiline-editor",
+            editor.is_some(),
+            "native NSTextView in report accessory",
+        );
+        let Some(editor) = editor else {
+            return;
+        };
+        g.check(
+            "report-draft-restored",
+            editor.string().to_string() == previous,
+            action,
+        );
+        g.check(
+            "report-optional-description-label",
+            alert.accessoryView().is_some_and(|accessory| {
+                accessory.subviews().iter().any(|child| {
+                    child
+                        .downcast_ref::<super::NSTextField>()
+                        .is_some_and(|label| {
+                            label.stringValue().to_string() == "Description (optional)"
+                        })
+                })
+            }),
+            "exact English label on the actual accessory control",
+        );
+        if action == "cancel" {
+            g.save(
+                dir,
+                "report-prompt",
+                alert
+                    .window()
+                    .contentView()
+                    .and_then(|v| capture(&v))
+                    .as_ref(),
+            );
+        }
+        let buttons = alert.buttons();
+        g.check(
+            "report-controls-localized",
+            alert.messageText().to_string() == get(Language::En, "report.prompt_title")
+                && buttons.objectAtIndex(0).title().to_string() == get(Language::En, "report.send")
+                && buttons.objectAtIndex(1).title().to_string() == get(Language::En, "ui.cancel")
+                && buttons
+                    .objectAtIndex(0)
+                    .keyEquivalent()
+                    .to_string()
+                    .is_empty(),
+            "Send requires an explicit click; Return belongs to the multiline editor",
+        );
+        editor.setString(&ns(description));
+        // Pump while editing to exercise timer/render reentrancy without resetting text.
+        settle(c, SETTLE);
+        g.check(
+            "report-editor-keeps-unicode",
+            editor.string().to_string() == description,
+            action,
+        );
+        match action {
+            "close" => main.endSheet_returnCode(&alert.window(), 0),
+            "cancel" => unsafe { buttons.objectAtIndex(1).performClick(None) },
+            _ => unsafe { buttons.objectAtIndex(0).performClick(None) },
+        }
+        let until = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < until && main.attachedSheet().is_some() {
+            settle(c, Duration::from_millis(100));
+        }
+        settle(c, SETTLE);
+        let (draft, open) = c.with_app(|app| {
+            let (draft, open) = app.report_prompt_state();
+            (draft.to_owned(), open)
+        });
+        g.check(
+            &format!("report-{action}-retains-description"),
+            draft == description
+                && !open
+                && main.attachedSheet().is_none()
+                && c.ivars().report_alert.borrow().is_none(),
+            format!("draft={draft:?}; prompt open={open}"),
+        );
+        c.with_app(|app| g.no_drive_io(action, app));
+        previous = description.to_owned();
+    }
+}
+
+fn report_editor(view: &NSView) -> Option<objc2::rc::Retained<super::NSTextView>> {
+    if let Some(editor) = view.downcast_ref::<super::NSTextView>() {
+        return Some(editor.retain());
+    }
+    view.subviews()
+        .iter()
+        .find_map(|child| report_editor(&child))
 }

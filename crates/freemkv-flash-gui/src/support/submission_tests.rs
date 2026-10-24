@@ -17,6 +17,13 @@ fn reply(status: u16, body: Value) -> Reply {
     }
 }
 fn server(script: Vec<Reply>) -> (String, std::thread::JoinHandle<Vec<String>>) {
+    server_with_inspection(script, |_| {})
+}
+
+fn server_with_inspection(
+    script: Vec<Reply>,
+    inspect: impl Fn(&[u8]) + Send + 'static,
+) -> (String, std::thread::JoinHandle<Vec<String>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -59,6 +66,7 @@ fn server(script: Vec<Reply>) -> (String, std::thread::JoinHandle<Vec<String>>) 
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
             if headers.starts_with("PUT ") {
+                inspect(&body);
                 use sha2::Digest;
                 let expected: String = sha2::Sha256::digest(&body)
                     .iter()
@@ -116,6 +124,7 @@ fn approval_pending_then_upload_notification_retry_returns_a_receipt() {
     ]);
     let (source, dir) = source();
     let mut opened = false;
+    let mut progress = Vec::new();
     let result = submit_at(
         source,
         &control(),
@@ -125,10 +134,14 @@ fn approval_pending_then_upload_notification_retry_returns_a_receipt() {
             opened = true;
             Ok(())
         },
-        |_| {},
+        |message| progress.push(message),
     )
     .unwrap();
     assert!(opened);
+    assert!(
+        progress.iter().any(|message| message == "report.preparing"),
+        "preparation progress must be localized: {progress:?}"
+    );
     assert!(result.contains("synthetic-report"));
     let requests = server.join().unwrap();
     assert!(requests[0].starts_with("POST /requests "));
@@ -176,7 +189,8 @@ fn receipt_is_not_misreported_as_cancelled_when_upload_was_already_accepted() {
     let (source, dir) = source();
     let receipt = submit_at(source, &control, &base, |_| Ok(()), |_| {}).unwrap();
     assert!(control.cancelled());
-    assert!(crate::localization::english(&receipt).contains("accepted-before-cancel received"));
+    assert!(crate::localization::english(&receipt).contains("Diagnostic report sent"));
+    assert!(crate::localization::english(&receipt).contains("accepted-before-cancel"));
     assert_eq!(server.join().unwrap().len(), 3);
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -307,5 +321,82 @@ fn production_submission_with_synthetic_history() {
     assert!(receipt.starts_with("Report ") && receipt.contains(" received. Local copy:"));
     eprintln!("Synthetic production submission: {receipt}");
     drop(journal);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn backup_upload_receipt_describes_actual_bundle_and_blank_description() {
+    let (base, server) = server_with_inspection(
+        vec![
+            reply(200, created()),
+            reply(200, approved()),
+            reply(200, json!({"report_id":"backup-receipt"})),
+        ],
+        |body| {
+            let mut zip = zip::ZipArchive::new(std::io::Cursor::new(body)).unwrap();
+            let manifest: Value =
+                serde_json::from_reader(zip.by_name("manifest.json").unwrap()).unwrap();
+            assert_eq!(manifest["artifact"]["kind"], "backup");
+            assert_eq!(manifest["description"], "");
+            let mut bytes = Vec::new();
+            zip.by_name("artifacts/backup.bin")
+                .unwrap()
+                .read_to_end(&mut bytes)
+                .unwrap();
+            assert_eq!(bytes, b"exact backup bytes");
+        },
+    );
+    let (source, dir) = source();
+    let path = dir.join("backup.tar");
+    std::fs::write(&path, b"exact backup bytes").unwrap();
+    let source = source.with_artifact(
+        crate::support::ReportArtifact::pending(path, "backup")
+            .capture("drive", "Drive", "op")
+            .unwrap(),
+    );
+    let result = submit_at(source, &control(), &base, |_| Ok(()), |_| {}).unwrap();
+    assert!(crate::localization::english(&result).contains("Diagnostic report and backup sent"));
+    assert!(result.contains("backup-receipt"));
+    assert_eq!(server.join().unwrap().len(), 3);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn changed_dump_never_reaches_upload_after_approval() {
+    let (base, server) = server(vec![reply(200, created()), reply(200, approved())]);
+    let (source, dir) = source();
+    let path = dir.join("dump.bin");
+    std::fs::write(&path, b"original bytes").unwrap();
+    let artifact = crate::support::ReportArtifact::pending(path.clone(), "dump")
+        .capture("drive", "Drive", "op")
+        .unwrap();
+    std::fs::write(path, b"modified bytes").unwrap();
+    let error = submit_at(
+        source.with_artifact(artifact),
+        &control(),
+        &base,
+        |_| Ok(()),
+        |_| {},
+    )
+    .unwrap_err();
+    assert!(error.is::<crate::support::AttachmentChanged>());
+    assert_eq!(server.join().unwrap().len(), 2);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn empty_server_receipt_is_not_submission_success() {
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(200, approved()),
+        reply(200, json!({"report_id":""})),
+    ]);
+    let (source, dir) = source();
+    let result = submit_at(source, &control(), &base, |_| Ok(()), |_| {});
+    assert!(
+        result.is_err(),
+        "empty receipt must not claim success: {result:?}"
+    );
+    assert_eq!(server.join().unwrap().len(), 3);
     std::fs::remove_dir_all(dir).unwrap();
 }

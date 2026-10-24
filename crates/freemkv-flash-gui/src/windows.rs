@@ -875,6 +875,13 @@ impl Shell {
                     Ok(None) => {}
                     Err(error) => self.send(Input::DialogFailed(pick, format!("{error:?}"))),
                 },
+                Effect::ReportPrompt {
+                    summary,
+                    description,
+                } => {
+                    let response = self.report_prompt(&summary, &description);
+                    self.send(response);
+                }
                 Effect::CopyText(text) => self.copy(&text),
                 Effect::OpenPath(path) => {
                     let _ = crate::external::open_path(&path);
@@ -1638,6 +1645,151 @@ impl Shell {
         } else {
             Input::CancelConfirm
         });
+    }
+
+    /// Own the draft outside App: Windows pumps messages while the modal is open.
+    /// Capture edits before destruction, including closing with Escape or the title bar.
+    fn report_prompt(&self, summary: &str, description: &str) -> Input {
+        let language = self.app.borrow().language;
+        let tr = |key| crate::localization::get(language, key);
+        let limit_message = crate::localization::render(
+            language,
+            &crate::localization::message(
+                "report.description_too_long",
+                &[("summary", summary.to_owned())],
+            ),
+        );
+        let summary = crate::localization::render(language, summary);
+        let dialog = gui::WindowModal::new(gui::WindowModalOpts {
+            title: tr("report.prompt_title"),
+            size: gui::dpi(620, 430),
+            ..Default::default()
+        });
+        let summary_label = gui::Label::new(
+            &dialog,
+            gui::LabelOpts {
+                text: &summary,
+                position: gui::dpi(20, 20),
+                size: gui::dpi(580, 100),
+                control_style: co::SS::LEFT | co::SS::NOPREFIX,
+                ..Default::default()
+            },
+        );
+        let _label = gui::Label::new(
+            &dialog,
+            gui::LabelOpts {
+                text: tr("report.description_label"),
+                position: gui::dpi(20, 125),
+                size: gui::dpi(580, 25),
+                control_style: co::SS::LEFT | co::SS::NOPREFIX,
+                ..Default::default()
+            },
+        );
+        let entry = gui::Edit::new(
+            &dialog,
+            gui::EditOpts {
+                text: description,
+                position: gui::dpi(20, 155),
+                width: gui::dpi_x(580),
+                height: gui::dpi_y(180),
+                control_style: co::ES::MULTILINE
+                    | co::ES::AUTOVSCROLL
+                    | co::ES::WANTRETURN
+                    | co::ES::NOHIDESEL,
+                window_style: co::WS::CHILD
+                    | co::WS::VISIBLE
+                    | co::WS::TABSTOP
+                    | co::WS::GROUP
+                    | co::WS::VSCROLL,
+                ..Default::default()
+            },
+        );
+        let cancel = gui::Button::new(
+            &dialog,
+            gui::ButtonOpts {
+                text: tr("ui.cancel"),
+                position: gui::dpi(240, 380),
+                width: gui::dpi_x(170),
+                ..Default::default()
+            },
+        );
+        let proceed = gui::Button::new(
+            &dialog,
+            gui::ButtonOpts {
+                text: tr("report.send"),
+                position: gui::dpi(430, 380),
+                width: gui::dpi_x(170),
+                ..Default::default()
+            },
+        );
+        let draft = Rc::new(RefCell::new(description.to_owned()));
+        let accepted = Rc::new(Cell::new(false));
+        let field = entry.clone();
+        let button = proceed.clone();
+        let label = summary_label.clone();
+        #[cfg(debug_assertions)]
+        let popup = dialog.clone();
+        let initial_valid = description.len() <= crate::support::DESCRIPTION_LIMIT;
+        let initial_message = if initial_valid {
+            summary.clone()
+        } else {
+            limit_message.clone()
+        };
+        dialog.on().wm_create(move |_| {
+            // The byte limit is visible validation, never silent native truncation.
+            field.limit_text(None);
+            button.hwnd().EnableWindow(initial_valid);
+            set_text(&label, &initial_message);
+            #[cfg(debug_assertions)]
+            gate::arm_report_probe(popup.hwnd())?;
+            Ok(0)
+        });
+        let field = entry.clone();
+        let text = draft.clone();
+        let button = proceed.clone();
+        let label = summary_label.clone();
+        entry.on().en_change(move || {
+            if let Ok(value) = field.text() {
+                let valid = value.len() <= crate::support::DESCRIPTION_LIMIT;
+                *text.borrow_mut() = value;
+                button.hwnd().EnableWindow(valid);
+                set_text(&label, if valid { &summary } else { &limit_message });
+            }
+            Ok(())
+        });
+        let popup = dialog.clone();
+        cancel.on().bn_clicked(move || {
+            popup.close();
+            Ok(())
+        });
+        // IsDialogMessage generates IDCANCEL for Escape even without an IDCANCEL button.
+        let popup = dialog.clone();
+        dialog.on().wm_command(2u16, co::BN::CLICKED, move || {
+            popup.close();
+            Ok(())
+        });
+        let popup = dialog.clone();
+        let chosen = accepted.clone();
+        let text = draft.clone();
+        proceed.on().bn_clicked(move || {
+            if text.borrow().len() > crate::support::DESCRIPTION_LIMIT {
+                return Ok(());
+            }
+            chosen.set(true);
+            popup.close();
+            Ok(())
+        });
+        #[cfg(debug_assertions)]
+        gate::install_report_probe(&dialog, &entry, &summary_label, &proceed, &cancel);
+        // Keep the label alive in release builds, too.
+        let _summary_label = summary_label;
+        let shown = dialog.show_modal(&self.wnd);
+        let description = draft.borrow().clone();
+        if shown.is_ok() && accepted.get() {
+            Input::SendReport(description)
+        } else {
+            Input::DismissReport(description)
+        }
     }
 
     /// Typed challenge uses a native edit control; policy remains in the shared model.

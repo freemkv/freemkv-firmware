@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use winsafe::{self as w, co, msg, prelude::*};
+use winsafe::{self as w, co, gui, msg, prelude::*};
 
 use super::{send_raw, Shell, TDM_CLICK_BUTTON, TD_CANCEL};
 use crate::gui_gate::{self, Capture, Gate, Order, Region, SheetRun, TabRun};
@@ -119,6 +119,7 @@ fn run(me: &Shell, dir: &Path) {
         );
     }
 
+    report_prompts(me, &mut g);
     firmware_pickers(me, &mut g);
     me.send(Input::SelectTask(Task::Flash));
     let first = sheet(me, dir, true, &mut g);
@@ -126,6 +127,165 @@ fn run(me: &Shell, dir: &Path) {
     gui_gate::sheet_checks(&mut g, &first, &reopened);
     g.no_drive_io("end", &me.app.borrow());
     std::process::exit(g.finish(dir));
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ReportAnswer {
+    Send,
+    Cancel,
+    Escape,
+    Close,
+}
+
+struct ReportProbe {
+    answer: ReportAnswer,
+    initial: String,
+    text: String,
+    summary: String,
+    newline: bool,
+}
+
+thread_local! {
+    static REPORT_PROBE: RefCell<Option<ReportProbe>> = const { RefCell::new(None) };
+}
+
+/// Exercise the actual editor and production button handlers with a pending report.
+/// The inert model consumes Send without starting any network worker.
+fn report_prompts(me: &Shell, g: &mut Gate) {
+    const DRAFT: &str = "  描述 🦀\nsecond line  ";
+    for answer in [
+        ReportAnswer::Cancel,
+        ReportAnswer::Send,
+        ReportAnswer::Escape,
+        ReportAnswer::Close,
+    ] {
+        REPORT_PROBE.with(|p| {
+            *p.borrow_mut() = Some(ReportProbe {
+                answer,
+                initial: String::new(),
+                text: String::new(),
+                summary: String::new(),
+                newline: false,
+            })
+        });
+        let effects = me.app.borrow_mut().dispatch(Input::SubmitReport);
+        let summary = effects.into_iter().find_map(|effect| match effect {
+            crate::ui::Effect::ReportPrompt { summary, .. } => Some(summary),
+            _ => None,
+        });
+        let Some(summary) = summary else {
+            g.check(
+                "report-prompt-opens",
+                false,
+                "SubmitReport produced no prompt",
+            );
+            continue;
+        };
+        let rendered_summary = crate::localization::render(me.app.borrow().language, &summary);
+        let response = me.report_prompt(&summary, DRAFT);
+        let observed = REPORT_PROBE.with(|p| p.borrow_mut().take()).unwrap();
+        let expected = format!("{DRAFT}\r\n");
+        let correct = match &response {
+            Input::SendReport(text) => matches!(answer, ReportAnswer::Send) && text == &expected,
+            Input::DismissReport(text) => {
+                !matches!(answer, ReportAnswer::Send) && text == &expected
+            }
+            _ => false,
+        };
+        g.check(
+            "report-native-unicode-newline-answer",
+            correct
+                && observed.newline
+                && observed.initial == DRAFT
+                && observed.text == expected
+                && observed.summary == rendered_summary,
+            format!("{answer:?}: editor and callback preserve Unicode, whitespace and newline"),
+        );
+        me.send(response);
+        let app = me.app.borrow();
+        let (draft, open) = app.report_prompt_state();
+        g.check(
+            "report-prompt-model-draft",
+            draft == expected && !open,
+            format!("{answer:?}: model retained the exact draft and consumed the prompt"),
+        );
+        g.no_drive_io("report prompt inert callback", &app);
+    }
+}
+
+pub(super) fn arm_report_probe(hwnd: &w::HWND) -> w::SysResult<()> {
+    if REPORT_PROBE.with(|p| p.borrow().is_some()) {
+        hwnd.SetTimer(10, 100, None)?;
+        hwnd.SetTimer(11, 5000, None)?;
+    }
+    Ok(())
+}
+
+pub(super) fn install_report_probe(
+    dialog: &gui::WindowModal,
+    entry: &gui::Edit,
+    summary: &gui::Label,
+    proceed: &gui::Button,
+    cancel: &gui::Button,
+) {
+    if !REPORT_PROBE.with(|p| p.borrow().is_some()) {
+        return;
+    }
+    let popup = dialog.clone();
+    dialog.on().wm_timer(11, move || {
+        popup.hwnd().KillTimer(11)?;
+        REPORT_PROBE.with(|p| {
+            if let Some(probe) = p.borrow_mut().as_mut() {
+                probe.newline = false;
+            }
+        });
+        popup.close();
+        Ok(())
+    });
+    let popup = dialog.clone();
+    let field = entry.clone();
+    let summary = summary.clone();
+    let proceed = proceed.clone();
+    let cancel = cancel.clone();
+    dialog.on().wm_timer(10, move || {
+        popup.hwnd().KillTimer(10)?;
+        let initial = field.text()?;
+        // Append a real WM_CHAR carriage return, as the keyboard does. WANTRETURN
+        // must insert a newline rather than activate Send or close the window.
+        let end = field.hwnd().GetWindowTextLength()? as usize;
+        send_raw(field.hwnd(), super::EM_SETSEL, end, end as isize);
+        send_raw(field.hwnd(), 0x0102, 13, 0); // WM_CHAR, Return
+        let text = field.text()?;
+        let summary = summary.hwnd().GetWindowText()?;
+        let answer = REPORT_PROBE.with(|p| {
+            let mut state = p.borrow_mut();
+            let probe = state.as_mut().unwrap();
+            probe.initial = initial;
+            probe.text = text;
+            probe.summary = summary;
+            probe.newline = popup.hwnd().IsWindowVisible();
+            probe.answer
+        });
+        match answer {
+            ReportAnswer::Send => {
+                send_raw(proceed.hwnd(), 0x00f5, 0, 0);
+            } // BM_CLICK
+            ReportAnswer::Cancel => {
+                send_raw(cancel.hwnd(), 0x00f5, 0, 0);
+            }
+            ReportAnswer::Escape => {
+                let mut key = w::MSG {
+                    hwnd: unsafe { w::HWND::from_ptr(field.hwnd().ptr()) },
+                    message: co::WM::KEYDOWN,
+                    wParam: 27,
+                    ..Default::default()
+                };
+                let _ = popup.hwnd().IsDialogMessage(&mut key);
+            }
+            ReportAnswer::Close => popup.close(),
+        }
+        Ok(())
+    });
 }
 
 fn close_next_picker(thread_id: u32) -> std::thread::JoinHandle<bool> {
