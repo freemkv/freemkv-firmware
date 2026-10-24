@@ -131,6 +131,8 @@ struct Drive {
     reject_parameter_write: bool,
     memory: Vec<u8>,
     normal_memory: Vec<u8>,
+    normal_readback_reads: usize,
+    corrupt_normal_after_finish: bool,
     initial_identity: (
         [u8; pioneer_optical::INQUIRY_LEN],
         [u8; pioneer_optical::IDENTITY_LEN],
@@ -170,6 +172,8 @@ impl Drive {
             reject_parameter_write: false,
             memory: plan.first_kernel_image().to_vec(),
             normal_memory: Vec::new(),
+            normal_readback_reads: 0,
+            corrupt_normal_after_finish: false,
             initial_identity: (inquiry, vendor),
             target_identity: (inquiry, vendor),
             descriptor: b"PIONEER TEST-NEW".to_vec(),
@@ -251,6 +255,7 @@ impl ScsiDevice for Drive {
         if cdb.len() == 10 && cdb[..3] == pioneer_optical::cdb::read_memory(0, 0)[..3] {
             let addr = u32::from_be_bytes([0, cdb[3], cdb[4], cdb[5]]);
             if addr >= 0x0041_0000 {
+                self.normal_readback_reads += 1;
                 let offset = (addr - 0x0041_0000) as usize;
                 return Ok(self.normal_memory[offset..offset + len].to_vec());
             }
@@ -316,6 +321,9 @@ impl ScsiDevice for Drive {
             self.updating = false;
             let kernel = Envelope::load(&self.kernel)?;
             self.normal_memory = Envelope::load_with_kernel(&self.normal_wire, &kernel)?.image;
+            if self.corrupt_normal_after_finish {
+                self.normal_memory[0x100] ^= 1;
+            }
             self.descriptor = self.normal_memory[..16].to_vec();
             self.memory = kernel.image;
             self.finishes += 1;
@@ -438,21 +446,61 @@ fn unpatched_update_reports_target_startup_and_readback_limits() {
     assert_eq!(drive.finishes, 1);
 }
 
-#[test]
-fn different_running_revision_does_not_skip_normal_readback() {
-    let plan = plan(false);
-    let mut drive = Drive::new(&plan);
-    drive.wrong_target_revision = true;
-    let outcome = crate::backends::pioneer::flash::execute_with_sleep(
-        &mut crate::engine::gates::ungated_for_tests(&mut drive),
-        crate::backends::pioneer::flash::PreparedFlash::Complete(&plan),
-        pioneer_optical::receiver::ExecutionMode::Flash,
-        &mut |_| {},
+fn pair_with_normal_readback(marker: u8) -> Update {
+    let original = pair(false, marker);
+    let mut kernel = original.kernel().image.clone();
+    // H8 descriptor and extent instructions establish the Normal readback surface.
+    for (at, hex) in [
+        (0x6000, "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 62 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de"),
+        (0x6100, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6"),
+    ] {
+        let bytes: Vec<u8> = hex.split_whitespace()
+            .map(|byte| u8::from_str_radix(byte, 16).unwrap()).collect();
+        kernel[at..at + bytes.len()].copy_from_slice(&bytes);
+    }
+    kernel[0x6200..0x6210].copy_from_slice(&original.normal().image[..16]);
+    balance(&mut kernel);
+    let update = Update::load(
+        &original.kernel().repack(&kernel).unwrap(),
+        original.normal_transfer(),
     )
     .unwrap();
-    // This fixture cannot expose Normal: changed branding does not waive it.
-    assert!(!outcome.fully_verified());
-    assert_eq!(drive.finishes, 1);
+    assert!(update.kernel().normal_layout().is_ok());
+    update
+}
+
+#[test]
+fn different_running_revision_does_not_skip_normal_readback() {
+    let installed = pair_with_normal_readback(1);
+    let plan = Receiver::from_installed(&installed)
+        .unwrap()
+        .prepare(pair_with_normal_readback(0))
+        .unwrap();
+    for corrupt in [false, true] {
+        let mut drive = Drive::new(&plan);
+        drive.wrong_target_revision = true;
+        drive.corrupt_normal_after_finish = corrupt;
+        let result = crate::backends::pioneer::flash::execute_with_sleep(
+            &mut crate::engine::gates::ungated_for_tests(&mut drive),
+            crate::backends::pioneer::flash::PreparedFlash::Complete(&plan),
+            pioneer_optical::receiver::ExecutionMode::Flash,
+            &mut |_| {},
+        );
+        assert!(
+            drive.normal_readback_reads > 0,
+            "different revision must still read Normal"
+        );
+        if corrupt {
+            let error = result.unwrap_err();
+            assert!(
+                format!("{error:#}").contains("Normal readback differs"),
+                "{error:#}"
+            );
+        } else {
+            assert!(result.unwrap().fully_verified());
+        }
+        assert_eq!(drive.finishes, 1);
+    }
 }
 
 #[test]

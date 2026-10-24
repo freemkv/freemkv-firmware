@@ -3,27 +3,26 @@
 //! `v0_11_2` transcribes, with line references, the job each 0.11.2 control
 //! started (`crates/freemkv-flash-gui/src/{app,analysis_ui,ops}.rs` at the
 //! v0.11.2 tag). Each test drives the 0.12 model with `Input`s, records the job
-//! through the `dry_run` seam, and compares the workflow call it makes with the
-//! 0.11.2 one. Where they differ by design, the test asserts both sides and
+//! through the model seam and real `ops::execute` dispatcher, then compares its
+//! workflow call with the 0.11.2 one. Where they differ by design, the test asserts both sides and
 //! names the commit that made the change.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use freemkv_flash::platform::MockScsiDevice;
 use freemkv_flash::report::{self, Group};
-use freemkv_flash::workflow::{
-    self, Control, CurrentFirmware, DriveChoice, Event, FlashSheet, Source,
-};
+use freemkv_flash::workflow::{self, Control, DriveChoice, Event, FlashSheet, Source};
 
-use crate::ops::{self, Job, Request, ResultView};
+use crate::ops::{self, Job, ResultView};
 use crate::ui::{
     App, Button, CardBody, CheckId, Effect, FileFilter, Input, Item, Msg, Pick, Side, Task,
 };
 
 /// A recovery's current-firmware source, as the workflow receives it.
 #[derive(Clone, Debug, PartialEq)]
-enum Current {
+pub(crate) enum Current {
     NotRequired,
     File(PathBuf),
     ReadFromDrive,
@@ -32,7 +31,7 @@ enum Current {
 /// An analysis source. `as_backup` has no 0.11.2 field; Pioneer captures a
 /// backup either way (`pioneer_capture_is_a_backup_either_way`).
 #[derive(Clone, Debug, PartialEq)]
-enum Src {
+pub(crate) enum Src {
     File(PathBuf),
     Drive {
         device: String,
@@ -46,10 +45,13 @@ enum Src {
 /// `FlashOptions::force` is absent: every 0.11.2 Flash job set it false and
 /// 954f51d removed the field.
 #[derive(Clone, Debug, PartialEq)]
-enum Call {
-    Info,
+pub(crate) enum Call {
+    Info {
+        device: Option<String>,
+    },
     CheckFile(PathBuf),
     Backup {
+        device: Option<String>,
         out: PathBuf,
         dump: bool,
         replace: bool,
@@ -89,7 +91,7 @@ struct Sent {
     call: Call,
 }
 
-fn src(source: &Source) -> Src {
+pub(crate) fn src(source: &Source) -> Src {
     match source {
         Source::File(path) => Src::File(path.clone()),
         Source::Drive {
@@ -105,53 +107,31 @@ fn src(source: &Source) -> Src {
     }
 }
 
-/// The call `ops::execute` makes for `job` (its arms match 0.11.2 `ops.rs:879-896`).
-fn call(job: &Job) -> Call {
-    match job {
-        Job::Info => Call::Info,
-        Job::InfoFile { input } => Call::CheckFile(input.clone()),
-        Job::Backup { out, replace } => Call::Backup {
-            out: out.clone(),
-            dump: false,
-            replace: *replace,
-        },
-        Job::Dump { out, replace } => Call::Backup {
-            out: out.clone(),
-            dump: true,
-            replace: *replace,
-        },
-        Job::Flash(o) => Call::Flash {
-            device: o.device.clone(),
-            input: o.input.clone(),
-            backup: o.backup.clone(),
-            execute: o.execute,
-            acknowledged_risk: o.acknowledged_risk,
-        },
-        Job::PlanFlash(o) => Call::Preview {
-            device: o.device.clone(),
-            input: o.input.clone(),
-            backup: o.backup.clone(),
-            acknowledged_risk: o.acknowledged_risk,
-        },
-        Job::Recovery(o) => Call::Recover {
-            device: o.device.clone(),
-            input: o.input.clone(),
-            current: match &o.current {
-                CurrentFirmware::NotRequired => Current::NotRequired,
-                CurrentFirmware::File(path) => Current::File(path.clone()),
-                CurrentFirmware::ReadFromDrive => Current::ReadFromDrive,
-            },
-            execute: o.execute,
-            acknowledged_risk: o.acknowledged_risk,
-        },
-        Job::ExecuteRecovery(_) => {
-            panic!("prepared recovery has no equivalent path-based 0.11.2 call")
+thread_local! {
+    static OBSERVED: RefCell<Option<Vec<Call>>> = const { RefCell::new(None) };
+}
+
+/// Called by the workflow boundary double, from the real `ops::execute` arms.
+pub(crate) fn record(call: Call) -> bool {
+    OBSERVED.with(|observed| match observed.borrow_mut().as_mut() {
+        Some(calls) => {
+            calls.push(call);
+            true
         }
-        Job::Analysis { request, .. } => match request {
-            Request::Inspect(a) => Call::Inspect(src(a)),
-            Request::Compare(a, b) => Call::Compare(src(a), src(b)),
-        },
-    }
+        None => false,
+    })
+}
+
+fn call(device: &str, job: &Job) -> Call {
+    OBSERVED.with(|observed| assert!(observed.replace(Some(Vec::new())).is_none()));
+    let result = ops::execute(device, job, &mut workflow::Preconfirmed);
+    let mut calls = OBSERVED.with(|observed| observed.take().unwrap());
+    assert!(
+        result.is_err(),
+        "the boundary double returns before any workflow IO"
+    );
+    assert_eq!(calls.len(), 1, "one actual workflow call per job");
+    calls.pop().unwrap()
 }
 
 /// What 0.11.2 started, transcribed from its sources at the v0.11.2 tag.
@@ -169,7 +149,13 @@ mod v0_11_2 {
 
     /// `app.rs:401-402`, "Read drive information".
     pub fn read_info(device: &str) -> Sent {
-        sent("Drive information", device, Call::Info)
+        sent(
+            "Drive information",
+            device,
+            Call::Info {
+                device: Some(device.into()),
+            },
+        )
     }
 
     /// `app.rs:404-411` ("Check file…" on Info) and `app.rs:524-530` (Flash's link).
@@ -192,6 +178,7 @@ mod v0_11_2 {
     pub fn backup(device: &str, out: &Path, dump: bool) -> Sent {
         let replace = out.symlink_metadata().is_ok();
         let call = Call::Backup {
+            device: Some(device.into()),
             out: out.into(),
             dump,
             replace,
@@ -204,7 +191,7 @@ mod v0_11_2 {
     /// enabled only once the box is ticked, sets `acknowledged_risk`.
     pub fn flash_now(device: &str, input: &Path) -> Sent {
         let call = Call::Flash {
-            device: None,
+            device: Some(device.into()),
             input: input.into(),
             backup: None,
             execute: true,
@@ -216,7 +203,7 @@ mod v0_11_2 {
     /// `app.rs:304-310`, `choose_flash(ctx, false)`. No 0.11.2 control called it.
     pub fn preview(device: &str, input: &Path) -> Sent {
         let call = Call::Preview {
-            device: None,
+            device: Some(device.into()),
             input: input.into(),
             backup: None,
             acknowledged_risk: false,
@@ -233,7 +220,7 @@ mod v0_11_2 {
             Current::File(current.expect("Recover needs Current").into())
         };
         let call = Call::Recover {
-            device: None,
+            device: Some(device.into()),
             input: input.into(),
             current,
             execute: true,
@@ -336,7 +323,7 @@ fn sent(app: &App) -> Sent {
     Sent {
         label: label.clone(),
         device: device.clone(),
-        call: call(job),
+        call: call(device, job),
     }
 }
 
@@ -640,7 +627,7 @@ fn prepared_recovery_inputs(app: &App) -> Sent {
     Sent {
         label: "Recovery".into(),
         device: device.clone(),
-        call: call(&Job::Recovery(options)),
+        call: call(device, &Job::Recovery(options)),
     }
 }
 

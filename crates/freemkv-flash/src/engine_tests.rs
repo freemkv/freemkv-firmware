@@ -674,13 +674,28 @@ fn flash_execute_streams_enc_payload_not_plaintext() {
     let req = bin_req(image.clone(), true);
     flash(&mut dev, &Mtk, &req).unwrap();
 
-    let first_chunk = dev
+    let mut transferred: Vec<u8> = dev
         .writes
         .iter()
-        .find(|(cdb, _)| is_stream_write(cdb))
-        .map(|(_, data)| data.clone())
-        .expect("at least one STREAM write");
-    assert_ne!(first_chunk, image[..CHUNK]);
+        .filter(|(cdb, _)| is_stream_write(cdb))
+        .flat_map(|(_, data)| data.iter().copied())
+        .collect();
+    assert_eq!(transferred.len(), image.len(), "every image byte is sent");
+    assert_ne!(transferred, image, "receiver requires encrypted bytes");
+    // Decode the complete observed wire stream independently of preparation.
+    use aes::cipher::{BlockDecrypt, KeyInit};
+    let cipher = aes::Aes128::new_from_slice(&[
+        0x5e, 0x9e, 0x4f, 0x00, 0x94, 0xef, 0x20, 0xab, 0x52, 0xe3, 0x5e, 0x73, 0x6a, 0xcb, 0x23,
+        0x24,
+    ])
+    .unwrap();
+    for block in transferred.as_chunks_mut::<16>().0 {
+        cipher.decrypt_block(aes::cipher::Block::<aes::Aes128>::from_mut_slice(block));
+    }
+    assert_eq!(
+        transferred, image,
+        "every encrypted chunk decodes to the target"
+    );
 }
 
 #[test]

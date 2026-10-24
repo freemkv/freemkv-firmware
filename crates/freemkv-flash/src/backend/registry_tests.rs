@@ -390,10 +390,24 @@ fn mtk_identity_parses_boot_banner_from_32b_region() {
     let mut banner = b"MT1959 Boot BU5 ".to_vec();
     banner.push(0x00); // NUL ends the printable run
     banner.resize(32, 0x00);
-    let mut dev = MockScsiDevice::new().on(
-        |cdb| cdb.first() == Some(&0x3C) && cdb.get(3..6) == Some(&[0x00, 0x30, 0x00][..]),
-        banner,
-    );
+    struct BannerDrive(Vec<u8>);
+    impl ScsiDevice for BannerDrive {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> anyhow::Result<Vec<u8>> {
+            if cdb.first() == Some(&0x3c) && cdb.get(3..6) == Some(&[0, 0x30, 0][..]) {
+                assert_eq!(cdb.get(6..9), Some(&[0, 0, 32][..]), "32-byte CDB transfer");
+                assert_eq!(len, 32, "32-byte host allocation");
+                return Ok(self.0.clone());
+            }
+            Ok(vec![0; len])
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> anyhow::Result<()> {
+            panic!("identity must not write");
+        }
+        fn describe(&self) -> String {
+            "strict 32-byte boot region".into()
+        }
+    }
+    let mut dev = BannerDrive(banner);
     let id = MTK.identity(&mut ReadDevice::without_unlocks(&mut dev));
     assert_eq!(id.banner.as_deref(), Some("MT1959 Boot BU5"));
 }
