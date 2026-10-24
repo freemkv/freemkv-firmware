@@ -56,6 +56,7 @@ pub(super) fn execute_with_sleep(
     };
     let selected_identity = format!("{} {}", info.model, info.revision);
     let mut runtime = Runtime {
+        mode,
         start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
         completed_passes: 0,
@@ -188,6 +189,7 @@ fn execution_error(
 }
 
 struct Runtime<'a, 'd> {
+    mode: ExecutionMode,
     device: &'a SharedDevice<'d>,
     sleep: &'a mut dyn FnMut(Duration),
     start: crate::runtime_clock::Clock,
@@ -288,8 +290,10 @@ impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
         if pass == FlashPass::Restoration {
             self.completed_passes = 1;
         }
-        self.device
-            .with(|dev| crate::engine::guard_no_medium(dev, true))?;
+        if self.mode == ExecutionMode::Flash {
+            self.device
+                .with(|dev| crate::engine::guard_no_medium(dev, true))?;
+        }
         if pass == FlashPass::Restoration {
             println!("{}", style::dim("restoring the unmodified target Kernel"));
         }

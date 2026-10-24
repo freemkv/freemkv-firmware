@@ -20,6 +20,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 | FMT | Snapshot normalization removes trailing display padding, including empty structured `MSG` rows and terminal prompts. Commands, payload bytes, message content and assertions are unchanged; the historical v0.11.2 snapshots remain untouched. |
 | P10 | Pioneer 0.13.4: the shared optical executor derives the dialect from decoded firmware, binds the live receiver before entry and again after startup migration, and checks target identity plus Kernel and available Normal readback after each pass. OEM vendor identity binds to the loaded firmware ID, and revisions compare the defined four-byte INQUIRY field (including the projected `0.05e` release). Recovery with a supplied Current envelope uses its decoded Kernel signatures, dialect and exact identity to establish an OEM receiver; unsupported probing without Current remains refused. Golden devices now install the transferred Normal, report its tag and revision, and expose programmed bytes for verification. Typed failures retain the underlying transport cause. The corpus also refreshes the earlier optical 0.15.1 receiver-derived `FrontKeyTwoRegion` framing (`6c8c2be`, `9100f74`, `5847fe4`): a 0x1200 Kernel header/key transfer followed by two 0x8000 body transfers at offsets 0x1200 and 0x9200. Flash already used this before the current audit; Recovery now shares that plan. Contiguous Kernel bytes, Normal transfers and control payloads are preserved. |
 | P11 | Pioneer corpus refresh of the prior 0.13.1 Normal preparation fixes (`a20047a`, `3b2a421`, October 19): preserve a valid OEM representation or prepare Normal for its actual receiving Kernel, proving decoded-body equality and receiver-required authentication. The corpus snapshots were last refreshed on October 11 (`9ee1a1d`); valid Normal-only scenarios now reach execution. Authentication gates remain in force, and incompatible Kernel-version or corrupt-body cases still refuse. The 34 newly exercised locally signed Normal transfers use recorded valid authentication blocks in tests, keyed by receiver authentication policy and every byte outside the 0x170..0x1c0 signature/public-key block. Fresh and recorded signatures are both verified; full emitted wire digests remain asserted. Production signing remains random. |
+| RECOVERY_TRAY | 0.14.5: Pioneer Recovery skips the Flash-only medium guard before its initial and restoration passes; ordinary Flash still rejects a loaded disc. The recorded Recovery execution transcripts omit those two medium-status checks. No write command, payload, ordering, family check or verification is relaxed. |
 | M-LIFECYCLE | MediaTek 0.13.4: immutable receiver plans own authorization, encoding, execution and exact target startup verification. Plan messages describe the receiver-bound sequence; cached evidence is revalidated before entry. Successful mocks now expose the actual programmed descriptor and matching INQUIRY, and synthetic descriptors have a valid vendor and revision. Completion distinguishes verified readback from unavailable readback; structured errors preserve the failed phase and transport cause. |
 | P9 | Pioneer 0.13.4: the UD04 golden mock now returns its real `GENERAL` Kernel tag from vendor identity so the firmware-derived entry preflight can match the captured installed Kernel. Only post-flash identity text in these mock transcripts changes; firmware write commands and payloads do not. |
 | P8 | Pioneer 0.13.3: read the live A0 startup word 0x9F before firmware transfer, write and verify only when it differs from the target value, then continue. The added read and preflight commands in these mock transcripts reflect this migration; neutral FFFF already matches and sends no A0 write. |
@@ -32534,7 +32535,7 @@ reason: PROTO, F-OVERRIDE
 ```
 
 ### Pioneer recover execute: receiver in kernel mode
-reason: P4, P7, P10, PROTO, F-OVERRIDE
+reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 ```diff
 ---- text (0) ---
 ---- events (3) ---
@@ -32554,12 +32555,10 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
-+--- scsi transcript (25) ---
++--- scsi transcript (23) ---
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-+MEDIUM -> ClosedEmpty
-+MEDIUM -> ClosedEmpty
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
@@ -32574,7 +32573,7 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE
 ```
 
 ### Pioneer recover execute: receiver in normal mode
-reason: P4, P7, P8, P10, PROTO, F-OVERRIDE
+reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 ```diff
 ---- text (0) ---
 ---- events (3) ---
@@ -32594,17 +32593,15 @@ reason: P4, P7, P8, P10, PROTO, F-OVERRIDE
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
-+--- scsi transcript (36) ---
++--- scsi transcript (34) ---
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-+MEDIUM -> ClosedEmpty
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
-+MEDIUM -> ClosedEmpty
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
@@ -32633,7 +32630,7 @@ reason: P10, PRECHECK, PROTO
 ```
 
 ### Pioneer recover execute: write fails on the 2nd command
-reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE
+reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY
 ```diff
 -result: ERR Kernel write failed at 0x8000; firmware may be partial; write was not retried: injected write failure
 ---- text (0) ---
@@ -32652,12 +32649,10 @@ reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
-+--- scsi transcript (11) ---
++--- scsi transcript (9) ---
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
-+MEDIUM -> ClosedEmpty
-+MEDIUM -> ClosedEmpty
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> err
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok

@@ -46,6 +46,23 @@ fn diagnostic(visible: bool, text: &str) {
     }
 }
 
+// Preserve machine-readable sense through every native transport entry point.
+fn native_error(error: &libfreemkv::error::Error, detail: String) -> anyhow::Error {
+    match error.scsi_sense() {
+        Some(s) => ScsiSenseError::new(s.sense_key, s.asc, s.ascq, detail).into(),
+        None => anyhow!(detail),
+    }
+}
+
+fn status_error(status: u8, sense: &[u8], detail: String) -> anyhow::Error {
+    match (status, sense_kaa(sense)) {
+        (CHECK_CONDITION, Some((key, asc, ascq))) => {
+            ScsiSenseError::new(key, asc, ascq, detail).into()
+        }
+        _ => anyhow!(detail),
+    }
+}
+
 /// A [`ScsiDevice`] backed by a libfreemkv platform transport.
 pub struct TransportDevice {
     inner: Box<dyn ScsiTransport>,
@@ -159,10 +176,7 @@ impl TransportDevice {
                         }
                     }
                     let detail = format!("SCSI command failed on {}: {} (cdb={cdb:02x?}, direction={dir:?}, requested={}, attempt={})", self.path, super::describe_scsi_error(&e), buf.len(), attempt + 1);
-                    return Err(match e.scsi_sense() {
-                        Some(s) => ScsiSenseError::new(s.sense_key, s.asc, s.ascq, detail).into(),
-                        None => anyhow!(detail),
-                    });
+                    return Err(native_error(&e, detail));
                 }
             };
             if r.bytes_transferred > buf.len() {
@@ -210,12 +224,7 @@ impl TransportDevice {
                     r.status,
                     r.sense
                 );
-                return Err(match (r.status, sense_kaa(sense)) {
-                    (CHECK_CONDITION, Some((key, asc, ascq))) => {
-                        ScsiSenseError::new(key, asc, ascq, detail).into()
-                    }
-                    _ => anyhow!(detail),
-                });
+                return Err(status_error(r.status, sense, detail));
             }
             diagnostic(trace, "SCSI policy: nonzero status tolerated");
             break;
@@ -296,19 +305,23 @@ impl ScsiDevice for TransportDevice {
         crate::diagnostics::record(format!(
             "Recovery diagnostic buffer: cdb={cdb:02x?} raw={buf:02x?} (buffer snapshot; status/count validation required)"
         ));
-        let result = result.map_err(|e| anyhow!("{}", super::describe_scsi_error(&e)))?;
+        let result = result.map_err(|e| native_error(&e, super::describe_scsi_error(&e)))?;
         anyhow::ensure!(
             result.bytes_transferred <= buf.len(),
             "invalid diagnostic transfer count: {} > {}",
             result.bytes_transferred,
             buf.len()
         );
-        anyhow::ensure!(
-            result.status == 0,
-            "diagnostic SCSI status=0x{:02x} sense={:02x?}",
-            result.status,
-            result.sense
-        );
+        if result.status != 0 {
+            return Err(status_error(
+                result.status,
+                &result.sense,
+                format!(
+                    "diagnostic SCSI status=0x{:02x} sense={:02x?}",
+                    result.status, result.sense
+                ),
+            ));
+        }
         buf.truncate(result.bytes_transferred);
         Ok(buf)
     }
