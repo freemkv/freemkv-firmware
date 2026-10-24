@@ -7,6 +7,23 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Flash
 
+- Keep file inspection in a bounded background queue, reuse translated analysis,
+  and release obsolete controls and incomplete diagnostic archives.
+- Report desktop log, clipboard and confirmation failures in the selected language;
+  keep diagnostic actions available after file-origin inspection.
+- Prevent a Windows crash when an active operation displays its close warning
+  while background progress arrives.
+- Retain completed dump and backup attachments for diagnostic submissions. Ask for
+  an optional description, verify the attached bytes, and confirm exactly what was
+  sent after submission succeeds.
+- Keep firmware confirmations concise, with technical information under Details.
+  Show saved backup evidence, all warnings and a fresh risk acknowledgement.
+- Reject unusable recovery targets before a long drive capture. Explain when a
+  valid update does not match the installed firmware, without calling it corrupt.
+- Use the available freemkv command for MediaTek raw dumps, inspect MediaTek release
+  packages, and report incomplete reads without guessing a permanent restriction.
+- Report Pioneer Kernel-only backups as partial, and avoid repeating the same
+  target validation before authorization.
 - Recognize genuine MediaTek boot responses that include machine code after the
   identity label, restoring supported non-Pioneer drive profiles. A failed foreign
   vendor probe no longer hides a valid native protocol response.
