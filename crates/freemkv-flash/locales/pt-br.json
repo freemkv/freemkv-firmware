@@ -94,6 +94,7 @@
     "errors.command_options": "Algumas opções do comando estão ausentes ou são inválidas. Execute o comando com --help, corrija as opções e tente novamente.",
     "errors.no_firmware_write": "Esta operação não gravou firmware na unidade.",
     "errors.unsupported_firmware": "Este aplicativo não oferece suporte a este firmware para a operação solicitada. Escolha um arquivo compatível ou salve um relatório de diagnóstico para obter ajuda.",
+    "errors.installed_firmware_mismatch": "A atualização selecionada não corresponde ao firmware instalado atualmente nesta unidade. Escolha um pacote de atualização compatível.",
     "errors.incompatible_firmware": "O firmware selecionado é para outro hardware. Escolha firmware compatível com esta unidade.",
     "errors.drive_changed": "A unidade não corresponde mais à recuperação preparada. Selecione a unidade correta e prepare a recuperação novamente.",
     "errors.preparation_expired": "A recuperação preparada não está mais disponível. Prepare a recuperação novamente antes de continuar.",

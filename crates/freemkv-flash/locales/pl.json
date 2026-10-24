@@ -94,6 +94,7 @@
     "errors.command_options": "Brakuje opcji polecenia lub są one nieprawidłowe. Uruchom polecenie z --help, popraw opcje i spróbuj ponownie.",
     "errors.no_firmware_write": "Ta operacja nie zapisała oprogramowania w napędzie.",
     "errors.unsupported_firmware": "Ta aplikacja nie obsługuje tego oprogramowania napędu dla żądanej operacji. Wybierz obsługiwany plik lub zapisz raport diagnostyczny, aby uzyskać pomoc.",
+    "errors.installed_firmware_mismatch": "Wybrana aktualizacja nie pasuje do oprogramowania układowego obecnie zainstalowanego w tym napędzie. Wybierz zgodny pakiet aktualizacji.",
     "errors.incompatible_firmware": "Wybrane oprogramowanie jest przeznaczone dla innego sprzętu. Wybierz oprogramowanie zgodne z tym napędem.",
     "errors.drive_changed": "Napęd nie odpowiada już przygotowanemu przywracaniu. Wybierz właściwy napęd i przygotuj przywracanie ponownie.",
     "errors.preparation_expired": "Przygotowane przywracanie nie jest już dostępne. Przygotuj je ponownie przed kontynuowaniem.",

@@ -503,12 +503,13 @@ pub(crate) fn authorize_installed(
     let (installed_kernel, installed_normal) = classify_flash_input(installed.context(
         "installed firmware backup is required to recover the receiver control key; refusing update entry"
     ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
-    if kernel.is_none() {
-        flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
-            .map_err(anyhow::Error::msg)?;
-    }
     let receiver =
         receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
+    if kernel.is_none() {
+        flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
+            .map_err(anyhow::Error::msg)
+            .context(crate::user_error::IssueCode::InstalledFirmwareMismatch)?;
+    }
     let (prepared, target_facts, receiver_check) = match p.selection {
         FlashSelection::KernelAndNormal => {
             let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;

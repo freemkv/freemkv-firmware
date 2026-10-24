@@ -94,6 +94,7 @@
     "errors.command_options": "Một số tùy chọn lệnh bị thiếu hoặc không hợp lệ. Chạy lệnh với --help, sửa các tùy chọn rồi thử lại.",
     "errors.no_firmware_write": "Thao tác này không ghi firmware vào ổ đĩa.",
     "errors.unsupported_firmware": "Ứng dụng này không hỗ trợ phần mềm điều khiển này cho thao tác được yêu cầu. Hãy chọn tệp được hỗ trợ hoặc lưu báo cáo chẩn đoán để được trợ giúp.",
+    "errors.installed_firmware_mismatch": "Bản cập nhật đã chọn không phù hợp với phần sụn hiện được cài đặt trên ổ đĩa này. Hãy chọn gói cập nhật tương thích.",
     "errors.incompatible_firmware": "Firmware đã chọn dành cho phần cứng khác. Chọn firmware tương thích với ổ đĩa này.",
     "errors.drive_changed": "Ổ đĩa không còn khớp với quá trình khôi phục đã chuẩn bị. Chọn đúng ổ đĩa và chuẩn bị khôi phục lại.",
     "errors.preparation_expired": "Quá trình khôi phục đã chuẩn bị không còn khả dụng. Hãy chuẩn bị lại trước khi tiếp tục.",

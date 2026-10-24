@@ -94,6 +94,7 @@
     "errors.command_options": "Bazı komut seçenekleri eksik veya geçersiz. Komutu --help ile çalıştırın, seçenekleri düzeltin ve yeniden deneyin.",
     "errors.no_firmware_write": "Bu işlem sürücüye ürün yazılımı yazmadı.",
     "errors.unsupported_firmware": "Bu uygulama, istenen işlem için bu aygıt yazılımını desteklemiyor. Desteklenen bir dosya seçin veya yardım almak için tanılama raporu kaydedin.",
+    "errors.installed_firmware_mismatch": "Seçilen güncelleme, bu sürücüde yüklü olan aygıt yazılımıyla eşleşmiyor. Uyumlu bir güncelleme paketi seçin.",
     "errors.incompatible_firmware": "Seçilen ürün yazılımı farklı donanımlar içindir. Bu sürücüyle uyumlu ürün yazılımını seçin.",
     "errors.drive_changed": "Sürücü artık hazırlanan kurtarmayla eşleşmiyor. Doğru sürücüyü seçip kurtarmayı yeniden hazırlayın.",
     "errors.preparation_expired": "Hazırlanan kurtarma artık kullanılamıyor. Devam etmeden önce kurtarmayı yeniden hazırlayın.",

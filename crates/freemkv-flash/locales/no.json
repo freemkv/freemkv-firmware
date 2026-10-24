@@ -94,6 +94,7 @@
     "errors.command_options": "Noen kommandoalternativer mangler eller er ugyldige. Kjør kommandoen med --help, rett alternativene og prøv igjen.",
     "errors.no_firmware_write": "Denne handlingen skrev ikke fastvare til stasjonen.",
     "errors.unsupported_firmware": "Dette programmet støtter ikke denne fastvaren for den forespurte operasjonen. Velg en støttet fil eller lagre en diagnoserapport for å få hjelp.",
+    "errors.installed_firmware_mismatch": "Den valgte oppdateringen passer ikke til fastvaren som er installert på denne stasjonen. Velg en kompatibel oppdateringspakke.",
     "errors.incompatible_firmware": "Den valgte fastvaren er for annen maskinvare. Velg fastvare som passer til denne stasjonen.",
     "errors.drive_changed": "Stasjonen samsvarer ikke lenger med den forberedte gjenopprettingen. Velg riktig stasjon og forbered gjenopprettingen på nytt.",
     "errors.preparation_expired": "Den forberedte gjenopprettingen er ikke lenger tilgjengelig. Forbered den på nytt før du fortsetter.",

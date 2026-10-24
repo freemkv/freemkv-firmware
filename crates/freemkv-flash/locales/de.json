@@ -94,6 +94,7 @@
     "errors.command_options": "Einige Befehlsoptionen fehlen oder sind ungültig. Rufen Sie den Befehl mit --help auf, korrigieren Sie die Optionen und versuchen Sie es erneut.",
     "errors.no_firmware_write": "Bei diesem Vorgang wurde keine Firmware auf das Laufwerk geschrieben.",
     "errors.unsupported_firmware": "Diese Anwendung unterstützt diese Firmware nicht für den angeforderten Vorgang. Wählen Sie eine unterstützte Datei oder speichern Sie einen Diagnosebericht, um Hilfe zu erhalten.",
+    "errors.installed_firmware_mismatch": "Das ausgewählte Update passt nicht zur derzeit auf diesem Laufwerk installierten Firmware. Wählen Sie ein kompatibles Updatepaket.",
     "errors.incompatible_firmware": "Die ausgewählte Firmware ist für andere Hardware bestimmt. Wählen Sie eine Firmware, die zu diesem Laufwerk passt.",
     "errors.drive_changed": "Das Laufwerk entspricht nicht mehr der vorbereiteten Wiederherstellung. Wählen Sie das richtige Laufwerk und bereiten Sie die Wiederherstellung erneut vor.",
     "errors.preparation_expired": "Die vorbereitete Wiederherstellung ist nicht mehr verfügbar. Bereiten Sie sie erneut vor.",

@@ -94,6 +94,7 @@
     "errors.command_options": "Vissa kommandoalternativ saknas eller är ogiltiga. Kör kommandot med --help, rätta alternativen och försök igen.",
     "errors.no_firmware_write": "Den här åtgärden skrev ingen firmware till enheten.",
     "errors.unsupported_firmware": "Den här appen stöder inte denna firmware för den begärda åtgärden. Välj en fil som stöds eller spara en diagnostikrapport för att få hjälp.",
+    "errors.installed_firmware_mismatch": "Den valda uppdateringen passar inte den firmware som är installerad på den här enheten. Välj ett kompatibelt uppdateringspaket.",
     "errors.incompatible_firmware": "Den valda firmwaren är avsedd för annan maskinvara. Välj firmware som passar den här enheten.",
     "errors.drive_changed": "Enheten motsvarar inte längre den förberedda återställningen. Välj rätt enhet och förbered återställningen igen.",
     "errors.preparation_expired": "Den förberedda återställningen är inte längre tillgänglig. Förbered den igen innan du fortsätter.",

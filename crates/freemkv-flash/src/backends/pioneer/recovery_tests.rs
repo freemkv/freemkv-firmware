@@ -2104,3 +2104,109 @@ fn recovery_original_td05_rejected_before_capture_when_configured() {
     };
     preparation_error_before_capture(&std::fs::read(path).unwrap());
 }
+
+fn installed_compatibility_issue(installed: &[u8], target: &[u8]) -> crate::user_error::UserError {
+    use crate::backend::{FlashPlan, UpdateFailure};
+    use crate::user_error::{explain, IssueCode, UserError};
+    let plan =
+        FlashPlan::new(super::super::execute_plan(target).expect("target is independently valid"));
+    let error = super::super::authorize_installed(plan, Some(installed))
+        .err()
+        .expect("installed compatibility must refuse this target");
+    assert!(format!("{error:#}").contains("required-Kernel tag"));
+    UserError::of(&UpdateFailure::before_write(
+        "compatibility checks",
+        explain(error, IssueCode::UnsupportedFirmware),
+    ))
+}
+
+#[test]
+fn normal_only_installed_tag_mismatch_has_specific_guidance() {
+    use crate::backend::FlashPlan;
+    use crate::localization::{self, Language};
+    let current = fixture_pair(false, 1);
+    let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    let installed = archive(&current, false);
+    let issue = installed_compatibility_issue(&installed, target.normal_transfer());
+    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
+    for language in Language::ALL {
+        assert!(issue.render(language).contains(localization::get(
+            language,
+            "errors.installed_firmware_mismatch"
+        )));
+        assert!(issue
+            .render(language)
+            .contains(localization::get(language, "errors.update_blocked")));
+    }
+    let plan = FlashPlan::new(super::super::execute_plan(current.normal_transfer()).unwrap());
+    assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
+}
+
+#[test]
+fn real_td05_installed_tag_mismatch_when_configured() {
+    let Some(dir) = std::env::var_os("FREEMKV_TD05_COMPATIBILITY_FIXTURES") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    let current = std::fs::read(dir.join("current.tar")).unwrap();
+    let target = std::fs::read(dir.join("corrected-target.tar")).unwrap();
+    let issue = installed_compatibility_issue(&current, &target);
+    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.consequence, Some("errors.update_blocked"));
+    let current_normal = std::fs::read(dir.join("current-1.bin")).unwrap();
+    let plan = crate::backend::FlashPlan::new(super::super::execute_plan(&current_normal).unwrap());
+    super::super::authorize_installed(plan, Some(&current))
+        .expect("matching GENERAL firmware remains compatible");
+}
+
+#[test]
+fn installed_tag_mismatch_does_not_hide_invalid_current_or_target() {
+    use crate::backend::FlashPlan;
+    use crate::user_error::{IssueCode, UserError};
+    let current = fixture_pair(false, 1);
+    let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    // Missing installed Normal must fail receiver validation before comparing
+    // the valid GENERAL Kernel with the independently valid ID72 target.
+    for installed in [b"invalid Current".as_slice(), current.kernel_transfer()] {
+        let plan = FlashPlan::new(super::super::execute_plan(target.normal_transfer()).unwrap());
+        let error = super::super::authorize_installed(plan, Some(installed))
+            .err()
+            .unwrap();
+        assert_ne!(
+            error.downcast_ref::<IssueCode>(),
+            Some(&IssueCode::InstalledFirmwareMismatch)
+        );
+        assert_ne!(
+            UserError::of(&error).id,
+            "errors.installed_firmware_mismatch"
+        );
+    }
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, data) in [
+        ("kernel.enc", current.kernel_transfer()),
+        ("normal.enc", target.normal_transfer()),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, name, data).unwrap();
+    }
+    // A package inconsistent within itself is invalid input, not a statement
+    // about the installed drive. Truncated target input stays invalid too.
+    for malformed in [
+        tar.into_inner().unwrap(),
+        target.normal_transfer()[..0x100].to_vec(),
+    ] {
+        let error = super::super::execute_plan(&malformed).err().unwrap();
+        assert_ne!(
+            error.downcast_ref::<IssueCode>(),
+            Some(&IssueCode::InstalledFirmwareMismatch)
+        );
+        assert_ne!(
+            UserError::of(&error).id,
+            "errors.installed_firmware_mismatch"
+        );
+    }
+}

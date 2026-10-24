@@ -94,6 +94,7 @@
     "errors.command_options": "Some command options are missing or not valid. Run this command with --help, correct the options, and try again.",
     "errors.no_firmware_write": "This operation did not write firmware to the drive.",
     "errors.unsupported_firmware": "This application does not support this firmware for the requested operation. Choose a supported firmware file or save a diagnostic report for help.",
+    "errors.installed_firmware_mismatch": "The selected update does not match the firmware currently installed on this drive. Choose a compatible update package.",
     "errors.incompatible_firmware": "The selected firmware is for different hardware. Choose firmware compatible with this drive.",
     "errors.drive_changed": "The drive no longer matches the prepared recovery. Select the intended drive and prepare recovery again.",
     "errors.preparation_expired": "The prepared recovery is no longer available. Prepare recovery again before continuing.",

@@ -94,6 +94,7 @@
     "errors.command_options": "Néhány parancsbeállítás hiányzik vagy érvénytelen. Futtassa a parancsot a --help kapcsolóval, javítsa a beállításokat, és próbálja újra.",
     "errors.no_firmware_write": "Ez a művelet nem írt firmware-t a meghajtóra.",
     "errors.unsupported_firmware": "Az alkalmazás nem támogatja ezt a firmware-t a kért művelethez. Válasszon támogatott fájlt, vagy mentsen diagnosztikai jelentést segítségkéréshez.",
+    "errors.installed_firmware_mismatch": "A kiválasztott frissítés nem illik a meghajtóra jelenleg telepített firmware-hez. Válasszon kompatibilis frissítőcsomagot.",
     "errors.incompatible_firmware": "A kiválasztott firmware más hardverhez készült. Válasszon ezzel a meghajtóval kompatibilis firmware-t.",
     "errors.drive_changed": "A meghajtó már nem egyezik az előkészített helyreállítással. Válassza ki a megfelelő meghajtót, és készítse elő újra a helyreállítást.",
     "errors.preparation_expired": "Az előkészített helyreállítás már nem érhető el. A folytatás előtt készítse elő újra.",
