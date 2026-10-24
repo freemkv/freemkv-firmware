@@ -881,8 +881,9 @@ impl Shell {
                 }
                 Effect::StartTicking => {
                     if let Err(_e) = self.wnd.hwnd().SetTimer(TIMER_TICK, TICK_MS, None) {
+                        let language = self.app.borrow().language;
                         let _ = self.wnd.hwnd().MessageBox(
-                            crate::localization::get(self.app.borrow().language, "errors.timer"),
+                            crate::localization::get(language, "errors.timer"),
                             "freemkv",
                             co::MB::ICONERROR,
                         );
@@ -1990,11 +1991,12 @@ impl Shell {
             if me.view().can_close {
                 me.wnd.hwnd().DestroyWindow()?;
             } else {
-                me.wnd.hwnd().MessageBox(
-                    &crate::localization::render(me.app.borrow().language, ui::CLOSE_BLOCKED),
-                    "freemkv",
-                    co::MB::ICONWARNING,
-                )?;
+                // MessageBox pumps window events; polling must be able to borrow App.
+                let message =
+                    crate::localization::render(me.app.borrow().language, ui::CLOSE_BLOCKED);
+                me.wnd
+                    .hwnd()
+                    .MessageBox(&message, "freemkv", co::MB::ICONWARNING)?;
             }
             Ok(())
         });
@@ -2138,8 +2140,10 @@ pub fn run() -> i32 {
     }
     if let Err(e) = shell.wnd.run_main(None) {
         crate::application_failure(&format!("Win32 event loop failed: {e}"), false);
-        let app = shell.app.borrow();
-        let message = app.runtime_issue().render(app.language);
+        let message = {
+            let app = shell.app.borrow();
+            app.runtime_issue().render(app.language)
+        };
         let _ = w::HWND::NULL.MessageBox(&message, "freemkv", co::MB::ICONERROR);
         return 1;
     }
