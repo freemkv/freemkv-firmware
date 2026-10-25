@@ -54,6 +54,8 @@ define_issue_codes! {
     UnsupportedFirmware => "errors.unsupported_firmware",
     /// No safe authenticated code hole can hold the requested modifications.
     FirmwareNoCodeSpace => "errors.firmware_no_code_space",
+    /// Firmware metadata or bytes are corrupt, rather than merely unsupported.
+    FirmwareCorrupt => "errors.firmware_corrupt",
     /// A known settings adaptation has not been validated for this transition.
     SettingsUnresolved => "errors.settings_unresolved",
     /// The firmware's hardware differs; no display identity was available.

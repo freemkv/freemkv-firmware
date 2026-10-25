@@ -849,6 +849,31 @@ fn report_prompt(c: &Controller, dir: &Path, g: &mut Gate) {
             let (draft, open) = app.report_prompt_state();
             (draft.to_owned(), open)
         });
+        if action == "send-blank" {
+            let required =
+                get(Language::En, "report.description_required").replace("{summary}", "");
+            let reopened = c.ivars().report_alert.borrow().clone();
+            g.check(
+                "report-blank-description-requires-input",
+                draft.is_empty()
+                    && open
+                    && main.attachedSheet().is_some()
+                    && reopened.as_ref().is_some_and(|alert| {
+                        alert
+                            .informativeText()
+                            .to_string()
+                            .contains(required.trim())
+                    }),
+                "blank Send reopens the required-description prompt without network or drive I/O",
+            );
+            c.with_app(|app| g.no_drive_io(action, app));
+            if let Some(alert) = reopened {
+                unsafe { alert.buttons().objectAtIndex(1).performClick(None) };
+                settle(c, SETTLE);
+            }
+            previous = description.to_owned();
+            continue;
+        }
         g.check(
             &format!("report-{action}-retains-description"),
             draft == description

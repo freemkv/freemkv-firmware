@@ -222,3 +222,20 @@ fn create_refuses_an_image_no_engine_recognizes() {
          refuse it rather than emit something unflashable"
     );
 }
+
+#[test]
+fn old_modified_table_corruption_is_refused_before_modification() {
+    let mut image = include_bytes!("../tests/fixtures/WH16NS58_OEM_1.V9.bin").to_vec();
+    let entry = freemkv_flash::cmac::parse_table(&image)
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.enabled == u32::MAX)
+        .unwrap();
+    image[entry.entry_off..entry.entry_off + 4].copy_from_slice(&0x02000e41u32.to_le_bytes());
+    let image = freemkv_flash::cmac::resign(&image).unwrap();
+    assert!(
+        freemkv_flash::cmac::verify(&image),
+        "the old host MAC check alone misses this corruption"
+    );
+    assert!(super::modify_with_defaults(&image, &crate::boot::BootSettings::standard()).is_err());
+}
