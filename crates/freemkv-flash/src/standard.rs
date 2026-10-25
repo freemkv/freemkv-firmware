@@ -123,21 +123,38 @@ impl StandardInfo {
 pub fn region_rows(dev: &mut ReadDevice<'_>) -> Vec<Row> {
     let region = with_device(dev, |d| d.get(pioneer_optical::device::DvdRegion));
     let rows = match region {
-        Ok(rpc) => vec![
-            row(
-                "rpc",
-                "RPC scheme",
-                &match rpc.scheme {
-                    0 => "RPC-1".into(),
-                    1 => "RPC-2".into(),
-                    v => format!("Unknown ({v})"),
-                },
-            ),
-            row(
-                "region",
-                "DVD region",
-                &crate::inspection::dvd_region_label(rpc),
-            ),
+        Ok(rpc) => reported_region_rows(rpc),
+        Err(e) => {
+            crate::diagnostics::record(format!("DVD region read failed: {e:#}"));
+            vec![row("region", "DVD region", "Unavailable")]
+        }
+    };
+    rows.into_iter()
+        .map(|r| r.in_group(Group::Region))
+        .collect()
+}
+
+fn reported_region_rows(rpc: pioneer_optical::rpc::State) -> Vec<Row> {
+    let mut rows = vec![
+        row(
+            "rpc",
+            "RPC scheme",
+            &match rpc.scheme {
+                0 => "RPC-1".into(),
+                1 => "RPC-2".into(),
+                v => format!("Unknown ({v})"),
+            },
+        ),
+        row(
+            "region",
+            "DVD region",
+            &crate::inspection::dvd_region_label(rpc),
+        ),
+    ];
+    // RPC-1 does not enforce the RPC-2 change budget. Its zero fields are not
+    // exhausted reset counters, including after applying Region-free.
+    if rpc.scheme == 1 {
+        rows.extend([
             row(
                 "user_changes",
                 "User changes remaining",
@@ -159,15 +176,9 @@ pub fn region_rows(dev: &mut ReadDevice<'_>) -> Vec<Row> {
                     _ => "Unknown",
                 },
             ),
-        ],
-        Err(e) => {
-            crate::diagnostics::record(format!("DVD region read failed: {e:#}"));
-            vec![row("region", "DVD region", "Unavailable")]
-        }
-    };
-    rows.into_iter()
-        .map(|r| r.in_group(Group::Region))
-        .collect()
+        ]);
+    }
+    rows
 }
 
 /// A row both front-ends show under the same label, sanitized.
@@ -237,3 +248,36 @@ const MEDIA: [(&str, Media); 21] = [
     ("HD DVD-RAM", Media::HdDvdRam),
     ("HD DVD-RW", Media::HdDvdRw),
 ];
+
+#[cfg(test)]
+mod region_tests {
+    use super::*;
+    #[test]
+    fn rpc1_hides_inapplicable_reset_budget_after_region_free_modify() {
+        let state = pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, 0, 0, 0, 0]).unwrap();
+        let rows = reported_region_rows(state);
+        assert_eq!(
+            rows.iter().map(|r| r.key).collect::<Vec<_>>(),
+            ["rpc", "region"]
+        );
+        assert_eq!(crate::inspection::dvd_region_label(state), "Region-free");
+    }
+    #[test]
+    fn rpc2_keeps_real_zero_counts_and_stock_media_counts() {
+        for status in [0, 0x64] {
+            let state =
+                pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, status, 0xfd, 1, 0]).unwrap();
+            let rows = reported_region_rows(state);
+            assert_eq!(
+                rows.iter().map(|r| r.key).collect::<Vec<_>>(),
+                [
+                    "rpc",
+                    "region",
+                    "user_changes",
+                    "vendor_resets",
+                    "region_state"
+                ]
+            );
+        }
+    }
+}

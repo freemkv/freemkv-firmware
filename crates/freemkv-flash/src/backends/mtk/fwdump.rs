@@ -84,7 +84,7 @@ pub(crate) fn is_freemkv(dev: &mut dyn ScsiDevice) -> bool {
 
 /// Read the full 2 MiB firmware image through the injected `DumpAll` command
 /// (flash is mapped at address 0). Returns the same `(image, readable, gaps)`
-/// shape as [`crate::probe::read_full_image`] so the caller validates it
+/// shape as [`crate::probe::FullImage`] so the caller validates it
 /// identically. Any 64-byte window the drive will not return is `0xFF`-filled
 /// and recorded as a gap. Read-only.
 pub(crate) fn capture_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {

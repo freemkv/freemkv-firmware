@@ -67,6 +67,7 @@ pub(crate) fn profile_view(p: &DriveProfile) -> Profile {
     };
     Profile {
         can_read: p.can_read(),
+        read_notice: p.read_notice().map(str::to_owned),
         flash_current: caps.flash_current,
         recovery_family_override: workflow::recovery_supports_family_override(p),
         recovery_without_live_protocol: !caps.recovery && p.recovery.is_some(),

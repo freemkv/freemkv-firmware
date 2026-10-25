@@ -2816,6 +2816,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
+    "MTK_READ_GUIDANCE",
     "M-TABLE-FIXTURE",
     "FILE_VALIDATION",
     "F-OVERRIDE",

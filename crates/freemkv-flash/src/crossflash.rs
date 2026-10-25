@@ -36,6 +36,12 @@ pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> C
         ) {
             return CompatibilityStatus::SoftNo;
         }
+        if matches!(
+            error.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
+            Some(pioneer_optical::settings::adaptation::Error::OriginalRequired)
+        ) {
+            return CompatibilityStatus::SoftNo;
+        }
         match error.source() {
             Some(source) => error = source,
             None => return CompatibilityStatus::HardNo,
@@ -206,6 +212,22 @@ impl Prefilter {
                         .contains(&drive.to_ascii_uppercase())
             }
             (Platform::Mediatek, _, _) => same_family,
+        }
+    }
+}
+
+#[cfg(test)]
+mod adaptation_tests {
+    use super::*;
+    #[test]
+    fn missing_original_evidence_is_conditional_but_native_mismatch_is_not() {
+        use pioneer_optical::settings::adaptation::Error;
+        assert_eq!(
+            refusal_status(&Error::OriginalRequired),
+            CompatibilityStatus::SoftNo
+        );
+        for error in [Error::OriginalMismatch, Error::Guard, Error::Registry] {
+            assert_eq!(refusal_status(&error), CompatibilityStatus::HardNo);
         }
     }
 }

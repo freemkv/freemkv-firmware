@@ -141,6 +141,9 @@ pub(super) fn execute_with_sleep(
 
 fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
     use pioneer_optical::settings::update::Effect;
+    if let Some(id) = plan.adaptation_id() {
+        crate::diagnostics::record(format!("Pioneer settings adaptation: {id}; original factory mechanism and live prerequisites must match before writing"));
+    }
     for setting in plan.entries() {
         match setting.effect() {
             Effect::ParameterWord {

@@ -259,3 +259,39 @@ fn known_mtk_backup_connection_failure_does_not_claim_firmware_restriction() {
     assert!(!error.is::<crate::backend::BackupReadRestricted>());
     assert!(format!("{error:#}").contains("read 0 of"));
 }
+
+#[test]
+fn wh16ns58_rejected_reads_are_an_expected_backup_limitation() {
+    struct ReadRestricted;
+    impl crate::platform::ScsiDevice for ReadRestricted {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> anyhow::Result<Vec<u8>> {
+            if cdb.len() == 10 && cdb[..3] == [0x3c, 6, 0] {
+                let offset = u32::from_be_bytes([0, cdb[3], cdb[4], cdb[5]]);
+                if offset >= 0x1f0000 {
+                    return Ok(vec![0xa5; len]);
+                }
+            }
+            Err(crate::platform::ScsiSenseError::new(5, 0x24, 0, "read rejected").into())
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> anyhow::Result<()> {
+            panic!("backup must never write")
+        }
+        fn describe(&self) -> String {
+            "WH16NS58 restricted-read regression".into()
+        }
+    }
+    let error = capture(&mut crate::backend::ReadDevice::without_unlocks(
+        &mut ReadRestricted,
+    ))
+    .unwrap_err()
+    .context(crate::user_error::NoFirmwareWrite)
+    .context(crate::user_error::BackupAttempt);
+    let issue = crate::user_error::UserError::of(&error);
+    assert_eq!(issue.id, "errors.backup_restricted");
+    assert_eq!(issue.severity(), crate::user_error::IssueSeverity::Notice);
+    let text = issue.render(crate::localization::Language::En);
+    assert!(text.contains("expected limitation"), "{text}");
+    assert!(!text.contains("connection"), "{text}");
+    assert!(!text.contains("send it to us"), "{text}");
+    assert!(format!("{error:#}").contains("65536 of 2097152"));
+}

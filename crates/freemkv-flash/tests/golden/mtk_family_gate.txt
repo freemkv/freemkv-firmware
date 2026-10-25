@@ -1,7 +1,8 @@
 
 === MTK execute: JB7 drive reflashed with its own build ===
 result: OK
---- text (213) ---
+--- text (214) ---
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -215,7 +216,8 @@ flashing firmware: 99%
 flashing firmware: 100%
 upload complete (2 MiB); waiting for the drive to finish programming...
 verifying...
---- events (216) ---
+--- events (217) ---
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
@@ -2359,7 +2361,8 @@ saved pre-flash backup: 2097152 bytes sha256=dfaf5b12e4cfaa981fabf80572e94bd787c
 
 === MTK execute: JB8 drive reflashed with its own build ===
 result: OK
---- text (213) ---
+--- text (214) ---
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -2573,7 +2576,8 @@ flashing firmware: 99%
 flashing firmware: 100%
 upload complete (2 MiB); waiting for the drive to finish programming...
 verifying...
---- events (216) ---
+--- events (217) ---
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
@@ -4747,7 +4751,8 @@ saved pre-flash backup: <not created>
 
 === MTK execute: drive without a hardware record ===
 result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.unsupported_firmware: could not determine the installed firmware family (the pre-flash backup has no hardware configuration record to profile); flashing requires a known family: could not determine the installed firmware family
---- text (108) ---
+--- text (109) ---
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -4856,7 +4861,8 @@ drive: BD-RE  BH16NS40
 firmware: 2 MiB (wire layout selected from receiver code)
 backup: saved <TMP>/mtk-family/backup_5.bin (2097152 bytes)
 The receiver-bound command sequence is validated before execution
---- events (108) ---
+--- events (109) ---
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
