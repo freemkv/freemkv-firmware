@@ -1023,3 +1023,29 @@ fn startup_wrapper_never_hides_firmware_or_completed_pass_consequences() {
         );
     }
 }
+
+#[test]
+fn settings_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
+    use pioneer_optical::{receiver::PreparationError, settings::update::Error};
+    for (error, code) in [
+        (
+            Error::ConversionUnavailable,
+            "pioneer.settings.conversion_unavailable",
+        ),
+        (
+            Error::Unresolved,
+            "pioneer.settings.compatibility_unresolved",
+        ),
+    ] {
+        let report = super::preparation_error(PreparationError::Settings(error));
+        assert_eq!(
+            crate::user_error::UserError::of(&report).id,
+            "errors.settings_unresolved"
+        );
+        let message = format!("{report:#}");
+        assert!(message.contains(code));
+        assert!(message.contains("settings mapping"));
+        assert!(message.contains("No firmware was written"));
+        assert!(!message.contains("hardware mismatch"));
+    }
+}

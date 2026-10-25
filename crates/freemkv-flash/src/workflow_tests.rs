@@ -167,12 +167,27 @@ fn hardware_mismatch_guidance_keeps_models_but_not_family_hashes() {
         .into(),
     );
     let message = error_message(&error);
-    assert!(message.contains("The underlying hardware for these firmwares is not compatible."));
-    assert!(message.contains("Installed firmware: BDE-PR1EP PP100."));
-    assert!(message.contains("Selected firmware: BDX-PR1MLA."));
+    assert!(message.contains("The installed and selected firmware are for different hardware."));
+    assert!(message.contains("Installed: BDE-PR1EP PP100."));
+    assert!(message.contains("Selected: BDX-PR1MLA."));
     assert!(message.contains("No firmware was written."));
     assert!(!message.contains("cf3183a51bc41e42"));
     assert!(!message.contains("31ce81c2dbb0fdb"));
+    for language in crate::localization::Language::ALL {
+        let translated = crate::user_error::UserError::of(&error).render(language);
+        assert!(
+            translated.contains("BDE-PR1EP PP100"),
+            "{language:?}: {translated}"
+        );
+        assert!(
+            translated.contains("BDX-PR1MLA"),
+            "{language:?}: {translated}"
+        );
+        assert!(
+            !translated.contains("{installed}") && !translated.contains("{selected}"),
+            "{language:?}: {translated}"
+        );
+    }
     let diagnostic = format!("{error:#}");
     assert!(diagnostic.contains("cf3183a51bc41e42"));
     assert!(diagnostic.contains("31ce81c2dbb0fdb"));

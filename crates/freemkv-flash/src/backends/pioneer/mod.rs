@@ -505,6 +505,33 @@ pub(crate) fn authorize_installed(
     let receiver =
         receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
     if kernel.is_none() {
+        // Validate both sides as independent images before comparing their
+        // tags. Pair validation would call an installed-drive mismatch a
+        // malformed target bundle and lose the actionable values.
+        flash_plan::validate_component_headers(None, Some(normal))
+            .and_then(|()| {
+                flash_plan::validate_component_headers(installed_kernel.as_deref(), None)
+            })
+            .map_err(anyhow::Error::msg)
+            .context(crate::user_error::IssueCode::InstalledFirmwareMismatch)?;
+        let installed_tag = installed_kernel
+            .as_deref()
+            .and_then(flash_plan::component_kernel_tag);
+        let required_tag = flash_plan::component_kernel_tag(normal);
+        let (Some(installed), Some(required)) = (installed_tag, required_tag) else {
+            return Err(anyhow!("Normal-only update lacks a readable Kernel tag")
+                .context(crate::user_error::IssueCode::InstalledFirmwareMismatch));
+        };
+        if installed != required {
+            return Err(anyhow::Error::new(crate::backend::InstalledKernelMismatch {
+                required,
+                installed,
+            })
+            .context(crate::user_error::IssueCode::InstalledFirmwareMismatch));
+        }
+        // Keep the pre-existing installed-Kernel/target-Normal pair checks
+        // after the typed tag comparison. Besides the Kernel generation, the
+        // headers must still agree on the hardware/SAT and model identity.
         flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
             .map_err(anyhow::Error::msg)
             .context(crate::user_error::IssueCode::InstalledFirmwareMismatch)?;
@@ -831,6 +858,11 @@ impl FileFacet for Pioneer {
             return structural(&ENVELOPE);
         }
         None
+    }
+
+    fn validate_flash_input(&self, bytes: &[u8], _recognized: &Recognized) -> Result<()> {
+        let (kernel, normal) = classify_flash_input(bytes)?;
+        flash_plan::ensure_no_unrecovered_tail(kernel.as_deref(), normal.as_deref())
     }
 
     fn describe(&self, image: &[u8], _recognized: &Recognized) -> Option<Result<()>> {

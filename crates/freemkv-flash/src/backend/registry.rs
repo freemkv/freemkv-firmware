@@ -134,6 +134,17 @@ pub fn recognize(bytes: &[u8]) -> Result<Option<(&'static dyn Backend, Recognize
     recognize_among(backends(), bytes)
 }
 
+/// Reject proven corrupt recognized inputs before device discovery or opening.
+/// Unknown formats keep the existing backend-specific selection behavior.
+pub(crate) fn validate_flash_input(bytes: &[u8]) -> Result<()> {
+    if let Some((backend, recognized)) = recognize(bytes)? {
+        if let Some(files) = backend.files() {
+            files.validate_flash_input(bytes, &recognized)?;
+        }
+    }
+    Ok(())
+}
+
 /// [`recognize`] over an explicit backend list.
 pub fn recognize_among<B: Backend + ?Sized + 'static>(
     candidates: impl IntoIterator<Item = &'static B>,

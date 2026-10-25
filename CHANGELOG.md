@@ -3,6 +3,13 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.1] - Unreleased
+
+### freemkv Flash
+
+- Give clearer guidance for corrupt or incomplete firmware files.
+- Show more precise drive hardware and firmware details.
+
 ## [0.15.0] - Unreleased
 
 ### freemkv Flash

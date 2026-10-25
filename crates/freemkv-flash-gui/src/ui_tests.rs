@@ -3033,7 +3033,7 @@ fn blocked_update_shows_actionable_reason_and_records_no_write() {
         completed_stages: Vec::new(),
     }))
     .unwrap();
-    let reason = "The underlying hardware for these firmwares is not compatible. Installed firmware: PP100. Target firmware: BDX-PR1MLA.";
+    let reason = "The installed and selected firmware are for different hardware. Installed: PP100. Selected: BDX-PR1MLA.";
     tx.send(Msg::UserIssue(workflow::UserError {
         id: "errors.hardware_mismatch",
         arguments: vec![
@@ -4195,5 +4195,79 @@ fn shell_failures_are_localized_in_every_catalog_and_keep_technical_details_out(
                 assert_eq!(answer.try_recv(), Ok(false));
             }
         }
+    }
+}
+
+#[test]
+fn corrupt_input_error_remains_visible_and_controls_are_reenabled() {
+    let mut app = one_drive();
+    app.dispatch(Input::ReadInfo);
+    let error = anyhow::Error::new(freemkv_flash::backend::CorruptFirmware {
+        detail: "unrecoverable Normal tail".into(),
+    });
+    let guidance = workflow::user_error(&error);
+    app.worker
+        .as_ref()
+        .unwrap()
+        .send(Msg::UserIssue(guidance))
+        .unwrap();
+    assert_eq!(
+        finish(&mut app, Err("corrupt firmware".into())),
+        [Effect::StopTicking]
+    );
+    let view = app.view();
+    assert!(!app.running() && view.controls_enabled && view.can_close);
+    let failure = view.results.unwrap().failure.unwrap();
+    assert!(failure.text.contains("corrupt or incomplete"));
+    assert!(failure.text.contains("Download a fresh OEM copy"));
+}
+
+#[test]
+#[ignore = "requires the privately held corrupt TD05 package"]
+fn td05_corrupt_package_finishes_flash_and_recovery_jobs_without_opening_a_drive() {
+    let input = std::env::var_os("PIONEER_TD05_CORRUPT_FIXTURE").expect("private fixture path");
+    let options = FlashOptions {
+        input: input.clone().into(),
+        execute: true,
+        acknowledged_risk: true,
+        ..FlashOptions::default()
+    };
+    let recovery = RecoveryOptions {
+        device: None,
+        bypass_family_check: false,
+        input: input.into(),
+        member: None,
+        current: workflow::CurrentFirmware::ReadFromDrive,
+        current_member: None,
+        execute: true,
+        acknowledged_risk: true,
+    };
+    for job in [
+        Job::PlanFlash(options.clone()),
+        Job::Flash(options),
+        Job::Recovery(recovery),
+    ] {
+        let (tx, rx) = mpsc::channel();
+        run_job(
+            "not-a-real-device",
+            job,
+            tx,
+            None,
+            "td05-corrupt-regression".into(),
+            "TD05",
+        );
+        let messages: Vec<_> = rx.try_iter().collect();
+        assert!(messages
+            .iter()
+            .any(|msg| matches!(msg, Msg::UserIssue(issue)
+            if issue.id == "errors.firmware_corrupt")));
+        assert!(messages
+            .iter()
+            .any(|msg| matches!(msg, Msg::FailureEvidence(e)
+            if !e.write_started && e.payload_bytes_accepted == Some(0))));
+        assert!(messages.iter().any(|msg| matches!(msg, Msg::Done(Err(_)))));
+        assert!(!messages
+            .iter()
+            .any(|msg| matches!(msg, Msg::DriveAfter(_) | Msg::Authorized(_, _))));
     }
 }

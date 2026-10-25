@@ -443,12 +443,10 @@ pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) 
         if let Some(tail) =
             pioneer_optical::envelope::decode_envelope(bytes).and_then(|d| d.unrecovered_tail())
         {
-            return Err(anyhow!(
-                "the {label} envelope has an unrecoverable tail ({:#x}..{:#x} cannot be \
-                 reproduced); refusing to flash an incomplete image",
-                tail.start,
-                tail.end
-            ));
+            return Err(crate::backend::CorruptFirmware { detail: format!(
+                "the {label} envelope has an unrecoverable tail ({:#x}..{:#x} cannot be reproduced); refusing to flash an incomplete image",
+                tail.start, tail.end
+            ) }.into());
         }
     }
     Ok(())
@@ -674,7 +672,7 @@ fn component_date(bytes: &[u8]) -> Option<FwDate> {
 /// declared required-Kernel ID tag; for a Kernel, the Kernel's own ID tag
 /// (Pioneer uses the same header field on both, so both callers reach it the
 /// same way). Empty/missing → `None`.
-fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
+pub(super) fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
     let tag = pioneer_optical::envelope::header_info(bytes)?.kernel_version;
     let tag = tag.trim();
     (!tag.is_empty()).then(|| tag.to_string())

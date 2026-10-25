@@ -1,0 +1,247 @@
+{
+  "title": "0.15.1: hardware evidence, firmware settings, and factory identity",
+  "status": "Revised sparse issue-driven settings design approved; typed settings foundation implemented, replacement of the earlier register-derived gate pending",
+  "branch": "dev",
+  "target_release": "0.15.1",
+  "objective": "Validate hardware, validate OEM firmware and all required settings mappings, then execute and verify the prepared OEM firmware plus settings plan.",
+  "scope": {
+    "included": [
+      "Separate hardware-family evidence from firmware-controlled settings and factory product identity.",
+      "Generalize the existing startup parameter migration into a collection of typed, evidence-bound setting changes.",
+      "Show factory product identity alongside the installed firmware identity in UI and CLI.",
+      "Audit the complete indexed firmware corpus and every available captured factory record before changing recognition or family admission."
+    ],
+    "excluded": [
+      "No UD02/UD04 conversion, movement setting, or conversion profile becomes a supported production operation in this release design.",
+      "No live drive experiments, automatic arbitrary parameter writes, or model-name-based hardware matching.",
+      "No silent removal of existing family discriminators before the full old/new decision audit is reviewed."
+    ],
+    "research_separation": "UD02/UD04 binary experiments remain on research/ud02-ud04-pickup. This design and offline audit belong on dev."
+  },
+  "facts_and_identity": {
+    "hardware": "Structured evidence of hardware compatibility, with origin, coverage and explicit unknown/ambiguous outcomes. Firmware register initialization is evidence about hardware requirements, not an immutable physical identifier.",
+    "factory_product": "Product code read from retained production data. Preserve the complete code; do not infer a board revision, normalized model, or compatibility solely from the name.",
+    "installed_firmware": "Current INQUIRY model/revision plus reported platform, Kernel/Normal tags and code. These can change after flashing.",
+    "configuration": "Semantically identified settings required to run the firmware on the mechanism. Addresses, widths and encodings belong to their source/target codecs.",
+    "admission": "Hardware match plus a complete supported preparation/execution plan. A hardware match is not permission to flash unmodified bytes with incompatible settings.",
+    "separation_decision": "Do not encode known configuration differences back into the hardware hash. Hardware grouping may correctly merge while stock compatibility remains blocked by the independent settings gate."
+  },
+  "settings_filter": {
+    "decision_table": [
+      {
+        "hardware": "different or unknown",
+        "identified_issue": "any",
+        "decision": "block hardware admission"
+      },
+      {
+        "hardware": "match",
+        "identified_issue": "no matching requirement",
+        "decision": "continue existing firmware/settings checks; do not infer that every possible issue has been ruled out"
+      },
+      {
+        "hardware": "match",
+        "identified_issue": "matching unresolved requirement",
+        "decision": "block settings compatibility unresolved before mutation"
+      },
+      {
+        "hardware": "match",
+        "identified_issue": "matching requirement with validated supported conversion",
+        "decision": "prepare and verify required settings conversion alongside OEM firmware"
+      },
+      {
+        "hardware": "match",
+        "identified_issue": "potentially applicable known issue but required mechanism/firmware evidence missing or ambiguous",
+        "decision": "block compatibility unresolved within that issue scope; do not turn missing evidence into no match"
+      },
+      {
+        "hardware": "match",
+        "identified_issue": "multiple applicable requirements",
+        "decision": "satisfy every requirement; any unresolved requirement or conversion conflict blocks"
+      }
+    ],
+    "first_implementation_example": "Keep existing 0x9F behavior exactly as today through the typed settings executor. Sparse issue rules add only identified adaptation requirements.",
+    "future_conversion_example": "UD02 to UD03/UD04 becomes another supported conversion only after validation. It may require target-image configuration adaptation rather than a native A0 parameter write.",
+    "user_message": "Distinguish Hardware incompatible, Settings conversion unavailable, and Settings compatibility unresolved; do not call all three hardware-family mismatches.",
+    "proof_limit": "Same hardware-platform grouping is not proof that every board revision, firmware pair or conversion direction has been tested.",
+    "policy": "Sparse discovered-issue requirements, not a complete whitelist or blanket unresolved catalog. No matching identified issue adds no settings refusal; all existing firmware, hardware and supported startup checks still apply.",
+    "register_exclusion": "FE8F/FE9D/FE9F are excluded from hardware and settings compatibility decisions. Keep historical values only in research/diagnostics if useful; do not use old family partitions as runtime settings contracts.",
+    "issue_registry": {
+      "owner": "Optical package; Pioneer rules ship with pioneer-optical and are consumed through preparation. UI/CLI and hoard publication do not independently decide admission.",
+      "storage": "Versioned declarative issue records alongside optical settings code; one requirement can name a bounded set of verified firmware identities. Not an all-pairs compatibility matrix and not a user-supplied bypass file.",
+      "record_fields": {
+        "id": "Stable issue/requirement identity",
+        "evidence": "Observed failure and research/test references, with affected versus merely untested scope distinguished",
+        "scope": "Mechanism configuration constraints, installed firmware contract, target OEM firmware contract, explicit direction",
+        "status": "unresolved or resolved",
+        "resolution": "Null while unresolved; otherwise a versioned supported settings conversion identifier with its own source/target guards and verification"
+      },
+      "matching": "Match verified content/layout contracts, not reported model names alone. Firmware identity normalization must explicitly explain excluded per-unit or volatile data. Never hash an entire device dump as an OEM identity.",
+      "mechanism": "Physical mechanism/current configuration evidence is independent of the installed firmware label. Converted UD04 on a UD02 mechanism must remain distinguishable from native UD04. Do not require a historical host database as the sole source of that distinction.",
+      "uncertain_identity": "Each issue has a conservative applicability scope and exact validated bindings. Potentially affected unrecognized revisions/configurations inside that scope block unresolved; unrelated firmware is not globally marked unresolved.",
+      "lifecycle": [
+        "No issue record: retain existing behavior.",
+        "Identify an issue: add the narrowly supported directional requirement with status unresolved and evidence.",
+        "Discover candidate settings fix: keep status unresolved until validated.",
+        "Validate conversion: reference the conversion in the same requirement; preparation now builds its settings operations.",
+        "Discover broader/narrower scope: revise the evidence and selectors explicitly; never infer reverse or transitive compatibility."
+      ],
+      "directionality": "A->B never creates B->A. A UD02 mechanism running adapted UD04 and returning to UD02 is a separately evaluated round-trip leg, not proof native UD04 mechanisms accept UD02 firmware.",
+      "defaults": "Do not enumerate all untested pairs. Seed only the newly exposed transitions for this explicit filter migration; thereafter add records when an issue is identified."
+    },
+    "family_filter_migration": {
+      "policy": "Use old/new family maps to enumerate newly matching cross-old-family directed transitions once. Seed those specific transitions as unresolved pending review; do not mark all drives in the merged family or previously matching transitions unresolved.",
+      "review_inventory": "../../research/0.15.1-drive-identity-audit/family-transition-review.json",
+      "resolutions": [
+        "validated_as_is",
+        "validated_with_settings"
+      ],
+      "runtime": "Historical family membership and removed register values are audit provenance, not ongoing runtime selectors. Bind reviewed requirements to mechanism and verified source/target contracts.",
+      "future_issues": "After this explicit migration review boundary, add unresolved requirements only for newly identified issues."
+    }
+  },
+  "optical_contract": {
+    "approach": "Extend PreparedUpdate and the current startup migration executor. Do not add a second flashing framework or put translation logic in frontends.",
+    "setting_entry": {
+      "key": "Stable semantic identifier; settings[0] is storage order, never the meaning of a setting.",
+      "source_binding": "Recognized current firmware, read surface, field type/encoding, valid domain and observed current value.",
+      "target_binding": "Recognized target firmware requirement, destination type/encoding, bounds and guarded patch locations where applicable.",
+      "policy": "Preserve, translate, or set target-required value. Do not assume every migration copies the old raw value.",
+      "effect": "Native parameter transaction or guarded target-image adaptation; explicitly distinguish persistent writes from image changes.",
+      "stage": "Before transfer, during target preparation, or after startup, as required by the recognized contract.",
+      "verification": "Readback rule and final target-state rule. Retain source evidence and transformed-target hashes in attempt diagnostics.",
+      "rollback": "Attempt-local original value and existing stage-aware rollback constraints. No blind restoration after update entry or firmware writes."
+    },
+    "preparation": [
+      "Recognize installed and target evidence, evaluate sparse known-issue applicability using mechanism configuration, and reject ambiguity only where evidence is required for an applicable issue or existing gate.",
+      "Build the complete list of settings and image adaptations before the first mutation. Read every original value before writing any setting; reject conflicts and unmet dependencies before execution.",
+      "Read required current settings from the selected drive under the existing binding/exclusive-access gates.",
+      "Validate translated values, overlaps, bounds, checksums and package signatures before presenting the prepared plan.",
+      "Execute through the existing optical writer, preserving its no-retry, receiver rebind, recovery, cancellation and rollback rules.",
+      "Verify changed settings and firmware startup/readback; report partial or uncertain outcomes without claiming success."
+    ],
+    "first_rule": "Represent today's audited startup-word migration (including observed parameter 0x9F cases) as one collection entry. Preserve existing recognized behavior before adding new rules; this is a generalization of an existing feature, not a new parallel subsystem.",
+    "existing_policy_caveat": "startup::setting currently selects neutral FFFF at word 9F when no comparison is recognized. That is an explicit existing update policy, not proof that an unknown firmware has no requirement. The generic API must not turn detector absence into a general write policy.",
+    "locks": "Typed rule identifiers and recognized source/target contracts restrict what may change. A generic executor does not expose arbitrary indexes, addresses, or user-supplied write commands.",
+    "ownership": {
+      "optical_packages": "Recognition, hardware evidence, settings codecs, translation, prepared operations, execution, verification and coded failure outcomes.",
+      "flash_engine": "Existing host policy, selected-drive ownership, backups, runtime services and diagnostic persistence.",
+      "ui_and_cli": "Render the same structured identity and planned changes; neither interprets offsets nor decides compatibility."
+    },
+    "layout_specificity": "Stable semantic keys do not imply stable firmware addresses. For a required adaptation, recognized codecs supply bounded locators and coordinated transforms. Missing required mappings block; absence of an identified issue does not create a new mapping requirement."
+  },
+  "future_profile_fallback": {
+    "decision": "Prefer firmware-derived rules. If a validated adaptation cannot be derived, allow a declarative profile to feed the same typed plan later.",
+    "requirements": [
+      "Explicit direction and independently bound source/target firmware contracts; no assumption that reverse conversion is safe.",
+      "Only supported transforms and guarded writes, with expected source bytes/domains, hashes and readback rules.",
+      "Profile does not replace or bypass hardware admission, source capture, verification or rollback rules."
+    ],
+    "not_implemented": "No ud04ud02.json production file is part of 0.15.1 until that conversion is validated. This is an extension point, not an advertised capability."
+  },
+  "drive_details": {
+    "shared_rows": [
+      {
+        "key": "model",
+        "label": "Model",
+        "meaning": "Installed firmware's reported product; retain existing behavior."
+      },
+      {
+        "key": "firmware_version",
+        "label": "Firmware version",
+        "meaning": "Installed firmware revision."
+      },
+      {
+        "key": "product_code",
+        "label": "Factory product code",
+        "meaning": "Complete validated retained product code; clarify the existing row rather than add a duplicate."
+      },
+      {
+        "key": "factory_test_date",
+        "label": "Factory test date",
+        "meaning": "Date decoded from the factory test string. Do not call this a proven manufacture date."
+      }
+    ],
+    "example": {
+      "Model": "BD-RW   BDR-UD04",
+      "Firmware version": "1.14",
+      "Factory product code": "BDR-UD02TBD",
+      "Factory test date": "2013-05-25"
+    },
+    "diagnostic_details": "Retain source surface/layout and recognized/absent/unsupported/read-error distinctions in structured evidence and logs. Do not print raw production/calibration blocks.",
+    "no_overclaim": "Different factory and firmware names do not by themselves prove a crossflash or incompatibility; OEM rebadges and shared hardware exist. Report both facts without inventing a conversion status.",
+    "unavailable": "Use Not reported for a successfully read absent record; Unavailable for a failed read; Unsupported layout for unrecognized bytes when a structured reason is available. Never fall back to a target package or historical backup as live factory identity.",
+    "settings_presentation": "Show supported current settings and planned changes from the optical report. Keep low-level addresses in diagnostics; require UI/CLI parity and localization.",
+    "other_fields": "Keep existing region, media, serial, buffer, interface, Kernel and supported setting details. Audit provenance before adding more rows. Product origin inferred from a serial suffix is inferred evidence."
+  },
+  "factory_parser": {
+    "location": "pioneer-optical production module; shared through Pioneer details rows",
+    "current_issue": "A0 offset90 has BDR-UD02TBD, preserved across three firmware identities, but the parser rejects it because offset84 is FFFFFFFF instead of kw0 plus a digit.",
+    "proposal": "Retain recognized tagged layouts. Add an independently validated untagged layout requiring a well-formed product field and corroborating factory record structure; do not just remove the tag check globally.",
+    "boundedness": "Check response length, allowed characters, padding, exact offsets, actual calendar dates and captured-read validity. Word-swapped persistent records require an explicitly recognized codec, not unrestricted string scanning.",
+    "coverage": "identity-census.json inventories all local hoard files and checks saved diagnostic captures. OEM firmware packages cannot validate per-unit factory records."
+  },
+  "family_and_settings_audit": {
+    "baseline": "Record original partitions and directed admission results separately from opaque family hash values.",
+    "candidate": "Classify each current discriminator as demonstrated hardware evidence, configurable behavior, or unresolved. Do not equate every register address with hardware or every immediate value with a safe setting.",
+    "acceptance": [
+      "Run every indexed package/image and record decode failures, unsupported contracts and ambiguity; no silent exclusions.",
+      "Report old-to-new group mappings, every merge/split and every newly admitted/rejected pair.",
+      "Compare stock compatibility separately from compatibility after an explicitly supported settings adaptation.",
+      "Require existing startup migration outcomes to remain equivalent when refactoring the single setting to a list.",
+      "Preserve receiver ABI, transport, update protocol and byte-verification checks independently of hardware-family equality.",
+      "If hash inputs change, version the fingerprint scheme and audit downstream catalogs; do not compare different schemes as equal.",
+      "No new production movement discriminator or adaptation until its recognition and hardware/media validation are complete."
+    ],
+    "desired_not_assumed": "Hardware grouping may merge 25 recognized groups into 24. Preserve existing outcomes by explicit identified-issue requirements for affected transitions, not by reusing excluded registers or implicitly requiring every new match to be approved. Prior 18-pair results are historical evidence from the earlier fallback, pending re-audit after replacement.",
+    "coverage_limits": "A code/corpus audit establishes recognition coverage and decision changes, not physical compatibility for every pair. Live validation remains separate."
+  },
+  "audit_snapshot": {
+    "identity_census": "../../research/0.15.1-drive-identity-audit/identity-census.json",
+    "firmware_census": "../../research/0.15.1-drive-identity-audit/optical-census.json",
+    "scope": "Entire local catalog inventoried; all 719 distinct indexed Pioneer Normal images attempted. This is a corpus recognition audit, not a completed physical validation of every pair.",
+    "family_results": "684 decode; 525 have recognized family evidence in 25 groups; 159 decoded images have unknown family evidence; 35 legacy ATA/SCSI envelopes are unsupported by this decoder.",
+    "startup_results": "55 explicit startup comparisons, all at parameter 0x9F with varying required values; 629 decoded images have no recognized comparison. Detector absence does not establish absence of a requirement.",
+    "factory_results": "14 saved captures, 7 unique A0 responses: 5 tagged records, 1 corroborated untagged UD02 candidate, 1 unrecognized PR1AME layout. No capture validation errors.",
+    "remaining_before_production": "Publish/review the companion optical dependency and remove the local override before release. Factory identity parser/UI work and full physical validation of any future movement conversion remain separate; no movement conversion ships here.",
+    "proof_results": "../../research/0.15.1-drive-identity-audit/proof-results.json",
+    "implemented_census": "../../research/0.15.1-drive-identity-audit/implemented-settings-census.json"
+  },
+  "required_validation": [
+    "All captured tagged records remain recognized; the UD02 untagged record is recognized without accepting erased, truncated, random or malformed responses.",
+    "Factory product remains unchanged across the saved UD02/UD03/UD04 captures while reported firmware identity changes.",
+    "Unknown PR1AME production layout remains explicit rather than guessed from a model string.",
+    "Pioneer startup settings list reproduces existing single-setting behavior across full corpus and read/change/verify/error/rollback tests.",
+    "Multi-setting tests cover overlapping writes, partial failure, ordering, readback mismatch, receiver rebinding and safe rollback boundaries.",
+    "Golden CLI and shared GUI-row tests verify factory identity labels, unavailable states, settings previews and localized rendering.",
+    "No hardware-family admission changes ship without the complete old/new partition and directed-decision report.",
+    "No matching known issue preserves existing admission behavior and unchanged 0x9F policy.",
+    "An identified unresolved requirement blocks only its affected scope and direction; missing required evidence inside that scope also blocks.",
+    "Resolved requirements add only their validated settings operations; all overlapping requirements must be satisfied and conflicts fail before mutation.",
+    "UD02 mechanism -> adapted UD04 -> UD02 is distinguished from native UD04 mechanism -> UD02; neither reverse nor transitive support is inferred.",
+    "Mutating FE8F/FE9D/FE9F alone changes neither hardware family nor sparse issue selection.",
+    "Re-audit every indexed image and all changed decisions after replacing the fallback; do not label untested pairs as resolved or unresolved without an identified issue."
+  ],
+  "implementation": {
+    "application_branch": "feature/maintenance-0151",
+    "optical_branch": "feature/settings-0151",
+    "optical_worktree": "../pioneer-optical-0151",
+    "hardware_scheme": "pioneer.hardware.v4",
+    "settings_api": "pioneer_optical::settings::update::{Plan,Setting,Key,Effect,Contract}",
+    "current_rules": [
+      "pioneer.startup.word: identical selection and single-word execution to published 1.0.0",
+      "pioneer.receiver.kernel-marker: existing temporary adaptation and mandatory pristine OEM restoration"
+    ],
+    "admission": "Hardware and settings are independent; even family-override preparation must pass the settings gate. Existing integrity, receiver, ABI and authentication checks remain mandatory.",
+    "mechanism_status": "Sparse identified issue registry implemented; all identified cross-convention directions unresolved. No movement converter registered.",
+    "dependency_status": "Exact version 1.2.1 and immutable Git revision 47e62cc565e77150a74b7e0445914535ef8804b9; no relative dependency override.",
+    "report": "../../research/0.15.1-drive-identity-audit/implementation-state.json",
+    "design_gap": "Static mapping and packaging audits do not establish hardware/media success or native reverse conversion. Release keeps these transitions blocked."
+  },
+  "release_scope": {
+    "version": "0.15.1",
+    "settings_framework": true,
+    "identified_ud02_adaptations": "unresolved; blocked in both directions; no experimental movement converter registered",
+    "existing_startup_setting": "preserve current 0x9F behavior",
+    "experimental_branch": "UD02 to UD03/UD04 movement settings conversion, plus sister firmware targets where audit and validation support it; excluded from release"
+  }
+}

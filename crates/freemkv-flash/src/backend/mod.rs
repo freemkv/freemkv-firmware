@@ -224,6 +224,19 @@ pub struct FlashRequest {
     pub predump_out: Option<std::path::PathBuf>,
 }
 
+/// A selected firmware image has proven missing or corrupt bytes.
+#[derive(Debug)]
+pub struct CorruptFirmware {
+    /// Diagnostic description; rendered UI guidance does not expose this text.
+    pub detail: String,
+}
+impl fmt::Display for CorruptFirmware {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.detail)
+    }
+}
+impl std::error::Error for CorruptFirmware {}
+
 /// Live receiver detection failed; retain diagnostics while asking for Current.
 #[derive(Debug)]
 pub struct CurrentFirmwareRequired {
@@ -263,6 +276,27 @@ impl std::error::Error for HardwareMismatch {
         Some(self.source.as_ref())
     }
 }
+
+/// A valid Normal requires a different Kernel generation than the drive has.
+#[derive(Debug)]
+pub struct InstalledKernelMismatch {
+    /// The Kernel tag required by the selected Normal.
+    pub required: String,
+    /// The Kernel tag found in the installed backup.
+    pub installed: String,
+}
+
+impl std::fmt::Display for InstalledKernelMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Normal requires Kernel {}, but the drive has Kernel {}",
+            self.required, self.installed
+        )
+    }
+}
+
+impl std::error::Error for InstalledKernelMismatch {}
 
 /// What a drive offers, derived from the facets its backend provides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -457,6 +491,11 @@ pub trait FileFacet {
     /// Print the `info <file>` / `check` report for a file this backend
     /// recognized, or `None` to leave it to the generic report. Read-only.
     fn describe(&self, bytes: &[u8], recognized: &Recognized) -> Option<Result<()>>;
+    /// Check device-independent input integrity before opening any drive.
+    /// This grants no hardware compatibility or write authorization.
+    fn validate_flash_input(&self, _bytes: &[u8], _recognized: &Recognized) -> Result<()> {
+        Ok(())
+    }
     /// The format of a flash input no backend recognizes, by its name, so the
     /// drive's flash path reports the specific parse error.
     fn classify_input(&self, path: &Path, bytes: &[u8]) -> &'static FileFormat;

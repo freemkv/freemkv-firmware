@@ -1,0 +1,295 @@
+{
+  "engine_version": "0.15.1",
+  "packages": 10,
+  "admitted_links": 43,
+  "ud02_cross_convention_links": [],
+  "future_links": 0,
+  "scope": "Actual release freemkv-crossflash binary on ten audit packages; stock admission, no conversion registered. Marketing graph cache is keyed by executable SHA256; new executable forces reevaluation.",
+  "marketing_regressions": {
+    "passed": 11,
+    "failed": 0
+  },
+  "inventory": [
+    {
+      "sha256": "0bc0cd7a85ddd14d8a90357f5c144e3cf0d44572316c3cd9017a74c0d1802011",
+      "normal_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "kernel_sha256": "7e1104a2843825aea6d03bde6359d94254f3cea192e576450f3f94c4afcee824",
+      "revision": "1.00",
+      "embedded_model": "BDR-UD02D",
+      "components": [
+        {
+          "identity_key": "pioneer:8410:ID84:1.00:kernel",
+          "member": "components/S8410840.100.enc",
+          "revision": "1.00",
+          "role": "kernel",
+          "sha256": "7e1104a2843825aea6d03bde6359d94254f3cea192e576450f3f94c4afcee824"
+        },
+        {
+          "identity_key": "pioneer:8410:ID84:1.00:normal",
+          "member": "components/S8410841.100.enc",
+          "revision": "1.00",
+          "role": "normal",
+          "sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373"
+        }
+      ]
+    },
+    {
+      "sha256": "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84",
+      "normal_sha256": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+      "kernel_sha256": "36d0e3542a34a653250295f86d489d5e1e4f7931043351d856f27e57477d72ae",
+      "revision": "1.03",
+      "embedded_model": "BDR-UD03",
+      "components": [
+        {
+          "identity_key": "pioneer:8510:ID19:1.03:kernel",
+          "member": "components/S8510190.103.enc",
+          "revision": "1.03",
+          "role": "kernel",
+          "sha256": "36d0e3542a34a653250295f86d489d5e1e4f7931043351d856f27e57477d72ae"
+        },
+        {
+          "identity_key": "pioneer:8510:ID19:1.03:normal",
+          "member": "components/S8510191.103.enc",
+          "revision": "1.03",
+          "role": "normal",
+          "sha256": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e"
+        }
+      ]
+    },
+    {
+      "sha256": "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48",
+      "normal_sha256": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
+      "kernel_sha256": "36d0e3542a34a653250295f86d489d5e1e4f7931043351d856f27e57477d72ae",
+      "revision": "1.03",
+      "embedded_model": "BDR-UD03",
+      "components": [
+        {
+          "identity_key": "pioneer:8510:ID19:1.03:kernel",
+          "member": "components/S8510190.103.enc",
+          "revision": "1.03",
+          "role": "kernel",
+          "sha256": "36d0e3542a34a653250295f86d489d5e1e4f7931043351d856f27e57477d72ae"
+        },
+        {
+          "identity_key": "pioneer:8510:ID19:1.03:normal",
+          "member": "components/S8510191.103.enc",
+          "revision": "1.03",
+          "role": "normal",
+          "sha256": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560"
+        }
+      ]
+    },
+    {
+      "sha256": "28d02d1b180c0cfc8bd98bc217b891dede41a488b5052d4fad604f93150e1d6b",
+      "normal_sha256": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
+      "kernel_sha256": null,
+      "revision": "1.11",
+      "embedded_model": "BDR-UD04",
+      "components": [
+        {
+          "identity_key": "pioneer:8A10:GENERAL:1.11:normal",
+          "member": "components/S8A10001.111.enc",
+          "revision": "1.11",
+          "role": "normal",
+          "sha256": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6"
+        }
+      ]
+    },
+    {
+      "sha256": "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6",
+      "normal_sha256": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+      "kernel_sha256": "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83",
+      "revision": "1.14",
+      "embedded_model": "BDR-UD04",
+      "components": [
+        {
+          "identity_key": "pioneer:8A10:GENERAL:1.00:kernel",
+          "member": "components/S8A10000.100.enc",
+          "revision": "1.00",
+          "role": "kernel",
+          "sha256": "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83"
+        },
+        {
+          "identity_key": "pioneer:8A10:GENERAL:1.14:normal",
+          "member": "components/S8A10001.114.enc",
+          "revision": "1.14",
+          "role": "normal",
+          "sha256": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141"
+        }
+      ]
+    },
+    {
+      "sha256": "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+      "normal_sha256": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+      "kernel_sha256": "07e421c1d1853f11cf5e9a3b4c355949e1dc141f9cf152766b3d79ce5ad23e9f",
+      "revision": "HLE2",
+      "embedded_model": "SlimtypeEB1",
+      "components": [
+        {
+          "identity_key": "pioneer:8A10:GENERAL:HLE2:kernel",
+          "member": "components/S8A10000.HE2.enc",
+          "revision": "HLE2",
+          "role": "kernel",
+          "sha256": "07e421c1d1853f11cf5e9a3b4c355949e1dc141f9cf152766b3d79ce5ad23e9f"
+        },
+        {
+          "identity_key": "pioneer:8A10:GENERAL:HLE2:normal",
+          "member": "components/S8A10001.HE2.enc",
+          "revision": "HLE2",
+          "role": "normal",
+          "sha256": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2"
+        }
+      ]
+    },
+    {
+      "sha256": "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+      "normal_sha256": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509",
+      "kernel_sha256": "9091f155a979180db7da207df6b2b75b8a3b6cab8ca2e8107d5b9db1f0adfeef",
+      "revision": "1.10",
+      "embedded_model": "SBW-06D2X-U",
+      "components": [
+        {
+          "identity_key": "pioneer:8511:ID22:1.10:kernel",
+          "member": "components/S8511220.110.enc",
+          "revision": "1.10",
+          "role": "kernel",
+          "sha256": "9091f155a979180db7da207df6b2b75b8a3b6cab8ca2e8107d5b9db1f0adfeef"
+        },
+        {
+          "identity_key": "pioneer:8511:ID22:1.10:normal",
+          "member": "components/S8511221.110.enc",
+          "revision": "1.10",
+          "role": "normal",
+          "sha256": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509"
+        }
+      ]
+    },
+    {
+      "sha256": "ac3e20898808512e8b116b46e05a8da27c25e94f6aa87e7371434671b741ad3c",
+      "normal_sha256": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+      "kernel_sha256": null,
+      "revision": "1.14",
+      "embedded_model": "BDR-UD04",
+      "components": [
+        {
+          "identity_key": "pioneer:8A10:GENERAL:1.14:normal",
+          "member": "components/S8A10001.114.enc",
+          "revision": "1.14",
+          "role": "normal",
+          "sha256": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa"
+        }
+      ]
+    },
+    {
+      "sha256": "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8",
+      "normal_sha256": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8",
+      "kernel_sha256": "77432fcd9cf4d32e711458015e01c995ee780706d1f9cb4800ff77f4b371e224",
+      "revision": "1.14",
+      "embedded_model": "BDR-UD03",
+      "components": [
+        {
+          "identity_key": "pioneer:8511:GENERAL:1.14:kernel",
+          "member": "components/S8511000.114.enc",
+          "revision": "1.14",
+          "role": "kernel",
+          "sha256": "77432fcd9cf4d32e711458015e01c995ee780706d1f9cb4800ff77f4b371e224"
+        },
+        {
+          "identity_key": "pioneer:8511:GENERAL:1.14:normal",
+          "member": "components/S8511001.114.enc",
+          "revision": "1.14",
+          "role": "normal",
+          "sha256": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8"
+        }
+      ]
+    },
+    {
+      "sha256": "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038",
+      "normal_sha256": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001",
+      "kernel_sha256": "f7ae41dbb3940dcdac05de118226788942349dcdc51c928e9c6af3b2efe85ee7",
+      "revision": "1.10",
+      "embedded_model": "SBC-06D2X-U",
+      "components": [
+        {
+          "identity_key": "pioneer:8591:ID22:1.10:kernel",
+          "member": "components/S8591220.110.enc",
+          "revision": "1.10",
+          "role": "kernel",
+          "sha256": "f7ae41dbb3940dcdac05de118226788942349dcdc51c928e9c6af3b2efe85ee7"
+        },
+        {
+          "identity_key": "pioneer:8591:ID22:1.10:normal",
+          "member": "components/S8591221.110.enc",
+          "revision": "1.10",
+          "role": "normal",
+          "sha256": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001"
+        }
+      ]
+    }
+  ],
+  "graph": {
+    "format": "freemkv-crossflash-links",
+    "freemkv_flash": "0.15.1",
+    "future": {},
+    "links": {
+      "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84": [
+        "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48",
+        "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6",
+        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+        "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8",
+        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038"
+      ],
+      "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48": [
+        "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84",
+        "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6",
+        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+        "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8",
+        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038"
+      ],
+      "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6": [
+        "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84",
+        "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48",
+        "28d02d1b180c0cfc8bd98bc217b891dede41a488b5052d4fad604f93150e1d6b",
+        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+        "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8",
+        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038"
+      ],
+      "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990": [
+        "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84",
+        "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48",
+        "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6",
+        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+        "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8",
+        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038"
+      ],
+      "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c": [
+        "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84",
+        "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48",
+        "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6",
+        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+        "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8",
+        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038"
+      ],
+      "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8": [
+        "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84",
+        "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48",
+        "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6",
+        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038"
+      ],
+      "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038": [
+        "18b57472eeac46db8437ab4e3745035d463ee39b5fdca2f56b00a0959d049d84",
+        "202bd6f7991814bc5da1e1bb9556e91a26759316999145f5815a5e53d2425f48",
+        "349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6",
+        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+        "e1a3b5d5cea4b052dbc375910a9f66f5407bd298493f32be180c86fc49f347e8"
+      ]
+    },
+    "version": 2
+  }
+}

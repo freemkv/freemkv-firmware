@@ -1,0 +1,50 @@
+{
+  "scope": "Initial offline design proof, retained as historical evidence. See implementation-state.json for the subsequently implemented dev integration and its validation.",
+  "settings_proof": {
+    "command": "python3 internal/research/0.15.1-drive-identity-audit/settings_proof.py",
+    "passed": 14,
+    "transport": "in-memory"
+  },
+  "existing_startup_migration": {
+    "cwd": "../pioneer-optical",
+    "command": "cargo test --offline --features drive,envelope startup::migration:: -- --nocapture",
+    "passed": 9,
+    "failed": 0,
+    "source_version": "1.0.2",
+    "image_rs_sha256": "f0f5d00dbd070d57697a2a40547e1cabd84696b24e7c26cee90cc342c323f8d8",
+    "startup_rs_sha256": "4801d0d48f32b855e0ec8e59f86807d84237336a2517e8648d8714b16349fefd"
+  },
+  "hardware_counterfactual": {
+    "recognized_groups_before": 25,
+    "recognized_groups_after": 24,
+    "newly_equal_directed_pairs": 18,
+    "blocked_by_proof_settings_gate": 18,
+    "production_conversions_added": 0,
+    "evidence": "boundary-proof.json",
+    "limit": "Narrow phase recognition demonstrates policy separation, not a complete mechanism codec or production admission audit."
+  },
+  "corpus": {
+    "indexed_pioneer_normals_attempted": 719,
+    "decoded": 684,
+    "recognized_family": 525,
+    "decoded_unknown_family": 159,
+    "unsupported_envelope": 35,
+    "evidence": "optical-census.json"
+  },
+  "factory_records": {
+    "captures": 14,
+    "unique_a0": 7,
+    "tagged": 5,
+    "untagged_candidate": 1,
+    "unrecognized": 1,
+    "evidence": "identity-census.json",
+    "limit": "Per-unit records only; OEM packages cannot establish factory identity coverage."
+  },
+  "release_work_remaining": [
+    "Implement optical typed settings collection and two independent admission gates.",
+    "Audit complete directed production admission behavior and version the hardware scheme.",
+    "Implement and negatively test bounded factory identity fallback and shared UI/CLI rows.",
+    "Validate firmware-specific movement codecs before registering any conversion."
+  ],
+  "layout_policy": "Semantic identifiers are generic; locators and coordinated table/code transforms are firmware-layout-specific and guarded. Missing mappings block."
+}

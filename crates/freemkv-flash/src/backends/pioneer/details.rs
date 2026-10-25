@@ -47,12 +47,12 @@ fn identity_rows(dev: &mut ReadDevice<'_>, read: &InfoSoFar<'_>) -> Vec<Row> {
         with_device(dev, |d| d.parameters(&mut b).ok()).and_then(|n| production::parse(&b[..n]));
     rows.push(row(
         "product_code",
-        "Product code",
+        "Factory product code",
         &available(made.map(|p| p.product_code)),
     ));
     rows.push(row(
         "manufactured",
-        "Manufactured",
+        "Factory test date",
         &available(
             made.and_then(|p| p.manufactured)
                 .map(|d| format!("{:04}-{:02}-{:02}", d.year, d.month, d.day)),

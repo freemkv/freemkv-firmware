@@ -75,6 +75,17 @@ fn fixture_pair_class_with(
     xor_offsets: [u32; 2],
     tweak: impl FnOnce(&mut [u8]),
 ) -> Update {
+    fixture_pair_class_with_model(gated, marker, sat, xor_offsets, "PIONEER BDR-TEST", tweak)
+}
+
+fn fixture_pair_class_with_model(
+    gated: bool,
+    marker: u8,
+    sat: &[u8; 20],
+    xor_offsets: [u32; 2],
+    envelope_id: &str,
+    tweak: impl FnOnce(&mut [u8]),
+) -> Update {
     let mut kernel = vec![0; 0x10000];
     crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1000..0x1014].copy_from_slice(sat);
@@ -128,7 +139,7 @@ fn fixture_pair_class_with(
         &BuildInputs {
             kernel_image: &kernel,
             normal_image: &normal,
-            envelope_id: "PIONEER BDR-TEST",
+            envelope_id,
             normal_revision: "1.00",
             normal_date: "26/10/07",
             kernel: KernelBuild::from_seed(7),
@@ -1758,17 +1769,11 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
     };
     let message = crate::workflow::error_message(&error);
     assert!(
-        message.contains("underlying hardware for these firmwares is not compatible"),
+        message.contains("installed and selected firmware are for different hardware"),
         "{message}"
     );
-    assert!(
-        message.contains("Installed firmware: BDR-TEST."),
-        "{message}"
-    );
-    assert!(
-        message.contains("Selected firmware: BDR-OTHER."),
-        "{message}"
-    );
+    assert!(message.contains("Installed: BDR-TEST."), "{message}");
+    assert!(message.contains("Selected: BDR-OTHER."), "{message}");
     assert!(!message.contains(&installed.family().unwrap().to_string()));
     assert!(format!("{error:#}").contains(&installed.family().unwrap().to_string()));
     assert!(format!("{error:#}").contains(&target.family().unwrap().to_string()));
@@ -2114,7 +2119,9 @@ fn installed_compatibility_issue(installed: &[u8], target: &[u8]) -> crate::user
     let error = super::super::authorize_installed(plan, Some(installed))
         .err()
         .expect("installed compatibility must refuse this target");
-    assert!(format!("{error:#}").contains("required-Kernel tag"));
+    assert!(error
+        .chain()
+        .any(|cause| cause.is::<crate::backend::InstalledKernelMismatch>()));
     UserError::of(&UpdateFailure::before_write(
         "compatibility checks",
         explain(error, IssueCode::UnsupportedFirmware),
@@ -2129,19 +2136,110 @@ fn normal_only_installed_tag_mismatch_has_specific_guidance() {
     let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
     let installed = archive(&current, false);
     let issue = installed_compatibility_issue(&installed, target.normal_transfer());
-    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.id, "errors.installed_kernel_mismatch");
+    assert_eq!(
+        issue.arguments,
+        vec![
+            ("required", "ID72".to_string()),
+            ("installed", "GENERAL".to_string()),
+        ]
+    );
     assert_eq!(issue.consequence, Some("errors.update_blocked"));
     for language in Language::ALL {
-        assert!(issue.render(language).contains(localization::get(
-            language,
-            "errors.installed_firmware_mismatch"
-        )));
+        let rendered = issue.render(language);
+        assert!(!rendered.contains("errors.installed_kernel_mismatch"));
+        assert!(!rendered.contains("{required}") && !rendered.contains("{installed}"));
+        assert!(rendered.contains("ID72"));
+        assert!(rendered.contains("GENERAL"));
         assert!(issue
             .render(language)
             .contains(localization::get(language, "errors.update_blocked")));
     }
+    let english = issue.render(Language::En);
+    assert!(english.contains("updates Normal firmware only"));
+    assert!(english.contains("Normal update compatible with Kernel GENERAL"));
+    assert!(english.contains("package containing both Kernel and Normal"));
     let plan = FlashPlan::new(super::super::execute_plan(current.normal_transfer()).unwrap());
     assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
+
+    // A complete incoming pair may replace the installed Kernel generation.
+    let complete_target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    let plan =
+        FlashPlan::new(super::super::execute_plan(&archive(&complete_target, false)).unwrap());
+    assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
+}
+
+#[test]
+fn normal_only_tag_match_still_requires_matching_sat_and_model_headers() {
+    use crate::backend::{FlashPlan, UpdateFailure};
+    use crate::user_error::{explain, IssueCode, UserError};
+
+    let installed_pair = fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000");
+    let installed = archive(&installed_pair, false);
+    let installed_kernel = installed_pair.kernel_transfer();
+
+    let different_sat = fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000");
+    let different_model = fixture_pair_class_with_model(
+        false,
+        1,
+        b"SAT FFFEGENERAL 0000",
+        [0x100, 0x200],
+        "PIONEER BDR-OTHER",
+        |_| {},
+    );
+
+    let mut failures = Vec::new();
+    for (name, target) in [
+        (
+            "different SAT in the same family",
+            different_sat.normal_transfer(),
+        ),
+        ("different model", different_model.normal_transfer()),
+    ] {
+        if crate::backends::pioneer::flash_plan::component_kernel_tag(installed_kernel)
+            != crate::backends::pioneer::flash_plan::component_kernel_tag(target)
+        {
+            failures.push(format!("{name} fixture did not keep the Kernel tag equal"));
+            continue;
+        }
+        let Some(error) = super::super::authorize_installed(
+            FlashPlan::new(super::super::execute_plan(target).unwrap()),
+            Some(&installed),
+        )
+        .err() else {
+            failures.push(format!(
+                "{name} was accepted despite the installed header mismatch"
+            ));
+            continue;
+        };
+        if error.downcast_ref::<IssueCode>() != Some(&IssueCode::InstalledFirmwareMismatch) {
+            failures.push(format!(
+                "{name} lost the installed mismatch classification: {error:#}"
+            ));
+            continue;
+        }
+        if error
+            .downcast_ref::<crate::backend::InstalledKernelMismatch>()
+            .is_some()
+        {
+            failures.push(format!(
+                "{name} was incorrectly classified as a Kernel tag mismatch"
+            ));
+            continue;
+        }
+        let issue = UserError::of(&UpdateFailure::before_write(
+            "compatibility checks",
+            explain(error, IssueCode::UnsupportedFirmware),
+        ));
+        if issue.id != "errors.installed_firmware_mismatch"
+            || issue.consequence != Some("errors.update_blocked")
+        {
+            failures.push(format!(
+                "{name} lost its installed mismatch guidance: {issue:?}"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 #[test]
@@ -2153,7 +2251,7 @@ fn real_td05_installed_tag_mismatch_when_configured() {
     let current = std::fs::read(dir.join("current.tar")).unwrap();
     let target = std::fs::read(dir.join("corrected-target.tar")).unwrap();
     let issue = installed_compatibility_issue(&current, &target);
-    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.id, "errors.installed_kernel_mismatch");
     assert_eq!(issue.consequence, Some("errors.update_blocked"));
     let current_normal = std::fs::read(dir.join("current-1.bin")).unwrap();
     let plan = crate::backend::FlashPlan::new(super::super::execute_plan(&current_normal).unwrap());
