@@ -38,6 +38,28 @@
         "components/S8000711.120.enc"
       ],
       "limitation": "No failed flash or startup-setting write is present. This successful read operation does not validate the failing data-out path."
+    },
+    "da847a6a-abe5-4f59-8a2a-5468de706f37": {
+      "application": "0.14.5 Windows x86_64",
+      "installed": "ASUS BW-12D1S-U 1.20 SAT8000 ID71",
+      "target": "BDR-PR1MA 1.75 SAT8000 ID86",
+      "operation": "successful verified Kernel+Normal crossflash",
+      "startup_setting": {
+        "original": "FFFF",
+        "target": "FF01",
+        "write_cdb": "3B 02 A0 00 01 3E 00 00 02 00",
+        "write_bytes": 2,
+        "write_ms": 5,
+        "readback": "FF01 verified"
+      },
+      "verification": {
+        "target_started": true,
+        "Kernel": "Matched",
+        "Normal": "Matched",
+        "fully_verified": true,
+        "completed_passes": 1
+      },
+      "interpretation": "Same application session as the successful ASUS backup. Identical CDB and two-byte FF01 payload succeed on this drive. This disproves a universal failure of two-byte A0 writes in this app/version; it does not identify the PR1AME connection or firmware-specific cause."
     }
   },
   "firmware_evidence": {
@@ -97,5 +119,6 @@
     "windows_transport": "Windows MSVC target check and clippy passed; no Windows runtime available",
     "actual_asus_backup_check": "passed without device access",
     "published": false
-  }
+  },
+  "disposition": "Owner deferred the unresolved PR1AME write issue. Preserve diagnostics and confirmed validation/error fixes on dev; no speculative transport change and no 0.15.2 release tonight."
 }
