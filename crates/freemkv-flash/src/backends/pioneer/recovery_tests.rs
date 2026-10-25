@@ -1758,17 +1758,11 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
     };
     let message = crate::workflow::error_message(&error);
     assert!(
-        message.contains("underlying hardware for these firmwares is not compatible"),
+        message.contains("installed and selected firmware are for different hardware"),
         "{message}"
     );
-    assert!(
-        message.contains("Installed firmware: BDR-TEST."),
-        "{message}"
-    );
-    assert!(
-        message.contains("Selected firmware: BDR-OTHER."),
-        "{message}"
-    );
+    assert!(message.contains("Installed: BDR-TEST."), "{message}");
+    assert!(message.contains("Selected: BDR-OTHER."), "{message}");
     assert!(!message.contains(&installed.family().unwrap().to_string()));
     assert!(format!("{error:#}").contains(&installed.family().unwrap().to_string()));
     assert!(format!("{error:#}").contains(&target.family().unwrap().to_string()));
@@ -2114,7 +2108,9 @@ fn installed_compatibility_issue(installed: &[u8], target: &[u8]) -> crate::user
     let error = super::super::authorize_installed(plan, Some(installed))
         .err()
         .expect("installed compatibility must refuse this target");
-    assert!(format!("{error:#}").contains("required-Kernel tag"));
+    assert!(error
+        .chain()
+        .any(|cause| cause.is::<crate::backend::InstalledKernelMismatch>()));
     UserError::of(&UpdateFailure::before_write(
         "compatibility checks",
         explain(error, IssueCode::UnsupportedFirmware),
@@ -2129,18 +2125,36 @@ fn normal_only_installed_tag_mismatch_has_specific_guidance() {
     let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
     let installed = archive(&current, false);
     let issue = installed_compatibility_issue(&installed, target.normal_transfer());
-    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.id, "errors.installed_kernel_mismatch");
+    assert_eq!(
+        issue.arguments,
+        vec![
+            ("required", "ID72".to_string()),
+            ("installed", "GENERAL".to_string()),
+        ]
+    );
     assert_eq!(issue.consequence, Some("errors.update_blocked"));
     for language in Language::ALL {
-        assert!(issue.render(language).contains(localization::get(
-            language,
-            "errors.installed_firmware_mismatch"
-        )));
+        let rendered = issue.render(language);
+        assert!(!rendered.contains("errors.installed_kernel_mismatch"));
+        assert!(!rendered.contains("{required}") && !rendered.contains("{installed}"));
+        assert!(rendered.contains("ID72"));
+        assert!(rendered.contains("GENERAL"));
         assert!(issue
             .render(language)
             .contains(localization::get(language, "errors.update_blocked")));
     }
+    let english = issue.render(Language::En);
+    assert!(english.contains("updates Normal firmware only"));
+    assert!(english.contains("Normal update compatible with Kernel GENERAL"));
+    assert!(english.contains("package containing both Kernel and Normal"));
     let plan = FlashPlan::new(super::super::execute_plan(current.normal_transfer()).unwrap());
+    assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
+
+    // A complete incoming pair may replace the installed Kernel generation.
+    let complete_target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    let plan =
+        FlashPlan::new(super::super::execute_plan(&archive(&complete_target, false)).unwrap());
     assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
 }
 
@@ -2153,7 +2167,7 @@ fn real_td05_installed_tag_mismatch_when_configured() {
     let current = std::fs::read(dir.join("current.tar")).unwrap();
     let target = std::fs::read(dir.join("corrected-target.tar")).unwrap();
     let issue = installed_compatibility_issue(&current, &target);
-    assert_eq!(issue.id, "errors.installed_firmware_mismatch");
+    assert_eq!(issue.id, "errors.installed_kernel_mismatch");
     assert_eq!(issue.consequence, Some("errors.update_blocked"));
     let current_normal = std::fs::read(dir.join("current-1.bin")).unwrap();
     let plan = crate::backend::FlashPlan::new(super::super::execute_plan(&current_normal).unwrap());

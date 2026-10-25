@@ -3033,7 +3033,7 @@ fn blocked_update_shows_actionable_reason_and_records_no_write() {
         completed_stages: Vec::new(),
     }))
     .unwrap();
-    let reason = "The underlying hardware for these firmwares is not compatible. Installed firmware: PP100. Target firmware: BDX-PR1MLA.";
+    let reason = "The installed and selected firmware are for different hardware. Installed: PP100. Selected: BDX-PR1MLA.";
     tx.send(Msg::UserIssue(workflow::UserError {
         id: "errors.hardware_mismatch",
         arguments: vec![

@@ -197,6 +197,18 @@ impl UserError {
                     .to_string(),
             ));
             "errors.hardware_mismatch"
+        } else if let Some(mismatch) =
+            error.downcast_ref::<crate::backend::InstalledKernelMismatch>()
+        {
+            arguments.push((
+                "required",
+                crate::style::printable(&mismatch.required).to_string(),
+            ));
+            arguments.push((
+                "installed",
+                crate::style::printable(&mismatch.installed).to_string(),
+            ));
+            "errors.installed_kernel_mismatch"
         } else if error.is::<crate::backend::CorruptFirmware>() {
             "errors.firmware_corrupt"
         } else if error.is::<crate::backend::UnsupportedFamilyOverride>() {

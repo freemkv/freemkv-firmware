@@ -264,7 +264,7 @@ fn a_different_family_is_refused_at_the_plan() {
     for installed in [&drive, &descriptor_only] {
         let error = decide_plan(&drive.product, installed, &target).unwrap_err();
         let message = crate::workflow::error_message(&error);
-        assert!(message.contains("underlying hardware for these firmwares is not compatible"));
+        assert!(message.contains("installed and selected firmware are for different hardware"));
         assert!(message.contains("BU40N"));
         assert!(message.contains("WH16NS58"));
         assert!(!message.contains(BU3_FAMILY));

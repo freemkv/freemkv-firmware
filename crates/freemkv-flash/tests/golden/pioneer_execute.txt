@@ -294,7 +294,7 @@ IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
 
 === Pioneer execute: Normal for another Kernel tag, refused after the backup ===
-result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.installed_firmware_mismatch: malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
+result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.installed_firmware_mismatch: Normal requires Kernel ID58, but the drive has Kernel GENERAL
 --- text (6) ---
 Pioneer backup identity: drive="PIONEER BD-RW   BDR-UD04" revision="1.14" hardware="SAT 8A10"
 Pioneer firmware read probe: freemkv-flash=<VERSION> os=<OS> arch=<ARCH> device=UD04 firmware replay; no hardware
