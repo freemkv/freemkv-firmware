@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Pembaruan ini perlu mengubah pengaturan drive, tetapi konversi tersebut belum divalidasi. Pilih pembaruan dengan konversi pengaturan yang telah divalidasi.",
     "errors.firmware_corrupt": "File firmware ini rusak atau tidak lengkap. Unduh salinan OEM baru dan coba lagi.",
-    "errors.startup_setting_restored": "Pengaturan awal mulai drive telah dipulihkan dan diverifikasi. Simpan laporan diagnostik untuk mendapatkan bantuan sebelum mencoba lagi.",
-    "errors.startup_setting_uncertain": "Pengaturan awal mulai drive tidak dapat dipulihkan atau diverifikasi. Simpan laporan diagnostik dan mintalah pemeriksaan drive sebelum mencoba lagi.",
+    "errors.startup_setting_restored": "Pengaturan awal mulai drive telah dipulihkan dan diverifikasi. Perintah pembaruan firmware dan data firmware tidak dikirim. Simpan laporan diagnostik jika kesalahan terjadi lagi.",
+    "errors.startup_setting_uncertain": "Pengaturan awal mulai drive tidak dapat dipulihkan atau diverifikasi. Perintah pembaruan firmware dan data firmware tidak dikirim. Biarkan drive tetap terhubung, simpan laporan diagnostik, dan periksa pengaturan mulai sebelum mencoba lagi. Pengaturan mulai mungkin masih berubah.",
     "errors.backup_required": "Sebelum memperbarui, diperlukan cadangan lengkap firmware yang terpasang di drive ini. Buat atau pilih cadangan lengkap dari drive ini, lalu coba lagi.",
     "confirm.update_title": "Perbarui drive ini?",
     "confirm.firmware": "Firmware: {filename}",

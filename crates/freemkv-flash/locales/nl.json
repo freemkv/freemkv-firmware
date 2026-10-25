@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Deze update moet de instellingen van de drive wijzigen, maar die omzetting is niet gevalideerd. Kies een update met een gevalideerde omzetting van instellingen.",
     "errors.firmware_corrupt": "Dit firmwarebestand is beschadigd of onvolledig. Download een nieuwe OEM-kopie en probeer het opnieuw.",
-    "errors.startup_setting_restored": "De oorspronkelijke opstartinstelling van het station is hersteld en gecontroleerd. Sla een diagnostisch rapport op om hulp te krijgen voordat u het opnieuw probeert.",
-    "errors.startup_setting_uncertain": "De oorspronkelijke opstartinstelling van het station kon niet worden hersteld of gecontroleerd. Sla een diagnostisch rapport op en laat het station controleren voordat u het opnieuw probeert.",
+    "errors.startup_setting_restored": "De oorspronkelijke opstartinstelling van het station is hersteld en gecontroleerd. De firmware-updateopdracht en firmwaregegevens zijn niet verzonden. Sla een diagnoserapport op als de fout terugkomt.",
+    "errors.startup_setting_uncertain": "De oorspronkelijke opstartinstelling van het station kon niet worden hersteld of gecontroleerd. De firmware-updateopdracht en firmwaregegevens zijn niet verzonden. Houd het station aangesloten, sla een diagnoserapport op en laat de opstartinstelling controleren voordat u het opnieuw probeert. De opstartinstelling kan toch zijn gewijzigd.",
     "errors.backup_required": "Voor deze update is een volledige back-up nodig van de firmware op deze drive. Maak of selecteer een volledige back-up van deze drive en probeer het opnieuw.",
     "confirm.update_title": "Dit station bijwerken?",
     "confirm.firmware": "Firmware: {filename}",

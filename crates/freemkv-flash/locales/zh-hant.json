@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "此更新需要變更光碟機設定，但該設定轉換尚未通過驗證。請選擇設定轉換已驗證的更新。",
     "errors.firmware_corrupt": "此韌體檔案已損壞或不完整。請重新下載 OEM 檔案後再試。",
-    "errors.startup_setting_restored": "已還原並驗證光碟機原本的啟動設定。請儲存診斷報告並尋求協助，然後再重試。",
-    "errors.startup_setting_uncertain": "無法還原或驗證光碟機原本的啟動設定。請儲存診斷報告，並請專業人員檢查光碟機後再重試。",
+    "errors.startup_setting_restored": "光碟機原本的啟動設定已還原並驗證。韌體更新命令與韌體資料均未傳送。如果錯誤再次發生，請儲存診斷報告。",
+    "errors.startup_setting_uncertain": "無法還原或驗證光碟機原本的啟動設定。韌體更新命令與韌體資料均未傳送。請保持光碟機連線、儲存診斷報告，並在重試前檢查啟動設定。啟動設定仍可能已變更。",
     "errors.backup_required": "更新前需要備份此光碟機上安裝的完整韌體。請建立或選擇此光碟機的完整備份，然後再試一次。",
     "confirm.update_title": "更新此光碟機？",
     "confirm.firmware": "韌體：{filename}",

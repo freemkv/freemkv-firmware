@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Ez a frissítés módosítaná a meghajtó beállításait, de ezt az átalakítást nem ellenőrizték. Válasszon ellenőrzött beállítás-átalakítású frissítést.",
     "errors.firmware_corrupt": "Ez a firmware-fájl sérült vagy hiányos. Töltsön le egy új OEM-példányt, és próbálja újra.",
-    "errors.startup_setting_restored": "A meghajtó eredeti indítási beállítása vissza lett állítva és ellenőrizve lett. Újabb próbálkozás előtt mentse el a diagnosztikai jelentést, és kérjen segítséget.",
-    "errors.startup_setting_uncertain": "A meghajtó eredeti indítási beállítását nem sikerült visszaállítani vagy ellenőrizni. Mentse el a diagnosztikai jelentést, és újabb próbálkozás előtt ellenőriztesse a meghajtót.",
+    "errors.startup_setting_restored": "A meghajtó eredeti indítási beállítása vissza lett állítva és ellenőrizve. A firmware-frissítési parancs és a firmware-adatok nem lettek elküldve. Ha a hiba megismétlődik, mentsen diagnosztikai jelentést.",
+    "errors.startup_setting_uncertain": "A meghajtó eredeti indítási beállítását nem sikerült visszaállítani vagy ellenőrizni. A firmware-frissítési parancs és a firmware-adatok nem lettek elküldve. Hagyja csatlakoztatva a meghajtót, mentsen diagnosztikai jelentést, és újrapróbálkozás előtt ellenőriztesse ezt a beállítást. Az indítási beállítás ettől még megváltozhatott.",
     "errors.backup_required": "Frissítés előtt teljes biztonsági másolat szükséges a meghajtóra telepített firmware-ről. Készítsen vagy válasszon a meghajtóról készült teljes másolatot, majd próbálja újra.",
     "confirm.update_title": "Frissíti ezt a meghajtót?",
     "confirm.firmware": "Firmware: {filename}",

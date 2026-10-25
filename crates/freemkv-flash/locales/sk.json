@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Táto aktualizácia musí zmeniť nastavenia jednotky, ale tento prevod nebol overený. Vyberte aktualizáciu s overeným prevodom nastavení.",
     "errors.firmware_corrupt": "Tento súbor firmvéru je poškodený alebo neúplný. Stiahnite novú kópiu OEM a skúste to znova.",
-    "errors.startup_setting_restored": "Pôvodné nastavenie spúšťania jednotky bolo obnovené a overené. Pred ďalším pokusom uložte diagnostickú správu a požiadajte o pomoc.",
-    "errors.startup_setting_uncertain": "Pôvodné nastavenie spúšťania jednotky sa nepodarilo obnoviť alebo overiť. Uložte diagnostickú správu a pred ďalším pokusom nechajte jednotku skontrolovať.",
+    "errors.startup_setting_restored": "Pôvodné nastavenie spúšťania jednotky bolo obnovené a overené. Príkaz na aktualizáciu firmvéru ani údaje firmvéru sa neodoslali. Ak sa chyba zopakuje, uložte diagnostickú správu.",
+    "errors.startup_setting_uncertain": "Pôvodné nastavenie spúšťania jednotky sa nepodarilo obnoviť ani overiť. Príkaz na aktualizáciu firmvéru ani údaje firmvéru sa neodoslali. Nechajte jednotku pripojenú, uložte diagnostickú správu a pred ďalším pokusom dajte nastavenie skontrolovať. Nastavenie spúšťania sa mohlo napriek tomu zmeniť.",
     "errors.backup_required": "Pred aktualizáciou je potrebná úplná záloha firmvéru nainštalovaného v tejto jednotke. Vytvorte alebo vyberte úplnú zálohu z tejto jednotky a skúste to znova.",
     "confirm.update_title": "Aktualizovať túto mechaniku?",
     "confirm.firmware": "Firmvér: {filename}",

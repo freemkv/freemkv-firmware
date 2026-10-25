@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Bu güncellemenin sürücü ayarlarını değiştirmesi gerekiyor, ancak bu dönüşüm doğrulanmadı. Ayar dönüşümü doğrulanmış bir güncelleme seçin.",
     "errors.firmware_corrupt": "Bu aygıt yazılımı dosyası bozuk veya eksik. Yeni bir OEM kopyası indirip tekrar deneyin.",
-    "errors.startup_setting_restored": "Sürücünün özgün başlangıç ayarı geri yüklendi ve doğrulandı. Yeniden denemeden önce yardım almak için bir tanılama raporu kaydedin.",
-    "errors.startup_setting_uncertain": "Sürücünün özgün başlangıç ayarı geri yüklenemedi veya doğrulanamadı. Bir tanılama raporu kaydedin ve yeniden denemeden önce sürücüyü kontrol ettirin.",
+    "errors.startup_setting_restored": "Sürücünün özgün başlatma ayarı geri yüklendi ve doğrulandı. Ürün yazılımı güncelleme komutu ve ürün yazılımı verileri gönderilmedi. Hata tekrarlanırsa tanılama raporu kaydedin.",
+    "errors.startup_setting_uncertain": "Sürücünün özgün başlatma ayarı geri yüklenemedi veya doğrulanamadı. Ürün yazılımı güncelleme komutu ve ürün yazılımı verileri gönderilmedi. Sürücüyü bağlı tutun, tanılama raporu kaydedin ve yeniden denemeden önce başlatma ayarını kontrol ettirin. Başlatma ayarı yine de değişmiş olabilir.",
     "errors.backup_required": "Güncellemeden önce bu sürücüde yüklü aygıt yazılımının tam yedeği gerekir. Bu sürücüden tam bir yedek oluşturun veya seçin ve tekrar deneyin.",
     "confirm.update_title": "Bu sürücü güncellensin mi?",
     "confirm.firmware": "Aygıt yazılımı: {filename}",

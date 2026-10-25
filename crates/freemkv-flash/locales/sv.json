@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Den här uppdateringen måste ändra enhetens inställningar, men den ändringen har inte validerats. Välj en uppdatering med en validerad inställningskonvertering.",
     "errors.firmware_corrupt": "Den här firmwarefilen är skadad eller ofullständig. Hämta en ny OEM-kopia och försök igen.",
-    "errors.startup_setting_restored": "Enhetens ursprungliga startinställning återställdes och verifierades. Spara en diagnostikrapport för att få hjälp innan du försöker igen.",
-    "errors.startup_setting_uncertain": "Enhetens ursprungliga startinställning kunde inte återställas eller verifieras. Spara en diagnostikrapport och få enheten kontrollerad innan du försöker igen.",
+    "errors.startup_setting_restored": "Enhetens ursprungliga startinställning återställdes och verifierades. Kommandot för uppdatering av den fasta programvaran och dess data skickades inte. Spara en diagnostikrapport om felet återkommer.",
+    "errors.startup_setting_uncertain": "Enhetens ursprungliga startinställning kunde inte återställas eller verifieras. Kommandot för uppdatering av den fasta programvaran och dess data skickades inte. Låt enheten vara ansluten, spara en diagnostikrapport och kontrollera startinställningen innan du försöker igen. Startinställningen kan ändå ha ändrats.",
     "errors.backup_required": "En fullständig säkerhetskopia av den fasta programvara som är installerad på enheten krävs före uppdateringen. Skapa eller välj en fullständig säkerhetskopia från den här enheten och försök igen.",
     "confirm.update_title": "Uppdatera den här enheten?",
     "confirm.firmware": "Fast programvara: {filename}",

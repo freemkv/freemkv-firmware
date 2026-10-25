@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Esta atualização precisa alterar as configurações da unidade, mas essa conversão não foi validada. Escolha uma atualização com conversão de configurações validada.",
     "errors.firmware_corrupt": "Este arquivo de firmware está corrompido ou incompleto. Baixe uma nova cópia OEM e tente novamente.",
-    "errors.startup_setting_restored": "A configuração original de inicialização da unidade foi restaurada e verificada. Salve um relatório de diagnóstico para obter ajuda antes de tentar novamente.",
-    "errors.startup_setting_uncertain": "Não foi possível restaurar ou verificar a configuração original de inicialização da unidade. Salve um relatório de diagnóstico e solicite uma verificação da unidade antes de tentar novamente.",
+    "errors.startup_setting_restored": "A configuração original de inicialização da unidade foi restaurada e verificada. O comando de atualização do firmware e os dados do firmware não foram enviados. Salve um relatório de diagnóstico se o erro ocorrer novamente.",
+    "errors.startup_setting_uncertain": "Não foi possível restaurar ou verificar a configuração original de inicialização da unidade. O comando de atualização do firmware e os dados do firmware não foram enviados. Mantenha a unidade conectada, salve um relatório de diagnóstico e solicite a verificação dessa configuração antes de tentar novamente. Ainda assim, a configuração de inicialização pode ter sido alterada.",
     "errors.backup_required": "Antes da atualização, é necessário fazer um backup completo do firmware instalado nesta unidade. Crie ou selecione um backup completo desta unidade e tente novamente.",
     "confirm.update_title": "Atualizar esta unidade?",
     "confirm.firmware": "Firmware: {filename}",

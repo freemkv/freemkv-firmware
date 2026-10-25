@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "此更新需要更改驱动器设置，但该设置转换尚未通过验证。请选择设置转换已验证的更新。",
     "errors.firmware_corrupt": "此固件文件已损坏或不完整。请重新下载 OEM 文件后重试。",
-    "errors.startup_setting_restored": "已恢复并验证光驱原来的启动设置。请保存诊断报告并寻求帮助，然后再重试。",
-    "errors.startup_setting_uncertain": "无法恢复或验证光驱原来的启动设置。请保存诊断报告，并请专业人员检查光驱后再重试。",
+    "errors.startup_setting_restored": "光驱原来的启动设置已还原并验证。固件更新命令和固件数据均未发送。如果错误再次发生，请保存诊断报告。",
+    "errors.startup_setting_uncertain": "无法还原或验证光驱原来的启动设置。固件更新命令和固件数据均未发送。请保持光驱连接，保存诊断报告，并在重试前检查启动设置。启动设置仍可能已更改。",
     "errors.backup_required": "更新前需要备份此驱动器上安装的完整固件。请创建或选择此驱动器的完整备份，然后重试。",
     "confirm.update_title": "更新此光驱？",
     "confirm.firmware": "固件：{filename}",

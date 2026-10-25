@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Tämä päivitys edellyttää aseman asetusten muuttamista, mutta muutosta ei ole validoitu. Valitse päivitys, jonka asetusten muuntaminen on validoitu.",
     "errors.firmware_corrupt": "Tämä laiteohjelmistotiedosto on vioittunut tai puutteellinen. Lataa uusi OEM-kopio ja yritä uudelleen.",
-    "errors.startup_setting_restored": "Aseman alkuperäinen käynnistysasetus palautettiin ja vahvistettiin. Tallenna diagnostiikkaraportti saadaksesi apua ennen uutta yritystä.",
-    "errors.startup_setting_uncertain": "Aseman alkuperäistä käynnistysasetusta ei voitu palauttaa tai vahvistaa. Tallenna diagnostiikkaraportti ja tarkistuta asema ennen uutta yritystä.",
+    "errors.startup_setting_restored": "Aseman alkuperäinen käynnistysasetus palautettiin ja varmistettiin. Laiteohjelmiston päivityskomentoa tai laiteohjelmistotietoja ei lähetetty. Tallenna diagnostiikkaraportti, jos virhe toistuu.",
+    "errors.startup_setting_uncertain": "Aseman alkuperäistä käynnistysasetusta ei voitu palauttaa tai varmistaa. Laiteohjelmiston päivityskomentoa tai laiteohjelmistotietoja ei lähetetty. Pidä asema liitettynä, tallenna diagnostiikkaraportti ja tarkistuta käynnistysasetus ennen uutta yritystä. Käynnistysasetus on silti saattanut muuttua.",
     "errors.backup_required": "Ennen päivitystä tarvitaan täydellinen varmuuskopio tähän asemaan asennetusta laiteohjelmistosta. Luo tai valitse tästä asemasta tehty täydellinen varmuuskopio ja yritä uudelleen.",
     "confirm.update_title": "Päivitetäänkö tämä asema?",
     "confirm.firmware": "Laiteohjelmisto: {filename}",

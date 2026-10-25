@@ -869,14 +869,29 @@ fn startup_only_failures_report_blocked_with_truthful_rollback_guidance() {
         ));
         let guidance = UserError::of(&error);
         assert_eq!(guidance.id, expected);
-        assert_eq!(guidance.consequence, Some("errors.update_blocked"));
+        assert_eq!(
+            guidance.consequence,
+            (expected == "errors.unexpected").then_some("errors.update_blocked")
+        );
         for language in [Language::En, Language::De] {
             let rendered = guidance.render(language);
             assert!(!rendered.contains("A0"));
             assert!(!rendered.contains("preflight refused"));
             assert!(!rendered.contains("errors."));
             if language == Language::En {
-                assert!(rendered.contains("No firmware was written"));
+                if expected == "errors.startup_setting_uncertain" {
+                    assert!(
+                        rendered.contains("The firmware update command and payload were not sent")
+                    );
+                    assert!(rendered.contains("could not be restored or verified"));
+                    assert!(!rendered.contains("No firmware was written"));
+                } else if expected == "errors.startup_setting_restored" {
+                    assert!(
+                        rendered.contains("The firmware update command and payload were not sent")
+                    );
+                } else {
+                    assert!(rendered.contains("No firmware was written"));
+                }
                 assert!(!rendered.contains("waiting for an update"));
                 assert!(!rendered.contains("Temporary firmware"));
             }
@@ -958,6 +973,67 @@ fn failed_a0_change_and_restore_never_attempt_update_commands() {
         crate::user_error::UserError::of(&error).id,
         "errors.startup_setting_uncertain"
     );
+    let rendered = crate::workflow::user_error(&error).render(crate::localization::Language::En);
+    assert!(rendered.contains("The firmware update command and payload were not sent"));
+    assert!(rendered.contains("startup setting may still have changed"));
+    assert!(rendered.contains("Keep the drive connected"));
+    assert!(!rendered.contains("asked to start an update"));
+    assert!(!rendered.contains("No firmware was written"));
+    for language in crate::localization::Language::ALL {
+        let localized = crate::workflow::user_error(&error).render(language);
+        assert!(!localized.is_empty(), "{language:?}");
+        assert!(!localized.contains("errors."), "{language:?}: {localized}");
+    }
+}
+
+#[test]
+fn startup_setting_cause_outranks_a_conflicting_outer_entry_wrapper() {
+    use crate::{
+        backend::{UpdateFailure, UpdateProgress},
+        localization::Language,
+        user_error::{IssueCode, UserError},
+    };
+    let error = anyhow!("startup parameter rollback could not be verified")
+        .context(IssueCode::StartupSettingUncertain)
+        .context(UpdateFailure {
+            phase: "legacy startup setting wrapper".into(),
+            write_started: true,
+            progress: UpdateProgress::EntryAttempted,
+            payload_bytes_accepted: Some(0),
+            temporary_firmware: false,
+            completed_stages: vec![],
+        });
+    let issue = UserError::of(&error);
+    assert_eq!(issue.id, "errors.startup_setting_uncertain");
+    assert_eq!(issue.consequence, None);
+    let rendered = issue.render(Language::En);
+    assert!(rendered.contains("startup setting may still have changed"));
+    assert!(rendered.contains("update command and payload were not sent"));
+    assert!(!rendered.contains("asked to start an update"));
+}
+
+#[test]
+fn startup_setting_label_does_not_hide_payload_uncertainty() {
+    use crate::{
+        backend::{UpdateFailure, UpdateProgress},
+        localization::Language,
+        user_error::{IssueCode, UserError},
+    };
+    let error = anyhow!("payload transfer may have changed firmware")
+        .context(IssueCode::StartupSettingUncertain)
+        .context(UpdateFailure {
+            phase: "firmware transfer".into(),
+            write_started: true,
+            progress: UpdateProgress::PayloadAttempted,
+            payload_bytes_accepted: Some(0),
+            temporary_firmware: false,
+            completed_stages: vec![],
+        });
+    let issue = UserError::of(&error);
+    assert_eq!(issue.id, "errors.update_uncertain");
+    assert_eq!(issue.consequence, None);
+    let rendered = issue.render(Language::En);
+    assert!(rendered.contains("Firmware may have been written"));
 }
 
 #[test]

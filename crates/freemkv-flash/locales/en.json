@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "This update needs to change drive settings, but that settings conversion has not been validated. Choose an update with a validated settings conversion.",
     "errors.firmware_corrupt": "This firmware file is corrupt or incomplete. Download a fresh OEM copy and try again.",
-    "errors.startup_setting_restored": "The original drive startup setting was restored and verified. Save a diagnostic report for help before trying again.",
-    "errors.startup_setting_uncertain": "The original drive startup setting could not be restored or verified. Save a diagnostic report and have the drive checked before trying again.",
+    "errors.startup_setting_restored": "The drive’s original startup setting was restored and verified. The firmware update command and payload were not sent. Save a diagnostic report if the failure repeats.",
+    "errors.startup_setting_uncertain": "The drive’s original startup setting could not be restored or verified. The firmware update command and payload were not sent. Keep the drive connected; save a diagnostic report and have the startup setting checked before retrying. The startup setting may still have changed.",
     "errors.backup_required": "A complete backup of this drive’s installed firmware is required before updating. Create or select a complete backup from this drive, then try again.",
     "confirm.update_title": "Update this drive?",
     "confirm.firmware": "Firmware: {filename}",
