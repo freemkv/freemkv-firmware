@@ -1,6 +1,7 @@
 {
   "language_name": "Türkçe",
   "messages": {
+    "errors.settings_unresolved": "Bu güncelleme için ayar uyumluluğu doğrulanmadı. Desteklenen bir aygıt yazılımı seçin.",
     "errors.firmware_corrupt": "Bu aygıt yazılımı dosyası bozuk veya eksik. Yeni bir OEM kopyası indirip tekrar deneyin.",
     "errors.startup_setting_restored": "Sürücünün özgün başlangıç ayarı geri yüklendi ve doğrulandı. Yeniden denemeden önce yardım almak için bir tanılama raporu kaydedin.",
     "errors.startup_setting_uncertain": "Sürücünün özgün başlangıç ayarı geri yüklenemedi veya doğrulanamadı. Bir tanılama raporu kaydedin ve yeniden denemeden önce sürücüyü kontrol ettirin.",

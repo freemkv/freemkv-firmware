@@ -1,6 +1,7 @@
 {
   "language_name": "한국어",
   "messages": {
+    "errors.settings_unresolved": "이 업데이트에 대한 설정 호환성이 검증되지 않았습니다. 지원되는 펌웨어를 선택하세요.",
     "errors.firmware_corrupt": "이 펌웨어 파일은 손상되었거나 불완전합니다. 새 OEM 파일을 다운로드한 후 다시 시도하세요.",
     "errors.startup_setting_restored": "드라이브의 원래 시작 설정이 복원되고 확인되었습니다. 다시 시도하기 전에 진단 보고서를 저장하고 도움을 받으세요.",
     "errors.startup_setting_uncertain": "드라이브의 원래 시작 설정을 복원하거나 확인할 수 없었습니다. 진단 보고서를 저장하고 다시 시도하기 전에 드라이브 점검을 받으세요.",

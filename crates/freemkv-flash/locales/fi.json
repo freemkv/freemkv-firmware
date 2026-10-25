@@ -1,6 +1,7 @@
 {
   "language_name": "Suomi",
   "messages": {
+    "errors.settings_unresolved": "Asetusten yhteensopivuutta ei ole vahvistettu tälle päivitykselle. Valitse tuettu laiteohjelmisto.",
     "errors.firmware_corrupt": "Tämä laiteohjelmistotiedosto on vioittunut tai puutteellinen. Lataa uusi OEM-kopio ja yritä uudelleen.",
     "errors.startup_setting_restored": "Aseman alkuperäinen käynnistysasetus palautettiin ja vahvistettiin. Tallenna diagnostiikkaraportti saadaksesi apua ennen uutta yritystä.",
     "errors.startup_setting_uncertain": "Aseman alkuperäistä käynnistysasetusta ei voitu palauttaa tai vahvistaa. Tallenna diagnostiikkaraportti ja tarkistuta asema ennen uutta yritystä.",

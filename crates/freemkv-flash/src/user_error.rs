@@ -50,6 +50,8 @@ define_issue_codes! {
     AlreadyModified => "errors.already_modified",
     /// This application cannot prepare the requested update from this firmware.
     UnsupportedFirmware => "errors.unsupported_firmware",
+    /// A known settings adaptation has not been validated for this transition.
+    SettingsUnresolved => "errors.settings_unresolved",
     /// The firmware's hardware differs; no display identity was available.
     IncompatibleFirmware => "errors.incompatible_firmware",
     /// A valid selected update does not pair with the installed firmware.

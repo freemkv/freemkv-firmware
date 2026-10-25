@@ -87,8 +87,8 @@
   "integration": {
     "application_base": "0cffda3",
     "application_branch": "feature/maintenance-0151",
-    "optical_revision": "07e9b8eee03c26b045f7639dd076ae0f67e6a7d5",
-    "optical_version": "1.2.0",
+    "optical_revision": "47e62cc565e77150a74b7e0445914535ef8804b9",
+    "optical_version": "1.2.1",
     "local_override": false
   }
 }

@@ -1,6 +1,7 @@
 {
   "language_name": "Dansk",
   "messages": {
+    "errors.settings_unresolved": "Indstillingernes kompatibilitet er ikke valideret for denne opdatering. Vælg understøttet firmware.",
     "errors.firmware_corrupt": "Denne firmwarefil er beskadiget eller ufuldstændig. Download en ny OEM-kopi, og prøv igen.",
     "errors.startup_setting_restored": "Drevets oprindelige opstartsindstilling blev gendannet og bekræftet. Gem en diagnoserapport for at få hjælp, før du prøver igen.",
     "errors.startup_setting_uncertain": "Drevets oprindelige opstartsindstilling kunne ikke gendannes eller bekræftes. Gem en diagnoserapport, og få drevet kontrolleret, før du prøver igen.",

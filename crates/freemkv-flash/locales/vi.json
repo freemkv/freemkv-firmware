@@ -1,6 +1,7 @@
 {
   "language_name": "Tiếng Việt",
   "messages": {
+    "errors.settings_unresolved": "Khả năng tương thích của cài đặt chưa được xác thực cho bản cập nhật này. Hãy chọn firmware được hỗ trợ.",
     "errors.firmware_corrupt": "Tệp firmware này bị hỏng hoặc không đầy đủ. Hãy tải xuống bản OEM mới rồi thử lại.",
     "errors.startup_setting_restored": "Cài đặt khởi động ban đầu của ổ đĩa đã được khôi phục và xác minh. Hãy lưu báo cáo chẩn đoán để được trợ giúp trước khi thử lại.",
     "errors.startup_setting_uncertain": "Không thể khôi phục hoặc xác minh cài đặt khởi động ban đầu của ổ đĩa. Hãy lưu báo cáo chẩn đoán và nhờ kiểm tra ổ đĩa trước khi thử lại.",

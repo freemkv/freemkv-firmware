@@ -1,6 +1,7 @@
 {
   "language_name": "Español (Latinoamérica)",
   "messages": {
+    "errors.settings_unresolved": "No se ha validado la compatibilidad de los ajustes para esta actualización. Elija un firmware compatible.",
     "errors.firmware_corrupt": "Este archivo de firmware está dañado o incompleto. Descargue una copia OEM nueva e inténtelo de nuevo.",
     "errors.startup_setting_restored": "Se restauró y verificó la configuración original de arranque de la unidad. Guarda un informe de diagnóstico para obtener ayuda antes de volver a intentarlo.",
     "errors.startup_setting_uncertain": "No se pudo restaurar o verificar la configuración original de arranque de la unidad. Guarda un informe de diagnóstico y solicita una revisión de la unidad antes de volver a intentarlo.",

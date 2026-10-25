@@ -1,6 +1,7 @@
 {
   "language_name": "Français",
   "messages": {
+    "errors.settings_unresolved": "La compatibilité des réglages n’a pas été validée pour cette mise à jour. Choisissez un micrologiciel pris en charge.",
     "errors.firmware_corrupt": "Ce fichier de micrologiciel est corrompu ou incomplet. Téléchargez une nouvelle copie OEM et réessayez.",
     "errors.startup_setting_restored": "Le réglage de démarrage initial du lecteur a été restauré et vérifié. Enregistrez un rapport de diagnostic pour obtenir de l’aide avant de réessayer.",
     "errors.startup_setting_uncertain": "Le réglage de démarrage initial du lecteur n’a pas pu être restauré ou vérifié. Enregistrez un rapport de diagnostic et faites vérifier le lecteur avant de réessayer.",

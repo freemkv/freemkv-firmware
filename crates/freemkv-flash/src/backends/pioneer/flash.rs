@@ -184,7 +184,14 @@ where
     E: std::error::Error + Send + Sync + CodedError + 'static,
 {
     let code = error.code();
-    let issue = crate::user_error::IssueCode::from(error.kind());
+    let issue = if matches!(
+        code,
+        "pioneer.settings.compatibility_unresolved" | "pioneer.settings.conversion_unavailable"
+    ) {
+        crate::user_error::IssueCode::SettingsUnresolved
+    } else {
+        crate::user_error::IssueCode::from(error.kind())
+    };
     let status = crate::crossflash::refusal_status(&error);
     let guidance = if code.starts_with("pioneer.settings.") {
         "A validated settings mapping is required for this firmware and is unavailable. No firmware was written."

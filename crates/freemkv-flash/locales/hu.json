@@ -1,6 +1,7 @@
 {
   "language_name": "Magyar",
   "messages": {
+    "errors.settings_unresolved": "A beállítások kompatibilitását ehhez a frissítéshez nem ellenőrizték. Válasszon támogatott firmware-t.",
     "errors.firmware_corrupt": "Ez a firmware-fájl sérült vagy hiányos. Töltsön le egy új OEM-példányt, és próbálja újra.",
     "errors.startup_setting_restored": "A meghajtó eredeti indítási beállítása vissza lett állítva és ellenőrizve lett. Újabb próbálkozás előtt mentse el a diagnosztikai jelentést, és kérjen segítséget.",
     "errors.startup_setting_uncertain": "A meghajtó eredeti indítási beállítását nem sikerült visszaállítani vagy ellenőrizni. Mentse el a diagnosztikai jelentést, és újabb próbálkozás előtt ellenőriztesse a meghajtót.",
