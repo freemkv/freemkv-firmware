@@ -27,12 +27,6 @@
       "revision": "1.03",
       "normal_envelope_sha256": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
       "context_decoding_required": false
-    },
-    {
-      "model": "BDR-UD03",
-      "revision": "1.03",
-      "normal_envelope_sha256": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
-      "context_decoding_required": false
     }
   ],
   "prepare": {
