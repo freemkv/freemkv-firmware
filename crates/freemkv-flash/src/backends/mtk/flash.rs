@@ -555,6 +555,7 @@ fn check_image(image: &[u8]) -> Result<()> {
             image.len()
         );
     }
+    crate::cmac::validate_flags(image)?;
     if !crate::cmac::verify(image) {
         bail!(
             "firmware image fails its AES-CMAC integrity check — refusing to flash. \

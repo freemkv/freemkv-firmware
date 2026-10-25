@@ -268,6 +268,7 @@ pub(super) fn backup_image(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>
 }
 
 fn validate_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
+    cmac::validate_flags(image)?;
     let boot = image
         .get(..mediatek_optical::layout::BOOT_PAGE.len)
         .context("backup is shorter than a boot page")?;

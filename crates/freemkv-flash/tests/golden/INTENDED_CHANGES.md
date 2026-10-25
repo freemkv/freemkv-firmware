@@ -14,6 +14,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| M-TABLE-FIXTURE | 0.15.2: synthetic MediaTek fixtures now initialize every inactive integrity-table record to the erased sentinel instead of retaining patterned payload bytes. Only the resulting fixture hashes and the affected transfer chunk hashes change; v0.11.2 baseline files remain immutable. The new real preflight rejects instruction-valued metadata before any write. |
 | FILE_VALIDATION | Check file rejects unrecognized bytes rather than reporting successful validation. Informational inspection remains available. No drive commands change. |
 | OPERATION_015 | 0.15.0: confirmation prompts and accepted answers use the selected language; Pioneer requires a usable installed backup and never offers a bypass it cannot execute. Typed localized user issues retain pre-write and read-only evidence; internal error chains gain stable cause markers. Recovery states whether its family gate is retained or explicitly bypassed. Expected restart command failures remain in diagnostics rather than user warnings. Write ordering, payloads and verification comparisons are unchanged. |
 | CLI_INFO | 0.14.4: CLI drive information groups and aligns the shared GUI identity, interface, capabilities, region and settings fields. GUI field values and device-command transcript remain unchanged. Native transport traces stay in diagnostics. |
@@ -146,21 +147,21 @@ the `reason:` of any `UNCLASSIFIED` section by hand.
 ## backup_capture.txt
 
 ### MTK backup: destination exists
-reason: R8, M-ENC, M-LIFECYCLE
+reason: R8, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 -saved file: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
-+saved file: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
++saved file: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 ```
 
 ### MTK backup: drive-read image
-reason: R1, R8, M-BAK, M-ENC, M-LIFECYCLE
+reason: R1, R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 -backup sha256: 338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
-+backup sha256: 0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
++backup sha256: b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 -OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 +this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
 -MSG      backup sha256: 338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
-+MSG      backup sha256: 0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
++MSG      backup sha256: b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 -FIELD    Backup validation = OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 -MSG      OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
 ---- scsi transcript (516) ---
@@ -169,21 +170,21 @@ reason: R1, R8, M-BAK, M-ENC, M-LIFECYCLE
 +--- scsi transcript (517) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -saved file: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
-+saved file: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
++saved file: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 ```
 
 ### MTK dump (recover): raw memory
-reason: R8, M-BAK, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 -backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
++backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 -MSG      backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+MSG      backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
++MSG      backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 -saved file: 2097152 bytes sha256=aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+saved file: 2097152 bytes sha256=98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
++saved file: 2097152 bytes sha256=585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 ```
 
 ### Pioneer backup: bounded replay of a UD04
@@ -239,13 +240,13 @@ reason: OPERATION_015
 ```
 
 ### check_file mtk_bad_cmac.bin
-reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
+reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 -sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
 -chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
 -descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
-+sha256: fb53e348f185d5598fc2082cecba444e8a3d5b8cfeb7d2b372a11f802c9d2917
++sha256: 8346151f27896fa5f4c41ffd69b826eb5d69267d29f25ff58ae815d72941207f
 +chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 +descriptor: vendor='HL-DT-ST' model='BD-RE BU40N' rev='1.00'
@@ -254,7 +255,7 @@ reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
 -built for: <unknown> BD-RE BU40N (MT1959)
 +built for: HL-DT-ST BD-RE BU40N (MT1959)
 -MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
-+MSG      sha256: fb53e348f185d5598fc2082cecba444e8a3d5b8cfeb7d2b372a11f802c9d2917
++MSG      sha256: 8346151f27896fa5f4c41ffd69b826eb5d69267d29f25ff58ae815d72941207f
 -FIELD    Firmware version = <unknown>
 -MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>
@@ -301,13 +302,13 @@ reason: R7, R6, R8, M-CHIP, M-ENC, M-LIFECYCLE
 ```
 
 ### check_file mtk_flashable.bin
-reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
+reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 -sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 -chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
 -descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
-+sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
++sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 +chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 +descriptor: vendor='HL-DT-ST' model='BD-RE BU40N' rev='1.00'
@@ -316,7 +317,7 @@ reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
 -built for: <unknown> BD-RE BU40N (MT1959)
 +built for: HL-DT-ST BD-RE BU40N (MT1959)
 -MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+MSG      sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
++MSG      sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 -FIELD    Firmware version = <unknown>
 -MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>
@@ -2862,7 +2863,7 @@ reason: P4, PRECHECK
 ## flash_execute.txt
 
 ### MTK execute: .bin with pre-flash backup
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 ---- text (221) ---
 +--- text (213) ---
@@ -4044,7 +4045,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=80ee3ed30ac41fae0716fd2728ea335a0d6fd36929e13fb0db9975622b3075c8 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
-+OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
++OUTS cdb=3b0600010000004000000000 len=16384 sha256=11dcaf13c15bef81f83152c9fac51119e802cfc5f18cb89fb67730593f402294 -> ok
 -OUTS cdb=3b0600098000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 -OUTS cdb=3b060009c000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 +OUTS cdb=3b0600098000004000000000 len=16384 sha256=c234eadaa34f0052f607dff3ee7bc757037f6658f71fbddf636cebfda474fbd4 -> ok
@@ -4060,7 +4061,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
 -IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 +IN   cdb=120000002400 alloc=36 -> ok 36
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
-+saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
++saved pre-flash backup: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 ```
 
 ### MTK execute: MT1939 image on an MT1959 drive
@@ -7134,7 +7135,7 @@ reason: R3, M-CHIP, PRECHECK
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-FIXTURE
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 ---- text (218) ---
@@ -8311,7 +8312,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=26d931082030370b92bb6bc98f74b6de8fcefdf1922c73e53c11263f9e9c6bbc -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=80ee3ed30ac41fae0716fd2728ea335a0d6fd36929e13fb0db9975622b3075c8 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=87d548f5cdf94d4d210105b3d1e0d1f8e2b13baedf11e31b06920cf54524f006 -> ok
-+OUTS cdb=3b0600010000004000000000 len=16384 sha256=71f0fb1e406da3b5e64dc48b7bcac0e6c06455a7bd6d4da3133fa64d0ed14b97 -> ok
++OUTS cdb=3b0600010000004000000000 len=16384 sha256=11dcaf13c15bef81f83152c9fac51119e802cfc5f18cb89fb67730593f402294 -> ok
 -OUTS cdb=3b0600098000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 -OUTS cdb=3b060009c000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 +OUTS cdb=3b0600098000004000000000 len=16384 sha256=c234eadaa34f0052f607dff3ee7bc757037f6658f71fbddf636cebfda474fbd4 -> ok
@@ -8325,11 +8326,11 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK
 -IN   cdb=030000108000000000000000 alloc=16 -> ok 16
 +IN   cdb=030000001080000000000000 alloc=16 -> ok 16
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
-+saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
++saved pre-flash backup: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 ```
 
 ### MTK execute: restore the saved .tar
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 ---- text (222) ---
 +--- text (214) ---
@@ -9511,7 +9512,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
 -OUTS cdb=3b0600000000004000000000 len=16384 sha256=a4cb3cc52bb7eb6b5653aa3ae08de21602c9e35b2554c26e436da86f17db43bf -> ok
 +OUTS cdb=3b0600000000004000000000 len=16384 sha256=0e716478b1e7df15804fe5d3d36f252a4b8575452f474d632be57e2b429e5fd2 -> ok
 -OUTS cdb=3b0600010000004000000000 len=16384 sha256=b9e553f7d1a5cc04a848712b55885a676f216144d11abac0a94d2c73c01522d3 -> ok
-+OUTS cdb=3b0600010000004000000000 len=16384 sha256=68d92d5c5b65aedc61a89cfe676c675767aa16e1e8aa5aaa56e828a951959db2 -> ok
++OUTS cdb=3b0600010000004000000000 len=16384 sha256=b74d20b3fd1aec1c284826a8922238bd60e5a649992487d44672fa0563fcb09a -> ok
 -OUTS cdb=3b0600098000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
 -OUTS cdb=3b060009c000004000000000 len=16384 sha256=4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe -> ok
 +OUTS cdb=3b0600098000004000000000 len=16384 sha256=d4cda70744d5fcc8e3cef9511f0a25a58f6d960c81b100dedf533f147f9eb996 -> ok
@@ -9527,7 +9528,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE
 -IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 +IN   cdb=120000002400 alloc=36 -> ok 36
 -saved pre-flash backup: 2097152 bytes sha256=338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
-+saved pre-flash backup: 2097152 bytes sha256=0e12cfdb47a40a3d5897982f6a3c3c0d70ddaeb1953c9572f559c1a7232b45b7
++saved pre-flash backup: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 ```
 
 ### MTK execute: tray open
@@ -9561,13 +9562,13 @@ reason: P5, PRECHECK, OPERATION_015
 ## info_file.txt
 
 ### info_file mtk_bad_cmac.bin
-reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
+reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 -sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
 -chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
 -descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
-+sha256: fb53e348f185d5598fc2082cecba444e8a3d5b8cfeb7d2b372a11f802c9d2917
++sha256: 8346151f27896fa5f4c41ffd69b826eb5d69267d29f25ff58ae815d72941207f
 +chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 +descriptor: vendor='HL-DT-ST' model='BD-RE BU40N' rev='1.00'
@@ -9576,7 +9577,7 @@ reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
 -built for: <unknown> BD-RE BU40N (MT1959)
 +built for: HL-DT-ST BD-RE BU40N (MT1959)
 -MSG      sha256: 58761debe147bcf0fdd58acc33e085b1dbe8e9487286c20a0b6f4369877e5de2
-+MSG      sha256: fb53e348f185d5598fc2082cecba444e8a3d5b8cfeb7d2b372a11f802c9d2917
++MSG      sha256: 8346151f27896fa5f4c41ffd69b826eb5d69267d29f25ff58ae815d72941207f
 -FIELD    Firmware version = <unknown>
 -MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>
@@ -9623,13 +9624,13 @@ reason: R7, R6, R8, M-CHIP, M-ENC, M-LIFECYCLE
 ```
 
 ### info_file mtk_flashable.bin
-reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
+reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```diff
 -sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 -chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
 -descriptor: vendor='<unknown>' model='BD-RE BU40N' rev='<unknown>'
-+sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
++sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 +chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 +banner: MT1959 Boot BU5
 +descriptor: vendor='HL-DT-ST' model='BD-RE BU40N' rev='1.00'
@@ -9638,7 +9639,7 @@ reason: R7, R8, M-CHIP, M-ENC, M-LIFECYCLE
 -built for: <unknown> BD-RE BU40N (MT1959)
 +built for: HL-DT-ST BD-RE BU40N (MT1959)
 -MSG      sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+MSG      sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
++MSG      sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 -FIELD    Firmware version = <unknown>
 -MSG      chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -MSG      banner: <none>

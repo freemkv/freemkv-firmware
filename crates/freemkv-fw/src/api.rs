@@ -135,6 +135,7 @@ pub fn create_with_defaults(
 
 fn create_inner(image: &[u8], defaults: &crate::boot::BootSettings) -> Result<CreateOutcome> {
     let eng = engine::detect(image).context("selecting a platform engine for this image")?;
+    freemkv_flash::cmac::validate_flags(image)?;
     diagnostics::record(format!("create: engine={}", eng.name()));
     let chip = family::detect_chip(image).ok();
     diagnostics::record(format!("create: chip={chip:?}"));
@@ -233,6 +234,7 @@ pub fn modify_with_defaults(
     defaults: &crate::boot::BootSettings,
 ) -> Result<(engine::ModifyReport, crate::boot::BootSupport)> {
     let eng = engine::detect(image)?;
+    freemkv_flash::cmac::validate_flags(image)?;
     if let Some((output, support)) = crate::boot::update(image, defaults)? {
         let mut report = eng.modify(image)?;
         report.levers.push(if image == output {

@@ -282,7 +282,7 @@ pub(super) fn arm_report_probe(hwnd: &w::HWND) -> w::SysResult<()> {
 pub(super) fn install_report_probe(
     dialog: &gui::WindowModal,
     entry: &gui::Edit,
-    summary: &gui::Label,
+    summary: &gui::Edit,
     proceed: &gui::Button,
     cancel: &gui::Button,
 ) {

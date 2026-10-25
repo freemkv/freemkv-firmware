@@ -21,6 +21,9 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Flash
 
+- Reject overwritten MediaTek integrity-table metadata before flashing, even
+  when the stored region hashes match. Modify also rejects these damaged inputs.
+
 - Distinguish information, actions the user needs to take, and failures. Give
   specific guidance for permissions, missing selections, unsupported operations
   and known transfer failures without presenting routine restrictions as faults.

@@ -131,7 +131,7 @@ result: OK
 Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_flashable.bin
 size: 2 MiB
-sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
+sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='HL-DT-ST' model='BD-RE BU40N' rev='1.00'
@@ -147,7 +147,7 @@ MSG      file: <TMP>/check-file/mtk_flashable.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/check-file/mtk_flashable.bin
 FIELD    Size = 2 MiB
-MSG      sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
+MSG      sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = 1.00
@@ -167,7 +167,7 @@ result: OK
 Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_bad_cmac.bin
 size: 2 MiB
-sha256: fb53e348f185d5598fc2082cecba444e8a3d5b8cfeb7d2b372a11f802c9d2917
+sha256: 8346151f27896fa5f4c41ffd69b826eb5d69267d29f25ff58ae815d72941207f
 chipset: MediaTek MT1959 (from boot banner; identity tag MTEKMT1959)
 banner: MT1959 Boot BU5
 descriptor: vendor='HL-DT-ST' model='BD-RE BU40N' rev='1.00'
@@ -183,7 +183,7 @@ MSG      file: <TMP>/check-file/mtk_bad_cmac.bin
 MSG      size: 2 MiB
 FIELD    File = <TMP>/check-file/mtk_bad_cmac.bin
 FIELD    Size = 2 MiB
-MSG      sha256: fb53e348f185d5598fc2082cecba444e8a3d5b8cfeb7d2b372a11f802c9d2917
+MSG      sha256: 8346151f27896fa5f4c41ffd69b826eb5d69267d29f25ff58ae815d72941207f
 FIELD    Chipset = MT1959
 FIELD    Model = BD-RE BU40N
 FIELD    Firmware version = 1.00
