@@ -1,6 +1,12 @@
 {
   "language_name": "Bahasa Indonesia",
   "messages": {
+    "report.successful_flash": "Flash berhasil dan tidak ada kesalahan yang dilaporkan. Konfirmasikan bahwa firmware ini berfungsi di https://freemkv.org/firmware/find/. Apakah Anda tetap ingin mengirim laporan diagnostik?",
+    "report.update_required": "Pembaruan {version} tersedia. Laporan diagnostik otomatis memerlukan versi terbaru. Perbarui di https://freemkv.org/firmware/. Anda tetap dapat melihat dan menyimpan log secara lokal.",
+    "errors.transfer_rejected": "Drive menolak blok firmware pada byte {offset} (ukuran blok: {length} byte).",
+    "errors.transfer_stopped": "Transfer firmware berhenti pada byte {offset} (ukuran blok: {length} byte).",
+    "errors.update_communication": "Drive melaporkan kegagalan komunikasi selama perintah pembaruan.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Pembaruan ini perlu mengubah pengaturan drive, tetapi konversi tersebut belum divalidasi. Pilih pembaruan dengan konversi pengaturan yang telah divalidasi.",
     "errors.firmware_corrupt": "File firmware ini rusak atau tidak lengkap. Unduh salinan OEM baru dan coba lagi.",
     "errors.startup_setting_restored": "Pengaturan awal mulai drive telah dipulihkan dan diverifikasi. Perintah pembaruan firmware dan data firmware tidak dikirim. Simpan laporan diagnostik jika kesalahan terjadi lagi.",

@@ -1,6 +1,12 @@
 {
   "language_name": "Suomi",
   "messages": {
+    "report.successful_flash": "Laiteohjelmiston kirjoitus onnistui eikä virheitä ilmoitettu. Vahvista toimivuus osoitteessa https://freemkv.org/firmware/find/. Haluatko silti lähettää diagnostiikkaraportin?",
+    "report.update_required": "Päivitys {version} on saatavilla. Automaattiset diagnostiikkaraportit vaativat uusimman version. Päivitä osoitteessa https://freemkv.org/firmware/. Lokeja voi edelleen tarkastella ja tallentaa paikallisesti.",
+    "errors.transfer_rejected": "Asema hylkäsi laiteohjelmistolohkon tavun {offset} kohdalla (lohkon koko: {length} tavua).",
+    "errors.transfer_stopped": "Laiteohjelmiston siirto pysähtyi tavun {offset} kohdalle (lohkon koko: {length} tavua).",
+    "errors.update_communication": "Asema ilmoitti tiedonsiirtovirheestä päivityskomennon aikana.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Tämä päivitys edellyttää aseman asetusten muuttamista, mutta muutosta ei ole validoitu. Valitse päivitys, jonka asetusten muuntaminen on validoitu.",
     "errors.firmware_corrupt": "Tämä laiteohjelmistotiedosto on vioittunut tai puutteellinen. Lataa uusi OEM-kopio ja yritä uudelleen.",
     "errors.startup_setting_restored": "Aseman alkuperäinen käynnistysasetus palautettiin ja varmistettiin. Laiteohjelmiston päivityskomentoa tai laiteohjelmistotietoja ei lähetetty. Tallenna diagnostiikkaraportti, jos virhe toistuu.",

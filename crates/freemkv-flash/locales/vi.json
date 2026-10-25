@@ -1,6 +1,12 @@
 {
   "language_name": "Tiếng Việt",
   "messages": {
+    "report.successful_flash": "Ghi firmware thành công và không có lỗi nào được báo cáo. Xác nhận firmware hoạt động tại https://freemkv.org/firmware/find/. Bạn vẫn muốn gửi báo cáo chẩn đoán?",
+    "report.update_required": "Có bản cập nhật {version}. Báo cáo chẩn đoán tự động yêu cầu phiên bản mới nhất. Cập nhật tại https://freemkv.org/firmware/. Bạn vẫn có thể xem và lưu nhật ký cục bộ.",
+    "errors.transfer_rejected": "Ổ đĩa đã từ chối khối firmware tại byte {offset} (kích thước khối: {length} byte).",
+    "errors.transfer_stopped": "Quá trình truyền firmware đã dừng tại byte {offset} (kích thước khối: {length} byte).",
+    "errors.update_communication": "Ổ đĩa báo lỗi giao tiếp trong lệnh cập nhật.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Bản cập nhật này cần thay đổi cài đặt ổ đĩa, nhưng cách chuyển đổi cài đặt chưa được xác thực. Hãy chọn bản cập nhật có quy trình chuyển đổi cài đặt đã được xác thực.",
     "errors.firmware_corrupt": "Tệp firmware này bị hỏng hoặc không đầy đủ. Hãy tải xuống bản OEM mới rồi thử lại.",
     "errors.startup_setting_restored": "Cài đặt khởi động ban đầu của ổ đĩa đã được khôi phục và xác minh. Lệnh cập nhật chương trình cơ sở và dữ liệu chương trình cơ sở chưa được gửi. Hãy lưu báo cáo chẩn đoán nếu lỗi xảy ra lần nữa.",

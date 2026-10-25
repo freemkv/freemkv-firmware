@@ -1,6 +1,12 @@
 {
   "language_name": "Dansk",
   "messages": {
+    "report.successful_flash": "Flashningen blev gennemført uden rapporterede fejl. Bekræft, at firmwaren virker, på https://freemkv.org/firmware/find/. Vil du stadig indsende en diagnoserapport?",
+    "report.update_required": "Opdatering {version} er tilgængelig. Automatiske diagnoserapporter kræver den nyeste version. Opdater på https://freemkv.org/firmware/. Logfiler kan stadig vises og gemmes lokalt.",
+    "errors.transfer_rejected": "Drevet afviste firmwareblokken ved byte {offset} (blokstørrelse: {length} byte).",
+    "errors.transfer_stopped": "Firmwareoverførslen stoppede ved byte {offset} (blokstørrelse: {length} byte).",
+    "errors.update_communication": "Drevet rapporterede en kommunikationsfejl under opdateringskommandoen.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Denne opdatering skal ændre drevets indstillinger, men overførslen er ikke valideret. Vælg en opdatering med en valideret indstillingsoverførsel.",
     "errors.firmware_corrupt": "Denne firmwarefil er beskadiget eller ufuldstændig. Download en ny OEM-kopi, og prøv igen.",
     "errors.startup_setting_restored": "Drevets oprindelige startindstilling blev gendannet og bekræftet. Firmwareopdateringskommandoen og firmwaredataene blev ikke sendt. Gem en diagnoserapport, hvis fejlen gentager sig.",

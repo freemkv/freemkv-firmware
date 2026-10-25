@@ -26,6 +26,7 @@ mod ops;
 mod parity_0_11_2_tests;
 mod support;
 mod ui;
+mod updates;
 // Toolkit-free and built everywhere so its tests run on every host; only Windows uses it.
 #[cfg_attr(not(all(feature = "native", target_os = "windows")), allow(dead_code))]
 mod win_layout;

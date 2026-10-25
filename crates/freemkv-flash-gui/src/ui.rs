@@ -816,6 +816,10 @@ pub struct App {
     analysis_cancelled: bool,
     preview_compatibility_pending: Option<bool>,
     report_rx: Option<Receiver<ReportMsg>>,
+    update_rx: Option<Receiver<Result<Option<String>, String>>>,
+    update_checked: bool,
+    available_update: Option<String>,
+    successful_flash: bool,
     report_prompt: Option<crate::support::BundleSource>,
     report_description: String,
     submitted_description: Option<String>,
@@ -912,7 +916,29 @@ impl App {
 
     /// Begin reading the selected drive's profile.
     pub fn start(&mut self) -> Vec<Effect> {
-        self.start_profile()
+        let mut effects = self.start_profile();
+        if !self.update_checked && !cfg!(test) {
+            self.update_checked = true;
+            let (tx, rx) = mpsc::channel();
+            self.update_rx = Some(rx);
+            let waker = self.waker.clone();
+            std::thread::spawn(move || {
+                let _ = tx.send(crate::updates::newer_release().map_err(|e| e.to_string()));
+                if let Some(wake) = waker {
+                    wake();
+                }
+            });
+            if !effects.contains(&Effect::StartTicking) {
+                effects.push(Effect::StartTicking);
+            }
+        }
+        effects
+    }
+
+    fn update_notice(&self) -> Option<String> {
+        self.available_update.as_ref().map(|version| {
+            crate::localization::message("report.update_required", &[("version", version.clone())])
+        })
     }
 
     pub(crate) fn with_drives(drives: Vec<DriveChoice>) -> Self {
@@ -952,6 +978,10 @@ impl App {
             analysis_cancelled: false,
             preview_compatibility_pending: None,
             report_rx: None,
+            update_rx: None,
+            update_checked: false,
+            available_update: None,
+            successful_flash: false,
             report_prompt: None,
             report_description: String::new(),
             submitted_description: None,
@@ -1542,6 +1572,11 @@ impl App {
                 self.diagnostics_open = true;
                 self.refresh_diagnostic_view();
             }
+            Input::SubmitReport | Input::SendReport(_) if self.available_update.is_some() => {
+                self.report_prompt = None;
+                self.diagnostic_notice = self.update_notice();
+                return Vec::new();
+            }
             Input::SubmitReport if self.report_rx.is_none() && !self.busy() => {
                 let Some(journal) = &self.journal else {
                     self.diagnostic_notice = Some("ui.report_history_is_unavailable".into());
@@ -1551,7 +1586,14 @@ impl App {
                 if let Some(artifact) = &self.report_artifact {
                     source = source.with_artifact(artifact.clone());
                 }
-                let summary = source.summary();
+                let summary = if self.successful_flash
+                    && self.failure.is_none()
+                    && self.report_artifact.is_none()
+                {
+                    "report.successful_flash".into()
+                } else {
+                    source.summary()
+                };
                 self.report_prompt = Some(source);
                 return vec![Effect::ReportPrompt {
                     summary,
@@ -2117,6 +2159,7 @@ impl App {
             self.log.push("ui.no_optical_drive_selected".into());
             return Vec::new();
         }
+        self.successful_flash = false;
         self.artifact_in_progress = match &job {
             Job::Backup { out, .. } => Some(crate::support::ReportArtifact::pending(
                 out.clone(),
@@ -2201,6 +2244,23 @@ impl App {
 
     /// Drain the worker's events; call on every tick or repaint.
     pub fn poll(&mut self) -> Vec<Effect> {
+        let mut update_done = false;
+        if let Some(rx) = self.update_rx.take() {
+            match rx.try_recv() {
+                Ok(Ok(version)) => {
+                    self.available_update = version;
+                    update_done = true;
+                }
+                Ok(Err(error)) => {
+                    self.log.push(format!("Update check unavailable: {error}"));
+                    update_done = true;
+                }
+                Err(TryRecvError::Empty) => self.update_rx = Some(rx),
+                Err(TryRecvError::Disconnected) => {
+                    update_done = true;
+                }
+            }
+        }
         let mut report_done = false;
         if let Some(rx) = self.report_rx.take() {
             loop {
@@ -2326,6 +2386,8 @@ impl App {
                             matches!(result, Ok(Some(workflow::UpdateOutcome::Planned)))
                         });
                         planned = self.planning.take().filter(|_| result.is_ok());
+                        self.successful_flash = matches!(&result, Ok(Some(outcome)) if outcome.fully_verified())
+                            && matches!(self.task, Task::Flash | Task::Recovery);
                         self.end_flash();
                         let cancelled = std::mem::take(&mut self.cancelled);
                         match &result {
@@ -2482,12 +2544,13 @@ impl App {
         if self.diagnostics_open && due {
             self.refresh_diagnostic_view();
         }
-        if (finished || profiled || origin_done || report_done)
+        if (finished || profiled || origin_done || report_done || update_done)
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
             && self.origin_pending.is_empty()
             && self.report_rx.is_none()
+            && self.update_rx.is_none()
         {
             vec![Effect::StopTicking]
         } else {
@@ -2815,16 +2878,27 @@ impl App {
             panel: self.panel(enabled),
             controls_enabled: enabled,
             status: shown.then(|| self.status_view()),
-            results: (shown || self.has_origin_error()).then(|| {
-                let mut results = self.results_view();
-                if !shown {
-                    results.cards.clear();
-                    results.fields.clear();
-                    results.failure = None;
-                    results.open_results = None;
-                }
-                results
-            }),
+            results: (shown || self.has_origin_error() || self.available_update.is_some()).then(
+                || {
+                    let mut results = self.results_view();
+                    if !shown {
+                        results.cards.clear();
+                        results.fields.clear();
+                        results.failure = None;
+                        results.open_results = None;
+                    }
+                    if let Some(update) = self.update_notice() {
+                        results.notice = Some(match results.notice {
+                            Some(notice) if notice != update => crate::localization::message(
+                                "notice.join",
+                                &[("first", update), ("second", notice)],
+                            ),
+                            _ => update,
+                        });
+                    }
+                    results
+                },
+            ),
             confirm: self.pending.as_ref().map(|p| self.confirm_view(p)),
             log: self
                 .log
@@ -3173,6 +3247,13 @@ impl App {
                 ),
                 None => self.status.clone(),
             }
+        } else if self.failure.is_some() {
+            // The wrapped results label owns the detailed failure. The single
+            // line status must not repeat and truncate that same guidance.
+            crate::localization::message(
+                "status.operation_failed",
+                &[("operation", self.action.clone())],
+            )
         } else {
             self.status.clone()
         };
@@ -3247,7 +3328,7 @@ impl App {
                         _ => "action.submit_report",
                     },
                     Input::SubmitReport,
-                    self.journal.is_some() && !self.busy(),
+                    self.journal.is_some() && !self.busy() && self.available_update.is_none(),
                 )
             },
         }

@@ -1,6 +1,12 @@
 {
   "language_name": "繁體中文",
   "messages": {
+    "report.successful_flash": "韌體寫入成功，未回報任何錯誤。請在 https://freemkv.org/firmware/find/ 確認此韌體可正常使用。您仍要提交診斷報告嗎？",
+    "report.update_required": "更新 {version} 已可用。自動提交診斷報告需要最新版本。請前往 https://freemkv.org/firmware/ 更新。您仍可在本機檢視和儲存記錄。",
+    "errors.transfer_rejected": "光碟機拒絕了位元組位置 {offset} 處的韌體區塊（區塊大小：{length} 位元組）。",
+    "errors.transfer_stopped": "韌體傳輸在位元組位置 {offset} 處停止（區塊大小：{length} 位元組）。",
+    "errors.update_communication": "光碟機在更新命令期間回報通訊失敗。",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "此更新需要變更光碟機設定，但該設定轉換尚未通過驗證。請選擇設定轉換已驗證的更新。",
     "errors.firmware_corrupt": "此韌體檔案已損壞或不完整。請重新下載 OEM 檔案後再試。",
     "errors.startup_setting_restored": "光碟機原本的啟動設定已還原並驗證。韌體更新命令與韌體資料均未傳送。如果錯誤再次發生，請儲存診斷報告。",

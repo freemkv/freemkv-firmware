@@ -1,6 +1,12 @@
 {
   "language_name": "Norsk",
   "messages": {
+    "report.successful_flash": "Flashingen ble fullført uten rapporterte feil. Bekreft at fastvaren virker på https://freemkv.org/firmware/find/. Vil du likevel sende en diagnoserapport?",
+    "report.update_required": "Oppdatering {version} er tilgjengelig. Automatiske diagnoserapporter krever den nyeste versjonen. Oppdater på https://freemkv.org/firmware/. Logger kan fortsatt vises og lagres lokalt.",
+    "errors.transfer_rejected": "Stasjonen avviste fastvareblokken ved byte {offset} (blokkstørrelse: {length} byte).",
+    "errors.transfer_stopped": "Fastvareoverføringen stoppet ved byte {offset} (blokkstørrelse: {length} byte).",
+    "errors.update_communication": "Stasjonen rapporterte en kommunikasjonsfeil under oppdateringskommandoen.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Denne oppdateringen må endre stasjonsinnstillinger, men denne konverteringen er ikke validert. Velg en oppdatering med en validert innstillingskonvertering.",
     "errors.firmware_corrupt": "Denne fastvarefilen er skadet eller ufullstendig. Last ned en ny OEM-kopi og prøv igjen.",
     "errors.startup_setting_restored": "Stasjonens opprinnelige oppstartsinnstilling ble gjenopprettet og bekreftet. Kommandoen for fastvareoppdatering og fastvaredataene ble ikke sendt. Lagre en diagnoserapport hvis feilen gjentar seg.",

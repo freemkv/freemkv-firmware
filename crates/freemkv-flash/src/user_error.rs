@@ -129,6 +129,24 @@ pub fn read_only<T>(result: anyhow::Result<T>) -> anyhow::Result<T> {
     result.map_err(|error| error.context(NoFirmwareWrite))
 }
 
+/// Structured transfer boundary, retained independently of transport prose.
+#[derive(Debug)]
+pub(crate) struct TransferFailure {
+    pub offset: usize,
+    pub length: usize,
+}
+
+impl std::fmt::Display for TransferFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "firmware transfer stopped at byte {}, block length {}",
+            self.offset, self.length
+        )
+    }
+}
+impl std::error::Error for TransferFailure {}
+
 /// A stable UI message with data arguments; no diagnostic error text is exposed.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct UserError {
@@ -201,7 +219,7 @@ impl UserError {
             (None, _) if error.is::<NoFirmwareWrite>() => Some("errors.no_firmware_write"),
             (None, _) => None,
         };
-        let id = if let Some(
+        let mut id = if let Some(
             issue @ (IssueCode::StartupSettingRestored | IssueCode::StartupSettingUncertain),
         ) = startup_setting_issue
         {
@@ -300,6 +318,40 @@ impl UserError {
         } else {
             "errors.unexpected"
         };
+        // Keep the safe disposition, but do not let it erase a known failure
+        // boundary. Never infer a cause from arbitrary diagnostic prose.
+        if failure.is_some_and(|f| {
+            matches!(
+                f.impact(),
+                UpdateImpact::EntryUncertain | UpdateImpact::PayloadUncertain
+            )
+        }) {
+            let sense = error.downcast_ref::<crate::platform::ScsiSenseError>();
+            let cause = if let Some(transfer) = error.downcast_ref::<TransferFailure>() {
+                Some(localization::message(
+                    if sense.is_some_and(|s| s.sense_key == 5 && s.asc == 0x26 && s.ascq == 2) {
+                        "errors.transfer_rejected"
+                    } else {
+                        "errors.transfer_stopped"
+                    },
+                    &[
+                        ("offset", transfer.offset.to_string()),
+                        ("length", transfer.length.to_string()),
+                    ],
+                ))
+            } else if sense.is_some_and(|s| s.sense_key == 4 && s.asc == 8 && s.ascq == 1) {
+                Some("errors.update_communication".into())
+            } else {
+                None
+            };
+            if let Some(cause) = cause {
+                arguments = vec![
+                    ("cause", cause),
+                    ("guidance", localization::message(id, &arguments)),
+                ];
+                id = "errors.update_cause";
+            }
+        }
         if let Some(evidence) = error.downcast_ref::<crate::backend::UpdateVerification>() {
             use crate::backend::ComponentVerification as V;
             let state = |value| {
@@ -376,6 +428,52 @@ impl UserError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reported_final_block_retains_rejection_and_uncertainty() {
+        let error = anyhow::Error::new(crate::platform::ScsiSenseError::new(
+            5,
+            0x26,
+            2,
+            "PRIVATE TRANSPORT DETAIL",
+        ))
+        .context(TransferFailure {
+            offset: 0x1fc000,
+            length: 16384,
+        })
+        .context(UpdateFailure {
+            phase: "firmware transfer".into(),
+            write_started: true,
+            progress: crate::backend::UpdateProgress::PayloadAccepted,
+            payload_bytes_accepted: Some(2080768),
+            temporary_firmware: false,
+            completed_stages: vec![],
+        });
+        let issue = UserError::of(&error);
+        for language in Language::ALL {
+            let text = issue.render(language);
+            assert!(text.contains("2080768") && text.contains("16384"));
+            assert!(text.contains(localization::get(language, "errors.update_uncertain")));
+            assert!(!text.contains("PRIVATE TRANSPORT DETAIL"));
+        }
+    }
+
+    #[test]
+    fn communication_failure_keeps_entry_disposition() {
+        let error = anyhow::Error::new(crate::platform::ScsiSenseError::new(4, 8, 1, "private"))
+            .context(UpdateFailure {
+                phase: "update entry".into(),
+                write_started: true,
+                progress: crate::backend::UpdateProgress::EntryAttempted,
+                payload_bytes_accepted: Some(0),
+                temporary_firmware: false,
+                completed_stages: vec![],
+            });
+        let text = UserError::of(&error).render(Language::En);
+        assert!(text.contains("communication failure"));
+        assert!(text.contains("no firmware data was sent"));
+        assert!(!text.contains("private"));
+    }
 
     #[test]
     fn corrupt_input_has_actionable_guidance_in_every_language() {

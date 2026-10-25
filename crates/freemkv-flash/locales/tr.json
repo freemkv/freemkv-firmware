@@ -1,6 +1,12 @@
 {
   "language_name": "Türkçe",
   "messages": {
+    "report.successful_flash": "Ürün yazılımı yazma işlemi başarılı oldu ve hata bildirilmedi. Çalıştığını https://freemkv.org/firmware/find/ adresinde onaylayın. Yine de tanılama raporu göndermek istiyor musunuz?",
+    "report.update_required": "{version} güncellemesi mevcut. Otomatik tanılama raporları en son sürümü gerektirir. https://freemkv.org/firmware/ adresinden güncelleyin. Günlükleri yerel olarak görüntülemeye ve kaydetmeye devam edebilirsiniz.",
+    "errors.transfer_rejected": "Sürücü, {offset} bayt konumundaki ürün yazılımı bloğunu reddetti (blok boyutu: {length} bayt).",
+    "errors.transfer_stopped": "Ürün yazılımı aktarımı {offset} bayt konumunda durdu (blok boyutu: {length} bayt).",
+    "errors.update_communication": "Sürücü, güncelleme komutu sırasında iletişim hatası bildirdi.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Bu güncellemenin sürücü ayarlarını değiştirmesi gerekiyor, ancak bu dönüşüm doğrulanmadı. Ayar dönüşümü doğrulanmış bir güncelleme seçin.",
     "errors.firmware_corrupt": "Bu aygıt yazılımı dosyası bozuk veya eksik. Yeni bir OEM kopyası indirip tekrar deneyin.",
     "errors.startup_setting_restored": "Sürücünün özgün başlatma ayarı geri yüklendi ve doğrulandı. Ürün yazılımı güncelleme komutu ve ürün yazılımı verileri gönderilmedi. Hata tekrarlanırsa tanılama raporu kaydedin.",

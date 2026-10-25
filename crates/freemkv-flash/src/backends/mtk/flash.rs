@@ -382,9 +382,14 @@ pub(super) fn flash_error(
     use mediatek_optical::update::FlashError;
     let detail = error.to_string();
     match error {
-        FlashError::Entry(source) | FlashError::Transfer { source, .. } => {
-            crate::transport::mtk_err(source).context(detail)
-        }
+        FlashError::Entry(source) => crate::transport::mtk_err(source).context(detail),
+        FlashError::Transfer {
+            offset,
+            length,
+            source,
+        } => crate::transport::mtk_err(source)
+            .context(detail)
+            .context(crate::user_error::TransferFailure { offset, length }),
         error => anyhow::Error::new(error),
     }
 }

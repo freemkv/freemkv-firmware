@@ -1,6 +1,12 @@
 {
   "language_name": "Slovenčina",
   "messages": {
+    "report.successful_flash": "Zápis firmvéru bol úspešný a neboli hlásené žiadne chyby. Potvrďte funkčnosť na https://freemkv.org/firmware/find/. Napriek tomu chcete odoslať diagnostickú správu?",
+    "report.update_required": "Je dostupná aktualizácia {version}. Automatické diagnostické správy vyžadujú najnovšiu verziu. Aktualizujte na https://freemkv.org/firmware/. Denníky možno naďalej prezerať a ukladať lokálne.",
+    "errors.transfer_rejected": "Jednotka odmietla blok firmvéru na bajte {offset} (veľkosť bloku: {length} bajtov).",
+    "errors.transfer_stopped": "Prenos firmvéru sa zastavil na bajte {offset} (veľkosť bloku: {length} bajtov).",
+    "errors.update_communication": "Jednotka oznámila chybu komunikácie počas príkazu aktualizácie.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Táto aktualizácia musí zmeniť nastavenia jednotky, ale tento prevod nebol overený. Vyberte aktualizáciu s overeným prevodom nastavení.",
     "errors.firmware_corrupt": "Tento súbor firmvéru je poškodený alebo neúplný. Stiahnite novú kópiu OEM a skúste to znova.",
     "errors.startup_setting_restored": "Pôvodné nastavenie spúšťania jednotky bolo obnovené a overené. Príkaz na aktualizáciu firmvéru ani údaje firmvéru sa neodoslali. Ak sa chyba zopakuje, uložte diagnostickú správu.",

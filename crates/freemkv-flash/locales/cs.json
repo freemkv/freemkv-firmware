@@ -1,6 +1,12 @@
 {
   "language_name": "Čeština",
   "messages": {
+    "report.successful_flash": "Zápis firmwaru byl úspěšný a nebyly hlášeny žádné chyby. Potvrďte funkčnost firmwaru na https://freemkv.org/firmware/find/. Přesto chcete odeslat diagnostickou zprávu?",
+    "report.update_required": "Je dostupná aktualizace {version}. Automatické diagnostické zprávy vyžadují nejnovější verzi. Aktualizujte na https://freemkv.org/firmware/. Protokoly lze nadále prohlížet a ukládat místně.",
+    "errors.transfer_rejected": "Jednotka odmítla blok firmwaru na bajtu {offset} (velikost bloku: {length} bajtů).",
+    "errors.transfer_stopped": "Přenos firmwaru se zastavil na bajtu {offset} (velikost bloku: {length} bajtů).",
+    "errors.update_communication": "Jednotka oznámila chybu komunikace během příkazu aktualizace.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Tato aktualizace musí změnit nastavení jednotky, ale tento převod nebyl ověřen. Vyberte aktualizaci s ověřeným převodem nastavení.",
     "errors.firmware_corrupt": "Tento soubor firmwaru je poškozený nebo neúplný. Stáhněte novou kopii OEM a zkuste to znovu.",
     "errors.startup_setting_restored": "Původní nastavení spouštění jednotky bylo obnoveno a ověřeno. Příkaz k aktualizaci firmwaru ani data firmwaru nebyly odeslány. Pokud se chyba opakuje, uložte diagnostickou zprávu.",

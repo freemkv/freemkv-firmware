@@ -1,6 +1,12 @@
 {
   "language_name": "Magyar",
   "messages": {
+    "report.successful_flash": "A firmware írása sikeres volt, hiba nem érkezett. Erősítse meg a firmware működését itt: https://freemkv.org/firmware/find/. Ennek ellenére szeretne diagnosztikai jelentést küldeni?",
+    "report.update_required": "Elérhető a(z) {version} frissítés. Az automatikus diagnosztikai jelentésekhez a legújabb verzió szükséges. Frissítés: https://freemkv.org/firmware/. A naplók továbbra is megtekinthetők és helyben menthetők.",
+    "errors.transfer_rejected": "A meghajtó elutasította a firmware blokkot a(z) {offset}. bájtnál (blokkméret: {length} bájt).",
+    "errors.transfer_stopped": "A firmware átvitele leállt a(z) {offset}. bájtnál (blokkméret: {length} bájt).",
+    "errors.update_communication": "A meghajtó kommunikációs hibát jelzett a frissítési parancs során.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Ez a frissítés módosítaná a meghajtó beállításait, de ezt az átalakítást nem ellenőrizték. Válasszon ellenőrzött beállítás-átalakítású frissítést.",
     "errors.firmware_corrupt": "Ez a firmware-fájl sérült vagy hiányos. Töltsön le egy új OEM-példányt, és próbálja újra.",
     "errors.startup_setting_restored": "A meghajtó eredeti indítási beállítása vissza lett állítva és ellenőrizve. A firmware-frissítési parancs és a firmware-adatok nem lettek elküldve. Ha a hiba megismétlődik, mentsen diagnosztikai jelentést.",

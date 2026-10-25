@@ -1,6 +1,12 @@
 {
   "language_name": "Polski",
   "messages": {
+    "report.successful_flash": "Wgranie oprogramowania zakończyło się pomyślnie i nie zgłoszono błędów. Potwierdź działanie na https://freemkv.org/firmware/find/. Czy mimo to chcesz wysłać raport diagnostyczny?",
+    "report.update_required": "Dostępna jest aktualizacja {version}. Automatyczne raporty diagnostyczne wymagają najnowszej wersji. Zaktualizuj na https://freemkv.org/firmware/. Dzienniki można nadal przeglądać i zapisywać lokalnie.",
+    "errors.transfer_rejected": "Napęd odrzucił blok oprogramowania układowego przy bajcie {offset} (rozmiar bloku: {length} bajtów).",
+    "errors.transfer_stopped": "Przesyłanie oprogramowania układowego zatrzymało się przy bajcie {offset} (rozmiar bloku: {length} bajtów).",
+    "errors.update_communication": "Napęd zgłosił błąd komunikacji podczas polecenia aktualizacji.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Ta aktualizacja musi zmienić ustawienia napędu, ale sposób konwersji nie został zweryfikowany. Wybierz aktualizację ze zweryfikowaną konwersją ustawień.",
     "errors.firmware_corrupt": "Ten plik oprogramowania układowego jest uszkodzony lub niekompletny. Pobierz nową kopię OEM i spróbuj ponownie.",
     "errors.startup_setting_restored": "Pierwotne ustawienie uruchamiania napędu zostało przywrócone i sprawdzone. Nie wysłano polecenia aktualizacji oprogramowania układowego ani jego danych. Zapisz raport diagnostyczny, jeśli błąd się powtórzy.",

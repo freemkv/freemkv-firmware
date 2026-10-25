@@ -1,6 +1,12 @@
 {
   "language_name": "Deutsch",
   "messages": {
+    "report.successful_flash": "Das Flashen war erfolgreich und es wurden keine Fehler gemeldet. Bestätigen Sie die Funktion dieser Firmware unter https://freemkv.org/firmware/find/. Möchten Sie trotzdem einen Diagnosebericht senden?",
+    "report.update_required": "Update {version} ist verfügbar. Automatische Diagnoseberichte erfordern die neueste Version. Update unter https://freemkv.org/firmware/. Protokolle können weiterhin lokal angezeigt und gespeichert werden.",
+    "errors.transfer_rejected": "Das Laufwerk hat den Firmwareblock bei Byte {offset} abgelehnt (Blockgröße: {length} Byte).",
+    "errors.transfer_stopped": "Die Firmwareübertragung wurde bei Byte {offset} unterbrochen (Blockgröße: {length} Byte).",
+    "errors.update_communication": "Das Laufwerk meldete während des Aktualisierungsbefehls einen Kommunikationsfehler.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Dieses Update muss Laufwerkeinstellungen ändern, aber diese Umstellung wurde nicht validiert. Wählen Sie ein Update mit einer validierten Einstellungsumstellung.",
     "errors.firmware_corrupt": "Diese Firmwaredatei ist beschädigt oder unvollständig. Laden Sie eine neue OEM-Kopie herunter und versuchen Sie es erneut.",
     "errors.startup_setting_restored": "Die ursprüngliche Starteinstellung des Laufwerks wurde wiederhergestellt und überprüft. Der Firmware-Updatebefehl und die Firmwaredaten wurden nicht gesendet. Speichern Sie einen Diagnosebericht, falls der Fehler erneut auftritt.",

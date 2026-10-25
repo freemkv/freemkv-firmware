@@ -1,6 +1,12 @@
 {
   "language_name": "日本語",
   "messages": {
+    "report.successful_flash": "書き込みは正常に完了し、エラーは報告されませんでした。https://freemkv.org/firmware/find/ でこのファームウェアの動作を確認してください。それでも診断レポートを送信しますか？",
+    "report.update_required": "更新 {version} が利用可能です。自動診断レポートの送信には最新バージョンが必要です。https://freemkv.org/firmware/ から更新してください。ログの表示とローカル保存は引き続き利用できます。",
+    "errors.transfer_rejected": "ドライブがバイト位置 {offset} のファームウェアブロックを拒否しました（ブロックサイズ：{length} バイト）。",
+    "errors.transfer_stopped": "ファームウェア転送がバイト位置 {offset} で停止しました（ブロックサイズ：{length} バイト）。",
+    "errors.update_communication": "更新コマンド中にドライブが通信エラーを報告しました。",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "この更新ではドライブ設定の変更が必要ですが、その変換方法は検証されていません。設定変換が検証済みの更新を選択してください。",
     "errors.firmware_corrupt": "このファームウェアファイルは破損しているか、不完全です。新しい OEM ファイルをダウンロードして、もう一度お試しください。",
     "errors.startup_setting_restored": "ドライブの元の起動設定は復元され、確認されました。ファームウェア更新コマンドとファームウェアデータは送信されていません。エラーが再発する場合は診断レポートを保存してください。",

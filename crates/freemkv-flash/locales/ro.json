@@ -1,6 +1,12 @@
 {
   "language_name": "Română",
   "messages": {
+    "report.successful_flash": "Scrierea firmware-ului a reușit și nu au fost raportate erori. Confirmați funcționarea la https://freemkv.org/firmware/find/. Doriți totuși să trimiteți un raport de diagnostic?",
+    "report.update_required": "Actualizarea {version} este disponibilă. Rapoartele automate de diagnostic necesită cea mai recentă versiune. Actualizați la https://freemkv.org/firmware/. Puteți vedea și salva în continuare jurnalele local.",
+    "errors.transfer_rejected": "Unitatea a respins blocul de firmware la octetul {offset} (dimensiunea blocului: {length} octeți).",
+    "errors.transfer_stopped": "Transferul firmware-ului s-a oprit la octetul {offset} (dimensiunea blocului: {length} octeți).",
+    "errors.update_communication": "Unitatea a raportat o eroare de comunicare în timpul comenzii de actualizare.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Această actualizare trebuie să modifice setările unității, dar conversia nu a fost validată. Alegeți o actualizare cu o conversie validată a setărilor.",
     "errors.firmware_corrupt": "Acest fișier firmware este corupt sau incomplet. Descărcați o copie OEM nouă și încercați din nou.",
     "errors.startup_setting_restored": "Setarea inițială de pornire a unității a fost restaurată și verificată. Comanda de actualizare a firmware-ului și datele firmware-ului nu au fost trimise. Salvați un raport de diagnostic dacă eroarea se repetă.",

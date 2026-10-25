@@ -1,6 +1,12 @@
 {
   "language_name": "English",
   "messages": {
+    "report.successful_flash": "The flash completed successfully and no errors were reported. To share that it worked, confirm this firmware at https://freemkv.org/firmware/find/. Do you still want to submit a diagnostic report?",
+    "report.update_required": "Update {version} is available. Automated diagnostic reports require the latest version. Update at https://freemkv.org/firmware/. You can still view and save logs locally.",
+    "errors.transfer_rejected": "The drive rejected the firmware block at byte {offset} (block size: {length} bytes).",
+    "errors.transfer_stopped": "Firmware transfer stopped at byte {offset} (block size: {length} bytes).",
+    "errors.update_communication": "The drive reported a communication failure during the update command.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "This update needs to change drive settings, but that settings conversion has not been validated. Choose an update with a validated settings conversion.",
     "errors.firmware_corrupt": "This firmware file is corrupt or incomplete. Download a fresh OEM copy and try again.",
     "errors.startup_setting_restored": "The drive’s original startup setting was restored and verified. The firmware update command and payload were not sent. Save a diagnostic report if the failure repeats.",

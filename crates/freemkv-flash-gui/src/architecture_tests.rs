@@ -8,6 +8,7 @@ const MODEL: &[(&str, &str)] = &[
     ("ops.rs", include_str!("ops.rs")),
     ("gui_gate.rs", include_str!("gui_gate.rs")),
     ("support.rs", include_str!("support.rs")),
+    ("updates.rs", include_str!("updates.rs")),
 ];
 
 const SHELLS: &[(&str, &str)] = &[

@@ -1,6 +1,12 @@
 {
   "language_name": "Svenska",
   "messages": {
+    "report.successful_flash": "Flashningen slutfördes utan rapporterade fel. Bekräfta att denna firmware fungerar på https://freemkv.org/firmware/find/. Vill du ändå skicka en diagnostikrapport?",
+    "report.update_required": "Uppdatering {version} är tillgänglig. Automatiska diagnostikrapporter kräver den senaste versionen. Uppdatera på https://freemkv.org/firmware/. Loggar kan fortfarande visas och sparas lokalt.",
+    "errors.transfer_rejected": "Enheten avvisade firmwareblocket vid byte {offset} (blockstorlek: {length} byte).",
+    "errors.transfer_stopped": "Firmwareöverföringen stoppades vid byte {offset} (blockstorlek: {length} byte).",
+    "errors.update_communication": "Enheten rapporterade ett kommunikationsfel under uppdateringskommandot.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Den här uppdateringen måste ändra enhetens inställningar, men den ändringen har inte validerats. Välj en uppdatering med en validerad inställningskonvertering.",
     "errors.firmware_corrupt": "Den här firmwarefilen är skadad eller ofullständig. Hämta en ny OEM-kopia och försök igen.",
     "errors.startup_setting_restored": "Enhetens ursprungliga startinställning återställdes och verifierades. Kommandot för uppdatering av den fasta programvaran och dess data skickades inte. Spara en diagnostikrapport om felet återkommer.",

@@ -1,6 +1,12 @@
 {
   "language_name": "Nederlands",
   "messages": {
+    "report.successful_flash": "Het flashen is geslaagd en er zijn geen fouten gemeld. Bevestig de werking van deze firmware op https://freemkv.org/firmware/find/. Wilt u toch een diagnoserapport indienen?",
+    "report.update_required": "Update {version} is beschikbaar. Automatische diagnoserapporten vereisen de nieuwste versie. Werk bij via https://freemkv.org/firmware/. Logboeken kunnen nog steeds lokaal worden bekeken en opgeslagen.",
+    "errors.transfer_rejected": "Het station heeft het firmwareblok bij byte {offset} geweigerd (blokgrootte: {length} bytes).",
+    "errors.transfer_stopped": "De firmwareoverdracht is gestopt bij byte {offset} (blokgrootte: {length} bytes).",
+    "errors.update_communication": "Het station meldde een communicatiefout tijdens de updateopdracht.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Deze update moet de instellingen van de drive wijzigen, maar die omzetting is niet gevalideerd. Kies een update met een gevalideerde omzetting van instellingen.",
     "errors.firmware_corrupt": "Dit firmwarebestand is beschadigd of onvolledig. Download een nieuwe OEM-kopie en probeer het opnieuw.",
     "errors.startup_setting_restored": "De oorspronkelijke opstartinstelling van het station is hersteld en gecontroleerd. De firmware-updateopdracht en firmwaregegevens zijn niet verzonden. Sla een diagnoserapport op als de fout terugkomt.",

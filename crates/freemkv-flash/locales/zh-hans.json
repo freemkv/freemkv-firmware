@@ -1,6 +1,12 @@
 {
   "language_name": "简体中文",
   "messages": {
+    "report.successful_flash": "固件写入成功，未报告任何错误。请在 https://freemkv.org/firmware/find/ 确认此固件可正常使用。您仍要提交诊断报告吗？",
+    "report.update_required": "更新 {version} 已可用。自动提交诊断报告需要最新版本。请前往 https://freemkv.org/firmware/ 更新。您仍可在本地查看和保存日志。",
+    "errors.transfer_rejected": "驱动器拒绝了字节位置 {offset} 处的固件块（块大小：{length} 字节）。",
+    "errors.transfer_stopped": "固件传输在字节位置 {offset} 处停止（块大小：{length} 字节）。",
+    "errors.update_communication": "驱动器在更新命令期间报告通信失败。",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "此更新需要更改驱动器设置，但该设置转换尚未通过验证。请选择设置转换已验证的更新。",
     "errors.firmware_corrupt": "此固件文件已损坏或不完整。请重新下载 OEM 文件后重试。",
     "errors.startup_setting_restored": "光驱原来的启动设置已还原并验证。固件更新命令和固件数据均未发送。如果错误再次发生，请保存诊断报告。",

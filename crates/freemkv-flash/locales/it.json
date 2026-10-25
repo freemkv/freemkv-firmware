@@ -1,6 +1,12 @@
 {
   "language_name": "Italiano",
   "messages": {
+    "report.successful_flash": "La scrittura del firmware è riuscita e non sono stati segnalati errori. Confermi il funzionamento su https://freemkv.org/firmware/find/. Vuole comunque inviare un rapporto diagnostico?",
+    "report.update_required": "L’aggiornamento {version} è disponibile. I rapporti diagnostici automatici richiedono l’ultima versione. Aggiornare su https://freemkv.org/firmware/. È comunque possibile visualizzare e salvare i log localmente.",
+    "errors.transfer_rejected": "L’unità ha rifiutato il blocco firmware al byte {offset} (dimensione del blocco: {length} byte).",
+    "errors.transfer_stopped": "Il trasferimento del firmware si è interrotto al byte {offset} (dimensione del blocco: {length} byte).",
+    "errors.update_communication": "L’unità ha segnalato un errore di comunicazione durante il comando di aggiornamento.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Questo aggiornamento deve modificare le impostazioni dell’unità, ma la conversione non è stata convalidata. Scegli un aggiornamento con una conversione delle impostazioni convalidata.",
     "errors.firmware_corrupt": "Questo file firmware è danneggiato o incompleto. Scarica una nuova copia OEM e riprova.",
     "errors.startup_setting_restored": "L’impostazione di avvio originale dell’unità è stata ripristinata e verificata. Non sono stati inviati il comando di aggiornamento del firmware né i dati del firmware. Salva un rapporto diagnostico se l’errore si ripete.",

@@ -4226,6 +4226,8 @@ fn corrupt_input_error_remains_visible_and_controls_are_reenabled() {
     );
     let view = app.view();
     assert!(!app.running() && view.controls_enabled && view.can_close);
+    let status = view.status.as_ref().unwrap();
+    assert!(!crate::localization::english(&status.text).contains("corrupt or incomplete"));
     let failure = view.results.unwrap().failure.unwrap();
     assert!(failure.text.contains("corrupt or incomplete"));
     assert!(failure.text.contains("Download a fresh OEM copy"));
@@ -4279,4 +4281,66 @@ fn td05_corrupt_package_finishes_flash_and_recovery_jobs_without_opening_a_drive
             .iter()
             .any(|msg| matches!(msg, Msg::DriveAfter(_) | Msg::Authorized(_, _))));
     }
+}
+
+#[test]
+fn newer_release_blocks_both_report_entry_points_and_keeps_local_logs() {
+    let mut app = one_drive();
+    app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+    assert!(matches!(
+        app.dispatch(Input::SubmitReport).as_slice(),
+        [Effect::ReportPrompt { .. }]
+    ));
+    let (tx, rx) = mpsc::channel();
+    app.update_rx = Some(rx);
+    tx.send(Ok(Some("0.15.3".into()))).unwrap();
+    app.poll();
+    assert!(app.dispatch(Input::SendReport("details".into())).is_empty());
+    assert!(app.report_rx.is_none() && app.report_prompt.is_none());
+    assert!(app.dispatch(Input::SubmitReport).is_empty());
+    let view = app.view();
+    let results = view.results.unwrap();
+    assert!(!results.submit_report.enabled);
+    let notice = crate::localization::english(results.notice.as_ref().unwrap());
+    assert!(notice.contains("0.15.3") && notice.contains("latest version"));
+    app.dispatch(Input::ViewLog);
+    assert!(app.diagnostics_open);
+}
+
+#[test]
+fn failed_or_current_release_check_allows_normal_reports() {
+    for response in [Err("offline".into()), Ok(None)] {
+        let mut app = one_drive();
+        app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+        let (tx, rx) = mpsc::channel();
+        app.update_rx = Some(rx);
+        tx.send(response).unwrap();
+        app.poll();
+        assert!(app.available_update.is_none());
+        assert!(app.results_view().submit_report.enabled);
+        assert!(matches!(
+            app.dispatch(Input::SubmitReport).as_slice(),
+            [Effect::ReportPrompt { .. }]
+        ));
+    }
+}
+
+#[test]
+fn successful_flash_without_attachment_suggests_website_confirmation() {
+    let mut app = one_drive();
+    app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+    app.successful_flash = true;
+    let effects = app.dispatch(Input::SubmitReport);
+    let [Effect::ReportPrompt { summary, .. }] = &effects[..] else {
+        panic!("missing confirmation");
+    };
+    let text = crate::localization::english(summary);
+    assert!(text.contains("completed successfully") && text.contains("still want to submit"));
+    app.dispatch(Input::DismissReport(String::new()));
+    app.failure = Some("error".into());
+    let effects = app.dispatch(Input::SubmitReport);
+    let [Effect::ReportPrompt { summary, .. }] = &effects[..] else {
+        panic!("missing report prompt");
+    };
+    assert!(!crate::localization::english(summary).contains("completed successfully"));
 }

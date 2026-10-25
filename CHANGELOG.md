@@ -7,6 +7,14 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Flash
 
+- Check for a newer stable release at startup. When confirmed, explain the
+  update and disable automated diagnostic submissions until updated; failed
+  checks allow normal use, and local logs remain available.
+- Show known transfer failure causes alongside the unverified-update warning,
+  without repeating the full error in the single-line status.
+
+- After a fully verified flash without an attachment, ask whether a diagnostic
+  report is needed and suggest confirming success on the website.
 - Require a nonblank description when submitting a diagnostic report, and include
   the description in the maintainer notification email.
 

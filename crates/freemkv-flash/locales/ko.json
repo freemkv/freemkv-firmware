@@ -1,6 +1,12 @@
 {
   "language_name": "한국어",
   "messages": {
+    "report.successful_flash": "펌웨어 쓰기가 성공했으며 보고된 오류가 없습니다. https://freemkv.org/firmware/find/ 에서 이 펌웨어의 작동을 확인해 주세요. 그래도 진단 보고서를 제출하시겠습니까?",
+    "report.update_required": "업데이트 {version}을 사용할 수 있습니다. 자동 진단 보고서 제출에는 최신 버전이 필요합니다. https://freemkv.org/firmware/ 에서 업데이트하세요. 로그 보기 및 로컬 저장은 계속 사용할 수 있습니다.",
+    "errors.transfer_rejected": "드라이브가 바이트 위치 {offset}의 펌웨어 블록을 거부했습니다(블록 크기: {length}바이트).",
+    "errors.transfer_stopped": "펌웨어 전송이 바이트 위치 {offset}에서 중단되었습니다(블록 크기: {length}바이트).",
+    "errors.update_communication": "업데이트 명령 중 드라이브가 통신 오류를 보고했습니다.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "이 업데이트는 드라이브 설정을 변경해야 하지만 해당 설정 변환은 검증되지 않았습니다. 설정 변환이 검증된 업데이트를 선택하세요.",
     "errors.firmware_corrupt": "이 펌웨어 파일은 손상되었거나 불완전합니다. 새 OEM 파일을 다운로드한 후 다시 시도하세요.",
     "errors.startup_setting_restored": "드라이브의 원래 시작 설정을 복원하고 확인했습니다. 펌웨어 업데이트 명령과 펌웨어 데이터는 전송되지 않았습니다. 오류가 다시 발생하면 진단 보고서를 저장하세요.",

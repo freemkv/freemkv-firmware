@@ -1,6 +1,12 @@
 {
   "language_name": "Català",
   "messages": {
+    "report.successful_flash": "La gravació ha finalitzat correctament i no s’ha informat de cap error. Confirmeu que aquest microprogramari funciona a https://freemkv.org/firmware/find/. Encara voleu enviar un informe de diagnòstic?",
+    "report.update_required": "L’actualització {version} està disponible. Els informes de diagnòstic automàtics requereixen la versió més recent. Actualitzeu a https://freemkv.org/firmware/. Podeu continuar veient i desant registres localment.",
+    "errors.transfer_rejected": "La unitat ha rebutjat el bloc de microprogramari al byte {offset} (mida del bloc: {length} bytes).",
+    "errors.transfer_stopped": "La transferència del microprogramari s’ha aturat al byte {offset} (mida del bloc: {length} bytes).",
+    "errors.update_communication": "La unitat ha informat d’un error de comunicació durant l’ordre d’actualització.",
+    "errors.update_cause": "{cause}\n\n{guidance}",
     "errors.settings_unresolved": "Aquesta actualització ha de canviar els paràmetres de la unitat, però la conversió no s’ha validat. Trieu una actualització amb una conversió validada.",
     "errors.firmware_corrupt": "Aquest fitxer de microprogramari està malmès o incomplet. Descarregueu-ne una còpia OEM nova i torneu-ho a provar.",
     "errors.startup_setting_restored": "La configuració d’inici original de la unitat s’ha restaurat i verificat. No s’han enviat l’ordre d’actualització del microprogramari ni les dades del microprogramari. Deseu un informe de diagnòstic si l’error es repeteix.",
