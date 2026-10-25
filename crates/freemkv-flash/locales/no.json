@@ -1,6 +1,7 @@
 {
   "language_name": "Norsk",
   "messages": {
+    "errors.settings_unresolved": "Innstillingenes kompatibilitet er ikke validert for denne oppdateringen. Velg støttet fastvare.",
     "errors.firmware_corrupt": "Denne fastvarefilen er skadet eller ufullstendig. Last ned en ny OEM-kopi og prøv igjen.",
     "errors.startup_setting_restored": "Stasjonens opprinnelige oppstartsinnstilling ble gjenopprettet og bekreftet. Lagre en diagnoserapport for å få hjelp før du prøver igjen.",
     "errors.startup_setting_uncertain": "Stasjonens opprinnelige oppstartsinnstilling kunne ikke gjenopprettes eller bekreftes. Lagre en diagnoserapport, og få stasjonen kontrollert før du prøver igjen.",

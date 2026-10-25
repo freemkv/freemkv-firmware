@@ -1,6 +1,7 @@
 {
   "language_name": "English",
   "messages": {
+    "errors.settings_unresolved": "Settings compatibility has not been validated for this update. Choose a supported firmware.",
     "errors.firmware_corrupt": "This firmware file is corrupt or incomplete. Download a fresh OEM copy and try again.",
     "errors.startup_setting_restored": "The original drive startup setting was restored and verified. Save a diagnostic report for help before trying again.",
     "errors.startup_setting_uncertain": "The original drive startup setting could not be restored or verified. Save a diagnostic report and have the drive checked before trying again.",

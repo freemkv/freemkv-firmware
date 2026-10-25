@@ -1,6 +1,7 @@
 {
   "language_name": "Bahasa Indonesia",
   "messages": {
+    "errors.settings_unresolved": "Kompatibilitas pengaturan belum divalidasi untuk pembaruan ini. Pilih firmware yang didukung.",
     "errors.firmware_corrupt": "File firmware ini rusak atau tidak lengkap. Unduh salinan OEM baru dan coba lagi.",
     "errors.startup_setting_restored": "Pengaturan awal mulai drive telah dipulihkan dan diverifikasi. Simpan laporan diagnostik untuk mendapatkan bantuan sebelum mencoba lagi.",
     "errors.startup_setting_uncertain": "Pengaturan awal mulai drive tidak dapat dipulihkan atau diverifikasi. Simpan laporan diagnostik dan mintalah pemeriksaan drive sebelum mencoba lagi.",

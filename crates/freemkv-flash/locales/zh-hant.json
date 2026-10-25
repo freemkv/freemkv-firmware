@@ -1,6 +1,7 @@
 {
   "language_name": "繁體中文",
   "messages": {
+    "errors.settings_unresolved": "尚未驗證此更新的設定相容性。請選擇受支援的韌體。",
     "errors.firmware_corrupt": "此韌體檔案已損壞或不完整。請重新下載 OEM 檔案後再試。",
     "errors.startup_setting_restored": "已還原並驗證光碟機原本的啟動設定。請儲存診斷報告並尋求協助，然後再重試。",
     "errors.startup_setting_uncertain": "無法還原或驗證光碟機原本的啟動設定。請儲存診斷報告，並請專業人員檢查光碟機後再重試。",

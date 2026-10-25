@@ -1,6 +1,7 @@
 {
   "language_name": "Deutsch",
   "messages": {
+    "errors.settings_unresolved": "Die Kompatibilität der Einstellungen wurde für dieses Update nicht bestätigt. Wählen Sie eine unterstützte Firmware.",
     "errors.firmware_corrupt": "Diese Firmwaredatei ist beschädigt oder unvollständig. Laden Sie eine neue OEM-Kopie herunter und versuchen Sie es erneut.",
     "errors.startup_setting_restored": "Die ursprüngliche Starteinstellung des Laufwerks wurde wiederhergestellt und überprüft. Speichern Sie einen Diagnosebericht, um vor einem erneuten Versuch Hilfe zu erhalten.",
     "errors.startup_setting_uncertain": "Die ursprüngliche Starteinstellung des Laufwerks konnte nicht wiederhergestellt oder überprüft werden. Speichern Sie einen Diagnosebericht und lassen Sie das Laufwerk vor einem erneuten Versuch überprüfen.",

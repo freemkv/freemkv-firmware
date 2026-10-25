@@ -1,6 +1,7 @@
 {
   "language_name": "Svenska",
   "messages": {
+    "errors.settings_unresolved": "Inställningarnas kompatibilitet har inte validerats för denna uppdatering. Välj en firmware som stöds.",
     "errors.firmware_corrupt": "Den här firmwarefilen är skadad eller ofullständig. Hämta en ny OEM-kopia och försök igen.",
     "errors.startup_setting_restored": "Enhetens ursprungliga startinställning återställdes och verifierades. Spara en diagnostikrapport för att få hjälp innan du försöker igen.",
     "errors.startup_setting_uncertain": "Enhetens ursprungliga startinställning kunde inte återställas eller verifieras. Spara en diagnostikrapport och få enheten kontrollerad innan du försöker igen.",

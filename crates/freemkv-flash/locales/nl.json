@@ -1,6 +1,7 @@
 {
   "language_name": "Nederlands",
   "messages": {
+    "errors.settings_unresolved": "De compatibiliteit van de instellingen is niet gevalideerd voor deze update. Kies ondersteunde firmware.",
     "errors.firmware_corrupt": "Dit firmwarebestand is beschadigd of onvolledig. Download een nieuwe OEM-kopie en probeer het opnieuw.",
     "errors.startup_setting_restored": "De oorspronkelijke opstartinstelling van het station is hersteld en gecontroleerd. Sla een diagnostisch rapport op om hulp te krijgen voordat u het opnieuw probeert.",
     "errors.startup_setting_uncertain": "De oorspronkelijke opstartinstelling van het station kon niet worden hersteld of gecontroleerd. Sla een diagnostisch rapport op en laat het station controleren voordat u het opnieuw probeert.",

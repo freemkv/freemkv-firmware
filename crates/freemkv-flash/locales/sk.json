@@ -1,6 +1,7 @@
 {
   "language_name": "Slovenčina",
   "messages": {
+    "errors.settings_unresolved": "Kompatibilita nastavení pre túto aktualizáciu nebola overená. Vyberte podporovaný firmvér.",
     "errors.firmware_corrupt": "Tento súbor firmvéru je poškodený alebo neúplný. Stiahnite novú kópiu OEM a skúste to znova.",
     "errors.startup_setting_restored": "Pôvodné nastavenie spúšťania jednotky bolo obnovené a overené. Pred ďalším pokusom uložte diagnostickú správu a požiadajte o pomoc.",
     "errors.startup_setting_uncertain": "Pôvodné nastavenie spúšťania jednotky sa nepodarilo obnoviť alebo overiť. Uložte diagnostickú správu a pred ďalším pokusom nechajte jednotku skontrolovať.",

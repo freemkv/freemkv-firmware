@@ -1038,6 +1038,10 @@ fn settings_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
         ),
     ] {
         let report = super::preparation_error(PreparationError::Settings(error));
+        assert_eq!(
+            crate::user_error::UserError::of(&report).id,
+            "errors.settings_unresolved"
+        );
         let message = format!("{report:#}");
         assert!(message.contains(code));
         assert!(message.contains("settings mapping"));

@@ -233,7 +233,7 @@
     ],
     "admission": "Hardware and settings are independent; even family-override preparation must pass the settings gate. Existing integrity, receiver, ABI and authentication checks remain mandatory.",
     "mechanism_status": "Sparse identified issue registry implemented; all identified cross-convention directions unresolved. No movement converter registered.",
-    "dependency_status": "Exact version 1.2.0 and immutable Git revision 07e9b8eee03c26b045f7639dd076ae0f67e6a7d5; no relative dependency override.",
+    "dependency_status": "Exact version 1.2.1 and immutable Git revision 47e62cc565e77150a74b7e0445914535ef8804b9; no relative dependency override.",
     "report": "../../research/0.15.1-drive-identity-audit/implementation-state.json",
     "design_gap": "Static mapping and packaging audits do not establish hardware/media success or native reverse conversion. Release keeps these transitions blocked."
   },
