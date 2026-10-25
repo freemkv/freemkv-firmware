@@ -10,3 +10,9 @@ except as permitted by their owners.
 WH16NS58 1.V9 is the original 2 MiB OEM image from the reported failure, SHA-256
 `97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061`.
 It exercises an erased run extending beyond the final active integrity range.
+
+BE14NU40 MT1939 JB7 1.01 is a 2 MiB OEM image from the external read-only
+firmware hoard, SHA-256
+`7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567`. It
+regresses classic MT1939 CREATE/MODIFY parity when the independent HRL detour
+resolves but the RawRead helper does not.

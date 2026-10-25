@@ -521,29 +521,44 @@ impl Mt1959Engine {
         // byte-identical to OEM (no deny-reset detour). Structurally audited; the
         // static-only label already carries the pending-hardware-KAT caveat.
         //
-        // HRL-skip is emitted alongside RawRead (and its facts folded in),
-        // MIRRORING `build_report_classic` — otherwise create and modify
-        // produce non-identical images on the same classic base and
-        // `corpus_create_and_modify_agree_byte_for_byte` fails once
-        // `CLASSIC_BOOT_BLESSED` is true. Modern `build_modify` (mt1959.rs)
-        // folds HRL facts into the RawRead lever the same way; keep the two
-        // engines symmetric so downstream (audit / reporter) sees one lever
-        // shape regardless of family.
+        // HRL-skip is a separate, independently anchored classic detour. CREATE
+        // attempts it even when one of the RawRead helpers misses (for example,
+        // a relocated classic AACS block can lack the shared JB8 session-reset
+        // signature). MODIFY must do the same or it silently omits an otherwise
+        // valid HRL patch and diverges from CREATE. Both effects are represented
+        // by the composite RawRead lever; when only HRL resolves, its facts still
+        // make the applied detour visible to the structural auditor.
         levers.push(if cap.bd_aacs {
-            match self.emit_rawread_classic(image, &mut out, flag_base) {
-                Ok(mut facts) => {
-                    if let Ok((sites, stub_va)) = self.emit_hrl_classic(image, &mut out, flag_base)
-                    {
-                        if stub_va != 0 {
-                            facts.push(("hrl_stub_va", stub_va));
-                            for (k, &s) in sites.iter().take(3).enumerate() {
-                                facts.push((["hrl_site", "hrl_site2", "hrl_site3"][k], s));
+            let rawread = self.emit_rawread_classic(image, &mut out, flag_base);
+            let hrl = self.emit_hrl_classic(image, &mut out, flag_base);
+            let append_hrl_facts =
+                |facts: &mut Vec<(&'static str, u32)>, result: &Result<(Vec<u32>, u32)>| {
+                    if let Ok((sites, stub_va)) = result {
+                        if *stub_va != 0 {
+                            facts.push(("hrl_stub_va", *stub_va));
+                            for (k, &site) in sites.iter().take(3).enumerate() {
+                                facts.push((["hrl_site", "hrl_site2", "hrl_site3"][k], site));
                             }
                         }
                     }
+                };
+            match (rawread, hrl) {
+                (Ok(mut facts), result) => {
+                    append_hrl_facts(&mut facts, &result);
                     LeverReport::applied(LeverId::RawRead, facts)
                 }
-                Err(e) => LeverReport::missed(LeverId::RawRead, format!("{e:#}")),
+                (Err(_), Ok((sites, stub_va))) if stub_va != 0 => {
+                    let mut facts = Vec::new();
+                    append_hrl_facts(&mut facts, &Ok((sites, stub_va)));
+                    LeverReport::applied(LeverId::RawRead, facts)
+                }
+                (Err(rawread_error), Err(hrl_error)) => LeverReport::missed(
+                    LeverId::RawRead,
+                    format!("{rawread_error:#}; classic HRL-skip also missed: {hrl_error:#}"),
+                ),
+                (Err(rawread_error), Ok(_)) => {
+                    LeverReport::missed(LeverId::RawRead, format!("{rawread_error:#}"))
+                }
             }
         } else {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
