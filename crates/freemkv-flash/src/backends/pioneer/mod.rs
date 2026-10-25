@@ -529,6 +529,12 @@ pub(crate) fn authorize_installed(
             })
             .context(crate::user_error::IssueCode::InstalledFirmwareMismatch));
         }
+        // Keep the pre-existing installed-Kernel/target-Normal pair checks
+        // after the typed tag comparison. Besides the Kernel generation, the
+        // headers must still agree on the hardware/SAT and model identity.
+        flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
+            .map_err(anyhow::Error::msg)
+            .context(crate::user_error::IssueCode::InstalledFirmwareMismatch)?;
     }
     let (prepared, target_facts, receiver_check) = match p.selection {
         FlashSelection::KernelAndNormal => {
