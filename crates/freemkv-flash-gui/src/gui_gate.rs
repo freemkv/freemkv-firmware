@@ -104,7 +104,7 @@ pub fn fixture() -> App {
     app.language = crate::localization::Language::En;
     app.profile = ProfileState::Ready(Profile {
         can_read: Some(true),
-        read_notice: None,
+        read_notice: std::env::var("FREEMKV_GUI_GATE_READ_NOTICE").ok(),
         flash_current: true,
         recovery_family_override: true,
         chips: vec!["Synthetic".into()],

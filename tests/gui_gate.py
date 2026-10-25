@@ -29,7 +29,10 @@ def main(app, out):
     for name in os.listdir(out):
         if name in ("gate.txt", "panic.txt") or name.endswith(".png"):
             os.remove(os.path.join(out, name))
-    env = dict(os.environ, FREEMKV_FLASH_GATE=out)
+    env = dict(os.environ, FREEMKV_FLASH_GATE=out,
+               FREEMKV_GUI_GATE_READ_NOTICE="ui.mtk_read_limits")
+    # Exercise the real read-limitation copy and its layout using synthetic
+    # profile evidence; the native gate never probes or writes a real drive.
     if sys.platform.startswith("linux"):
         # Xvfb has no GPU: GTK's software renderer, and no accessibility bus to wait on.
         env.setdefault("GSK_RENDERER", "cairo")
