@@ -215,6 +215,24 @@ fn check_branch_impl(
 pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
     let img = &report.image;
     let mut checks = Vec::new();
+    // Re-signing may change digests, never the table's geometry or erased
+    // sentinel records. A self-consistent MAC alone cannot prove this.
+    let descriptors_preserved = (0..cmac::ENTRY_COUNT).all(|index| {
+        let at = cmac::TABLE_OFFSET + index * cmac::ENTRY_SIZE;
+        let len = if original.get(at..at + 4) == Some(&[0xff; 4]) {
+            cmac::ENTRY_SIZE
+        } else {
+            12
+        };
+        original.get(at..at + len).is_some()
+            && original.get(at..at + len) == report.image.get(at..at + len)
+    });
+    checks.push(AuditCheck {
+        lever: "integrity",
+        what: "integrity table descriptors and unused slots preserved".into(),
+        ok: descriptors_preserved,
+        detail: "Only active stored digests may change during signing".into(),
+    });
 
     for l in &report.levers {
         if l.outcome != LeverOutcome::Applied {

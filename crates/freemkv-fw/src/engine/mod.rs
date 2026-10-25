@@ -19,6 +19,8 @@ use crate::family::{self, ChipFamily};
 use thumb_asm::CommandRecord;
 
 pub mod audit;
+mod code_space;
+pub use code_space::NoCodeSpace;
 pub mod core;
 pub mod lever;
 pub mod mt1939;

@@ -1462,6 +1462,7 @@ dependencies = [
  "clap",
  "freemkv-chipset",
  "freemkv-flash",
+ "mediatek-optical",
  "sha2",
  "tempfile",
  "thumb-asm",

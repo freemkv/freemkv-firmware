@@ -5,6 +5,13 @@ Versions are independent of the freemkv ripping applications.
 
 ## [0.15.2] - Unreleased
 
+### freemkv Modify
+
+- Allocate injected MediaTek code outside integrity metadata, update signatures,
+  identity and drive-owned storage, even when those areas are erased. Preserve
+  integrity-table descriptors and unused slots in the structural audit. This
+  fixes the reproduced WH16NS58 1.V9 table corruption during modification.
+
 ### freemkv Flash
 
 - Check for a newer stable release at startup. When confirmed, explain the
