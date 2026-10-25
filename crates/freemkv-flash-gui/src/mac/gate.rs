@@ -791,13 +791,13 @@ fn report_prompt(c: &Controller, dir: &Path, g: &mut Gate) {
             action,
         );
         g.check(
-            "report-optional-description-label",
+            "report-required-description-label",
             alert.accessoryView().is_some_and(|accessory| {
                 accessory.subviews().iter().any(|child| {
                     child
                         .downcast_ref::<super::NSTextField>()
                         .is_some_and(|label| {
-                            label.stringValue().to_string() == "Description (optional)"
+                            label.stringValue().to_string() == "Description (required)"
                         })
                 })
             }),

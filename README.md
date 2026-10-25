@@ -343,11 +343,13 @@ other settings to OEM behavior. The button changes the form; Create writes them
 to the generated firmware. Saved drive settings do not override these boot
 choices; applications can still change settings during a session.
 
-The CLI uses repeatable `--default FEATURE=VALUE` options:
+Modify signs and verifies its output automatically; there is no separate Sign
+action. The CLI uses `modify INPUT [OUTPUT]` with repeatable
+`--default FEATURE=VALUE` options (`create` remains a compatibility alias):
 
 ```sh
-freemkv-fw create original.bin custom.bin --default hrl=off --default encryption=off
-freemkv-fw create original.bin custom.bin --default region=free --dry-run
+freemkv-fw modify original.bin custom.bin --default hrl=off --default encryption=off
+freemkv-fw modify original.bin custom.bin --default region=free --dry-run
 ```
 
 Supported values are `unrestricted`, `hrl`, and `encryption` = `on|off|oem`,

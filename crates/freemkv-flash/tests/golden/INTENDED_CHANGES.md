@@ -14,6 +14,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| FILE_VALIDATION | Check file rejects unrecognized bytes rather than reporting successful validation. Informational inspection remains available. No drive commands change. |
 | OPERATION_015 | 0.15.0: confirmation prompts and accepted answers use the selected language; Pioneer requires a usable installed backup and never offers a bypass it cannot execute. Typed localized user issues retain pre-write and read-only evidence; internal error chains gain stable cause markers. Recovery states whether its family gate is retained or explicitly bypassed. Expected restart command failures remain in diagnostics rather than user warnings. Write ordering, payloads and verification comparisons are unchanged. |
 | CLI_INFO | 0.14.4: CLI drive information groups and aligns the shared GUI identity, interface, capabilities, region and settings fields. GUI field values and device-command transcript remain unchanged. Native transport traces stay in diagnostics. |
 | HUMAN_ERRORS | 0.14.1: optional DVD region, Pioneer identity and settings read failures show Unavailable. Full causes remain in English diagnostics. No device commands or values from successful reads change. |
@@ -178,11 +179,11 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 +backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
 -MSG      backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 +MSG      backup sha256: 98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
--saved file: 2097152 bytes sha256=aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+saved file: 2097152 bytes sha256=98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
+-saved file: 2097152 bytes sha256=aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
++saved file: 2097152 bytes sha256=98c9c825893f7f5c35b525c1f54b41d65eaaaf01a0389e1f5ca00581064d1519
 ```
 
 ### Pioneer backup: bounded replay of a UD04
@@ -203,6 +204,32 @@ reason: P4
 ```
 
 ## check_file.txt
+
+### check_file empty.bin
+reason: FILE_VALIDATION
+```diff
+-result: OK
+---- text (6) ---
++result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
++--- text (5) ---
+-image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+---- events (9) ---
++--- events (8) ---
+-MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+```
+
+### check_file garbage.bin
+reason: FILE_VALIDATION
+```diff
+-result: OK
+---- text (6) ---
++result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
++--- text (5) ---
+-image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+---- events (9) ---
++--- events (8) ---
+-MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+```
 
 ### check_file missing file
 reason: OPERATION_015
@@ -396,10 +423,12 @@ reason: R7, R6, R8, M-CHIP, M-ENC, M-LIFECYCLE
 ```
 
 ### check_file mtk_unsigned.bin
-reason: R7, M-CHIP, M-LIFECYCLE
+reason: R7, M-CHIP, M-LIFECYCLE, FILE_VALIDATION
 ```diff
+-result: OK
 ---- text (12) ---
-+--- text (6) ---
++result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
++--- text (5) ---
 -sha256: 1778b3ed7796dad5553929eb37c3f42050a1eb645b67142e92722680be86698b
 -chipset: MediaTek MT1959 (via identity string; tag MTEKMT1959)
 -banner: <none>
@@ -409,9 +438,8 @@ reason: R7, M-CHIP, M-LIFECYCLE
 -integrity: no signed CMAC table (unsigned or non-standard image)
 -built for: <unknown> BD-RE BU40N (MT1959)
 +sha256: 2bbbe22fee8733f9463bb566f584d84c00b52d9c4de3f5b30262344bcd8f9989
-+image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 ---- events (19) ---
-+--- events (9) ---
++--- events (8) ---
 -MSG      sha256: 1778b3ed7796dad5553929eb37c3f42050a1eb645b67142e92722680be86698b
 -FIELD    Chipset = MT1959
 -FIELD    Model = BD-RE BU40N
@@ -425,7 +453,6 @@ reason: R7, M-CHIP, M-LIFECYCLE
 -MSG      integrity: no signed CMAC table (unsigned or non-standard image)
 -MSG      built for: <unknown> BD-RE BU40N (MT1959)
 +MSG      sha256: 2bbbe22fee8733f9463bb566f584d84c00b52d9c4de3f5b30262344bcd8f9989
-+MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 ```
 
 ### check_file pioneer_bundle_signed_pair.tar
@@ -435,6 +462,19 @@ reason: P4
 +sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
 -MSG      sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
 +MSG      sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
+```
+
+### check_file zeros_2mib.bin
+reason: FILE_VALIDATION
+```diff
+-result: OK
+---- text (6) ---
++result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
++--- text (5) ---
+-image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
+---- events (9) ---
++--- events (8) ---
+-MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 ```
 
 ## classify_and_unknown_info.txt
@@ -10586,11 +10626,11 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 +backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 -MSG      backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
 +MSG      backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
--saved file: 2097152 bytes sha256=933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
-+saved file: 2097152 bytes sha256=61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
+-saved file: 2097152 bytes sha256=933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
++saved file: 2097152 bytes sha256=61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 ```
 
 ### MTK dump: MT1959 drive read
@@ -10600,11 +10640,11 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 +backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 -MSG      backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
 +MSG      backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
--saved file: 2097152 bytes sha256=1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
-+saved file: 2097152 bytes sha256=47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
+-saved file: 2097152 bytes sha256=1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
++saved file: 2097152 bytes sha256=47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 ```
 
 ### MTK dump: firmware read fails at 0x100000
@@ -10632,11 +10672,11 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 -MSG      backup sha256: 39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
 +MSG      errors.backup_partial
 +MSG      backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
--saved file: 2097152 bytes sha256=39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
-+saved file: 2097152 bytes sha256=1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 ---- scsi transcript (522) ---
 +--- scsi transcript (523) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
+-saved file: 2097152 bytes sha256=39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
++saved file: 2097152 bytes sha256=1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 ```
 
 ### MTK dump: unknown boot page
@@ -10646,11 +10686,11 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 +backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 -MSG      backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
 +MSG      backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
--saved file: 2097152 bytes sha256=e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
-+saved file: 2097152 bytes sha256=e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
+-saved file: 2097152 bytes sha256=e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
++saved file: 2097152 bytes sha256=e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 ```
 
 ## mtk_flash_input_refusals.txt

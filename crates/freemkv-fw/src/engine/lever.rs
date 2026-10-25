@@ -205,8 +205,6 @@ pub struct ModifyReport {
     pub validation: Validation,
 }
 
-/// Refusal wording when every lever is already set.
-pub const ALREADY_MODIFIED: &str = "this image is already modified — nothing to change";
 /// Refusal wording when no lever can be applied to this image.
 pub const NOT_MODIFIABLE: &str = "nothing in this image can be modified by freemkv-fw";
 
@@ -260,26 +258,14 @@ impl ModifyReport {
             .count()
     }
 
-    /// Why `create` must refuse this report, or `None` when at least one lever
-    /// was Applied. An image whose levers are all already set (none skipped) is
-    /// "already modified"; anything else is simply not modifiable.
+    /// Refuse only when no supported lever is effective. An already-enabled
+    /// change is a successful no-op even if other levers are unavailable.
     pub fn refusal(&self) -> Option<&'static str> {
-        if self.applied_count() > 0 {
-            return None;
-        }
-        let already = self
-            .levers
-            .iter()
-            .any(|l| l.outcome == LeverOutcome::AlreadyPresent);
-        let missed = self
-            .levers
-            .iter()
-            .any(|l| matches!(l.outcome, LeverOutcome::SignatureNotFound { .. }));
-        Some(if already && !missed {
-            ALREADY_MODIFIED
+        if self.any_effective() {
+            None
         } else {
-            NOT_MODIFIABLE
-        })
+            Some(NOT_MODIFIABLE)
+        }
     }
 
     /// Machine-readable JSON (hand-rolled — no serde dependency).

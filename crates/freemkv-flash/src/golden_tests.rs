@@ -2815,6 +2815,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
+    "FILE_VALIDATION",
     "F-OVERRIDE",
     "OPERATION_015",
     "PROTO",
@@ -2845,6 +2846,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
+    "FILE_VALIDATION",
     "F-OVERRIDE",
     "OPERATION_015",
     "PROTO",
@@ -3078,6 +3080,11 @@ fn golden_parity_with_0_11_2() {
                 {
                     problems.push(format!(
                         "RECOVERY_TRAY is only valid for Pioneer Recovery execution goldens, got {file} :: {title}"
+                    ));
+                }
+                if reasons.iter().any(|r| r == "FILE_VALIDATION") && file != "check_file.txt" {
+                    problems.push(format!(
+                        "FILE_VALIDATION only applies to check_file.txt, got {file} :: {title}"
                     ));
                 }
                 if reasons.iter().any(|r| r == "P3")

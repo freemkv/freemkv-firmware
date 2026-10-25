@@ -92,12 +92,6 @@ fn unrecognized_image_is_clean_error() {
 }
 
 #[test]
-fn default_signed_path_uses_stem() {
-    let p = default_signed_path(Path::new("/tmp/fw.bin"));
-    assert_eq!(p, PathBuf::from("/tmp/fw.signed.bin"));
-}
-
-#[test]
 fn default_created_path_uses_stem() {
     let p = default_created_path(Path::new("/tmp/fw.bin"));
     assert_eq!(p, PathBuf::from("/tmp/fw.freemkv.bin"));
@@ -695,46 +689,10 @@ fn sign_image_refuses_an_image_with_no_active_regions() {
 }
 
 #[test]
-fn cmd_sign_writes_the_default_output_and_refuses_to_clobber_its_input() {
-    let dir = scratch_dir("sign-guards");
-    let input = dir.join("fw.bin");
-    let mut img = synthetic_image();
-    img[0x1500] ^= 0xFF; // force a real re-sign
-    std::fs::write(&input, &img).unwrap();
-
-    assert_eq!(
-        exit_dbg(cmd_sign(&input, None, false, None).unwrap()),
-        exit_dbg(ExitCode::SUCCESS)
-    );
-    let default_out = dir.join("fw.signed.bin");
-    assert!(
-        default_out.is_file(),
-        "with no -o and no --in-place the re-signed image must be written to \
-         <stem>.signed.bin"
-    );
-    assert_eq!(
-        std::fs::read(&input).unwrap(),
-        img,
-        "the input must be left untouched unless --in-place was asked for"
-    );
-
-    assert!(
-        cmd_sign(&input, Some(input.clone()), false, None).is_err(),
-        "an -o equal to the input must be refused — silently overwriting the \
-         only copy of an OEM image destroys it"
-    );
-    assert!(
-        cmd_sign(&input, Some(default_out.clone()), true, None).is_err(),
-        "--in-place and -o are mutually exclusive"
-    );
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn cmd_sign_surfaces_a_missing_image_as_an_error() {
-    let missing = std::env::temp_dir().join("freemkv-fw-definitely-absent-sign.bin");
-    let _ = std::fs::remove_file(&missing);
-    assert!(cmd_sign(&missing, None, false, None).is_err());
+fn modify_is_canonical_create_is_compatible_and_sign_is_removed() {
+    assert!(Cli::try_parse_from(["freemkv-fw", "modify", "input.bin"]).is_ok());
+    assert!(Cli::try_parse_from(["freemkv-fw", "create", "input.bin"]).is_ok());
+    assert!(Cli::try_parse_from(["freemkv-fw", "sign", "input.bin"]).is_err());
 }
 
 // -- create: the build guards ("never write an image that does not verify") --
@@ -782,6 +740,35 @@ fn cmd_create_builds_audits_and_writes_the_oem_base() {
     );
     assert!(base_out.is_file());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn modify_already_enabled_de_succeeds_and_preserves_firmware_bytes() {
+    let mut image = vec![0; 0x200000];
+    let banner = freemkv_chipset::BANNER_OFFSET;
+    image[banner..banner + 16].copy_from_slice(b"MT1939 Boot Code");
+    let desc = freemkv_chipset::DESCRIPTOR_OFFSET;
+    image[desc..desc + 0x40].fill(b' ');
+    image[desc..desc + 8].copy_from_slice(b"HL-DT-ST");
+    image[desc + 8..desc + 19].copy_from_slice(b"BD-RE  X100");
+    image[desc + 0x18..desc + 0x1c].copy_from_slice(b"1.00");
+    image[desc + 0x34..desc + 0x3e].copy_from_slice(b"MTEKMT1939");
+    image[desc + 0x56] = 0xde;
+    let table = cmac::TABLE_OFFSET;
+    image[table..table + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE].fill(0xff);
+    image[table..table + 4].copy_from_slice(&1u32.to_le_bytes());
+    image[table + 4..table + 8].copy_from_slice(&(desc as u32).to_le_bytes());
+    image[table + 8..table + 12].copy_from_slice(&(desc as u32 + 0xff).to_le_bytes());
+    let image = cmac::resign(&image).unwrap();
+    let dir = scratch_dir("already-enabled-de");
+    let input = dir.join("original.bin");
+    let output = dir.join("result.bin");
+    std::fs::write(&input, &image).unwrap();
+    let result = cmd_create(&input, Some(output.clone()), false, false, false, false);
+    assert_eq!(exit_dbg(result.unwrap()), exit_dbg(ExitCode::SUCCESS));
+    assert_eq!(std::fs::read(&output).unwrap(), image);
+    assert_eq!(std::fs::read(&input).unwrap(), image);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

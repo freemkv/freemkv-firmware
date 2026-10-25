@@ -527,7 +527,12 @@ fn results_ui(
             });
     }
     if let Some(failure) = &results.failure {
-        ui.colored_label(ERROR, &failure.text);
+        let color = match failure.severity {
+            crate::ui::IssueSeverity::Notice => ui.visuals().text_color(),
+            crate::ui::IssueSeverity::ActionRequired => egui::Color32::from_rgb(160, 90, 0),
+            crate::ui::IssueSeverity::Error => ERROR,
+        };
+        ui.colored_label(color, &failure.text);
     }
     if let Some(notice) = &results.notice {
         ui.label(notice);

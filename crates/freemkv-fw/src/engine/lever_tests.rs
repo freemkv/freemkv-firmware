@@ -87,23 +87,23 @@ fn refusal_is_none_when_any_lever_applied() {
 }
 
 #[test]
-fn refusal_says_already_modified_when_everything_is_already_set() {
+fn already_enabled_changes_are_successful_noops() {
     let r = report(vec![
         LeverReport::already(LeverId::RegionFree, vec![]),
         LeverReport::already(LeverId::Speed, vec![]),
         LeverReport::not_applicable(LeverId::RawRead, "no BD"),
     ]);
-    assert_eq!(r.refusal(), Some(ALREADY_MODIFIED));
+    assert_eq!(r.refusal(), None);
     assert!(r.to_json().contains("\"modified\":false"));
 }
 
 #[test]
-fn refusal_says_not_modifiable_when_a_lever_was_missed() {
+fn existing_de_is_successful_even_if_other_levers_are_unavailable() {
     let r = report(vec![
         LeverReport::already(LeverId::DowngradeEnable, vec![]),
         LeverReport::missed(LeverId::RawRead, "gate not found"),
     ]);
-    assert_eq!(r.refusal(), Some(NOT_MODIFIABLE));
+    assert_eq!(r.refusal(), None);
     let r = report(vec![LeverReport::missed(LeverId::Speed, "x")]);
     assert_eq!(r.refusal(), Some(NOT_MODIFIABLE));
 }

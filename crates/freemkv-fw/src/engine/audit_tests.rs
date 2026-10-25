@@ -571,12 +571,16 @@ fn a_fully_landed_synthetic_image_passes_every_structural_audit_check() {
         ("Raw read", "scratch buffer in runtime RAM window"),
         ("Downgrade (DE)", "DE byte set"),
         ("integrity", "CMAC tables verify"),
+        (
+            "integrity",
+            "integrity table descriptors and unused slots preserved",
+        ),
     ] {
         assert!(find(&a, lever, what).ok, "[{lever}] {what} must pass");
     }
     assert_eq!(
         a.checks.len(),
-        11,
+        12,
         "no check silently dropped or duplicated"
     );
     // The AKE install here is a `B.W`; the detail must say so, because that
@@ -587,6 +591,22 @@ fn a_fully_landed_synthetic_image_passes_every_structural_audit_check() {
             .contains("(b.w)"),
         "a B.W install must be reported as b.w, got: {}",
         find(&a, "Raw read", "AKE detour branch").detail
+    );
+}
+
+#[test]
+fn resigning_cannot_hide_integrity_table_descriptor_corruption() {
+    let (original, mut report) = fully_landed();
+    let table = cmac::TABLE_OFFSET;
+    report.image[table + 4] ^= 0x10;
+    let audit = audit_image(&original, &report);
+    assert!(
+        !find(
+            &audit,
+            "integrity",
+            "integrity table descriptors and unused slots preserved"
+        )
+        .ok
     );
 }
 

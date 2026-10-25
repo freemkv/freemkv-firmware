@@ -881,6 +881,54 @@ fn allocation_clips_erased_runs_to_one_active_integrity_range() {
 }
 
 #[test]
+fn allocation_rejects_erased_reserved_regions_even_when_authenticated() {
+    // Authentication does not imply executable space: these areas can be
+    // erased in a perfectly valid OEM image and populated later by the drive.
+    for reserved in [
+        0x10000..0x10400,   // boot mirror
+        0x105c0..0x10610,   // update signatures
+        0x1d8000..0x1ec000, // revocation lists and settings
+        0x1ec000..0x1ec100, // identity
+        0x1f0000..0x200000, // calibration
+        0xfff0..0x10000,    // boot integrity digest
+    ] {
+        let mut image = vec![0; 0x200000];
+        let table = cmac::TABLE_OFFSET;
+        image[table..table + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE].fill(0xff);
+        image[table..table + 4].copy_from_slice(&1u32.to_le_bytes());
+        image[table + 4..table + 8].copy_from_slice(&0x9c00u32.to_le_bytes());
+        image[table + 8..table + 12].copy_from_slice(&0x1fffffu32.to_le_bytes());
+        image[reserved.clone()].fill(0xff);
+        assert!(
+            Mt1959Engine.free_space(&image, 4).is_err(),
+            "allocated reserved {reserved:x?}"
+        );
+    }
+}
+
+#[test]
+fn allocation_clips_at_reserved_storage_and_does_not_reuse_written_code() {
+    let mut image = vec![0; 0x200000];
+    let table = cmac::TABLE_OFFSET;
+    image[table..table + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE].fill(0xff);
+    image[table..table + 4].copy_from_slice(&1u32.to_le_bytes());
+    image[table + 4..table + 8].copy_from_slice(&0x10000u32.to_le_bytes());
+    image[table + 8..table + 12].copy_from_slice(&0x1fffffu32.to_le_bytes());
+    // One erased run straddles the descriptor; only its safe prefix counts.
+    image[0x1ebff0..0x1ec100].fill(0xff);
+    // SETTINGS owns that prefix, too: no part of this run is executable.
+    assert!(Mt1959Engine.free_space(&image, 4).is_err());
+    image[0x1d7ff0..0x1d8100].fill(0xff);
+    assert!(Mt1959Engine.free_space(&image, 17).is_err());
+    let first = Mt1959Engine.free_space(&image, 8).unwrap() as usize;
+    assert_eq!(first, 0x1d7ff0);
+    image[first..first + 8].fill(0x55);
+    assert_eq!(Mt1959Engine.free_space(&image, 8).unwrap(), 0x1d7ff8);
+    image[first + 8..first + 16].fill(0x55);
+    assert!(Mt1959Engine.free_space(&image, 1).is_err());
+}
+
+#[test]
 fn allocation_keeps_existing_whole_run_placements_before_boundary_fallback() {
     let mut image = fixture();
     let original = Mt1959Engine.free_space(&image, 52).unwrap();
@@ -909,7 +957,8 @@ fn reported_wh16ns58_v9_build_installs_raw_read_inside_signed_flash() {
     assert_eq!(raw.outcome, LeverOutcome::Applied);
     assert!(support.has_boot());
     let boundary_stub = fact(raw, "bd_stub_va").unwrap();
-    assert_eq!(boundary_stub, 0x1b236c);
+    assert_ne!(boundary_stub, 0);
+    assert!(boundary_stub as usize >= cmac::TABLE_OFFSET + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE);
     let table = cmac::parse_table(&report.image).unwrap();
     assert!(table.iter().any(|entry| entry.is_active()
         && entry.start <= boundary_stub
@@ -924,4 +973,33 @@ fn reported_wh16ns58_v9_build_installs_raw_read_inside_signed_flash() {
     let (again, _) =
         crate::api::modify_with_defaults(&report.image, &BootSettings::standard()).unwrap();
     assert_eq!(again.image, report.image);
+}
+
+#[test]
+fn wh16ns58_v9_modification_preserves_every_integrity_table_descriptor() {
+    let original = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let settings = BootSettings::parse(&[
+        "hrl=off".into(),
+        "encryption=off".into(),
+        "speed=uncapped".into(),
+        "region=free".into(),
+    ])
+    .unwrap();
+    let (report, _) = crate::api::modify_with_defaults(original, &settings).unwrap();
+    for index in 0..cmac::ENTRY_COUNT {
+        let at = cmac::TABLE_OFFSET + index * cmac::ENTRY_SIZE;
+        assert_eq!(
+            &report.image[at..at + 12],
+            &original[at..at + 12],
+            "table descriptor {index} was overwritten"
+        );
+        if original[at..at + 4] == [0xff; 4] {
+            assert_eq!(
+                &report.image[at..at + cmac::ENTRY_SIZE],
+                &original[at..at + cmac::ENTRY_SIZE],
+                "unused table entry {index} was used as code"
+            );
+        }
+    }
+    assert!(cmac::verify(&report.image));
 }

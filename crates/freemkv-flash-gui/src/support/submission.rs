@@ -177,6 +177,17 @@ fn submit_at(
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
+    agent
+        .put(&format!("{base}/requests/{id}/description"))
+        .header("Authorization", &format!("Bearer {upload_token}"))
+        .config()
+        .timeout_global(Some(control.timeout()?))
+        .build()
+        .send_json(
+            json!({"description":source.description(), "firmware_inputs": built.firmware_inputs}),
+        )
+        .context("Could not save report description")?;
+    control.check()?;
     progress("report.uploading".into());
     for attempt in 1..=3 {
         let response = agent

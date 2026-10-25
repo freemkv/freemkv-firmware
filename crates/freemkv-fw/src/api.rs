@@ -160,6 +160,7 @@ fn create_inner(image: &[u8], defaults: &crate::boot::BootSettings) -> Result<Cr
     ));
     diagnostics::image("created image", &report.image);
     diagnostics::record(format!("create: scanner_entry=0x{:x} cdb_base=0x{:x} handler_va=0x{:x} handler_bytes={} boot_init_site=0x{:x} boot_stub_va=0x{:x} flag_base=0x{:x}", report.scanner_entry, report.cdb_base, report.handler_va, report.handler_bytes.len(), report.boot_init_site, report.boot_stub_va, report.flag_base));
+    engine::validate_metadata(image, &report.image)?;
     let verdicts = MtkCmac.verify(&report.image)?;
     for verdict in &verdicts {
         diagnostics::record(format!("post-create integrity: {verdict:?}"));
@@ -240,6 +241,7 @@ pub fn modify_with_defaults(
             engine::lever::LeverReport::applied(engine::lever::LeverId::BootSettings, vec![])
         });
         report.image = output;
+        engine::validate_metadata(image, &report.image)?;
         return Ok((report, support));
     }
     if engine::core::is_freemkv_patched(image) {
@@ -275,6 +277,7 @@ pub fn modify_with_defaults(
             vec![],
         ));
     }
+    engine::validate_metadata(image, &report.image)?;
     Ok((report, support))
 }
 

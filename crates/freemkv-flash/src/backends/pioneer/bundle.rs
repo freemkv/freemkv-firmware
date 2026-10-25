@@ -74,14 +74,20 @@ impl Bundle {
         let mut hardware: Option<String> = None;
         for entry in archive.entries()? {
             let mut entry = entry?;
-            if !entry.header().entry_type().is_file() || entry.size() > MAX_COMPONENT {
-                bail!("invalid Pioneer envelope tar member");
-            }
             let path = entry
                 .path()?
                 .to_str()
                 .context("non-UTF8 tar path")?
                 .to_owned();
+            if !entry.header().entry_type().is_file() {
+                bail!(
+                    "Pioneer firmware archive member {path:?} is not a regular file (type {:?})",
+                    entry.header().entry_type()
+                );
+            }
+            if entry.size() > MAX_COMPONENT {
+                bail!("Pioneer firmware archive member {path:?} exceeds the {MAX_COMPONENT}-byte component limit ({} bytes)", entry.size());
+            }
             let member_name = path.strip_prefix("components/").unwrap_or(&path);
             if member_name.is_empty()
                 || member_name.contains('/')

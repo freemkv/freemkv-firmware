@@ -87,3 +87,15 @@ fn scsi_error_check_condition_no_sense_is_a_rejection() {
     assert!(s.contains("0x3b/0x02/0x00/0x00/0x00"), "raw code kept: {s}");
     assert!(!s.contains("transport"), "{s}");
 }
+
+#[test]
+fn opening_a_missing_drive_never_blames_a_missing_firmware_file() {
+    use crate::user_error::UserError;
+    for (kind, expected) in [
+        (std::io::ErrorKind::NotFound, "errors.connection"),
+        (std::io::ErrorKind::PermissionDenied, "errors.drive_access"),
+    ] {
+        let error = super::open_error(std::io::Error::from(kind).into());
+        assert_eq!(UserError::of(&error).id, expected);
+    }
+}

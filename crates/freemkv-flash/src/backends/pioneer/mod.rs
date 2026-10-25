@@ -213,7 +213,10 @@ pub(crate) fn classify_flash_input(input: &[u8]) -> Result<FlashComponents> {
         return Ok((None, Some(input.to_vec())));
     }
     let bundle = crate::backends::pioneer::bundle::Bundle::from_tar_bytes(input)
-        .context("flash input is neither a valid Pioneer bundle nor a Normal .enc")?;
+        .context("flash input is neither a valid Pioneer bundle nor a Normal .enc")
+        .map_err(|error| {
+            crate::user_error::explain(error, crate::user_error::IssueCode::FirmwareInvalid)
+        })?;
     let find = |role| {
         bundle
             .components
@@ -866,6 +869,11 @@ impl FileFacet for Pioneer {
     }
 
     fn describe(&self, image: &[u8], _recognized: &Recognized) -> Option<Result<()>> {
+        if pioneer_optical::envelope::header_info(image).is_some() {
+            if let Err(error) = flash_plan::ensure_no_unrecovered_tail(None, Some(image)) {
+                return Some(Err(error));
+            }
+        }
         file_info::describe(image)
     }
 
