@@ -1,6 +1,7 @@
 {
   "language_name": "Français",
   "messages": {
+    "errors.firmware_corrupt": "Ce fichier de micrologiciel est corrompu ou incomplet. Téléchargez une nouvelle copie OEM et réessayez.",
     "errors.startup_setting_restored": "Le réglage de démarrage initial du lecteur a été restauré et vérifié. Enregistrez un rapport de diagnostic pour obtenir de l’aide avant de réessayer.",
     "errors.startup_setting_uncertain": "Le réglage de démarrage initial du lecteur n’a pas pu être restauré ou vérifié. Enregistrez un rapport de diagnostic et faites vérifier le lecteur avant de réessayer.",
     "errors.backup_required": "Cette mise à jour nécessite une sauvegarde complète du micrologiciel installé. Enregistrez un rapport de diagnostic pour obtenir de l’aide.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Type de firmware",
     "domain.kernel_version": "Version du kernel",
     "domain.pioneer_identity": "Identification Pioneer",
-    "domain.product_code": "Code de produit",
-    "domain.manufactured": "fabriqué",
+    "domain.product_code": "Code produit d’usine",
+    "domain.manufactured": "Date du test en usine",
     "domain.product_origin": "Origine du produit",
     "domain.saved_quiet_drive": "Réservation de l'écran optique silencieux",
     "domain.pureread_version": "La version pure",

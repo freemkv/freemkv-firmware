@@ -833,6 +833,11 @@ impl FileFacet for Pioneer {
         None
     }
 
+    fn validate_flash_input(&self, bytes: &[u8], _recognized: &Recognized) -> Result<()> {
+        let (kernel, normal) = classify_flash_input(bytes)?;
+        flash_plan::ensure_no_unrecovered_tail(kernel.as_deref(), normal.as_deref())
+    }
+
     fn describe(&self, image: &[u8], _recognized: &Recognized) -> Option<Result<()>> {
         file_info::describe(image)
     }

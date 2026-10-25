@@ -1,0 +1,472 @@
+{
+  "status": "Review inventory; not a runtime rule registry or a validated settings conversion",
+  "scope": "Only newly matching cross-old-family directed image pairs from the existing full indexed audit. Existing matches remain unchanged.",
+  "baseline_scheme": "pioneer.hardware.v3",
+  "corrected_scheme": "pioneer.hardware.v4",
+  "old_groups": 25,
+  "new_groups": 24,
+  "old_to_new": {
+    "2b639d1c79f534b3": [
+      "9a3666d169c53784"
+    ],
+    "3ae6112c2852e813": [
+      "489663fb029b8dc0"
+    ],
+    "3b8be746d1bbfc26": [
+      "957758a89984307a"
+    ],
+    "3ce571a7a94b0329": [
+      "d9a11584f89db20c"
+    ],
+    "3e3415a49f245a2f": [
+      "5df9fd06b71f55cb"
+    ],
+    "450a8920386f7840": [
+      "adcab7b854c054d0"
+    ],
+    "47f1bfb3d024e2ff": [
+      "7ec982e96aa57f73"
+    ],
+    "488eea7d0e6e20bb": [
+      "53b28ab23d399cd3"
+    ],
+    "4bedb7958716e1cb": [
+      "9a792f461ac6a926"
+    ],
+    "4f7fd0f638aefd68": [
+      "94061a537be14911"
+    ],
+    "5b81eaf2e2bd0260": [
+      "7a7c2fce9027e7e9"
+    ],
+    "6200c930499d30f3": [
+      "83a4abb2a9b5480e"
+    ],
+    "8b1b19bec4db1196": [
+      "497cb6e6b257fd65"
+    ],
+    "95ffe2a43d0e4b8": [
+      "83a4abb2a9b5480e"
+    ],
+    "9af5529c54746ee6": [
+      "bb6dfef113c537d5"
+    ],
+    "a7269ae20a188ccf": [
+      "94393c1a03f75646"
+    ],
+    "b283401ec5330d6e": [
+      "526603674149e582"
+    ],
+    "c5c699b9c0246f09": [
+      "124d3c8652272d3b"
+    ],
+    "c7e07c34686031ea": [
+      "3f81009aa3282a3a"
+    ],
+    "c94d8647d0fa23e4": [
+      "463a127dcfbabc80"
+    ],
+    "cc085cbf99e1033": [
+      "fb569dabb1303547"
+    ],
+    "d3444643c7d83daf": [
+      "5ed39a5aa1a4f84b"
+    ],
+    "e7fcd1749cb7dbb7": [
+      "4fd81a20211cf4cb"
+    ],
+    "edb704b9f2d001c": [
+      "101ab6ed04db6900"
+    ],
+    "f0e13717d8c165e6": [
+      "12861a8f2dadb026"
+    ]
+  },
+  "newly_matching_directed_transitions": [
+    {
+      "source": {
+        "normal_envelope_sha256": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509",
+        "model_for_display": "SBW-06D2X-U",
+        "catalog_path": "images/pioneer/sat/8511/ID22/1.10/normal/2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8",
+        "model_for_display": "BDR-UD03",
+        "catalog_path": "images/pioneer/sat/8511/GENERAL/1.14/normal/4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+        "model_for_display": "BDR-UD03",
+        "catalog_path": "images/pioneer/sat/8510/ID19/1.03/normal/6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+        "model_for_display": "SlimtypeEB1",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/HLE2/normal/79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
+        "model_for_display": "BDR-UD03",
+        "catalog_path": "images/pioneer/sat/8510/ID19/1.03/normal/7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+        "model_for_display": "BDR-UD04",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/1.14/normal/820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001",
+        "model_for_display": "SBC-06D2X-U",
+        "catalog_path": "images/pioneer/sat/8591/ID22/1.10/normal/8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+        "model_for_display": "BDR-UD04",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/1.14/normal/8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509",
+        "model_for_display": "SBW-06D2X-U",
+        "catalog_path": "images/pioneer/sat/8511/ID22/1.10/normal/2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8",
+        "model_for_display": "BDR-UD03",
+        "catalog_path": "images/pioneer/sat/8511/GENERAL/1.14/normal/4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+        "model_for_display": "BDR-UD03",
+        "catalog_path": "images/pioneer/sat/8510/ID19/1.03/normal/6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+        "model_for_display": "SlimtypeEB1",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/HLE2/normal/79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
+        "model_for_display": "BDR-UD03",
+        "catalog_path": "images/pioneer/sat/8510/ID19/1.03/normal/7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+        "model_for_display": "BDR-UD04",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/1.14/normal/820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001",
+        "model_for_display": "SBC-06D2X-U",
+        "catalog_path": "images/pioneer/sat/8591/ID22/1.10/normal/8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+        "model_for_display": "BDR-UD04",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/1.14/normal/8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
+        "model_for_display": "BDR-UD04",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/1.11/normal/a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    },
+    {
+      "source": {
+        "normal_envelope_sha256": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
+        "model_for_display": "BDR-UD04",
+        "catalog_path": "images/pioneer/sat/8A10/GENERAL/1.11/normal/a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6.enc",
+        "old_hardware_family": "6200c930499d30f3",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "target": {
+        "normal_envelope_sha256": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        "model_for_display": "BDR-UD02D",
+        "catalog_path": "images/pioneer/sat/8410/ID84/1.00/normal/a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373.enc",
+        "old_hardware_family": "95ffe2a43d0e4b8",
+        "new_hardware_family": "83a4abb2a9b5480e"
+      },
+      "review_state": "unresolved",
+      "reason": "Newly matching hardware after removal of three former family discriminators; operational compatibility has not been validated for this transition.",
+      "mechanism_scope": "Must be bound to observed mechanism configuration before resolving; firmware labels alone cannot distinguish a converted UD02 round trip from native UD04.",
+      "conversion": null,
+      "validation_evidence": []
+    }
+  ],
+  "resolution_states": {
+    "unresolved": "Remain blocked; a candidate fix alone does not resolve the transition.",
+    "validated_as_is": "No additional setting needed for the explicitly tested mechanism/firmware direction; all normal gates still apply.",
+    "validated_with_settings": "Requires named supported conversion with guarded settings operations and validation evidence."
+  },
+  "identity_limit": "Catalog Normal-envelope hashes identify audit inputs, not normalized live firmware or physical mechanisms. Runtime binding/identity codecs remain to implement.",
+  "future_policy": "Additional unresolved records are added only when a new issue or explicit compatibility-review boundary is identified; do not enumerate every untested firmware pair."
+}

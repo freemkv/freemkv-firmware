@@ -1,6 +1,7 @@
 {
   "language_name": "한국어",
   "messages": {
+    "errors.firmware_corrupt": "이 펌웨어 파일은 손상되었거나 불완전합니다. 새 OEM 파일을 다운로드한 후 다시 시도하세요.",
     "errors.startup_setting_restored": "드라이브의 원래 시작 설정이 복원되고 확인되었습니다. 다시 시도하기 전에 진단 보고서를 저장하고 도움을 받으세요.",
     "errors.startup_setting_uncertain": "드라이브의 원래 시작 설정을 복원하거나 확인할 수 없었습니다. 진단 보고서를 저장하고 다시 시도하기 전에 드라이브 점검을 받으세요.",
     "errors.backup_required": "이 업데이트에는 설치된 펌웨어의 전체 백업이 필요합니다. 진단 보고서를 저장하여 도움을 요청하세요.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware 유형",
     "domain.kernel_version": "Kernel 버전",
     "domain.pioneer_identity": "Pioneer 정체성",
-    "domain.product_code": "제품 코드",
-    "domain.manufactured": "제조",
+    "domain.product_code": "공장 제품 코드",
+    "domain.manufactured": "공장 테스트 날짜",
     "domain.product_origin": "제품 출처",
     "domain.saved_quiet_drive": "조용한 광학 드라이브",
     "domain.pureread_version": "순수한 버전",

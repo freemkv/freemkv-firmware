@@ -1,0 +1,111 @@
+{
+  "status": "All newly equal hardware pairs remain blocked by the independent settings gate",
+  "evidence_scope": "Proof for every newly equal hardware pair in the audited counterfactual.\n\nRead-only, narrow phase-output evidence; NOT a full mechanism decoder or a\nconversion rule. COMP storage is excluded; expanded regions stay separate.\n",
+  "profiles": {
+    "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509": "word0=B",
+    "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8": "word0=B",
+    "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e": "word0=B",
+    "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2": "word0=B",
+    "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560": "word0=B",
+    "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa": "word0=B",
+    "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001": "word0=B",
+    "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141": "word0=B",
+    "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373": "word0=A",
+    "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6": "word0=B"
+  },
+  "directed_pairs_checked": 18,
+  "decisions": [
+    {
+      "source": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
+      "target": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    },
+    {
+      "source": "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+      "target": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
+      "decision": "settings_conversion_unavailable_or_ambiguous"
+    }
+  ],
+  "production_conversion_rules_added": 0,
+  "limitation": "Proves the changed boundary and generic policy in memory. Does not prove complete mechanism semantics, physical compatibility, unchanged production admission for every existing pair, or readiness to ship a movement conversion."
+}

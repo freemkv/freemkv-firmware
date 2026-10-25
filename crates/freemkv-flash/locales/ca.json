@@ -1,6 +1,7 @@
 {
   "language_name": "Català",
   "messages": {
+    "errors.firmware_corrupt": "Aquest fitxer de microprogramari està malmès o incomplet. Descarregueu-ne una còpia OEM nova i torneu-ho a provar.",
     "errors.startup_setting_restored": "La configuració original d’inici de la unitat s’ha restaurat i verificat. Deseu un informe de diagnòstic per obtenir ajuda abans de tornar-ho a provar.",
     "errors.startup_setting_uncertain": "No s’ha pogut restaurar o verificar la configuració original d’inici de la unitat. Deseu un informe de diagnòstic i feu revisar la unitat abans de tornar-ho a provar.",
     "errors.backup_required": "Aquesta actualització requereix una còpia de seguretat completa del microprogramari instal·lat. Desa un informe de diagnòstic per obtenir ajuda.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Tipus de firmware",
     "domain.kernel_version": "Versió del kernel",
     "domain.pioneer_identity": "Identificació Pioneer",
-    "domain.product_code": "Codi de producte",
-    "domain.manufactured": "Fabricació",
+    "domain.product_code": "Codi de producte de fàbrica",
+    "domain.manufactured": "Data de prova de fàbrica",
     "domain.product_origin": "Origen del producte",
     "domain.saved_quiet_drive": "Disminució de la conducció òptica silenciosa",
     "domain.pureread_version": "Versió purament",

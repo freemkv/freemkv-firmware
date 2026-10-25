@@ -1,6 +1,7 @@
 {
   "language_name": "Čeština",
   "messages": {
+    "errors.firmware_corrupt": "Tento soubor firmwaru je poškozený nebo neúplný. Stáhněte novou kopii OEM a zkuste to znovu.",
     "errors.startup_setting_restored": "Původní nastavení spouštění jednotky bylo obnoveno a ověřeno. Před dalším pokusem uložte diagnostickou zprávu a požádejte o pomoc.",
     "errors.startup_setting_uncertain": "Původní nastavení spouštění jednotky se nepodařilo obnovit nebo ověřit. Uložte diagnostickou zprávu a před dalším pokusem nechte jednotku zkontrolovat.",
     "errors.backup_required": "Tato aktualizace vyžaduje úplnou zálohu nainstalovaného firmwaru. Uložte diagnostickou zprávu a požádejte o pomoc.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Typ firmwaru",
     "domain.kernel_version": "Kernelová verze",
     "domain.pioneer_identity": "Pioneer identity",
-    "domain.product_code": "Produktový kód",
-    "domain.manufactured": "Vyrobeno",
+    "domain.product_code": "Výrobní kód produktu",
+    "domain.manufactured": "Datum tovární zkoušky",
     "domain.product_origin": "Původ produktu",
     "domain.saved_quiet_drive": "Ušetřené tiché optické pohony",
     "domain.pureread_version": "Čistá verze",

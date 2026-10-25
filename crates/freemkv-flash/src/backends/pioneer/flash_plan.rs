@@ -443,12 +443,10 @@ pub fn ensure_no_unrecovered_tail(kernel: Option<&[u8]>, normal: Option<&[u8]>) 
         if let Some(tail) =
             pioneer_optical::envelope::decode_envelope(bytes).and_then(|d| d.unrecovered_tail())
         {
-            return Err(anyhow!(
-                "the {label} envelope has an unrecoverable tail ({:#x}..{:#x} cannot be \
-                 reproduced); refusing to flash an incomplete image",
-                tail.start,
-                tail.end
-            ));
+            return Err(crate::backend::CorruptFirmware { detail: format!(
+                "the {label} envelope has an unrecoverable tail ({:#x}..{:#x} cannot be reproduced); refusing to flash an incomplete image",
+                tail.start, tail.end
+            ) }.into());
         }
     }
     Ok(())

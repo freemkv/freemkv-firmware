@@ -93,13 +93,11 @@ pub(super) fn execute_with_sleep(
     };
     let restoration_required =
         matches!(plan, PreparedFlash::Complete(p) if p.restoration_kernel_transfer().is_some());
-    let setting = match plan {
-        PreparedFlash::Complete(plan) => plan.startup_setting(),
-        PreparedFlash::Normal(plan) => plan.startup_setting(),
+    let settings = match plan {
+        PreparedFlash::Complete(plan) => plan.settings(),
+        PreparedFlash::Normal(plan) => plan.settings(),
     };
-    if let Some(setting) = setting {
-        report_startup_setting(setting);
-    }
+    report_settings(settings);
     let outcome = match plan {
         PreparedFlash::Complete(plan) => plan.execute(io, &mut runtime, mode),
         PreparedFlash::Normal(plan) => plan.execute(io, &mut runtime),
@@ -141,6 +139,32 @@ pub(super) fn execute_with_sleep(
     ))
 }
 
+fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
+    use pioneer_optical::settings::update::Effect;
+    for setting in plan.entries() {
+        match setting.effect() {
+            Effect::ParameterWord {
+                parameter,
+                value,
+                explicit,
+            } => {
+                report_startup_setting(pioneer_optical::startup::Setting {
+                    parameter,
+                    value,
+                    explicit,
+                });
+            }
+            Effect::TemporaryKernelMarker => {
+                let text = "temporary receiver setting; pristine OEM Kernel restored and verified in the final pass";
+                crate::diagnostics::record(format!(
+                    "Pioneer setting {}: {text}",
+                    setting.key().id()
+                ));
+            }
+        }
+    }
+}
+
 pub(super) fn report_startup_setting(setting: pioneer_optical::startup::Setting) {
     let source = if setting.explicit {
         "required by target firmware"
@@ -162,7 +186,9 @@ where
     let code = error.code();
     let issue = crate::user_error::IssueCode::from(error.kind());
     let status = crate::crossflash::refusal_status(&error);
-    let guidance = if status == crate::crossflash::CompatibilityStatus::SoftNo {
+    let guidance = if code.starts_with("pioneer.settings.") {
+        "A validated settings mapping is required for this firmware and is unavailable. No firmware was written."
+    } else if status == crate::crossflash::CompatibilityStatus::SoftNo {
         "Intermediate transfer is required but not implemented. No firmware was written."
     } else {
         "No firmware was written. Check that the firmware package is complete and compatible with this drive"
@@ -188,15 +214,28 @@ fn execution_error(
             pioneer_optical::receiver::ExecutionError::Startup(migration) => {
                 match migration.as_ref() {
                     Error::Change { rollback, .. } | Error::Flash { rollback, .. } => {
-                        match rollback {
-                            Rollback::Restored => {
-                                Some(crate::user_error::IssueCode::StartupSettingRestored)
+                        fn guidance<E>(
+                            rollback: &Rollback<E>,
+                        ) -> Option<crate::user_error::IssueCode> {
+                            use crate::user_error::IssueCode;
+                            match rollback {
+                                Rollback::Restored => Some(IssueCode::StartupSettingRestored),
+                                Rollback::Failed(_) => Some(IssueCode::StartupSettingUncertain),
+                                Rollback::Settings(results) => {
+                                    let outcomes: Vec<_> =
+                                        results.iter().filter_map(|(_, r)| guidance(r)).collect();
+                                    if outcomes.contains(&IssueCode::StartupSettingUncertain) {
+                                        Some(IssueCode::StartupSettingUncertain)
+                                    } else if !outcomes.is_empty() {
+                                        Some(IssueCode::StartupSettingRestored)
+                                    } else {
+                                        None
+                                    }
+                                }
+                                Rollback::Unchanged | Rollback::UnsafeAfterFirmwareWrite => None,
                             }
-                            Rollback::Failed(_) => {
-                                Some(crate::user_error::IssueCode::StartupSettingUncertain)
-                            }
-                            Rollback::Unchanged | Rollback::UnsafeAfterFirmwareWrite => None,
                         }
+                        guidance(rollback)
                     }
                     _ => None,
                 }

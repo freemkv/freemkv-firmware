@@ -1,0 +1,369 @@
+{
+  "scope": "Offline census of the local hoard and captured factory identity evidence.\n\nFirmware-package identity is never treated as factory identity. Reads only\nsaved files; does not access drives. Reports coverage, not universal validity.\n",
+  "inventory": {
+    "hoard": {
+      "files": 44559,
+      "suffixes": {
+        ".json": 25767,
+        ".tar": 3447,
+        "": 146,
+        ".md": 144,
+        ".txt": 16,
+        ".bin": 8322,
+        ".enc": 1237,
+        ".exe": 2657,
+        ".log": 506,
+        ".zip": 1870,
+        ".dmg": 122,
+        ".rar": 130,
+        ".pdf": 48,
+        ".tgz-renamed": 57,
+        ".7z": 28,
+        ".sqlite": 1,
+        ".rom": 7,
+        ".xml": 1,
+        ".jpg": 9,
+        ".sit": 6,
+        ".msi": 5,
+        ".101": 2,
+        ".100": 6,
+        ".cksum": 3,
+        ".png": 7,
+        ".102": 1,
+        ".hqx": 3,
+        ".ini": 3,
+        ".afs": 1,
+        ".sse": 1,
+        ".chm": 2,
+        ".sea": 1,
+        ".bmp": 2,
+        ".ruf": 1
+      },
+      "inventory_sha256": "2b21f3e1a664e61b1d57c5358b65edd1b5b342ab0a0001d915f2d9b5250abb1d",
+      "binary_capture_candidates_checked": 8322
+    },
+    "hoard-bdplayer": {
+      "files": 4281,
+      "suffixes": {
+        ".json": 2551,
+        ".txt": 2,
+        ".md": 5,
+        ".tar": 4,
+        ".log": 3,
+        ".bin": 818,
+        ".error-404": 1,
+        ".tsv": 26,
+        ".7z": 3,
+        "": 117,
+        ".error-1016": 1,
+        ".sh": 8,
+        ".exe": 279,
+        ".zip": 446,
+        ".pkg": 2,
+        ".iso": 8,
+        ".partial-20261019": 1,
+        ".partial-20261019-2": 1,
+        ".ruf": 2,
+        ".z02": 1,
+        ".z01": 1,
+        ".20101130225655": 1
+      },
+      "inventory_sha256": "09e09037c8b964be59819c6750bf4f6819053cb9f937ec149d68c07f553c920a",
+      "binary_capture_candidates_checked": 818
+    },
+    "user-dump": {
+      "files": 489,
+      "suffixes": {
+        ".bin": 162,
+        ".json": 135,
+        ".tar": 24,
+        ".enc": 14,
+        ".md": 1,
+        "": 1,
+        ".log": 52,
+        ".txt": 55,
+        ".gz": 3,
+        ".patch": 6,
+        ".py": 3,
+        ".asm": 20,
+        ".diff": 1,
+        ".rs": 3,
+        ".decoded": 4,
+        ".exit": 5
+      },
+      "inventory_sha256": "f2dfa88f87aa515c13dff939a85572407f62a47e0fc5d8874a49693ec4fcd178",
+      "binary_capture_candidates_checked": 162
+    },
+    "user-backup": {
+      "files": 13,
+      "suffixes": {
+        ".tar": 3,
+        ".json": 8,
+        ".enc": 2
+      },
+      "inventory_sha256": "55cc1d3b742c02b19cb62ec9e22de1b5165d9572c67db5640521b817421d467c",
+      "binary_capture_candidates_checked": 0
+    }
+  },
+  "catalog": {
+    "identity_groups": 2424,
+    "distinct_images": 5432,
+    "groups_by_family": {
+      "mediatek": 358,
+      "pioneer": 1215,
+      "renesas": 26,
+      "unknown": 825
+    },
+    "packages": 720,
+    "indexed_missing_images": [],
+    "unique_normal_images": 719,
+    "firmware_metadata_is_not_factory_evidence": true
+  },
+  "capture_count": 14,
+  "unique_parameter_responses": 7,
+  "unique_units_with_identity": 6,
+  "production_status_counts": {
+    "tagged": 5,
+    "unrecognized": 1,
+    "untagged_candidate": 1
+  },
+  "proposed_only": [
+    {
+      "status": "untagged_candidate",
+      "current_parser_accepts": false,
+      "proposed_parser_accepts": true,
+      "product": "BDR-UD02TBD",
+      "factory_test_date": "2013-05-25",
+      "tag_hex": "ffffffff",
+      "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+    }
+  ],
+  "captures": [
+    {
+      "path": "user-dump/02320f682379783cdc10c4b6badfa385e6e5ed0846e044f72a6e8ad39dc25302/dump.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW   BDR-S11",
+      "firmware_revision": "1.53",
+      "unit_key": "0ba9284992a836541113cd17585549dbd8267d13a37073cd2287d046a6d92d61",
+      "production": {
+        "status": "tagged",
+        "current_parser_accepts": true,
+        "proposed_parser_accepts": true,
+        "product": "BDR-209XJB",
+        "factory_test_date": "2014-01-16",
+        "tag_hex": "6b773032",
+        "response_sha256": "59d43bb7dc42b0327ef2a37a5843d71bcbc6c5b73e50982d2d2d334fb3068a32"
+      }
+    },
+    {
+      "path": "user-dump/20ad45391b43705241e81cc69d5cdb34d7a061c3583b125139b76ea7627954eb/dump.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW   BDR-UD04",
+      "firmware_revision": "1.14",
+      "unit_key": "2267730f73347a91dd4f699ab3d13df9a193afc6774f770901b3cfe711b3bcb7",
+      "production": {
+        "status": "tagged",
+        "current_parser_accepts": true,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD03FAL",
+        "factory_test_date": "2017-08-03",
+        "tag_hex": "6b773031",
+        "response_sha256": "e3bba2aa48a7f227473aa2bbfb235de6b3c3fcf8656734711dca4534ac52fe56"
+      }
+    },
+    {
+      "path": "user-dump/534abba6eb7a4689a2a91f0cb98c2215cd5b7d14cc347ae895507006ea4d4176/dump.bin",
+      "capture_complete": true,
+      "firmware_product": "BDR-PR1AME",
+      "firmware_revision": "1.05",
+      "unit_key": "42ba01b628e0d3a2f3ed34d14342c1e72f1addcd780219204dda6170b9367ed0",
+      "production": {
+        "status": "unrecognized",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": false,
+        "product": null,
+        "factory_test_date": "2018-11-22",
+        "tag_hex": "03c703c4",
+        "response_sha256": "786aff54f174a9e9a2ffde21cf4cf806f151370dc3dc831d9ed10701b2c55dd0"
+      }
+    },
+    {
+      "path": "user-dump/b22bcee03d23431d16eb211367b1b5d1afd3c78a5390a290565fa1a72af31eb3/dump.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW  BDR-S11JX",
+      "firmware_revision": "1.54",
+      "unit_key": "0ba9284992a836541113cd17585549dbd8267d13a37073cd2287d046a6d92d61",
+      "production": {
+        "status": "tagged",
+        "current_parser_accepts": true,
+        "proposed_parser_accepts": true,
+        "product": "BDR-209XJB",
+        "factory_test_date": "2014-01-16",
+        "tag_hex": "6b773032",
+        "response_sha256": "c82ff81b70b02718de2a310333b979b912541d9cc8e4af2433459009d72c1683"
+      }
+    },
+    {
+      "path": "user-dump/da907a3bb0a2465a2b80e5b17d6511a7341007ed5f384e7c2e56475b0a45f5ce/dump.bin",
+      "capture_complete": true,
+      "firmware_product": "BD-RW  BDR-UD02D",
+      "firmware_revision": "1.00",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    },
+    {
+      "path": "user-dump/dcd297e20b030075ff9581cad27a2784ccfadd919d5f29786adcbf3f28705afd/dump.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW  BDR-XD06U",
+      "firmware_revision": "1.11",
+      "unit_key": "2b332e427e4c37d3bc19fc814e2b5d430f85f27baee43314ba9dd1e0f173ad7e",
+      "production": {
+        "status": "tagged",
+        "current_parser_accepts": true,
+        "proposed_parser_accepts": true,
+        "product": "XD05R/XV5",
+        "factory_test_date": "2014-06-16",
+        "tag_hex": "6b773032",
+        "response_sha256": "f13271f1a8c46769a9794bedf42b0ad6e6d34c44c55a3bda06d02ca5295a0fe8"
+      }
+    },
+    {
+      "path": "user-dump/fbb68161a53c11cf579b2526119d3da588895019e15d7d35478015a556c70c6b/dump.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW   BDR-S12U",
+      "firmware_revision": "1.02",
+      "unit_key": "c6bff222b7696f2c5095f55490791f19ecf98acf3d84d75ad3faf62ade043ba6",
+      "production": {
+        "status": "tagged",
+        "current_parser_accepts": true,
+        "proposed_parser_accepts": true,
+        "product": "BDR-212V",
+        "factory_test_date": "2022-01-12",
+        "tag_hex": "6b773031",
+        "response_sha256": "c27d64b02c95d280d6f97552101c4f750cd82f767622a8e73e37eee05e026e87"
+      }
+    },
+    {
+      "path": "user-dump/ud02-getter-trial-2026-10-23/override-loaded-flash/after.dump.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW   BDR-UD04",
+      "firmware_revision": "1.14",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    },
+    {
+      "path": "user-dump/ud02-pickup-2026-10-24/baseline-ud02-bd.bin",
+      "capture_complete": true,
+      "firmware_product": "BD-RW  BDR-UD02D",
+      "firmware_revision": "1.00",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    },
+    {
+      "path": "user-dump/ud02-pickup-2026-10-24/baseline-ud02.bin",
+      "capture_complete": true,
+      "firmware_product": "BD-RW  BDR-UD02D",
+      "firmware_revision": "1.00",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    },
+    {
+      "path": "user-dump/ud02-pickup-2026-10-24/ud03-phase-f70a-range-failed.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW   BDR-UD03",
+      "firmware_revision": "1.03",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    },
+    {
+      "path": "user-dump/ud02-pickup-2026-10-24/ud04-getter-bd-failed.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW   BDR-UD04",
+      "firmware_revision": "1.14",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    },
+    {
+      "path": "user-dump/ud02-to-ud04-trial-2026-10-23/after-dump.bin",
+      "capture_complete": false,
+      "firmware_product": "BD-RW   BDR-UD04",
+      "firmware_revision": "1.14",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    },
+    {
+      "path": "user-dump/ud02-to-ud04-trial-2026-10-23/before-dump.bin",
+      "capture_complete": true,
+      "firmware_product": "BD-RW  BDR-UD02D",
+      "firmware_revision": "1.00",
+      "unit_key": "dc8d43299dedd5cf2f875ad26746f0a2b6d76f63c28071183c6bffa5ce3cded0",
+      "production": {
+        "status": "untagged_candidate",
+        "current_parser_accepts": false,
+        "proposed_parser_accepts": true,
+        "product": "BDR-UD02TBD",
+        "factory_test_date": "2013-05-25",
+        "tag_hex": "ffffffff",
+        "response_sha256": "34c67be4b3ddb4e3ade0a2a05a96679642fd05901e5dc05ea4ec2b6a4b4b0789"
+      }
+    }
+  ],
+  "errors": [],
+  "limitation": "Only captured A0 responses validate factory parsing. OEM packages and player firmware do not contain evidence of a particular drive factory record. This census does not prove a proposed parser on unrepresented hardware."
+}

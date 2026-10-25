@@ -1,6 +1,7 @@
 {
   "language_name": "Suomi",
   "messages": {
+    "errors.firmware_corrupt": "Tämä laiteohjelmistotiedosto on vioittunut tai puutteellinen. Lataa uusi OEM-kopio ja yritä uudelleen.",
     "errors.startup_setting_restored": "Aseman alkuperäinen käynnistysasetus palautettiin ja vahvistettiin. Tallenna diagnostiikkaraportti saadaksesi apua ennen uutta yritystä.",
     "errors.startup_setting_uncertain": "Aseman alkuperäistä käynnistysasetusta ei voitu palauttaa tai vahvistaa. Tallenna diagnostiikkaraportti ja tarkistuta asema ennen uutta yritystä.",
     "errors.backup_required": "Tämä päivitys edellyttää täydellistä varmuuskopiota asennetusta laiteohjelmistosta. Tallenna diagnostiikkaraportti avun saamista varten.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware tyyppi",
     "domain.kernel_version": "Kernelin versio",
     "domain.pioneer_identity": "Pioneer identiteetti",
-    "domain.product_code": "Tuotekoodi",
-    "domain.manufactured": "Valmistettu",
+    "domain.product_code": "Tehtaan tuotekoodi",
+    "domain.manufactured": "Tehdastestin päivämäärä",
     "domain.product_origin": "Tuotteen alkuperä",
     "domain.saved_quiet_drive": "Tyynen optisen ajon säästäminen",
     "domain.pureread_version": "PureRead versio",
