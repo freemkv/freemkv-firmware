@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "anyhow",
  "mediatek-optical",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "aes",
  "anyhow",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -1455,7 +1455,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1468,7 +1468,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "anyhow",
  "eframe",
@@ -3257,8 +3257,8 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pioneer-optical"
-version = "1.1.0"
-source = "git+https://github.com/MattJackson/pioneer-optical?rev=3753f39cafa9100fcb039ce2407abdd0dca60bbe#3753f39cafa9100fcb039ce2407abdd0dca60bbe"
+version = "1.2.0"
+source = "git+https://github.com/MattJackson/pioneer-optical?rev=07e9b8eee03c26b045f7639dd076ae0f67e6a7d5#07e9b8eee03c26b045f7639dd076ae0f67e6a7d5"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
@@ -3267,6 +3267,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "serde",
+ "serde_json",
  "sha1",
  "sha2",
 ]

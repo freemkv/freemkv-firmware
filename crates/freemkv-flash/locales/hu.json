@@ -1,6 +1,7 @@
 {
   "language_name": "Magyar",
   "messages": {
+    "errors.firmware_corrupt": "Ez a firmware-fájl sérült vagy hiányos. Töltsön le egy új OEM-példányt, és próbálja újra.",
     "errors.startup_setting_restored": "A meghajtó eredeti indítási beállítása vissza lett állítva és ellenőrizve lett. Újabb próbálkozás előtt mentse el a diagnosztikai jelentést, és kérjen segítséget.",
     "errors.startup_setting_uncertain": "A meghajtó eredeti indítási beállítását nem sikerült visszaállítani vagy ellenőrizni. Mentse el a diagnosztikai jelentést, és újabb próbálkozás előtt ellenőriztesse a meghajtót.",
     "errors.backup_required": "Ehhez a frissítéshez a telepített firmware teljes biztonsági másolata szükséges. Mentsen diagnosztikai jelentést a segítségkéréshez.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware típus",
     "domain.kernel_version": "Kernel verzió",
     "domain.pioneer_identity": "Pioneer identitás",
-    "domain.product_code": "Termékkód",
-    "domain.manufactured": "gyártott",
+    "domain.product_code": "Gyári termékkód",
+    "domain.manufactured": "Gyári teszt dátuma",
     "domain.product_origin": "Termék eredet",
     "domain.saved_quiet_drive": "Csendes optikai vezeték",
     "domain.pureread_version": "PureRead verzió",

@@ -1,6 +1,7 @@
 {
   "language_name": "Slovenčina",
   "messages": {
+    "errors.firmware_corrupt": "Tento súbor firmvéru je poškodený alebo neúplný. Stiahnite novú kópiu OEM a skúste to znova.",
     "errors.startup_setting_restored": "Pôvodné nastavenie spúšťania jednotky bolo obnovené a overené. Pred ďalším pokusom uložte diagnostickú správu a požiadajte o pomoc.",
     "errors.startup_setting_uncertain": "Pôvodné nastavenie spúšťania jednotky sa nepodarilo obnoviť alebo overiť. Uložte diagnostickú správu a pred ďalším pokusom nechajte jednotku skontrolovať.",
     "errors.backup_required": "Táto aktualizácia vyžaduje úplnú zálohu nainštalovaného firmvéru. Uložte diagnostickú správu a požiadajte o pomoc.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Typ firmvéru",
     "domain.kernel_version": "Kernelová verzia",
     "domain.pioneer_identity": "Pioneer identity",
-    "domain.product_code": "Produktový kód",
-    "domain.manufactured": "vyrobené",
+    "domain.product_code": "Výrobný kód produktu",
+    "domain.manufactured": "Dátum výrobnej skúšky",
     "domain.product_origin": "Pôvod produktu",
     "domain.saved_quiet_drive": "Ušetrené Tiché optické pohony",
     "domain.pureread_version": "Čistá verzia",

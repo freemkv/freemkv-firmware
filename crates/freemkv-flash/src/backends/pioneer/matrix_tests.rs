@@ -52,6 +52,7 @@ fn every_prepared_package_in_both_directions_within_its_family() {
     assert!(packages.len() >= 2, "matrix must contain multiple packages");
     let mut same_family = 0;
     let mut different_family = 0;
+    let mut settings_refused = 0;
     let mut restore_passes = 0;
     for (source_id, installed, _, _, receiver) in &packages {
         for (target_id, _, target, update, _) in &packages {
@@ -69,6 +70,14 @@ fn every_prepared_package_in_both_directions_within_its_family() {
                 !matches!(selected, FlashPlan::Refused(_)),
                 "{source_id} -> {target_id}: {selected:?}"
             );
+            if receiver.check_settings(&update.normal().image).is_err() {
+                assert!(matches!(
+                    receiver.prepare(update.clone()),
+                    Err(pioneer_optical::receiver::PreparationError::Settings(_))
+                ));
+                settings_refused += 1;
+                continue;
+            }
             let prepared = receiver
                 .prepare(update.clone())
                 .unwrap_or_else(|error| panic!("{source_id} -> {target_id}: {error}"));
@@ -106,7 +115,7 @@ fn every_prepared_package_in_both_directions_within_its_family() {
             }
         }
     }
-    eprintln!("{} packages: {same_family} same-family directions, {different_family} cross-family refusals, {restore_passes} restore paths", packages.len());
+    eprintln!("{} packages: {same_family} same-family directions, {different_family} cross-family refusals, {settings_refused} settings refusals, {restore_passes} restore paths", packages.len());
 }
 
 fn receive_kernel(wire: &[u8]) -> Vec<u8> {

@@ -1,0 +1,2135 @@
+{
+  "status": "Offline mapping audit complete; production transition states unchanged",
+  "input_images": 9,
+  "distinct_decoded_images": 6,
+  "mapped_images": 9,
+  "donor_profile": "This UD02 unit: parameter 0x028F = 0x0001",
+  "rows": [
+    {
+      "model": "BDR-UD03",
+      "revision": "1.03",
+      "normal_envelope_sha256": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+      "decoded_sha256": "95664992a098ff6c3c8a9c4bae228209d956f4a1462c238fb37863b910b72149",
+      "candidate_sha256": "f78a48ea604d36663f1da13b5eaad63396e8a0c4ccc6c18fb7f38547f1816a56",
+      "standalone_decoded_sha256": "95664992a098ff6c3c8a9c4bae228209d956f4a1462c238fb37863b910b72149",
+      "context_decoding": null,
+      "kernel_supplied": true,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x53710e",
+      "assisted_branch": "0x537bbe",
+      "coordinate_slots": [
+        {
+          "address": "0x53782c",
+          "bytes": 64
+        },
+        {
+          "address": "0x53793a",
+          "bytes": 66
+        },
+        {
+          "address": "0x53797c",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x5738d2",
+        "0x538c7a": "0x536e82",
+        "0x538b74": "0x536d5e",
+        "0x575990": "0x573862",
+        "0x531a86": "0x52f996",
+        "0x538b0c": "0x536cf6"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a75b6",
+          "initializer_pointer": "0x536f66",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a76b6",
+          "initializer_pointer": "0x536f88",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a79b6",
+          "initializer_pointer": "0x53703e",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a79fe",
+          "initializer_pointer": "0x537034",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "whole-word getter already compatible; no change",
+        "offset": "0xe3c76"
+      },
+      "edits": [
+        {
+          "offset": "0x12710e",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x127120",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x126f9c",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x126fa4",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x126fa8",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x126fba",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x126fc2",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x126fc6",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x127086",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x12708e",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x12713e",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "5d7601a38e507962a809ad4a4d838d31fe2d05de9fcb05acead5bae983014d10",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x12714e",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "ebb6d4047017a1170672b87a211ded304e58bddf622430636216b853ad8ce2b6",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x127bbe",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x127c38",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x1975b6",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x1976b6",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x1979b6",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x1979fe",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x12782c",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "20042f3262e06c9392f3906b0bb294568ee79360883f463a69ad870d6e55cd14",
+          "after_sha256": "1f3f312869f1c14231e659255e962dd0840252248f68e2993c357f166e8f838d"
+        },
+        {
+          "offset": "0x12793a",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "f694693ea5c30d4d732e13ff8950abc2e4a14e82d5d6e7c6b7a4572226a90772",
+          "after_sha256": "b39ff97045bdd6ba9b8e7bfc4f2d7f79f2c0815023827a748a114ba7aebffc75"
+        },
+        {
+          "offset": "0x12797c",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "610b9ba3cf0e48accb37d9b6a5574f926ca9356200ee2957caf7b7a8a81a50da",
+          "after_sha256": "ff90fa4a768eae7bf1e4abb52d17dc7da42bceba20a9c9c1157f104c0758d2dd"
+        }
+      ],
+      "changed_bytes": 678
+    },
+    {
+      "model": "BDR-UD03",
+      "revision": "1.03",
+      "normal_envelope_sha256": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
+      "decoded_sha256": "95664992a098ff6c3c8a9c4bae228209d956f4a1462c238fb37863b910b72149",
+      "candidate_sha256": "f78a48ea604d36663f1da13b5eaad63396e8a0c4ccc6c18fb7f38547f1816a56",
+      "standalone_decoded_sha256": "95664992a098ff6c3c8a9c4bae228209d956f4a1462c238fb37863b910b72149",
+      "context_decoding": null,
+      "kernel_supplied": true,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x53710e",
+      "assisted_branch": "0x537bbe",
+      "coordinate_slots": [
+        {
+          "address": "0x53782c",
+          "bytes": 64
+        },
+        {
+          "address": "0x53793a",
+          "bytes": 66
+        },
+        {
+          "address": "0x53797c",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x5738d2",
+        "0x538c7a": "0x536e82",
+        "0x538b74": "0x536d5e",
+        "0x575990": "0x573862",
+        "0x531a86": "0x52f996",
+        "0x538b0c": "0x536cf6"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a75b6",
+          "initializer_pointer": "0x536f66",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a76b6",
+          "initializer_pointer": "0x536f88",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a79b6",
+          "initializer_pointer": "0x53703e",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a79fe",
+          "initializer_pointer": "0x537034",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "whole-word getter already compatible; no change",
+        "offset": "0xe3c76"
+      },
+      "edits": [
+        {
+          "offset": "0x12710e",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x127120",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x126f9c",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x126fa4",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x126fa8",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x126fba",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x126fc2",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x126fc6",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x127086",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x12708e",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x12713e",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "5d7601a38e507962a809ad4a4d838d31fe2d05de9fcb05acead5bae983014d10",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x12714e",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "ebb6d4047017a1170672b87a211ded304e58bddf622430636216b853ad8ce2b6",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x127bbe",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x127c38",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x1975b6",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x1976b6",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x1979b6",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x1979fe",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x12782c",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "20042f3262e06c9392f3906b0bb294568ee79360883f463a69ad870d6e55cd14",
+          "after_sha256": "1f3f312869f1c14231e659255e962dd0840252248f68e2993c357f166e8f838d"
+        },
+        {
+          "offset": "0x12793a",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "f694693ea5c30d4d732e13ff8950abc2e4a14e82d5d6e7c6b7a4572226a90772",
+          "after_sha256": "b39ff97045bdd6ba9b8e7bfc4f2d7f79f2c0815023827a748a114ba7aebffc75"
+        },
+        {
+          "offset": "0x12797c",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "610b9ba3cf0e48accb37d9b6a5574f926ca9356200ee2957caf7b7a8a81a50da",
+          "after_sha256": "ff90fa4a768eae7bf1e4abb52d17dc7da42bceba20a9c9c1157f104c0758d2dd"
+        }
+      ],
+      "changed_bytes": 678
+    },
+    {
+      "model": "BDR-UD04",
+      "revision": "1.11",
+      "normal_envelope_sha256": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
+      "decoded_sha256": "887c3e73bda21e325f1b24dcc813363bdde9af93f7eb01a16648695d28c9d12e",
+      "candidate_sha256": "ab6c56eec582123c39924172a59724719ea4903c09d5040186322516c9add27f",
+      "standalone_decoded_sha256": "e28b1857980bad0e1d2904149fe1f8a34afbcf516efaa7d2cd719777bc40cc68",
+      "context_decoding": {
+        "path": "/tmp/ud02-pickup-analysis/nine-target-candidates/ud04-1.11-paired-normal.bin",
+        "decoded_sha256": "887c3e73bda21e325f1b24dcc813363bdde9af93f7eb01a16648695d28c9d12e",
+        "kernel_context": "UD04 1.14 stock Kernel; Update::load original Normal authentication passed",
+        "reason": "Standalone decode leaves two reconstructed words incorrect; context decoding repairs offsets 0x16900..0x16903 and 0x77300..0x77303. Do not simply fix the checksum of the standalone image."
+      },
+      "kernel_supplied": false,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x538c52",
+      "assisted_branch": "0x53973a",
+      "coordinate_slots": [
+        {
+          "address": "0x53937a",
+          "bytes": 64
+        },
+        {
+          "address": "0x5394b2",
+          "bytes": 66
+        },
+        {
+          "address": "0x5394f4",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x575626",
+        "0x538c7a": "0x5389c6",
+        "0x538b74": "0x5388c0",
+        "0x575990": "0x5755b6",
+        "0x531a86": "0x5317d2",
+        "0x538b0c": "0x538858"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b53fc",
+          "initializer_pointer": "0x538aaa",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b54fc",
+          "initializer_pointer": "0x538acc",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b57fc",
+          "initializer_pointer": "0x538b82",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b5844",
+          "initializer_pointer": "0x538b78",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "split-byte getter adapted",
+        "offset": "0xe4f84"
+      },
+      "edits": [
+        {
+          "offset": "0x128c52",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128c64",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128ae0",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x128ae8",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x128aec",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x128afe",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x128b06",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x128b0a",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x128bca",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x128bd2",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x128c82",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "e177f6c4be721233bcac133cc94e6293cbf6a38d32df3a67f7e88255813b6b8b",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x128c92",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "0ddc5388d1c1841654d7f22f6bd43f4415f898df16fb9c908f4267a88402c495",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x12973a",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x1297b2",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x1a53fc",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x1a54fc",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x1a57fc",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x1a5844",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x12937a",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "cadb1590fce85742ca0c890507f7382e21b320210497c5e6501f66edf58ad3ed",
+          "after_sha256": "eece025e11d65601a7c1ad6fc33a40b0866522025cafa0816a833877449f90ea"
+        },
+        {
+          "offset": "0x1294b2",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "fe784cda222a0ebd58fcbb0072b9ed835f612f5dac48a959bf9fe08856e66e0b",
+          "after_sha256": "55405fc115c8810f0e2bccff0e6282c4f542e98e183566acb6717001047bd4ae"
+        },
+        {
+          "offset": "0x1294f4",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "ce8bf00381790470e49910771f6f4f7d9fdb88cb4ebdf25f9cb9f12321fd8a3e",
+          "after_sha256": "8d72b01b080044b51b66ab5eb19d6183b2b6a6cfc318749340015ff135ad0d80"
+        },
+        {
+          "offset": "0xe4f84",
+          "size": 2,
+          "reason": "preserve UD02 calibration byte interpretation",
+          "before_sha256": "9c9ab1903bd128857c6fee15716de2b3c734e67c37148ef4bde0e56386168e63",
+          "after_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+        }
+      ],
+      "changed_bytes": 680
+    },
+    {
+      "model": "BDR-UD04",
+      "revision": "1.14",
+      "normal_envelope_sha256": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+      "decoded_sha256": "87e8152f1de1d3be53eb4ad9144c1bb0c45a9be6f78713a0b7487a637f989bf1",
+      "candidate_sha256": "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815",
+      "standalone_decoded_sha256": "87e8152f1de1d3be53eb4ad9144c1bb0c45a9be6f78713a0b7487a637f989bf1",
+      "context_decoding": null,
+      "kernel_supplied": true,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x538f06",
+      "assisted_branch": "0x5399ee",
+      "coordinate_slots": [
+        {
+          "address": "0x53962e",
+          "bytes": 64
+        },
+        {
+          "address": "0x539766",
+          "bytes": 66
+        },
+        {
+          "address": "0x5397a8",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x575a00",
+        "0x538c7a": "0x538c7a",
+        "0x538b74": "0x538b74",
+        "0x575990": "0x575990",
+        "0x531a86": "0x531a86",
+        "0x538b0c": "0x538b0c"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b5804",
+          "initializer_pointer": "0x538d5e",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b5904",
+          "initializer_pointer": "0x538d80",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b5c04",
+          "initializer_pointer": "0x538e36",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b5c4c",
+          "initializer_pointer": "0x538e2c",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "split-byte getter adapted",
+        "offset": "0xe5126"
+      },
+      "edits": [
+        {
+          "offset": "0x128f06",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128f18",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128d94",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x128d9c",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x128da0",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x128db2",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x128dba",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x128dbe",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x128e7e",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x128e86",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x128f36",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "36659797715b97cb9997ce2e233b614a4d322a145d5a286abd5025c75119bf12",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x128f46",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "2fd988170ad545a20ae9f9b89447a2d447062f488eed7593a6fa0671af38ac18",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x1299ee",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x129a66",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x1a5804",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x1a5904",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x1a5c04",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x1a5c4c",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x12962e",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "772515ec20de8dc9173125a8fc49a1023dd80c6de6d54650235536b8f6479054",
+          "after_sha256": "e2d20dc8a7ea334ed3640780538e6e1e8b8111b0a915f9908f39926ccc95bac4"
+        },
+        {
+          "offset": "0x129766",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "ac47537cb365f2f185bb16dc41c747dcb8e101319b7af6c01025665d47c80617",
+          "after_sha256": "255d45647f72e0642d26fe4df10d5758e19c6506907a3c05e7831f8fad93708c"
+        },
+        {
+          "offset": "0x1297a8",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "13b659049a9f56a3457110cd5a1aa7352e9bfee1b3be6d9febe8cc8bd25f03e0",
+          "after_sha256": "92dcdf14df02cc51f1904b48d6d968bf30d5b0dca3fc79b6a43feadef28c20a2"
+        },
+        {
+          "offset": "0xe5126",
+          "size": 2,
+          "reason": "preserve UD02 calibration byte interpretation",
+          "before_sha256": "9c9ab1903bd128857c6fee15716de2b3c734e67c37148ef4bde0e56386168e63",
+          "after_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+        }
+      ],
+      "changed_bytes": 679
+    },
+    {
+      "model": "SlimtypeEB1",
+      "revision": "HLE2",
+      "normal_envelope_sha256": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+      "decoded_sha256": "87e8152f1de1d3be53eb4ad9144c1bb0c45a9be6f78713a0b7487a637f989bf1",
+      "candidate_sha256": "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815",
+      "standalone_decoded_sha256": "87e8152f1de1d3be53eb4ad9144c1bb0c45a9be6f78713a0b7487a637f989bf1",
+      "context_decoding": null,
+      "kernel_supplied": true,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x538f06",
+      "assisted_branch": "0x5399ee",
+      "coordinate_slots": [
+        {
+          "address": "0x53962e",
+          "bytes": 64
+        },
+        {
+          "address": "0x539766",
+          "bytes": 66
+        },
+        {
+          "address": "0x5397a8",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x575a00",
+        "0x538c7a": "0x538c7a",
+        "0x538b74": "0x538b74",
+        "0x575990": "0x575990",
+        "0x531a86": "0x531a86",
+        "0x538b0c": "0x538b0c"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b5804",
+          "initializer_pointer": "0x538d5e",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b5904",
+          "initializer_pointer": "0x538d80",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b5c04",
+          "initializer_pointer": "0x538e36",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b5c4c",
+          "initializer_pointer": "0x538e2c",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "split-byte getter adapted",
+        "offset": "0xe5126"
+      },
+      "edits": [
+        {
+          "offset": "0x128f06",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128f18",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128d94",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x128d9c",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x128da0",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x128db2",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x128dba",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x128dbe",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x128e7e",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x128e86",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x128f36",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "36659797715b97cb9997ce2e233b614a4d322a145d5a286abd5025c75119bf12",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x128f46",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "2fd988170ad545a20ae9f9b89447a2d447062f488eed7593a6fa0671af38ac18",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x1299ee",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x129a66",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x1a5804",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x1a5904",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x1a5c04",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x1a5c4c",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x12962e",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "772515ec20de8dc9173125a8fc49a1023dd80c6de6d54650235536b8f6479054",
+          "after_sha256": "e2d20dc8a7ea334ed3640780538e6e1e8b8111b0a915f9908f39926ccc95bac4"
+        },
+        {
+          "offset": "0x129766",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "ac47537cb365f2f185bb16dc41c747dcb8e101319b7af6c01025665d47c80617",
+          "after_sha256": "255d45647f72e0642d26fe4df10d5758e19c6506907a3c05e7831f8fad93708c"
+        },
+        {
+          "offset": "0x1297a8",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "13b659049a9f56a3457110cd5a1aa7352e9bfee1b3be6d9febe8cc8bd25f03e0",
+          "after_sha256": "92dcdf14df02cc51f1904b48d6d968bf30d5b0dca3fc79b6a43feadef28c20a2"
+        },
+        {
+          "offset": "0xe5126",
+          "size": 2,
+          "reason": "preserve UD02 calibration byte interpretation",
+          "before_sha256": "9c9ab1903bd128857c6fee15716de2b3c734e67c37148ef4bde0e56386168e63",
+          "after_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+        }
+      ],
+      "changed_bytes": 679
+    },
+    {
+      "model": "SBW-06D2X-U",
+      "revision": "1.10",
+      "normal_envelope_sha256": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509",
+      "decoded_sha256": "8faaaf8c5b522461eacf1a292368a00eb73381597162271a729ce75dffcbc19d",
+      "candidate_sha256": "c2e63f6a1e24d08ce95c1c0d4531067ebdafa4701bac422019393a5fc7b79937",
+      "standalone_decoded_sha256": "8faaaf8c5b522461eacf1a292368a00eb73381597162271a729ce75dffcbc19d",
+      "context_decoding": null,
+      "kernel_supplied": true,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x5355ea",
+      "assisted_branch": "0x5360d2",
+      "coordinate_slots": [
+        {
+          "address": "0x535d12",
+          "bytes": 64
+        },
+        {
+          "address": "0x535e4a",
+          "bytes": 66
+        },
+        {
+          "address": "0x535e8c",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x57119a",
+        "0x538c7a": "0x53535e",
+        "0x538b74": "0x535258",
+        "0x575990": "0x57112a",
+        "0x531a86": "0x52e1d8",
+        "0x538b0c": "0x5351f0"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a216a",
+          "initializer_pointer": "0x535442",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a226a",
+          "initializer_pointer": "0x535464",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a256a",
+          "initializer_pointer": "0x53551a",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a25b2",
+          "initializer_pointer": "0x535510",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "split-byte getter adapted",
+        "offset": "0xe1ebe"
+      },
+      "edits": [
+        {
+          "offset": "0x1255ea",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x1255fc",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x125478",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x125480",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x125484",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x125496",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x12549e",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x1254a2",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x125562",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x12556a",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x12561a",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "f841896cb2588d6b5593724168f5a1e3a39e197b61deb4eb9e1b3f77c41e79db",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x12562a",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "1c11d215e89626ddd3011db3b5e5fba957a9489b984654e96ae948509d75ace9",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x1260d2",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x12614a",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x19216a",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x19226a",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x19256a",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x1925b2",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x125d12",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "3b90e2691fbfe1f7afa0d3e235bad073d013ef8d1d5f5893cfc3c4452a8622d3",
+          "after_sha256": "f74e11a2f3fc4a9769163befbc0faf995169e60cb03427571563a5582b51b5fc"
+        },
+        {
+          "offset": "0x125e4a",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "adcc875744f8de9509b297a0299645d861b363be14de312540c9ca45cde0f019",
+          "after_sha256": "60b860d0413df10d5afc9f155021a61cff666b59091be10c66790f5f0a5018d3"
+        },
+        {
+          "offset": "0x125e8c",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "907d9e8e5666cf4417d0779e239ef1220a4bfae1fc4973211f088dcfac4d35b2",
+          "after_sha256": "4d4ff394000ff0c8c8ae85544741863fa0368c4981262cce31424ff9c06209f1"
+        },
+        {
+          "offset": "0xe1ebe",
+          "size": 2,
+          "reason": "preserve UD02 calibration byte interpretation",
+          "before_sha256": "9c9ab1903bd128857c6fee15716de2b3c734e67c37148ef4bde0e56386168e63",
+          "after_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+        }
+      ],
+      "changed_bytes": 679
+    },
+    {
+      "model": "BDR-UD04",
+      "revision": "1.14",
+      "normal_envelope_sha256": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+      "decoded_sha256": "87e8152f1de1d3be53eb4ad9144c1bb0c45a9be6f78713a0b7487a637f989bf1",
+      "candidate_sha256": "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815",
+      "standalone_decoded_sha256": "87e8152f1de1d3be53eb4ad9144c1bb0c45a9be6f78713a0b7487a637f989bf1",
+      "context_decoding": null,
+      "kernel_supplied": false,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x538f06",
+      "assisted_branch": "0x5399ee",
+      "coordinate_slots": [
+        {
+          "address": "0x53962e",
+          "bytes": 64
+        },
+        {
+          "address": "0x539766",
+          "bytes": 66
+        },
+        {
+          "address": "0x5397a8",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x575a00",
+        "0x538c7a": "0x538c7a",
+        "0x538b74": "0x538b74",
+        "0x575990": "0x575990",
+        "0x531a86": "0x531a86",
+        "0x538b0c": "0x538b0c"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b5804",
+          "initializer_pointer": "0x538d5e",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5b5904",
+          "initializer_pointer": "0x538d80",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b5c04",
+          "initializer_pointer": "0x538e36",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5b5c4c",
+          "initializer_pointer": "0x538e2c",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "split-byte getter adapted",
+        "offset": "0xe5126"
+      },
+      "edits": [
+        {
+          "offset": "0x128f06",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128f18",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x128d94",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x128d9c",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x128da0",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x128db2",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x128dba",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x128dbe",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x128e7e",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x128e86",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x128f36",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "36659797715b97cb9997ce2e233b614a4d322a145d5a286abd5025c75119bf12",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x128f46",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "2fd988170ad545a20ae9f9b89447a2d447062f488eed7593a6fa0671af38ac18",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x1299ee",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x129a66",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x1a5804",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x1a5904",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x1a5c04",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x1a5c4c",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x12962e",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "772515ec20de8dc9173125a8fc49a1023dd80c6de6d54650235536b8f6479054",
+          "after_sha256": "e2d20dc8a7ea334ed3640780538e6e1e8b8111b0a915f9908f39926ccc95bac4"
+        },
+        {
+          "offset": "0x129766",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "ac47537cb365f2f185bb16dc41c747dcb8e101319b7af6c01025665d47c80617",
+          "after_sha256": "255d45647f72e0642d26fe4df10d5758e19c6506907a3c05e7831f8fad93708c"
+        },
+        {
+          "offset": "0x1297a8",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "13b659049a9f56a3457110cd5a1aa7352e9bfee1b3be6d9febe8cc8bd25f03e0",
+          "after_sha256": "92dcdf14df02cc51f1904b48d6d968bf30d5b0dca3fc79b6a43feadef28c20a2"
+        },
+        {
+          "offset": "0xe5126",
+          "size": 2,
+          "reason": "preserve UD02 calibration byte interpretation",
+          "before_sha256": "9c9ab1903bd128857c6fee15716de2b3c734e67c37148ef4bde0e56386168e63",
+          "after_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+        }
+      ],
+      "changed_bytes": 679
+    },
+    {
+      "model": "BDR-UD03",
+      "revision": "1.14",
+      "normal_envelope_sha256": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8",
+      "decoded_sha256": "e6bdfa9bd0220f618d3e4bf722a590c2e1cf4216431869ab399561b94c71f515",
+      "candidate_sha256": "57d0be1d40c2c8bba7f71bd7b84e66fd4394eb56924fb385610ba92c62797f32",
+      "standalone_decoded_sha256": "e6bdfa9bd0220f618d3e4bf722a590c2e1cf4216431869ab399561b94c71f515",
+      "context_decoding": null,
+      "kernel_supplied": true,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x535990",
+      "assisted_branch": "0x536478",
+      "coordinate_slots": [
+        {
+          "address": "0x5360b8",
+          "bytes": 64
+        },
+        {
+          "address": "0x5361f0",
+          "bytes": 66
+        },
+        {
+          "address": "0x536232",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x571658",
+        "0x538c7a": "0x535704",
+        "0x538b74": "0x5355fe",
+        "0x575990": "0x5715e8",
+        "0x531a86": "0x52e57e",
+        "0x538b0c": "0x535596"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a271e",
+          "initializer_pointer": "0x5357e8",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a281e",
+          "initializer_pointer": "0x53580a",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a2b1e",
+          "initializer_pointer": "0x5358c0",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a2b66",
+          "initializer_pointer": "0x5358b6",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "split-byte getter adapted",
+        "offset": "0xe2080"
+      },
+      "edits": [
+        {
+          "offset": "0x125990",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x1259a2",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x12581e",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x125826",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x12582a",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x12583c",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x125844",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x125848",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x125908",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x125910",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x1259c0",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "5bc9e22f22070646b92ca2e8b34e1da2d984bc106f9173eeabd7ce13fcce1fbb",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x1259d0",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "08242a68c472ca089c43e4d4926b4b81884478c1b8e5a4396c746a76f932a631",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x126478",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x1264f0",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x19271e",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x19281e",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x192b1e",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x192b66",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x1260b8",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "f5fa5ebf864632ac68bc21702bca2a9f662050834fef9dd8b55199611c537d53",
+          "after_sha256": "c328a2e7ed014535b6c3e7306edf53844e09e14131bd2124d172bc9c6dbc051d"
+        },
+        {
+          "offset": "0x1261f0",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "938338231f248b9608fa52b6142afdc788729509f10b432ac6bdc59913c7fb08",
+          "after_sha256": "fab626af59f3ed877587cd206162669982587de231b40e7de313dc67a99434b0"
+        },
+        {
+          "offset": "0x126232",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "0f41b67876d01ee7570015aa7fa25a8aba01d6759812903318909d388e5e8d7d",
+          "after_sha256": "e370471d71a45a9119950e26f980a651cd2cbcf22a862ac8b9dab434fa536f9a"
+        },
+        {
+          "offset": "0xe2080",
+          "size": 2,
+          "reason": "preserve UD02 calibration byte interpretation",
+          "before_sha256": "9c9ab1903bd128857c6fee15716de2b3c734e67c37148ef4bde0e56386168e63",
+          "after_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+        }
+      ],
+      "changed_bytes": 680
+    },
+    {
+      "model": "SBC-06D2X-U",
+      "revision": "1.10",
+      "normal_envelope_sha256": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001",
+      "decoded_sha256": "cc66d7d84b3ce1756b4f4b0004553df333ae2f4837d759bb64afeed8c6ce68fc",
+      "candidate_sha256": "4f7a7c4e0f252488010848a9b4108109c26b46777e2fe71777c9343aa508c653",
+      "standalone_decoded_sha256": "cc66d7d84b3ce1756b4f4b0004553df333ae2f4837d759bb64afeed8c6ce68fc",
+      "context_decoding": null,
+      "kernel_supplied": true,
+      "audit": "all movement conversion groups map with guarded edits",
+      "operational_state": "unresolved; offline applicability is not a new live validation",
+      "phase_helper": "0x5352e4",
+      "assisted_branch": "0x535dcc",
+      "coordinate_slots": [
+        {
+          "address": "0x535a0c",
+          "bytes": 64
+        },
+        {
+          "address": "0x535b44",
+          "bytes": 66
+        },
+        {
+          "address": "0x535b86",
+          "bytes": 50
+        }
+      ],
+      "coordinate_callees": {
+        "0x575a00": "0x5708c2",
+        "0x538c7a": "0x535058",
+        "0x538b74": "0x534f52",
+        "0x575990": "0x570852",
+        "0x531a86": "0x52ded2",
+        "0x538b0c": "0x534eea"
+      },
+      "tables": [
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a187a",
+          "initializer_pointer": "0x53513c",
+          "model": null
+        },
+        {
+          "kind": "selected UD02 waveform",
+          "address": "0x5a197a",
+          "initializer_pointer": "0x53515e",
+          "model": null
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a1c7a",
+          "initializer_pointer": "0x535214",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        },
+        {
+          "kind": "assisted coefficient layout",
+          "address": "0x5a1cc2",
+          "initializer_pointer": "0x53520a",
+          "model": {
+            "register_value_pairs": 18,
+            "emitted_values_equal_ud02_model": true
+          }
+        }
+      ],
+      "getter": {
+        "status": "split-byte getter adapted",
+        "offset": "0xe1bb8"
+      },
+      "edits": [
+        {
+          "offset": "0x1252e4",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x1252f6",
+          "size": 4,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ff6817f998cb059d2fe2fbcb62bc5f310e983ac70fbe002555344f26c05e869d",
+          "after_sha256": "06fe85ba7c1cac161135bcd99548fab75ffe48e700db4cd8128690071f8726f1"
+        },
+        {
+          "offset": "0x125172",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d",
+          "after_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15"
+        },
+        {
+          "offset": "0x12517a",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799",
+          "after_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832"
+        },
+        {
+          "offset": "0x12517e",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a",
+          "after_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd"
+        },
+        {
+          "offset": "0x125190",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "a8eafa0ff77f2fcef770bb102840d6f0d8ff299818cf0d0bd12315d4c4816b15",
+          "after_sha256": "e21b2ced6b29f5e2949c39ae32aae38ac47647130e67dacc6a7e48eb2570f92d"
+        },
+        {
+          "offset": "0x125198",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "94cc31476a01042751d1a6629e994f64e35b1138f8d63a3d9df5de12ce243832",
+          "after_sha256": "ea8131cbfe4c74bbd860e361d7634a023fa81cc54838f7c43a6df1bc9b2c3799"
+        },
+        {
+          "offset": "0x12519c",
+          "size": 2,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "cd9f06e5d88160ee273e198fab560620897c0c06f9126510e91ee5dc942d95bd",
+          "after_sha256": "184aeb6e09e2b1399d7adbf444b5beb6f53cb6c25752342fa6a25acaf55c817a"
+        },
+        {
+          "offset": "0x12525c",
+          "size": 6,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "8d142fe129b832bb7b4248397200843f165ef1165fe62f3d1c4ef02f11212dde",
+          "after_sha256": "6336218ee31867f4d57b480f106d1bdb1a93bd85dd783be7aa82d35273c57514"
+        },
+        {
+          "offset": "0x125264",
+          "size": 10,
+          "reason": "phase/order/mode2/coefficient destination convention",
+          "before_sha256": "73d88dcb2e8cff45ce794a02d3164528f6a0e6534be8c73f6766edc1b80c56f5",
+          "after_sha256": "2fa4dd6491bfad39eaaf98ab15fa2091bb5f81f82dc39d133a69af88afe4f8e4"
+        },
+        {
+          "offset": "0x125314",
+          "size": 6,
+          "reason": "ordered phase output; inline proven no-op",
+          "before_sha256": "82cc5018dee36a209ad900bba1bdeab26f7d52314d573487dd34491f8ac4a8bc",
+          "after_sha256": "0cac968efd536d189ecbbf373bd1a2b9152dcbee2ea421708efb460f69c9d630"
+        },
+        {
+          "offset": "0x125324",
+          "size": 6,
+          "reason": "ordered phase output; inline proven byte extraction",
+          "before_sha256": "27b992941cc70ae3e1ad0a38e055b28c3058b5e7e4f29b6bc09ef36b58ac8a64",
+          "after_sha256": "0a3eed328c3e628dcbc589203706622f2ba48ce9803ba23606b44f9a06e88d3e"
+        },
+        {
+          "offset": "0x125dcc",
+          "size": 2,
+          "reason": "assisted movement direction",
+          "before_sha256": "701726775e0875abd5114c5793084b890b5e06da0aea1fed29a9632fb449ca38",
+          "after_sha256": "8869fee2c9b7f0e2d54bd7f5be2e33bcfb66a0346f06f803f4b95426e9f2d8ed"
+        },
+        {
+          "offset": "0x125e44",
+          "size": 12,
+          "reason": "assisted command direction convention",
+          "before_sha256": "7208a9982173394e45a31b4a76f75e85392d94f88d014f767ffd91c44f34379f",
+          "after_sha256": "48f05eee02dd50997afffc4beb537e244a65b00982246c7e66721ed1ecdd92eb"
+        },
+        {
+          "offset": "0x19187a",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "8d7f45ce7aac02ef62215150b390ac2733123654740b95afd4640618c754fcbe",
+          "after_sha256": "e8b5eca061c4024f94e828db10a2d586d2fd229fd8802b71dd155f95853c7501"
+        },
+        {
+          "offset": "0x19197a",
+          "size": 256,
+          "reason": "selected UD02 waveform",
+          "before_sha256": "ec4ec82b692fbf76b20645f9df0e74a90f4a155e25b14bdc386ec7cfe9762ffe",
+          "after_sha256": "2d51b20bb7d16f053e74200aff631f76c30829cc7a55d165afa4d47dee3d87b9"
+        },
+        {
+          "offset": "0x191c7a",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "191968a08e9b3af9b3e451d6cd4e33b770c692c09d3eee1508007de75d841997",
+          "after_sha256": "200677e070f2fe2167e6b34c6daa91f7e866d20a82e5bf321f543307316c17d1"
+        },
+        {
+          "offset": "0x191cc2",
+          "size": 72,
+          "reason": "assisted coefficient layout",
+          "before_sha256": "af7cdfacad57ceb9562784299f2d8fa7da8d3ea50a67e0dd7822861aeb5c9147",
+          "after_sha256": "85420ea54c78cbe92899e1a79a7e844bd2d8ee6f938ac908b0d7ae9125ffc637"
+        },
+        {
+          "offset": "0x125a0c",
+          "size": 64,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "aba1d9019f83bd42fe74a4542fab2bf4ddb64635cd76ef7bb1e7fadd482c4312",
+          "after_sha256": "a372c08729561e213934ececd700a14d6a26fd4ba51f3f4213dc549563321e86"
+        },
+        {
+          "offset": "0x125b44",
+          "size": 66,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "2f24308283c950eecc534d018522418254904bb72e5816f06858bf575c31e5b8",
+          "after_sha256": "723ac5ee3651a3120c55045df48201e287c1cc45c8f6b7e9d117bf13942c4025"
+        },
+        {
+          "offset": "0x125b86",
+          "size": 50,
+          "reason": "UD02 coordinate conversion with bound calls",
+          "before_sha256": "d8a5c006240f60a1d4d1d27b0c629bbdc56280cb6c768e6fca4c34e8941f2900",
+          "after_sha256": "ecd42191d5d1bb2bdedc1aefe68863f22cec31e860cb391fa92f5d5e52bb65b2"
+        },
+        {
+          "offset": "0xe1bb8",
+          "size": 2,
+          "reason": "preserve UD02 calibration byte interpretation",
+          "before_sha256": "9c9ab1903bd128857c6fee15716de2b3c734e67c37148ef4bde0e56386168e63",
+          "after_sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+        }
+      ],
+      "changed_bytes": 680
+    }
+  ],
+  "limits": [
+    "No live flash or disc test performed.",
+    "This ports the movement-only UD04 adaptation; the working UD03 candidate also included earlier experimental groups whose necessity is unresolved.",
+    "No production conversion or reverse rule registered.",
+    "Only the original UD02 mechanism/profile is represented; do not generalize to every UD02 calibration/profile.",
+    "Decoded checksum and code applicability do not by themselves prove receiver acceptance, all mechanisms or full BD/UHD reading."
+  ],
+  "ud03_known_candidate_comparison": {
+    "minimal_movement_candidate_sha256": "f78a48ea604d36663f1da13b5eaad63396e8a0c4ccc6c18fb7f38547f1816a56",
+    "known_candidate23_sha256": "c3d53550a044d5f1d5356a742d015692cc5e849d7870f988b3243c3fac12a00b",
+    "remaining_non_checksum_byte_differences": 45,
+    "differences_by_prior_experimental_group": {
+      "pins": 3,
+      "F70A07": 1,
+      "mode_path": 24,
+      "controller_commands": 2,
+      "controller_init": 15
+    },
+    "unclassified_differences": 0,
+    "interpretation": "Core movement changes reproduce; the minimal movement-only UD03 build omits five earlier experimental groups. It is not the exact previously live-tested UD03 candidate."
+  },
+  "packaging_audit": {
+    "passed": 8,
+    "failed": 1,
+    "results": [
+      {
+        "normal_envelope_sha256": "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      },
+      {
+        "normal_envelope_sha256": "7a97691fa0ed3ecc53ecc7cdda65db674f80cd7a0ee1c6455c536239bd43e560",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      },
+      {
+        "normal_envelope_sha256": "a5aa757081478620637ed2950b540f35f1cbb969598532cfc872daba0a0366e6",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      },
+      {
+        "normal_envelope_sha256": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      },
+      {
+        "normal_envelope_sha256": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      },
+      {
+        "normal_envelope_sha256": "2780d7b736bb883849caabeaceb00356077becef640bd924c6f676e2ca00c509",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      },
+      {
+        "normal_envelope_sha256": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+        "result": "Err(\"Normal decoded checksum failed: sum=0xdc597521, bytes=0x1c7500\")",
+        "roundtrip_passed": false
+      },
+      {
+        "normal_envelope_sha256": "4a5c9c055c4a31bed730618c0ea68597c807ea1e581558acfd7e873f8e32eba8",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      },
+      {
+        "normal_envelope_sha256": "8d912673689d7928c98f5f93da903a3440182cb37f254eab774e6ea6a22d2001",
+        "result": "Ok(\"ValidKeyAndCiphertext\")",
+        "roundtrip_passed": true
+      }
+    ],
+    "excluded_source": "S8A10001.114.live-derived.unverified.enc was unapproved; original removed by owner instruction. Byte-identical decoded code is not identical authenticated envelope provenance."
+  },
+  "release_decision": "All identified UD02 transition adaptations remain unresolved in 0.15.1; experimental movement conversions stay on side branch. Static mapping is not drive validation."
+}

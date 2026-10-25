@@ -754,6 +754,7 @@ fn open_flash(
 )> {
     let input = read_capped(&args.input)
         .with_context(|| format!("reading input {}", args.input.display()))?;
+    registry::validate_flash_input(&input)?;
     if args.current.is_none() && args.current_member.is_some() {
         return Err(anyhow::anyhow!("--current-member requires --current")
             .context(crate::user_error::IssueCode::CommandOptions));
@@ -1174,6 +1175,7 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
     }
     crate::diagnostics::record(format!("recovery options: {args:?}"));
     let input = read_capped(&args.input)?;
+    registry::validate_flash_input(&input)?;
     let target = recovery_target(&input, args.member.as_deref())?;
     let supplied = match &args.current {
         CurrentFirmware::File(path) => {

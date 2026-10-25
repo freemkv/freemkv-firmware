@@ -224,6 +224,19 @@ pub struct FlashRequest {
     pub predump_out: Option<std::path::PathBuf>,
 }
 
+/// A selected firmware image has proven missing or corrupt bytes.
+#[derive(Debug)]
+pub struct CorruptFirmware {
+    /// Diagnostic description; rendered UI guidance does not expose this text.
+    pub detail: String,
+}
+impl fmt::Display for CorruptFirmware {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.detail)
+    }
+}
+impl std::error::Error for CorruptFirmware {}
+
 /// Live receiver detection failed; retain diagnostics while asking for Current.
 #[derive(Debug)]
 pub struct CurrentFirmwareRequired {
@@ -457,6 +470,11 @@ pub trait FileFacet {
     /// Print the `info <file>` / `check` report for a file this backend
     /// recognized, or `None` to leave it to the generic report. Read-only.
     fn describe(&self, bytes: &[u8], recognized: &Recognized) -> Option<Result<()>>;
+    /// Check device-independent input integrity before opening any drive.
+    /// This grants no hardware compatibility or write authorization.
+    fn validate_flash_input(&self, _bytes: &[u8], _recognized: &Recognized) -> Result<()> {
+        Ok(())
+    }
     /// The format of a flash input no backend recognizes, by its name, so the
     /// drive's flash path reports the specific parse error.
     fn classify_input(&self, path: &Path, bytes: &[u8]) -> &'static FileFormat;

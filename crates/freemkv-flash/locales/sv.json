@@ -1,6 +1,7 @@
 {
   "language_name": "Svenska",
   "messages": {
+    "errors.firmware_corrupt": "Den här firmwarefilen är skadad eller ofullständig. Hämta en ny OEM-kopia och försök igen.",
     "errors.startup_setting_restored": "Enhetens ursprungliga startinställning återställdes och verifierades. Spara en diagnostikrapport för att få hjälp innan du försöker igen.",
     "errors.startup_setting_uncertain": "Enhetens ursprungliga startinställning kunde inte återställas eller verifieras. Spara en diagnostikrapport och få enheten kontrollerad innan du försöker igen.",
     "errors.backup_required": "Denna uppdatering kräver en fullständig säkerhetskopia av den installerade firmwaren. Spara en diagnostikrapport för att få hjälp.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware typ",
     "domain.kernel_version": "Kernelversion",
     "domain.pioneer_identity": "Pioneer identitet",
-    "domain.product_code": "Produktkoder",
-    "domain.manufactured": "tillverkas",
+    "domain.product_code": "Fabrikens produktkod",
+    "domain.manufactured": "Datum för fabrikstest",
     "domain.product_origin": "Produkt ursprung",
     "domain.saved_quiet_drive": "Spara tyst optisk körning",
     "domain.pureread_version": "PureRead version",

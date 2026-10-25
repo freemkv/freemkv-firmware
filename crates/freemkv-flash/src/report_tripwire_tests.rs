@@ -219,7 +219,11 @@ fn info_gui_events_match_0_11_2() {
         let expected: Vec<String> = expected
             .iter()
             .filter(|e| e.starts_with("FIELD ") || e.starts_with("SETTINGS "))
-            .map(|e| e.trim_end().to_string())
+            .map(|e| {
+                e.trim_end()
+                    .replace("FIELD    Product code =", "FIELD    Factory product code =")
+                    .replace("FIELD    Manufactured =", "FIELD    Factory test date =")
+            })
             .collect();
         assert_eq!(events, expected, "{scenario}");
     }

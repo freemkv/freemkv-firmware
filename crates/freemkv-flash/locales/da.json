@@ -1,6 +1,7 @@
 {
   "language_name": "Dansk",
   "messages": {
+    "errors.firmware_corrupt": "Denne firmwarefil er beskadiget eller ufuldstændig. Download en ny OEM-kopi, og prøv igen.",
     "errors.startup_setting_restored": "Drevets oprindelige opstartsindstilling blev gendannet og bekræftet. Gem en diagnoserapport for at få hjælp, før du prøver igen.",
     "errors.startup_setting_uncertain": "Drevets oprindelige opstartsindstilling kunne ikke gendannes eller bekræftes. Gem en diagnoserapport, og få drevet kontrolleret, før du prøver igen.",
     "errors.backup_required": "Denne opdatering kræver en komplet sikkerhedskopi af den installerede firmware. Gem en diagnosticeringsrapport for at få hjælp.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware type",
     "domain.kernel_version": "Kernel version",
     "domain.pioneer_identity": "Pioneer identitet",
-    "domain.product_code": "Produktkode",
-    "domain.manufactured": "fremstillet",
+    "domain.product_code": "Fabrikkens produktkode",
+    "domain.manufactured": "Dato for fabrikstest",
     "domain.product_origin": "Produkts oprindelse",
     "domain.saved_quiet_drive": "Sikker optisk ledning",
     "domain.pureread_version": "PureRead version",

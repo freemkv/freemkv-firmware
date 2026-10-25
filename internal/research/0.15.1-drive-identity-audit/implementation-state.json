@@ -1,0 +1,94 @@
+{
+  "status": "Typed settings foundation implemented; earlier register-based gate is superseded by the approved sparse issue-driven design and still requires replacement",
+  "flow": [
+    "hardware admission",
+    "OEM firmware integrity/protocol/receiver validation plus required-settings compatibility",
+    "prepared OEM firmware plus typed settings execution and verification"
+  ],
+  "current_settings": [
+    "pioneer.startup.word",
+    "pioneer.receiver.kernel-marker"
+  ],
+  "startup_compatibility": {
+    "published_baseline": "pioneer-optical 1.0.0",
+    "selection_source_identical": true,
+    "single_word_read_change_verify_rollback_execute_source_identical": true,
+    "legacy_api_preserved": "startup_setting()"
+  },
+  "hardware_and_settings_census": {
+    "attempted": 719,
+    "decoded": 684,
+    "known_family_images": 525,
+    "decoded_unknown_family": 159,
+    "unsupported_envelopes": 35,
+    "groups_before": 25,
+    "groups_after": 24,
+    "existing_equal_family_directed_pairs": 36363,
+    "newly_equal_directed_pairs": 18,
+    "new_pairs_settings_blocked": 18,
+    "existing_pairs_new_settings_refusals": 0,
+    "artifact": "implemented-settings-census.json",
+    "limit": "Hardware equality plus settings contract only; not complete physical or all receiver/authentication admission validation."
+  },
+  "phase_recognition_limit": "Phase helper variations also occur inside established families. The helper alone is not a universal compatibility discriminator. Excluded configuration differences stay fail-closed until a complete mapping exists.",
+  "tests": {
+    "final_settings_regressions": {
+      "passed": 5,
+      "failed": 0
+    },
+    "existing_startup_migration_tests": 9,
+    "workspace_check": "passed",
+    "optical_feature_checks": [
+      "no defaults",
+      "drive",
+      "image",
+      "all features"
+    ],
+    "optical_clippy_all_features": "passed with -D warnings",
+    "optical_library": {
+      "passed": 416,
+      "failed": 0
+    },
+    "flash_suite": {
+      "passed": 653,
+      "failed": 0,
+      "ignored": 23,
+      "command": "cargo test --offline -p freemkv-flash"
+    },
+    "final_settings_guidance_regression": {
+      "passed": 1,
+      "failed": 0
+    },
+    "flash_clippy": "passed with -D warnings"
+  },
+  "local_integration": {
+    "application_branch": "dev",
+    "companion_branch": "feature/oem-firmware-settings",
+    "companion_relative_path": "../pioneer-optical-settings",
+    "cargo_patch": "Explicit local override; architecture test checks exact path and version. Not suitable for release until replaced by a reviewed published dependency."
+  },
+  "source_sha256": {
+    "src/image.rs": "f18ff3e0c3d6d0767804ca9c1db5cd831b3c0018eed3bce5e20daa21f88c889b",
+    "src/receiver.rs": "3632d19388a69e7234f298f57c7a319a627f222f9f5467627cce8f138ab37157",
+    "src/receiver/preparation.rs": "f3eb461cba3cdb7c56ed209d3d3cba738f1495a7155de86fd1af980efb8f2e63",
+    "src/receiver/execution_safe.rs": "0435b3539d675af1fc3264dae0a1f0210816450516f070498a72c27477a0d661",
+    "src/settings.rs": "b9ba87bc3cfaf4584d99908b3117dca1821cf2a4cd8585f08185a579de77a232",
+    "src/settings/update.rs": "7fb4f15ac8d0d268df273135cf0b2287beeb20936fdeb2f7284bfb78f196aa11",
+    "src/startup/migration.rs": "c0282cbebbc6fa1d33382f52dff51612061621978e8998a861bd2cca7d03d16c",
+    "src/error_codes.rs": "3253817d3681515e56fc802d3dbec63f328dbf762ee7e6f73cf40ad26315c814"
+  },
+  "unchanged_scope": [
+    "No production UD02 movement converter",
+    "No live access to 10.1.7.13",
+    "Existing 0x9F selection and single-word executor preserved"
+  ],
+  "superseding_design": "../../docs/design/0.15.1-hardware-and-settings.json",
+  "validation_scope": "Sparse production issue matcher implemented. Census: 36,363 prior same-family directed image pairs compatible; 18 newly equal directions unresolved; no existing same-family settings refusals. Full receiver admission and integrated release CI are separate checks.",
+  "integration": {
+    "application_base": "0cffda3",
+    "application_branch": "feature/maintenance-0151",
+    "optical_revision": "07e9b8eee03c26b045f7639dd076ae0f67e6a7d5",
+    "optical_version": "1.2.0",
+    "local_override": false
+  }
+}

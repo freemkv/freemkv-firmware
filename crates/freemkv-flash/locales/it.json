@@ -1,6 +1,7 @@
 {
   "language_name": "Italiano",
   "messages": {
+    "errors.firmware_corrupt": "Questo file firmware è danneggiato o incompleto. Scarica una nuova copia OEM e riprova.",
     "errors.startup_setting_restored": "L’impostazione di avvio originale dell’unità è stata ripristinata e verificata. Salva un rapporto diagnostico per ricevere assistenza prima di riprovare.",
     "errors.startup_setting_uncertain": "Non è stato possibile ripristinare o verificare l’impostazione di avvio originale dell’unità. Salva un rapporto diagnostico e fai controllare l’unità prima di riprovare.",
     "errors.backup_required": "Questo aggiornamento richiede un backup completo del firmware installato. Salva un rapporto diagnostico per ricevere assistenza.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Tipo di firmware",
     "domain.kernel_version": "Versione kernel",
     "domain.pioneer_identity": "ID di Pioneer",
-    "domain.product_code": "Codice del prodotto",
-    "domain.manufactured": "Produzione",
+    "domain.product_code": "Codice prodotto di fabbrica",
+    "domain.manufactured": "Data del test in fabbrica",
     "domain.product_origin": "Origine del prodotto",
     "domain.saved_quiet_drive": "La guida ottica silenziosa",
     "domain.pureread_version": "Versione PureRead",

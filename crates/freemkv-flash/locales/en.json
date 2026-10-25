@@ -1,6 +1,7 @@
 {
   "language_name": "English",
   "messages": {
+    "errors.firmware_corrupt": "This firmware file is corrupt or incomplete. Download a fresh OEM copy and try again.",
     "errors.startup_setting_restored": "The original drive startup setting was restored and verified. Save a diagnostic report for help before trying again.",
     "errors.startup_setting_uncertain": "The original drive startup setting could not be restored or verified. Save a diagnostic report and have the drive checked before trying again.",
     "errors.backup_required": "This update requires a complete backup of the installed firmware. Save a diagnostic report for help.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware type",
     "domain.kernel_version": "Kernel version",
     "domain.pioneer_identity": "Pioneer identity",
-    "domain.product_code": "Product code",
-    "domain.manufactured": "Manufactured",
+    "domain.product_code": "Factory product code",
+    "domain.manufactured": "Factory test date",
     "domain.product_origin": "Product origin",
     "domain.saved_quiet_drive": "Saved Quiet Drive",
     "domain.pureread_version": "PureRead version",

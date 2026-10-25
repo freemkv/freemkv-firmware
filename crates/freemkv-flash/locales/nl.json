@@ -1,6 +1,7 @@
 {
   "language_name": "Nederlands",
   "messages": {
+    "errors.firmware_corrupt": "Dit firmwarebestand is beschadigd of onvolledig. Download een nieuwe OEM-kopie en probeer het opnieuw.",
     "errors.startup_setting_restored": "De oorspronkelijke opstartinstelling van het station is hersteld en gecontroleerd. Sla een diagnostisch rapport op om hulp te krijgen voordat u het opnieuw probeert.",
     "errors.startup_setting_uncertain": "De oorspronkelijke opstartinstelling van het station kon niet worden hersteld of gecontroleerd. Sla een diagnostisch rapport op en laat het station controleren voordat u het opnieuw probeert.",
     "errors.backup_required": "Deze update vereist een volledige back-up van de geïnstalleerde firmware. Sla een diagnostisch rapport op om hulp te krijgen.",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware type",
     "domain.kernel_version": "Kernel versie",
     "domain.pioneer_identity": "Pioneer identiteit",
-    "domain.product_code": "Productcode",
-    "domain.manufactured": "geproduceerd",
+    "domain.product_code": "Fabrieksproductcode",
+    "domain.manufactured": "Datum fabriekstest",
     "domain.product_origin": "Product Oorsprong",
     "domain.saved_quiet_drive": "Rustige optische drive",
     "domain.pureread_version": "PureRead versie",

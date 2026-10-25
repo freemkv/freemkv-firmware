@@ -1,6 +1,7 @@
 {
   "language_name": "简体中文",
   "messages": {
+    "errors.firmware_corrupt": "此固件文件已损坏或不完整。请重新下载 OEM 文件后重试。",
     "errors.startup_setting_restored": "已恢复并验证光驱原来的启动设置。请保存诊断报告并寻求帮助，然后再重试。",
     "errors.startup_setting_uncertain": "无法恢复或验证光驱原来的启动设置。请保存诊断报告，并请专业人员检查光驱后再重试。",
     "errors.backup_required": "此更新需要已安装固件的完整备份。请保存诊断报告以寻求帮助。",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "Firmware 类型",
     "domain.kernel_version": "核心版本",
     "domain.pioneer_identity": "Pioneer 身份",
-    "domain.product_code": "产品代码",
-    "domain.manufactured": "制作",
+    "domain.product_code": "出厂产品代码",
+    "domain.manufactured": "工厂测试日期",
     "domain.product_origin": "产品起源",
     "domain.saved_quiet_drive": "安静光学驱动",
     "domain.pureread_version": "PureRead 版本",

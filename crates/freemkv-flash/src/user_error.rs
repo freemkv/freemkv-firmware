@@ -195,6 +195,8 @@ impl UserError {
                     .to_string(),
             ));
             "errors.hardware_mismatch"
+        } else if error.is::<crate::backend::CorruptFirmware>() {
+            "errors.firmware_corrupt"
         } else if error.is::<crate::backend::UnsupportedFamilyOverride>() {
             "recovery.family_override_unsupported"
         } else if matches!(
@@ -333,6 +335,22 @@ impl UserError {
 mod tests {
     use super::*;
 
+    #[test]
+    fn corrupt_input_has_actionable_guidance_in_every_language() {
+        let error = anyhow::Error::new(crate::backend::CorruptFirmware {
+            detail: "Normal tail cannot be reconstructed".into(),
+        })
+        .context("input validation");
+        let guidance = UserError::of(&error);
+        assert_eq!(guidance.id, "errors.firmware_corrupt");
+        assert!(guidance
+            .render(Language::En)
+            .contains("Download a fresh OEM copy"));
+        for language in Language::ALL {
+            let rendered = guidance.render(language);
+            assert!(!rendered.is_empty() && !rendered.contains("errors.firmware_corrupt"));
+        }
+    }
     #[test]
     fn backup_guidance_is_idempotent_and_does_not_relabel_uncertain_writes() {
         let read_only =

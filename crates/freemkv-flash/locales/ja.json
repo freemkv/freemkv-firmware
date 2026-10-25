@@ -1,6 +1,7 @@
 {
   "language_name": "日本語",
   "messages": {
+    "errors.firmware_corrupt": "このファームウェアファイルは破損しているか、不完全です。新しい OEM ファイルをダウンロードして、もう一度お試しください。",
     "errors.startup_setting_restored": "ドライブの元の起動設定が復元され、確認されました。再試行する前に、診断レポートを保存してサポートを受けてください。",
     "errors.startup_setting_uncertain": "ドライブの元の起動設定を復元または確認できませんでした。診断レポートを保存し、再試行する前にドライブの点検を受けてください。",
     "errors.backup_required": "この更新にはインストール済みファームウェアの完全なバックアップが必要です。診断レポートを保存してサポートを求めてください。",
@@ -467,8 +468,8 @@
     "domain.firmware_type": "ファームウェアタイプ",
     "domain.kernel_version": "カーネル版",
     "domain.pioneer_identity": "Pioneer アイデンティティ",
-    "domain.product_code": "製品コード",
-    "domain.manufactured": "製造",
+    "domain.product_code": "工場製品コード",
+    "domain.manufactured": "工場テスト日",
     "domain.product_origin": "製品起源",
     "domain.saved_quiet_drive": "安静な光学ドライブ",
     "domain.pureread_version": "クリーンバージョン",
