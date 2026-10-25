@@ -672,7 +672,7 @@ fn component_date(bytes: &[u8]) -> Option<FwDate> {
 /// declared required-Kernel ID tag; for a Kernel, the Kernel's own ID tag
 /// (Pioneer uses the same header field on both, so both callers reach it the
 /// same way). Empty/missing → `None`.
-fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
+pub(super) fn component_kernel_tag(bytes: &[u8]) -> Option<String> {
     let tag = pioneer_optical::envelope::header_info(bytes)?.kernel_version;
     let tag = tag.trim();
     (!tag.is_empty()).then(|| tag.to_string())

@@ -277,6 +277,27 @@ impl std::error::Error for HardwareMismatch {
     }
 }
 
+/// A valid Normal requires a different Kernel generation than the drive has.
+#[derive(Debug)]
+pub struct InstalledKernelMismatch {
+    /// The Kernel tag required by the selected Normal.
+    pub required: String,
+    /// The Kernel tag found in the installed backup.
+    pub installed: String,
+}
+
+impl std::fmt::Display for InstalledKernelMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Normal requires Kernel {}, but the drive has Kernel {}",
+            self.required, self.installed
+        )
+    }
+}
+
+impl std::error::Error for InstalledKernelMismatch {}
+
 /// What a drive offers, derived from the facets its backend provides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Capabilities {

@@ -32303,7 +32303,7 @@ reason: P4, P7, P8, P9, FMT, P10
 reason: P2, PRECHECK, OPERATION_015
 ```diff
 -result: ERR malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
-+result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.installed_firmware_mismatch: malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
++result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.installed_firmware_mismatch: Normal requires Kernel ID58, but the drive has Kernel GENERAL
 ---- scsi transcript (23) ---
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
