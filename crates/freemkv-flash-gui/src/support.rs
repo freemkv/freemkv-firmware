@@ -9,6 +9,8 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 
+pub(crate) mod update_check;
+
 const JOURNAL_LIMIT: u64 = 8 * 1024 * 1024;
 const BUNDLE_LIMIT: u64 = 50 * 1024 * 1024;
 pub(crate) const DESCRIPTION_LIMIT: usize = 16 * 1024;
