@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "id": "pioneer.settings.ud02-mechanism.87e8152f1de1",
+  "status": "experimental-settings-profile",
+  "release_enabled": false,
+  "direction": "UD02 mechanism to target firmware; no native inverse implied",
+  "source_configuration": {
+    "hardware_scheme": "pioneer.hardware.v4",
+    "hardware_family": "83a4abb2a9b5480e",
+    "original_normal_decoded_sha256": "84fab289c44ce2de98e96272e607869de4501b45f8f4badc43e492920ce07750",
+    "required_live_parameter": {
+      "index": "0x028f",
+      "value": "0x0001"
+    },
+    "calibration_policy": "Preserve source calibration; adapt target interpretation. Existing startup-word migration policy remains unchanged."
+  },
+  "setting_keys": [
+    "pioneer.mechanism.phase-order",
+    "pioneer.mechanism.waveform",
+    "pioneer.mechanism.assisted-motion",
+    "pioneer.mechanism.coordinate",
+    "pioneer.calibration.getter"
+  ],
+  "targets": [
+    {
+      "model": "BDR-UD04",
+      "revision": "1.14",
+      "normal_envelope_sha256": "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+      "context_decoding_required": false
+    },
+    {
+      "model": "SlimtypeEB1",
+      "revision": "HLE2",
+      "normal_envelope_sha256": "79a758b6285df2c0a8302e654956e83cedd0059ff872e7356786f4f40aaa20f2",
+      "context_decoding_required": false
+    }
+  ],
+  "prepare": {
+    "component": "decoded_normal",
+    "input_sha256": "87e8152f1de1d3be53eb4ad9144c1bb0c45a9be6f78713a0b7487a637f989bf1",
+    "input_length": 1864960,
+    "operations": [
+      {
+        "op": "replace_bytes",
+        "offset": 1216262,
+        "expected_hex": "6f300002",
+        "replacement_hex": "69300000"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1216280,
+        "expected_hex": "6f300002",
+        "replacement_hex": "69300000"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1215892,
+        "expected_hex": "8808",
+        "replacement_hex": "88f8"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1215900,
+        "expected_hex": "1888",
+        "replacement_hex": "f810"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1215904,
+        "expected_hex": "f820",
+        "replacement_hex": "f830"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1215922,
+        "expected_hex": "88f8",
+        "replacement_hex": "8808"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1215930,
+        "expected_hex": "f810",
+        "replacement_hex": "1888"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1215934,
+        "expected_hex": "f830",
+        "replacement_hex": "f820"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1216126,
+        "expected_hex": "7900061319c0",
+        "replacement_hex": "0dc07910012a"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1216134,
+        "expected_hex": "7900013219c079100009",
+        "replacement_hex": "0dc07910060200000000"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1216310,
+        "expected_hex": "69305e57cf0c",
+        "replacement_hex": "6f3000020000"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1216326,
+        "expected_hex": "69305e57cf0e",
+        "replacement_hex": "6f3000020c08"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1219054,
+        "expected_hex": "4622",
+        "replacement_hex": "4722"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1219174,
+        "expected_hex": "7900ec08ae014602f8881899",
+        "replacement_hex": "7900ec88ae014602f8081899"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1726468,
+        "expected_hex": "ee00b400f000b3c0f180b340f3c0b300f780b28000c0b2000940b28012c0b4403740c8c04400da004840e2c049c0e6804a40e8404ac0ea004b40eb404b80ecc04c00ee004c40f0004cc0f1804d00f3c04d80f7804e0000c04d8009404bc012c037403740260044001d404840198049c017c04a4016004ac014c04b4013404b8012004c0010004c400e804cc00c404d0008804d80ff404e00f6c04d80ed404bc0c8c03740bc002600b7c01d40b6401980b5c017c0b5401600b4c014c0b4801340b4001200b3c01000b3400e80b3000c40b2800880b200ff40b280f6c0b440ed40c8c0c8c0da00bc00e2c0b7c0e680b640e840b5c0ea00b540eb40b4c0ecc0b480",
+        "replacement_hex": "f000b7c0f1c0b600f3c0b4000200aa000580ad800940b1400e00b60018c0c0c02c00d4003780df803cc0e4c04000e8004180e9804300eb004480ec804600ee004800f00049c0f1c04bc0f3c055c00200524005804e80094049c00e003f0018c02c002c00204037801b003cc017c040001640418014c043001340448011c046000fc048000e0049c00c004bc0fdc055c0fa405240f6804e80f1c049c0e7003f00d4002c00c8402040c3001b00bfc017c0be401640bcc014c0bb401340b9c011c0b7c00fc0b6000e00b4000c00aa00fdc0ad80fa40b140f680b600f1c0c0c0e700d400d400df80c840e4c0c300e800bfc0e980be40eb00bcc0ec80bb40ee00b9c0"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1726724,
+        "expected_hex": "1100b3c01280b44013c0b4801580b5001780b5801940b6401d40b7c02880bd403740c8c04bc0ed404d80f6c04e00ff404d8008804d000bc04cc00e004c800f404c4011004bc012804b8013c04b0015804a80178049c0194048401d4042c028803740374012c04bc009404d8000c04e00f7804d80f4404d00f2004cc0f0c04c80ef004c40ed804bc0ec404b80ea804b00e8804a80e6c049c0e2c04840d78042c0c8c03740b44012c0b2800940b20000c0b280f780b300f440b340f200b380f0c0b3c0ef00b440ed80b480ec40b500ea80b580e880b640e6c0b7c0e2c0bd40d780c8c0c8c0ed40b440f6c0b280ff40b2000880b2800bc0b3000e00b3400f40b380",
+        "replacement_hex": "0fc0b7c011c0b9c01340bb4014c0bcc01640be4017c0bfc01b00c3002040c8402c00d4003f00e70049c0f1c04e80f6805240fa4055c0fdc04bc00c0049c00e0048000fc0460011c044801340430014c041801640400017c03cc01b00378020402c002c0018c03f000e0049c009404e8005805240020055c0f3c04bc0f1c049c0f0004800ee004600ec804480eb004300e9804180e8004000e4c03cc0df803780d4002c00c0c018c0b6000e00b1400940ad800580aa000200b400f3c0b600f1c0b7c0f000b9c0ee00bb40ec80bcc0eb00be40e980bfc0e800c300e4c0c840df80d400d400e700c0c0f1c0b600f680b140fa40ad80fdc0aa000c00b4000e00b600"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1727492,
+        "expected_hex": "f000f180f340fd4003c007000ac010401ac02c0036c03b803ec040c04200438044c04600480049804b40524053c050804cc047403cc02c0021801c0018c016c01580144012c01180",
+        "replacement_hex": "f340f18003c0fd400ac007001ac0104036c02c003ec03b80420040c044c04380480046004b40498053c052404cc050803cc0474021802c0018c01c00158016c012c0144010001180"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1727564,
+        "expected_hex": "0fc0118012c01440158016c018c01c0021802c003dc047404cc0508053c052404b4049804800460044c04380420040c03ec03b8036002c001ac010400ac0070003c0fd40f340f180",
+        "replacement_hex": "12c011801580144018c016c021801c003dc02c004cc0474053c050804b4052404800498044c04600420043803ec040c036003b801ac02c000ac0104003c00700f340fd40f040f180"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1218094,
+        "expected_hex": "01006df30d13790001285e575a000d0b790001275e575a000d39790100401050105017707903001253301901179b105b105b105b09b109910d1001006d735470",
+        "replacement_hex": "01006df30d1b790001285e575a000d03790001275e575a00105010501770790200125320105310531053093009b001006d735470000000000000000000000000"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1218406,
+        "expected_hex": "5e538c7a5e538b740c8917517900003019107960003f790100125210115011500d08790001275e5759905e531a8611501150115017900d08790001285e5759905470",
+        "replacement_hex": "5e538c7a5e538b7417507960003f790100125210115011500d08790001275e5759905e531a861150115011500d08790001285e575990547000000000000000000000"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 1218472,
+        "expected_hex": "6df3790001275e575a000d035e538c7a0f82f940105310530d301770790300125330188989f0e93f0fa05e538b0c6d735470",
+        "replacement_hex": "6df3790001275e575a000d035e538c7a0f82105310530d3017707901001253100c89e93f0fa05e538b0c6d73547000000000"
+      },
+      {
+        "op": "replace_bytes",
+        "offset": 938278,
+        "expected_hex": "0c08",
+        "replacement_hex": "0000"
+      },
+      {
+        "op": "balance_additive_u32_be",
+        "offset": 16
+      }
+    ],
+    "output_sha256": "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815"
+  },
+  "verification": {
+    "offline_mapping": "passed",
+    "authenticated_envelope_roundtrip": "passed",
+    "hardware_scope": "Only original tested UD02 mechanism/profile; sister firmware remains operationally unresolved.",
+    "user_report": {
+      "date": "2026-10-24",
+      "source": "Owner confirmed UHD works on converted UD02 using latest findings",
+      "prepared_normal_sha256": "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815",
+      "scope": "Tested UD02 to UD04 configuration only; no native reverse or other target inferred."
+    }
+  }
+}

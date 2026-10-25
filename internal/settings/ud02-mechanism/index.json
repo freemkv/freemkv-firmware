@@ -1,0 +1,9 @@
+{
+  "format": "pioneer-experimental-settings-profiles-v1",
+  "base_release": "0.15.1",
+  "profiles": 6,
+  "target_envelopes": 8,
+  "production_enabled": false,
+  "excluded_unapproved_duplicate": "820bf61f6937aa6bf2f17fe7aaf25e930e622e844bda2e279ec8b5d621642afa",
+  "policy": "Directional profiles only. No family override, reverse migration or per-unit data transplantation. All corresponding 0.15.1 production requirements remain unresolved. Configs specify exact guarded decoded-image preparation; they are not automatically loaded by the release flasher."
+}
