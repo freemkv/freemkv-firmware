@@ -108,7 +108,7 @@
   ],
   "validation": {
     "core_tests": {
-      "passed": 687,
+      "passed": 689,
       "ignored": 18
     },
     "gui_tests": {
@@ -118,7 +118,8 @@
     "core_clippy": "passed with -D warnings",
     "windows_transport": "Windows MSVC target check and clippy passed; no Windows runtime available",
     "actual_asus_backup_check": "passed without device access",
-    "published": false
+    "published": false,
+    "windows_diagnostics_dev_commit": "c186d56f"
   },
   "disposition": "Owner deferred the unresolved PR1AME write issue. Preserve diagnostics and confirmed validation/error fixes on dev; no speculative transport change and no 0.15.2 release tonight."
 }

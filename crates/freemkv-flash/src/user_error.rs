@@ -184,7 +184,7 @@ impl UserError {
                 )
             })
             .filter(|_| {
-                failure.map_or(true, |failure| {
+                failure.is_none_or(|failure| {
                     matches!(
                         failure.impact(),
                         UpdateImpact::Blocked | UpdateImpact::EntryUncertain
