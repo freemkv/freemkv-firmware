@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn check_file_rejects_unrecognized_input_with_localized_file_guidance() {
+    let dir = std::env::temp_dir().join(format!("freemkv-check-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("modified_firmware.tar");
+    std::fs::write(&path, b"not a supported firmware archive").unwrap();
+    let error = check_file(&path).expect_err("unrecognized input is not a successful check");
+    let issue = user_error(&error);
+    assert_eq!(issue.id, "errors.firmware_invalid");
+    assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+    for language in crate::localization::Language::ALL {
+        assert!(!issue.render(language).contains("errors.firmware_invalid"));
+    }
+    // Informational inspection retains its ability to describe unknown bytes.
+    engine::info_file(&path).unwrap();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn desktop_faults_localize_without_exposing_native_details_or_guessing_write_effects() {
     for read_only in [true, false] {
         let issue = application_failure("private native status 0x1234", read_only);

@@ -1,0 +1,101 @@
+{
+  "status": "validation fixes implemented; startup-write transport cause unresolved",
+  "reports": {
+    "9dead7be-9b88-4041-86f0-abdd59ca86bf": {
+      "application": "0.14.5 Windows x86_64",
+      "installed": "BDR-PR1AME 1.05 SAT8000 ID90",
+      "target": "BDR-PR1MA 1.75 ID86 Kernel+Normal",
+      "medium_sense": "02/3A/01: no medium, tray closed",
+      "parameter": "0x9F",
+      "read_value": "FF09",
+      "write_cdb": "3B 02 A0 00 01 3E 00 00 02 00",
+      "target_value": "FF01",
+      "target_write_ms": 15004,
+      "restoration_value": "FF09",
+      "restoration_write_ms": 15008,
+      "write_sense": "04/08/01",
+      "firmware_payload_sent": false,
+      "final_setting_value": "unknown: no successful final readback",
+      "interpretation": "Both target and original-value writes fail; evidence does not support a target-value rejection. Matching firmware contains a 15000 ms data-receive wait before the settings setter. This does not identify which host/adapter/device condition prevented completion."
+    },
+    "397cc47c-96f7-4db5-8e93-29cefa48b661": {
+      "application": "0.14.5 Windows x86_64",
+      "installed": "BDR-PR1AME 1.06",
+      "input": "modified PR1MA 1.75 TAR",
+      "failure": "invalid Pioneer envelope tar member",
+      "writes_attempted": false,
+      "check_file_result": "incorrect success despite unrecognized format",
+      "limitation": "Modified TAR is not attached. A directory entry or oversized member can reproduce this parser error; neither is established as the report's actual offending member."
+    },
+    "99c812d4-19ca-43e9-ad48-5ef0d617e51a": {
+      "application": "0.14.5 Windows x86_64",
+      "installed": "ASUS BW-12D1S-U 1.20 SAT8000 ID71",
+      "operation": "successful verified backup using Pioneer protocol",
+      "artifact_sha256": "4d1524ad6b54855a5d4f35e9db25b3ab3d48d3b7a2896b1b4edcae472dd558e8",
+      "artifact_bytes": 2741760,
+      "components": [
+        "components/S8000710.000.enc",
+        "components/S8000711.120.enc"
+      ],
+      "limitation": "No failed flash or startup-setting write is present. This successful read operation does not validate the failing data-out path."
+    }
+  },
+  "firmware_evidence": {
+    "installed_normal_sha256": "040c96bee20a2c245ce48856425e86bcaeaeeb3d290c716f508298d3e69521b2",
+    "load_address": "0x410000",
+    "a0_write_group_entry": "0x4705F8",
+    "receive_helpers": [
+      "0x45FD0E",
+      "0x45FCD6",
+      "0x415D22",
+      "0x416528"
+    ],
+    "timeout_initializer": "0x4161E6: 79 01 3A 98 6F B1 00 2A",
+    "sense_table": "0x62F6A6: 07 04 08 01 08 04 08 03",
+    "transfer_even_length_handling": "0x53B91E..0x53B92A: two bytes remain two; this branch does not establish a larger minimum transfer",
+    "scope": "Evidence specific to the installed firmware and failed operation. Never infer a universal 15-second timeout from sense 04/08/01 alone."
+  },
+  "implemented": [
+    "Check file fails for unknown input instead of treating informational inspection as successful validation.",
+    "Malformed Pioneer flash inputs retain a localized FirmwareInvalid cause through wrapper errors.",
+    "Parser diagnostics distinguish non-file archive members from oversized components without relaxing archive admission.",
+    "Pioneer file inspection uses the same existing unrecoverable-tail check as Flash, including partial Kernel backups without granting flashability.",
+    "Separate libfreemkv branch records adapter bus metadata and Windows IOCTL response fields, including failing commands. Returned transfer length is explicitly not proof of wire acceptance."
+  ],
+  "next_evidence_required": [
+    "Capture the failing command on the affected Windows drive connection, including bus/adapter identity, CDB, data-out bytes, completion/residue and sense.",
+    "Determine whether the two data bytes reach the drive and whether the data phase completes. Host API logs alone cannot prove this.",
+    "Only if host transfer framing is implicated, compare buffered and direct Windows SCSI requests in a controlled test with unchanged CDB, length and value; do not add automatic write retries or fallback to production.",
+    "Obtain the modified TAR to identify its actual invalid member. Existing parser diagnostics did not retain enough detail to reconstruct it."
+  ],
+  "candidate_transport_policy": {
+    "status": "unvalidated hypothesis, not implemented",
+    "candidate": "Buffered SCSI pass-through for small transfers if affected-host evidence proves the direct path is failing.",
+    "sources": [
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through",
+      "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddscsi/ni-ntddscsi-ioctl_scsi_pass_through_direct"
+    ],
+    "qualification": "Microsoft describes typical small/large transfer usage, not a ban on small direct transfers. Documentation alone does not establish the cause of this user's failure."
+  },
+  "acceptance": [
+    "Malformed and unrecognized inputs cannot produce a successful Check file result; GUI and CLI retain the same localized typed cause.",
+    "Existing valid and inspection-only files keep their documented behavior; no family, receiver, settings or archive safety gate is bypassed.",
+    "Any startup-write fix requires reproduction of the original failure followed by successful target-setting readback, completed firmware transfer and firmware readback on the affected connection.",
+    "A failed setting write remains a pre-update failure with separately recorded setting uncertainty; no claim of update entry or successful restoration without evidence.",
+    "Publish through the normal library/application QA release process after validation; do not retag or alter 0.15.1."
+  ],
+  "validation": {
+    "core_tests": {
+      "passed": 687,
+      "ignored": 18
+    },
+    "gui_tests": {
+      "passed": 241,
+      "ignored": 2
+    },
+    "core_clippy": "passed with -D warnings",
+    "windows_transport": "Windows MSVC target check and clippy passed; no Windows runtime available",
+    "actual_asus_backup_check": "passed without device access",
+    "published": false
+  }
+}

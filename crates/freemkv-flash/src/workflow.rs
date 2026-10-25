@@ -234,7 +234,7 @@ pub fn check_file(path: &Path) -> Result<()> {
 }
 
 fn check_file_inner(path: &Path) -> Result<()> {
-    engine::info_file(path)
+    engine::check_file(path)
         .map_err(|e| crate::user_error::explain(e, crate::user_error::IssueCode::FirmwareInvalid))
 }
 

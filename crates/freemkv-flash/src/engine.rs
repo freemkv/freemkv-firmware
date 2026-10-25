@@ -213,6 +213,15 @@ fn firmware_rows(r: &crate::backend::FirmwareReport) -> Vec<Row> {
 /// integrity, so a user can ask "what is this .bin and what can I do with it?"
 /// and later know whether it matches a given drive (same family key both sides).
 pub fn info_file(path: &Path) -> Result<()> {
+    inspect_file(path, false)
+}
+
+/// Validate a selected file without treating an unknown format as success.
+pub(crate) fn check_file(path: &Path) -> Result<()> {
+    inspect_file(path, true)
+}
+
+fn inspect_file(path: &Path, require_recognized: bool) -> Result<()> {
     let image = crate::workflow::read_capped(path)
         .with_context(|| format!("reading firmware image {}", path.display()))?;
     println!("{}", style::kv("file", &path.display().to_string()));
@@ -236,7 +245,14 @@ pub fn info_file(path: &Path) -> Result<()> {
             return report;
         }
     }
-    info_file_other(&crate::imageid::identify(&image))
+    let identity = crate::imageid::identify(&image);
+    if require_recognized && identity.family == crate::imageid::ImageFamily::Unknown {
+        return Err(
+            anyhow::anyhow!("selected file has no recognized firmware format")
+                .context(IssueCode::FirmwareInvalid),
+        );
+    }
+    info_file_other(&identity)
 }
 
 /// Report a firmware FILE that is NOT MediaTek MT19xx: a non-MTK family found by

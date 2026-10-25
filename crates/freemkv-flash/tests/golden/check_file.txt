@@ -198,15 +198,14 @@ MSG      built for: HL-DT-ST BD-RE BU40N (MT1959)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file mtk_unsigned.bin ===
-result: OK
---- text (6) ---
+result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
+--- text (5) ---
 Diagnostic log: <LOG>
 file: <TMP>/check-file/mtk_unsigned.bin
 size: 2 MiB
 sha256: 2bbbe22fee8733f9463bb566f584d84c00b52d9c4de3f5b30262344bcd8f9989
-image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 Diagnostic log saved: <LOG>
---- events (9) ---
+--- events (8) ---
 FIELD    Diagnostic log = <LOG>
 MSG      Diagnostic log: <LOG>
 MSG      file: <TMP>/check-file/mtk_unsigned.bin
@@ -214,19 +213,17 @@ MSG      size: 2 MiB
 FIELD    File = <TMP>/check-file/mtk_unsigned.bin
 FIELD    Size = 2 MiB
 MSG      sha256: 2bbbe22fee8733f9463bb566f584d84c00b52d9c4de3f5b30262344bcd8f9989
-MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file zeros_2mib.bin ===
-result: OK
---- text (6) ---
+result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
+--- text (5) ---
 Diagnostic log: <LOG>
 file: <TMP>/check-file/zeros_2mib.bin
 size: 2 MiB
 sha256: 5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee
-image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 Diagnostic log saved: <LOG>
---- events (9) ---
+--- events (8) ---
 FIELD    Diagnostic log = <LOG>
 MSG      Diagnostic log: <LOG>
 MSG      file: <TMP>/check-file/zeros_2mib.bin
@@ -234,7 +231,6 @@ MSG      size: 2 MiB
 FIELD    File = <TMP>/check-file/zeros_2mib.bin
 FIELD    Size = 2 MiB
 MSG      sha256: 5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee
-MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file mtk_drive_read_backup.bin ===
@@ -554,15 +550,14 @@ MSG      integrity: not applicable (this family has no MT19xx-style signed CMAC 
 MSG      Diagnostic log saved: <LOG>
 
 === check_file garbage.bin ===
-result: OK
---- text (6) ---
+result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
+--- text (5) ---
 Diagnostic log: <LOG>
 file: <TMP>/check-file/garbage.bin
 size: 37 B
 sha256: a552e4e0d78112be611b1be78487595efc5690afc29fd57dd2d0fff41ef33777
-image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 Diagnostic log saved: <LOG>
---- events (9) ---
+--- events (8) ---
 FIELD    Diagnostic log = <LOG>
 MSG      Diagnostic log: <LOG>
 MSG      file: <TMP>/check-file/garbage.bin
@@ -570,19 +565,17 @@ MSG      size: 37 B
 FIELD    File = <TMP>/check-file/garbage.bin
 FIELD    Size = 37 B
 MSG      sha256: a552e4e0d78112be611b1be78487595efc5690afc29fd57dd2d0fff41ef33777
-MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file empty.bin ===
-result: OK
---- text (6) ---
+result: ERR operation has no firmware write capability: errors.firmware_invalid: selected file has no recognized firmware format
+--- text (5) ---
 Diagnostic log: <LOG>
 file: <TMP>/check-file/empty.bin
 size: 0 B
 sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 Diagnostic log saved: <LOG>
---- events (9) ---
+--- events (8) ---
 FIELD    Diagnostic log = <LOG>
 MSG      Diagnostic log: <LOG>
 MSG      file: <TMP>/check-file/empty.bin
@@ -590,7 +583,6 @@ MSG      size: 0 B
 FIELD    File = <TMP>/check-file/empty.bin
 FIELD    Size = 0 B
 MSG      sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-MSG      image: unrecognized — no known drive-family signature (truncated, packed, or an unsupported family)
 MSG      Diagnostic log saved: <LOG>
 
 === check_file missing file ===

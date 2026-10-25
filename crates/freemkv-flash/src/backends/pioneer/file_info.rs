@@ -63,6 +63,19 @@ pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
 /// Print the Pioneer bundle report for `image`, or `None` when it is not one.
 pub(crate) fn describe(image: &[u8]) -> Option<Result<()>> {
     let bundle = super::bundle::Bundle::from_backup_tar_bytes(image).ok()?;
+    let component = |role| {
+        bundle
+            .components
+            .iter()
+            .find(|c| c.role == role)
+            .map(|c| c.bytes.as_slice())
+    };
+    if let Err(error) = super::flash_plan::ensure_no_unrecovered_tail(
+        component(super::bundle::Role::Kernel),
+        component(super::bundle::Role::Main),
+    ) {
+        return Some(Err(error));
+    }
     let kernel_only = bundle
         .components
         .iter()
