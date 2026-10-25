@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifikátor",
     "report.preparing": "Příprava zprávy…",
     "report.prompt_title": "Odeslat diagnostickou zprávu",
-    "report.description_label": "Popis (volitelný)",
+    "report.description_label": "Popis (povinný)",
     "report.send": "Odeslat",
     "report.summary_logs": "Odeslat diagnostickou zprávu obsahující protokoly a historii relace.",
     "report.summary_dump": "Odeslat diagnostickou zprávu a uložený výpis „{filename}“.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Protokol se nepodařilo otevřít v jiné aplikaci. Podívejte se do zdejšího diagnostického prohlížeče.",
     "errors.clipboard": "Text se nepodařilo zkopírovat. Zkuste to znovu.",
-    "errors.confirmation_dialog": "Potvrzení aktualizace se nepodařilo otevřít. Aktualizace byla zrušena. Žádný firmware nebyl zapsán. Zkuste to znovu."
+    "errors.confirmation_dialog": "Potvrzení aktualizace se nepodařilo otevřít. Aktualizace byla zrušena. Žádný firmware nebyl zapsán. Zkuste to znovu.",
+    "report.description_required": "{summary}\n\nZadejte stručný popis, proč zprávu odesíláte."
   }
 }

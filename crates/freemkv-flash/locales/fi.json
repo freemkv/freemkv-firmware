@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware muuttujat",
     "report.preparing": "Valmistellaan raporttia…",
     "report.prompt_title": "Lähetä diagnostiikkaraportti",
-    "report.description_label": "Kuvaus (valinnainen)",
+    "report.description_label": "Kuvaus (pakollinen)",
     "report.send": "Lähetä",
     "report.summary_logs": "Lähetä diagnostiikkaraportti, joka sisältää lokit ja istuntohistorian.",
     "report.summary_dump": "Lähetä diagnostiikkaraportti ja tallennettu muistivedos ”{filename}”.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Lokia ei voitu avata toisessa sovelluksessa. Tarkista tässä näkyvä diagnostiikkanäkymä.",
     "errors.clipboard": "Tekstiä ei voitu kopioida. Yritä uudelleen.",
-    "errors.confirmation_dialog": "Päivityksen vahvistusta ei voitu avata. Päivitys peruttiin. Laiteohjelmistoa ei kirjoitettu. Yritä uudelleen."
+    "errors.confirmation_dialog": "Päivityksen vahvistusta ei voitu avata. Päivitys peruttiin. Laiteohjelmistoa ei kirjoitettu. Yritä uudelleen.",
+    "report.description_required": "{summary}\n\nKerro lyhyesti, miksi lähetät raportin."
   }
 }

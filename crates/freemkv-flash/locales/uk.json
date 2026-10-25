@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Модифікатор",
     "report.preparing": "Підготовка звіту…",
     "report.prompt_title": "Надіслати діагностичний звіт",
-    "report.description_label": "Опис (необов’язково)",
+    "report.description_label": "Опис (обов’язковий)",
     "report.send": "Надіслати",
     "report.summary_logs": "Надіслати діагностичний звіт із журналами та історією сеансу.",
     "report.summary_dump": "Надіслати діагностичний звіт і збережений дамп «{filename}».",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Не вдалося відкрити журнал в іншій програмі. Перегляньте вікно діагностики тут.",
     "errors.clipboard": "Не вдалося скопіювати текст. Спробуйте ще раз.",
-    "errors.confirmation_dialog": "Не вдалося відкрити підтвердження оновлення. Оновлення скасовано. Прошивку не записано. Спробуйте ще раз."
+    "errors.confirmation_dialog": "Не вдалося відкрити підтвердження оновлення. Оновлення скасовано. Прошивку не записано. Спробуйте ще раз.",
+    "report.description_required": "{summary}\n\nКоротко вкажіть, чому ви надсилаєте цей звіт."
   }
 }

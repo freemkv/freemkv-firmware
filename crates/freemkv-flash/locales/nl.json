@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware wijziger",
     "report.preparing": "Je rapport wordt voorbereid…",
     "report.prompt_title": "Diagnoserapport versturen",
-    "report.description_label": "Beschrijving (optioneel)",
+    "report.description_label": "Beschrijving (verplicht)",
     "report.send": "Versturen",
     "report.summary_logs": "Verstuur een diagnoserapport met logboeken en sessiegeschiedenis.",
     "report.summary_dump": "Verstuur een diagnoserapport en de opgeslagen dump ‘{filename}’.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Het logboek kon niet in een andere app worden geopend. Bekijk hier de diagnostische weergave.",
     "errors.clipboard": "De tekst kon niet worden gekopieerd. Probeer het opnieuw.",
-    "errors.confirmation_dialog": "De bevestiging voor de update kon niet worden geopend. De update is geannuleerd. Er is geen firmware geschreven. Probeer het opnieuw."
+    "errors.confirmation_dialog": "De bevestiging voor de update kon niet worden geopend. De update is geannuleerd. Er is geen firmware geschreven. Probeer het opnieuw.",
+    "report.description_required": "{summary}\n\nLeg kort uit waarom je dit rapport verstuurt."
   }
 }

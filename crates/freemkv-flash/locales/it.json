@@ -527,7 +527,7 @@
     "modify.window_title": "Modifica di firmware freemkv",
     "report.preparing": "Preparazione del rapporto…",
     "report.prompt_title": "Invia rapporto diagnostico",
-    "report.description_label": "Descrizione (facoltativa)",
+    "report.description_label": "Descrizione (obbligatoria)",
     "report.send": "Invia",
     "report.summary_logs": "Invia un rapporto diagnostico con i registri e la cronologia della sessione.",
     "report.summary_dump": "Invia un rapporto diagnostico e il dump salvato «{filename}».",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Impossibile aprire il registro in un’altra app. Consulta qui il visualizzatore diagnostico.",
     "errors.clipboard": "Impossibile copiare il testo. Riprova.",
-    "errors.confirmation_dialog": "Impossibile aprire la conferma dell’aggiornamento. L’aggiornamento è stato annullato. Nessun firmware è stato scritto. Riprova."
+    "errors.confirmation_dialog": "Impossibile aprire la conferma dell’aggiornamento. L’aggiornamento è stato annullato. Nessun firmware è stato scritto. Riprova.",
+    "report.description_required": "{summary}\n\nSpiega brevemente perché invii il rapporto."
   }
 }

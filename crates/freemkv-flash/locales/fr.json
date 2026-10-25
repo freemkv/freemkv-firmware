@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Modifier de logiciel",
     "report.preparing": "Préparation de votre rapport…",
     "report.prompt_title": "Envoyer un rapport de diagnostic",
-    "report.description_label": "Description (facultative)",
+    "report.description_label": "Description (obligatoire)",
     "report.send": "Envoyer",
     "report.summary_logs": "Envoyer un rapport de diagnostic contenant les journaux et l’historique de la session.",
     "report.summary_dump": "Envoyer un rapport de diagnostic et le dump enregistré « {filename} ».",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Le journal n’a pas pu être ouvert dans une autre application. Consultez la visionneuse de diagnostics ici.",
     "errors.clipboard": "Le texte n’a pas pu être copié. Réessayez.",
-    "errors.confirmation_dialog": "La confirmation de la mise à jour n’a pas pu s’ouvrir. La mise à jour a été annulée. Aucun micrologiciel n’a été écrit. Réessayez."
+    "errors.confirmation_dialog": "La confirmation de la mise à jour n’a pas pu s’ouvrir. La mise à jour a été annulée. Aucun micrologiciel n’a été écrit. Réessayez.",
+    "report.description_required": "{summary}\n\nExpliquez brièvement pourquoi vous envoyez ce rapport."
   }
 }

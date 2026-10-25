@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifikator",
     "report.preparing": "Forbereder din rapport…",
     "report.prompt_title": "Send diagnoserapport",
-    "report.description_label": "Beskrivelse (valgfri)",
+    "report.description_label": "Beskrivelse (påkrævet)",
     "report.send": "Send",
     "report.summary_logs": "Send en diagnoserapport med logfiler og sessionshistorik.",
     "report.summary_dump": "Send en diagnoserapport og det gemte hukommelsesudtræk »{filename}«.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Loggen kunne ikke åbnes i en anden app. Se diagnosevisningen her.",
     "errors.clipboard": "Teksten kunne ikke kopieres. Prøv igen.",
-    "errors.confirmation_dialog": "Bekræftelsen af opdateringen kunne ikke åbnes. Opdateringen blev annulleret. Ingen firmware blev skrevet. Prøv igen."
+    "errors.confirmation_dialog": "Bekræftelsen af opdateringen kunne ikke åbnes. Opdateringen blev annulleret. Ingen firmware blev skrevet. Prøv igen.",
+    "report.description_required": "{summary}\n\nSkriv kort, hvorfor du sender rapporten."
   }
 }

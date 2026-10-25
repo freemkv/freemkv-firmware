@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Модификатор",
     "report.preparing": "Подготовка отчёта…",
     "report.prompt_title": "Отправить диагностический отчёт",
-    "report.description_label": "Описание (необязательно)",
+    "report.description_label": "Описание (обязательно)",
     "report.send": "Отправить",
     "report.summary_logs": "Отправить диагностический отчёт с журналами и историей сеанса.",
     "report.summary_dump": "Отправить диагностический отчёт и сохранённый дамп «{filename}».",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Не удалось открыть журнал в другом приложении. Посмотрите его в окне диагностики здесь.",
     "errors.clipboard": "Не удалось скопировать текст. Попробуйте ещё раз.",
-    "errors.confirmation_dialog": "Не удалось открыть подтверждение обновления. Обновление отменено. Прошивка не записывалась. Попробуйте ещё раз."
+    "errors.confirmation_dialog": "Не удалось открыть подтверждение обновления. Обновление отменено. Прошивка не записывалась. Попробуйте ещё раз.",
+    "report.description_required": "{summary}\n\nКратко укажите, почему вы отправляете этот отчёт."
   }
 }

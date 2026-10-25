@@ -1568,11 +1568,16 @@ impl App {
                     return Vec::new();
                 };
                 self.report_description = description;
-                if self.report_description.len() > crate::support::DESCRIPTION_LIMIT {
-                    let summary = crate::localization::message(
-                        "report.description_too_long",
-                        &[("summary", source.summary())],
-                    );
+                let validation_key = if self.report_description.trim().is_empty() {
+                    Some("report.description_required")
+                } else if self.report_description.len() > crate::support::DESCRIPTION_LIMIT {
+                    Some("report.description_too_long")
+                } else {
+                    None
+                };
+                if let Some(key) = validation_key {
+                    let summary =
+                        crate::localization::message(key, &[("summary", source.summary())]);
                     self.report_prompt = Some(source);
                     return vec![Effect::ReportPrompt {
                         summary,

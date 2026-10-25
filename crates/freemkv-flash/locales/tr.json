@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Değiştiricisi",
     "report.preparing": "Raporunuz hazırlanıyor…",
     "report.prompt_title": "Tanı raporu gönder",
-    "report.description_label": "Açıklama (isteğe bağlı)",
+    "report.description_label": "Açıklama (zorunlu)",
     "report.send": "Gönder",
     "report.summary_logs": "Günlükleri ve oturum geçmişini içeren bir tanı raporu gönderin.",
     "report.summary_dump": "Bir tanı raporu ve kaydedilen “{filename}” dökümünü gönderin.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Günlük başka bir uygulamada açılamadı. Buradaki tanılama görüntüleyicisine bakın.",
     "errors.clipboard": "Metin kopyalanamadı. Yeniden deneyin.",
-    "errors.confirmation_dialog": "Güncelleme onayı açılamadı. Güncelleme iptal edildi. Hiçbir aygıt yazılımı yazılmadı. Yeniden deneyin."
+    "errors.confirmation_dialog": "Güncelleme onayı açılamadı. Güncelleme iptal edildi. Hiçbir aygıt yazılımı yazılmadı. Yeniden deneyin.",
+    "report.description_required": "{summary}\n\nRaporu gönderme nedeninizi kısaca açıklayın."
   }
 }

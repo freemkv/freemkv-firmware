@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware 수정기",
     "report.preparing": "보고서 준비 중…",
     "report.prompt_title": "진단 보고서 보내기",
-    "report.description_label": "설명(선택 사항)",
+    "report.description_label": "설명(필수)",
     "report.send": "보내기",
     "report.summary_logs": "로그와 세션 기록이 포함된 진단 보고서를 보냅니다.",
     "report.summary_dump": "진단 보고서와 저장된 덤프 “{filename}”을 보냅니다.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "다른 앱에서 로그를 열 수 없습니다. 여기에 있는 진단 뷰어를 확인하세요.",
     "errors.clipboard": "텍스트를 복사할 수 없습니다. 다시 시도하세요.",
-    "errors.confirmation_dialog": "업데이트 확인 창을 열 수 없습니다. 업데이트가 취소되었습니다. 펌웨어는 기록되지 않았습니다. 다시 시도하세요."
+    "errors.confirmation_dialog": "업데이트 확인 창을 열 수 없습니다. 업데이트가 취소되었습니다. 펌웨어는 기록되지 않았습니다. 다시 시도하세요.",
+    "report.description_required": "{summary}\n\n보고서를 보내는 이유를 간단히 적어 주세요."
   }
 }

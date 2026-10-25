@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifier",
     "report.preparing": "Preparing your report…",
     "report.prompt_title": "Send diagnostic report",
-    "report.description_label": "Description (optional)",
+    "report.description_label": "Description (required)",
     "report.send": "Send",
     "report.summary_logs": "Send a diagnostic report containing logs and session history.",
     "report.summary_dump": "Send a diagnostic report and the saved dump “{filename}”.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "The log could not be opened in another app. Check the diagnostic viewer here.",
     "errors.clipboard": "The text could not be copied. Try again.",
-    "errors.confirmation_dialog": "The update confirmation could not open. The update was cancelled. No firmware was written. Try again."
+    "errors.confirmation_dialog": "The update confirmation could not open. The update was cancelled. No firmware was written. Try again.",
+    "report.description_required": "{summary}\n\nBriefly explain why you are sending this report."
   }
 }

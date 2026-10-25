@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modificator",
     "report.preparing": "Se pregătește raportul…",
     "report.prompt_title": "Trimite raportul de diagnostic",
-    "report.description_label": "Descriere (opțională)",
+    "report.description_label": "Descriere (obligatorie)",
     "report.send": "Trimite",
     "report.summary_logs": "Trimite un raport de diagnostic cu jurnalele și istoricul sesiunii.",
     "report.summary_dump": "Trimite un raport de diagnostic și imaginea de memorie salvată „{filename}”.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Jurnalul nu a putut fi deschis în altă aplicație. Consultați vizualizatorul de diagnostic de aici.",
     "errors.clipboard": "Textul nu a putut fi copiat. Încercați din nou.",
-    "errors.confirmation_dialog": "Confirmarea actualizării nu a putut fi deschisă. Actualizarea a fost anulată. Nu a fost scris niciun firmware. Încercați din nou."
+    "errors.confirmation_dialog": "Confirmarea actualizării nu a putut fi deschisă. Actualizarea a fost anulată. Nu a fost scris niciun firmware. Încercați din nou.",
+    "report.description_required": "{summary}\n\nExplică pe scurt de ce trimiți acest raport."
   }
 }

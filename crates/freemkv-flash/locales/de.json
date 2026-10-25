@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifikator",
     "report.preparing": "Ihr Bericht wird vorbereitet…",
     "report.prompt_title": "Diagnosebericht senden",
-    "report.description_label": "Beschreibung (optional)",
+    "report.description_label": "Beschreibung (erforderlich)",
     "report.send": "Senden",
     "report.summary_logs": "Einen Diagnosebericht mit Protokollen und Sitzungsverlauf senden.",
     "report.summary_dump": "Einen Diagnosebericht und das gespeicherte Abbild „{filename}“ senden.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Das Protokoll konnte nicht in einer anderen App geöffnet werden. Sehen Sie hier in der Diagnoseansicht nach.",
     "errors.clipboard": "Der Text konnte nicht kopiert werden. Versuchen Sie es erneut.",
-    "errors.confirmation_dialog": "Die Bestätigung für das Update konnte nicht geöffnet werden. Das Update wurde abgebrochen. Es wurde keine Firmware geschrieben. Versuchen Sie es erneut."
+    "errors.confirmation_dialog": "Die Bestätigung für das Update konnte nicht geöffnet werden. Das Update wurde abgebrochen. Es wurde keine Firmware geschrieben. Versuchen Sie es erneut.",
+    "report.description_required": "{summary}\n\nGeben Sie kurz an, warum Sie den Bericht senden."
   }
 }

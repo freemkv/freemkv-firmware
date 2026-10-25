@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv ファームウェアの変更",
     "report.preparing": "レポートを準備しています…",
     "report.prompt_title": "診断レポートを送信",
-    "report.description_label": "説明（任意）",
+    "report.description_label": "説明（必須）",
     "report.send": "送信",
     "report.summary_logs": "ログとセッション履歴を含む診断レポートを送信します。",
     "report.summary_dump": "診断レポートと保存済みのダンプ「{filename}」を送信します。",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "ログを別のアプリで開けませんでした。こちらの診断ビューアーを確認してください。",
     "errors.clipboard": "テキストをコピーできませんでした。もう一度お試しください。",
-    "errors.confirmation_dialog": "更新の確認画面を開けませんでした。更新はキャンセルされました。ファームウェアは書き込まれていません。もう一度お試しください。"
+    "errors.confirmation_dialog": "更新の確認画面を開けませんでした。更新はキャンセルされました。ファームウェアは書き込まれていません。もう一度お試しください。",
+    "report.description_required": "{summary}\n\nレポートを送信する理由を簡潔に記入してください。"
   }
 }

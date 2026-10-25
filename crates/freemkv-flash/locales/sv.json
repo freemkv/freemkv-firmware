@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifierare",
     "report.preparing": "Förbereder din rapport…",
     "report.prompt_title": "Skicka diagnostikrapport",
-    "report.description_label": "Beskrivning (valfri)",
+    "report.description_label": "Beskrivning (obligatorisk)",
     "report.send": "Skicka",
     "report.summary_logs": "Skicka en diagnostikrapport med loggar och sessionshistorik.",
     "report.summary_dump": "Skicka en diagnostikrapport och den sparade minnesdumpen ”{filename}”.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Loggen kunde inte öppnas i en annan app. Se diagnostikvisningen här.",
     "errors.clipboard": "Texten kunde inte kopieras. Försök igen.",
-    "errors.confirmation_dialog": "Bekräftelsen av uppdateringen kunde inte öppnas. Uppdateringen avbröts. Ingen fast programvara skrevs. Försök igen."
+    "errors.confirmation_dialog": "Bekräftelsen av uppdateringen kunde inte öppnas. Uppdateringen avbröts. Ingen fast programvara skrevs. Försök igen.",
+    "report.description_required": "{summary}\n\nBeskriv kort varför du skickar rapporten."
   }
 }

@@ -527,7 +527,7 @@
     "modify.window_title": "Modificació de firmware freemkv",
     "report.preparing": "S’està preparant l’informe…",
     "report.prompt_title": "Envia un informe de diagnòstic",
-    "report.description_label": "Descripció (opcional)",
+    "report.description_label": "Descripció (obligatòria)",
     "report.send": "Envia",
     "report.summary_logs": "Envia un informe de diagnòstic amb els registres i l’historial de la sessió.",
     "report.summary_dump": "Envia un informe de diagnòstic i el bolcat desat «{filename}».",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "No s'ha pogut obrir el registre en una altra aplicació. Consulteu el visor de diagnòstic aquí.",
     "errors.clipboard": "No s'ha pogut copiar el text. Torneu-ho a provar.",
-    "errors.confirmation_dialog": "No s'ha pogut obrir la confirmació de l'actualització. S'ha cancel·lat l'actualització. No s'ha escrit cap microprogramari. Torneu-ho a provar."
+    "errors.confirmation_dialog": "No s'ha pogut obrir la confirmació de l'actualització. S'ha cancel·lat l'actualització. No s'ha escrit cap microprogramari. Torneu-ho a provar.",
+    "report.description_required": "{summary}\n\nCal una descripció per a l’informe. Explica breument per què l’envies."
   }
 }

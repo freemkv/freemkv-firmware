@@ -270,6 +270,9 @@ impl BundleSource {
         self.description = description;
         self
     }
+    pub(super) fn description(&self) -> &str {
+        &self.description
+    }
     pub fn artifact_kind(&self) -> Option<&'static str> {
         self.artifact.as_ref().map(|a| a.kind)
     }

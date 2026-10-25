@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Đánh giá",
     "report.preparing": "Đang chuẩn bị báo cáo của bạn…",
     "report.prompt_title": "Gửi báo cáo chẩn đoán",
-    "report.description_label": "Mô tả (không bắt buộc)",
+    "report.description_label": "Mô tả (bắt buộc)",
     "report.send": "Gửi",
     "report.summary_logs": "Gửi báo cáo chẩn đoán chứa nhật ký và lịch sử phiên.",
     "report.summary_dump": "Gửi báo cáo chẩn đoán và bản kết xuất đã lưu “{filename}”.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Không thể mở nhật ký trong ứng dụng khác. Hãy kiểm tra trình xem chẩn đoán tại đây.",
     "errors.clipboard": "Không thể sao chép văn bản. Hãy thử lại.",
-    "errors.confirmation_dialog": "Không thể mở xác nhận cập nhật. Bản cập nhật đã bị hủy. Chưa ghi chương trình cơ sở nào. Hãy thử lại."
+    "errors.confirmation_dialog": "Không thể mở xác nhận cập nhật. Bản cập nhật đã bị hủy. Chưa ghi chương trình cơ sở nào. Hãy thử lại.",
+    "report.description_required": "{summary}\n\nHãy nêu ngắn gọn lý do bạn gửi báo cáo này."
   }
 }

@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware módosító",
     "report.preparing": "Jelentés előkészítése…",
     "report.prompt_title": "Diagnosztikai jelentés küldése",
-    "report.description_label": "Leírás (nem kötelező)",
+    "report.description_label": "Leírás (kötelező)",
     "report.send": "Küldés",
     "report.summary_logs": "Naplókat és munkamenet-előzményeket tartalmazó diagnosztikai jelentés küldése.",
     "report.summary_dump": "Diagnosztikai jelentés és a mentett „{filename}” memóriakép küldése.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "A naplót nem sikerült másik alkalmazásban megnyitni. Tekintse meg az itteni diagnosztikai nézetet.",
     "errors.clipboard": "A szöveget nem sikerült másolni. Próbálja újra.",
-    "errors.confirmation_dialog": "A frissítés megerősítését nem sikerült megnyitni. A frissítés megszakadt. Nem történt firmware-írás. Próbálja újra."
+    "errors.confirmation_dialog": "A frissítés megerősítését nem sikerült megnyitni. A frissítés megszakadt. Nem történt firmware-írás. Próbálja újra.",
+    "report.description_required": "{summary}\n\nRöviden írja le, miért küldi el a jelentést."
   }
 }

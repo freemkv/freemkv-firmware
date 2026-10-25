@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware 编辑器",
     "report.preparing": "正在准备报告…",
     "report.prompt_title": "发送诊断报告",
-    "report.description_label": "描述（可选）",
+    "report.description_label": "描述（必填）",
     "report.send": "发送",
     "report.summary_logs": "发送包含日志和会话历史记录的诊断报告。",
     "report.summary_dump": "发送诊断报告和已保存的转储文件“{filename}”。",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "无法在其他应用中打开日志。请查看此处的诊断查看器。",
     "errors.clipboard": "无法复制文本。请重试。",
-    "errors.confirmation_dialog": "无法打开更新确认窗口。更新已取消，未写入任何固件。请重试。"
+    "errors.confirmation_dialog": "无法打开更新确认窗口。更新已取消，未写入任何固件。请重试。",
+    "report.description_required": "{summary}\n\n请简要说明您发送此报告的原因。"
   }
 }

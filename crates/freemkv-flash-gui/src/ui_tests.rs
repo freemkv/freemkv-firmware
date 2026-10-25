@@ -3579,7 +3579,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
     let observed = requests.clone();
     let description = "Backup failed.\n日本語 — description 🐈";
     let server = std::thread::spawn(move || {
-        for index in 0..3 {
+        for index in 0..4 {
             let deadline = Instant::now() + Duration::from_secs(5);
             let mut stream = loop {
                 match listener.accept() {
@@ -3614,7 +3614,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
             observed.fetch_add(1, Ordering::SeqCst);
-            if index == 2 {
+            if index == 3 {
                 assert!(headers.starts_with("PUT "));
                 let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&body)).unwrap();
                 let manifest: serde_json::Value =
@@ -3643,6 +3643,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
                     r#"{"id":"joined","poll_token":"poll","approval_url":"http://localhost/approval"}"#
                 }
                 1 => r#"{"scope":"session","upload_token":"upload"}"#,
+                2 => r#"{"saved":true}"#,
                 _ => r#"{"report_id":"joined-receipt"}"#,
             };
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
@@ -3682,7 +3683,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
         crate::localization::english(app.diagnostic_notice.as_deref().unwrap()),
         receipt
     );
-    assert_eq!(requests.load(Ordering::SeqCst), 3);
+    assert_eq!(requests.load(Ordering::SeqCst), 4);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -3696,6 +3697,14 @@ fn report_prompt_bounds_preserve_draft_and_exclude_other_modals() {
     ));
     assert!(app.dispatch(Input::Choose(Pick::Backup)).is_empty());
     assert!(app.dispatch(Input::SubmitReport).is_empty());
+    let blank = " \n\t";
+    let effects = app.dispatch(Input::SendReport(blank.into()));
+    assert!(
+        matches!(&effects[..], [Effect::ReportPrompt { summary, description }]
+        if description == blank && crate::localization::english(summary).contains("Briefly explain why"))
+    );
+    assert_eq!(app.report_description, blank);
+    assert!(app.report_rx.is_none());
     let description = "🐈".repeat(crate::support::DESCRIPTION_LIMIT / 4 + 1);
     assert!(matches!(
         app.dispatch(Input::SendReport(description.clone()))

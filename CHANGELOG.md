@@ -3,6 +3,13 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.2] - Unreleased
+
+### freemkv Flash
+
+- Require a nonblank description when submitting a diagnostic report, and include
+  the description in the maintainer notification email.
+
 ## [0.15.1] - Unreleased
 
 ### freemkv Flash

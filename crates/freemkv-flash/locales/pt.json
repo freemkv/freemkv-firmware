@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Modificação de Firmware",
     "report.preparing": "A preparar o seu relatório…",
     "report.prompt_title": "Enviar relatório de diagnóstico",
-    "report.description_label": "Descrição (opcional)",
+    "report.description_label": "Descrição (obrigatória)",
     "report.send": "Enviar",
     "report.summary_logs": "Enviar um relatório de diagnóstico com os registos e o histórico da sessão.",
     "report.summary_dump": "Enviar um relatório de diagnóstico e a imagem de memória guardada «{filename}».",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Não foi possível abrir o registo noutra aplicação. Consulte aqui o visualizador de diagnóstico.",
     "errors.clipboard": "Não foi possível copiar o texto. Tente novamente.",
-    "errors.confirmation_dialog": "Não foi possível abrir a confirmação da atualização. A atualização foi cancelada. Não foi escrito qualquer firmware. Tente novamente."
+    "errors.confirmation_dialog": "Não foi possível abrir a confirmação da atualização. A atualização foi cancelada. Não foi escrito qualquer firmware. Tente novamente.",
+    "report.description_required": "{summary}\n\nExplique brevemente por que está a enviar este relatório."
   }
 }

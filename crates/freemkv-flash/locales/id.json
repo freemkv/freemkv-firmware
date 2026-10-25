@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifikasi",
     "report.preparing": "Menyiapkan laporan Anda…",
     "report.prompt_title": "Kirim laporan diagnostik",
-    "report.description_label": "Deskripsi (opsional)",
+    "report.description_label": "Deskripsi (wajib)",
     "report.send": "Kirim",
     "report.summary_logs": "Kirim laporan diagnostik yang berisi log dan riwayat sesi.",
     "report.summary_dump": "Kirim laporan diagnostik dan salinan memori “{filename}” yang telah disimpan.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Log tidak dapat dibuka di aplikasi lain. Periksa penampil diagnostik di sini.",
     "errors.clipboard": "Teks tidak dapat disalin. Coba lagi.",
-    "errors.confirmation_dialog": "Konfirmasi pembaruan tidak dapat dibuka. Pembaruan dibatalkan. Tidak ada firmware yang ditulis. Coba lagi."
+    "errors.confirmation_dialog": "Konfirmasi pembaruan tidak dapat dibuka. Pembaruan dibatalkan. Tidak ada firmware yang ditulis. Coba lagi.",
+    "report.description_required": "{summary}\n\nJelaskan secara singkat alasan Anda mengirim laporan ini."
   }
 }

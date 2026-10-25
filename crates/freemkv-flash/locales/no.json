@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifier",
     "report.preparing": "Forbereder rapporten din…",
     "report.prompt_title": "Send diagnoserapport",
-    "report.description_label": "Beskrivelse (valgfritt)",
+    "report.description_label": "Beskrivelse (påkrevd)",
     "report.send": "Send",
     "report.summary_logs": "Send en diagnoserapport med logger og økthistorikk.",
     "report.summary_dump": "Send en diagnoserapport og den lagrede minnedumpen «{filename}».",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Loggen kunne ikke åpnes i en annen app. Se diagnosevisningen her.",
     "errors.clipboard": "Teksten kunne ikke kopieres. Prøv igjen.",
-    "errors.confirmation_dialog": "Bekreftelsen av oppdateringen kunne ikke åpnes. Oppdateringen ble avbrutt. Ingen fastvare ble skrevet. Prøv igjen."
+    "errors.confirmation_dialog": "Bekreftelsen av oppdateringen kunne ikke åpnes. Oppdateringen ble avbrutt. Ingen fastvare ble skrevet. Prøv igjen.",
+    "report.description_required": "{summary}\n\nSkriv kort hvorfor du sender rapporten."
   }
 }

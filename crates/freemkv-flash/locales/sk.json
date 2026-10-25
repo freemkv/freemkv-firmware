@@ -527,7 +527,7 @@
     "modify.window_title": "freemkv Firmware Modifikátor",
     "report.preparing": "Príprava správy…",
     "report.prompt_title": "Odoslať diagnostickú správu",
-    "report.description_label": "Popis (voliteľný)",
+    "report.description_label": "Popis (povinný)",
     "report.send": "Odoslať",
     "report.summary_logs": "Odoslať diagnostickú správu obsahujúcu protokoly a históriu relácie.",
     "report.summary_dump": "Odoslať diagnostickú správu a uložený výpis „{filename}“.",
@@ -637,6 +637,7 @@
     "errors.verification_details": "{guidance}\n{selected_label}: {selected}\n{drive_label}: {observed}\n{kernel_label}: {kernel}\n{normal_label}: {normal}\n{startup_label}: {startup}",
     "errors.open_log": "Protokol sa nepodarilo otvoriť v inej aplikácii. Pozrite si tunajší diagnostický prehliadač.",
     "errors.clipboard": "Text sa nepodarilo skopírovať. Skúste to znova.",
-    "errors.confirmation_dialog": "Potvrdenie aktualizácie sa nepodarilo otvoriť. Aktualizácia bola zrušená. Žiadny firmvér nebol zapísaný. Skúste to znova."
+    "errors.confirmation_dialog": "Potvrdenie aktualizácie sa nepodarilo otvoriť. Aktualizácia bola zrušená. Žiadny firmvér nebol zapísaný. Skúste to znova.",
+    "report.description_required": "{summary}\n\nStručne opíšte, prečo správu odosielate."
   }
 }
