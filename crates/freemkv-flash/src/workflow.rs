@@ -347,6 +347,14 @@ pub struct DriveProfile {
 }
 
 impl DriveProfile {
+    /// Backend-provided read guidance; frontends do not identify vendors.
+    pub fn read_notice(&self) -> Option<&'static str> {
+        let id = self.backend.as_ref()?.0.id;
+        registry::backends()
+            .find(|b| b.descriptor().id == id)
+            .and_then(|b| b.read_notice())
+    }
+
     /// File selection remains available when live update admission is unavailable.
     pub fn firmware_picker_formats(&self) -> FirmwarePickerFormats {
         FirmwarePickerFormats::prefer(update_extensions(

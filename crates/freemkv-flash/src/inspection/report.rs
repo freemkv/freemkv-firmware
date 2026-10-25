@@ -391,16 +391,18 @@ impl LiveState {
                 Some(rpc) => {
                     self.fields
                         .push(Field::new("DVD region", dvd_region_label(rpc)));
-                    self.fields.push(Field::new(
-                        "User region changes remaining",
-                        rpc.user_changes_remaining,
-                    ));
-                    self.fields.push(Field::new(
-                        "Vendor region resets remaining",
-                        rpc.vendor_resets_remaining,
-                    ));
+                    if rpc.scheme == 1 {
+                        self.fields.push(Field::new(
+                            "User region changes remaining",
+                            rpc.user_changes_remaining,
+                        ));
+                        self.fields.push(Field::new(
+                            "Vendor region resets remaining",
+                            rpc.vendor_resets_remaining,
+                        ));
+                        self.fields.push(Field::new("RPC type", rpc.type_code));
+                    }
                     self.fields.push(Field::new("RPC scheme", rpc.scheme));
-                    self.fields.push(Field::new("RPC type", rpc.type_code));
                 }
                 None => self
                     .diagnostics
@@ -419,6 +421,9 @@ impl LiveState {
 /// The regions the drive's RPC mask permits. The mask, not the type code, is
 /// what the drive enforces: 0x00 permits all eight, 0xFF permits none.
 pub(crate) fn dvd_region_label(rpc: pioneer_optical::rpc::State) -> String {
+    if rpc.scheme == 0 {
+        return "Region-free".into();
+    }
     if rpc.prohibited_regions == 0xff {
         return "Not set".into();
     }

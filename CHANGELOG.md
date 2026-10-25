@@ -3,6 +3,33 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.3] - 2026-10-25
+
+### freemkv Flash
+
+- Explain MediaTek firmware read restrictions before Flash, Backup and Dump.
+  Explicitly rejected backup reads are an expected limitation, with no firmware
+  write, rather than a generic connection failure or automatic report request.
+  Incomplete diagnostic dumps remain clearly unsuitable for restoration.
+- Show DVD region reset counters and lock state only for RPC-2. RPC-1 reports
+  region-free status without presenting its zero fields as exhausted budgets.
+- Correct disconnect classification, unsupported-comparison severity, backup
+  reconstruction limitations and no-backup guidance after a personal review of
+  every error catalogue entry and the operation/confirmation boundaries.
+- Add the shared, compiled-in settings adaptation framework and independent
+  original-hardware checks. The production profile registry is empty: supported
+  firmware transitions and website crossflash decisions are unchanged. Synthetic
+  tests cover exact matching and UD02-only stock-return prerequisites.
+
+### freemkv Modify
+
+- Show only relevant region information when inspecting a drive after applying
+  Region-free. No firmware hook behavior changes in this release.
+- Align website feature listings with each exact image's Modify capability
+  report. Engine family and native UHD support no longer imply an available
+  UHD/BD modification. WH16NS58 1.V9's unavailable combined control is no longer
+  advertised as supported.
+
 ## [0.15.2] - 2026-10-25
 
 ### freemkv Modify

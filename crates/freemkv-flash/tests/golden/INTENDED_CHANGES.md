@@ -14,6 +14,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 
 | id | reason |
 |----|--------|
+| MTK_READ_GUIDANCE | 0.15.3 adds the MediaTek best-effort read note before backup/dump, classifies explicit read restrictions as informational, and removes the unsupported claim that missing a backup makes rollback impossible. Device commands, payloads and successful backup bytes remain unchanged. |
 | M-TABLE-FIXTURE | 0.15.2: synthetic MediaTek fixtures now initialize every inactive integrity-table record to the erased sentinel instead of retaining patterned payload bytes. Only the resulting fixture hashes and the affected transfer chunk hashes change; v0.11.2 baseline files remain immutable. The new real preflight rejects instruction-valued metadata before any write. |
 | FILE_VALIDATION | Check file rejects unrecognized bytes rather than reporting successful validation. Informational inspection remains available. No drive commands change. |
 | OPERATION_015 | 0.15.0: confirmation prompts and accepted answers use the selected language; Pioneer requires a usable installed backup and never offers a bypass it cannot execute. Typed localized user issues retain pre-write and read-only evidence; internal error chains gain stable cause markers. Recovery states whether its family gate is retained or explicitly bypassed. Expected restart command failures remain in diagnostics rather than user warnings. Write ordering, payloads and verification comparisons are unchanged. |
@@ -154,12 +155,18 @@ reason: R8, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```
 
 ### MTK backup: drive-read image
-reason: R1, R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
+reason: R1, R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE, MTK_READ_GUIDANCE
 ```diff
+---- text (105) ---
++--- text (106) ---
++ui.mtk_read_limits
 -backup sha256: 338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +backup sha256: b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 -OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
+---- events (107) ---
 +this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
++--- events (108) ---
++MSG      ui.mtk_read_limits
 -MSG      backup sha256: 338b5617b5cb86838c4808828a99e8e61531b9b20c69f4a66dcb3c56537839bb
 +MSG      backup sha256: b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 -FIELD    Backup validation = OEM-format image: per-drive settings, calibration and revocation lists replaced with factory contents; safe to share and flash back
@@ -174,10 +181,16 @@ reason: R1, R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
 ```
 
 ### MTK dump (recover): raw memory
-reason: R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE, MTK_READ_GUIDANCE
 ```diff
+---- text (105) ---
++--- text (106) ---
++ui.mtk_read_limits
 -backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 +backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
+---- events (108) ---
++--- events (109) ---
++MSG      ui.mtk_read_limits
 -MSG      backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
 +MSG      backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 ---- scsi transcript (514) ---
@@ -2863,10 +2876,11 @@ reason: P4, PRECHECK
 ## flash_execute.txt
 
 ### MTK execute: .bin with pre-flash backup
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE, MTK_READ_GUIDANCE
 ```diff
 ---- text (221) ---
-+--- text (213) ---
++--- text (214) ---
++ui.mtk_read_limits
 +receiver: Firmware (Plaintext, signature at 0x9a300)
 -firmware: 2 MiB (plaintext envelope)
 +firmware: 2 MiB (wire layout selected from receiver code)
@@ -2882,7 +2896,8 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE
 -  Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 -firmware now: unrecognized  [a1ec5b61bb1a0ad71b360fb23ecd17669b2922ef7cd73e9c662e543ab5285cb3]
 ---- events (221) ---
-+--- events (216) ---
++--- events (217) ---
++MSG      ui.mtk_read_limits
 +MSG      receiver: Firmware (Plaintext, signature at 0x9a300)
 -MSG      firmware: 2 MiB (plaintext envelope)
 +MSG      firmware: 2 MiB (wire layout selected from receiver code)
@@ -7135,12 +7150,13 @@ reason: R3, M-CHIP, PRECHECK
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-FIXTURE
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-FIXTURE, MTK_READ_GUIDANCE
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 ---- text (218) ---
 +result: ERR update failed during firmware readback (progress: UploadComplete; payload bytes accepted in stage: Some(2097152); temporary firmware: false; completed stages: []): MediaTek update failed: read-back differs at 0x01105e (read 0x00, wrote 0x11); 61346 of 61440 protected bytes differ
-+--- text (213) ---
++--- text (214) ---
++ui.mtk_read_limits
 +receiver: Firmware (Plaintext, signature at 0x9a300)
 -firmware: 2 MiB (plaintext envelope)
 +firmware: 2 MiB (wire layout selected from receiver code)
@@ -7153,7 +7169,8 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-
 -warning: could not parse the post-flash REQUEST SENSE response (16 bytes); relying on read-back verify
 -warning: post-settle REQUEST SENSE returned an unparseable 16-byte reply; relying on read-back verify.
 ---- events (218) ---
-+--- events (215) ---
++--- events (216) ---
++MSG      ui.mtk_read_limits
 +MSG      receiver: Firmware (Plaintext, signature at 0x9a300)
 -MSG      firmware: 2 MiB (plaintext envelope)
 +MSG      firmware: 2 MiB (wire layout selected from receiver code)
@@ -8330,10 +8347,11 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-
 ```
 
 ### MTK execute: restore the saved .tar
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE, MTK_READ_GUIDANCE
 ```diff
 ---- text (222) ---
-+--- text (214) ---
++--- text (215) ---
++ui.mtk_read_limits
 +receiver: Firmware (Plaintext, signature at 0x9a300)
 -firmware: 2 MiB (plaintext envelope)
 +firmware: 2 MiB (wire layout selected from receiver code)
@@ -8349,7 +8367,8 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE
 -  Integrity is enforced on-device: the drive recomputes CMAC at boot and rejects a bad image. The firmware identity below is the real result.
 -firmware now: unrecognized  [d1696027566f600e43eb18ec6b862208b205e74a93312f282e6135c3f79bed88]
 ---- events (222) ---
-+--- events (217) ---
++--- events (218) ---
++MSG      ui.mtk_read_limits
 +MSG      receiver: Firmware (Plaintext, signature at 0x9a300)
 -MSG      firmware: 2 MiB (plaintext envelope)
 +MSG      firmware: 2 MiB (wire layout selected from receiver code)
@@ -10549,17 +10568,19 @@ reason: FMT, HUMAN_ERRORS, CLI_INFO
 ## mtk_backup_variants.txt
 
 ### MTK backup: MT1939 drive read (build not in the catalog)
-reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC, M-LIFECYCLE
+reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 ```diff
 -result: ERR unrecognized boot page (sha256 233fadcb958146c4a25a7bde190f956ab7d684fdacb35452f2a39f39ebf81812); no restorable backup can be built for this firmware
 ---- text (102) ---
 +result: OK
-+--- text (105) ---
++--- text (106) ---
++ui.mtk_read_limits
 ---- events (102) ---
 +backup sha256: 43a808fcfc960734dbded270b1b671dfbb6cf98e66cf462c7600078b3d059255
 +wrote <TMP>/mtk-backup/mt1939.bak (2 MiB).
 +this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
-+--- events (107) ---
++--- events (108) ---
++MSG      ui.mtk_read_limits
 ---- scsi transcript (514) ---
 +MSG      backup sha256: 43a808fcfc960734dbded270b1b671dfbb6cf98e66cf462c7600078b3d059255
 +FIELD    Saved to = <TMP>/mtk-backup/mt1939.bak
@@ -10575,17 +10596,19 @@ reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK backup: MT1959 drive read
-reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC, M-LIFECYCLE
+reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 ```diff
 -result: ERR unrecognized boot page (sha256 0bd0297c45ac0fe82554dd385bac39bdbd1b5ee852596f8d5e4630c01ebde361); no restorable backup can be built for this firmware
 ---- text (102) ---
 +result: OK
-+--- text (105) ---
++--- text (106) ---
++ui.mtk_read_limits
 ---- events (102) ---
 +backup sha256: f12383331ccbdfb670f86e24d85ee1faea7b69604754c3adcd9c04908d8dc44c
 +wrote <TMP>/mtk-backup/mt1959.bak (2 MiB).
 +this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
-+--- events (107) ---
++--- events (108) ---
++MSG      ui.mtk_read_limits
 ---- scsi transcript (514) ---
 +MSG      backup sha256: f12383331ccbdfb670f86e24d85ee1faea7b69604754c3adcd9c04908d8dc44c
 +FIELD    Saved to = <TMP>/mtk-backup/mt1959.bak
@@ -10601,30 +10624,48 @@ reason: R1, R4, R8, M-CHIP, M-BAK, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK backup: firmware read fails at 0x100000
-reason: M-BAK, OPERATION_015
+reason: M-BAK, OPERATION_015, MTK_READ_GUIDANCE
 ```diff
 -result: ERR backup needs every firmware byte, but read 2096640 of 2097152; unreadable ranges [
 +result: ERR errors.backup_failed: backup needs every firmware byte, but read 2096640 of 2097152; unreadable ranges [
+---- text (102) ---
++--- text (103) ---
++ui.mtk_read_limits
+---- events (102) ---
++--- events (103) ---
++MSG      ui.mtk_read_limits
 ---- scsi transcript (522) ---
 +--- scsi transcript (523) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ### MTK backup: unknown boot page
-reason: R1, R4, M-BAK
+reason: R1, R4, M-BAK, MTK_READ_GUIDANCE
 ```diff
 -result: ERR unrecognized boot page (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033); no restorable backup can be built for this firmware
-+result: ERR rebuilding the OEM image from the drive read: boot page is neither a stored page nor a drive read's mirror (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033)
+---- text (102) ---
++result: ERR errors.unsupported_firmware: rebuilding the OEM image from the drive read: boot page is neither a stored page nor a drive read's mirror (sha256 b40246479629a11e563b32737ccc51e4f0ab10fcf243947fca2f6db424655033)
++--- text (103) ---
++ui.mtk_read_limits
+---- events (102) ---
++--- events (103) ---
++MSG      ui.mtk_read_limits
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
 ```
 
 ### MTK dump: MT1939 drive read (build not in the catalog)
-reason: R8, M-BAK, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 ```diff
+---- text (105) ---
++--- text (106) ---
++ui.mtk_read_limits
 -backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
 +backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
+---- events (108) ---
++--- events (109) ---
++MSG      ui.mtk_read_limits
 -MSG      backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
 +MSG      backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 ---- scsi transcript (514) ---
@@ -10635,10 +10676,16 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK dump: MT1959 drive read
-reason: R8, M-BAK, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 ```diff
+---- text (105) ---
++--- text (106) ---
++ui.mtk_read_limits
 -backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
 +backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
+---- events (108) ---
++--- events (109) ---
++MSG      ui.mtk_read_limits
 -MSG      backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
 +MSG      backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 ---- scsi transcript (514) ---
@@ -10649,10 +10696,11 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK dump: firmware read fails at 0x100000
-reason: R8, M-BAK, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 ```diff
 ---- text (111) ---
-+--- text (106) ---
++--- text (107) ---
++ui.mtk_read_limits
 -Unreadable ranges filled with FF: [
 -    (
 -        0x100000,
@@ -10663,7 +10711,8 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 +errors.backup_partial
 +backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 ---- events (115) ---
-+--- events (110) ---
++--- events (111) ---
++MSG      ui.mtk_read_limits
 -MSG      Unreadable ranges filled with FF: [
 -MSG          (
 -MSG              0x100000,
@@ -10681,10 +10730,16 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE
 ```
 
 ### MTK dump: unknown boot page
-reason: R8, M-BAK, M-ENC, M-LIFECYCLE
+reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 ```diff
+---- text (105) ---
++--- text (106) ---
++ui.mtk_read_limits
 -backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
 +backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
+---- events (108) ---
++--- events (109) ---
++MSG      ui.mtk_read_limits
 -MSG      backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
 +MSG      backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 ---- scsi transcript (514) ---
