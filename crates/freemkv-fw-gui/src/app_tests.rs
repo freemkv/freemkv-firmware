@@ -68,7 +68,6 @@ fn sibling_actions_and_diagnostic_controls_fit_the_same_window() {
     for (task, action) in [
         (Task::Verify, "Verify firmware"),
         (Task::Create, "Create firmware…"),
-        (Task::Sign, "Save signed firmware…"),
         (Task::Probe, "Read drive information"),
     ] {
         app.task = task;

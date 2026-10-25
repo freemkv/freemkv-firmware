@@ -519,18 +519,18 @@ fn firmware_read_capability_comes_from_normal_or_recovery_backend_without_io() {
 }
 
 #[test]
-fn backup_failure_guidance_preserves_cause_and_requests_a_dump_in_every_language() {
+fn backup_failure_guidance_does_not_request_dumps_for_prerequisites_or_connection_errors() {
     use crate::localization::{self, Language};
     use crate::user_error::{IssueCode, NoFirmwareWrite};
     for cause in [IssueCode::UnsupportedDrive, IssueCode::Connection] {
         let error = backup_error(anyhow::Error::new(cause), false).context(NoFirmwareWrite);
         let issue = user_error(&error);
-        assert_eq!(issue.id, "errors.backup_dump_guidance");
+        assert_eq!(issue.id, cause.message_id());
         assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
         for language in Language::ALL {
             let text = issue.render(language);
             assert!(text.contains(localization::get(language, cause.message_id())));
-            assert!(text.contains(localization::get(language, "action.submit_dump")));
+            assert!(!text.contains(localization::get(language, "action.submit_dump")));
             assert!(text.contains(localization::get(language, "errors.no_firmware_write")));
             assert!(!text.contains("{cause}") && !text.contains("{submit_dump}"));
         }
@@ -634,5 +634,32 @@ fn selected_file_metadata_rejects_fifo_and_accepts_a_regular_file() {
     let result = selected_file_info(&regular).unwrap();
     assert_eq!(result.origin, FileOrigin::Unknown);
     assert!(result.members.is_empty());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn firmware_input_collector_keeps_the_bytes_used_before_failed_validation() {
+    let dir = std::env::temp_dir().join(format!("freemkv-inputs-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("target.bin");
+    std::fs::write(&path, b"original consumed bytes").unwrap();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let result = capture_firmware_inputs(
+        {
+            let seen = seen.clone();
+            move |input| seen.lock().unwrap().push(input)
+        },
+        || {
+            let bytes = read_firmware_input("target", &path, Some("normal")).unwrap();
+            std::fs::write(&path, b"later replacement").unwrap();
+            assert_eq!(bytes, b"original consumed bytes");
+            Err::<(), _>(anyhow::anyhow!("later validation failure"))
+        },
+    );
+    assert!(result.is_err());
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen[0].bytes.as_ref(), b"original consumed bytes");
+    assert_eq!(seen[0].role, "target");
+    assert_eq!(seen[0].member.as_deref(), Some("normal"));
     std::fs::remove_dir_all(dir).unwrap();
 }

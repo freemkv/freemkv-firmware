@@ -1176,7 +1176,14 @@ impl Shell {
             &self.failure,
             r.failure.as_ref().map_or("", |f| f.text.as_str()),
         );
-        self.tone(&self.failure, Tone::Error);
+        self.tone(
+            &self.failure,
+            match r.failure.as_ref().map(|f| f.severity) {
+                Some(ui::IssueSeverity::Notice) => Tone::Normal,
+                Some(ui::IssueSeverity::ActionRequired) => Tone::Caution,
+                _ => Tone::Error,
+            },
+        );
         match &r.failure {
             Some(f) => self.save_log.bind(&f.save_log),
             None => self.save_log.unbind(),
@@ -1682,13 +1689,15 @@ impl Shell {
             size: gui::dpi(620, 430),
             ..Default::default()
         });
-        let summary_label = gui::Label::new(
+        let summary_label = gui::Edit::new(
             &dialog,
-            gui::LabelOpts {
+            gui::EditOpts {
                 text: &summary,
                 position: gui::dpi(20, 20),
-                size: gui::dpi(580, 100),
-                control_style: co::SS::LEFT | co::SS::NOPREFIX,
+                width: gui::dpi_x(580),
+                height: gui::dpi_y(100),
+                control_style: co::ES::MULTILINE | co::ES::READONLY | co::ES::AUTOVSCROLL,
+                window_style: co::WS::CHILD | co::WS::VISIBLE | co::WS::VSCROLL,
                 ..Default::default()
             },
         );

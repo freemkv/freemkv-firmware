@@ -4230,7 +4230,7 @@ fn corrupt_input_error_remains_visible_and_controls_are_reenabled() {
     assert!(!crate::localization::english(&status.text).contains("corrupt or incomplete"));
     let failure = view.results.unwrap().failure.unwrap();
     assert!(failure.text.contains("corrupt or incomplete"));
-    assert!(failure.text.contains("Download a fresh OEM copy"));
+    assert!(failure.text.contains("Download a fresh copy"));
 }
 
 #[test]
@@ -4343,4 +4343,27 @@ fn successful_flash_without_attachment_suggests_website_confirmation() {
         panic!("missing report prompt");
     };
     assert!(!crate::localization::english(summary).contains("completed successfully"));
+}
+
+#[test]
+fn expected_backup_restriction_is_plain_information_in_the_final_view() {
+    let mut app = one_drive();
+    app.dispatch(Input::ReadInfo);
+    let issue = workflow::user_error(&anyhow::Error::new(
+        freemkv_flash::backend::BackupReadRestricted,
+    ));
+    app.worker
+        .as_ref()
+        .unwrap()
+        .send(Msg::UserIssue(issue))
+        .unwrap();
+    finish(&mut app, Err("backup restricted".into()));
+    let view = app.view();
+    assert_eq!(
+        crate::localization::english(&view.status.unwrap().text),
+        "Information"
+    );
+    let failure = view.results.unwrap().failure.unwrap();
+    assert_eq!(failure.severity, workflow::IssueSeverity::Notice);
+    assert!(!failure.text.contains("Submit"));
 }

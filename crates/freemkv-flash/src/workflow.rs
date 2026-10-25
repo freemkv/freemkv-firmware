@@ -10,6 +10,7 @@ pub use crate::backend::{
 };
 /// Correlation helpers keep a front-end's session events linked to operation logs.
 pub use crate::diagnostics::{new_operation_id, with_operation_id};
+pub use crate::firmware_capture::{capture_firmware_inputs, FirmwareInput};
 /// Inspection inputs and results, so a front-end needs only this module and
 /// [`crate::report`] to run Inspect and Compare.
 pub use crate::inspection::{
@@ -20,7 +21,7 @@ use crate::manifest::FlashMode;
 /// The event stream every workflow writes to, which a front-end subscribes to.
 pub use crate::output::{capture_events, Event};
 /// Structured localizable issues exposed through the frontend workflow boundary.
-pub use crate::user_error::UserError;
+pub use crate::user_error::{issue_severity, IssueSeverity, UserError};
 use crate::{engine, platform, style};
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
@@ -752,7 +753,7 @@ fn open_flash(
     &'static dyn Backend,
     FlashRequest,
 )> {
-    let input = read_capped(&args.input)
+    let input = read_firmware_input("target", &args.input, None)
         .with_context(|| format!("reading input {}", args.input.display()))?;
     registry::validate_flash_input(&input)?;
     if args.current.is_none() && args.current_member.is_some() {
@@ -762,7 +763,12 @@ fn open_flash(
     let current = args
         .current
         .as_ref()
-        .map(|path| current_firmware_image(&read_capped(path)?, args.current_member.as_deref()))
+        .map(|path| {
+            current_firmware_image(
+                &read_firmware_input("current", path, args.current_member.as_deref())?,
+                args.current_member.as_deref(),
+            )
+        })
         .transpose()?;
     if let Some(current) = &current {
         check_supplied_family(current, &input)?;
@@ -901,6 +907,12 @@ impl FlashSheet {
 /// (largest Pioneer envelope is ~4.5 MiB; an MTK image 2 MiB).
 pub fn read_capped(path: &Path) -> Result<Vec<u8>> {
     read_capped_file(path, std::fs::File::open(path)?)
+}
+
+fn read_firmware_input(role: &'static str, path: &Path, member: Option<&str>) -> Result<Vec<u8>> {
+    let bytes = read_capped(path)?;
+    crate::firmware_capture::retain(role, path, member, &bytes);
+    Ok(bytes)
 }
 
 fn read_capped_file(path: &Path, file: std::fs::File) -> Result<Vec<u8>> {
@@ -1174,12 +1186,12 @@ fn open_recovery(args: &RecoveryOptions) -> Result<RecoveryInput> {
         return Err(crate::user_error::IssueCode::Acknowledgement.into());
     }
     crate::diagnostics::record(format!("recovery options: {args:?}"));
-    let input = read_capped(&args.input)?;
+    let input = read_firmware_input("target", &args.input, args.member.as_deref())?;
     registry::validate_flash_input(&input)?;
     let target = recovery_target(&input, args.member.as_deref())?;
     let supplied = match &args.current {
         CurrentFirmware::File(path) => {
-            let bytes = read_capped(path)?;
+            let bytes = read_firmware_input("current", path, args.current_member.as_deref())?;
             Some(current_firmware_image(
                 &bytes,
                 args.current_member.as_deref(),

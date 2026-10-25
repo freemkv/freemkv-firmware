@@ -812,6 +812,11 @@ fn capture_required_backup(
         .product;
     let saved_len = save_backup(out, &bytes, backup, &target_model)
         .context("pre-flash backup failed; aborting flash")?;
+    // Keep the serialized pre-update capture for reproduction, including a
+    // capture that later fails rollback validation. Reporting cannot alter flashing.
+    if let Ok(saved) = crate::workflow::read_capped(out) {
+        crate::firmware_capture::retain("current-capture", out, None, &saved);
+    }
     // A partial capture stays saved, but cannot authorize writing a region it
     // does not cover. No update command has been issued at this point.
     if let Err(error) = flash.verify_backup(plan, &bytes) {

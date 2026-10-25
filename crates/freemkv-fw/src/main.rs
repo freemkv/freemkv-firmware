@@ -6,13 +6,11 @@
 //! Everything except `verify <device>` only reads and rewrites `.bin` images
 //! on disk — it never touches a device.
 //!
-//! * `freemkv-fw create <input.bin> [output.bin]` — build freemkv firmware from
+//! * `freemkv-fw modify <input.bin> [output.bin]` — build freemkv firmware from
 //!   an MTK image (inject the built mods and re-sign).
 //! * `freemkv-fw verify <path>` — dual mode: a regular file gets the on-disk
 //!   integrity-region verify (below); a device node (`/dev/...`, or a
 //!   character/block special file) gets a live IDENTITY probe instead.
-//! * `freemkv-fw sign <image> [-o <out>] [--in-place]` — recompute every
-//!   active region's digest, write back, and self-verify the result.
 //!
 //! The tool is chipset-agnostic: it auto-selects an [`IntegrityScheme`] for the
 //! image (or accepts `--family` to force one). Only the MediaTek MT19xx AES-CMAC
@@ -37,12 +35,10 @@ use clap::{Parser, Subcommand};
 // path and cannot drift.
 use freemkv_flash::{platform, style};
 use freemkv_fw::boot::{BootFeature, BootSettings, BootSupport};
-use freemkv_fw::scheme::{
-    select_scheme, Family, IntegrityScheme, MtkCmac, RegionChange, RegionVerdict,
-};
+use freemkv_fw::scheme::{select_scheme, Family, IntegrityScheme, MtkCmac, RegionVerdict};
 use freemkv_fw::{abi, api, diagnostics, engine, family};
 
-/// freemkv firmware authoring tool (create / verify / re-sign).
+/// freemkv firmware authoring tool (modify / verify).
 #[derive(Parser, Debug)]
 #[command(name = "freemkv-fw", version, about, long_about = None)]
 struct Cli {
@@ -54,6 +50,7 @@ struct Cli {
 enum Command {
     /// Create freemkv firmware from an OEM image: hijack the `READ BUFFER`
     /// (`0x3C`) handler via the platform engine and re-sign.
+    #[command(name = "modify", alias = "create")]
     Create {
         /// Boot setting (repeatable): unrestricted/hrl/encryption=on|off|oem,
         /// speed=oem|uncapped, region=oem|free. Applied on every boot.
@@ -126,20 +123,6 @@ enum Command {
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
-    /// Recompute and write back every active region's digest.
-    Sign {
-        /// Firmware image (.bin) to re-sign.
-        image: PathBuf,
-        /// Output path (default: `<stem>.signed.bin`).
-        #[arg(short, long)]
-        out: Option<PathBuf>,
-        /// Rewrite the input image in place.
-        #[arg(long)]
-        in_place: bool,
-        /// Force a chipset family instead of auto-detecting.
-        #[arg(long, value_enum)]
-        family: Option<Family>,
-    },
 }
 
 fn main() -> ExitCode {
@@ -151,7 +134,6 @@ fn main() -> ExitCode {
         Command::Create { .. } => "create",
         Command::Verify { .. } => "verify",
         Command::Info { .. } => "info",
-        Command::Sign { .. } => "sign",
     };
     let verification_refusal = match &cli.command {
         Command::Verify { path, .. } if classify_verify_target(path) == VerifyTarget::File => {
@@ -197,12 +179,6 @@ fn main() -> ExitCode {
                 full,
                 out.as_deref(),
             ),
-            Command::Sign {
-                image,
-                out,
-                in_place,
-                family,
-            } => cmd_sign(&image, out, in_place, family),
         }?;
         diagnostics::record(format!("CLI exit: {code:?}"));
         if code != ExitCode::SUCCESS {
@@ -582,10 +558,11 @@ fn print_verdicts(verdicts: &[RegionVerdict]) {
 ///
 /// Returns the scheme name, the new image bytes, and the list of changed
 /// regions. Errors if the produced image fails to self-verify.
+#[cfg(test)]
 fn sign_image(
     image: &[u8],
     family: Option<Family>,
-) -> Result<(&'static str, Vec<u8>, Vec<RegionChange>)> {
+) -> Result<(&'static str, Vec<u8>, Vec<freemkv_fw::scheme::RegionChange>)> {
     let scheme = select_scheme(image, family)?;
     let (signed, changes) = scheme.sign(image)?;
 
@@ -599,76 +576,6 @@ fn sign_image(
         bail!("internal error: re-signed image does not self-verify");
     }
     Ok((scheme.name(), signed, changes))
-}
-
-fn cmd_sign(
-    path: &Path,
-    out: Option<PathBuf>,
-    in_place: bool,
-    family: Option<Family>,
-) -> Result<ExitCode> {
-    let image = diagnostics::read(path).with_context(|| format!("reading {}", path.display()))?;
-
-    let artifact = freemkv_fw::artifact::Artifact::parse(image)?;
-    let image = artifact.image().to_vec();
-
-    // Resolve the output path before doing work so we fail fast on conflicts.
-    let out_path = if in_place {
-        if out.is_some() {
-            return Err(anyhow::anyhow!("--in-place conflicts with -o/--out")
-                .context(freemkv_flash::user_error::IssueCode::CommandOptions));
-        }
-        path.to_path_buf()
-    } else {
-        let dest = out.unwrap_or_else(|| default_signed_path(path));
-        if dest == path {
-            return Err(anyhow::anyhow!(
-                "refusing to overwrite the input ({}); pass --in-place or a different -o",
-                path.display()
-            )
-            .context(freemkv_flash::user_error::IssueCode::CommandOptions));
-        }
-        dest
-    };
-
-    let (scheme_name, signed, changes) = sign_image(&image, family)?;
-    for change in &changes {
-        diagnostics::record(format!("integrity change: {change:?}"));
-    }
-
-    println!("scheme: {scheme_name}");
-    if changes.is_empty() {
-        println!("image already valid — 0 regions re-signed");
-    } else {
-        println!("re-signed {} region(s):", changes.len());
-        for c in &changes {
-            println!(
-                "  [{:>2}] 0x{:x}-0x{:x}  {} -> {}",
-                c.index,
-                c.start,
-                c.end,
-                short_hex(&c.before),
-                short_hex(&c.after),
-            );
-        }
-    }
-
-    diagnostics::write(&out_path, &artifact.output(signed.clone())?)
-        .with_context(|| format!("writing {}", out_path.display()))?;
-    println!("wrote {} ({} bytes)", out_path.display(), signed.len());
-    Ok(ExitCode::SUCCESS)
-}
-
-/// Default signed-output path: `<stem>.signed.bin` next to the input.
-fn default_signed_path(input: &Path) -> PathBuf {
-    let stem = input
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "image".to_string());
-    input.with_file_name(format!(
-        "{stem}.signed.{}",
-        input.extension().and_then(|e| e.to_str()).unwrap_or("bin")
-    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -808,7 +715,8 @@ fn cmd_create_configured(
                 println!("The stock image can still be flashed as-is with freemkv-flash.");
             }
         }
-        bail!("{why}");
+        return Err(anyhow::anyhow!("{why}")
+            .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
     }
 
     // Never write an image that does not re-verify.

@@ -34,6 +34,8 @@ define_issue_codes! {
     DriveChanged => "errors.drive_changed",
     /// No live connection could be established.
     Connection => "errors.connection",
+    /// The operating system denied access to the optical device.
+    DriveAccess => "errors.drive_access",
     /// A prepared session cannot be reused or was lost.
     PreparationExpired => "errors.preparation_expired",
     /// A backup destination must be chosen.
@@ -50,6 +52,8 @@ define_issue_codes! {
     AlreadyModified => "errors.already_modified",
     /// This application cannot prepare the requested update from this firmware.
     UnsupportedFirmware => "errors.unsupported_firmware",
+    /// No safe authenticated code hole can hold the requested modifications.
+    FirmwareNoCodeSpace => "errors.firmware_no_code_space",
     /// A known settings adaptation has not been validated for this transition.
     SettingsUnresolved => "errors.settings_unresolved",
     /// The firmware's hardware differs; no display identity was available.
@@ -147,6 +151,81 @@ impl std::fmt::Display for TransferFailure {
 }
 impl std::error::Error for TransferFailure {}
 
+/// Presentation severity of a typed issue; expected limitations are not faults.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IssueSeverity {
+    /// Expected limitation or a cancelled request.
+    Notice,
+    /// The user can resolve a prerequisite or select a different input.
+    ActionRequired,
+    /// Failed operation, unexpected fault, or uncertain drive state.
+    Error,
+}
+
+/// Read stable message IDs, never classify severity from translated error prose.
+pub fn issue_severity(message: &str) -> IssueSeverity {
+    if let Some(encoded) = message.strip_prefix('\u{1e}') {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(encoded) {
+            let id = value["id"].as_str().unwrap_or("");
+            if id == "ui.join" {
+                return value["arguments"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|a| a[1].as_str())
+                    .map(issue_severity)
+                    .max()
+                    .unwrap_or(IssueSeverity::Error);
+            }
+            return issue_severity(id);
+        }
+    }
+    match message {
+        "errors.backup_restricted"
+        | "errors.drive_firmware_unconfirmed"
+        | "errors.unsupported_drive"
+        | "errors.unsupported_firmware"
+        | "errors.firmware_no_code_space"
+        | "errors.no_drive"
+        | "errors.no_firmware_write"
+        | "errors.update_blocked"
+        | "ui.cancelled_no_firmware_was_written"
+        | "status.operation_cancelled" => IssueSeverity::Notice,
+        "errors.drive_access"
+        | "errors.choose_drive"
+        | "errors.tray_open"
+        | "errors.disc_present"
+        | "errors.file_missing"
+        | "errors.file_exists"
+        | "errors.permission_denied"
+        | "errors.command_options"
+        | "errors.acknowledgement"
+        | "errors.backup_destination"
+        | "errors.backup_required"
+        | "errors.backup_confirmation_required"
+        | "errors.current_required"
+        | "errors.current_incomplete"
+        | "errors.current_invalid"
+        | "errors.current_mismatch"
+        | "errors.backup_mismatch"
+        | "errors.hardware_mismatch"
+        | "errors.incompatible_firmware"
+        | "errors.installed_firmware_mismatch"
+        | "errors.installed_kernel_mismatch"
+        | "errors.already_modified"
+        | "errors.boot_settings"
+        | "errors.firmware_invalid"
+        | "errors.firmware_corrupt"
+        | "errors.backup_partial"
+        | "errors.preparation_expired"
+        | "errors.drive_changed"
+        | "errors.startup_setting_restored"
+        | "errors.settings_unresolved"
+        | "recovery.family_override_unsupported" => IssueSeverity::ActionRequired,
+        _ => IssueSeverity::Error,
+    }
+}
+
 /// A stable UI message with data arguments; no diagnostic error text is exposed.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct UserError {
@@ -172,7 +251,7 @@ impl UserError {
     /// Add the backup investigation action without losing its cause or write evidence.
     /// Repeated callers do not duplicate guidance; uncertain updates remain unchanged.
     pub fn with_backup_guidance(self) -> Self {
-        if self.id == "errors.backup_dump_guidance"
+        if !matches!(self.id, "errors.backup_failed" | "errors.unexpected")
             || self.consequence != Some("errors.no_firmware_write")
         {
             return self;
@@ -419,6 +498,11 @@ impl UserError {
         }
     }
 
+    /// Keep the disposition severity together with nested no-write consequences.
+    pub fn severity(&self) -> IssueSeverity {
+        issue_severity(&self.encoded())
+    }
+
     /// Render guidance without changing the stored diagnostic evidence.
     pub fn render(&self, language: Language) -> String {
         localization::render(language, &self.encoded())
@@ -428,6 +512,66 @@ impl UserError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn expected_backup_restriction_is_a_notice_not_a_dump_request() {
+        let error = anyhow::Error::new(BackupReadRestricted)
+            .context(NoFirmwareWrite)
+            .context(BackupAttempt);
+        let issue = UserError::of(&error);
+        assert_eq!(issue.id, "errors.backup_restricted");
+        assert_eq!(issue.severity(), IssueSeverity::Notice);
+        assert!(!issue.render(Language::En).contains("send it to us"));
+    }
+
+    #[test]
+    fn write_uncertainty_cannot_be_demoted_by_an_expected_limitation() {
+        for progress in [
+            crate::backend::UpdateProgress::EntryAttempted,
+            crate::backend::UpdateProgress::PayloadAccepted,
+        ] {
+            let error = anyhow::Error::new(BackupReadRestricted).context(UpdateFailure {
+                phase: "test".into(),
+                write_started: true,
+                progress,
+                payload_bytes_accepted: Some(0),
+                temporary_firmware: false,
+                completed_stages: vec![],
+            });
+            assert_eq!(UserError::of(&error).severity(), IssueSeverity::Error);
+        }
+        assert_eq!(issue_severity("unknown.id"), IssueSeverity::Error);
+    }
+
+    #[test]
+    fn prerequisites_are_actionable_and_expected_limitations_are_not_red_errors() {
+        for code in [
+            IssueCode::DiscPresent,
+            IssueCode::TrayOpen,
+            IssueCode::ChooseDrive,
+            IssueCode::Acknowledgement,
+            IssueCode::CurrentIncomplete,
+            IssueCode::FirmwareInvalid,
+            IssueCode::BackupDestination,
+        ] {
+            let issue = UserError::of(&anyhow::Error::new(code).context(NoFirmwareWrite));
+            assert_eq!(issue.severity(), IssueSeverity::ActionRequired, "{code:?}");
+            assert_eq!(issue_severity(&issue.encoded()), issue.severity());
+        }
+        for code in [
+            IssueCode::UnsupportedDrive,
+            IssueCode::UnsupportedFirmware,
+            IssueCode::NoDrive,
+            IssueCode::FirmwareNotDetected,
+            IssueCode::Cancelled,
+        ] {
+            assert_eq!(
+                UserError::of(&anyhow::Error::new(code).context(NoFirmwareWrite)).severity(),
+                IssueSeverity::Notice,
+                "{code:?}"
+            );
+        }
+    }
 
     #[test]
     fn reported_final_block_retains_rejection_and_uncertainty() {
@@ -485,7 +629,7 @@ mod tests {
         assert_eq!(guidance.id, "errors.firmware_corrupt");
         assert!(guidance
             .render(Language::En)
-            .contains("Download a fresh OEM copy"));
+            .contains("Download a fresh copy"));
         for language in Language::ALL {
             let rendered = guidance.render(language);
             assert!(!rendered.is_empty() && !rendered.contains("errors.firmware_corrupt"));
@@ -855,7 +999,7 @@ mod legacy_guidance_tests {
             let error = anyhow::anyhow!(detail).context(IssueCode::AlreadyModified);
             let guidance = UserError::of(&error);
             assert_eq!(guidance.id, "errors.already_modified");
-            assert!(guidance.render(Language::En).contains("Choose an original OEM firmware file"));
+            assert!(guidance.render(Language::En).contains("Choose an original firmware file"));
             assert!(format!("{error:#}").contains(detail));
         }
     }

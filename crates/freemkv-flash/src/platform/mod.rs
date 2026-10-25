@@ -285,9 +285,26 @@ pub use mock::MockScsiDevice;
 /// `info`/`dump` paths simply never issue a write.
 pub fn open(path: &str, writable: bool) -> Result<Box<dyn ScsiDevice>> {
     let _ = writable;
-    Ok(Box::new(adapter::TransportDevice::open(path).map_err(
-        |e| crate::user_error::explain(e, crate::user_error::IssueCode::Connection),
-    )?))
+    Ok(Box::new(
+        adapter::TransportDevice::open(path).map_err(open_error)?,
+    ))
+}
+
+fn open_error(error: anyhow::Error) -> anyhow::Error {
+    // This boundary opens a device, never an input file. Do not turn a vanished
+    // drive's NotFound into "choose the selected file again".
+    let denied = error
+        .chain()
+        .filter_map(|e| e.downcast_ref::<std::io::Error>())
+        .any(|e| e.kind() == std::io::ErrorKind::PermissionDenied);
+    if !denied && error.is::<crate::user_error::IssueCode>() {
+        return error;
+    }
+    error.context(if denied {
+        crate::user_error::IssueCode::DriveAccess
+    } else {
+        crate::user_error::IssueCode::Connection
+    })
 }
 
 /// Enumerate optical drives via the platform (IOKit / sysfs / setupapi). This is

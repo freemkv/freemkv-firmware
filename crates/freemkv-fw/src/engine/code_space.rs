@@ -27,6 +27,28 @@ impl std::fmt::Display for NoCodeSpace {
 
 impl std::error::Error for NoCodeSpace {}
 
+pub(crate) fn metadata_preserved(original: &[u8], output: &[u8]) -> bool {
+    original.len() == output.len()
+        && (0..cmac::ENTRY_COUNT).all(|index| {
+            let at = cmac::TABLE_OFFSET + index * cmac::ENTRY_SIZE;
+            let len = if original.get(at..at + 4) == Some(&[0xff; 4]) {
+                cmac::ENTRY_SIZE
+            } else {
+                12
+            };
+            original.get(at..at + len).is_some()
+                && original.get(at..at + len) == output.get(at..at + len)
+        })
+}
+
+pub(crate) fn validate_metadata(original: &[u8], output: &[u8]) -> Result<()> {
+    ensure!(
+        metadata_preserved(original, output),
+        "internal error: generated firmware changed integrity-table descriptors or unused records"
+    );
+    Ok(())
+}
+
 fn reservations() -> Vec<Range<usize>> {
     let mut out: Vec<_> = [
         layout::BOOT_AREA,
@@ -110,7 +132,10 @@ pub(super) fn find(image: &[u8], need: usize, code_start: usize) -> Result<u32> 
     // The generic Thumb toolkit owns alignment, capacity and deterministic fit.
     let at = find_free_space_in(image, need, 4, &whole, Fit::Largest)
         .or_else(|| find_free_space_in(image, need, 4, &clipped, Fit::Largest))
-        .ok_or(NoCodeSpace { need })?;
+        .ok_or_else(|| {
+            anyhow::Error::new(NoCodeSpace { need })
+                .context(freemkv_flash::user_error::IssueCode::FirmwareNoCodeSpace)
+        })?;
     let end = at
         .checked_add(need)
         .ok_or_else(|| anyhow!("code allocation overflow"))?;

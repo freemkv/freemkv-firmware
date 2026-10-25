@@ -5,7 +5,7 @@ use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 
@@ -173,6 +173,66 @@ impl Journal {
         result
     }
 
+    /// Persist the bytes received from the workflow, never reopen a selected input.
+    pub fn retain_firmware(
+        &mut self,
+        input: &freemkv_flash::workflow::FirmwareInput,
+        operation: &str,
+    ) -> Result<()> {
+        use sha2::{Digest, Sha256};
+        let sha256 = format!("{:x}", Sha256::digest(&input.bytes));
+        let cache = self.dir.join("firmware-inputs");
+        let stored = (|| -> Result<()> {
+            fs::create_dir_all(&cache)?;
+            let path = cache.join(&sha256);
+            if path.exists() {
+                anyhow::ensure!(
+                    fs::symlink_metadata(&path)?.file_type().is_file(),
+                    "invalid firmware cache file"
+                );
+                anyhow::ensure!(
+                    fs::metadata(&path)?.len() == input.bytes.len() as u64,
+                    "firmware cache length changed"
+                );
+                let mut bytes = Vec::new();
+                File::open(&path)?
+                    .take(input.bytes.len() as u64 + 1)
+                    .read_to_end(&mut bytes)?;
+                anyhow::ensure!(
+                    format!("{:x}", Sha256::digest(&bytes)) == sha256,
+                    "firmware cache checksum changed"
+                );
+            } else {
+                let mut options = OpenOptions::new();
+                options.write(true).create_new(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.mode(0o600);
+                }
+                let mut file = options.open(&path)?;
+                file.write_all(&input.bytes)?;
+                file.flush()?;
+            }
+            Ok(())
+        })();
+        let filename = input
+            .filename
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let record = self.record(
+            "firmware_input",
+            json!({
+                "operation": operation, "role": input.role,
+                "filename": filename, "member": input.member,
+                "bytes": input.bytes.len(), "sha256": sha256,
+                "available": stored.is_ok(),
+            }),
+        );
+        stored.and(record)
+    }
+
     pub fn source(&self) -> BundleSource {
         BundleSource {
             dir: self.dir.clone(),
@@ -208,6 +268,26 @@ pub struct ArtifactEvidence {
     pub drive: String,
     pub operation: String,
 }
+
+#[derive(Debug)]
+pub(crate) enum ReportProblem {
+    TooLarge,
+    FirmwareChanged,
+}
+impl ReportProblem {
+    pub fn message_id(&self) -> &'static str {
+        match self {
+            Self::TooLarge => "report.too_large",
+            Self::FirmwareChanged => "report.attachment_changed",
+        }
+    }
+}
+impl std::fmt::Display for ReportProblem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.message_id())
+    }
+}
+impl std::error::Error for ReportProblem {}
 
 #[derive(Debug)]
 pub(crate) struct AttachmentChanged;
@@ -386,12 +466,80 @@ impl BundleSource {
         events.sort_by_key(|e| e["ts_ms"].as_u64().unwrap_or(0));
         logs.sort();
         if logs.len() > MAX_LOGS {
-            bail!("There are more than {MAX_LOGS} logs. Choose this session or remove old logs.");
+            return Err(anyhow::Error::new(ReportProblem::TooLarge)
+                .context(format!("More than {MAX_LOGS} logs selected")));
         }
         let size = logs
             .iter()
             .filter_map(|p| fs::metadata(p).ok())
             .map(|m| m.len())
+            .sum::<u64>();
+        let mut firmware_inputs = Vec::<Value>::new();
+        for event in &events {
+            if event["event"] == "firmware_input" && !firmware_inputs.contains(&event["data"]) {
+                firmware_inputs.push(event["data"].clone());
+            }
+        }
+        anyhow::ensure!(firmware_inputs.len() <= 64, ReportProblem::TooLarge);
+        let mut firmware_paths = Vec::<(PathBuf, String, String, u64)>::new();
+        for input in &mut firmware_inputs {
+            let sha = input["sha256"].as_str().unwrap_or("").to_owned();
+            anyhow::ensure!(
+                sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()),
+                "Invalid saved firmware checksum"
+            );
+            let filename = input["filename"].as_str().unwrap_or("firmware.bin");
+            let filename = filename
+                .chars()
+                .filter(|c| !c.is_control() && *c != '/' && *c != '\\')
+                .take(240)
+                .collect::<String>();
+            let filename = if filename.is_empty() || filename == "." || filename == ".." {
+                "firmware.bin"
+            } else {
+                &filename
+            };
+            let archive_path = if let Some((_, path, _, _)) =
+                firmware_paths.iter().find(|(_, _, hash, _)| hash == &sha)
+            {
+                path.clone()
+            } else {
+                let path = self.dir.join("firmware-inputs").join(&sha);
+                let size = input["bytes"]
+                    .as_u64()
+                    .context("Missing firmware input size")?;
+                let stored = fs::symlink_metadata(&path)
+                    .ok()
+                    .filter(|m| m.file_type().is_file() && m.len() == size);
+                if input["available"] != true || stored.is_none() {
+                    input["available"] = json!(false);
+                    input["missing_reason"] =
+                        json!("Exact input snapshot is unavailable; no substitute was attached.");
+                    continue;
+                }
+                let archive_path = format!("firmware/{sha}/{filename}");
+                firmware_paths.push((path, archive_path.clone(), sha, size));
+                archive_path
+            };
+            input["archive_path"] = json!(archive_path);
+        }
+        // Explicitly name missing Current references instead of implying a pair exists.
+        let operations = firmware_inputs
+            .iter()
+            .filter_map(|v| v["operation"].as_str())
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>();
+        for operation in operations {
+            if !firmware_inputs.iter().any(|v| {
+                v["operation"] == operation
+                    && matches!(v["role"].as_str(), Some("current" | "current-capture"))
+            }) {
+                firmware_inputs.push(json!({"operation":operation,"role":"current","available":false,"missing_reason":"No complete Current firmware file or pre-update capture was available."}));
+            }
+        }
+        let firmware_size = firmware_paths
+            .iter()
+            .map(|(_, _, _, size)| size)
             .sum::<u64>();
         let artifact_size = if let Some(artifact) = &self.artifact {
             anyhow::ensure!(
@@ -418,11 +566,13 @@ impl BundleSource {
         };
         if size
             .saturating_add(artifact_size)
+            .saturating_add(firmware_size)
             .saturating_add(event_bytes as u64)
             .saturating_add(description_bytes)
             > BUNDLE_LIMIT
         {
-            bail!("The selected artifact, logs, and history exceed 50 MiB. Choose this session or submit a smaller artifact.");
+            return Err(anyhow::Error::new(ReportProblem::TooLarge)
+                .context("Files and history exceed 50 MiB"));
         }
         let mut reports = self.dir.join("reports");
         if fs::create_dir_all(&reports).is_err() {
@@ -478,6 +628,24 @@ impl BundleSource {
             check()?;
             serde_json::to_writer(&mut zip, &event)?;
             zip.write_all(b"\n")?;
+        }
+        for (source, archive_path, expected_sha, expected_size) in &firmware_paths {
+            check()?;
+            let mut bytes = Vec::new();
+            File::open(source)
+                .context(ReportProblem::FirmwareChanged)?
+                .take(expected_size + 1)
+                .read_to_end(&mut bytes)?;
+            use sha2::{Digest, Sha256};
+            anyhow::ensure!(
+                bytes.len() as u64 == *expected_size
+                    && format!("{:x}", Sha256::digest(&bytes)) == *expected_sha,
+                ReportProblem::FirmwareChanged
+            );
+            copied += bytes.len() as u64;
+            anyhow::ensure!(copied <= BUNDLE_LIMIT, ReportProblem::TooLarge);
+            zip.start_file(archive_path, opts)?;
+            zip.write_all(&bytes)?;
         }
         let artifact_manifest = if let Some(artifact) = &self.artifact {
             use sha2::{Digest, Sha256};
@@ -535,6 +703,7 @@ impl BundleSource {
                 "logs": included,
                 "missing_logs": missing,
                 "artifact": artifact_manifest,
+                "firmware_inputs": firmware_inputs,
                 "description": self.description,
             }),
         )?;
@@ -546,23 +715,28 @@ impl BundleSource {
             Some("backup") => "report.sent_backup",
             _ => "report.sent_logs",
         };
-        Ok(BuiltBundle { path, receipt_key })
+        Ok(BuiltBundle {
+            path,
+            receipt_key,
+            firmware_inputs,
+        })
     }
 }
 
 struct BuiltBundle {
     path: PathBuf,
     receipt_key: &'static str,
+    firmware_inputs: Vec<Value>,
 }
 
 fn retain_event(event: Value, events: &mut Vec<Value>, bytes: &mut usize) -> Result<()> {
     let size = serde_json::to_vec(&event)?.len() + 1;
     anyhow::ensure!(size <= EVENT_LINE, "A report history event exceeds 64 KiB.");
     *bytes += size;
-    anyhow::ensure!(
-        *bytes <= EVENT_BYTES,
-        "Selected event history exceeds 8 MiB. Choose this session or archive old history."
-    );
+    if *bytes > EVENT_BYTES {
+        return Err(anyhow::Error::new(ReportProblem::TooLarge)
+            .context("Selected event history exceeds 8 MiB"));
+    }
     events.push(event);
     Ok(())
 }
@@ -592,6 +766,96 @@ impl Drop for Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn report_keeps_exact_input_bytes_after_original_files_are_replaced() {
+        let dir = std::env::temp_dir().join(format!("freemkv-repro-{}", random_id().unwrap()));
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        let original = dir.join("selected.bin");
+        for (role, bytes) in [
+            ("current", b"current exact bytes".as_slice()),
+            ("target", b"patched signed bytes".as_slice()),
+        ] {
+            fs::write(&original, bytes).unwrap();
+            journal
+                .retain_firmware(
+                    &freemkv_flash::workflow::FirmwareInput {
+                        role,
+                        filename: original.clone(),
+                        member: None,
+                        bytes: std::sync::Arc::from(bytes),
+                    },
+                    "abc123",
+                )
+                .unwrap();
+        }
+        fs::write(&original, b"replacement must not be attached").unwrap();
+        let built = journal
+            .source()
+            .bundle_with_control(Scope::Session, None)
+            .unwrap();
+        assert_eq!(built.firmware_inputs.len(), 2);
+        let mut zip = zip::ZipArchive::new(File::open(&built.path).unwrap()).unwrap();
+        for input in &built.firmware_inputs {
+            let mut bytes = Vec::new();
+            zip.by_name(input["archive_path"].as_str().unwrap())
+                .unwrap()
+                .read_to_end(&mut bytes)
+                .unwrap();
+            assert_eq!(
+                bytes,
+                if input["role"] == "current" {
+                    b"current exact bytes".as_slice()
+                } else {
+                    b"patched signed bytes".as_slice()
+                }
+            );
+        }
+        let manifest: Value =
+            serde_json::from_reader(zip.by_name("manifest.json").unwrap()).unwrap();
+        assert_eq!(manifest["firmware_inputs"], json!(built.firmware_inputs));
+        drop(zip);
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn changed_snapshot_stops_submission_and_missing_current_is_explicit() {
+        let dir = std::env::temp_dir().join(format!("freemkv-repro-{}", random_id().unwrap()));
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        journal
+            .retain_firmware(
+                &freemkv_flash::workflow::FirmwareInput {
+                    role: "target",
+                    filename: "target.bin".into(),
+                    member: Some("normal".into()),
+                    bytes: std::sync::Arc::from(b"first".as_slice()),
+                },
+                "abc123",
+            )
+            .unwrap();
+        let built = journal
+            .source()
+            .bundle_with_control(Scope::Session, None)
+            .unwrap();
+        assert!(built
+            .firmware_inputs
+            .iter()
+            .any(|v| v["role"] == "current" && v["available"] == false));
+        let snapshot = fs::read_dir(dir.join("firmware-inputs"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        fs::write(snapshot, b"other").unwrap();
+        assert!(journal
+            .source()
+            .bundle_with_control(Scope::Session, None)
+            .is_err());
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn artifact_submission_keeps_selected_file_and_diagnostic_log_together() {

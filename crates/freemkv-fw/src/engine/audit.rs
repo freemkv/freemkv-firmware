@@ -217,16 +217,7 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
     let mut checks = Vec::new();
     // Re-signing may change digests, never the table's geometry or erased
     // sentinel records. A self-consistent MAC alone cannot prove this.
-    let descriptors_preserved = (0..cmac::ENTRY_COUNT).all(|index| {
-        let at = cmac::TABLE_OFFSET + index * cmac::ENTRY_SIZE;
-        let len = if original.get(at..at + 4) == Some(&[0xff; 4]) {
-            cmac::ENTRY_SIZE
-        } else {
-            12
-        };
-        original.get(at..at + len).is_some()
-            && original.get(at..at + len) == report.image.get(at..at + len)
-    });
+    let descriptors_preserved = super::code_space::metadata_preserved(original, img);
     checks.push(AuditCheck {
         lever: "integrity",
         what: "integrity table descriptors and unused slots preserved".into(),

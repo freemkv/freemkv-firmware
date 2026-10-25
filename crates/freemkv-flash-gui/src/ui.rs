@@ -115,6 +115,7 @@ pub(crate) enum ProfileState {
 }
 
 /// Shown beside the drive while its profile is read.
+pub use workflow::IssueSeverity;
 pub const PROBING: &str = "status.probing";
 const PROFILE_FAILED: &str = "ui.profile_unavailable";
 
@@ -418,6 +419,7 @@ pub struct Results {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Failure {
     pub text: String,
+    pub severity: workflow::IssueSeverity,
     pub save_log: Button,
 }
 
@@ -750,6 +752,7 @@ pub(crate) enum Msg {
     /// Backup capture failed; wait for an explicit human Yes or No.
     BackupUnavailable(String, Sender<bool>),
     CapturedArtifact(Result<crate::support::ReportArtifact, String>),
+    FirmwareInput(workflow::FirmwareInput),
     Done(Result<Option<workflow::UpdateOutcome>, String>),
 }
 
@@ -1660,7 +1663,13 @@ impl App {
                     #[cfg(not(test))]
                     let result = crate::support::submit(source, control, progress);
                     let _ = tx.send(ReportMsg::Finished(result.map_err(|error| {
-                        if error.is::<crate::support::AttachmentChanged>() {
+                        if let Some(problem) = error.downcast_ref::<crate::support::ReportProblem>()
+                        {
+                            let _ = tx.send(ReportMsg::Diagnostic(format!(
+                                "Report preparation failed: {error:#}"
+                            )));
+                            problem.message_id().into()
+                        } else if error.is::<crate::support::AttachmentChanged>() {
                             let _ = tx.send(ReportMsg::Diagnostic(format!(
                                 "Report attachment failed: {error:#}"
                             )));
@@ -2287,6 +2296,8 @@ impl App {
                                 "report.cancelled"
                             } else if error == "report.attachment_changed" {
                                 "report.attachment_changed"
+                            } else if error == "report.too_large" {
+                                "report.too_large"
                             } else {
                                 "errors.submit_report"
                             }
@@ -2321,6 +2332,18 @@ impl App {
         if let Some(rx) = self.rx.take() {
             loop {
                 match rx.try_recv() {
+                    Ok(Msg::FirmwareInput(input)) => {
+                        if let Some(journal) = &mut self.journal {
+                            if let Err(error) = journal.retain_firmware(
+                                &input,
+                                self.operation_id.as_deref().unwrap_or("unknown"),
+                            ) {
+                                self.log.push(format!(
+                                    "Firmware report capture unavailable: {error:#}"
+                                ));
+                            }
+                        }
+                    }
                     Ok(Msg::PreparedRecovery(prepared)) => self.prepared_recovery = Some(prepared),
                     Ok(Msg::UserIssue(issue)) => {
                         self.failure = Some(issue.encoded());
@@ -3247,6 +3270,21 @@ impl App {
                 ),
                 None => self.status.clone(),
             }
+        } else if self.failure.is_some()
+            && self
+                .user_issue
+                .as_ref()
+                .is_some_and(|i| i.severity() != workflow::IssueSeverity::Error)
+        {
+            if self
+                .user_issue
+                .as_ref()
+                .is_some_and(|i| i.severity() == workflow::IssueSeverity::Notice)
+            {
+                "status.information".into()
+            } else {
+                "status.action_needed".into()
+            }
         } else if self.failure.is_some() {
             // The wrapped results label owns the detailed failure. The single
             // line status must not repeat and truncate that same guidance.
@@ -3299,6 +3337,10 @@ impl App {
             },
             failure: self.failure.as_ref().map(|text| Failure {
                 text: text.clone(),
+                severity: self.user_issue.as_ref().map_or(
+                    workflow::IssueSeverity::Error,
+                    workflow::UserError::severity,
+                ),
                 save_log: Button::new("action.save_log", Input::Choose(Pick::DiagnosticLog), true),
             }),
             notice: match (&self.logging_warning, &self.diagnostic_notice) {
@@ -3633,26 +3675,34 @@ fn run_job(
                     tx: tx.clone(),
                     waker: waker.clone(),
                 };
-                workflow::with_operation_id(&operation_id, || {
-                    match ops::execute(device, &job, &mut sheet)? {
-                        ops::JobResult::Analysis(result) => {
-                            let _ = tx.send(Msg::Analysis(result));
-                            Ok(None)
-                        }
-                        ops::JobResult::Update(outcome) => Ok(Some(outcome)),
-                        ops::JobResult::PreparedRecovery(prepared) => {
-                            let _ = tx.send(Msg::PreparedRecovery(prepared));
-                            Ok(Some(workflow::UpdateOutcome::Planned))
-                        }
-                        ops::JobResult::Preview(preview) => {
-                            let _ = tx.send(Msg::PreviewCompatibilityPending(
-                                preview.compatibility_pending,
-                            ));
-                            Ok(None)
-                        }
-                        ops::JobResult::Complete => Ok(None),
-                    }
-                })
+                let input_tx = tx.clone();
+                workflow::capture_firmware_inputs(
+                    move |input| {
+                        let _ = input_tx.send(Msg::FirmwareInput(input));
+                    },
+                    || {
+                        workflow::with_operation_id(&operation_id, || {
+                            match ops::execute(device, &job, &mut sheet)? {
+                                ops::JobResult::Analysis(result) => {
+                                    let _ = tx.send(Msg::Analysis(result));
+                                    Ok(None)
+                                }
+                                ops::JobResult::Update(outcome) => Ok(Some(outcome)),
+                                ops::JobResult::PreparedRecovery(prepared) => {
+                                    let _ = tx.send(Msg::PreparedRecovery(prepared));
+                                    Ok(Some(workflow::UpdateOutcome::Planned))
+                                }
+                                ops::JobResult::Preview(preview) => {
+                                    let _ = tx.send(Msg::PreviewCompatibilityPending(
+                                        preview.compatibility_pending,
+                                    ));
+                                    Ok(None)
+                                }
+                                ops::JobResult::Complete => Ok(None),
+                            }
+                        })
+                    },
+                )
             },
         )
     }));
