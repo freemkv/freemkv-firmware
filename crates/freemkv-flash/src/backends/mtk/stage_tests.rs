@@ -599,7 +599,7 @@ fn mediatek_family_mismatch_keeps_hashes_in_diagnostics_only() {
     .expect("different families must refuse");
     let message = crate::workflow::error_message(&error);
     assert!(
-        message.contains("underlying hardware for these firmwares is not compatible"),
+        message.contains("installed and selected firmware are for different hardware"),
         "{message}"
     );
     assert!(message.contains("BU40N"));
