@@ -21,6 +21,7 @@ impl Profile {
     pub(crate) fn every_task() -> Self {
         Self {
             can_read: Some(true),
+            read_notice: None,
             flash_current: true,
             recovery_family_override: true,
             chips: vec!["Test family".into()],
@@ -61,6 +62,31 @@ fn ready(drives: Vec<DriveChoice>) -> App {
 
 fn one_drive() -> App {
     ready(vec![drive("drive-a", "drive-a", "Drive A")])
+}
+
+#[test]
+fn mediatek_read_limit_note_is_visible_before_flash_backup_and_dump() {
+    let mut app = one_drive();
+    if let ProfileState::Ready(p) = &mut app.profile {
+        p.read_notice = Some("ui.mtk_read_limits".into());
+    }
+    for task in [Task::Flash, Task::Backup, Task::Dump] {
+        app.task = task;
+        assert!(app
+            .panel(true)
+            .iter()
+            .any(|i| matches!(i, Item::Note(s) if s == "ui.mtk_read_limits")));
+    }
+    if let ProfileState::Ready(p) = &mut app.profile {
+        p.read_notice = None;
+    }
+    for task in [Task::Flash, Task::Backup, Task::Dump] {
+        app.task = task;
+        assert!(!app
+            .panel(true)
+            .iter()
+            .any(|i| matches!(i, Item::Note(s) if s == "ui.mtk_read_limits")));
+    }
 }
 
 #[test]

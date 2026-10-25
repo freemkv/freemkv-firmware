@@ -585,9 +585,7 @@ pub fn flash(
         })?;
     let backup_line = match &saved {
         Some(s) => s.summary().to_string(),
-        None => {
-            "NONE — flashing without a rollback backup (this drive cannot be rolled back)".into()
-        }
+        None => crate::localization::english("confirm.no_backup"),
     };
     emit_plan(&plan.after_backup, &backup_line);
     let reader = &mut ReadDevice::for_backend(dev, drive);

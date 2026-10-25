@@ -92,7 +92,11 @@ pub type FullImage = (Vec<u8>, usize, Vec<(usize, usize)>);
 /// GRACEFUL: any region the drive doesn't map to READ BUFFER is filled with
 /// `0xFF`. Returns `(image, readable_bytes, gaps)`. Read-only (`0x3C` only).
 /// 4 KiB reads (~2.5 s for a fully-exposed image). Shared by `dump`.
-pub(crate) fn read_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {
+/// Retain evidence that every failed firmware read was an explicit unsupported
+/// or invalid-field command response, rather than a connection/short-read error.
+pub(crate) fn read_full_image_with_restriction(
+    dev: &mut dyn ScsiDevice,
+) -> Result<(FullImage, bool)> {
     const CHUNK: usize = 0x1000;
     const PIECE: usize = 0x200;
     // Stop splitting after this many consecutive dead chunks; resume at the next
@@ -117,10 +121,25 @@ pub(crate) fn read_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {
             }
         }
     };
-    let read_exact = |dev: &mut dyn ScsiDevice, off: usize, len: usize| {
-        rd(dev, 6, 0, off as u32, len as u32)
-            .ok()
-            .filter(|v| v.len() == len)
+    let mut rejected = false;
+    let mut other_failure = false;
+    let mut read_exact = |dev: &mut dyn ScsiDevice, off: usize, len: usize| match rd(
+        dev, 6, 0, off as u32, len as u32,
+    ) {
+        Ok(bytes) if bytes.len() == len => Some(bytes),
+        Err(error)
+            if matches!(
+                crate::platform::sense_triplet(&error),
+                Some((5, 0x20 | 0x24, 0))
+            ) =>
+        {
+            rejected = true;
+            None
+        }
+        _ => {
+            other_failure = true;
+            None
+        }
     };
     while off < IMAGE_SIZE {
         let l = CHUNK.min(IMAGE_SIZE - off);
@@ -147,7 +166,7 @@ pub(crate) fn read_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {
             total: Some(IMAGE_SIZE),
         });
     }
-    Ok((image, readable, gaps))
+    Ok(((image, readable, gaps), rejected && !other_failure))
 }
 
 /// Single raw `READ BUFFER` via an explicit `(mode, buffer-id, offset, len)`, or

@@ -1,8 +1,9 @@
 
 === MTK backup: drive-read image ===
 result: OK
---- text (105) ---
+--- text (106) ---
 Backing up BD-RE BU40N → <TMP>/backup/mtk_backup.tar
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -107,8 +108,9 @@ reading drive memory: 100%
 backup sha256: b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c18745e6b6da8011dd2
 wrote <TMP>/backup/mtk_backup.tar (2 MiB).
 this firmware build is not in the OEM catalog (a revision we lack, or a modified image), so the backup is a reconstruction: the boot page and per-drive regions use this chip's factory contents. It carries no personal data and restores the installed firmware code, but it is not a known vendor file
---- events (107) ---
+--- events (108) ---
 MSG      Backing up BD-RE BU40N → <TMP>/backup/mtk_backup.tar
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
@@ -737,8 +739,9 @@ saved file: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb5d99befe03c1
 
 === MTK dump (recover): raw memory ===
 result: OK
---- text (105) ---
+--- text (106) ---
 Backing up BD-RE BU40N → <TMP>/backup/mtk_dump.bin
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -843,8 +846,9 @@ reading drive memory: 100%
 backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 wrote <TMP>/backup/mtk_dump.bin (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
---- events (108) ---
+--- events (109) ---
 MSG      Backing up BD-RE BU40N → <TMP>/backup/mtk_dump.bin
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152

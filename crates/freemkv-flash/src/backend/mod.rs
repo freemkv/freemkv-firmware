@@ -391,6 +391,11 @@ pub fn unsupported_family_error(family: &str) -> anyhow::Error {
 /// A firmware command-protocol backend. Everything beyond identity is an
 /// optional facet; core code offers exactly what the facets provide.
 pub trait Backend: Sync + 'static {
+    /// A localized, expected read limitation shown before capture/update.
+    fn read_notice(&self) -> Option<&'static str> {
+        None
+    }
+
     /// Whether to offer automatic Current firmware acquisition. The optical
     /// library owns this protocol capability; unknown backends require a file.
     fn can_read(&self) -> bool {

@@ -1,7 +1,8 @@
 
 === MTK execute: .bin with pre-flash backup ===
 result: OK
---- text (213) ---
+--- text (214) ---
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -215,7 +216,8 @@ flashing firmware: 99%
 flashing firmware: 100%
 upload complete (2 MiB); waiting for the drive to finish programming...
 verifying...
---- events (216) ---
+--- events (217) ---
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
@@ -2360,7 +2362,8 @@ image chunks streamed: 128 x 16384 bytes
 
 === MTK execute: read-back mismatch ===
 result: ERR update failed during firmware readback (progress: UploadComplete; payload bytes accepted in stage: Some(2097152); temporary firmware: false; completed stages: []): MediaTek update failed: read-back differs at 0x01105e (read 0x00, wrote 0x11); 61346 of 61440 protected bytes differ
---- text (213) ---
+--- text (214) ---
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -2574,7 +2577,8 @@ flashing firmware: 99%
 flashing firmware: 100%
 upload complete (2 MiB); waiting for the drive to finish programming...
 verifying...
---- events (215) ---
+--- events (216) ---
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152
@@ -4715,8 +4719,9 @@ saved pre-flash backup: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb
 
 === MTK execute: restore the saved .tar ===
 result: OK
---- text (214) ---
+--- text (215) ---
 == reflash backup firmware (per-unit data retained as reference) ==
+ui.mtk_read_limits
 reading drive memory: 0%
 reading drive memory: 1%
 reading drive memory: 2%
@@ -4930,8 +4935,9 @@ flashing firmware: 99%
 flashing firmware: 100%
 upload complete (2 MiB); waiting for the drive to finish programming...
 verifying...
---- events (217) ---
+--- events (218) ---
 MSG      == reflash backup firmware (per-unit data retained as reference) ==
+MSG      ui.mtk_read_limits
 PROGRESS reading drive memory 4096/2097152
 PROGRESS reading drive memory 24576/2097152
 PROGRESS reading drive memory 45056/2097152

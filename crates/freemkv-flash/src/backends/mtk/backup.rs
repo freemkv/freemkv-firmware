@@ -174,12 +174,28 @@ impl BackupArtifact {
 /// everything afterward — `oem::rebuild` (boot page from the catalog,
 /// drive-written regions reset to factory) and validation — is identical.
 pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
-    let (read, readable, gaps) = super::capture_raw(dev)?;
+    let ((read, readable, gaps), restricted) = super::capture_raw(dev)?;
     if read.len() != super::IMAGE_SIZE || readable != read.len() || !gaps.is_empty() {
-        return Err(incomplete_read(readable, &gaps));
+        let error = incomplete_read(readable, &gaps);
+        return Err(if restricted {
+            error.context(crate::backend::BackupReadRestricted)
+        } else {
+            error
+        });
     }
-    let rebuilt = oem::rebuild(&read, super::oem::catalog())
-        .context("rebuilding the OEM image from the drive read")?;
+    let rebuilt = oem::rebuild(&read, super::oem::catalog()).map_err(|error| {
+        let unsupported = matches!(
+            error,
+            oem::RebuildError::NoFactory(_) | oem::RebuildError::UnknownBootPage(_)
+        );
+        let error =
+            anyhow::Error::new(error).context("rebuilding the OEM image from the drive read");
+        if unsupported {
+            error.context(crate::user_error::IssueCode::UnsupportedFirmware)
+        } else {
+            error
+        }
+    })?;
     crate::diagnostics::record(format!(
         "MTK backup rebuild: {}",
         describe(&rebuilt.provenance)

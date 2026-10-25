@@ -857,6 +857,10 @@ pub static DESCRIPTOR: Descriptor = Descriptor {
 pub struct Mtk;
 
 impl Backend for Mtk {
+    fn read_notice(&self) -> Option<&'static str> {
+        Some("ui.mtk_read_limits")
+    }
+
     fn can_read(&self) -> bool {
         mediatek_optical::DriveClass::Mt19.can_read()
     }
@@ -1030,20 +1034,25 @@ impl BackupFacet for Mtk {
 }
 
 /// Capture raw bytes through the read path the installed firmware exposes.
-fn capture_raw(dev: &mut dyn ScsiDevice) -> Result<crate::probe::FullImage> {
+fn capture_raw(dev: &mut dyn ScsiDevice) -> Result<(crate::probe::FullImage, bool)> {
+    crate::output::guidance("ui.mtk_read_limits");
     if fwdump::is_freemkv(dev) {
         crate::diagnostics::record("MTK capture: drive runs freemkv firmware; reading via DumpAll");
         fwdump::capture_full_image(dev)
+            .map(|image| (image, false))
             .context("reading the drive's firmware via the freemkv dump command")
     } else {
-        crate::probe::read_full_image(dev).context("reading the drive's firmware")
+        crate::probe::read_full_image_with_restriction(dev).context("reading the drive's firmware")
     }
 }
 
 impl DumpFacet for Mtk {
     fn capture(&self, mut dev: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
-        let (image, readable, gaps) = capture_raw(dev.scsi())?;
+        let ((image, readable, gaps), restricted) = capture_raw(dev.scsi())?;
         if readable == 0 {
+            if restricted {
+                return Err(anyhow::Error::new(crate::backend::BackupReadRestricted));
+            }
             bail!("no MediaTek memory was readable; no dump saved");
         }
         crate::output::field(
@@ -1054,7 +1063,11 @@ impl DumpFacet for Mtk {
             let message = format!("Unreadable ranges filled with FF: {gaps:#x?}");
             crate::output::field("Dump gaps", &message);
             crate::diagnostics::record(message);
-            crate::output::guidance("errors.backup_partial");
+            crate::output::guidance(if restricted {
+                "ui.mtk_dump_restricted"
+            } else {
+                "errors.backup_partial"
+            });
         }
         Ok(image)
     }

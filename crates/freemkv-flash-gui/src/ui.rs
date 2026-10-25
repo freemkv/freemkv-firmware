@@ -86,6 +86,7 @@ impl Task {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Profile {
     pub(crate) can_read: Option<bool>,
+    pub(crate) read_notice: Option<String>,
     pub(crate) flash_current: bool,
     pub(crate) recovery_family_override: bool,
     /// Shown beside the drive: the family (or "Unsupported"), then what it offers.
@@ -2988,9 +2989,13 @@ impl App {
                         }],
                     },
                 ];
+                if let Some(note) = self.ready_profile().and_then(|p| p.read_notice.as_ref()) {
+                    items.insert(1, Item::Note(note.clone()));
+                }
                 let offer_dump = !dump
                     && self.ready_profile().is_some_and(|profile| {
-                        profile.tasks.contains(&Task::Dump)
+                        profile.read_notice.is_none()
+                            && profile.tasks.contains(&Task::Dump)
                             && (!profile.tasks.contains(&Task::Backup)
                                 || (self.result_task == Task::Backup && self.failure.is_some()))
                     });
@@ -3008,7 +3013,13 @@ impl App {
                 items
             }
             Task::Flash | Task::Recovery => {
-                self.firmware_panel(enabled, self.task == Task::Recovery)
+                let mut items = self.firmware_panel(enabled, self.task == Task::Recovery);
+                if self.task == Task::Flash {
+                    if let Some(note) = self.ready_profile().and_then(|p| p.read_notice.as_ref()) {
+                        items.insert(0, Item::Note(note.clone()));
+                    }
+                }
+                items
             }
         }
     }

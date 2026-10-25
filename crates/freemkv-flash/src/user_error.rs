@@ -192,7 +192,8 @@ pub fn issue_severity(message: &str) -> IssueSeverity {
         | "errors.no_firmware_write"
         | "errors.update_blocked"
         | "ui.cancelled_no_firmware_was_written"
-        | "status.operation_cancelled" => IssueSeverity::Notice,
+        | "status.operation_cancelled"
+        | "domain.these_firmware_formats_cannot_currently_be_compared" => IssueSeverity::Notice,
         "errors.drive_access"
         | "errors.choose_drive"
         | "errors.tray_open"
@@ -223,6 +224,9 @@ pub fn issue_severity(message: &str) -> IssueSeverity {
         | "errors.drive_changed"
         | "errors.startup_setting_restored"
         | "errors.settings_unresolved"
+        | "errors.analysis"
+        | "domain.for_pioneer_inspection_select_the_tar_package_containing_the_firmware"
+        | "domain.select_two_firmware_files_or_one_firmware_file_and_one_drive"
         | "recovery.family_override_unsupported" => IssueSeverity::ActionRequired,
         _ => IssueSeverity::Error,
     }
@@ -389,7 +393,11 @@ impl UserError {
                 std::io::ErrorKind::WriteZero | std::io::ErrorKind::StorageFull => {
                     "errors.save_failed"
                 }
-                std::io::ErrorKind::TimedOut => "errors.connection",
+                std::io::ErrorKind::TimedOut
+                | std::io::ErrorKind::NotConnected
+                | std::io::ErrorKind::ConnectionAborted
+                | std::io::ErrorKind::ConnectionReset
+                | std::io::ErrorKind::BrokenPipe => "errors.connection",
                 _ => "errors.file_access",
             }
         } else if error.is::<crate::platform::ScsiSenseError>()
@@ -887,10 +895,23 @@ mod tests {
         let text = guidance.render(Language::En);
         assert_eq!(
             text,
-            "This firmware cannot be backed up. This is normal for many MediaTek drives."
+            localization::get(Language::En, "errors.backup_restricted")
         );
         assert!(!text.contains("CDB") && !text.contains("E4000"));
         assert!(format!("{error:#}").contains("offset=0x98000 [E4000]"));
+    }
+
+    #[test]
+    fn operating_system_disconnects_do_not_become_file_access_errors() {
+        for kind in [
+            std::io::ErrorKind::NotConnected,
+            std::io::ErrorKind::BrokenPipe,
+            std::io::ErrorKind::ConnectionReset,
+            std::io::ErrorKind::ConnectionAborted,
+        ] {
+            let issue = UserError::of(&anyhow::Error::new(std::io::Error::from(kind)));
+            assert_eq!(issue.id, "errors.connection", "{kind:?}");
+        }
     }
 
     #[test]
