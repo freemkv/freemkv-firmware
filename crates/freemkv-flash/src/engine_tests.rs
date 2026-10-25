@@ -563,6 +563,8 @@ fn flash_execute_streams_patterned_image_verbatim() {
 /// authenticates: `[enabled(4) | start(4) | end(4) | tag(16)]` at 0x10400.
 fn with_active_cmac_range(mut image: Vec<u8>, start: u32, end: u32) -> Vec<u8> {
     let off = 0x10400usize; // cmac::TABLE_OFFSET
+                            // Other slots are erased metadata, not bytes from the payload pattern.
+    image[off..off + crate::cmac::ENTRY_COUNT * crate::cmac::ENTRY_SIZE].fill(0xff);
     image[off..off + 4].copy_from_slice(&1u32.to_le_bytes()); // enabled
     image[off + 4..off + 8].copy_from_slice(&start.to_le_bytes());
     image[off + 8..off + 12].copy_from_slice(&end.to_le_bytes());

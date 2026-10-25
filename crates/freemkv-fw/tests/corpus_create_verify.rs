@@ -22,8 +22,8 @@
 //! * a valid MediaTek CMAC integrity table (`freemkv_flash::cmac::parse_table`)
 //!   at `0x10400` with at least one active, in-bounds entry.
 //!
-//! Only images passing ALL THREE are FORGEABLE; every forgeable image must
-//! both `create` and `verify` cleanly, or the run is a hard failure.
+//! Images passing all three are candidates. A typed insufficient-safe-space
+//! refusal must leave no output; every other candidate must create and verify.
 //!
 //! Gated behind `FREEMKV_FW_CORPUS` (comma-separated directories to scan
 //! recursively for `*.bin`) so it is skipped by a normal `cargo test` and only
@@ -200,6 +200,8 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
     let mut skipped_other: Vec<(PathBuf, String)> = Vec::new();
     let mut passed: Vec<Outcome> = Vec::new();
     let mut failed: Vec<Outcome> = Vec::new();
+    let mut no_safe_space = Vec::new();
+    let mut unchanged = Vec::new();
 
     let tmp_root = std::env::temp_dir().join(format!(
         "freemkv-fw-corpus-{}-{}",
@@ -238,6 +240,33 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
             .expect("spawn freemkv-fw create");
 
         if !create.status.success() {
+            // Erased table slots used to make some images appear forgeable.
+            // Accept only the typed capacity refusal, independently reproduced
+            // through the engine, and require the CLI to leave no output.
+            let attempted = freemkv_fw::api::modify_with_defaults(
+                &image,
+                &freemkv_fw::boot::BootSettings::standard(),
+            );
+            let capacity_refusal = attempted
+                .as_ref()
+                .err()
+                .is_some_and(|err| err.downcast_ref::<engine::NoCodeSpace>().is_some());
+            if capacity_refusal {
+                assert!(!out_path.exists(), "refused image left a flashable output");
+                no_safe_space.push(path.clone());
+                continue;
+            }
+            // A stock/DE image may already contain every change the supported
+            // levers can make. A no-op refusal is expected only when the shared
+            // API returns exactly the original, valid bytes and an explicit
+            // refusal report; an arbitrary unsupported error is still a failure.
+            if attempted.as_ref().is_ok_and(|(report, _)| {
+                report.refusal().is_some() && report.image == image && cmac::verify(&image)
+            }) {
+                assert!(!out_path.exists(), "unchanged refusal left an output");
+                unchanged.push(path.clone());
+                continue;
+            }
             failed.push(Outcome {
                 path: path.clone(),
                 detail: format!(
@@ -309,6 +338,11 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
     println!("  passed:                  {}", passed.len());
     println!("  FAILED:                  {}", failed.len());
     println!("skipped (unmodifiable):    {}", skipped_other.len());
+    println!("refused (no safe space):   {}", no_safe_space.len());
+    println!("refused (no changes):      {}", unchanged.len());
+    for path in &no_safe_space {
+        println!("[SAFE REFUSAL] {}", path.display());
+    }
 
     if !failed.is_empty() {
         println!("\n--- FAILURES ---");

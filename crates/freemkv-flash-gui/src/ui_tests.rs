@@ -3579,7 +3579,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
     let observed = requests.clone();
     let description = "Backup failed.\n日本語 — description 🐈";
     let server = std::thread::spawn(move || {
-        for index in 0..3 {
+        for index in 0..4 {
             let deadline = Instant::now() + Duration::from_secs(5);
             let mut stream = loop {
                 match listener.accept() {
@@ -3614,7 +3614,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
             observed.fetch_add(1, Ordering::SeqCst);
-            if index == 2 {
+            if index == 3 {
                 assert!(headers.starts_with("PUT "));
                 let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&body)).unwrap();
                 let manifest: serde_json::Value =
@@ -3643,6 +3643,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
                     r#"{"id":"joined","poll_token":"poll","approval_url":"http://localhost/approval"}"#
                 }
                 1 => r#"{"scope":"session","upload_token":"upload"}"#,
+                2 => r#"{"saved":true}"#,
                 _ => r#"{"report_id":"joined-receipt"}"#,
             };
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
@@ -3682,7 +3683,7 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
         crate::localization::english(app.diagnostic_notice.as_deref().unwrap()),
         receipt
     );
-    assert_eq!(requests.load(Ordering::SeqCst), 3);
+    assert_eq!(requests.load(Ordering::SeqCst), 4);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -3696,6 +3697,14 @@ fn report_prompt_bounds_preserve_draft_and_exclude_other_modals() {
     ));
     assert!(app.dispatch(Input::Choose(Pick::Backup)).is_empty());
     assert!(app.dispatch(Input::SubmitReport).is_empty());
+    let blank = " \n\t";
+    let effects = app.dispatch(Input::SendReport(blank.into()));
+    assert!(
+        matches!(&effects[..], [Effect::ReportPrompt { summary, description }]
+        if description == blank && crate::localization::english(summary).contains("Briefly explain why"))
+    );
+    assert_eq!(app.report_description, blank);
+    assert!(app.report_rx.is_none());
     let description = "🐈".repeat(crate::support::DESCRIPTION_LIMIT / 4 + 1);
     assert!(matches!(
         app.dispatch(Input::SendReport(description.clone()))
@@ -4217,9 +4226,11 @@ fn corrupt_input_error_remains_visible_and_controls_are_reenabled() {
     );
     let view = app.view();
     assert!(!app.running() && view.controls_enabled && view.can_close);
+    let status = view.status.as_ref().unwrap();
+    assert!(!crate::localization::english(&status.text).contains("corrupt or incomplete"));
     let failure = view.results.unwrap().failure.unwrap();
     assert!(failure.text.contains("corrupt or incomplete"));
-    assert!(failure.text.contains("Download a fresh OEM copy"));
+    assert!(failure.text.contains("Download a fresh copy"));
 }
 
 #[test]
@@ -4270,4 +4281,89 @@ fn td05_corrupt_package_finishes_flash_and_recovery_jobs_without_opening_a_drive
             .iter()
             .any(|msg| matches!(msg, Msg::DriveAfter(_) | Msg::Authorized(_, _))));
     }
+}
+
+#[test]
+fn newer_release_blocks_both_report_entry_points_and_keeps_local_logs() {
+    let mut app = one_drive();
+    app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+    assert!(matches!(
+        app.dispatch(Input::SubmitReport).as_slice(),
+        [Effect::ReportPrompt { .. }]
+    ));
+    let (tx, rx) = mpsc::channel();
+    app.update_rx = Some(rx);
+    tx.send(Ok(Some("0.15.3".into()))).unwrap();
+    app.poll();
+    assert!(app.dispatch(Input::SendReport("details".into())).is_empty());
+    assert!(app.report_rx.is_none() && app.report_prompt.is_none());
+    assert!(app.dispatch(Input::SubmitReport).is_empty());
+    let view = app.view();
+    let results = view.results.unwrap();
+    assert!(!results.submit_report.enabled);
+    let notice = crate::localization::english(results.notice.as_ref().unwrap());
+    assert!(notice.contains("0.15.3") && notice.contains("latest version"));
+    app.dispatch(Input::ViewLog);
+    assert!(app.diagnostics_open);
+}
+
+#[test]
+fn failed_or_current_release_check_allows_normal_reports() {
+    for response in [Err("offline".into()), Ok(None)] {
+        let mut app = one_drive();
+        app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+        let (tx, rx) = mpsc::channel();
+        app.update_rx = Some(rx);
+        tx.send(response).unwrap();
+        app.poll();
+        assert!(app.available_update.is_none());
+        assert!(app.results_view().submit_report.enabled);
+        assert!(matches!(
+            app.dispatch(Input::SubmitReport).as_slice(),
+            [Effect::ReportPrompt { .. }]
+        ));
+    }
+}
+
+#[test]
+fn successful_flash_without_attachment_suggests_website_confirmation() {
+    let mut app = one_drive();
+    app.journal = Some(Journal::memory_at(std::env::temp_dir()));
+    app.successful_flash = true;
+    let effects = app.dispatch(Input::SubmitReport);
+    let [Effect::ReportPrompt { summary, .. }] = &effects[..] else {
+        panic!("missing confirmation");
+    };
+    let text = crate::localization::english(summary);
+    assert!(text.contains("completed successfully") && text.contains("still want to submit"));
+    app.dispatch(Input::DismissReport(String::new()));
+    app.failure = Some("error".into());
+    let effects = app.dispatch(Input::SubmitReport);
+    let [Effect::ReportPrompt { summary, .. }] = &effects[..] else {
+        panic!("missing report prompt");
+    };
+    assert!(!crate::localization::english(summary).contains("completed successfully"));
+}
+
+#[test]
+fn expected_backup_restriction_is_plain_information_in_the_final_view() {
+    let mut app = one_drive();
+    app.dispatch(Input::ReadInfo);
+    let issue = workflow::user_error(&anyhow::Error::new(
+        freemkv_flash::backend::BackupReadRestricted,
+    ));
+    app.worker
+        .as_ref()
+        .unwrap()
+        .send(Msg::UserIssue(issue))
+        .unwrap();
+    finish(&mut app, Err("backup restricted".into()));
+    let view = app.view();
+    assert_eq!(
+        crate::localization::english(&view.status.unwrap().text),
+        "Information"
+    );
+    let failure = view.results.unwrap().failure.unwrap();
+    assert_eq!(failure.severity, workflow::IssueSeverity::Notice);
+    assert!(!failure.text.contains("Submit"));
 }

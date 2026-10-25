@@ -1,5 +1,25 @@
 use super::*;
 
+#[test]
+fn non_file_archive_member_produces_a_specific_localized_flash_refusal() {
+    let mut bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut bytes);
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Directory);
+        header.set_size(0);
+        header.set_mode(0o755);
+        header.set_cksum();
+        tar.append_data(&mut header, "components/", std::io::empty())
+            .unwrap();
+        tar.finish().unwrap();
+    }
+    let error = crate::backends::pioneer::classify_flash_input(&bytes).unwrap_err();
+    assert!(format!("{error:#}").contains("not a regular file"));
+    let issue = crate::user_error::UserError::of(&error);
+    assert_eq!(issue.id, "errors.firmware_invalid");
+}
+
 fn image() -> Vec<u8> {
     let mut image = vec![0u8; 0x1d7000];
     let head = b"********  Copyright(c) 2000 Pioneer Corporation  ********\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11 .\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";

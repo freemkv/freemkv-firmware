@@ -531,3 +531,22 @@ fn flash_stream_sends_the_oem_sequence() {
     assert_eq!(cdbs[129], cdb::finish());
     assert!(dev.reads.iter().any(|c| *c == cdb::probe()));
 }
+
+#[test]
+fn transfer_error_keeps_structured_boundary_and_sense_for_user_guidance() {
+    let error = super::flash::flash_error(mediatek_optical::update::FlashError::Transfer {
+        offset: 0x1fc000,
+        length: 16384,
+        source: mediatek_optical::drive::Error::Transport(anyhow::Error::new(
+            crate::platform::ScsiSenseError::new(5, 0x26, 2, "reported final block rejection"),
+        )),
+    });
+    let boundary = error
+        .downcast_ref::<crate::user_error::TransferFailure>()
+        .unwrap();
+    assert_eq!((boundary.offset, boundary.length), (0x1fc000, 16384));
+    let sense = error
+        .downcast_ref::<crate::platform::ScsiSenseError>()
+        .unwrap();
+    assert_eq!((sense.sense_key, sense.asc, sense.ascq), (5, 0x26, 2));
+}

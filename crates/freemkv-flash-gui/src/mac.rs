@@ -1243,7 +1243,12 @@ impl Controller {
         }
         if let Some(f) = &r.failure {
             let l = wrapping(mtm, &f.text, 820.0);
-            l.setTextColor(Some(&NSColor::systemRedColor()));
+            let color = match f.severity {
+                ui::IssueSeverity::Notice => NSColor::labelColor(),
+                ui::IssueSeverity::ActionRequired => NSColor::systemOrangeColor(),
+                ui::IssueSeverity::Error => NSColor::systemRedColor(),
+            };
+            l.setTextColor(Some(&color));
             l.setSelectable(true);
             results.addArrangedSubview(&l);
         }

@@ -3,6 +3,46 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.2] - 2026-10-25
+
+### freemkv Modify
+
+- Allocate injected MediaTek code outside integrity metadata, update signatures,
+  identity and drive-owned storage, even when those areas are erased. Preserve
+  integrity-table descriptors and unused slots in the structural audit. This
+  fixes the reproduced WH16NS58 1.V9 table corruption during modification.
+- Remove the separate Sign action. Modify signs and verifies generated firmware
+  automatically. The CLI command is now `modify INPUT [OUTPUT]`; existing
+  `create` scripts remain compatible.
+- Treat an already-enabled modification, including DE, as a successful no-op.
+  Other unavailable features remain listed as skipped.
+- Apply the independent classic MediaTek HRL change even when the raw-read
+  patch is unavailable, restoring consistent output for BE14NU40 1.01.
+
+### freemkv Flash
+
+- Reject overwritten MediaTek integrity-table metadata before flashing, even
+  when the stored region hashes match. Modify also rejects these damaged inputs.
+
+- Distinguish information, actions the user needs to take, and failures. Give
+  specific guidance for permissions, missing selections, unsupported operations
+  and known transfer failures without presenting routine restrictions as faults.
+- Include the exact firmware files used by an update in its diagnostic archive,
+  including the selected Current and Target files when available. Record missing
+  inputs explicitly and include filenames and SHA-256 hashes in notification
+  emails so reports can be reproduced.
+
+- Check for a newer stable release at startup. When confirmed, explain the
+  update and disable automated diagnostic submissions until updated; failed
+  checks allow normal use, and local logs remain available.
+- Show known transfer failure causes alongside the unverified-update warning,
+  without repeating the full error in the single-line status.
+
+- After a fully verified flash without an attachment, ask whether a diagnostic
+  report is needed and suggest confirming success on the website.
+- Require a nonblank description when submitting a diagnostic report, and include
+  the description in the maintainer notification email.
+
 ## [0.15.1] - Unreleased
 
 ### freemkv Flash

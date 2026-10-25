@@ -751,7 +751,12 @@ impl Shell {
             self.results.append(&widgets::fields(&r.fields));
         }
         if let Some(f) = &r.failure {
-            let l = widgets::label(&f.text, &["error"]);
+            let classes: &[&str] = match f.severity {
+                ui::IssueSeverity::Notice => &[],
+                ui::IssueSeverity::ActionRequired => &["warning"],
+                ui::IssueSeverity::Error => &["error"],
+            };
+            let l = widgets::label(&f.text, classes);
             l.set_selectable(true);
             self.results.append(&l);
         }

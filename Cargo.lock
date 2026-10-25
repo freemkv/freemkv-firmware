@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "anyhow",
  "mediatek-optical",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -1443,6 +1443,7 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "rfd",
+ "semver",
  "serde_json",
  "sha2",
  "ureq",
@@ -1455,12 +1456,13 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "anyhow",
  "clap",
  "freemkv-chipset",
  "freemkv-flash",
+ "mediatek-optical",
  "sha2",
  "tempfile",
  "thumb-asm",
@@ -1468,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "anyhow",
  "eframe",

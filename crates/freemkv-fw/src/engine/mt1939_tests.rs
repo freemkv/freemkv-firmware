@@ -591,6 +591,37 @@ fn classic_emit_sweep_over_corpus() {
     );
 }
 
+#[test]
+fn be14nu40_101_classic_create_and_modify_emit_identical_audited_images() {
+    let image = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    assert!(is_classic(image), "fixture must be classic MT1939");
+
+    let create = Mt1939Engine.create(image).expect("classic create");
+    let modify = Mt1939Engine.modify(image).expect("classic modify");
+    assert_eq!(
+        create.image, modify.image,
+        "classic create and modify must share every emitted detour and CMAC"
+    );
+
+    let rawread = modify
+        .levers
+        .iter()
+        .find(|lever| lever.id == LeverId::RawRead)
+        .expect("composite RawRead/HRL lever");
+    assert_eq!(rawread.outcome, LeverOutcome::Applied);
+    assert!(rawread.facts.iter().any(|(key, _)| *key == "hrl_stub_va"));
+    let audit = crate::engine::audit::audit_image(image, &modify);
+    assert!(
+        audit.ok(),
+        "structural audit failed:\n{}",
+        audit
+            .failures()
+            .map(|check| format!("  [{}] {}: {}", check.lever, check.what, check.detail))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
 /// Minimal recursive `.bin` walk (std-only).
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();

@@ -596,6 +596,7 @@ fn stamp_descriptor(img: &mut [u8], model: &str) {
 
 fn with_active_cmac_range(mut image: Vec<u8>, start: u32, end: u32) -> Vec<u8> {
     let off = 0x10400usize;
+    image[off..off + crate::cmac::ENTRY_COUNT * crate::cmac::ENTRY_SIZE].fill(0xff);
     image[off..off + 4].copy_from_slice(&1u32.to_le_bytes());
     image[off + 4..off + 8].copy_from_slice(&start.to_le_bytes());
     image[off + 8..off + 12].copy_from_slice(&end.to_le_bytes());
@@ -2815,6 +2816,8 @@ fn golden_pioneer_flash_bundle_failures() {
 /// was recorded at that tag; a line may differ only where
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
+    "M-TABLE-FIXTURE",
+    "FILE_VALIDATION",
     "F-OVERRIDE",
     "OPERATION_015",
     "PROTO",
@@ -2845,6 +2848,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// rotation decode-loop and startup/RAM-programmer handoff signatures, so only
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
+    "FILE_VALIDATION",
     "F-OVERRIDE",
     "OPERATION_015",
     "PROTO",
@@ -3078,6 +3082,11 @@ fn golden_parity_with_0_11_2() {
                 {
                     problems.push(format!(
                         "RECOVERY_TRAY is only valid for Pioneer Recovery execution goldens, got {file} :: {title}"
+                    ));
+                }
+                if reasons.iter().any(|r| r == "FILE_VALIDATION") && file != "check_file.txt" {
+                    problems.push(format!(
+                        "FILE_VALIDATION only applies to check_file.txt, got {file} :: {title}"
                     ));
                 }
                 if reasons.iter().any(|r| r == "P3")

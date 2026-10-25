@@ -77,3 +77,5 @@ pub mod localization;
 pub mod cli;
 /// Localizable customer guidance; diagnostic errors preserve their complete source chains.
 pub mod user_error;
+
+mod firmware_capture;

@@ -3,6 +3,21 @@ use super::super::{detect_receiver, fixture};
 use super::*;
 use crate::platform::MockScsiDevice;
 
+#[test]
+fn old_modified_table_corruption_is_refused_before_flash() {
+    let mut image =
+        include_bytes!("../../../../freemkv-fw/tests/fixtures/WH16NS58_OEM_1.V9.bin").to_vec();
+    let entry = crate::cmac::parse_table(&image)
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.enabled == u32::MAX)
+        .unwrap();
+    image[entry.entry_off..entry.entry_off + 4].copy_from_slice(&0x02000e41u32.to_le_bytes());
+    let image = crate::cmac::resign(&image).unwrap();
+    assert!(crate::cmac::verify(&image));
+    assert!(super::check_image(&image).is_err());
+}
+
 struct Drive {
     inner: MockScsiDevice,
     written: Vec<u8>,

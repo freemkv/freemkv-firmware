@@ -65,7 +65,7 @@ fn server_with_inspection(
             }
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
-            if headers.starts_with("PUT ") {
+            if headers.starts_with("PUT /requests/test-id/bundle ") {
                 inspect(&body);
                 use sha2::Digest;
                 let expected: String = sha2::Sha256::digest(&body)
@@ -79,7 +79,11 @@ fn server_with_inspection(
                 assert!(zip.by_name("events.jsonl").is_ok());
                 assert!(zip.by_name("manifest.json").is_ok());
             }
-            seen.push(headers);
+            if headers.starts_with("PUT /requests/test-id/description ") {
+                seen.push(format!("{headers}{}", String::from_utf8_lossy(&body)));
+            } else {
+                seen.push(headers);
+            }
             if let Some(control) = reply.cancel {
                 control.cancel();
             }
@@ -104,7 +108,12 @@ fn source() -> (BundleSource, std::path::PathBuf) {
         crate::support::random_id().unwrap()
     ));
     let journal = crate::support::Journal::open_at(dir.clone()).unwrap();
-    (journal.source(), dir)
+    (
+        journal
+            .source()
+            .with_description("Synthetic diagnostic context".into()),
+        dir,
+    )
 }
 fn created() -> Value {
     json!({"id":"test-id","poll_token":"poll-secret","approval_url":"http://localhost/approve"})
@@ -119,6 +128,7 @@ fn approval_pending_then_upload_notification_retry_returns_a_receipt() {
         reply(200, created()),
         reply(202, json!({})),
         reply(200, approved()),
+        reply(200, json!({"saved":true})),
         reply(503, json!({})),
         reply(200, json!({"report_id":"synthetic-report"})),
     ]);
@@ -148,15 +158,20 @@ fn approval_pending_then_upload_notification_retry_returns_a_receipt() {
     assert!(requests[1]
         .to_ascii_lowercase()
         .contains("authorization: bearer poll-secret"));
-    assert!(requests[3].starts_with("PUT /requests/test-id/bundle "));
+    assert!(requests[3].starts_with("PUT /requests/test-id/description "));
     assert!(requests[3]
         .to_ascii_lowercase()
         .contains("authorization: bearer upload-secret"));
-    assert!(requests[3]
+    assert!(requests[3].contains("Synthetic diagnostic context"));
+    assert!(requests[4].starts_with("PUT /requests/test-id/bundle "));
+    assert!(requests[4]
+        .to_ascii_lowercase()
+        .contains("authorization: bearer upload-secret"));
+    assert!(requests[4]
         .to_ascii_lowercase()
         .contains("x-content-sha256:"));
     assert_eq!(
-        requests[3], requests[4],
+        requests[4], requests[5],
         "notification retry preserves the exact request"
     );
     std::fs::remove_dir_all(dir).unwrap();
@@ -184,6 +199,7 @@ fn receipt_is_not_misreported_as_cancelled_when_upload_was_already_accepted() {
     let (base, server) = server(vec![
         reply(200, created()),
         reply(200, approved()),
+        reply(200, json!({"saved":true})),
         received,
     ]);
     let (source, dir) = source();
@@ -191,7 +207,7 @@ fn receipt_is_not_misreported_as_cancelled_when_upload_was_already_accepted() {
     assert!(control.cancelled());
     assert!(crate::localization::english(&receipt).contains("Diagnostic report sent"));
     assert!(crate::localization::english(&receipt).contains("accepted-before-cancel"));
-    assert_eq!(server.join().unwrap().len(), 3);
+    assert_eq!(server.join().unwrap().len(), 4);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -200,11 +216,16 @@ fn cancellation_during_an_unsuccessful_upload_prevents_retry() {
     let control = control();
     let mut failed = reply(503, json!({}));
     failed.cancel = Some(control.clone());
-    let (base, server) = server(vec![reply(200, created()), reply(200, approved()), failed]);
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(200, approved()),
+        reply(200, json!({"saved":true})),
+        failed,
+    ]);
     let (source, dir) = source();
     let error = submit_at(source, &control, &base, |_| Ok(()), |_| {}).unwrap_err();
     assert!(error.to_string().contains("cancelled"));
-    assert_eq!(server.join().unwrap().len(), 3);
+    assert_eq!(server.join().unwrap().len(), 4);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -325,11 +346,12 @@ fn production_submission_with_synthetic_history() {
 }
 
 #[test]
-fn backup_upload_receipt_describes_actual_bundle_and_blank_description() {
+fn backup_upload_receipt_describes_actual_bundle_and_required_description() {
     let (base, server) = server_with_inspection(
         vec![
             reply(200, created()),
             reply(200, approved()),
+            reply(200, json!({"saved":true})),
             reply(200, json!({"report_id":"backup-receipt"})),
         ],
         |body| {
@@ -337,7 +359,7 @@ fn backup_upload_receipt_describes_actual_bundle_and_blank_description() {
             let manifest: Value =
                 serde_json::from_reader(zip.by_name("manifest.json").unwrap()).unwrap();
             assert_eq!(manifest["artifact"]["kind"], "backup");
-            assert_eq!(manifest["description"], "");
+            assert_eq!(manifest["description"], "Synthetic diagnostic context");
             let mut bytes = Vec::new();
             zip.by_name("artifacts/backup.bin")
                 .unwrap()
@@ -357,7 +379,7 @@ fn backup_upload_receipt_describes_actual_bundle_and_blank_description() {
     let result = submit_at(source, &control(), &base, |_| Ok(()), |_| {}).unwrap();
     assert!(crate::localization::english(&result).contains("Diagnostic report and backup sent"));
     assert!(result.contains("backup-receipt"));
-    assert_eq!(server.join().unwrap().len(), 3);
+    assert_eq!(server.join().unwrap().len(), 4);
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -389,6 +411,7 @@ fn empty_server_receipt_is_not_submission_success() {
     let (base, server) = server(vec![
         reply(200, created()),
         reply(200, approved()),
+        reply(200, json!({"saved":true})),
         reply(200, json!({"report_id":""})),
     ]);
     let (source, dir) = source();
@@ -397,6 +420,6 @@ fn empty_server_receipt_is_not_submission_success() {
         result.is_err(),
         "empty receipt must not claim success: {result:?}"
     );
-    assert_eq!(server.join().unwrap().len(), 3);
+    assert_eq!(server.join().unwrap().len(), 4);
     std::fs::remove_dir_all(dir).unwrap();
 }

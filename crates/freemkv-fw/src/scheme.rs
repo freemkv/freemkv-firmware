@@ -93,6 +93,7 @@ impl IntegrityScheme for MtkCmac {
     }
 
     fn verify(&self, image: &[u8]) -> Result<Vec<RegionVerdict>> {
+        cmac::validate_flags(image)?;
         let verdicts = cmac::verify_detailed(image).map_err(|e| {
             anyhow!(e).context(freemkv_flash::user_error::IssueCode::FirmwareInvalid)
         })?;
@@ -110,6 +111,7 @@ impl IntegrityScheme for MtkCmac {
     }
 
     fn sign(&self, image: &[u8]) -> Result<(Vec<u8>, Vec<RegionChange>)> {
+        cmac::validate_flags(image)?;
         // Snapshot the active entries before signing so we can diff digests.
         let before = cmac::parse_table(image).map_err(|e| {
             anyhow!(e).context(freemkv_flash::user_error::IssueCode::FirmwareInvalid)

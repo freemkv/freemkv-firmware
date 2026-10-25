@@ -34,6 +34,8 @@ define_issue_codes! {
     DriveChanged => "errors.drive_changed",
     /// No live connection could be established.
     Connection => "errors.connection",
+    /// The operating system denied access to the optical device.
+    DriveAccess => "errors.drive_access",
     /// A prepared session cannot be reused or was lost.
     PreparationExpired => "errors.preparation_expired",
     /// A backup destination must be chosen.
@@ -50,6 +52,10 @@ define_issue_codes! {
     AlreadyModified => "errors.already_modified",
     /// This application cannot prepare the requested update from this firmware.
     UnsupportedFirmware => "errors.unsupported_firmware",
+    /// No safe authenticated code hole can hold the requested modifications.
+    FirmwareNoCodeSpace => "errors.firmware_no_code_space",
+    /// Firmware metadata or bytes are corrupt, rather than merely unsupported.
+    FirmwareCorrupt => "errors.firmware_corrupt",
     /// A known settings adaptation has not been validated for this transition.
     SettingsUnresolved => "errors.settings_unresolved",
     /// The firmware's hardware differs; no display identity was available.
@@ -129,6 +135,99 @@ pub fn read_only<T>(result: anyhow::Result<T>) -> anyhow::Result<T> {
     result.map_err(|error| error.context(NoFirmwareWrite))
 }
 
+/// Structured transfer boundary, retained independently of transport prose.
+#[derive(Debug)]
+pub(crate) struct TransferFailure {
+    pub offset: usize,
+    pub length: usize,
+}
+
+impl std::fmt::Display for TransferFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "firmware transfer stopped at byte {}, block length {}",
+            self.offset, self.length
+        )
+    }
+}
+impl std::error::Error for TransferFailure {}
+
+/// Presentation severity of a typed issue; expected limitations are not faults.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IssueSeverity {
+    /// Expected limitation or a cancelled request.
+    Notice,
+    /// The user can resolve a prerequisite or select a different input.
+    ActionRequired,
+    /// Failed operation, unexpected fault, or uncertain drive state.
+    Error,
+}
+
+/// Read stable message IDs, never classify severity from translated error prose.
+pub fn issue_severity(message: &str) -> IssueSeverity {
+    if let Some(encoded) = message.strip_prefix('\u{1e}') {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(encoded) {
+            let id = value["id"].as_str().unwrap_or("");
+            if id == "ui.join" {
+                return value["arguments"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|a| a[1].as_str())
+                    .map(issue_severity)
+                    .max()
+                    .unwrap_or(IssueSeverity::Error);
+            }
+            return issue_severity(id);
+        }
+    }
+    match message {
+        "errors.backup_restricted"
+        | "errors.drive_firmware_unconfirmed"
+        | "errors.unsupported_drive"
+        | "errors.unsupported_firmware"
+        | "errors.firmware_no_code_space"
+        | "errors.no_drive"
+        | "errors.no_firmware_write"
+        | "errors.update_blocked"
+        | "ui.cancelled_no_firmware_was_written"
+        | "status.operation_cancelled" => IssueSeverity::Notice,
+        "errors.drive_access"
+        | "errors.choose_drive"
+        | "errors.tray_open"
+        | "errors.disc_present"
+        | "errors.file_missing"
+        | "errors.file_exists"
+        | "errors.permission_denied"
+        | "errors.command_options"
+        | "errors.acknowledgement"
+        | "errors.backup_destination"
+        | "errors.backup_required"
+        | "errors.backup_confirmation_required"
+        | "errors.current_required"
+        | "errors.current_incomplete"
+        | "errors.current_invalid"
+        | "errors.current_mismatch"
+        | "errors.backup_mismatch"
+        | "errors.hardware_mismatch"
+        | "errors.incompatible_firmware"
+        | "errors.installed_firmware_mismatch"
+        | "errors.installed_kernel_mismatch"
+        | "errors.already_modified"
+        | "errors.boot_settings"
+        | "errors.firmware_invalid"
+        | "errors.firmware_corrupt"
+        | "errors.backup_partial"
+        | "errors.preparation_expired"
+        | "errors.drive_changed"
+        | "errors.startup_setting_restored"
+        | "errors.settings_unresolved"
+        | "recovery.family_override_unsupported" => IssueSeverity::ActionRequired,
+        _ => IssueSeverity::Error,
+    }
+}
+
 /// A stable UI message with data arguments; no diagnostic error text is exposed.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct UserError {
@@ -154,7 +253,7 @@ impl UserError {
     /// Add the backup investigation action without losing its cause or write evidence.
     /// Repeated callers do not duplicate guidance; uncertain updates remain unchanged.
     pub fn with_backup_guidance(self) -> Self {
-        if self.id == "errors.backup_dump_guidance"
+        if !matches!(self.id, "errors.backup_failed" | "errors.unexpected")
             || self.consequence != Some("errors.no_firmware_write")
         {
             return self;
@@ -172,13 +271,41 @@ impl UserError {
     fn classify(error: &anyhow::Error) -> Self {
         let mut arguments = Vec::new();
         let failure = error.downcast_ref::<UpdateFailure>();
-        let consequence = match failure {
-            Some(f) if f.impact() == UpdateImpact::Blocked => Some("errors.update_blocked"),
-            Some(_) => None,
-            None if error.is::<NoFirmwareWrite>() => Some("errors.no_firmware_write"),
-            None => None,
+        // Pioneer startup-setting migration may mutate a setting before any
+        // firmware-update command. That stage-specific evidence outranks a
+        // generic outer update wrapper, which can describe the wrong boundary.
+        let startup_setting_issue = error
+            .downcast_ref::<IssueCode>()
+            .filter(|issue| {
+                matches!(
+                    issue,
+                    IssueCode::StartupSettingRestored | IssueCode::StartupSettingUncertain
+                )
+            })
+            .filter(|_| {
+                failure.is_none_or(|failure| {
+                    matches!(
+                        failure.impact(),
+                        UpdateImpact::Blocked | UpdateImpact::EntryUncertain
+                    )
+                })
+            });
+        let consequence = match (failure, startup_setting_issue) {
+            (
+                Some(_),
+                Some(IssueCode::StartupSettingUncertain | IssueCode::StartupSettingRestored),
+            ) => None,
+            (Some(f), _) if f.impact() == UpdateImpact::Blocked => Some("errors.update_blocked"),
+            (Some(_), _) => None,
+            (None, _) if error.is::<NoFirmwareWrite>() => Some("errors.no_firmware_write"),
+            (None, _) => None,
         };
-        let id = if let Some(failure) = failure.filter(|f| f.impact() != UpdateImpact::Blocked) {
+        let mut id = if let Some(
+            issue @ (IssueCode::StartupSettingRestored | IssueCode::StartupSettingUncertain),
+        ) = startup_setting_issue
+        {
+            issue.message_id()
+        } else if let Some(failure) = failure.filter(|f| f.impact() != UpdateImpact::Blocked) {
             match failure.impact() {
                 UpdateImpact::Blocked => unreachable!("filtered above"),
                 UpdateImpact::EntryUncertain => "errors.update_not_started",
@@ -272,6 +399,40 @@ impl UserError {
         } else {
             "errors.unexpected"
         };
+        // Keep the safe disposition, but do not let it erase a known failure
+        // boundary. Never infer a cause from arbitrary diagnostic prose.
+        if failure.is_some_and(|f| {
+            matches!(
+                f.impact(),
+                UpdateImpact::EntryUncertain | UpdateImpact::PayloadUncertain
+            )
+        }) {
+            let sense = error.downcast_ref::<crate::platform::ScsiSenseError>();
+            let cause = if let Some(transfer) = error.downcast_ref::<TransferFailure>() {
+                Some(localization::message(
+                    if sense.is_some_and(|s| s.sense_key == 5 && s.asc == 0x26 && s.ascq == 2) {
+                        "errors.transfer_rejected"
+                    } else {
+                        "errors.transfer_stopped"
+                    },
+                    &[
+                        ("offset", transfer.offset.to_string()),
+                        ("length", transfer.length.to_string()),
+                    ],
+                ))
+            } else if sense.is_some_and(|s| s.sense_key == 4 && s.asc == 8 && s.ascq == 1) {
+                Some("errors.update_communication".into())
+            } else {
+                None
+            };
+            if let Some(cause) = cause {
+                arguments = vec![
+                    ("cause", cause),
+                    ("guidance", localization::message(id, &arguments)),
+                ];
+                id = "errors.update_cause";
+            }
+        }
         if let Some(evidence) = error.downcast_ref::<crate::backend::UpdateVerification>() {
             use crate::backend::ComponentVerification as V;
             let state = |value| {
@@ -339,6 +500,11 @@ impl UserError {
         }
     }
 
+    /// Keep the disposition severity together with nested no-write consequences.
+    pub fn severity(&self) -> IssueSeverity {
+        issue_severity(&self.encoded())
+    }
+
     /// Render guidance without changing the stored diagnostic evidence.
     pub fn render(&self, language: Language) -> String {
         localization::render(language, &self.encoded())
@@ -350,6 +516,112 @@ mod tests {
     use super::*;
 
     #[test]
+    fn expected_backup_restriction_is_a_notice_not_a_dump_request() {
+        let error = anyhow::Error::new(BackupReadRestricted)
+            .context(NoFirmwareWrite)
+            .context(BackupAttempt);
+        let issue = UserError::of(&error);
+        assert_eq!(issue.id, "errors.backup_restricted");
+        assert_eq!(issue.severity(), IssueSeverity::Notice);
+        assert!(!issue.render(Language::En).contains("send it to us"));
+    }
+
+    #[test]
+    fn write_uncertainty_cannot_be_demoted_by_an_expected_limitation() {
+        for progress in [
+            crate::backend::UpdateProgress::EntryAttempted,
+            crate::backend::UpdateProgress::PayloadAccepted,
+        ] {
+            let error = anyhow::Error::new(BackupReadRestricted).context(UpdateFailure {
+                phase: "test".into(),
+                write_started: true,
+                progress,
+                payload_bytes_accepted: Some(0),
+                temporary_firmware: false,
+                completed_stages: vec![],
+            });
+            assert_eq!(UserError::of(&error).severity(), IssueSeverity::Error);
+        }
+        assert_eq!(issue_severity("unknown.id"), IssueSeverity::Error);
+    }
+
+    #[test]
+    fn prerequisites_are_actionable_and_expected_limitations_are_not_red_errors() {
+        for code in [
+            IssueCode::DiscPresent,
+            IssueCode::TrayOpen,
+            IssueCode::ChooseDrive,
+            IssueCode::Acknowledgement,
+            IssueCode::CurrentIncomplete,
+            IssueCode::FirmwareInvalid,
+            IssueCode::BackupDestination,
+        ] {
+            let issue = UserError::of(&anyhow::Error::new(code).context(NoFirmwareWrite));
+            assert_eq!(issue.severity(), IssueSeverity::ActionRequired, "{code:?}");
+            assert_eq!(issue_severity(&issue.encoded()), issue.severity());
+        }
+        for code in [
+            IssueCode::UnsupportedDrive,
+            IssueCode::UnsupportedFirmware,
+            IssueCode::NoDrive,
+            IssueCode::FirmwareNotDetected,
+            IssueCode::Cancelled,
+        ] {
+            assert_eq!(
+                UserError::of(&anyhow::Error::new(code).context(NoFirmwareWrite)).severity(),
+                IssueSeverity::Notice,
+                "{code:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn reported_final_block_retains_rejection_and_uncertainty() {
+        let error = anyhow::Error::new(crate::platform::ScsiSenseError::new(
+            5,
+            0x26,
+            2,
+            "PRIVATE TRANSPORT DETAIL",
+        ))
+        .context(TransferFailure {
+            offset: 0x1fc000,
+            length: 16384,
+        })
+        .context(UpdateFailure {
+            phase: "firmware transfer".into(),
+            write_started: true,
+            progress: crate::backend::UpdateProgress::PayloadAccepted,
+            payload_bytes_accepted: Some(2080768),
+            temporary_firmware: false,
+            completed_stages: vec![],
+        });
+        let issue = UserError::of(&error);
+        for language in Language::ALL {
+            let text = issue.render(language);
+            assert!(text.contains("2080768") && text.contains("16384"));
+            assert!(text.contains(localization::get(language, "errors.update_uncertain")));
+            assert!(!text.contains("PRIVATE TRANSPORT DETAIL"));
+        }
+    }
+
+    #[test]
+    fn communication_failure_keeps_entry_disposition() {
+        let error = anyhow::Error::new(crate::platform::ScsiSenseError::new(4, 8, 1, "private"))
+            .context(UpdateFailure {
+                phase: "update entry".into(),
+                write_started: true,
+                progress: crate::backend::UpdateProgress::EntryAttempted,
+                payload_bytes_accepted: Some(0),
+                temporary_firmware: false,
+                completed_stages: vec![],
+            });
+        let text = UserError::of(&error).render(Language::En);
+        assert!(text.contains("communication failure"));
+        assert!(text.contains("no firmware data was sent"));
+        assert!(!text.contains("private"));
+    }
+
+    #[test]
     fn corrupt_input_has_actionable_guidance_in_every_language() {
         let error = anyhow::Error::new(crate::backend::CorruptFirmware {
             detail: "Normal tail cannot be reconstructed".into(),
@@ -359,7 +631,7 @@ mod tests {
         assert_eq!(guidance.id, "errors.firmware_corrupt");
         assert!(guidance
             .render(Language::En)
-            .contains("Download a fresh OEM copy"));
+            .contains("Download a fresh copy"));
         for language in Language::ALL {
             let rendered = guidance.render(language);
             assert!(!rendered.is_empty() && !rendered.contains("errors.firmware_corrupt"));
@@ -729,7 +1001,7 @@ mod legacy_guidance_tests {
             let error = anyhow::anyhow!(detail).context(IssueCode::AlreadyModified);
             let guidance = UserError::of(&error);
             assert_eq!(guidance.id, "errors.already_modified");
-            assert!(guidance.render(Language::En).contains("Choose an original OEM firmware file"));
+            assert!(guidance.render(Language::En).contains("Choose an original firmware file"));
             assert!(format!("{error:#}").contains(detail));
         }
     }
