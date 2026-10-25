@@ -43,6 +43,7 @@ jobs:
     if: ${{ !inputs.native_only }}
     permissions:
       contents: write
+      actions: read
     uses: ./.github/workflows/release.yml
     secrets: inherit
 
