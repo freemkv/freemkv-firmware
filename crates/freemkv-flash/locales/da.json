@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Denne opdatering skal ændre drevets indstillinger, men overførslen er ikke valideret. Vælg en opdatering med en valideret indstillingsoverførsel.",
     "errors.firmware_corrupt": "Denne firmwarefil er beskadiget eller ufuldstændig. Download en ny OEM-kopi, og prøv igen.",
-    "errors.startup_setting_restored": "Drevets oprindelige opstartsindstilling blev gendannet og bekræftet. Gem en diagnoserapport for at få hjælp, før du prøver igen.",
-    "errors.startup_setting_uncertain": "Drevets oprindelige opstartsindstilling kunne ikke gendannes eller bekræftes. Gem en diagnoserapport, og få drevet kontrolleret, før du prøver igen.",
+    "errors.startup_setting_restored": "Drevets oprindelige startindstilling blev gendannet og bekræftet. Firmwareopdateringskommandoen og firmwaredataene blev ikke sendt. Gem en diagnoserapport, hvis fejlen gentager sig.",
+    "errors.startup_setting_uncertain": "Drevets oprindelige startindstilling kunne ikke gendannes eller bekræftes. Firmwareopdateringskommandoen og firmwaredataene blev ikke sendt. Lad drevet være tilsluttet, gem en diagnoserapport, og få startindstillingen kontrolleret, før du prøver igen. Startindstillingen kan stadig være ændret.",
     "errors.backup_required": "Der kræves en komplet sikkerhedskopi af firmwaren på drevet før opdatering. Opret eller vælg en komplet sikkerhedskopi fra dette drev, og prøv igen.",
     "confirm.update_title": "Opdater dette drev?",
     "confirm.firmware": "Firmware: {filename}",

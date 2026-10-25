@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Aquesta actualització ha de canviar els paràmetres de la unitat, però la conversió no s’ha validat. Trieu una actualització amb una conversió validada.",
     "errors.firmware_corrupt": "Aquest fitxer de microprogramari està malmès o incomplet. Descarregueu-ne una còpia OEM nova i torneu-ho a provar.",
-    "errors.startup_setting_restored": "La configuració original d’inici de la unitat s’ha restaurat i verificat. Deseu un informe de diagnòstic per obtenir ajuda abans de tornar-ho a provar.",
-    "errors.startup_setting_uncertain": "No s’ha pogut restaurar o verificar la configuració original d’inici de la unitat. Deseu un informe de diagnòstic i feu revisar la unitat abans de tornar-ho a provar.",
+    "errors.startup_setting_restored": "La configuració d’inici original de la unitat s’ha restaurat i verificat. No s’han enviat l’ordre d’actualització del microprogramari ni les dades del microprogramari. Deseu un informe de diagnòstic si l’error es repeteix.",
+    "errors.startup_setting_uncertain": "No s’ha pogut restaurar ni verificar la configuració d’inici original de la unitat. No s’han enviat l’ordre d’actualització del microprogramari ni les dades del microprogramari. Manteniu la unitat connectada, deseu un informe de diagnòstic i feu revisar aquesta configuració abans de tornar-ho a provar. La configuració d’inici encara pot haver canviat.",
     "errors.backup_required": "Cal una còpia completa del microprogramari instal·lat en aquesta unitat abans d’actualitzar. Creeu o seleccioneu una còpia completa d’aquesta unitat i torneu-ho a provar.",
     "confirm.update_title": "Vols actualitzar aquesta unitat?",
     "confirm.firmware": "Microprogramari: {filename}",

@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Cette mise à jour doit modifier les paramètres du lecteur, mais cette conversion n’a pas été validée. Choisissez une mise à jour dont la conversion des paramètres a été validée.",
     "errors.firmware_corrupt": "Ce fichier de micrologiciel est corrompu ou incomplet. Téléchargez une nouvelle copie OEM et réessayez.",
-    "errors.startup_setting_restored": "Le réglage de démarrage initial du lecteur a été restauré et vérifié. Enregistrez un rapport de diagnostic pour obtenir de l’aide avant de réessayer.",
-    "errors.startup_setting_uncertain": "Le réglage de démarrage initial du lecteur n’a pas pu être restauré ou vérifié. Enregistrez un rapport de diagnostic et faites vérifier le lecteur avant de réessayer.",
+    "errors.startup_setting_restored": "Le réglage de démarrage initial du lecteur a été restauré et vérifié. La commande de mise à jour du micrologiciel et ses données n’ont pas été envoyées. Enregistrez un rapport de diagnostic si l’erreur se reproduit.",
+    "errors.startup_setting_uncertain": "Le réglage de démarrage initial du lecteur n’a pas pu être restauré ou vérifié. La commande de mise à jour du micrologiciel et ses données n’ont pas été envoyées. Laissez le lecteur connecté, enregistrez un rapport de diagnostic et faites vérifier ce réglage avant de réessayer. Le réglage de démarrage a néanmoins pu changer.",
     "errors.backup_required": "Une sauvegarde complète du micrologiciel installé sur ce lecteur est nécessaire avant la mise à jour. Créez ou sélectionnez une sauvegarde complète de ce lecteur, puis réessayez.",
     "confirm.update_title": "Mettre à jour ce lecteur ?",
     "confirm.firmware": "Micrologiciel : {filename}",

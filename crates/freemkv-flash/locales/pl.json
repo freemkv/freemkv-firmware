@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Ta aktualizacja musi zmienić ustawienia napędu, ale sposób konwersji nie został zweryfikowany. Wybierz aktualizację ze zweryfikowaną konwersją ustawień.",
     "errors.firmware_corrupt": "Ten plik oprogramowania układowego jest uszkodzony lub niekompletny. Pobierz nową kopię OEM i spróbuj ponownie.",
-    "errors.startup_setting_restored": "Oryginalne ustawienie uruchamiania napędu zostało przywrócone i zweryfikowane. Zapisz raport diagnostyczny, aby uzyskać pomoc przed ponowną próbą.",
-    "errors.startup_setting_uncertain": "Nie udało się przywrócić lub zweryfikować oryginalnego ustawienia uruchamiania napędu. Zapisz raport diagnostyczny i zleć sprawdzenie napędu przed ponowną próbą.",
+    "errors.startup_setting_restored": "Pierwotne ustawienie uruchamiania napędu zostało przywrócone i sprawdzone. Nie wysłano polecenia aktualizacji oprogramowania układowego ani jego danych. Zapisz raport diagnostyczny, jeśli błąd się powtórzy.",
+    "errors.startup_setting_uncertain": "Nie udało się przywrócić ani sprawdzić pierwotnego ustawienia uruchamiania napędu. Nie wysłano polecenia aktualizacji oprogramowania układowego ani jego danych. Pozostaw napęd podłączony, zapisz raport diagnostyczny i sprawdź to ustawienie przed ponowną próbą. Ustawienie uruchamiania mogło jednak ulec zmianie.",
     "errors.backup_required": "Przed aktualizacją wymagana jest pełna kopia zapasowa oprogramowania zainstalowanego w tym napędzie. Utwórz lub wybierz pełną kopię z tego napędu i spróbuj ponownie.",
     "confirm.update_title": "Zaktualizować ten napęd?",
     "confirm.firmware": "Oprogramowanie układowe: {filename}",

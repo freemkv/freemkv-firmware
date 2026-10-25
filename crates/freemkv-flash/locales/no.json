@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Denne oppdateringen må endre stasjonsinnstillinger, men denne konverteringen er ikke validert. Velg en oppdatering med en validert innstillingskonvertering.",
     "errors.firmware_corrupt": "Denne fastvarefilen er skadet eller ufullstendig. Last ned en ny OEM-kopi og prøv igjen.",
-    "errors.startup_setting_restored": "Stasjonens opprinnelige oppstartsinnstilling ble gjenopprettet og bekreftet. Lagre en diagnoserapport for å få hjelp før du prøver igjen.",
-    "errors.startup_setting_uncertain": "Stasjonens opprinnelige oppstartsinnstilling kunne ikke gjenopprettes eller bekreftes. Lagre en diagnoserapport, og få stasjonen kontrollert før du prøver igjen.",
+    "errors.startup_setting_restored": "Stasjonens opprinnelige oppstartsinnstilling ble gjenopprettet og bekreftet. Kommandoen for fastvareoppdatering og fastvaredataene ble ikke sendt. Lagre en diagnoserapport hvis feilen gjentar seg.",
+    "errors.startup_setting_uncertain": "Stasjonens opprinnelige oppstartsinnstilling kunne ikke gjenopprettes eller bekreftes. Kommandoen for fastvareoppdatering og fastvaredataene ble ikke sendt. La stasjonen være tilkoblet, lagre en diagnoserapport og få oppstartsinnstillingen kontrollert før du prøver igjen. Oppstartsinnstillingen kan likevel ha blitt endret.",
     "errors.backup_required": "Før oppdatering kreves en fullstendig sikkerhetskopi av fastvaren som er installert på denne stasjonen. Opprett eller velg en fullstendig sikkerhetskopi fra denne stasjonen, og prøv på nytt.",
     "confirm.update_title": "Oppdatere denne stasjonen?",
     "confirm.firmware": "Fastvare: {filename}",

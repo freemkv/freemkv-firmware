@@ -3,8 +3,8 @@
   "messages": {
     "errors.settings_unresolved": "Dieses Update muss Laufwerkeinstellungen ändern, aber diese Umstellung wurde nicht validiert. Wählen Sie ein Update mit einer validierten Einstellungsumstellung.",
     "errors.firmware_corrupt": "Diese Firmwaredatei ist beschädigt oder unvollständig. Laden Sie eine neue OEM-Kopie herunter und versuchen Sie es erneut.",
-    "errors.startup_setting_restored": "Die ursprüngliche Starteinstellung des Laufwerks wurde wiederhergestellt und überprüft. Speichern Sie einen Diagnosebericht, um vor einem erneuten Versuch Hilfe zu erhalten.",
-    "errors.startup_setting_uncertain": "Die ursprüngliche Starteinstellung des Laufwerks konnte nicht wiederhergestellt oder überprüft werden. Speichern Sie einen Diagnosebericht und lassen Sie das Laufwerk vor einem erneuten Versuch überprüfen.",
+    "errors.startup_setting_restored": "Die ursprüngliche Starteinstellung des Laufwerks wurde wiederhergestellt und überprüft. Der Firmware-Updatebefehl und die Firmwaredaten wurden nicht gesendet. Speichern Sie einen Diagnosebericht, falls der Fehler erneut auftritt.",
+    "errors.startup_setting_uncertain": "Die ursprüngliche Starteinstellung des Laufwerks konnte nicht wiederhergestellt oder überprüft werden. Der Firmware-Updatebefehl und die Firmwaredaten wurden nicht gesendet. Lassen Sie das Laufwerk angeschlossen, speichern Sie einen Diagnosebericht und lassen Sie die Starteinstellung überprüfen, bevor Sie es erneut versuchen. Die Starteinstellung könnte sich dennoch geändert haben.",
     "errors.backup_required": "Vor dem Update ist eine vollständige Sicherung der auf diesem Laufwerk installierten Firmware erforderlich. Erstellen oder wählen Sie eine vollständige Sicherung dieses Laufwerks und versuchen Sie es erneut.",
     "confirm.update_title": "Dieses Laufwerk aktualisieren?",
     "confirm.firmware": "Firmware: {filename}",

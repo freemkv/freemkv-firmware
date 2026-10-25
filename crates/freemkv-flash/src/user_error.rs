@@ -172,13 +172,41 @@ impl UserError {
     fn classify(error: &anyhow::Error) -> Self {
         let mut arguments = Vec::new();
         let failure = error.downcast_ref::<UpdateFailure>();
-        let consequence = match failure {
-            Some(f) if f.impact() == UpdateImpact::Blocked => Some("errors.update_blocked"),
-            Some(_) => None,
-            None if error.is::<NoFirmwareWrite>() => Some("errors.no_firmware_write"),
-            None => None,
+        // Pioneer startup-setting migration may mutate a setting before any
+        // firmware-update command. That stage-specific evidence outranks a
+        // generic outer update wrapper, which can describe the wrong boundary.
+        let startup_setting_issue = error
+            .downcast_ref::<IssueCode>()
+            .filter(|issue| {
+                matches!(
+                    issue,
+                    IssueCode::StartupSettingRestored | IssueCode::StartupSettingUncertain
+                )
+            })
+            .filter(|_| {
+                failure.map_or(true, |failure| {
+                    matches!(
+                        failure.impact(),
+                        UpdateImpact::Blocked | UpdateImpact::EntryUncertain
+                    )
+                })
+            });
+        let consequence = match (failure, startup_setting_issue) {
+            (
+                Some(_),
+                Some(IssueCode::StartupSettingUncertain | IssueCode::StartupSettingRestored),
+            ) => None,
+            (Some(f), _) if f.impact() == UpdateImpact::Blocked => Some("errors.update_blocked"),
+            (Some(_), _) => None,
+            (None, _) if error.is::<NoFirmwareWrite>() => Some("errors.no_firmware_write"),
+            (None, _) => None,
         };
-        let id = if let Some(failure) = failure.filter(|f| f.impact() != UpdateImpact::Blocked) {
+        let id = if let Some(
+            issue @ (IssueCode::StartupSettingRestored | IssueCode::StartupSettingUncertain),
+        ) = startup_setting_issue
+        {
+            issue.message_id()
+        } else if let Some(failure) = failure.filter(|f| f.impact() != UpdateImpact::Blocked) {
             match failure.impact() {
                 UpdateImpact::Blocked => unreachable!("filtered above"),
                 UpdateImpact::EntryUncertain => "errors.update_not_started",
