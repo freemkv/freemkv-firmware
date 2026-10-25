@@ -79,7 +79,7 @@
   },
   "unchanged_scope": [
     "No production UD02 movement converter",
-    "No live access to 10.1.7.13",
+    "No live drive access",
     "Existing 0x9F selection and single-word executor preserved"
   ],
   "superseding_design": "../../docs/design/0.15.1-hardware-and-settings.json",

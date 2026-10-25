@@ -6,7 +6,7 @@
     "transport": "in-memory"
   },
   "existing_startup_migration": {
-    "cwd": "/Users/matthew/Developer/pioneer-optical",
+    "cwd": "../pioneer-optical",
     "command": "cargo test --offline --features drive,envelope startup::migration:: -- --nocapture",
     "passed": 9,
     "failed": 0,
