@@ -196,7 +196,7 @@ All 72 pass structural/integrity audits and offline Flash admission against
 their respective original. Source hashes remain unchanged. The adjacent
 `mt1939-uhd-candidate-builds-20261026.json` records every output checksum and
 admission result. Research output files are held separately under
-`/Users/matthew/Developer/tmp/mt1939-uhd-research-20261026`, never in approved
+`Developer/tmp/mt1939-uhd-research-20261026`, never in approved
 hoard inputs or the website catalog.
 
 To reproduce from the workspace root, use absolute source/output paths:
