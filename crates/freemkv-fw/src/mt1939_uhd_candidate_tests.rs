@@ -231,9 +231,19 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
             part.bytes,
         ));
     }
+    let parameter = plan.parameter_candidate(image, flags)?;
+    let parameter_patch = parameter.hook.is_some();
+    if let Some(part) = parameter.hook {
+        parts.push((
+            "ParameterTable".to_string(),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
     ensure!(
-        parts.len() == 12,
-        "research probe requires all twelve reviewed components"
+        parts.len() == 15 + usize::from(parameter_patch),
+        "research probe is missing reviewed components"
     );
     let mut installed = Vec::new();
     for (role, site, original, bytes) in parts {
@@ -304,6 +314,7 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
         "input_sha256":format!("{:x}",Sha256::digest(image)),
         "output_sha256":format!("{:x}",Sha256::digest(&report.image)),
         "pending":plan.remaining_contracts(),"flag_base":flags,"installed":installed,
+        "parameter_profile":format!("{:?}",parameter.contract.variant),
         "base_structural_audit":"passed","component_branches_and_bytes":"passed",
         "integrity":"passed","offline_flash_admission":"passed"});
     Ok((report.image, record))
@@ -316,7 +327,7 @@ fn classic_di_probe_places_signs_and_admits_without_promoting_standard_support()
     let (probe, record) = di_routing_probe(image).unwrap();
     assert_ne!(probe.as_slice(), image);
     assert_eq!(record["ready_for_hardware_test"], false);
-    assert_eq!(record["installed"].as_array().unwrap().len(), 12);
+    assert_eq!(record["installed"].as_array().unwrap().len(), 16);
     assert_eq!(image.as_slice(), before.as_slice());
     let (_, support) = crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
     assert!(!support.supports(BootFeature::Unrestricted));

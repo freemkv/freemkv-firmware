@@ -145,18 +145,61 @@ impl UhdConversionPlan {
                     original: image[site..site + selection.span()].to_vec(),
                     accept: selection.accept(),
                     reject: selection.reject(),
-                    bytes: emit_c7_selection(
+                    bytes: emit_c7_selection_relocated(
                         self.state,
                         flags,
                         selection.replay(),
                         selection.accept(),
                         selection.reject(),
+                        contract.relocated_load,
                     )?,
                     caller: contract.caller,
                 })
             })
             .collect()
     }
+    /// Preserve a state-independent lookup, or extend the positively bound
+    /// native media-table gate. Never copy another drive's calibration values.
+    pub fn parameter_candidate(&self, image: &[u8], flags: u32) -> Result<UhdParameterCandidate> {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        let contract =
+            mediatek_optical::image::analysis::ClassicParameter::detect(image, self.state)?;
+        let hook = if let Some(selection) = &contract.selection {
+            let site = selection.site();
+            Some(UhdRoutingCandidate {
+                area: contract.variant,
+                region_start: contract.entry + 2,
+                calculation_end: None,
+                site,
+                original: image[site..site + selection.span()].to_vec(),
+                accept: selection.accept(),
+                reject: selection.reject(),
+                bytes: emit_c7_selection(
+                    self.state,
+                    flags,
+                    selection.replay(),
+                    selection.accept(),
+                    selection.reject(),
+                )?,
+                caller: contract.caller.clone(),
+            })
+        } else {
+            None
+        };
+        Ok(UhdParameterCandidate { contract, hook })
+    }
+}
+/// Parameter lookup evidence and the optional source-bound detour.
+#[derive(Debug, Clone)]
+pub struct UhdParameterCandidate {
+    /// Native getter, rate list, coefficient table and setter relationship.
+    pub contract: mediatek_optical::image::analysis::ClassicParameter,
+    /// Absent when the complete native getter is state-independent.
+    pub hook:
+        Option<UhdRoutingCandidate<mediatek_optical::image::analysis::ClassicParameterVariant>>,
 }
 /// A candidate detour with exact replay bytes and both native continuations.
 /// Includes the native saved-link contract needed before installing a branch.
@@ -206,10 +249,11 @@ fn selection_case(
     state: u32,
     flag: u32,
     replay: &[u16],
-    accept: usize,
-    reject: usize,
+    continuations: (usize, usize),
     cv: Option<u32>,
+    relocated_load: Option<(u8, u32)>,
 ) {
+    let (accept, reject) = continuations;
     let oem = a.label();
     let no = a.label();
     a.push(8);
@@ -226,12 +270,18 @@ fn selection_case(
     for &op in replay {
         a.raw16(op);
     }
+    if let Some((register, value)) = relocated_load {
+        a.ldr_lit(u16::from(register), value);
+    }
     tail(a, accept);
     a.bind(oem);
     restore_cv(a, cv);
     a.pop(8);
     for &op in replay {
         a.raw16(op);
+    }
+    if let Some((register, value)) = relocated_load {
+        a.ldr_lit(u16::from(register), value);
     }
     a.bne(no);
     tail(a, accept);
@@ -253,6 +303,16 @@ fn emit_c7_selection(
     accept: usize,
     reject: usize,
 ) -> Result<Vec<u8>> {
+    emit_c7_selection_relocated(state, flags, replay, accept, reject, None)
+}
+fn emit_c7_selection_relocated(
+    state: u32,
+    flags: u32,
+    replay: &[u16],
+    accept: usize,
+    reject: usize,
+    relocated_load: Option<(u8, u32)>,
+) -> Result<Vec<u8>> {
     let mut a = Asm::new();
     let flag = flag_address(flags)?;
     if replay.first().is_some_and(|h| h & 0xffc0 == 0x4380) {
@@ -263,16 +323,24 @@ fn emit_c7_selection(
         let c1v1 = a.label();
         a.bvs(v1);
         a.bhs(c1v0);
-        selection_case(&mut a, state, flag, replay, accept, reject, Some(0));
+        selection_case(
+            &mut a,
+            state,
+            flag,
+            replay,
+            (accept, reject),
+            Some(0),
+            relocated_load,
+        );
         a.bind(c1v0);
         selection_case(
             &mut a,
             state,
             flag,
             replay,
-            accept,
-            reject,
+            (accept, reject),
             Some(0xffff_ffff),
+            relocated_load,
         );
         a.bind(v1);
         a.bhs(c1v1);
@@ -281,9 +349,9 @@ fn emit_c7_selection(
             state,
             flag,
             replay,
-            accept,
-            reject,
+            (accept, reject),
             Some(0x4000_0000),
+            relocated_load,
         );
         a.bind(c1v1);
         selection_case(
@@ -291,12 +359,20 @@ fn emit_c7_selection(
             state,
             flag,
             replay,
-            accept,
-            reject,
+            (accept, reject),
             Some(0x8000_0000),
+            relocated_load,
         );
     } else {
-        selection_case(&mut a, state, flag, replay, accept, reject, None);
+        selection_case(
+            &mut a,
+            state,
+            flag,
+            replay,
+            (accept, reject),
+            None,
+            relocated_load,
+        );
     }
     a.finish().map_err(Into::into)
 }
@@ -403,7 +479,7 @@ mod tests {
             );
         }
         let auxiliary = plan.auxiliary_candidates(CLASSIC, 0x0200f000).unwrap();
-        assert_eq!(auxiliary.len(), 6);
+        assert_eq!(auxiliary.len(), 9);
         for candidate in auxiliary {
             assert_eq!(
                 &CLASSIC[candidate.site..candidate.site + candidate.original.len()],
@@ -425,7 +501,13 @@ mod tests {
         let inventory: serde_json::Value =
             serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
         for row in inventory["images"].as_array().unwrap() {
-            let data = std::fs::read(hoard.join(row["path"].as_str().unwrap())).unwrap();
+            let hint = std::path::Path::new(row["path"].as_str().unwrap());
+            let tail: std::path::PathBuf = hint.iter().skip(1).collect();
+            let source = std::iter::once(hoard.join(hint))
+                .chain(["oem", "dump", "mk", "omni"].map(|b| hoard.join(b).join(&tail)))
+                .find(|p| p.is_file())
+                .expect("held corpus image");
+            let data = std::fs::read(source).unwrap();
             assert_eq!(
                 format!("{:x}", Sha256::digest(&data)),
                 row["sha256"].as_str().unwrap()
@@ -459,7 +541,7 @@ mod tests {
                 assert_eq!(plan.routing_candidates(&data, 0x0200f000).unwrap().len(), 5);
                 assert_eq!(
                     plan.auxiliary_candidates(&data, 0x0200f000).unwrap().len(),
-                    6
+                    7
                 );
             }
         }

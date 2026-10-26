@@ -75,6 +75,8 @@ def routing(data, evidence, states):
                     reached[:] = [None, None]
                     for cpu in (native, patched):
                         setup(cpu, evidence['state'], evidence['flag_base'], state, flag, cv)
+                        if candidate['area'] == 'ParameterTable':
+                            cpu.reg_write(reg.UC_ARM_REG_R0, 0)
                         try:
                             cpu.emu_start(candidate['region_start'] | 1, 0x200000, count=250)
                         except Exception as error:
@@ -88,6 +90,51 @@ def routing(data, evidence, states):
                     assert patched.mem_read(0x0420903c, 4) == native.mem_read(0x0420903c, 4)
                     assert patched.mem_read(0x0420b1b0, 4) == native.mem_read(0x0420b1b0, 4)
                     count += 1
+    return count
+
+
+def parameters(data, evidence):
+    """Execute complete native parameter getters through their real pop-PC.
+
+    Media-selected C7/On uses that image's native C8 coefficient entries while
+    retaining its six-entry C7 rate list. State-independent getters stay native.
+    """
+    profile = evidence['parameter_profile']
+    native, patched = machine(data), machine(data)
+    if profile['patch_required']:
+        candidate = next(c for c in evidence['candidates'] if c['area'] == 'ParameterTable')
+        site = candidate['site']
+        delta = STUB - site - 4
+        patched.mem_write(STUB, bytes(candidate['stub']))
+        patched.mem_write(site, struct.pack('<HH', 0xf000 | ((delta >> 12) & 0x7ff),
+                                           0xf800 | ((delta >> 1) & 0x7ff)))
+    done = 0x1fe000
+    for cpu in (native, patched):
+        cpu.hook_add(UC_HOOK_CODE, lambda c, at, _size, _user: c.emu_stop() if at == done else None)
+    rates = list(data[profile['rates']:profile['rates'] + 6])
+    assert len(rates) == 6 and all(rates) and rates == sorted(rates)
+    count = 0
+    for request in range(min(12, rates[-1]) + 1):
+        index = next(i for i, value in enumerate(rates) if value >= request)
+        for state in (0xc0, 0xc7, 0xc8, 0xcc, 0xe8, 0xf8):
+            for flag in (0, 1, 2, 255):
+                values = []
+                for cpu in (native, patched):
+                    setup(cpu, evidence['state'], evidence['flag_base'], state, flag, 3)
+                    cpu.reg_write(reg.UC_ARM_REG_R0, request)
+                    cpu.reg_write(reg.UC_ARM_REG_LR, done | 1)
+                    saved = [cpu.reg_read(r) for r in REGISTERS[4:8]]
+                    cpu.emu_start(profile['entry'] | 1, 0x200000, count=2000)
+                    assert cpu.reg_read(reg.UC_ARM_REG_PC) == done, (profile['variant'], state, flag, request)
+                    assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
+                    assert [cpu.reg_read(r) for r in REGISTERS[4:8]] == saved
+                    values.append(cpu.reg_read(reg.UC_ARM_REG_R0))
+                if profile['variant'] == 'StateIndependent' or (state == 0xc7 and flag == 1):
+                    expected = struct.unpack_from('<H', data, profile['coefficients'] + index * 2)[0]
+                else:
+                    expected = values[0]
+                assert values[1] == expected, (profile['variant'], state, flag, request, values, expected)
+                count += 1
     return count
 
 
@@ -242,6 +289,8 @@ def parent_returns(data, evidence):
                 if len(candidate['original']) == 6:
                     cpu.mem_write(site + 4, b'\xc0\x46')
                 setup(cpu, evidence['state'], evidence['flag_base'], 0xc7, flag, 0)
+                if candidate['area'] == 'ParameterTable':
+                    cpu.reg_write(reg.UC_ARM_REG_R0, 0)
                 saved = [0x60000000 + register * 0x101 for register in registers]
                 frame = b'\xa5' * locals_size + struct.pack('<' + 'I' * (len(saved) + 1), *saved, done | 1)
                 cpu.mem_write(0x03008000, frame)
@@ -250,13 +299,20 @@ def parent_returns(data, evidence):
                 cpu.emu_start(candidate['region_start'] | 1, 0x200000, count=250)
                 assert cpu.reg_read(reg.UC_ARM_REG_PC) in stops
                 assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
-                assert cpu.mem_read(0x03008000, caller['stack_bytes']) == frame
+                # Native regions may write their own local stack slots. Saved registers
+                # and the parent's return address must remain byte-for-byte intact.
+                # PUSH r1-r3 may reserve writable locals; only r4-r7 and
+                # saved LR are callee-preserved by the native ABI.
+                protected = [i for i, r in enumerate(registers) if r >= 4] + [len(registers)]
+                for index in protected:
+                    offset = locals_size + index * 4
+                    assert cpu.mem_read(0x03008000 + offset, 4) == frame[offset:offset + 4]
                 cpu.hook_del(handle)
                 cpu.hook_add(UC_HOOK_CODE, lambda c, at, _s, _u: c.emu_stop() if at == done else None)
                 cpu.emu_start(epilogue | 1, 0x200000, count=4)
                 assert cpu.reg_read(reg.UC_ARM_REG_PC) == done
                 assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000 + caller['stack_bytes']
-                assert [cpu.reg_read(REGISTERS[i]) for i in registers] == saved
+                assert [cpu.reg_read(REGISTERS[r]) for r in registers if r >= 4] == [value for r, value in zip(registers, saved) if r >= 4]
                 count += 1
     return count
 
@@ -291,6 +347,68 @@ def helpers(data, evidence):
     return count
 
 
+def di_mode(data, evidence):
+    candidate = next(c for c in evidence['candidates'] if c['area'] == 'DiMode')
+    start, site = candidate['region_start'], candidate['site']
+    # Stop after the native STRB and before its hardware programming call.
+    end = start + 28
+    load_at = site + 2
+    op = struct.unpack_from('<H', data, load_at)[0]
+    pool = ((load_at + 4) & ~3) + (op & 255) * 4
+    destination = struct.unpack_from('<I', data, pool)[0]
+    cpu = machine(data)
+    cpu.mem_write(STUB, bytes(candidate['stub']))
+    delta = STUB - site - 4
+    cpu.mem_write(site, struct.pack('<HHH', 0xf000 | ((delta >> 12) & 0x7ff), 0xf800 | ((delta >> 1) & 0x7ff), 0x46c0))
+    cpu.hook_add(UC_HOOK_CODE, lambda c, at, _size, _user: c.emu_stop() if at == end else None)
+    count = 0
+    for state in range(256):
+        for flag in (0, 1, 2, 255):
+            setup(cpu, evidence['state'], evidence['flag_base'], state, flag, 0)
+            cpu.mem_write(destination, b'\xa5')
+            cpu.emu_start(start | 1, 0x200000, count=250)
+            expected = 0x15 if state & 0xcc == 0xcc else 0x1c if state & 0xc8 == 0xc8 or (state == 0xc7 and flag == 1) else 7
+            assert cpu.reg_read(reg.UC_ARM_REG_PC) == end
+            assert cpu.mem_read(destination, 1)[0] == expected, (state, flag)
+            count += 1
+    return count
+
+
+def read_boundary(data, evidence):
+    candidate = next(c for c in evidence['candidates'] if c['area'] == 'ReadBoundary')
+    start, site = candidate['region_start'], candidate['site']
+    cpu = machine(data)
+    cpu.mem_write(STUB, bytes(candidate['stub']))
+    delta = STUB - site - 4
+    cpu.mem_write(site, struct.pack('<HH', 0xf000 | ((delta >> 12) & 0x7ff), 0xf800 | ((delta >> 1) & 0x7ff)))
+    end = start + 108
+    cpu.hook_add(UC_HOOK_CODE, lambda c, at, _size, _user: c.emu_stop() if at == end else None)
+    cells = []
+    for offset in (14, 34, 58):
+        at = start + offset
+        op = struct.unpack_from('<H', data, at)[0]
+        assert op & 0xff00 == 0x4a00
+        cells.append(struct.unpack_from('<I', data, ((at + 4) & ~3) + (op & 255) * 4)[0])
+    count = 0
+    for boundaries in ((100, 200, 300), (1000, 2000, 3000)):
+        for request in (0, 32, *boundaries, *(b + 1 for b in boundaries)):
+            for state in (0xc7, 0xc8, 0xcc):
+                setup(cpu, evidence['state'], evidence['flag_base'], state, 1, 0)
+                for cell, value in zip(cells, boundaries):
+                    cpu.mem_write(cell, struct.pack('<I', value))
+                cpu.reg_write(reg.UC_ARM_REG_R0, (request - 32) & 0xffffffff)
+                cpu.emu_start(start | 1, 0x200000, count=250)
+                expected = request
+                for boundary, maximum in zip(boundaries, (3 << 26, 1 << 27, 1 << 26)):
+                    if request == boundary + 1:
+                        expected = maximum - boundary - 1
+                        break
+                assert cpu.reg_read(reg.UC_ARM_REG_PC) == end
+                assert struct.unpack('<I', cpu.mem_read(0x03008004, 4))[0] == expected
+                count += 1
+    return count
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--builder', type=Path, required=True)
@@ -310,12 +428,15 @@ def main():
             data = source.read_bytes()
             assert hashlib.sha256(data).hexdigest() == row['sha256']
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
-            assert evidence['pending'] and len(evidence['candidates']) == 11
+            assert evidence['pending'] and len(evidence['candidates']) == 14 + int(evidence['parameter_profile']['patch_required'])
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
             arithmetic_cases = calculations(data, evidence)
+            parameter_cases = parameters(data, evidence)
+            mode_cases = di_mode(data, evidence)
+            boundary_cases = read_boundary(data, evidence)
             di_cases = di_entry(data, evidence)
             parent_cases = parent_returns(data, evidence)
-            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
+            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
             print(f"{row['sha256'][:12]}: {cases} native-versus-emitted cases passed", flush=True)
         if args.output:
             args.output.write_text(json.dumps({'policy':'research stubs only; no conversion enabled',
@@ -324,14 +445,17 @@ def main():
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
     assert evidence['pending'], 'research components must not enable standard conversion'
-    assert len(evidence['candidates']) == 11
+    assert len(evidence['candidates']) == 14 + int(evidence['parameter_profile']['patch_required'])
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
     arithmetic_cases = calculations(data, evidence)
+    parameter_cases = parameters(data, evidence)
+    mode_cases = di_mode(data, evidence)
+    boundary_cases = read_boundary(data, evidence)
     di_cases = di_entry(data, evidence)
     parent_cases = parent_returns(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
 
 
 if __name__ == '__main__':

@@ -46,6 +46,12 @@ fn main() -> anyhow::Result<()> {
                     .iter()
                     .map(|c| routing_evidence(c, None)),
             );
+            let parameter = plan.parameter_candidate(&image, flags)?;
+            if let Some(hook) = &parameter.hook {
+                let mut record = routing_evidence(hook, Some(parameter.contract.lookup));
+                record["area"] = serde_json::json!("ParameterTable");
+                records.push(record);
+            }
             let di = freemkv_fw::engine::mtk_uhd::di_prevalidation_candidate(&image, flags).ok();
             println!(
                 "{}",
@@ -53,6 +59,13 @@ fn main() -> anyhow::Result<()> {
                     "policy":"research component emission only; no image is written or UHD capability enabled",
                     "state":plan.state_address(), "flag_base":flags,
                     "pending":plan.remaining_contracts(),
+                    "parameter_profile":{
+                        "variant":format!("{:?}",parameter.contract.variant),
+                        "entry":parameter.contract.entry,"lookup":parameter.contract.lookup,
+                        "rates":parameter.contract.rates,"coefficients":parameter.contract.coefficients,
+                        "oem_coefficients":parameter.contract.oem_coefficients,
+                        "patch_required":parameter.hook.is_some(),
+                    },
                     "di_recognition":emit_di_recognition(flags)?, "di_layers":emit_di_layers(flags)?,
                     "di_entry":di.as_ref().map(|d| serde_json::json!({
                         "entry":d.contract.entry,"epilogue":d.contract.epilogue,
