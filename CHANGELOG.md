@@ -7,6 +7,9 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Make native BD hooks read the shared Unrestricted runtime flag, matching UHD
+  and auth hooks. The retired BD storage slot no longer changes new hook behavior.
+
 - Implement all three auth-hook choices where native refusal is proven: OEM
   replays its decision, On allows access, and Off takes its refusal path.
   Preserve registers, stack and comparison flags; keep older partial records

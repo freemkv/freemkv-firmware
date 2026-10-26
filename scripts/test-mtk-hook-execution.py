@@ -45,6 +45,38 @@ def execute(image, site, deny, value, setting, value_register):
     return reached[0], cpu.reg_read(UC_ARM_REG_CPSR) & 0xF0000000
 
 
+
+def execute_bd(image, site, unrestricted, retired, media_class):
+    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    cpu.mem_map(0, 0x200000)
+    cpu.mem_write(0, image)
+    cpu.mem_map(0x02000000, 0x2000)
+    cpu.mem_map(0x03000000, 0x10000)
+    cpu.reg_write(UC_ARM_REG_CPSR, 0xA0000030)
+    registers = [getattr(arm_const, f'UC_ARM_REG_R{i}') for i in range(13)]
+    before = [0x76540000 + i * 0x101 for i in range(13)]
+    before[2] = 0x02001000
+    for register, value in zip(registers, before):
+        cpu.reg_write(register, value)
+    cpu.reg_write(UC_ARM_REG_SP, 0x03008000)
+    cpu.reg_write(UC_ARM_REG_LR, 0x12345679)
+    cpu.mem_write(0x02001007, bytes([media_class]))
+    cpu.mem_write(0x02000e43, bytes([unrestricted, retired]))
+    reached = []
+    def stop(machine, address, _size, _data):
+        if address == site + 4:
+            reached.append(address)
+            machine.emu_stop()
+    cpu.hook_add(UC_HOOK_CODE, stop)
+    cpu.emu_start(site | 1, 0x200000, count=100)
+    assert reached == [site + 4]
+    after = [cpu.reg_read(register) for register in registers]
+    assert after[0] == media_class
+    assert all(after[i] == before[i] for i in range(13) if i not in (0, 3))
+    assert cpu.reg_read(UC_ARM_REG_SP) == 0x03008000
+    return cpu.reg_read(UC_ARM_REG_CPSR) & 0xF0000000
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fw', required=True, type=Path)
@@ -70,6 +102,18 @@ def main():
             displacement = int.from_bytes(bytes([branch & 255]), 'little', signed=True)
             deny = site + 6 + displacement * 2
             modified = output.read_bytes()
+            if name == 'BU40N_OEM_1.00.bin':
+                bd_site = facts['bd_site']
+                for setting in (0, 1, 255):
+                    for retired in (0, 1, 255):
+                        for media_class in range(16):
+                            old_flags = execute_bd(original, bd_site, setting, retired, media_class)
+                            flags = execute_bd(modified, bd_site, setting, retired, media_class)
+                            if setting == 0:
+                                assert flags & 0x40000000 == 0, (setting, retired, media_class, 'Off must refuse')
+                            else:
+                                assert flags == old_flags, (setting, retired, media_class, 'retired flag altered native BD decision')
+                            cases += 1
             for setting in (0, 1, 255, 2):
                 for value in range(16):
                     old_target, old_flags = execute(original, site, deny, value, setting, value_register)
@@ -78,7 +122,7 @@ def main():
                     assert target == expected, (name, value, setting, hex(target), hex(expected))
                     assert flags == old_flags, (name, value, setting, 'CMP flags were not preserved')
                     cases += 1
-    print(f'PASS: {cases} WH/BU state/setting combinations; continuations, r0-r12, SP and CMP flags')
+    print(f'PASS: {cases} WH/BU auth and BD combinations; shared runtime flag, continuations, registers, SP and CMP flags')
 
 
 if __name__ == '__main__':

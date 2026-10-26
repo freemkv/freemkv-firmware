@@ -50,8 +50,8 @@ const EXPECT_HANDLER_HEX: &str =
 // and saved reload with standard/custom settings; offsets and covered CMACs move.
 // The three-way auth hook now shares its register-preserving body across BU/WH;
 // Off takes native refusal. Independent CPU tests cover all nibble/setting pairs.
-const EXPECT_CMAC_1: &str = "e149748ce784900432096c6d6e8a3947";
-const EXPECT_CMAC_15: &str = "6373f837720f214e797077a870d4760c";
+const EXPECT_CMAC_1: &str = "4f99f4614ba4cbb8b77404c02bfe3da3";
+const EXPECT_CMAC_15: &str = "41f93094192a868580512ce030d3c9f9";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -793,9 +793,15 @@ fn feature_flag_gating_is_reslotted() {
         !has(&bd, 0x2B02),
         "BD-refuse stub must NOT gate on the retired `cmp r3,#0x02` sentinel"
     );
-    #[allow(deprecated)]
-    let bd_flag = base + Feature::Bd as u32;
-    assert!(reads(&bd, bd_flag), "BD-refuse stub reads flag[Bd]");
+    let bd_flag = base + Feature::Unrestricted as u32;
+    assert!(
+        reads(&bd, bd_flag),
+        "BD-refuse stub reads the shared Unrestricted flag"
+    );
+    assert!(
+        !reads(&bd, base + 4),
+        "retired BD slot must not select behavior"
+    );
 
     // Region tri-state encodes all three canonical states: reads flag[Region], gates
     // on `cmp r3,#STATE_ON` (0x2B01, region-free) and `cmp r3,#STATE_OFF` (0x2B00,

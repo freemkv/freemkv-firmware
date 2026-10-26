@@ -2725,13 +2725,12 @@ impl Mt1959Engine {
     ///     (`cmp r0,#0xff`; class is never `0xff`) so the caller's `beq <accept>` is
     ///     NOT taken and control falls into the OEM deny block, which raises the
     ///     drive's own `6F` refusal sense — the drive REFUSES the BD disc.
-    #[allow(deprecated)] // BD-refuse stub reads the deprecated `Feature::Bd` slot; retirement to `Unrestricted` is deferred (would re-bless the golden KAT).
     pub(crate) fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let refuse = a.label();
         a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
-        a.ldr_lit(3, flag_base + abi::Feature::Bd as u32); // r3 = &flag[Bd]
-        a.ldrb_imm(3, 3, 0); // r3 = Bd flag byte
+        a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // shared runtime setting
+        a.ldrb_imm(3, 3, 0); // r3 = Unrestricted flag byte
         a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force BD refuse (0xFF passthrough / 0x01 on stay OEM; boot hook makes 0x00 unreachable at power-on)
         a.beq(refuse);
         a.cmp_imm(0, 2); // stealth: replay `cmp r0,#2` LAST so the caller's `beq` sees OEM flags

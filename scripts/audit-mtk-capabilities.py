@@ -28,7 +28,15 @@ identities=json.loads((root/'index/identities.json').read_text())['identities']
 paths={i['sha256']:i['path'] for identity in identities if identity['family']=='mediatek' for i in identity['images']}
 def query(r):
  p=root/paths[r['sha256']];assert digest(p)==r['sha256']
- q=subprocess.run([str(cli),'capabilities',str(p)],capture_output=True,text=True,check=True,timeout=180)
+ q=subprocess.run([str(cli),'capabilities',str(p)],capture_output=True,text=True,timeout=180)
+ if q.returncode != 0:
+  # The baseline's known malformed artifact is rejected before JSON reporting.
+  # Keep that actual command rejection distinct from a Modify capability record.
+  if r['result'] != 'invalid-input':
+   raise RuntimeError(f'Unexpected capability query rejection: {r["sha256"]}: {q.stderr}')
+  assert digest(p)==r['sha256'],'source changed during rejected query'
+  return {'sha256':r['sha256'],'path':paths[r['sha256']],'baseline':r,'capability':None,
+          'query_failure':{'returncode':q.returncode,'detail':'\n'.join(line for line in q.stderr.splitlines() if not line.startswith('Diagnostic log'))}}
  data=json.loads(q.stdout);assert data['input_sha256']==r['sha256'];assert digest(p)==r['sha256']
  result={'sha256':r['sha256'],'path':paths[r['sha256']],'baseline':r,'capability':data}
  if args.flash and data['status']=='supported':
@@ -48,5 +56,5 @@ assert digest(cli)==producer
 assert not args.flash or digest(args.flash)==flash_sha,'flasher changed during audit'
 out={'schema':1,'producer_sha256':producer,'flasher_sha256':flash_sha,'bucket':args.bucket,'scope':'exact-image Modify preview plus structural audit; optional actual builds and flasher gates; no physical validation','images':results}
 args.output.write_text(json.dumps(out,indent=2)+'\n')
-print('statuses',dict(collections.Counter(x['capability']['status'] for x in results)))
-print('unrestricted',dict(collections.Counter(str((x['capability'].get('report') or {}).get('boot_settings',{}).get('unrestricted')) for x in results)))
+print('statuses',dict(collections.Counter(x['capability']['status'] if x['capability'] else 'query-rejected' for x in results)))
+print('unrestricted',dict(collections.Counter(str(((x['capability'] or {}).get('report') or {}).get('boot_settings',{}).get('unrestricted')) for x in results)))
