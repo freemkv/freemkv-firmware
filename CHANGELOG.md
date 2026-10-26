@@ -22,6 +22,11 @@ Versions are independent of the freemkv ripping applications.
 - Query hash-bound capabilities through the real Modify preview and structural
   audit, including explicit unsupported results for publication tooling.
 - Execute hook state/register/stack contracts on an independent ARM CPU in CI.
+- Keep descriptor-pattern candidates separate from proven BD controls, avoiding
+  a refusal detour on an unrelated structure-response path.
+- Add a source-hashed MT1939 WH14NS40 investigation with native routing and
+  paired classifier CPU tests. Retain the existing alternate path in the
+  research trampoline; classic UHD remains unavailable pending complete proof.
 
 ### freemkv Flash
 

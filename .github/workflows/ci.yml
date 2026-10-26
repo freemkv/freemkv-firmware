@@ -175,6 +175,8 @@ jobs:
           "$RUNNER_TEMP/hook-cpu/bin/python" -m pip install --only-binary=:all: unicorn==2.1.4
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hook-execution.py --fw target/debug/freemkv-fw
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-runtime-execution.py --fw target/debug/freemkv-fw
+          cargo build -p freemkv-fw --example mtk_receiver_evidence
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-dispatch.py --candidate-builder target/debug/examples/mtk_receiver_evidence
 
   # cargo-deny — audits the RESOLVED graph (RUSTSEC advisories, licence
   # allow-list, source/ban hygiene) against the committed Cargo.lock + deny.toml.

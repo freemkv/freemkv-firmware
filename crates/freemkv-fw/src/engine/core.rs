@@ -422,9 +422,6 @@ pub(crate) const SETDISCMODE_SIG: &[(u16, u16)] = &[
     (0x1EE3, 0xFFFF), // subs r3,r4,#3     (mode-3 jump-table index)
 ];
 
-/// Validated descriptor grammar's offset to its native media-refusal block.
-pub(crate) const BD_GATE_VER_DENY_OFF: u32 = 0x40;
-
 /// Signature of the flash-resident **Host Revocation List (HRL) lookup** routine
 /// (`0x13550e` on BU40N 1.00; relocated per version — e.g. `0x13569a` on BU40N
 /// 1.02 / BU50N, `0x134cca` on WH16NS60, `0x138e9a` on BE16NU50 — all
@@ -2787,114 +2784,20 @@ impl Mt1959Engine {
         a.finish().map_err(anyhow::Error::from)
     }
 
-    /// Newer-codegen sibling of [`Self::build_bd_stub`] — the `Feature::Bd` BD-refuse
-    /// trampoline for the descriptor-classifier media gate (`MediaGateVariant::Descriptor`).
-    /// Entered by a `bl` that replaces `cmp r2,#0; sub sp,#imm` (the 4 bytes at the
-    /// gate's `anchor+6`). On entry `r2 = disc mode` (from the gate's own `ldrb
-    /// r2,[r1]`, undisturbed by a `bl`), `sp` is the caller's frame *before* its own
-    /// `sub` (which we replay), and `lr = anchor+10` (the OEM `bne <mode-not-0>`,
-    /// which the gate reaches for every disc mode). `subsp_hw` is the exact OEM
-    /// `sub sp,#imm` halfword (frame size varies per image); `deny_va` is the OEM
-    /// `6F/05` media deny at `anchor+0x40`.
-    ///
-    /// # Register / frame contract
-    /// The stub uses `r3` as scratch (loaded flag pointer, then the deny target) and
-    /// preserves the OEM `r3` across a `push {r3}`/`pop {r3}` pair — `r3` is live on
-    /// the `mode != 0` continuation (`adds r2,r2,r3`), so it must survive the stealth
-    /// return; it is dead on the deny path. `r0`/`r1`/`r2`/`r5` are untouched, so both
-    /// OEM continuations see their exact inputs. The replayed `sub sp,#imm` leaves
-    /// `sp` in the same state the OEM instruction would, so the stealth return to
-    /// `anchor+10` and the deny block's own `add sp,#imm` both balance. `lr` is
-    /// caller-saved (the function returns via its own `pop {…,pc}`).
-    ///
-    /// `flag[Bd]` tri-state at this site:
-    ///   * `!= STATE_OFF` (`0xFF` passthrough / `0x01` on): pop `r3`, replay
-    ///     `cmp r2,#0` and `bx lr` — the caller's `bne` sees the exact OEM `Z` flag,
-    ///     so disc acceptance is byte-behaviour-identical to OEM. Inert (stealth).
-    ///   * `== STATE_OFF` (`0x00`) **and** `r2 == 0` (disc mode-0 = BD): jump to the
-    ///     OEM `6F/05` deny at `deny_va` — the drive REFUSES the BD disc using its own
-    ///     refusal sense. Any other mode (`r2 != 0`, e.g. UHD/AACS-2.0 mode-1) takes
-    ///     the stealth path, so the UHD arm is never affected.
-    #[allow(deprecated)] // BD-refuse stub reads the deprecated `Feature::Bd` slot; retirement to `Unrestricted` is deferred (would re-bless the golden KAT).
-    pub(crate) fn build_bd_stub_ver(
-        &self,
-        flag_base: u32,
-        subsp_hw: u16,
-        deny_va: u32,
-    ) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
-        let stealth = a.label();
-        a.raw16(subsp_hw); // replay: sub sp,#imm  (sp now matches OEM state at return)
-        a.push(0x0008); // push {r3}   (preserve OEM r3 — live on the mode!=0 continuation)
-        a.ldr_lit(3, flag_base + abi::Feature::Bd as u32); // r3 = &flag[Bd]
-        a.ldrb_imm(3, 3, 0); // r3 = Bd flag byte
-        a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force BD refuse
-        a.bne(stealth); // 0xFF/0x01 -> stealth (byte-identical to OEM)
-        a.cmp_imm(2, 0); // mode == 0 (BD)?
-        a.bne(stealth); // mode != 0 (UHD/other) -> stealth (never touch the non-BD arm)
-        a.pop(0x0008); // BD & OFF: restore r3, sp back to sub-imm
-        a.ldr_lit(3, deny_va | 1); // r3 = &OEM 6F/05 deny (thumb)
-        a.bx(3); // -> deny (drive refuses the BD disc)
-        a.bind(stealth);
-        a.pop(0x0008); // restore r3, sp = sub-imm
-        a.cmp_imm(2, 0); // re-establish Z=(mode==0) for the OEM `bne` at anchor+10
-        a.bx(14); // bx lr -> anchor+10 (OEM continuation)
-        a.finish().map_err(anyhow::Error::from)
-    }
-
-    /// Resolve the `Feature::Bd` media-gate refuse detour, dispatching on the shape
-    /// [`Self::find_bd_gate`] resolved (original-first). Returns `(detour_site,
-    /// stub_bytes)` where a `bl` to the stub is written at `detour_site`. Both shapes
-    /// verify their exact OEM bytes before returning, so a mis-anchored match refuses
-    /// rather than patches.
-    ///
-    /// * explicit REPORT KEY gate (`MediaGateVariant::Explicit`, anchor head `cmp r0,#1`): the
-    ///   mode-0 class check `ldrb r0,[r2,#7]; cmp r0,#2` at `anchor+16` ->
-    ///   [`Self::build_bd_stub`].
-    /// * descriptor-classifier gate (`MediaGateVariant::Descriptor`, anchor head `ldrb r2,[r1]`):
-    ///   the mode==0 test `cmp r2,#0; sub sp,#imm` at `anchor+6` ->
-    ///   [`Self::build_bd_stub_ver`], jumping to the deny at `anchor+0x40` on refuse.
+    /// Emit a native BD-control detour only from a role-validated contract.
+    /// Descriptor-pattern candidates remain discoverable for analysis, but they
+    /// do not authorize a BD hook on a different structure-response path.
     pub(crate) fn bd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
-        let anchor = self.find_bd_gate(image)? as usize;
-        // find_masked_all only guarantees the signature span (<=18 bytes) is in
-        // bounds; both arms index further (up to the ver-gate deny head at
-        // anchor+0x40). Refuse a match too close to EOF rather than panic.
-        if anchor + (BD_GATE_VER_DENY_OFF as usize) + 2 > image.len() {
-            bail!("BD gate matched within 0x42 of image end (0x{anchor:x}) — truncated image, refusing");
-        }
-        let head = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
-        if head == 0x2801 {
-            // Explicit REPORT KEY gate: mode-0 class check at anchor+16.
-            let site = anchor + 16;
-            let ldrb = u16::from_le_bytes([image[site], image[site + 1]]);
-            let cmp = u16::from_le_bytes([image[site + 2], image[site + 3]]);
-            if ldrb != 0x79D0 || cmp != 0x2802 {
-                bail!(
-                    "BD gate mode-0 class check (ldrb r0,[r2,#7]; cmp r0,#2) not at 0x{site:x} \
-                     (got 0x{ldrb:04x} 0x{cmp:04x})"
-                );
-            }
-            Ok((site, self.build_bd_stub(flag_base)?))
-        } else {
-            // Descriptor-classifier gate: mode==0 test `cmp r2,#0; sub sp,#imm` at
-            // anchor+6; the OEM 6F/05 deny is at anchor+0x40. Verify all three
-            // landmarks (mode test, frame reserve, deny head) before patching.
-            let site = anchor + 6;
-            let cmp = u16::from_le_bytes([image[site], image[site + 1]]);
-            let subsp = u16::from_le_bytes([image[site + 2], image[site + 3]]);
-            let deny_off = anchor + BD_GATE_VER_DENY_OFF as usize;
-            let deny_head = u16::from_le_bytes([image[deny_off], image[deny_off + 1]]);
-            if cmp != 0x2A00 || (subsp & 0xFF80) != 0xB080 || deny_head != 0x2201 {
-                bail!(
-                    "BD (ver) gate landmarks off at anchor 0x{anchor:x} \
-                     (cmp@+6=0x{cmp:04x} sub@+8=0x{subsp:04x} deny@+0x40=0x{deny_head:04x})"
-                );
-            }
-            Ok((
-                site,
-                self.build_bd_stub_ver(flag_base, subsp, deny_off as u32)?,
-            ))
-        }
+        let contract = mediatek_optical::image::analysis::MediaGate::inspect(image)
+            .map_err(|error| anyhow!("BD layout: {error}"))?;
+        let site = contract.bd_site().ok_or_else(|| anyhow!(
+            "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+        ))?;
+        ensure!(
+            image.get(site..site + 4) == Some(&[0xd0, 0x79, 0x02, 0x28]),
+            "BD displaced instructions do not match the selected contract"
+        );
+        Ok((site, self.build_bd_stub(flag_base)?))
     }
 
     /// Resolve the `Feature::Unrestricted` media-gate arm on the SAME AACS accept gate the BD
@@ -2911,28 +2814,15 @@ impl Mt1959Engine {
     /// fixed offset, so UHD is UNAVAILABLE there — this returns an `Err` (the caller
     /// leaves `uhd_stub_va = 0`, feature not applied), never a guessed site.
     pub(crate) fn uhd_gate_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
-        let anchor = self.find_bd_gate(image)? as usize;
-        if anchor + (BD_GATE_VER_DENY_OFF as usize) + 2 > image.len() {
-            bail!("media gate matched within 0x42 of image end (0x{anchor:x}) — truncated image, refusing");
-        }
-        let head = u16::from_le_bytes([image[anchor], image[anchor + 1]]);
-        if head != 0x2801 {
-            bail!(
-                "UHD media-gate arm unavailable on this codegen (anchor 0x{anchor:x} head \
-                 0x{head:04x} != explicit REPORT KEY gate 0x2801) — leaving UHD unwired"
-            );
-        }
-        // Explicit REPORT KEY gate: UHD class-3 check `ldrb r0,[r2,#7]; cmp r0,#3` at
-        // anchor+4; the stub returns to the paired `bne <deny>` at anchor+8.
-        let site = anchor + 4;
-        let ldrb = u16::from_le_bytes([image[site], image[site + 1]]);
-        let cmp = u16::from_le_bytes([image[site + 2], image[site + 3]]);
-        if ldrb != 0x79D0 || cmp != 0x2803 {
-            bail!(
-                "UHD gate class-3 check (ldrb r0,[r2,#7]; cmp r0,#3) not at 0x{site:x} \
-                 (got 0x{ldrb:04x} 0x{cmp:04x})"
-            );
-        }
+        let contract = mediatek_optical::image::analysis::MediaGate::inspect(image)
+            .map_err(|error| anyhow!("UHD layout: {error}"))?;
+        let site = contract.uhd_site().ok_or_else(|| {
+            anyhow!("no role-validated native UHD discriminator in this instruction layout")
+        })?;
+        ensure!(
+            image.get(site..site + 4) == Some(&[0xd0, 0x79, 0x03, 0x28]),
+            "UHD displaced instructions do not match the selected contract"
+        );
         Ok((site, self.build_uhd_gate_stub(flag_base)?))
     }
 
@@ -3011,9 +2901,20 @@ impl Mt1959Engine {
         deny_va: u32,
         value_register: u8,
     ) -> Result<Vec<u8>> {
+        self.build_authcell_widen_scoped_stub(flag_base, deny_va, value_register, None)
+    }
+
+    fn build_authcell_widen_scoped_stub(
+        &self,
+        flag_base: u32,
+        deny_va: u32,
+        value_register: u8,
+        minimum_class: Option<u8>,
+    ) -> Result<Vec<u8>> {
         ensure!(value_register <= 1, "unsupported auth-cell register");
         let mut a = Asm::new();
         let widen = a.label();
+        let original_comparison = a.label();
         let deny = a.label();
         a.push(0x0008);
         a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32);
@@ -3021,11 +2922,16 @@ impl Mt1959Engine {
         a.cmp_imm(3, abi::STATE_ON);
         a.beq(widen);
         a.pop(0x0008);
+        a.bind(original_comparison);
         a.cmp_imm(value_register.into(), 0xC);
         a.bne(deny);
         a.bx(14);
         a.bind(widen);
         a.pop(0x0008);
+        if let Some(minimum) = minimum_class {
+            a.cmp_imm(value_register.into(), minimum);
+            a.blo(original_comparison);
+        }
         a.cmp_imm(value_register.into(), 0xC);
         a.bx(14);
         a.bind(deny);
@@ -3038,11 +2944,7 @@ impl Mt1959Engine {
 
     /// Select the state-band implementation from the shared OEM VID-success
     /// contract. Its role and continuations are established before any emission.
-    pub(crate) fn auth_cell_widen_detour(
-        &self,
-        image: &[u8],
-        flag_base: u32,
-    ) -> Result<(usize, Vec<u8>)> {
+    pub fn auth_cell_widen_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
         use mediatek_optical::image::analysis::{AuthCell, AuthCellVariant};
         let contract = AuthCell::detect(image).map_err(|e| anyhow!("auth-cell layout: {e}"))?;
         let bytes = match contract.variant() {
@@ -3054,6 +2956,17 @@ impl Mt1959Engine {
             }
             AuthCellVariant::R0StateR0 | AuthCellVariant::R0StateR5 => {
                 self.build_authcell_widen_value_stub(flag_base, contract.deny() as u32, 0)?
+            }
+            AuthCellVariant::R0StateR1Alternate => {
+                // Research candidate only: retain the separate lower-nibble
+                // implementation, including nibble 4. No classic feature flag
+                // is advertised by this low-level emitter.
+                self.build_authcell_widen_scoped_stub(
+                    flag_base,
+                    contract.deny() as u32,
+                    0,
+                    Some(12),
+                )?
             }
         };
         Ok((contract.site(), bytes))

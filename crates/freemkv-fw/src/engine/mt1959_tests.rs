@@ -978,13 +978,29 @@ fn reported_wh16ns58_v9_build_installs_raw_read_inside_signed_flash() {
     let raw = lever(&report, LeverId::RawRead);
     assert_eq!(raw.outcome, LeverOutcome::Applied);
     assert!(support.has_boot());
-    let boundary_stub = fact(raw, "bd_stub_va").unwrap();
+    assert!(
+        fact(raw, "bd_stub_va").is_none(),
+        "unproven descriptor role must not be installed"
+    );
+    assert!(raw
+        .hooks
+        .iter()
+        .any(|hook| hook.id == "bd-native" && hook.reason.is_some()));
+    let boundary_stub = fact(raw, "auth_cell_stub_va").unwrap();
+    let contract = mediatek_optical::image::analysis::AuthCell::detect(original).unwrap();
+    let bytes = Mt1959Engine
+        .build_authcell_widen_value_stub(FLAG_TABLE_BASE, contract.deny() as u32, 1)
+        .unwrap();
+    assert_eq!(
+        &report.image[boundary_stub as usize..boundary_stub as usize + bytes.len()],
+        bytes
+    );
     assert_ne!(boundary_stub, 0);
     assert!(boundary_stub as usize >= cmac::TABLE_OFFSET + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE);
     let table = cmac::parse_table(&report.image).unwrap();
     assert!(table.iter().any(|entry| entry.is_active()
         && entry.start <= boundary_stub
-        && boundary_stub + 36 <= entry.end));
+        && boundary_stub + bytes.len() as u32 - 1 <= entry.end));
     assert!(cmac::verify_detailed(&report.image)
         .unwrap()
         .iter()
@@ -1049,4 +1065,19 @@ fn boot_stub_fits_exact_finalized_capacity_and_refuses_short_without_writes() {
         .unwrap();
     assert_eq!(installed, base);
     assert_eq!(&exact[base as usize..base as usize + bytes.len()], bytes);
+}
+
+#[test]
+fn descriptor_match_does_not_install_a_role_unproven_bd_refusal() {
+    let image = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let engine = Mt1959Engine;
+    assert!(
+        engine.find_bd_gate(image).is_ok(),
+        "the descriptor candidate remains identifiable"
+    );
+    let result = engine.bd_detour(image, FLAG_TABLE_BASE);
+    assert!(
+        result.is_err(),
+        "a descriptor signature alone must not authorize a native BD hook"
+    );
 }
