@@ -119,5 +119,39 @@ These remain CPU routing and preservation checks, not physical read tests.
    behavior, or whether a distinct layer response is required.
 4. Validate the complete hook group and OEM behavior, including the alternate
    implementation, before enabling a classic capability in Modify or the finder.
-5. Continue with the agreed allocation, five-feature, unsupported-input and
-   zero-configurable-feature audits; keep work on dev and pause after green QA.
+5. Sole current scope: get UHD working for the 24 published classic MT1939
+   images. Other feature buckets and website changes are out of scope.
+
+## 24-image authentication contract and native read-entry comparison
+
+The published 6/6 group contains 84 MT1959 hashes and no MT1939 hashes. All 24
+published 5/6 hashes are MT1939. Every one of those 24 independently selects
+`R0StateR1Alternate` through the same shared VID/authentication analyzer; all
+research candidate source hashes match their full original. The adjacent
+`mt1939-24-auth-candidates-20261026.json` records the exact per-image sites and
+candidate bytes. This is research evidence, not a capability enablement.
+
+The native READ(10/12) dispatch records select `0xb4814` in the classic example
+and `0xae73c` in the MT1959 comparison. Both first check the same native ready
+state at `0x01ff9b2b`. Their next decision also has the same semantics:
+
+| Role | MT1939 | MT1959 |
+| --- | --- | --- |
+| availability byte | `0x02000ddc` | `0x02000c20` |
+| packed media-state byte | `0x01ff9dd3` | `0x01ff9e00` |
+| native status byte | `0x01ff9b29` | `0x01ff9b29` |
+| accept continuation | `0xb484c` | `0xae76e` |
+| reject continuation | `0xb4844` | `0xae766` |
+
+Both reject only when availability is zero, the packed high nibble is F, and
+native status differs from 0x82. Both report native medium-error 03/31/00 on
+that branch. Independent execution of both original entry blocks passes 1,024
+paired combinations covering every packed state byte, both availability values
+and both native status outcomes. This gate is not evidence of a classic-only
+UHD restriction, and it is not patched. F must not be renamed UHD based solely
+on this comparison.
+
+The added small original excerpts and checks run in the existing independent
+CPU script. The next target remains the disc-information/density recognition
+path leading to those state/availability values, followed by the physical data
+read path. Authentication widening alone does not establish UHD reading.

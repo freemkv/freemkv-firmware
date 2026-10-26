@@ -46,6 +46,32 @@ def route(cpu, start, stops):
     return reached[0]
 
 
+def read_entry_cases():
+    """Compare actual native READ(10/12) preflight, without patching either gate."""
+    def execute(modern, value, available, status):
+        cpu = machine('wh14-modern-read-entry' if modern else 'wh14-classic-read-entry')
+        cell = 0x01ff9e00 if modern else 0x01ff9dd3
+        ready = 0x02000c20 if modern else 0x02000ddc
+        cpu.mem_write(cell, bytes([value]))
+        cpu.mem_write(ready, bytes([available]))
+        cpu.mem_write(0x01ff9b29, bytes([status]))
+        cpu.mem_write(0x01ff9b2b, bytes([0]))
+        return route(cpu, 0xae73c if modern else 0xb4814,
+                     {0xae76e: 'accept', 0xae766: 'refuse'} if modern else
+                     {0xb484c: 'accept', 0xb4844: 'refuse'})
+
+    count = 0
+    for value in range(256):
+        for available in (0, 1):
+            for status in (0, 0x82):
+                old = execute(False, value, available, status)
+                new = execute(True, value, available, status)
+                expected = 'refuse' if not available and value >> 4 == 15 and status != 0x82 else 'accept'
+                assert old == new == expected, (value, available, status, old, new)
+                count += 1
+    return count
+
+
 def candidate_cases(builder):
     source = ROOT / 'wh14-vid.bin'
     response = subprocess.run([str(builder.resolve()), str(source), 'auth-candidate', '02000e40'], capture_output=True, text=True, check=True)
@@ -160,9 +186,10 @@ def main():
                     expected = 'media' if fmt < 0x80 and media != 1 else 'accept' if layer == 0 or (layer == 1 and available) else 'layer'
                     assert actual == expected, (media, fmt, layer, available, actual, expected)
                     layer_cases += 1
+    read_cases = read_entry_cases()
     type_cases = type_classification_cases()
     candidates = candidate_cases(args.candidate_builder) if args.candidate_builder else 0
-    print(f'PASS: {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {type_cases} paired type-classification cases, {candidates} candidate trampoline cases')
+    print(f'PASS: {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {type_cases} paired type-classification cases, {read_cases} paired native read-entry cases, {candidates} candidate trampoline cases')
 
 
 if __name__ == '__main__':

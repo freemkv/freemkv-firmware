@@ -26,5 +26,19 @@
     "source_offset": 911284,
     "padding": 0,
     "excerpt_sha256": "da17a2c38fd27b82817f382a843deebd4f439170085eb2fb0bda954e193cbd92"
+  },
+  {
+    "file": "wh14-classic-read-entry.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 739348,
+    "padding": 0,
+    "excerpt_sha256": "b303da13282c35029b516fa9821216bf0e07fa4fc07347998e81b210e41f4db4"
+  },
+  {
+    "file": "wh14-modern-read-entry.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 714556,
+    "padding": 0,
+    "excerpt_sha256": "8e570c309a9ff6872884a636798a28e3d7759ceb6433c366dc2c0e2bb738d645"
   }
 ]
