@@ -122,3 +122,48 @@ authorization. Application selection, wrapper argument binding and integrity
 semantics must still be connected before exposing programmed ranges in a
 transfer plan or extending allocation coverage. These results do not resolve
 the 18 allocation cases by themselves.
+
+### Application arguments and integrity joins
+
+The integrity grammar now follows an explicit forward branch to the result
+test, requiring boot failure and application completion to join at the same
+`cmp r0,#0`. A real UH12NS40 regression failed before this change and passes
+after it; the immediate-join form remains supported. Skipped padding is not
+decoded as executable instructions.
+
+Bulk decoder evidence is associated with its exact selection address. The
+shared acceptance-tail grammar then binds the staging pointer, length cell,
+source-pointer register, failure-state register, mode-three call and common
+post-call continuation. It derives the scratch register allocation and saved
+stack offset, including a forward jump over a literal pool. This is one
+operand-derived grammar, not per-model tail selection. Frame/prologue binding
+must still validate the recorded saved slot; a changed valid slot produces
+different evidence rather than silently retaining the old contract.
+
+All **18** allocation cases now have a matched integrity-selection component.
+**7** also have positively traced bulk decode and a matching programming tail.
+The other **11** lack that decoder/tail chain, so this stage does not authorize
+their writes. Exact results are recorded in
+`mediatek-allocation-application-evidence-20261025.json`.
+
+Across all **1085** held hashes, **201** have one integrity-selection component,
+**15** have one traced bulk decoder, and **22** have one plaintext-or-bulk
+acceptance tail. The remaining counts are explicit missing component evidence,
+not new Modify capability results. Four observed failure-register/stack-offset
+combinations share the same tail grammar. Full results are in
+`mediatek-hoard-application-evidence-20261025.json`; reproduce the audit command
+above with `--query application-evidence`.
+
+Independent CPU replay covers **8** boot/application result combinations and
+**24** native program/skip argument cases across four real tail excerpts. The
+latter include unequal source/destination values, failure-state skips, swapped
+scratch registers and the jump over the literal pool. Together with the seven
+native range/boot checks, all **39** integrity-routing cases pass. Crypto and
+hardware completion remain simulated. The original INTM/WH1.V9 held-image
+decoding regression also passes against the current hoard folder layout.
+
+Remaining before extending coverage: connect the wrapper's stores and setup
+helpers to the loop, bind incoming pointer/frame facts and intervening control
+flow, and validate the native checker semantics for any planned metadata
+change. Neither these component matches nor a successful CPU replay alone
+changes the allocator or proves physical flash acceptance.

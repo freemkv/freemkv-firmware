@@ -7,6 +7,37 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "application-evidence" {
+            let analysis = ApplicationAnalysis::inspect(&image, 0)
+                .ok_or_else(|| anyhow::anyhow!("invalid analysis range"))?;
+            println!(
+                "{}",
+                serde_json::json!({
+                    "policy":"component evidence only; control flow and helper semantics still require binding",
+                    "conflicting_arguments":analysis.conflicting_arguments(),
+                    "integrity":analysis.integrity_selections().iter().map(|p| serde_json::json!({
+                        "address":p.address,"boot_check":p.boot_check,"application_check":p.application_check,
+                        "success":p.success,"failure":p.failure,
+                    })).collect::<Vec<_>>(),
+                    "ranges":analysis.ranges().iter().map(|r| serde_json::json!({
+                        "selection":r.selection.address,"end":r.selection.end,
+                        "offset_cell":r.selection.offset_cell,"start_cell":r.selection.start_cell,
+                        "length_cell":r.selection.length_cell,"plain_signature":r.signature.is_some(),
+                        "acceptance":r.acceptance.map(|p| serde_json::json!({
+                            "address":p.address,"program_call":p.program_call,"program_target":p.program_target,
+                            "tag_check":p.tag_check,"marker_check":p.marker_check,"before_program":p.before_program,
+                        "source_pointer_register":p.source_pointer_register,"failure_pointer_register":p.failure_pointer_register,
+                        "continuation":p.continuation,"saved_state_offset":p.saved_state_offset,
+                        })),
+                    })).collect::<Vec<_>>(),
+                    "bulk":analysis.bulk_decoders().iter().map(|p| serde_json::json!({
+                        "selection":p.selection_address,"header_call":p.header.address,
+                        "body_call":p.from_zero.address,"decoder":p.from_zero.target,
+                    })).collect::<Vec<_>>(),
+                })
+            );
+            return Ok(());
+        }
         if offset == "program-candidates" {
             use mediatek_optical::receiver::programming::inspect_program_loop;
             let candidates: Vec<_> = (0..image.len())

@@ -11,6 +11,7 @@ parser.add_argument('--hoard', type=Path, required=True)
 parser.add_argument('--example', type=Path, required=True)
 parser.add_argument('--inputs', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--query', choices=('program-candidates', 'application-evidence'), default='program-candidates')
 args = parser.parse_args()
 producer = args.example.resolve()
 
@@ -27,7 +28,7 @@ assert len({r['sha256'] for r in inputs}) == len(inputs), 'duplicate input hashe
 def query(record):
     source = args.hoard / record['path']
     assert digest(source) == record['sha256'], str(source)
-    process = subprocess.run([str(producer), str(source), 'program-candidates'],
+    process = subprocess.run([str(producer), str(source), args.query],
                              check=True, capture_output=True, text=True)
     result = json.loads(process.stdout)
     assert digest(source) == record['sha256'], 'source changed during query'
@@ -38,9 +39,10 @@ with ThreadPoolExecutor(max_workers=4) as pool:
     records = list(pool.map(query, inputs))
 assert digest(producer) == producer_sha, 'producer changed during audit'
 result = {'schema': 1, 'producer_sha256': producer_sha,
-          'scope': 'native loop evidence; no caller/integrity/wrapper authorization',
+          'scope': 'component evidence; no executable receiver authorization', 'query': args.query,
           'images': records}
 args.output.write_text(json.dumps(result, indent=2) + '\n')
-print(json.dumps({'images': len(records), 'candidate_counts': {
-    str(n): sum(len(r['candidates']) == n for r in records)
-    for n in sorted({len(r['candidates']) for r in records})}}))
+counts = [len(r['candidates']) if args.query == 'program-candidates'
+          else sum(p['acceptance'] is not None for p in r['ranges']) for r in records]
+print(json.dumps({'images': len(records), 'query': args.query,
+                  'match_counts': {str(n): counts.count(n) for n in sorted(set(counts))}}))
