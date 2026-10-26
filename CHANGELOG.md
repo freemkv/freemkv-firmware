@@ -55,6 +55,10 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Flash
 
+- Allow Pioneer REC backup capture independently of flash support. Preserve the
+  captured Kernel and Normal when OEM seeds/signatures are unknown and label
+  reconstructed metadata without claiming OEM provenance or update acceptance.
+
 - Update the shared MediaTek dependency to the source-pinned analysis release;
   firmware hook analysis remains an opt-in image feature.
 

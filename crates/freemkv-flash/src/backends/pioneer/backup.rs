@@ -529,7 +529,7 @@ fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> 
         String::from_utf8_lossy(&inquiry[32..36]),
         String::from_utf8_lossy(&f1[16..24])
     );
-    if !f1[16..24].starts_with(b"SAT ") {
+    if !f1[16..24].starts_with(b"SAT ") && !f1[16..24].starts_with(b"REC ") {
         let hardware = String::from_utf8_lossy(&f1[16..24]);
         bail!("Pioneer backup is not implemented for hardware {hardware:?}: H8/SAT hardware identity required; no firmware image read or backup created");
     }

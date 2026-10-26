@@ -724,8 +724,8 @@ pub(crate) fn verify_preflash_backup(backup: &[u8], input: &[u8]) -> Result<()> 
 #[derive(Default)]
 pub struct Pioneer;
 
-/// Raw capture for Pioneer identities without an OEM backup/update backend.
-pub(crate) struct DumpOnly;
+/// Read capture for Pioneer identities without a validated update dialect.
+pub(crate) struct ReadCapture;
 
 static DUMP_DESCRIPTOR: Descriptor = Descriptor {
     id: BackendId("pioneer-dump"),
@@ -734,7 +734,19 @@ static DUMP_DESCRIPTOR: Descriptor = Descriptor {
     formats: &[],
 };
 
-impl Backend for DumpOnly {
+impl Backend for ReadCapture {
+    fn can_read(&self) -> bool {
+        pioneer_optical::DriveClass::Bd.can_read()
+    }
+
+    fn allowed_data_out(&self) -> &'static [CdbPattern] {
+        READ_UNLOCK
+    }
+
+    fn backup(&self) -> Option<&dyn BackupFacet> {
+        Some(&Pioneer)
+    }
+
     fn descriptor(&self) -> &'static Descriptor {
         &DUMP_DESCRIPTOR
     }

@@ -341,7 +341,9 @@ impl ScsiDevice for CaptureReplay {
         if cdb == [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0] {
             assert_eq!(len, 48);
             let mut data = vec![0; 48];
-            data[16..24].copy_from_slice(b"SAT 8A10");
+            data[16..24].copy_from_slice(
+                &self.dump[KERNEL_IMAGE_BASE + 0x1000..KERNEL_IMAGE_BASE + 0x1008],
+            );
             return Ok(data);
         }
         if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
@@ -1192,7 +1194,9 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
             // Match the production backup capability boundary exactly. Every
             // non-SAT pair must prove refusal using its usable identity before
             // any firmware access; every SAT pair keeps the reconstruction gate.
-            if !h.hardware_version.as_bytes().starts_with(b"SAT ") {
+            if !h.hardware_version.as_bytes().starts_with(b"SAT ")
+                && !h.hardware_version.as_bytes().starts_with(b"REC ")
+            {
                 assert_eq!(
                     h.hardware_version.len(),
                     8,
@@ -2086,4 +2090,115 @@ fn xd06u_backup_normal_matches_oem_exactly_when_configured() {
     assert_eq!(k.bytes, held_kernel);
     let provenance = package_provenance(&rebuilt);
     assert!(provenance.kernel_oem && provenance.normal_oem);
+}
+
+/// Replay the report's actual identity and readable address space, without any
+/// physical device or write/update path. Optional user artifacts stay local.
+#[test]
+fn rec_report_capture_preserves_firmware_without_oem_metadata() {
+    let Ok(path) = std::env::var("PIONEER_REC_REPORT_DUMP") else {
+        return;
+    };
+    struct ReportReplay {
+        inner: CaptureReplay,
+        inquiry: Vec<u8>,
+        identity: Vec<u8>,
+    }
+    impl ScsiDevice for ReportReplay {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            if cdb.first() == Some(&0x12) {
+                return Ok(self.inquiry[..len].to_vec());
+            }
+            if cdb.get(..3) == Some(&[0x3c, 2, 0xf1]) {
+                return Ok(self.identity.clone());
+            }
+            self.inner.command_in(cdb, len)
+        }
+        fn command_out(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+            self.inner.command_out(cdb, bytes)
+        }
+        fn describe(&self) -> String {
+            "REC report replay; no hardware".into()
+        }
+    }
+    let bytes = std::fs::read(path).unwrap();
+    let directory = super::super::dump::directory(&bytes).unwrap().unwrap();
+    let section = |name| {
+        let row = directory["sections"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["name"] == name)
+            .unwrap();
+        let offset = row["file_offset"].as_u64().unwrap() as usize;
+        let length = row["length"].as_u64().unwrap() as usize;
+        bytes[offset..offset + length].to_vec()
+    };
+    let mut replay = ReportReplay {
+        inquiry: section("inquiry"),
+        identity: section("identity"),
+        inner: CaptureReplay {
+            dump: bytes.clone(),
+            reads: 0,
+            knocks: 0,
+            corrupt_second_pass: false,
+        },
+    };
+    let package = capture_signed_candidate(&mut replay).unwrap();
+    validate_envelope_package(&package, "BD-RW BDR-L13SH").unwrap();
+    let bundle = Bundle::from_backup_tar_bytes(&package).unwrap();
+    assert_eq!(bundle.components.len(), 2);
+    let kernel = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap();
+    let kernel = pioneer_optical::envelope::decode_envelope(&kernel.bytes).unwrap();
+    assert_eq!(kernel.image, bytes[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE]);
+    let normal = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap();
+    let normal =
+        pioneer_optical::envelope::decode_envelope_with_kernel(&normal.bytes, &kernel).unwrap();
+    assert_eq!(
+        normal.image,
+        bytes[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + normal.image.len()]
+    );
+    assert!(!package_provenance(&package).normal_oem);
+    if let Ok(path) = std::env::var("PIONEER_REC_REPORT_PACKAGE") {
+        std::fs::write(path, package).unwrap();
+    }
+}
+
+#[test]
+fn rec_backup_without_oem_seeds_preserves_both_images() {
+    let (mut kernel, normal) = bounded_backup_fixture();
+    kernel[0x1000..0x1008].copy_from_slice(b"REC 8C00");
+    let sum = kernel.as_chunks::<4>().0.iter().fold(0u32, |sum, word| {
+        sum.wrapping_add(u32::from_be_bytes(*word))
+    });
+    let old = u32::from_be_bytes(kernel[0x1020..0x1024].try_into().unwrap());
+    kernel[0x1020..0x1024].copy_from_slice(&old.wrapping_sub(sum).to_be_bytes());
+    let mut replay = BoundedBackupReplay::new(&kernel, &normal);
+    let archive = capture_signed_candidate(&mut replay).unwrap();
+    validate_envelope_package(&archive, "BD-RW BDR-UD04").unwrap();
+    let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
+    let k = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap();
+    let n = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap();
+    let k = pioneer_optical::envelope::decode_envelope(&k.bytes).unwrap();
+    let n = pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, &k).unwrap();
+    assert_eq!(k.image, kernel);
+    assert_eq!(n.image, normal);
+    let provenance = package_provenance(&archive);
+    assert!(!provenance.kernel_oem && !provenance.normal_oem);
 }

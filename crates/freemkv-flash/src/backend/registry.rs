@@ -14,7 +14,7 @@ use crate::platform::ScsiDevice;
 
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
-static PIONEER_DUMP: pioneer::DumpOnly = pioneer::DumpOnly;
+static PIONEER_DUMP: pioneer::ReadCapture = pioneer::ReadCapture;
 
 /// Origin evidence is supplied by protocol file analysis, not the front end.
 pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
@@ -98,7 +98,7 @@ pub(crate) fn resolve_detection(
             } else {
                 (
                     &PIONEER_DUMP,
-                    "validated Pioneer F1 identity; update dialect unsupported",
+                    "validated Pioneer F1 identity; capture available, update dialect unvalidated",
                 )
             }
         }

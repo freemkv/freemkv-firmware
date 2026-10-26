@@ -291,6 +291,7 @@ fn recovery_offered_for_unsupported_identified_drive() {
     assert_eq!(
         profile.capabilities,
         crate::backend::Capabilities {
+            backup: true,
             dump: true,
             deep_salvage: true,
             ..crate::backend::Capabilities::NONE
@@ -319,7 +320,7 @@ fn recovery_identify_uses_shared_read_only_discovery() {
     let mut dev = Rec::new(unprobeable_receiver());
     let resolved = registry::resolve(&mut dev).unwrap().unwrap();
     assert!(resolved.backend.flash().is_none());
-    assert!(resolved.backend.backup().is_none());
+    assert!(resolved.backend.backup().is_some());
     assert!(resolved.backend.recovery().is_none());
     let mut dev = Rec::new(unprobeable_receiver());
     let receiver = Pioneer::new()
