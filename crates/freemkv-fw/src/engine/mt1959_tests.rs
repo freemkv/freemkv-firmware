@@ -45,8 +45,8 @@ fn uh12_oem_allocation_failure_builds_through_the_normal_modify_api() {
         .iter()
         .all(|f| support.supports(*f)));
     assert!(
-        !support.supports_value(crate::boot::BootFeature::Unrestricted, 0),
-        "an unproven native refusal hook must not be advertised as available"
+        support.supports_value(crate::boot::BootFeature::Unrestricted, 0),
+        "the emitted three-way auth hook must expose native refusal"
     );
     assert!(freemkv_flash::cmac::verify(&report.image));
     assert!(crate::engine::code_space::metadata_preserved(

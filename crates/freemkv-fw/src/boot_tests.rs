@@ -15,7 +15,7 @@ fn classic_emitted_boot_and_region_hrl_controls_are_reported() {
 }
 
 #[test]
-fn wh_auth_widening_exposes_on_and_oem_without_claiming_refusal_support() {
+fn wh_auth_hook_exposes_and_roundtrips_all_three_proven_choices() {
     let image = include_bytes!("../tests/fixtures/WH16NS58_OEM_1.V9.bin");
     let (report, support) =
         crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
@@ -25,12 +25,21 @@ fn wh_auth_widening_exposes_on_and_oem_without_claiming_refusal_support() {
     );
     assert!(support.supports_value(BootFeature::Unrestricted, 1));
     assert!(support.supports_value(BootFeature::Unrestricted, 255));
-    assert!(!support.supports_value(BootFeature::Unrestricted, 0));
+    assert!(support.supports_value(BootFeature::Unrestricted, 0));
     assert!(!support.supports_value(BootFeature::Unrestricted, 17));
     let (_, restored) = inspect(&report.image).unwrap().unwrap();
-    assert!(!restored.supports_value(BootFeature::Unrestricted, 0));
+    assert!(restored.supports_value(BootFeature::Unrestricted, 0));
     let off = settings(&["unrestricted=off"]);
-    assert!(off.validate(&restored).is_err());
+    assert!(off.validate(&restored).is_ok());
+    let (off_image, _) = update(&report.image, &off).unwrap().unwrap();
+    assert_eq!(
+        inspect(&off_image)
+            .unwrap()
+            .unwrap()
+            .0
+            .value(BootFeature::Unrestricted),
+        "off"
+    );
     let oem = settings(&["unrestricted=oem"]);
     let (changed, _) = update(&report.image, &oem).unwrap().unwrap();
     assert_eq!(
@@ -43,7 +52,25 @@ fn wh_auth_widening_exposes_on_and_oem_without_claiming_refusal_support() {
     );
     assert!(BootSettings::standard()
         .report_json(&support, "{}")
-        .contains("\"choices\":[\"oem\",\"on\"]"));
+        .contains("\"choices\":[\"oem\",\"on\",\"off\"]"));
+}
+
+#[test]
+fn existing_partial_capability_records_do_not_gain_off_from_new_engine_support() {
+    let image = include_bytes!("../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let (report, _) = api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
+    let mut legacy = report.image;
+    let record = legacy
+        .windows(16)
+        .position(|w| w == RECORD_MAGIC_V3)
+        .unwrap();
+    legacy[record + 23] |= LIMITED_UNRESTRICTED;
+    let legacy = freemkv_flash::cmac::resign(&legacy).unwrap();
+    let (_, support) = inspect(&legacy).unwrap().unwrap();
+    assert!(support.supports_value(BootFeature::Unrestricted, 1));
+    assert!(support.supports_value(BootFeature::Unrestricted, 255));
+    assert!(!support.supports_value(BootFeature::Unrestricted, 0));
+    assert!(update(&legacy, &settings(&["unrestricted=off"])).is_err());
 }
 
 #[test]

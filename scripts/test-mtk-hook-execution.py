@@ -14,7 +14,7 @@ from unicorn.arm_const import UC_ARM_REG_CPSR, UC_ARM_REG_PC, UC_ARM_REG_SP, UC_
 from unicorn import arm_const
 
 
-def execute(image, site, deny, value, setting):
+def execute(image, site, deny, value, setting, value_register):
     cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0, image)
@@ -23,7 +23,7 @@ def execute(image, site, deny, value, setting):
     cpu.reg_write(UC_ARM_REG_CPSR, 0xA0000030)
     registers = [getattr(arm_const, f'UC_ARM_REG_R{i}') for i in range(13)]
     before = [0x76540000 + i * 0x101 for i in range(13)]
-    before[1] = value
+    before[value_register] = value
     for register, initial in zip(registers, before):
         cpu.reg_write(register, initial)
     cpu.reg_write(UC_ARM_REG_SP, 0x03008000)
@@ -49,27 +49,36 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fw', required=True, type=Path)
     args = parser.parse_args()
-    original_path = Path(__file__).resolve().parents[1] / 'crates/freemkv-fw/tests/fixtures/WH16NS58_OEM_1.V9.bin'
-    original = original_path.read_bytes()
-    with tempfile.TemporaryDirectory(prefix='freemkv-hook-execution-') as temp:
-        output = Path(temp) / 'modified.bin'
-        result = subprocess.run([str(args.fw.resolve()), 'modify', str(original_path), str(output), '--json'], capture_output=True, text=True, check=True)
-        report = json.loads(result.stdout)
-        facts = next(lever['facts'] for lever in report['levers'] if lever['id'] == 'RawRead')
-        site = facts['auth_cell_site']
-        assert site == 0x13AA96, 'selected the wrong semantic check'
-        deny = 0x13AB16
-        modified = output.read_bytes()
-        cases = 0
-        for setting in (0, 1, 255, 2):
-            for value in range(16):
-                old_target, old_flags = execute(original, site, deny, value, setting)
-                target, flags = execute(modified, site, deny, value, setting)
-                expected = site + 4 if setting == 1 else old_target
-                assert target == expected, (value, setting, hex(target), hex(expected))
-                assert flags == old_flags, (value, setting, 'CMP flags were not preserved')
-                cases += 1
-        print(f'PASS: {cases} WH state/setting combinations; continuations, r0-r12, SP and CMP flags')
+    fixtures = Path(__file__).resolve().parents[1] / 'crates/freemkv-fw/tests/fixtures'
+    cases = 0
+    for name, expected_site in [('WH16NS58_OEM_1.V9.bin', 0x13aa96),
+                                ('BU40N_OEM_1.00.bin', 0x136826)]:
+        original_path = fixtures / name
+        original = original_path.read_bytes()
+        with tempfile.TemporaryDirectory(prefix='freemkv-hook-execution-') as temp:
+            output = Path(temp) / 'modified.bin'
+            result = subprocess.run([str(args.fw.resolve()), 'modify', str(original_path), str(output), '--json'], capture_output=True, text=True, check=True)
+            report = json.loads(result.stdout)
+            facts = next(lever['facts'] for lever in report['levers'] if lever['id'] == 'RawRead')
+            site = facts['auth_cell_site']
+            assert site == expected_site, 'selected the wrong semantic check'
+            comparison = int.from_bytes(original[site:site + 2], 'little')
+            assert comparison in (0x280c, 0x290c)
+            value_register = (comparison >> 8) & 7
+            branch = int.from_bytes(original[site + 2:site + 4], 'little')
+            assert branch & 0xff00 == 0xd100
+            displacement = int.from_bytes(bytes([branch & 255]), 'little', signed=True)
+            deny = site + 6 + displacement * 2
+            modified = output.read_bytes()
+            for setting in (0, 1, 255, 2):
+                for value in range(16):
+                    old_target, old_flags = execute(original, site, deny, value, setting, value_register)
+                    target, flags = execute(modified, site, deny, value, setting, value_register)
+                    expected = deny if setting == 0 else site + 4 if setting == 1 else old_target
+                    assert target == expected, (name, value, setting, hex(target), hex(expected))
+                    assert flags == old_flags, (name, value, setting, 'CMP flags were not preserved')
+                    cases += 1
+    print(f'PASS: {cases} WH/BU state/setting combinations; continuations, r0-r12, SP and CMP flags')
 
 
 if __name__ == '__main__':

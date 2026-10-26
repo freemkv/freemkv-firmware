@@ -234,6 +234,7 @@ impl BootSupport {
         Self::from_facts(r.boot_stub_va != 0, |key| match key {
             "uhd_stub_va" => r.uhd_stub_va,
             "auth_cell_stub_va" => r.auth_cell_stub_va,
+            "auth_cell_refusal" => u32::from(r.auth_cell_refusal),
             "bd_stub_va" => r.bd_stub_va,
             "hrl_stub_va" => r.hrl_stub_va,
             "ake_stub_va" => r.ake_stub_va,
@@ -255,7 +256,8 @@ impl BootSupport {
         Self::from_facts(fact("boot_stub_va") != 0, fact)
     }
     fn from_facts(boot: bool, fact: impl Fn(&str) -> u32) -> Self {
-        let refusal = fact("uhd_stub_va") != 0 && fact("bd_stub_va") != 0;
+        let refusal =
+            (fact("uhd_stub_va") != 0 && fact("bd_stub_va") != 0) || fact("auth_cell_refusal") != 0;
         let widening = fact("auth_cell_stub_va") != 0;
         let supported = [
             refusal || widening,

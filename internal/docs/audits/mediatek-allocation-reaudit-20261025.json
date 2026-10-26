@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "producer_sha256": "f64bbd245d1f981dc679392ac25bf407d9f26a0137569250ca87075e96d5b8c3",
-  "flasher_sha256": "c3a31b2e5fc1a4a8133dfbe3bf422794e30458c98805b62e7ff74977f1cf7a30",
+  "producer_sha256": "aa501f23d2d433d3446d7c7469b9454db63f00f749846cb1642107fcc8879c67",
+  "flasher_sha256": "93a5d69bb9f3dcb380c8418cef3eb910c9a890f476fb7a7b26a5209a70eba47c",
   "images": [
     {
       "sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
@@ -707,7 +707,8 @@
                 "hrl_stub_va": 1383236,
                 "hrl_site": 1262424,
                 "auth_cell_site": 1263196,
-                "auth_cell_stub_va": 1383268
+                "auth_cell_stub_va": 1383268,
+                "auth_cell_refusal": 1
               },
               "hooks": [
                 {
@@ -777,7 +778,8 @@
               "supported": true,
               "choices": [
                 "oem",
-                "on"
+                "on",
+                "off"
               ]
             },
             "hrl": {
@@ -819,10 +821,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "4cc41eb2b9c8539717cf57a461d982ab2cc53e65e4478a966dcb1c5f71e3d8f6"
+        "output_sha256": "a3b7b156bbc06bc7a29c6a95fca261415f458b06d06936452777376b34af9957"
       },
       "build_validation": {
-        "output_sha256": "4cc41eb2b9c8539717cf57a461d982ab2cc53e65e4478a966dcb1c5f71e3d8f6",
+        "output_sha256": "a3b7b156bbc06bc7a29c6a95fca261415f458b06d06936452777376b34af9957",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -1006,7 +1008,8 @@
                 "hrl_stub_va": 1405972,
                 "hrl_site": 1284236,
                 "auth_cell_site": 1284990,
-                "auth_cell_stub_va": 1406004
+                "auth_cell_stub_va": 1406004,
+                "auth_cell_refusal": 1
               },
               "hooks": [
                 {
@@ -1076,7 +1079,8 @@
               "supported": true,
               "choices": [
                 "oem",
-                "on"
+                "on",
+                "off"
               ]
             },
             "hrl": {
@@ -1118,10 +1122,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "158d15b0c4a1eb68a26d7e6861e80449256c933c57f7731fe4366fc772304752"
+        "output_sha256": "f6495f5e6ace51167049e433b2cfb7c9cca0c259df15c27e6228a3b4ec9be5d8"
       },
       "build_validation": {
-        "output_sha256": "158d15b0c4a1eb68a26d7e6861e80449256c933c57f7731fe4366fc772304752",
+        "output_sha256": "f6495f5e6ace51167049e433b2cfb7c9cca0c259df15c27e6228a3b4ec9be5d8",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -1305,7 +1309,8 @@
                 "hrl_stub_va": 1383236,
                 "hrl_site": 1262424,
                 "auth_cell_site": 1263196,
-                "auth_cell_stub_va": 1383268
+                "auth_cell_stub_va": 1383268,
+                "auth_cell_refusal": 1
               },
               "hooks": [
                 {
@@ -1375,7 +1380,8 @@
               "supported": true,
               "choices": [
                 "oem",
-                "on"
+                "on",
+                "off"
               ]
             },
             "hrl": {
@@ -1417,10 +1423,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "1ece449ebc357ad07b86c371b3a115705cb40e3d8678357008bbff846ccbc5b0"
+        "output_sha256": "02b77c73683887cab61d82a8a86a421a65ee4cec649ae5a6491fec2506d57513"
       },
       "build_validation": {
-        "output_sha256": "1ece449ebc357ad07b86c371b3a115705cb40e3d8678357008bbff846ccbc5b0",
+        "output_sha256": "02b77c73683887cab61d82a8a86a421a65ee4cec649ae5a6491fec2506d57513",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -2119,7 +2125,8 @@
                 "bd_site": 1274158,
                 "bd_stub_va": 1727172,
                 "auth_cell_site": 1274710,
-                "auth_cell_stub_va": 1727196
+                "auth_cell_stub_va": 1727196,
+                "auth_cell_refusal": 1
               },
               "hooks": [
                 {
@@ -2232,10 +2239,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "59376ae200e0ec4927ff002f0a70e890d2297512eabcaa79b36cf6027424b8ce"
+        "output_sha256": "e8d96c4c94727bb819ebd89dbd1bc0a04a5f8319a95da7d68f42df3951a83b1e"
       },
       "build_validation": {
-        "output_sha256": "59376ae200e0ec4927ff002f0a70e890d2297512eabcaa79b36cf6027424b8ce",
+        "output_sha256": "e8d96c4c94727bb819ebd89dbd1bc0a04a5f8319a95da7d68f42df3951a83b1e",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -2419,7 +2426,8 @@
                 "hrl_stub_va": 1782388,
                 "hrl_site": 1284820,
                 "auth_cell_site": 1285574,
-                "auth_cell_stub_va": 1782420
+                "auth_cell_stub_va": 1782420,
+                "auth_cell_refusal": 1
               },
               "hooks": [
                 {
@@ -2489,7 +2497,8 @@
               "supported": true,
               "choices": [
                 "oem",
-                "on"
+                "on",
+                "off"
               ]
             },
             "hrl": {
@@ -2531,10 +2540,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "539b5f687280e00703a23296a13ff62242f8957134606ad7657c9967e9484b55"
+        "output_sha256": "1f5948237d9f6139455f367d6b981f1381b9639704e8503fa7f080ebf55f5af5"
       },
       "build_validation": {
-        "output_sha256": "539b5f687280e00703a23296a13ff62242f8957134606ad7657c9967e9484b55",
+        "output_sha256": "1f5948237d9f6139455f367d6b981f1381b9639704e8503fa7f080ebf55f5af5",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -3459,7 +3468,8 @@
                 "hrl_stub_va": 1637108,
                 "hrl_site": 1491374,
                 "auth_cell_site": 1492112,
-                "auth_cell_stub_va": 1637140
+                "auth_cell_stub_va": 1637140,
+                "auth_cell_refusal": 1
               },
               "hooks": [
                 {
@@ -3529,7 +3539,8 @@
               "supported": true,
               "choices": [
                 "oem",
-                "on"
+                "on",
+                "off"
               ]
             },
             "hrl": {
@@ -3571,10 +3582,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "185bd7de15a6b5cc3ee967fd60e0424ca4ee6d68d1219c528c39a5d3184822ee"
+        "output_sha256": "00574add82b0dacf39b1d1f430d93e9471e46d6d0dd5abb2e7326f52ce043aa1"
       },
       "build_validation": {
-        "output_sha256": "185bd7de15a6b5cc3ee967fd60e0424ca4ee6d68d1219c528c39a5d3184822ee",
+        "output_sha256": "00574add82b0dacf39b1d1f430d93e9471e46d6d0dd5abb2e7326f52ce043aa1",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -3975,7 +3986,8 @@
                 "hrl_stub_va": 1405836,
                 "hrl_site": 1284100,
                 "auth_cell_site": 1284854,
-                "auth_cell_stub_va": 1405868
+                "auth_cell_stub_va": 1405868,
+                "auth_cell_refusal": 1
               },
               "hooks": [
                 {
@@ -4045,7 +4057,8 @@
               "supported": true,
               "choices": [
                 "oem",
-                "on"
+                "on",
+                "off"
               ]
             },
             "hrl": {
@@ -4087,10 +4100,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "4d5078298f092e96c7ea5f61396cc948e5803d8e5da3760a2b16122f91d13488"
+        "output_sha256": "4731356322e93c533c00b80a4c32e7ec03a53ea3455b610873079a2e44b0c459"
       },
       "build_validation": {
-        "output_sha256": "4d5078298f092e96c7ea5f61396cc948e5803d8e5da3760a2b16122f91d13488",
+        "output_sha256": "4731356322e93c533c00b80a4c32e7ec03a53ea3455b610873079a2e44b0c459",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",

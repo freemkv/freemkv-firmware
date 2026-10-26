@@ -48,8 +48,10 @@ const EXPECT_HANDLER_HEX: &str =
 // 0.15.4: RESET_TO_FLASH with erased NV branches to the existing reset-defaults
 // body, removing 28 duplicate bytes. Independent CPU execution checks both paths
 // and saved reload with standard/custom settings; offsets and covered CMACs move.
-const EXPECT_CMAC_1: &str = "285ceee96e2c2d78c275742725228472";
-const EXPECT_CMAC_15: &str = "af8b15c11be825a28f6533b7d14e29b0";
+// The three-way auth hook now shares its register-preserving body across BU/WH;
+// Off takes native refusal. Independent CPU tests cover all nibble/setting pairs.
+const EXPECT_CMAC_1: &str = "e149748ce784900432096c6d6e8a3947";
+const EXPECT_CMAC_15: &str = "6373f837720f214e797077a870d4760c";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -395,7 +397,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // 0x0013681c on BU40N 1.00): the OEM `cmp (state>>4),#0xC; bne <6F/02>` at
     // anchor+10 = 0x00136826, detoured to a stub that widens the accepted
     // top-nibble set to include `0xEx` when `flag[Unrestricted]==STATE_ON`, and
-    // replays OEM byte-for-byte otherwise (STATE_OFF or STATE_PASSTHROUGH).
+    // replays OEM for STATE_PASSTHROUGH and takes native refusal for STATE_OFF.
     assert_eq!(
         report.auth_cell_site, 0x0013_6826,
         "auth-cell widen (Feature::Unrestricted) detours the state-band cmp (1.00)"
@@ -736,12 +738,9 @@ fn feature_flag_gating_is_reslotted() {
         "UHD gate stub reads flag[Unrestricted]"
     );
 
-    // Auth-cell widen stub — the 9th lever. Uses `cmp r3,#STATE_ON` (0x2B01, ONLY
-    // widens when flag == STATE_ON), NOT the peer `cmp r3,#STATE_OFF` convention:
-    // for auth-cell, PASSTHROUGH (0xFF) must replay OEM (which refuses `0xEx`) —
-    // it is NOT an OEM-legal accept like the peer stubs' PASSTHROUGH is. Also
-    // emits the OEM-replay `cmp r0,#0xC` (0x280C) and reads `flag[Unrestricted]`.
-    // Deny target rides on a bx-via-r3 pool literal (`deny_va | 1`).
+    // The auth hook distinguishes On, Off and OEM. The deny continuation is
+    // loaded through a stacked PC transfer, preserving the live r3 value.
+    // Independent CPU tests prove routing, register and comparison contracts.
     let deny_va = 0x0013_68f4u32;
     let auth_cell = Mt1959Engine
         .build_authcell_widen_stub(base, deny_va)
@@ -751,8 +750,8 @@ fn feature_flag_gating_is_reslotted() {
         "auth-cell widen stub gates on cmp r3,#STATE_ON (NOT the peer cmp r3,#STATE_OFF)"
     );
     assert!(
-        !has(&auth_cell, CMP_R3_OFF),
-        "auth-cell widen stub must NOT use cmp r3,#STATE_OFF (would collapse PASSTHROUGH into ON)"
+        has(&auth_cell, CMP_R3_OFF),
+        "auth-cell hook must distinguish forced refusal from OEM passthrough"
     );
     assert!(
         has(&auth_cell, 0x280C),

@@ -7,6 +7,11 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Implement all three auth-hook choices where native refusal is proven: OEM
+  replays its decision, On allows access, and Off takes its refusal path.
+  Preserve registers, stack and comparison flags; keep older partial records
+  restricted to their original choices.
+
 - Distinguish decoded constant-success checks from helper calls in receiver
   analysis, preserving explicit bypass evidence and rejecting unknown effects.
 

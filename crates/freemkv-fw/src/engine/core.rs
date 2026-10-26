@@ -2826,71 +2826,15 @@ impl Mt1959Engine {
         Ok((site, self.build_uhd_gate_stub(flag_base)?))
     }
 
-    /// The [`abi::Feature::Unrestricted`] **auth-cell state-band widen** trampoline. Entered
-    /// by a `bl` that replaces `cmp r0,#0xC; bne <deny>` (4 bytes at
-    /// `AuthCell`'s `anchor+10`). On entry `r0 = state_byte >> 4` (the top
-    /// nibble the OEM `cmp` was about to compare against `0xC`); `deny_va` is the
-    /// OEM `6F/02 Incompatible medium` emitter reached by the OEM `bne`.
-    ///
-    /// # Register / frame contract
-    /// A bare `bl` (no push in the caller). `r3` is scratch inside the stub —
-    /// preserved across the flag load via `push {r3}` / `pop {r3}` because the OEM
-    /// accept-arm at `anchor+14` reads `r3` (it holds `sp` from `mov r3, sp` at
-    /// `anchor-14`). `r0` is dead after the OEM `bne` on both arms (the deny-arm
-    /// recomputes r0 in the sense emitter; the accept-arm starts with
-    /// `movs r2, #1` and doesn't read r0), so clobbering the shifted-index is safe.
-    /// `lr` is caller-saved.
-    ///
-    /// # Flag semantics
-    /// [`abi::Feature::Unrestricted`] tri-state at this site (uniform tri-state):
-    /// * `!= STATE_OFF` (`0xFF` passthrough / `0x01` armed on): **widen** — the
-    ///   stub returns immediately, so the caller falls into the OEM accept-arm at
-    ///   `anchor+14` regardless of the shifted-index value. This lets state values
-    ///   in the `0xEx` band (which the OEM `cmp` would refuse) pass the gate.
-    /// * `== STATE_OFF` (`0x00`): **stealth** — replay the OEM `cmp r0, #0xC`. On
-    ///   equal, return to the caller's accept-arm; on not-equal, jump to `deny_va`
-    ///   (the OEM `6F/02` emitter), giving byte-behaviour-identical semantics to
-    ///   OEM. Inert when the feature is armed OFF.
+    /// Three-way auth decision at a role-validated CMP/BNE pair. OEM replays
+    /// the displaced comparison, On follows acceptance, Off follows the native
+    /// refusal continuation. The generic body preserves every live register.
     pub(crate) fn build_authcell_widen_stub(
         &self,
         flag_base: u32,
         deny_va: u32,
     ) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
-        let armed = a.label();
-        let stealth_deny = a.label();
-        // Preserve r3 (live on the OEM accept-arm at anchor+14).
-        a.push(0x0008); // push {r3}
-        a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // r3 = &flag[Unrestricted]
-        a.ldrb_imm(3, 3, 0); // r3 = flag byte
-                             // Tri-state, distinct from the peer stubs: only STATE_ON (0x01) widens.
-                             // STATE_OFF (0x00) and STATE_PASSTHROUGH (0xFF) both replay the OEM
-                             // `cmp r0,#0xC; bne <deny>` byte-for-byte — passthrough here is
-                             // stealth-OEM (drive refuses `0xEx` states, as shipped), not "on".
-                             // The peer stubs use `!= STATE_OFF` because their PASSTHROUGH and ON
-                             // both resolve to an OEM-legal accept; here they diverge, so we test
-                             // equality against STATE_ON explicitly.
-        a.cmp_imm(3, abi::STATE_ON);
-        a.beq(armed);
-        // Stealth (STATE_OFF or STATE_PASSTHROUGH): replay OEM `cmp r0, #0xC`;
-        // branch to deny_va on !=.
-        a.cmp_imm(0, 0xC);
-        a.bne(stealth_deny);
-        // r0 == 0xC (stealth accept): restore r3 and return; caller lands at accept-arm.
-        a.pop(0x0008);
-        a.bx(14);
-        a.bind(stealth_deny);
-        // r0 != 0xC (stealth deny): restore r3 and jump to the OEM 6F/02 emitter.
-        a.pop(0x0008);
-        a.ldr_lit(3, deny_va | 1); // thumb bit
-        a.bx(3);
-        a.bind(armed);
-        // Unrestricted == STATE_ON (0x01): widen — return unconditionally so the
-        // caller's accept-arm at anchor+14 runs regardless of the nibble value.
-        a.pop(0x0008);
-        a.bx(14);
-        a.finish()
-            .map_err(|e| anyhow!("build_authcell_widen_stub: {e}"))
+        self.build_authcell_widen_value_stub(flag_base, deny_va, 0)
     }
 
     /// r1 state-band variant. Preserve every GPR and replay the original flags;
@@ -2915,12 +2859,19 @@ impl Mt1959Engine {
         let mut a = Asm::new();
         let widen = a.label();
         let original_comparison = a.label();
+        let force_refusal = a.label();
         let deny = a.label();
         a.push(0x0008);
         a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32);
         a.ldrb_imm(3, 3, 0);
         a.cmp_imm(3, abi::STATE_ON);
         a.beq(widen);
+        if minimum_class.is_none() {
+            // A normal contract's non-C continuation is a native refusal.
+            // The research alternate path is not a refusal and stays OEM.
+            a.cmp_imm(3, abi::STATE_OFF);
+            a.beq(force_refusal);
+        }
         a.pop(0x0008);
         a.bind(original_comparison);
         a.cmp_imm(value_register.into(), 0xC);
@@ -2934,6 +2885,12 @@ impl Mt1959Engine {
         }
         a.cmp_imm(value_register.into(), 0xC);
         a.bx(14);
+        a.bind(force_refusal);
+        if minimum_class.is_none() {
+            a.pop(0x0008);
+            // Keep the exact displaced CMP flags even on a forced refusal.
+            a.cmp_imm(value_register.into(), 0xC);
+        }
         a.bind(deny);
         a.push(0x0108);
         a.ldr_lit(3, deny_va | 1);

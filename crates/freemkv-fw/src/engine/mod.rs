@@ -126,18 +126,15 @@ pub struct CreateReport {
     pub bd_gate_site: u32,
     /// Injection address of the `Feature::Bd` BD-refuse trampoline. `0` when not wired.
     pub bd_stub_va: u32,
-    /// `Feature::Unrestricted` auth-cell state-band widen detour site — the OEM
-    /// `cmp r0,#0xC; bne <deny>` at `AUTH_CELL_SIG` `anchor+10` (`0x00136826` on
-    /// BU40N 1.00). The stub widens the accepted top-nibble set when the flag is
-    /// armed (non-`STATE_OFF`), letting the drive engage on state-byte values in
-    /// the `0xEx` band that some triple-layer UHDs land on; when the flag is
-    /// `STATE_OFF` the stub replays OEM exactly (accept `0xC`, else jump to the
-    /// OEM `6F/02 Incompatible medium` emitter). `0` when not wired (image does
-    /// not carry the known `ldr r4, [pc, ...] = 0x01FF9E04` prefix).
+    /// Role-validated auth-cell CMP/BNE detour. On selects acceptance, OEM
+    /// replays the original comparison, and Off selects native refusal where
+    /// `auth_cell_refusal` is true. Zero means no auth hook was installed.
     pub auth_cell_site: u32,
     /// Injection address of the `Feature::Unrestricted` auth-cell widen trampoline.
     /// `0` when not wired.
     pub auth_cell_stub_va: u32,
+    /// The emitted auth hook implements a proven native refusal for Off.
+    pub auth_cell_refusal: bool,
     /// The three HRL-skip cert-path detour sites (`flag[Feature::Hrl]==STATE_ON`):
     /// each a `cmp r0,#0; bne <6F/00>` replaced by a `bl` to the shared HRL-skip
     /// stub. Empty when the HRL cert path is not the known shape (lever MISS).

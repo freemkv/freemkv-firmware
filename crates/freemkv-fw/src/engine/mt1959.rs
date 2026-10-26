@@ -88,6 +88,7 @@ struct RawReadFacts {
     /// Injection address of the `Feature::Unrestricted` auth-cell widen trampoline.
     /// `0` when not wired.
     auth_cell_stub_va: u32,
+    auth_cell_refusal: bool,
     vid_producer: u32,
     hooks: Vec<HookReport>,
 }
@@ -317,6 +318,7 @@ impl Mt1959Engine {
             bd_stub_va: f.bd_stub_va,
             auth_cell_site: f.auth_cell_site,
             auth_cell_stub_va: f.auth_cell_stub_va,
+            auth_cell_refusal: f.auth_cell_refusal,
             hrl_sites: f.hrl_sites,
             hrl_stub_va: f.hrl_stub_va,
             de_off: de_off.unwrap_or(0),
@@ -506,6 +508,7 @@ impl Mt1959Engine {
                     if f.auth_cell_stub_va != 0 {
                         facts.push(("auth_cell_site", f.auth_cell_site));
                         facts.push(("auth_cell_stub_va", f.auth_cell_stub_va));
+                        facts.push(("auth_cell_refusal", u32::from(f.auth_cell_refusal)));
                     }
                     LeverReport::applied(LeverId::RawRead, facts).with_hooks(f.hooks)
                 }
@@ -877,6 +880,9 @@ impl Mt1959Engine {
                 }
             };
 
+        let auth_cell_refusal = auth_cell_stub_va != 0
+            && mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()
+                != mediatek_optical::image::analysis::AuthCellVariant::R0StateR1Alternate;
         *out = w;
         Ok(RawReadFacts {
             ake_gate,
@@ -894,6 +900,7 @@ impl Mt1959Engine {
             bd_stub_va,
             auth_cell_site,
             auth_cell_stub_va,
+            auth_cell_refusal,
             vid_producer,
             hooks,
         })

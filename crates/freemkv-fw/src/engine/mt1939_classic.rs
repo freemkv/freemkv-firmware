@@ -326,6 +326,7 @@ impl Mt1959Engine {
             // never wired on classic. Report 0s.
             auth_cell_site: 0,
             auth_cell_stub_va: 0,
+            auth_cell_refusal: false,
             hrl_sites,
             hrl_stub_va,
             de_off: de_off.unwrap_or(0),

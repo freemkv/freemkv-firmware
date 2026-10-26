@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(result["identity"]["chip"], "MT1959");
         assert_eq!(
             result["report"]["boot_settings"]["unrestricted"]["choices"],
-            serde_json::json!(["oem", "on"])
+            serde_json::json!(["oem", "on", "off"])
         );
         let raw = result["report"]["levers"]
             .as_array()
