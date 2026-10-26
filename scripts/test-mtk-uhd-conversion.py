@@ -76,11 +76,14 @@ def routing(data, evidence, states):
                     reached[:] = [None, None]
                     for cpu in (native, patched):
                         setup(cpu, evidence['state'], evidence['flag_base'], state, flag, cv)
+                        if candidate['area'] in ('ReadUpperRange','ReadLowerRange'):
+                            cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
+                            cpu.reg_write(reg.UC_ARM_REG_R2,0xc8)
                         if candidate['area'] == 'PositionOutput':
-                            cpu.reg_write(reg.UC_ARM_REG_R6, evidence['state'])
-                            cpu.reg_write(reg.UC_ARM_REG_R7, 0xc8)
+                            cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
+                            cpu.reg_write(reg.UC_ARM_REG_R7,0xc8)
                         if candidate['area'] == 'ParameterTable':
-                            cpu.reg_write(reg.UC_ARM_REG_R0, 0)
+                            cpu.reg_write(reg.UC_ARM_REG_R0,0)
                         try:
                             cpu.emu_start(candidate['region_start'] | 1, 0x200000, count=250)
                         except Exception as error:
@@ -293,6 +296,9 @@ def parent_returns(data, evidence):
                 if len(candidate['original']) == 6:
                     cpu.mem_write(site + 4, b'\xc0\x46')
                 setup(cpu, evidence['state'], evidence['flag_base'], 0xc7, flag, 0)
+                if candidate['area'] in ('ReadUpperRange','ReadLowerRange'):
+                    cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
+                    cpu.reg_write(reg.UC_ARM_REG_R2,0xc8)
                 if candidate['area'] == 'PositionOutput':
                     cpu.reg_write(reg.UC_ARM_REG_R6, evidence['state'])
                     cpu.reg_write(reg.UC_ARM_REG_R7, 0xc8)
@@ -490,6 +496,61 @@ def calibration(data, evidence):
     return count
 
 
+def read_position(data, evidence):
+    fixture=Path(__file__).resolve().parents[1]/'crates/freemkv-fw/tests/fixtures/mtk-uhd-read-position-modern.json'
+    source=json.loads(fixture.read_text())
+    assert source['source_sha256']=='648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc'
+    modern=bytearray(b'\xff'*0x200000)
+    for part in source['parts']:
+        raw=bytes.fromhex(part['hex'])
+        assert hashlib.sha256(raw).hexdigest()==part['sha256']
+        modern[part['offset']:part['offset']+len(raw)]=raw
+    modern=bytes(modern)
+    p=evidence['read_position'];patched=machine(data);native=machine(data);new=machine(modern)
+    parts=[(p['site'],p['stub'])]+[(c['site'],c['stub']) for c in evidence['candidates'] if c['area'] in ('ReadUpperRange','ReadLowerRange')]
+    for n,(site,stub) in enumerate(parts):
+     target=STUB+n*0x400;patched.mem_write(target,bytes(stub));delta=target-site-4
+     patched.mem_write(site,struct.pack('<HH',0xf000|((delta>>12)&0x7ff),0xf800|((delta>>1)&0x7ff)))
+    done=0x1fe000
+    # Actual native routines execute. Only logging and the modern notification helper
+    # are intercepted; those calls do not define the position/layer/range result.
+    call_targets=set()
+    for image,start,end in ((data,p['entry'],p['entry']+0x14c),(modern,0xda0a8,0xda262)):
+     for at in range(start,end-2,2):
+      first,second=struct.unpack_from('<HH',image,at)
+      if first&0xf800==0xf000 and second&0xf800==0xf800:
+       high=first&0x7ff
+       if high&0x400:high-=0x800
+       call_targets.add(at+4+(high<<12)+((second&0x7ff)<<1))
+    def hook(c,at,_size,_user):
+     if at==done:c.emu_stop()
+     elif at in call_targets:c.reg_write(reg.UC_ARM_REG_PC,c.reg_read(reg.UC_ARM_REG_LR))
+    for cpu in (native,patched,new):cpu.hook_add(UC_HOOK_CODE,hook)
+    count=0
+    for byte in (0,0x1b,0x1c,0x21,0x22,0x3f,0x40,0x41,0x5b,0x5c,0x61,0x62,0x7f,0x80,0xc0,255):
+     for low in (0,0x1234,0xffff):
+      for layer in range(4):
+       for cache in range(4):
+        for flag in (0,1,2,255):
+         results=[]
+         for cpu,is_modern in ((new if flag==1 else native,flag==1),(patched,False)):
+          setup(cpu,0x1ff9e00 if is_modern else evidence['state'],evidence['flag_base'],0xc7,flag,0)
+          position=0x2000b38 if is_modern else p['position'];layer_cell=0x2000b02 if is_modern else p['layer'];cache_cell=0x2000b03 if is_modern else p['cached_layer'];status=0x2000b0f if is_modern else p['status']
+          cpu.mem_write(position,struct.pack('<I',(byte<<16)|low));cpu.mem_write(layer_cell,bytes([layer]));cpu.mem_write(cache_cell,bytes([cache]));cpu.mem_write(status,b'\0')
+          cpu.reg_write(reg.UC_ARM_REG_R4,layer_cell if is_modern else position)
+          if is_modern:cpu.reg_write(reg.UC_ARM_REG_R6,position)
+          cpu.mem_write(0x03008000,struct.pack('<6I',3,4,5,6,7,done|1))
+          start=0xda0e0 if is_modern else p['entry']+0x32
+          try:cpu.emu_start(start|1,0x200000,count=500)
+          except Exception as error:raise AssertionError((is_modern,byte,low,layer,cache,flag,hex(cpu.reg_read(reg.UC_ARM_REG_PC)))) from error
+          assert cpu.reg_read(reg.UC_ARM_REG_PC)==done,(hex(cpu.reg_read(reg.UC_ARM_REG_PC)),is_modern,byte,low,layer,cache,flag)
+          assert cpu.reg_read(reg.UC_ARM_REG_SP)==0x03008018
+          results.append((bytes(cpu.mem_read(position,4)),bytes(cpu.mem_read(layer_cell,1)),cpu.mem_read(status,1)[0]&0x10))
+         assert results[0]==results[1],(byte,low,layer,cache,flag,results)
+         count+=1
+    return count
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--builder', type=Path, required=True)
@@ -509,7 +570,7 @@ def main():
             data = source.read_bytes()
             assert hashlib.sha256(data).hexdigest() == row['sha256']
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
-            assert evidence['pending'] and len(evidence['candidates']) == 16 + int(evidence['parameter_profile']['patch_required'])
+            assert evidence['pending'] and len(evidence['candidates']) == 18 + int(evidence['parameter_profile']['patch_required'])
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
             arithmetic_cases = calculations(data, evidence)
             parameter_cases = parameters(data, evidence)
@@ -517,9 +578,10 @@ def main():
             boundary_cases = read_boundary(data, evidence)
             position_cases = position(data, evidence)
             calibration_cases = calibration(data, evidence)
+            read_position_cases = read_position(data, evidence)
             di_cases = di_entry(data, evidence)
             parent_cases = parent_returns(data, evidence)
-            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'position_cases':position_cases, 'calibration_cases':calibration_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
+            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'position_cases':position_cases, 'calibration_cases':calibration_cases, 'read_position_cases':read_position_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
             print(f"{row['sha256'][:12]}: {cases} native-versus-emitted cases passed", flush=True)
         if args.output:
             args.output.write_text(json.dumps({'policy':'research stubs only; no conversion enabled',
@@ -528,7 +590,7 @@ def main():
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
     assert evidence['pending'], 'research components must not enable standard conversion'
-    assert len(evidence['candidates']) == 16 + int(evidence['parameter_profile']['patch_required'])
+    assert len(evidence['candidates']) == 18 + int(evidence['parameter_profile']['patch_required'])
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
     arithmetic_cases = calculations(data, evidence)
@@ -537,10 +599,11 @@ def main():
     boundary_cases = read_boundary(data, evidence)
     position_cases = position(data, evidence)
     calibration_cases = calibration(data, evidence)
+    read_position_cases = read_position(data, evidence)
     di_cases = di_entry(data, evidence)
     parent_cases = parent_returns(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {read_position_cases} native read-position cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
 
 
 if __name__ == '__main__':

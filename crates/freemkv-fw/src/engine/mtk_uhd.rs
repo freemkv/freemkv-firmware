@@ -208,6 +208,89 @@ impl UhdConversionPlan {
         })
         .collect()
     }
+    /// Extend read-position decoding and native range checks for C7/On.
+    pub fn read_position_candidates(
+        &self,
+        image: &[u8],
+        flags: u32,
+    ) -> Result<(
+        UhdReadPositionCandidate,
+        Vec<UhdRoutingCandidate<PositionRole>>,
+    )> {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        let contract =
+            mediatek_optical::image::analysis::ClassicReadPosition::detect(image, self.state)?;
+        let mut a = Asm::new();
+        let oem = a.label();
+        let zero = a.label();
+        let reject = a.label();
+        a.push(8);
+        a.ldr_lit(3, flag_address(flags)?);
+        a.ldrb_imm(3, 3, 0);
+        a.cmp_imm(3, crate::abi::STATE_ON);
+        a.bne(oem);
+        a.ldr_lit(3, self.state);
+        a.ldrb_imm(3, 3, 0);
+        a.cmp_imm(3, 0xc7);
+        a.bne(oem);
+        a.pop(8);
+        a.raw16(0x78a1);
+        a.raw16(0x0989);
+        a.cmp_imm(1, 1);
+        a.bne(zero);
+        tail(&mut a, contract.layer_one);
+        a.bind(zero);
+        tail(&mut a, contract.layer_zero);
+        a.bind(oem);
+        a.pop(8);
+        a.raw16(0x2900);
+        a.bne(reject);
+        tail(&mut a, contract.decode.accept());
+        a.bind(reject);
+        tail(&mut a, contract.decode.reject());
+        let original = image[contract.decode.site()..contract.decode.site() + 4].to_vec();
+        let bytes = a.finish()?;
+        let ranges = contract
+            .ranges
+            .iter()
+            .enumerate()
+            .map(|(index, selection)| {
+                let site = selection.site();
+                Ok(UhdRoutingCandidate {
+                    area: if index == 0 {
+                        PositionRole::ReadUpperRange
+                    } else {
+                        PositionRole::ReadLowerRange
+                    },
+                    region_start: contract.entry + if index == 0 { 0x124 } else { 0x134 },
+                    calculation_end: None,
+                    site,
+                    original: image[site..site + 4].to_vec(),
+                    accept: selection.accept(),
+                    reject: selection.reject(),
+                    bytes: emit_c7_selection(
+                        self.state,
+                        flags,
+                        selection.replay(),
+                        selection.accept(),
+                        selection.reject(),
+                    )?,
+                    caller: contract.callers[index + 1].clone(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok((
+            UhdReadPositionCandidate {
+                contract,
+                original,
+                bytes,
+            },
+            ranges,
+        ))
+    }
     /// Select this image's own C8 calibration at the native startup lookup.
     /// State-independent getters already share coefficients and need no hook.
     pub fn calibration_candidate(
@@ -288,6 +371,16 @@ impl UhdConversionPlan {
         Ok(UhdParameterCandidate { contract, hook })
     }
 }
+/// Bound read-position decoder and its emitted replacement.
+#[derive(Debug, Clone)]
+pub struct UhdReadPositionCandidate {
+    /// Complete native decode/range routine and state cells.
+    pub contract: mediatek_optical::image::analysis::ClassicReadPosition,
+    /// Source CMP/branch displaced by the replacement.
+    pub original: Vec<u8>,
+    /// Relocatable C7 decoder.
+    pub bytes: Vec<u8>,
+}
 /// Bound startup calibration load and its emitted replacement.
 #[derive(Debug, Clone)]
 pub struct UhdCalibrationCandidate {
@@ -305,6 +398,10 @@ pub enum PositionRole {
     PositionInput,
     /// Double the native result before its final shift.
     PositionOutput,
+    /// Upper read-position threshold selection.
+    ReadUpperRange,
+    /// Lower read-position threshold selection.
+    ReadLowerRange,
 }
 /// Parameter lookup evidence and the optional source-bound detour.
 #[derive(Debug, Clone)]

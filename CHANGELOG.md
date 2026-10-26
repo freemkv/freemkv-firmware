@@ -22,6 +22,8 @@ Versions are independent of the freemkv ripping applications.
   parameter tables across media-selected and state-independent getter layouts.
   Bind paired position scaling and the startup calibration lookup to complete
   native routines; reuse this image’s C8 coefficients rather than modern data.
+  Add source-bound classic C7 read-position decoding and range selectors; compare
+  native position/layer/status results against the modern C7 implementation.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse

@@ -57,6 +57,8 @@ fn main() -> anyhow::Result<()> {
                 record["area"] = serde_json::json!("ParameterTable");
                 records.push(record);
             }
+            let (read_position, range_candidates) = plan.read_position_candidates(&image, flags)?;
+            records.extend(range_candidates.iter().map(|c| routing_evidence(c, None)));
             let calibration = plan.calibration_candidate(&image, flags)?;
             let di = freemkv_fw::engine::mtk_uhd::di_prevalidation_candidate(&image, flags).ok();
             println!(
@@ -65,6 +67,10 @@ fn main() -> anyhow::Result<()> {
                     "policy":"research component emission only; no image is written or UHD capability enabled",
                     "state":plan.state_address(), "flag_base":flags,
                     "pending":plan.remaining_contracts(),
+                    "read_position":{"entry":read_position.contract.entry,"site":read_position.contract.decode.site(),
+                        "position":read_position.contract.position,"layer":read_position.contract.layer,
+                        "cached_layer":read_position.contract.cached_layer,"status":read_position.contract.status,
+                        "stub":read_position.bytes,"original":read_position.original},
                     "calibration":calibration.as_ref().map(|c|serde_json::json!({
                         "entry":c.contract.caller.entry,"site":c.contract.site,"resume":c.contract.site+6,
                         "original_base":c.contract.original_base,"coefficients":c.contract.c7_coefficients,
