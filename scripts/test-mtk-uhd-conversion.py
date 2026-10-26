@@ -10,7 +10,7 @@ import json
 import struct
 import subprocess
 from pathlib import Path
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE, UC_HOOK_MEM_READ
 from unicorn import arm_const as reg
 
 REGISTERS = [getattr(reg, f'UC_ARM_REG_R{i}') for i in range(13)]
@@ -23,6 +23,7 @@ def machine(data):
     cpu.mem_write(0, data)
     cpu.mem_map(0x01ff0000, 0x20000)
     cpu.mem_map(0x04200000, 0x10000)
+    cpu.mem_map(0x04040000, 0x10000)
     cpu.mem_map(0x03000000, 0x10000)
     return cpu
 
@@ -75,6 +76,9 @@ def routing(data, evidence, states):
                     reached[:] = [None, None]
                     for cpu in (native, patched):
                         setup(cpu, evidence['state'], evidence['flag_base'], state, flag, cv)
+                        if candidate['area'] == 'PositionOutput':
+                            cpu.reg_write(reg.UC_ARM_REG_R6, evidence['state'])
+                            cpu.reg_write(reg.UC_ARM_REG_R7, 0xc8)
                         if candidate['area'] == 'ParameterTable':
                             cpu.reg_write(reg.UC_ARM_REG_R0, 0)
                         try:
@@ -289,6 +293,9 @@ def parent_returns(data, evidence):
                 if len(candidate['original']) == 6:
                     cpu.mem_write(site + 4, b'\xc0\x46')
                 setup(cpu, evidence['state'], evidence['flag_base'], 0xc7, flag, 0)
+                if candidate['area'] == 'PositionOutput':
+                    cpu.reg_write(reg.UC_ARM_REG_R6, evidence['state'])
+                    cpu.reg_write(reg.UC_ARM_REG_R7, 0xc8)
                 if candidate['area'] == 'ParameterTable':
                     cpu.reg_write(reg.UC_ARM_REG_R0, 0)
                 saved = [0x60000000 + register * 0x101 for register in registers]
@@ -409,6 +416,80 @@ def read_boundary(data, evidence):
     return count
 
 
+def position(data, evidence):
+    parts = [c for c in evidence['candidates'] if c['area'] in ('PositionInput', 'PositionOutput')]
+    assert len(parts) == 2
+    entry = parts[0]['caller']['entry']
+    at = entry + 16
+    op = struct.unpack_from('<H', data, at)[0]
+    mode = struct.unpack_from('<I', data, ((at + 4) & ~3) + (op & 255) * 4)[0]
+    native, patched = machine(data), machine(data)
+    for index, candidate in enumerate(parts):
+        target = STUB + index * 0x400
+        patched.mem_write(target, bytes(candidate['stub']))
+        site = candidate['site']
+        delta = target - site - 4
+        patched.mem_write(site, struct.pack('<HH', 0xf000 | ((delta >> 12) & 0x7ff), 0xf800 | ((delta >> 1) & 0x7ff)))
+    done = 0x1fe000
+    for cpu in (native, patched):
+        cpu.hook_add(UC_HOOK_CODE, lambda c, at, _size, _user: c.emu_stop() if at == done else None)
+        # Controller completion is simulated; +0x10 retains the programmed input.
+        # This proves native software scaling, not physical controller behavior.
+        cpu.hook_add(UC_HOOK_MEM_READ, lambda c, _access, address, _size, _value, _user: c.mem_write(address, b'\0' * 4) if address == 0x04042018 else None)
+    count = 0
+    for state in (0xc0, 0xc4, 0xc7, 0xc8, 0xcc, 0xe8):
+        for flag in (0, 1, 2, 255):
+            for value in (0, 1, 7, 8, 100, 1000, 10000, 0x100000):
+                outputs = []
+                for index, cpu in enumerate((native, patched)):
+                    expected_state = 0xc8 if index == 0 and state == 0xc7 and flag == 1 else state
+                    setup(cpu, evidence['state'], evidence['flag_base'], expected_state, flag, 0)
+                    cpu.mem_write(mode, b'\x1c')
+                    cpu.reg_write(reg.UC_ARM_REG_R0, value)
+                    cpu.reg_write(reg.UC_ARM_REG_LR, done | 1)
+                    preserved = [cpu.reg_read(r) for r in REGISTERS[4:8]]
+                    cpu.emu_start(entry | 1, 0x200000, count=500)
+                    assert cpu.reg_read(reg.UC_ARM_REG_PC) == done
+                    assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
+                    assert [cpu.reg_read(r) for r in REGISTERS[4:8]] == preserved
+                    outputs.append(cpu.reg_read(reg.UC_ARM_REG_R0))
+                assert outputs[0] == outputs[1], (state, flag, value, outputs)
+                count += 1
+    return count
+
+
+def calibration(data, evidence):
+    contract=evidence.get('calibration')
+    if contract is None:
+        assert evidence['parameter_profile']['variant']=='StateIndependent'
+        return 0
+    site=contract['site'];native,patched=machine(data),machine(data)
+    patched.mem_write(STUB,bytes(contract['stub']))
+    delta=STUB-site-4
+    patched.mem_write(site,struct.pack('<HHH',0xf000|((delta>>12)&0x7ff),0xf800|((delta>>1)&0x7ff),0x46c0))
+    for cpu in (native,patched):
+        cpu.hook_add(UC_HOOK_CODE,lambda c,at,_size,_user:c.emu_stop() if at==contract['resume'] else None)
+    count=0
+    for state in (0,0xc0,0xc4,0xc7,0xc8,0xcc,0xe8,255):
+        for flag in (0,1,2,255):
+            for index in range(6):
+                for cv in range(16):
+                    outputs=[]
+                    for cpu in (native,patched):
+                        setup(cpu,evidence['state'],evidence['flag_base'],state,flag,cv)
+                        cpu.reg_write(reg.UC_ARM_REG_R6,index*2)
+                        cpu.emu_start(site|1,0x200000,count=100)
+                        assert cpu.reg_read(reg.UC_ARM_REG_PC)==contract['resume']
+                        outputs.append(([cpu.reg_read(r) for r in REGISTERS],cpu.reg_read(reg.UC_ARM_REG_CPSR)&0xf0000000))
+                        assert cpu.reg_read(reg.UC_ARM_REG_SP)==0x03008000
+                    base=contract['coefficients'] if state==0xc7 and flag==1 else contract['original_base']+0x58
+                    assert outputs[1][0][0]==struct.unpack_from('<H',data,base+index*2)[0]
+                    assert outputs[0][0][1:]==outputs[1][0][1:]
+                    assert outputs[0][1]==outputs[1][1]
+                    count+=1
+    return count
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--builder', type=Path, required=True)
@@ -428,15 +509,17 @@ def main():
             data = source.read_bytes()
             assert hashlib.sha256(data).hexdigest() == row['sha256']
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
-            assert evidence['pending'] and len(evidence['candidates']) == 14 + int(evidence['parameter_profile']['patch_required'])
+            assert evidence['pending'] and len(evidence['candidates']) == 16 + int(evidence['parameter_profile']['patch_required'])
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
             arithmetic_cases = calculations(data, evidence)
             parameter_cases = parameters(data, evidence)
             mode_cases = di_mode(data, evidence)
             boundary_cases = read_boundary(data, evidence)
+            position_cases = position(data, evidence)
+            calibration_cases = calibration(data, evidence)
             di_cases = di_entry(data, evidence)
             parent_cases = parent_returns(data, evidence)
-            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
+            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'position_cases':position_cases, 'calibration_cases':calibration_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
             print(f"{row['sha256'][:12]}: {cases} native-versus-emitted cases passed", flush=True)
         if args.output:
             args.output.write_text(json.dumps({'policy':'research stubs only; no conversion enabled',
@@ -445,17 +528,19 @@ def main():
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
     assert evidence['pending'], 'research components must not enable standard conversion'
-    assert len(evidence['candidates']) == 14 + int(evidence['parameter_profile']['patch_required'])
+    assert len(evidence['candidates']) == 16 + int(evidence['parameter_profile']['patch_required'])
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
     arithmetic_cases = calculations(data, evidence)
     parameter_cases = parameters(data, evidence)
     mode_cases = di_mode(data, evidence)
     boundary_cases = read_boundary(data, evidence)
+    position_cases = position(data, evidence)
+    calibration_cases = calibration(data, evidence)
     di_cases = di_entry(data, evidence)
     parent_cases = parent_returns(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
 
 
 if __name__ == '__main__':

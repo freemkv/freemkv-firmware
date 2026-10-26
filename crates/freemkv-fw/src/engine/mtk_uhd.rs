@@ -158,6 +158,102 @@ impl UhdConversionPlan {
             })
             .collect()
     }
+    /// Emit both selectors only after matching the complete native position
+    /// routine, including its polling loops, table loads and balanced return.
+    pub fn position_candidates(
+        &self,
+        image: &[u8],
+        flags: u32,
+    ) -> Result<Vec<UhdRoutingCandidate<PositionRole>>> {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        let contract =
+            mediatek_optical::image::analysis::ClassicPosition::detect(image, self.state)?;
+        [
+            (
+                PositionRole::PositionInput,
+                &contract.input,
+                contract.entry + 2,
+                0,
+            ),
+            (
+                PositionRole::PositionOutput,
+                &contract.output,
+                contract.output.site() - 2,
+                1,
+            ),
+        ]
+        .into_iter()
+        .map(|(area, selection, region_start, index)| {
+            let site = selection.site();
+            Ok(UhdRoutingCandidate {
+                area,
+                region_start,
+                calculation_end: None,
+                site,
+                original: image[site..site + selection.span()].to_vec(),
+                accept: selection.accept(),
+                reject: selection.reject(),
+                bytes: emit_c7_selection(
+                    self.state,
+                    flags,
+                    selection.replay(),
+                    selection.accept(),
+                    selection.reject(),
+                )?,
+                caller: contract.callers[index].clone(),
+            })
+        })
+        .collect()
+    }
+    /// Select this image's own C8 calibration at the native startup lookup.
+    /// State-independent getters already share coefficients and need no hook.
+    pub fn calibration_candidate(
+        &self,
+        image: &[u8],
+        flags: u32,
+    ) -> Result<Option<UhdCalibrationCandidate>> {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        let contract =
+            mediatek_optical::image::analysis::ClassicCalibration::detect(image, self.state)?;
+        let Some(coefficients) = contract.c7_coefficients else {
+            return Ok(None);
+        };
+        let mut a = Asm::new();
+        let oem = a.label();
+        a.push(0x0a);
+        a.ldr_lit(3, flag_address(flags)?);
+        a.ldrb_imm(3, 3, 0);
+        a.cmp_imm(3, crate::abi::STATE_ON);
+        a.bne(oem);
+        a.ldr_lit(3, self.state);
+        a.ldrb_imm(3, 3, 0);
+        a.cmp_imm(3, 0xc7);
+        a.bne(oem);
+        a.pop(0x0a);
+        a.ldr_lit(0, contract.original_base);
+        a.raw16(0x3058);
+        a.ldr_lit(0, coefficients);
+        a.raw16(0x5b80);
+        tail(&mut a, contract.site + 6);
+        a.bind(oem);
+        a.pop(0x0a);
+        a.ldr_lit(0, contract.original_base);
+        a.raw16(0x3058);
+        a.raw16(0x5b80);
+        tail(&mut a, contract.site + 6);
+        let original = image[contract.site..contract.site + 6].to_vec();
+        Ok(Some(UhdCalibrationCandidate {
+            contract,
+            original,
+            bytes: a.finish()?,
+        }))
+    }
     /// Preserve a state-independent lookup, or extend the positively bound
     /// native media-table gate. Never copy another drive's calibration values.
     pub fn parameter_candidate(&self, image: &[u8], flags: u32) -> Result<UhdParameterCandidate> {
@@ -191,6 +287,24 @@ impl UhdConversionPlan {
         };
         Ok(UhdParameterCandidate { contract, hook })
     }
+}
+/// Bound startup calibration load and its emitted replacement.
+#[derive(Debug, Clone)]
+pub struct UhdCalibrationCandidate {
+    /// Native table/getter and saved-frame contract.
+    pub contract: mediatek_optical::image::analysis::ClassicCalibration,
+    /// Source instructions displaced by the detour.
+    pub original: Vec<u8>,
+    /// Relocatable Thumb replacement.
+    pub bytes: Vec<u8>,
+}
+/// Paired native position-scaling roles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PositionRole {
+    /// Quarter-scale the native input.
+    PositionInput,
+    /// Double the native result before its final shift.
+    PositionOutput,
 }
 /// Parameter lookup evidence and the optional source-bound detour.
 #[derive(Debug, Clone)]

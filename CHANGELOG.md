@@ -20,6 +20,8 @@ Versions are independent of the freemkv ripping applications.
   native local-stack release, moved read-status blocks, DI mode selection and
   read-boundary reflection. Relocate displaced literal loads and preserve native
   parameter tables across media-selected and state-independent getter layouts.
+  Bind paired position scaling and the startup calibration lookup to complete
+  native routines; reuse this image’s C8 coefficients rather than modern data.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse

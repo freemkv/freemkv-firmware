@@ -46,12 +46,18 @@ fn main() -> anyhow::Result<()> {
                     .iter()
                     .map(|c| routing_evidence(c, None)),
             );
+            records.extend(
+                plan.position_candidates(&image, flags)?
+                    .iter()
+                    .map(|c| routing_evidence(c, None)),
+            );
             let parameter = plan.parameter_candidate(&image, flags)?;
             if let Some(hook) = &parameter.hook {
                 let mut record = routing_evidence(hook, Some(parameter.contract.lookup));
                 record["area"] = serde_json::json!("ParameterTable");
                 records.push(record);
             }
+            let calibration = plan.calibration_candidate(&image, flags)?;
             let di = freemkv_fw::engine::mtk_uhd::di_prevalidation_candidate(&image, flags).ok();
             println!(
                 "{}",
@@ -59,6 +65,12 @@ fn main() -> anyhow::Result<()> {
                     "policy":"research component emission only; no image is written or UHD capability enabled",
                     "state":plan.state_address(), "flag_base":flags,
                     "pending":plan.remaining_contracts(),
+                    "calibration":calibration.as_ref().map(|c|serde_json::json!({
+                        "entry":c.contract.caller.entry,"site":c.contract.site,"resume":c.contract.site+6,
+                        "original_base":c.contract.original_base,"coefficients":c.contract.c7_coefficients,
+                        "original":c.original,"stub":c.bytes,
+                        "caller":{"entry":c.contract.caller.entry,"stack_bytes":c.contract.caller.stack_bytes,"returns":c.contract.caller.returns}
+                    })),
                     "parameter_profile":{
                         "variant":format!("{:?}",parameter.contract.variant),
                         "entry":parameter.contract.entry,"lookup":parameter.contract.lookup,
